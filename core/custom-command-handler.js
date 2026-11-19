@@ -1,10 +1,140 @@
+/*
+ * Runs a guild's custom commands (`custom_commands`), from chat (`!rules`, via the universal command
+ * bridge in core/universal-commands.js) and from a slash interaction.
+ *
+ * Responses are templates: variables, arguments and API calls are filled in by
+ * core/custom-command-vars.js, and every API call goes through utils/safe-fetch.js (public http/https
+ * only, re-checked on each redirect) and the shared per-guild / per-command rate limiter. API text is
+ * cleaned and checked against core/hate-terms.js before it is inserted, and replies are sent with
+ * allowedMentions limited to the people our own tokens mention (plus mentions the admin typed into
+ * the template) — so neither an argument nor an API reply can ping @everyone or a role.
+ *
+ * {db:…} / {sdb:…} storage tokens read and write custom_commands_kv through core/custom-command-store.js:
+ * per member (whoever ran the command) or server-wide. Stored values are cleaned like API text and get
+ * the same allowedMentions, so they cannot ping either. The dashboard Test reads real values but saves nothing.
+ */
 import pool from '../utils/db.js';
 import logger from '../utils/logger.js';
+import { safeFetch } from '../utils/safe-fetch.js';
+import { containsHateTerm, rejectReason } from './hate-terms.js';
+import { evilInsults, isEvilInsultUrl } from './evil-insults.js';
+import { getGuildWordFilter } from './advanced-automod-manager.js';
+import { logFeatureEvent } from './feature-log.js';
+import {
+  TEMPLATE_VARIABLES, renderTemplate, allowedMentionsFor, mentionTokensUsed, normaliseArgs, touserOf, apiLimiter,
+} from './custom-command-vars.js';
+import { createSqlStore, createPreviewStore } from './custom-command-store.js';
+
+export { TEMPLATE_VARIABLES };
+
+const kvStore = createSqlStore(pool);
 
 const commandCache = new Map();
+const missCache = new Map(); // `${guildId}:${name}` -> expiry; any prefixed sentence is looked up, so remember misses briefly
+const MISS_TTL_MS = 60_000;
 
 // Clear cache every 5 minutes
-setInterval(() => commandCache.clear(), 5 * 60 * 1000);
+setInterval(() => { commandCache.clear(); missCache.clear(); }, 5 * 60 * 1000).unref?.();
+
+/**
+ * API plumbing for one command in one guild. `log: false` for dashboard previews.
+ * evilinsult.com generate_insult.php URLs (and {evilinsult}) never reach the network: they are
+ * answered from core/evil-insults.js, filtered by the bot-wide slur list plus this server's automod
+ * words and patterns, exactly like /fun insult.
+ */
+export function apiDepsFor(guild, commandName, { log = true } = {}) {
+  return {
+    localAnswer: async (url) => {
+      if (!isEvilInsultUrl(url)) return null;
+      const filter = await getGuildWordFilter(guild?.id);
+      return evilInsults.answerApi(url, { guildId: guild?.id, reject: (text) => rejectReason(text, filter) });
+    },
+    fetcher: (url) => safeFetch(url),
+    limiter: apiLimiter,
+    isBlockedText: containsHateTerm,
+    onError: (code, url) => {
+      let host = '';
+      try { host = new URL(url).host; } catch { host = 'invalid URL'; }
+      logger.debug(`[CustomCommand] API call for '${commandName}' failed: ${code} (${host})`, { guildId: guild?.id });
+      if (!log || String(code).startsWith('rate_')) return;
+      void logFeatureEvent(() => guild, 'system.customApiFailed', () => ({
+        title: 'Custom command API call failed',
+        description: `\`${commandName}\` showed "(API error)" instead of the API reply.`,
+        fields: [['Host', host], ['Reason', String(code).replace(/_/g, ' ')]],
+        footer: 'Shown at most once every 10 minutes per command',
+        throttle: { key: `ccapi:${guild?.id}:${commandName}`, ms: 10 * 60 * 1000 },
+      }));
+    },
+  };
+}
+
+/**
+ * Fill a command's response for one invocation.
+ * @param {object} p
+ *   guild, channel, sender (User), senderName, target (User; mentioned or sender), targetName,
+ *   mentionedName (display name of the first mention or null), args (string[]), commandName, log,
+ *   preview (true: storage reads are real, writes are not saved), store (tests: a store object)
+ * @returns {Promise<{ content: string, allowedMentions: object, calls: Array, storage: Array }>}
+ */
+export async function renderCustomResponse(response, p) {
+  const args = p.args || [];
+  const values = {
+    'user.name': p.target.username,
+    'user.mention': `<@${p.target.id}>`,
+    'user.id': p.target.id,
+    'user.tag': p.target.tag ?? p.target.username,
+    sender: p.senderName || p.sender.username,
+    'sender.mention': `<@${p.sender.id}>`,
+    touser: touserOf({ mentionedName: p.mentionedName, args, senderName: p.senderName || p.sender.username }),
+    'channel.name': p.channel?.name ?? 'DM',
+    'channel.mention': p.channel?.id ? `<#${p.channel.id}>` : '#channel',
+    'channel.id': p.channel?.id ?? '',
+    'server.name': p.guild.name,
+    'server.id': p.guild.id,
+  };
+  const baseStore = p.store || kvStore;
+  const { text, calls, storage } = await renderTemplate(response, { values, args }, {
+    guildId: p.guild.id,
+    commandKey: p.commandKey || p.commandName,
+    deps: apiDepsFor(p.guild, p.commandName, { log: p.log !== false }),
+  }, {
+    store: p.preview ? createPreviewStore(baseStore) : baseStore,
+    guildId: p.guild.id,
+    userId: p.sender.id,
+    onError: (err, node) => logger.warn(`[CustomCommand] storage ${node.op} '${node.key}' failed for '${p.commandName}': ${err.message}`, { guildId: p.guild.id }),
+  });
+  const used = mentionTokensUsed(response);
+  const ids = [used.has('user.mention') ? p.target.id : null, used.has('sender.mention') ? p.sender.id : null];
+  return { content: text, allowedMentions: allowedMentionsFor(response, ids), calls, storage };
+}
+
+/** Dashboard "Test": render as the admin, in no channel, with real API calls (same guard and limits)
+ * and real storage reads; storage writes are not saved. */
+export async function previewCustomResponse(guild, user, response, rawArgs = '') {
+  const tokens = String(rawArgs || '').split(/\s+/).filter(Boolean);
+  const member = await guild.members?.fetch?.(user.id).catch(() => null);
+  const senderName = member?.displayName || user.global_name || user.username;
+  const sender = { id: user.id, username: user.username, tag: user.username };
+  const { content, calls } = await renderCustomResponse(response, {
+    guild, channel: { id: null, name: 'channel' }, sender, senderName, target: sender, mentionedName: null,
+    args: normaliseArgs(tokens), commandName: 'dashboard-test', commandKey: `preview:${user.id}`, log: false, preview: true,
+  });
+  return { content, calls };
+}
+
+function parseIdList(value) {
+  try { return value ? JSON.parse(value) : []; } catch { return []; }
+}
+
+/**
+ * Count a successful run (the dashboard's Uses column). Fire-and-forget: before migration 425
+ * adds the columns the UPDATE fails with ER_BAD_FIELD_ERROR, which is ignored.
+ */
+function recordUse(command) {
+  if (!command?.id) return;
+  pool.execute('UPDATE custom_commands SET use_count = use_count + 1, last_used_at = NOW() WHERE id = ?', [command.id])
+    .catch(() => {});
+}
 
 /**
  * Handle custom command from interaction
@@ -16,151 +146,105 @@ export async function handleCustomCommand(interaction) {
 
   const guildId = interaction.guild.id;
   const commandName = interaction.commandName.toLowerCase();
-  const cacheKey = `${guildId}:${commandName}`;
   let command;
-
-  // Check cache first
-  if (commandCache.has(cacheKey)) {
-    command = commandCache.get(cacheKey);
-  } else {
-    // Fetch from database
-    const [rows] = await pool.execute(
-      'SELECT * FROM custom_commands WHERE guild_id = ? AND command_name = ?',
-      [guildId, commandName]
-    );
-
-    if (rows.length > 0) {
-      command = rows[0];
-      commandCache.set(cacheKey, command);
-    }
+  try {
+    command = await findCustomCommand(guildId, commandName);
+  } catch (error) {
+    logger.error(`[CustomCommandHandler] lookup failed: ${error.message}`);
+    return false;
   }
+  if (!command) return false;
+  return runCustomCommand(interaction, command);
+}
 
-  if (command) {
-    try {
-      // Permission Checks - Required Roles
-      const requiredRoles = command.required_roles ? JSON.parse(command.required_roles) : [];
-      if (requiredRoles.length > 0 && !interaction.member.roles.cache.some(r => requiredRoles.includes(r.id))) {
-        await interaction.reply({
-          content: 'You do not have the required role to use this command.',
-          ephemeral: true
-        });
-        return true;
-      }
-
-      // Permission Checks - Allowed Channels
-      const allowedChannels = command.allowed_channels ? JSON.parse(command.allowed_channels) : [];
-      if (allowedChannels.length > 0 && !allowedChannels.includes(interaction.channelId)) {
-        await interaction.reply({
-          content: `This command can only be used in the following channels: ${allowedChannels.map(id => `<#${id}>`).join(', ')}.`,
-          ephemeral: true
-        });
-        return true;
-      }
-
-      // Parse response with variable substitution
-      const response = parseVariables(command.response, interaction);
-      const targetMember = interaction.options.getMember('user') || interaction.member;
-
-      // Execute action based on action type
-      switch (command.action_type) {
-        case 'reply':
-          await interaction.reply(response);
-          break;
-
-        case 'add_role':
-          const roleToAdd = await interaction.guild.roles.fetch(command.action_content).catch(() => null);
-          if (!roleToAdd || !roleToAdd.editable) {
-            await interaction.reply({
-              content: 'Error: The role configured for this command is invalid or I cannot manage it.',
-              ephemeral: true
-            });
-            return true;
-          }
-          await targetMember.roles.add(roleToAdd);
-          await interaction.reply({
-            content: `Added the ${roleToAdd.name} role to ${targetMember.displayName}.`,
-            ephemeral: true
-          });
-          break;
-
-        case 'remove_role':
-          const roleToRemove = await interaction.guild.roles.fetch(command.action_content).catch(() => null);
-          if (!roleToRemove || !roleToRemove.editable) {
-            await interaction.reply({
-              content: 'Error: The role configured for this command is invalid or I cannot manage it.',
-              ephemeral: true
-            });
-            return true;
-          }
-          await targetMember.roles.remove(roleToRemove);
-          await interaction.reply({
-            content: `Removed the ${roleToRemove.name} role from ${targetMember.displayName}.`,
-            ephemeral: true
-          });
-          break;
-      }
+/**
+ * Run one custom command for a slash interaction: /tools cc run (commands/admin/cc.js) and
+ * handleCustomCommand. Same checks and output as the chat path below (required roles, allowed
+ * channels, role actions, template and API calls, the use counter). Reads the `user` option as the
+ * target and `args` / `text` as the arguments when the command has them.
+ * @returns {Promise<boolean>} true: the interaction was answered.
+ */
+export async function runCustomCommand(interaction, command) {
+  const guildId = interaction.guild.id;
+  const commandName = command.command_name;
+  try {
+    // Permission Checks - Required Roles
+    const requiredRoles = parseIdList(command.required_roles);
+    if (requiredRoles.length > 0 && !interaction.member.roles.cache.some(r => requiredRoles.includes(r.id))) {
+      await interaction.reply({ content: 'You do not have the required role to use this command.', ephemeral: true });
       return true;
+    }
 
-    } catch (error) {
-      if (error.code !== 'ER_BAD_FIELD_ERROR') {
-        logger.error(`[CustomCommandHandler] Error executing command '${commandName}'`, {
-          error: error.message,
-          stack: error.stack,
-          guildId,
-          commandName
-        });
-      }
+    // Permission Checks - Allowed Channels
+    const allowedChannels = parseIdList(command.allowed_channels);
+    if (allowedChannels.length > 0 && !allowedChannels.includes(interaction.channelId)) {
       await interaction.reply({
-        content: 'There was an error trying to execute that custom command. It may not be configured correctly.',
-        ephemeral: true
+        content: `This command can only be used in the following channels: ${allowedChannels.map(id => `<#${id}>`).join(', ')}.`,
+        ephemeral: true,
       });
       return true;
     }
+
+    const targetMember = interaction.options.getMember('user') || interaction.member;
+
+    switch (command.action_type) {
+      case 'add_role':
+      case 'remove_role': {
+        const role = await interaction.guild.roles.fetch(command.action_content).catch(() => null);
+        if (!role || !role.editable) {
+          await interaction.reply({ content: 'Error: The role configured for this command is invalid or I cannot manage it.', ephemeral: true });
+          return true;
+        }
+        const adding = command.action_type === 'add_role';
+        await targetMember.roles[adding ? 'add' : 'remove'](role);
+        recordUse(command);
+        await interaction.reply({
+          content: `${adding ? 'Added' : 'Removed'} the ${role.name} role ${adding ? 'to' : 'from'} ${targetMember.displayName}.`,
+          ephemeral: true,
+        });
+        return true;
+      }
+      case 'reply':
+      default: {
+        const mentioned = interaction.options.getUser('user');
+        const mentionedMember = interaction.options.getMember('user');
+        let rawArgs = '';
+        try { rawArgs = interaction.options.getString('args') || interaction.options.getString('text') || ''; } catch { rawArgs = ''; }
+        const needsApi = /\{api|customapi|urlfetch/i.test(command.response || '');
+        if (needsApi) await interaction.deferReply();
+        const out = await renderCustomResponse(command.response, {
+          guild: interaction.guild,
+          channel: interaction.channel,
+          sender: interaction.user,
+          senderName: interaction.member?.displayName || interaction.user.username,
+          target: mentioned || interaction.user,
+          mentionedName: mentioned ? (mentionedMember?.displayName || mentioned.username) : null,
+          args: normaliseArgs(rawArgs.split(/\s+/)),
+          commandName,
+        });
+        const payload = { content: out.content || '​', allowedMentions: out.allowedMentions };
+        if (needsApi) await interaction.editReply(payload);
+        else await interaction.reply(payload);
+        recordUse(command);
+        return true;
+      }
+    }
+  } catch (error) {
+    if (error.code !== 'ER_BAD_FIELD_ERROR') {
+      logger.error(`[CustomCommandHandler] Error executing command '${commandName}'`, {
+        error: error.message,
+        stack: error.stack,
+        guildId,
+        commandName,
+      });
+    }
+    const method = interaction.deferred || interaction.replied ? 'editReply' : 'reply';
+    await interaction[method]({
+      content: 'There was an error trying to execute that custom command. It may not be configured correctly.',
+      ephemeral: true,
+    }).catch(() => {});
+    return true;
   }
-
-  return false;
-}
-
-/** The full set of placeholders a custom-command response may use. */
-export const TEMPLATE_VARIABLES = Object.freeze([
-  { token: '{user.name}', description: "The invoking (or targeted) user's username" },
-  { token: '{user.mention}', description: 'Pings that user' },
-  { token: '{user.id}', description: "That user's ID" },
-  { token: '{user.tag}', description: 'username#0000' },
-  { token: '{channel.name}', description: 'Current channel name' },
-  { token: '{channel.mention}', description: 'Links the current channel' },
-  { token: '{channel.id}', description: 'Current channel ID' },
-  { token: '{server.name}', description: 'This server\'s name' },
-  { token: '{server.id}', description: "This server's ID" },
-  { token: '{random:1-100}', description: 'A random whole number in that range' },
-  { token: '{choice:a|b|c}', description: 'Picks one of the options at random' },
-]);
-
-const RANDOM_RE = /\{random:(-?\d{1,9})-(-?\d{1,9})\}/g;
-const CHOICE_RE = /\{choice:([^{}]{1,300})\}/g;
-
-/**
- * Fill a response template. Dynamic tokens are resolved per invocation, so `!pp` can answer
- * with a different number each time — which is what the bots we replace actually do.
- */
-export function substitute(text, values, rng = Math.random) {
-  let out = text || '';
-  for (const [token, value] of Object.entries(values)) {
-    out = out.split(token).join(value);
-  }
-
-  out = out.replace(RANDOM_RE, (_, lo, hi) => {
-    let a = parseInt(lo, 10), b = parseInt(hi, 10);
-    if (a > b) [a, b] = [b, a];
-    return String(a + Math.floor(rng() * (b - a + 1)));
-  });
-
-  out = out.replace(CHOICE_RE, (_, list) => {
-    const options = list.split('|').map(s => s.trim()).filter(Boolean);
-    return options.length ? options[Math.floor(rng() * options.length)] : '';
-  });
-
-  return out;
 }
 
 /** Look a custom command up (cached) by guild + name. */
@@ -168,24 +252,30 @@ export async function findCustomCommand(guildId, commandName) {
   const name = String(commandName || '').toLowerCase();
   const cacheKey = `${guildId}:${name}`;
   if (commandCache.has(cacheKey)) return commandCache.get(cacheKey);
+  if ((missCache.get(cacheKey) || 0) > Date.now()) return null;
 
   const [rows] = await pool.execute(
     'SELECT * FROM custom_commands WHERE guild_id = ? AND command_name = ?', [guildId, name]);
   const command = rows[0] || null;
   if (command) commandCache.set(cacheKey, command);
+  else {
+    missCache.set(cacheKey, Date.now() + MISS_TTL_MS);
+    if (missCache.size > 10_000) missCache.clear();
+  }
   return command;
 }
 
 /**
- * Run a custom command from a plain chat message (`!rules`).
+ * Run a custom command from a plain chat message (`!rules`, `!roast @someone`).
  *
  * Custom commands were previously only reachable through `handleCustomCommand`, which
  * nothing called and which needed a slash command that was never registered — so they
  * never ran at all. The prefix bridge is what actually makes them work.
  *
+ * @param {string[]} argTokens  the words typed after the command name
  * @returns {Promise<boolean>} true if a custom command with this name ran.
  */
-export async function handleCustomPrefixCommand(message, commandName) {
+export async function handleCustomPrefixCommand(message, commandName, argTokens = []) {
   if (!message.guild) return false;
 
   let command;
@@ -200,13 +290,13 @@ export async function handleCustomPrefixCommand(message, commandName) {
   if (!command) return false;
 
   try {
-    const requiredRoles = command.required_roles ? JSON.parse(command.required_roles) : [];
+    const requiredRoles = parseIdList(command.required_roles);
     if (requiredRoles.length && !message.member?.roles.cache.some(r => requiredRoles.includes(r.id))) {
       await message.reply({ content: 'You do not have the required role to use this command.' }).catch(() => {});
       return true;
     }
 
-    const allowedChannels = command.allowed_channels ? JSON.parse(command.allowed_channels) : [];
+    const allowedChannels = parseIdList(command.allowed_channels);
     if (allowedChannels.length && !allowedChannels.includes(message.channelId)) {
       await message.reply({
         content: `This command can only be used in: ${allowedChannels.map(id => `<#${id}>`).join(', ')}.`,
@@ -214,19 +304,9 @@ export async function handleCustomPrefixCommand(message, commandName) {
       return true;
     }
 
-    const targetUser = message.mentions.users.first() || message.author;
+    const mentioned = message.mentions.users.first() || null;
+    const targetUser = mentioned || message.author;
     const targetMember = message.mentions.members?.first() || message.member;
-    const response = substitute(command.response, {
-      '{user.name}': targetUser.username,
-      '{user.mention}': targetUser.toString(),
-      '{user.id}': targetUser.id,
-      '{user.tag}': targetUser.tag,
-      '{channel.name}': message.channel.name ?? 'DM',
-      '{channel.mention}': message.channel.toString(),
-      '{channel.id}': message.channelId,
-      '{server.name}': message.guild.name,
-      '{server.id}': message.guild.id,
-    });
 
     switch (command.action_type) {
       case 'add_role':
@@ -238,15 +318,36 @@ export async function handleCustomPrefixCommand(message, commandName) {
         }
         const adding = command.action_type === 'add_role';
         await targetMember.roles[adding ? 'add' : 'remove'](role);
+        recordUse(command);
         await message.reply({
           content: `${adding ? 'Added' : 'Removed'} the ${role.name} role ${adding ? 'to' : 'from'} ${targetMember.displayName}.`,
         }).catch(() => {});
         return true;
       }
       case 'reply':
-      default:
-        if (response) await message.reply({ content: response, allowedMentions: { repliedUser: false } }).catch(() => {});
+      default: {
+        const nameOf = (id) => {
+          const m = message.mentions.members?.get(id);
+          const u = message.mentions.users.get(id);
+          return m?.displayName || u?.globalName || u?.username || null;
+        };
+        const out = await renderCustomResponse(command.response, {
+          guild: message.guild,
+          channel: message.channel,
+          sender: message.author,
+          senderName: message.member?.displayName || message.author.globalName || message.author.username,
+          target: targetUser,
+          mentionedName: mentioned ? nameOf(mentioned.id) : null,
+          args: normaliseArgs(argTokens, nameOf),
+          commandName: command.command_name,
+        });
+        if (out.content) {
+          await message.reply({ content: out.content, allowedMentions: out.allowedMentions }).catch(() => {});
+        }
+        // A reply that only saves ({db:set:…}) sends nothing but still ran.
+        if (out.content || out.storage?.length) recordUse(command);
         return true;
+      }
     }
   } catch (error) {
     logger.error(`[CustomCommand] '${commandName}' failed: ${error.message}`, { guildId: message.guild.id });
@@ -256,43 +357,12 @@ export async function handleCustomPrefixCommand(message, commandName) {
 }
 
 /**
- * Parse variables in text
- * @param {string} text - Text with variables to parse
- * @param {ChatInputCommandInteraction} interaction - Discord interaction object
- * @returns {string} - Parsed text
- */
-function parseVariables(text, interaction) {
-  if (!text) return '';
-
-  const targetUser = interaction.options.getUser('user') || interaction.user;
-  const replacements = {
-    '{user.name}': targetUser.username,
-    '{user.mention}': targetUser.toString(),
-    '{user.id}': targetUser.id,
-    '{user.tag}': targetUser.tag,
-    '{channel.name}': interaction.channel.isDMBased() ? 'DM' : interaction.channel.name,
-    '{channel.mention}': interaction.channel.toString(),
-    '{channel.id}': interaction.channel.id,
-    '{server.name}': interaction.guild.name,
-    '{server.id}': interaction.guild.id,
-  };
-
-  let parsedText = text;
-  for (const [variable, value] of Object.entries(replacements)) {
-    parsedText = parsedText.replace(new RegExp(variable.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), value);
-  }
-
-  return parsedText;
-}
-
-/**
  * Invalidate command cache for a specific command
  * @param {string} guildId - Guild ID
  * @param {string} commandName - Command name
  */
 export function invalidateCommandCache(guildId, commandName) {
-  const cacheKey = `${guildId}:${commandName.toLowerCase()}`;
-  if (commandCache.has(cacheKey)) {
-    commandCache.delete(cacheKey);
-  }
+  const cacheKey = `${guildId}:${String(commandName || '').toLowerCase()}`;
+  commandCache.delete(cacheKey);
+  missCache.delete(cacheKey);
 }

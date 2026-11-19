@@ -2,6 +2,7 @@ import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelec
 import pool from '../utils/db.js';
 import logger from '../utils/logger.js';
 import botManager from './bot-manager.js';
+import { themeColor } from './guild-theme.js';
 
 const LOG_TAG = '[ServerTransfer]';
 const SEND_DELAY = 500; // ms between message sends to avoid rate limits
@@ -501,7 +502,7 @@ async function transferGiveaways(guildId, guild, customClient, defaultClient, pr
             const endsAt = new Date(gw.ends_at);
             const embed = new EmbedBuilder()
                 .setTitle('🎉 GIVEAWAY 🎉')
-                .setColor(0x5865F2)
+                .setColor(themeColor(guildId, 'primary'))
                 .setDescription(`**${gw.prize}**\n\n${gw.winner_count} winner${gw.winner_count > 1 ? 's' : ''}\nReact with 🎉 to enter!`)
                 .addFields({ name: 'Ends', value: `<t:${Math.floor(endsAt.getTime() / 1000)}:R>`, inline: true })
                 .setTimestamp(endsAt);
@@ -560,7 +561,7 @@ async function transferPolls(guildId, guild, customClient, defaultClient, progre
 
             const embed = new EmbedBuilder()
                 .setTitle(`📊 ${poll.question}`)
-                .setColor(0x5865F2)
+                .setColor(themeColor(guildId, 'primary'))
                 .setDescription(desc)
                 .setFooter({ text: `${totalVotes} vote${totalVotes !== 1 ? 's' : ''}` })
                 .setTimestamp();
@@ -617,7 +618,7 @@ async function transferStickyMessages(guildId, guild, customClient, defaultClien
             const channel = guild.channels.cache.get(sticky.channel_id);
             if (!channel) { progress.items.stickyMessages.errors++; continue; }
 
-            const newMsg = await channel.send(sticky.message_content);
+            const newMsg = await channel.send({ content: sticky.message_content, allowedMentions: { parse: [] } });
 
             // Delete old
             if (sticky.last_message_id) {

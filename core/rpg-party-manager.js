@@ -5,6 +5,7 @@
 
 import { pool } from '../utils/db.js';
 import logger from '../utils/logger.js';
+import RPGLeaderboardManager from './rpg-leaderboard-manager.js';
 
 class RPGPartyManager {
     /**
@@ -36,6 +37,8 @@ class RPGPartyManager {
              VALUES (?, ?, ?, 'leader')`,
             [partyId, characterId, userId]
         );
+        // Party Animal (parties joined; founding one counts)
+        RPGLeaderboardManager.trackStat(characterId, 'parties_joined', 1);
 
         // Update character's party_id
         await pool.execute(
@@ -142,6 +145,7 @@ class RPGPartyManager {
              VALUES (?, ?, ?, 'member')`,
             [invite.party_id, characterId, userId]
         );
+        RPGLeaderboardManager.trackStat(characterId, 'parties_joined', 1);
 
         // Update character
         await pool.execute(
@@ -359,6 +363,7 @@ class RPGPartyManager {
                 'UPDATE dnd_characters SET gold = gold + ? WHERE character_id = ?',
                 [perMember, member.character_id]
             );
+            RPGLeaderboardManager.trackStat(member.character_id, 'gold_earned', perMember);
         }
 
         // Remainder goes to party fund

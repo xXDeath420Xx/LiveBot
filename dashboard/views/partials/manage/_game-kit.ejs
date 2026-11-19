@@ -1,0 +1,69 @@
+<%#
+  Shared parts for the Games, Economy and Game news pages (2026-11-18 UI pass):
+    .cf-dc*     a Discord message as members see it: the dashboard's one message preview
+                (/css/cf-msgpreview.css, /js/cf-msgpreview.js), loaded here. Markup:
+                  div.cf-dc > [div.cf-dc-used] + _gk-author + div.cf-dc-text / div.cf-dc-embed ...
+    .gk-subnav  links between a page and its sub-pages (Digimon, quiz, odds).
+    window.GK   GK.fill(node, text, vars): draws message text (Discord markdown, <@&role>, <#channel>,
+                <@user>, {variables}) into node with the shared preview's parser, using this server's
+                role and channel names (window.GK_DATA). textContent only, so server or member text
+                can never become markup.
+  Include once at the top of a page: include('_game-kit').
+%>
+<%
+const gkRoles = {};
+(locals.roles || []).forEach(function (r) {
+    if (!r || !r.id) return;
+    const c = Number(r.color) || 0;
+    gkRoles[r.id] = { name: String(r.name || ''), color: c ? '#' + c.toString(16).padStart(6, '0') : null };
+});
+const gkChannels = {};
+(locals.channels || []).forEach(function (c) { if (c && c.id) gkChannels[c.id] = String(c.name || ''); });
+%>
+<link rel="stylesheet" href="/css/cf-msgpreview.css">
+<script src="/js/cf-msgpreview.js"></script>
+<style>
+    /* A preview inside a kit panel: the panel's own row padding around it. */
+    .cf-rows > .gk-preview, .cf-rows .gk-preview-wrap { padding: var(--cf-4) var(--cf-5); }
+    .gk-preview { display: grid; gap: var(--cf-3); min-width: 0; }
+    .gk-preview-label { margin: 0; font-size: var(--cf-text-xs); font-weight: 500; color: var(--cf-text-3); }
+    .gk-preview-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); gap: var(--cf-4); align-items: start; }
+
+    /* A "from ... to ..." pair of numbers in one row control. */
+    .cf-rows .cf-row-control > .cf-inline { flex-wrap: nowrap; }
+    .cf-rows .cf-row-control > .cf-inline > input.form-control { flex: 1 1 5rem; width: auto; min-width: 0; }
+
+    .gk-subnav { margin: 0 0 var(--cf-6); }
+    .gk-subnav a { text-decoration: none; }
+
+    .gk-cmd-name { font-family: var(--cf-mono); font-size: var(--cf-text-sm); color: var(--cf-text); white-space: nowrap; background: none; border: 0; padding: 0; }
+    .gk-cmd-desc { display: block; margin-top: 1px; font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+    .gk-cmd-group .cf-expand-body { padding: 0; }
+    .gk-cmd-group > summary .cf-tab-count, .gk-cmd-count { font-weight: 400; font-size: var(--cf-text-xs); color: var(--cf-text-3); margin-left: 6px; }
+    @media (max-width: 640px) {
+        .cf-rows > .gk-preview, .cf-rows .gk-preview-wrap { padding: var(--cf-3) var(--cf-4); }
+        .gk-cmd-name { white-space: normal; }
+    }
+</style>
+<script>
+window.GK_DATA = { roles: <%- JSON.stringify(gkRoles).replace(/</g, '\\u003c') %>, channels: <%- JSON.stringify(gkChannels).replace(/</g, '\\u003c') %> };
+window.GK = window.GK || (function () {
+    'use strict';
+    var P = window.CFMsgPreview;
+    function el(tag, cls, text) {
+        var n = document.createElement(tag);
+        if (cls) n.className = cls;
+        if (text != null) n.textContent = text;
+        return n;
+    }
+    function names() { var d = window.GK_DATA || {}; return { roles: d.roles || {}, channels: d.channels || {} }; }
+    /** Append `text` to `node` as Discord would draw it; `vars` fills {name} tokens first. */
+    function append(node, text, vars) { if (node) P.inline(P.fill(text, vars || {}), names(), node); }
+    function fill(node, text, vars) {
+        if (!node) return;
+        node.replaceChildren();
+        append(node, text, vars);
+    }
+    return { fill: fill, append: append, el: el };
+})();
+</script>

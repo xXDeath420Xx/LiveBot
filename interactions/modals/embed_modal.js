@@ -1,5 +1,6 @@
 import { EmbedBuilder } from 'discord.js';
 import logger from '../../utils/logger.js';
+import { themeColor } from '../../core/guild-theme.js';
 
 /**
  * Handle embed creation modal submission
@@ -27,7 +28,7 @@ export async function handleEmbedCreate(interaction) {
         const hex = color.startsWith('#') ? color : `#${color}`;
         embed.setColor(parseInt(hex.replace('#', ''), 16));
     } catch {
-        embed.setColor(0x5865F2);
+        embed.setColor(themeColor(interaction.guildId, 'primary'));
     }
     if (image) embed.setImage(image);
     if (footer) embed.setFooter({ text: footer });
@@ -74,7 +75,7 @@ export async function handleEmbedEdit(interaction) {
         const hex = color.startsWith('#') ? color : `#${color}`;
         embed.setColor(parseInt(hex.replace('#', ''), 16));
     } catch {
-        embed.setColor(0x5865F2);
+        embed.setColor(themeColor(interaction.guildId, 'primary'));
     }
     if (image) embed.setImage(image);
     if (footer) embed.setFooter({ text: footer });

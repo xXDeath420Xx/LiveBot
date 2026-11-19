@@ -1,74 +1,92 @@
 <%# Initialize Bot — end-to-end setup wizard.
     API-driven; needs `guild` and `channels` in locals. Every step's `done` flag is derived
     from the same rows the runtime reads, so the checklist can never claim something is set
-    up when it isn't. %>
+    up when it isn't. Built on the settings-row kit (cf-settings.css): progress and permissions
+    are kit panels, and the script draws each step group as a kit section of list rows. %>
+<style>
+  #initWizard .init-progress { display: flex; align-items: center; justify-content: space-between; gap: var(--cf-4); padding: var(--cf-4) var(--cf-5); }
+  #initWizard .init-progress-text { margin: 0; font-size: var(--cf-text-sm); color: var(--cf-text-2); line-height: 1.5; min-width: 0; }
+  #initWizard .init-pct { flex: none; font-size: var(--cf-text-xl); font-weight: 600; color: var(--cf-text); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+  #initWizard .init-bar { height: 6px; margin: 0 var(--cf-5) var(--cf-4); border-radius: 999px; background: var(--cf-surface-3); overflow: hidden; }
+  #initWizard .cf-rows > .init-bar { border-top: 0; }
+  #initWizard .init-bar-fill { width: 0; height: 100%; background: var(--cf-accent); border-radius: inherit; transition: width .4s ease; }
+  #initWizard .cf-state--compact { flex-wrap: wrap; }
+  #initWizard .cf-state--compact .cf-state-title { white-space: nowrap; }
+  #initWizard .init-perm-flag { font-weight: 500; color: var(--cf-text); }
+  #initWizard .init-perm-why { display: block; color: var(--cf-text-3); }
+  #initWizard .init-title { display: flex; align-items: center; flex-wrap: wrap; gap: var(--cf-2); font-weight: 500; color: var(--cf-text); font-size: var(--cf-text-md); }
+  #initWizard .init-desc { display: block; margin-top: 2px; color: var(--cf-text-3); }
+  #initWizard .init-detail { display: block; margin-top: 4px; font-size: var(--cf-text-xs); color: var(--cf-warning); }
+  #initWizard .init-step .cf-list-actions { flex-wrap: wrap; align-items: center; justify-content: flex-end; max-width: 30rem; }
+  #initWizard select.init-chan { width: auto; min-width: 0; max-width: 14rem; margin: 0; }
+  #initWizard .init-status { flex-basis: 100%; justify-content: flex-end; }
+  #initWizard .init-status:empty { display: none; }
+  @media (max-width: 640px) {
+    #initWizard .init-progress { padding: var(--cf-4); }
+    #initWizard .init-bar { margin: 0 var(--cf-4) var(--cf-4); }
+    #initWizard .init-step .cf-list-actions { max-width: none; justify-content: stretch; }
+    #initWizard .init-step .cf-list-actions > select.init-chan { flex: 1 1 100%; max-width: none; min-height: 44px; }
+    #initWizard .init-step .cf-list-actions > .btn { flex: 1 1 auto; justify-content: center; }
+    #initWizard .init-status { justify-content: flex-start; }
+  }
+</style>
+
 <div class="page-section" id="initWizard" data-guild-id="<%= guild.id %>">
     <div class="page-section-header">
         <div>
             <div class="page-section-title">
-                <i class="fas fa-wand-magic-sparkles"></i>
-                <span>Initialize Bot</span>
+                <i class="fas fa-wand-magic-sparkles" aria-hidden="true"></i>
+                <span>Initialize bot</span>
             </div>
-            <div class="page-section-subtitle">
-                Everything a new server needs, in order. Each step checks your live settings —
-                nothing here is remembered as "done" unless it really is.
-            </div>
+            <div class="page-section-subtitle">A step is only marked done when its settings are really in place.</div>
         </div>
     </div>
 
-    <div id="initError" class="alert alert-danger" hidden></div>
+    <div id="initError" class="cf-notice is-bad" role="alert" hidden></div>
 
-    <!-- Progress -->
-    <div class="init-card">
-        <div class="init-progress-head">
+    <section class="cf-section" aria-labelledby="initBotName">
+        <header class="cf-section-head">
             <div>
-                <h3 class="init-h" id="initBotName">Setup progress</h3>
-                <p class="form-help" id="initProgressText">Loading…</p>
+                <h2 class="cf-section-title" id="initBotName">Setup progress</h2>
+                <p class="cf-section-desc">Essential and recommended steps count towards the total; optional extras are listed separately.</p>
             </div>
-            <div class="init-pct" id="initPct">—</div>
+        </header>
+        <div class="cf-rows">
+            <div class="init-progress">
+                <p class="init-progress-text" id="initProgressText" role="status" aria-live="polite">Loading setup status</p>
+                <div class="init-pct" id="initPct" aria-hidden="true">0%</div>
+            </div>
+            <div class="init-bar" aria-hidden="true"><div class="init-bar-fill" id="initBarFill"></div></div>
         </div>
-        <div class="init-bar"><div class="init-bar-fill" id="initBarFill" style="width:0%"></div></div>
-    </div>
+    </section>
 
-    <!-- Permissions -->
-    <div class="init-card">
-        <h3 class="init-h"><i class="fas fa-key"></i> Bot permissions</h3>
-        <p class="form-help">
-            If a permission is missing, the feature that needs it will fail quietly. Fix these first.
-        </p>
-        <div id="initPerms" class="init-perms">Loading…</div>
-    </div>
+    <section class="cf-section" aria-labelledby="init-perms-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="init-perms-title">Bot permissions</h2>
+                <p class="cf-section-desc">A feature whose permission is missing fails quietly, so fix these first.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div id="initPerms" class="cf-list">
+                <%- include('../kit/_state', { kind: 'loading', title: 'Checking permissions', compact: true }) %>
+            </div>
+        </div>
+    </section>
 
-    <!-- Steps -->
-    <div id="initGroups"></div>
+    <div id="initGroups">
+        <section class="cf-section" aria-labelledby="init-steps-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="init-steps-title">Setup steps</h2>
+                </div>
+            </header>
+            <div class="cf-rows">
+                <%- include('../kit/_state', { kind: 'loading', title: 'Loading setup steps', compact: true }) %>
+            </div>
+        </section>
+    </div>
 </div>
-
-<style>
-  #initWizard .init-card { background: var(--card-bg, #1e2028); border: 1px solid var(--border, #2c2f3a);
-    border-radius: 10px; padding: 1.1rem 1.25rem; margin-bottom: 1rem; }
-  #initWizard .init-h { margin: 0 0 .35rem; font-size: 1rem; font-weight: 600; }
-  #initWizard .init-progress-head { display:flex; align-items:center; justify-content:space-between; gap:1rem; }
-  #initWizard .init-pct { font-size: 1.6rem; font-weight: 700; }
-  #initWizard .init-bar { height: 8px; border-radius: 999px; background: #2c2f3a; margin-top: .75rem; overflow: hidden; }
-  #initWizard .init-bar-fill { height: 100%; background: linear-gradient(90deg,#5865F2,#57F287); transition: width .4s ease; }
-  #initWizard .init-perms { display: grid; gap: .4rem; }
-  #initWizard .init-perm { display:flex; align-items:center; gap:.6rem; font-size:.9rem; }
-  #initWizard .init-perm .why { color:#8b8f9e; }
-  #initWizard .init-group-title { margin: 1.4rem 0 .6rem; font-size: .78rem; letter-spacing: .08em;
-    text-transform: uppercase; color: #8b8f9e; font-weight: 600; }
-  #initWizard .init-step { display:flex; gap:.9rem; align-items:flex-start; padding:.9rem 1rem;
-    border:1px solid #2c2f3a; border-radius:10px; margin-bottom:.6rem; background:#1e2028; }
-  #initWizard .init-step.done { border-color:#2f6f4a; }
-  #initWizard .init-icon { flex:0 0 1.6rem; font-size:1.1rem; line-height:1.4; }
-  #initWizard .init-body { flex:1; min-width:0; }
-  #initWizard .init-title { font-weight:600; }
-  #initWizard .init-desc { color:#8b8f9e; font-size:.88rem; margin-top:.15rem; }
-  #initWizard .init-detail { font-size:.82rem; margin-top:.3rem; color:#c9a227; }
-  #initWizard .init-actions { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; margin-top:.6rem; }
-  #initWizard select.init-chan { background:#14161c; border:1px solid #2c2f3a; color:#e7e9ee;
-    border-radius:6px; padding:.35rem .5rem; font-size:.85rem; max-width:16rem; }
-  #initWizard .init-status { font-size:.82rem; color:#57F287; min-height:1em; }
-</style>
 
 <script>
 (function () {
@@ -79,16 +97,21 @@
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
 
   // Text channels for the one-click steps that need one.
-  const CHANNELS = <%- JSON.stringify((locals.channels || []).filter(c => c.type === 0 || c.type === 'GUILD_TEXT' || c.type === 5).map(c => ({ id: c.id, name: c.name }))) %>;
+  const CHANNELS = <%- JSON.stringify((locals.channels || []).filter(c => c.type === 0 || c.type === 'GUILD_TEXT' || c.type === 5).map(c => ({ id: c.id, name: c.name }))).replace(/</g, '\\u003c') %>;
 
   const GROUPS = [
-    { key: 'essential',   label: 'Essential' },
-    { key: 'recommended', label: 'Recommended' },
-    { key: 'optional',    label: 'Optional' },
+    { key: 'essential',   label: 'Essential',   desc: 'The basics every server should have.' },
+    { key: 'recommended', label: 'Recommended', desc: 'Worth setting up for most servers.' },
+    { key: 'optional',    label: 'Optional',    desc: 'Extras to switch on if you want them.' },
   ];
   // Steps the wizard can complete in place. Everything else links to its own page, because a
   // wizard that guesses at moderation thresholds is worse than one that refuses.
   const QUICK = { logging: 'channel', welcome: 'channel', leveling: null, prefixes: null };
+
+  // Kit empty / error state markup (partials/kit/_state.ejs) for the panels the script fills.
+  const stateHtml = (kind, title, text) =>
+    `<div class="cf-state cf-state--${kind} cf-state--compact"${kind === 'error' ? ' role="alert"' : ''}>` +
+    `<p class="cf-state-title">${esc(title)}</p>${text ? `<p class="cf-state-text">${esc(text)}</p>` : ''}</div>`;
 
   async function req(url, options) {
     const res = await fetch(url, { credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, ...options });
@@ -104,61 +127,63 @@
 
   function renderPerms(perms) {
     const el = document.getElementById('initPerms');
-    if (!perms.length) { el.textContent = 'Could not read permissions.'; return; }
+    if (!perms.length) { el.innerHTML = stateHtml('empty', 'Could not read permissions.'); return; }
     el.innerHTML = perms.map(p => {
-      const icon = p.granted === null ? '<span style="color:#8b8f9e">•</span>'
-        : p.granted ? '<span style="color:#57F287">✔</span>' : '<span style="color:#ED4245">✕</span>';
-      return `<div class="init-perm">${icon}<strong>${esc(p.flag)}</strong><span class="why">— ${esc(p.why)}</span></div>`;
+      const pill = p.granted === null ? '<span class="cf-pill">Unknown</span>'
+        : p.granted ? '<span class="cf-pill is-ok">Granted</span>' : '<span class="cf-pill is-bad">Missing</span>';
+      return `<div class="cf-list-item init-perm"><div class="cf-list-main"><span class="init-perm-flag">${esc(p.flag)}</span><span class="init-perm-why">${esc(p.why)}</span></div><div class="cf-list-actions">${pill}</div></div>`;
     }).join('');
   }
 
   function stepHtml(step) {
-    const icon = step.done === null ? '⏳' : step.done ? '✅' : '▫️';
+    const pill = step.done === null ? '<span class="cf-pill">Checking</span>'
+      : step.done ? '<span class="cf-pill is-ok">Done</span>' : '<span class="cf-pill is-warn">To do</span>';
     const quick = Object.prototype.hasOwnProperty.call(QUICK, step.id) && !step.done;
     const needsChannel = QUICK[step.id] === 'channel';
 
     let actions = '';
     if (quick) {
       const picker = needsChannel
-        ? `<select class="init-chan" data-chan-for="${step.id}">
-             <option value="">Choose a channel…</option>
-             ${CHANNELS.map(c => `<option value="${c.id}">#${esc(c.name)}</option>`).join('')}
+        ? `<select class="form-select form-select-sm init-chan" data-chan-for="${esc(step.id)}" aria-label="Channel for ${esc(step.title)}">
+             <option value="">Choose a channel</option>
+             ${CHANNELS.map(c => `<option value="${esc(c.id)}">#${esc(c.name)}</option>`).join('')}
            </select>`
         : '';
-      actions += `${picker}<button class="btn btn-sm btn-primary" data-quick="${step.id}">Enable</button>`;
+      actions += `${picker}<button type="button" class="btn btn-sm btn-primary" data-quick="${esc(step.id)}">Turn on</button>`;
     }
     if (step.section) {
-      actions += `<a class="btn btn-sm btn-secondary" href="/manage/${guildId}?section=${step.section}">
-                    ${step.done ? 'Review' : 'Configure'}</a>`;
+      actions += `<a class="btn btn-sm btn-secondary" href="/manage/${esc(guildId)}?page=${encodeURIComponent(step.section)}">${step.done ? 'Review' : 'Set up'}</a>`;
     }
-    const detail = step.detail ? `<div class="init-detail">${esc(step.detail)}</div>` : '';
+    const detail = step.detail ? `<span class="init-detail">${esc(step.detail)}</span>` : '';
 
-    return `<div class="init-step ${step.done ? 'done' : ''}">
-      <div class="init-icon">${icon}</div>
-      <div class="init-body">
-        <div class="init-title">${esc(step.title)}</div>
-        <div class="init-desc">${esc(step.description)}</div>
+    return `<div class="cf-list-item init-step ${step.done ? 'done' : ''}">
+      <div class="cf-list-main">
+        <span class="init-title">${esc(step.title)} ${pill}</span>
+        <span class="init-desc">${esc(step.description)}</span>
         ${detail}
-        <div class="init-actions">${actions}<span class="init-status" data-status="${step.id}"></span></div>
       </div>
+      <div class="cf-list-actions">${actions}<span class="init-status cf-status-line" data-status="${esc(step.id)}" role="status"></span></div>
     </div>`;
   }
 
   function render(data) {
-    document.getElementById('initBotName').textContent = `${data.botName} — setup progress`;
+    document.getElementById('initBotName').textContent = `${data.botName} setup progress`;
     const { done, total, optionalDone, optionalTotal } = data.progress;
     const pct = total ? Math.round((done / total) * 100) : 0;
     document.getElementById('initPct').textContent = `${pct}%`;
     document.getElementById('initBarFill').style.width = `${pct}%`;
     document.getElementById('initProgressText').textContent =
-      `${done} of ${total} essential and recommended steps done · ${optionalDone}/${optionalTotal} optional extras enabled.`;
+      `${done} of ${total} essential and recommended steps done. ${optionalDone} of ${optionalTotal} optional extras on.`;
 
     renderPerms(data.permissions || []);
 
     document.getElementById('initGroups').innerHTML = GROUPS.map(g => {
       const steps = data.steps.filter(s => s.group === g.key);
       if (!steps.length) return '';
-      return `<div class="init-group-title">${g.label}</div>` + steps.map(stepHtml).join('');
+      return `<section class="cf-section init-group" aria-label="${g.label} steps">
+        <header class="cf-section-head"><div><h2 class="cf-section-title">${g.label}</h2><p class="cf-section-desc">${g.desc}</p></div></header>
+        <div class="cf-rows"><div class="cf-list">${steps.map(stepHtml).join('')}</div></div>
+      </section>`;
     }).join('');
   }
 
@@ -168,6 +193,12 @@
       render(await req(api('/initialize/status')));
     } catch (err) {
       showError(err.message);
+      // Replace the loading rows (first load only) so the panels don't spin forever.
+      root.querySelectorAll('#initPerms .cf-state--loading, #initGroups .cf-state--loading').forEach((el) => {
+        el.outerHTML = stateHtml('error', 'Could not load setup status', 'Reload the page to try again.');
+      });
+      const txt = document.getElementById('initProgressText');
+      if (txt.textContent === 'Loading setup status') txt.textContent = 'Setup status is unavailable right now.';
     }
   }
 
@@ -178,7 +209,7 @@
     const status = root.querySelector(`[data-status="${step}"]`);
     const picker = root.querySelector(`[data-chan-for="${step}"]`);
 
-    if (picker && !picker.value) { status.textContent = 'Pick a channel first.'; status.style.color = '#ED4245'; return; }
+    if (picker && !picker.value) { status.textContent = 'Pick a channel first.'; status.className = 'init-status cf-status-line is-bad'; return; }
 
     btn.disabled = true;
     try {
@@ -186,11 +217,11 @@
         method: 'POST',
         body: JSON.stringify(picker ? { channel_id: picker.value } : {}),
       });
-      status.style.color = '#57F287';
-      status.textContent = 'Enabled.';
+      status.className = 'init-status cf-status-line is-ok';
+      status.textContent = 'Turned on.';
       await load();
     } catch (err) {
-      status.style.color = '#ED4245';
+      status.className = 'init-status cf-status-line is-bad';
       status.textContent = err.message;
       btn.disabled = false;
     }

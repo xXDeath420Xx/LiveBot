@@ -1,6 +1,13 @@
 import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, ChannelType, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import pool from '../../utils/db.js';
 import logger from '../../utils/logger.js';
+import { themeColor } from '../../core/guild-theme.js';
+import { libraryCoverage, selectLibraryQuestion, DEFAULT_WINDOW_DAYS } from '../../core/qotd-selector.js';
+import { createChannel, updateChannelSchedule, describeDays } from '../../core/qotd-poster.js';
+
+/** Shared by setup channel and setup schedule. Short descriptions: /qotd sits near Discord's per-command size limit. */
+const daysOption = (o) => o.setName('days').setDescription('Weekly: days to post, e.g. monday or mon,thu').setMaxLength(80).setRequired(false);
+const timezoneOption = (o) => o.setName('timezone').setDescription('Timezone, e.g. America/Los_Angeles').setAutocomplete(true).setRequired(false);
 
 export default {
     category: 'community',
@@ -39,6 +46,8 @@ export default {
                                 .setDescription('Time to post (HH:MM format, e.g., 09:00)')
                                 .setRequired(false)
                         )
+                        .addStringOption(daysOption)
+                        .addStringOption(timezoneOption)
                 )
                 .addSubcommand(sub =>
                     sub
@@ -70,6 +79,9 @@ export default {
                                 .setMaxValue(168)
                                 .setRequired(false)
                         )
+                        .addStringOption(daysOption)
+                        .addStringOption(o => o.setName('time').setDescription('Time to post, HH:MM').setRequired(false))
+                        .addStringOption(timezoneOption)
                 )
                 .addSubcommand(sub =>
                     sub
@@ -280,6 +292,85 @@ export default {
                         )
                 )
         )
+        .addSubcommandGroup(group =>
+            group
+                .setName('library')
+                .setDescription('The shared question library and its no-repeat rules')
+                .addSubcommand(sub =>
+                    sub
+                        .setName('stats')
+                        .setDescription('How much of the library this server has used, and how much runway is left')
+                )
+                .addSubcommand(sub =>
+                    sub
+                        .setName('preview')
+                        .setDescription('Show the next few questions this channel would post')
+                        .addChannelOption(option =>
+                            option
+                                .setName('channel')
+                                .setDescription('QOTD channel')
+                                .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+                                .setRequired(true)
+                        )
+                        .addIntegerOption(option =>
+                            option
+                                .setName('days')
+                                .setDescription('How many days ahead to preview (default 7)')
+                                .setMinValue(1)
+                                .setMaxValue(30)
+                                .setRequired(false)
+                        )
+                )
+                .addSubcommand(sub =>
+                    sub
+                        .setName('source')
+                        .setDescription('Choose where this channel takes questions from')
+                        .addChannelOption(option =>
+                            option
+                                .setName('channel')
+                                .setDescription('QOTD channel')
+                                .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+                                .setRequired(true)
+                        )
+                        .addStringOption(option =>
+                            option
+                                .setName('mode')
+                                .setDescription('Where questions come from')
+                                .setRequired(true)
+                                .addChoices(
+                                    { name: 'Shared library (recommended)', value: 'library' },
+                                    { name: 'This server\'s deck only', value: 'deck' },
+                                    { name: 'Deck first, then library', value: 'mixed' }
+                                )
+                        )
+                        .addIntegerOption(option =>
+                            option
+                                .setName('window')
+                                .setDescription('Days before a question may repeat here (default 90)')
+                                .setMinValue(7)
+                                .setMaxValue(730)
+                                .setRequired(false)
+                        )
+                )
+                .addSubcommand(sub =>
+                    sub
+                        .setName('themes')
+                        .setDescription('List every theme, or mute ones this server does not want')
+                        .addChannelOption(option =>
+                            option
+                                .setName('channel')
+                                .setDescription('QOTD channel (omit to just list the themes)')
+                                .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+                                .setRequired(false)
+                        )
+                        .addStringOption(option =>
+                            option
+                                .setName('mute')
+                                .setDescription('Comma-separated themes to never post here. Use "none" to clear.')
+                                .setRequired(false)
+                        )
+                )
+        )
         .addSubcommand(sub =>
             sub
                 .setName('suggest')
@@ -330,6 +421,17 @@ export default {
         )
         .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild),
 
+    async autocomplete(interaction) {
+        const focused = interaction.options.getFocused(true);
+        if (focused.name !== 'timezone') return interaction.respond([]);
+        const q = String(focused.value || '').toLowerCase().replace(/\s+/g, '_');
+        let zones = [];
+        try { zones = Intl.supportedValuesOf('timeZone'); } catch { zones = ['UTC']; }
+        if (!zones.includes('UTC')) zones.unshift('UTC');
+        const hits = zones.filter((z) => z.toLowerCase().includes(q)).slice(0, 25);
+        return interaction.respond(hits.map((z) => ({ name: z.replace(/_/g, ' '), value: z })));
+    },
+
     async execute(interaction) {
         const subcommandGroup = interaction.options.getSubcommandGroup();
         const subcommand = interaction.options.getSubcommand();
@@ -339,6 +441,8 @@ export default {
                 await handleSetup(interaction, subcommand);
             } else if (subcommandGroup === 'deck') {
                 await handleDeck(interaction, subcommand);
+            } else if (subcommandGroup === 'library') {
+                await handleLibrary(interaction, subcommand);
             } else if (subcommandGroup === 'card') {
                 await handleCard(interaction, subcommand);
             } else if (subcommand === 'suggest') {
@@ -351,7 +455,7 @@ export default {
         } catch (error) {
             logger.error('[QOTD] Command error:', { error, subcommand, subcommandGroup });
             const errorEmbed = new EmbedBuilder()
-                .setColor('#ed4245')
+                .setColor(themeColor(interaction.guildId, 'danger'))
                 .setTitle('Error')
                 .setDescription(`An error occurred: ${error.message}`)
                 .setTimestamp();
@@ -364,6 +468,16 @@ export default {
         }
     }
 };
+
+/** "Daily", "Weekly: Monday and Thursday", "Every 6 hours". */
+function scheduleText(row) {
+    if (row.schedule_type === 'weekly') return `Weekly: ${describeDays(row.schedule_days)}`;
+    if (row.schedule_type === 'custom') {
+        const m = Number(row.custom_interval_minutes) || 0;
+        return m % 60 === 0 ? `Every ${m / 60} hour${m === 60 ? '' : 's'}` : `Every ${m} minutes`;
+    }
+    return 'Daily';
+}
 
 // Setup handlers
 async function handleSetup(interaction, subcommand) {
@@ -379,27 +493,40 @@ async function handleSetup(interaction, subcommand) {
         if (!timeRegex.test(time)) {
             return interaction.editReply({
                 embeds: [new EmbedBuilder()
-                    .setColor('#ed4245')
+                    .setColor(themeColor(interaction.guildId, 'danger'))
                     .setTitle('Invalid Time Format')
                     .setDescription('Please use HH:MM format (e.g., 09:00, 14:30)')
                 ]
             });
         }
 
-        // Create or update channel configuration
-        await pool.execute(`
-            INSERT INTO qotd_channels (channel_id, guild_id, schedule_type, schedule_time)
-            VALUES (?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE schedule_type = VALUES(schedule_type), schedule_time = VALUES(schedule_time), enabled = 1
-        `, [channel.id, interaction.guild.id, schedule, time]);
+        // New channels start from the server's dashboard defaults; options given here win.
+        const overrides = { schedule_type: schedule };
+        if (interaction.options.getString('time')) overrides.schedule_time = time;
+        const days = interaction.options.getString('days');
+        if (days) overrides.schedule_days = days;
+        const timezone = interaction.options.getString('timezone');
+        if (timezone) overrides.timezone = timezone;
+
+        const result = await createChannel(interaction.guild.id, channel.id, overrides);
+        if (!result.ok) {
+            return interaction.editReply({
+                embeds: [new EmbedBuilder()
+                    .setColor(themeColor(interaction.guildId, 'danger'))
+                    .setTitle('Could not set up QOTD')
+                    .setDescription(result.error + (schedule === 'weekly' ? '\nAdd `days`, e.g. `days: monday`.' : ''))
+                ]
+            });
+        }
+        const row = result.row;
 
         const embed = new EmbedBuilder()
-            .setColor('#57f287')
+            .setColor(themeColor(interaction.guildId, 'success'))
             .setTitle('QOTD Channel Configured')
             .setDescription(`Successfully set up QOTD in ${channel}`)
             .addFields(
-                { name: 'Schedule', value: schedule.charAt(0).toUpperCase() + schedule.slice(1), inline: true },
-                { name: 'Time', value: time, inline: true }
+                { name: 'Schedule', value: scheduleText(row), inline: true },
+                { name: 'Time', value: `${String(row.schedule_time).slice(0, 5)} ${row.timezone}`, inline: true }
             )
             .setFooter({ text: 'Use /qotd deck select to choose a deck' })
             .setTimestamp();
@@ -420,31 +547,40 @@ async function handleSetup(interaction, subcommand) {
         if (!config) {
             return interaction.editReply({
                 embeds: [new EmbedBuilder()
-                    .setColor('#ed4245')
+                    .setColor(themeColor(interaction.guildId, 'danger'))
                     .setTitle('Channel Not Configured')
                     .setDescription(`${channel} is not set up for QOTD. Use \`/qotd setup channel\` first.`)
                 ]
             });
         }
 
-        let customIntervalMinutes = null;
-        if (type === 'custom' && interval) {
-            customIntervalMinutes = interval * 60; // Convert hours to minutes
+        const patch = { schedule_type: type };
+        if (type === 'custom' && interval) patch.custom_interval_minutes = interval * 60; // hours → minutes
+        for (const k of ['days', 'time', 'timezone']) {
+            const v = interaction.options.getString(k);
+            if (v) patch[{ days: 'schedule_days', time: 'schedule_time', timezone: 'timezone' }[k]] = v;
         }
 
-        await pool.execute(
-            'UPDATE qotd_channels SET schedule_type = ?, custom_interval_minutes = ? WHERE channel_id = ?',
-            [type, customIntervalMinutes, channel.id]
-        );
+        const result = await updateChannelSchedule(interaction.guild.id, channel.id, patch);
+        if (!result.ok) {
+            return interaction.editReply({
+                embeds: [new EmbedBuilder()
+                    .setColor(themeColor(interaction.guildId, 'danger'))
+                    .setTitle('Schedule not changed')
+                    .setDescription(result.error)
+                ]
+            });
+        }
+        const row = result.row;
 
         const embed = new EmbedBuilder()
-            .setColor('#57f287')
+            .setColor(themeColor(interaction.guildId, 'success'))
             .setTitle('Schedule Updated')
             .setDescription(`Updated posting schedule for ${channel}`)
-            .addFields({
-                name: 'Type',
-                value: type === 'custom' ? `Every ${interval} hours` : type.charAt(0).toUpperCase() + type.slice(1)
-            })
+            .addFields(
+                { name: 'Schedule', value: scheduleText(row), inline: true },
+                { name: 'Time', value: row.schedule_type === 'custom' ? '—' : `${String(row.schedule_time).slice(0, 5)} ${row.timezone}`, inline: true }
+            )
             .setTimestamp();
 
         await interaction.editReply({ embeds: [embed] });
@@ -460,7 +596,7 @@ async function handleSetup(interaction, subcommand) {
         if (color && !/^#[0-9A-F]{6}$/i.test(color)) {
             return interaction.editReply({
                 embeds: [new EmbedBuilder()
-                    .setColor('#ed4245')
+                    .setColor(themeColor(interaction.guildId, 'danger'))
                     .setTitle('Invalid Color')
                     .setDescription('Please use a valid hex color code (e.g., #5865F2)')
                 ]
@@ -491,7 +627,7 @@ async function handleSetup(interaction, subcommand) {
         if (updates.length === 0) {
             return interaction.editReply({
                 embeds: [new EmbedBuilder()
-                    .setColor('#ffa500')
+                    .setColor(themeColor(interaction.guildId, 'warning'))
                     .setTitle('No Changes')
                     .setDescription('Please specify at least one appearance setting to update.')
                 ]
@@ -535,7 +671,7 @@ async function handleDeck(interaction, subcommand) {
         );
 
         const embed = new EmbedBuilder()
-            .setColor('#57f287')
+            .setColor(themeColor(interaction.guildId, 'success'))
             .setTitle('Deck Created')
             .setDescription(`Created new ${type} deck`)
             .addFields(
@@ -563,7 +699,7 @@ async function handleDeck(interaction, subcommand) {
         if (decks.length === 0) {
             return interaction.editReply({
                 embeds: [new EmbedBuilder()
-                    .setColor('#ffa500')
+                    .setColor(themeColor(interaction.guildId, 'warning'))
                     .setTitle('No Decks Found')
                     .setDescription('No decks available. Create one with `/qotd deck create`')
                 ]
@@ -571,7 +707,7 @@ async function handleDeck(interaction, subcommand) {
         }
 
         const embed = new EmbedBuilder()
-            .setColor('#5865f2')
+            .setColor(themeColor(interaction.guildId, 'primary'))
             .setTitle(showCommunity ? 'Available Decks (Including Community)' : 'Server Decks')
             .setDescription(decks.map(d =>
                 `**${d.deck_id}. ${d.deck_name}** ${d.is_community ? '🌐' : ''}\n` +
@@ -596,7 +732,7 @@ async function handleDeck(interaction, subcommand) {
         if (!deck) {
             return interaction.editReply({
                 embeds: [new EmbedBuilder()
-                    .setColor('#ed4245')
+                    .setColor(themeColor(interaction.guildId, 'danger'))
                     .setTitle('Deck Not Found')
                     .setDescription('Deck not found or not accessible to this server.')
                 ]
@@ -610,7 +746,7 @@ async function handleDeck(interaction, subcommand) {
         );
 
         const embed = new EmbedBuilder()
-            .setColor('#57f287')
+            .setColor(themeColor(interaction.guildId, 'success'))
             .setTitle('Deck Selected')
             .setDescription(`Set active deck for ${channel}`)
             .addFields(
@@ -633,7 +769,7 @@ async function handleDeck(interaction, subcommand) {
         if (!deck) {
             return interaction.editReply({
                 embeds: [new EmbedBuilder()
-                    .setColor('#ed4245')
+                    .setColor(themeColor(interaction.guildId, 'danger'))
                     .setTitle('Deck Not Found')
                     .setDescription('Deck not found or you don\'t have permission to shuffle it.')
                 ]
@@ -649,7 +785,7 @@ async function handleDeck(interaction, subcommand) {
         if (cards.length === 0) {
             return interaction.editReply({
                 embeds: [new EmbedBuilder()
-                    .setColor('#ffa500')
+                    .setColor(themeColor(interaction.guildId, 'warning'))
                     .setTitle('No Cards to Shuffle')
                     .setDescription('This deck has no cards.')
                 ]
@@ -672,7 +808,7 @@ async function handleDeck(interaction, subcommand) {
         }
 
         const embed = new EmbedBuilder()
-            .setColor('#57f287')
+            .setColor(themeColor(interaction.guildId, 'success'))
             .setTitle('Deck Shuffled')
             .setDescription(`Shuffled ${cards.length} cards in **${deck.deck_name}**`)
             .setTimestamp();
@@ -691,7 +827,7 @@ async function handleDeck(interaction, subcommand) {
         if (!deck) {
             return interaction.editReply({
                 embeds: [new EmbedBuilder()
-                    .setColor('#ed4245')
+                    .setColor(themeColor(interaction.guildId, 'danger'))
                     .setTitle('Deck Not Found')
                     .setDescription('Deck not found or you don\'t have permission to delete it.')
                 ]
@@ -702,7 +838,7 @@ async function handleDeck(interaction, subcommand) {
         await pool.execute('DELETE FROM qotd_decks WHERE deck_id = ?', [deckId]);
 
         const embed = new EmbedBuilder()
-            .setColor('#57f287')
+            .setColor(themeColor(interaction.guildId, 'success'))
             .setTitle('Deck Deleted')
             .setDescription(`Deleted deck **${deck.deck_name}** and all its cards`)
             .setTimestamp();
@@ -729,7 +865,7 @@ async function handleCard(interaction, subcommand) {
         if (!deck) {
             return interaction.editReply({
                 embeds: [new EmbedBuilder()
-                    .setColor('#ed4245')
+                    .setColor(themeColor(interaction.guildId, 'danger'))
                     .setTitle('Deck Not Found')
                     .setDescription('Deck not found or you don\'t have permission to add cards to it.')
                 ]
@@ -755,7 +891,7 @@ async function handleCard(interaction, subcommand) {
         );
 
         const embed = new EmbedBuilder()
-            .setColor('#57f287')
+            .setColor(themeColor(interaction.guildId, 'success'))
             .setTitle('Card Added')
             .setDescription(`Added card to **${deck.deck_name}**`)
             .addFields({ name: 'Content', value: content.substring(0, 1024) })
@@ -783,7 +919,7 @@ async function handleCard(interaction, subcommand) {
         if (!card) {
             return interaction.editReply({
                 embeds: [new EmbedBuilder()
-                    .setColor('#ed4245')
+                    .setColor(themeColor(interaction.guildId, 'danger'))
                     .setTitle('Card Not Found')
                     .setDescription('Card not found or you don\'t have permission to edit it.')
                 ]
@@ -796,7 +932,7 @@ async function handleCard(interaction, subcommand) {
         );
 
         const embed = new EmbedBuilder()
-            .setColor('#57f287')
+            .setColor(themeColor(interaction.guildId, 'success'))
             .setTitle('Card Updated')
             .setDescription('Successfully updated card content')
             .addFields({ name: 'New Content', value: content.substring(0, 1024) })
@@ -819,7 +955,7 @@ async function handleCard(interaction, subcommand) {
         if (!card) {
             return interaction.editReply({
                 embeds: [new EmbedBuilder()
-                    .setColor('#ed4245')
+                    .setColor(themeColor(interaction.guildId, 'danger'))
                     .setTitle('Card Not Found')
                     .setDescription('Card not found or you don\'t have permission to delete it.')
                 ]
@@ -835,7 +971,7 @@ async function handleCard(interaction, subcommand) {
         );
 
         const embed = new EmbedBuilder()
-            .setColor('#57f287')
+            .setColor(themeColor(interaction.guildId, 'success'))
             .setTitle('Card Deleted')
             .setDescription(`Deleted card from **${card.deck_name}**`)
             .setTimestamp();
@@ -857,7 +993,7 @@ async function handleCard(interaction, subcommand) {
         if (!deck) {
             return interaction.editReply({
                 embeds: [new EmbedBuilder()
-                    .setColor('#ed4245')
+                    .setColor(themeColor(interaction.guildId, 'danger'))
                     .setTitle('Deck Not Found')
                     .setDescription('Deck not found or not accessible.')
                 ]
@@ -872,7 +1008,7 @@ async function handleCard(interaction, subcommand) {
         if (cards.length === 0) {
             return interaction.editReply({
                 embeds: [new EmbedBuilder()
-                    .setColor('#ffa500')
+                    .setColor(themeColor(interaction.guildId, 'warning'))
                     .setTitle('No Cards')
                     .setDescription('This deck has no cards.')
                 ]
@@ -882,7 +1018,7 @@ async function handleCard(interaction, subcommand) {
         const totalPages = Math.ceil(deck.card_count / perPage);
 
         const embed = new EmbedBuilder()
-            .setColor('#5865f2')
+            .setColor(themeColor(interaction.guildId, 'primary'))
             .setTitle(`${deck.deck_name} - Cards`)
             .setDescription(cards.map(c =>
                 `**${c.card_id}.** ${c.content.substring(0, 100)}${c.content.length > 100 ? '...' : ''}`
@@ -907,7 +1043,7 @@ async function handleSuggest(interaction) {
     );
 
     const embed = new EmbedBuilder()
-        .setColor('#57f287')
+        .setColor(themeColor(interaction.guildId, 'success'))
         .setTitle('Suggestion Submitted')
         .setDescription('Your suggestion has been submitted to server staff for review.')
         .addFields({ name: 'Content', value: content.substring(0, 1024) })
@@ -931,7 +1067,7 @@ async function handlePost(interaction) {
     if (!config || !config.active_deck_id) {
         return interaction.editReply({
             embeds: [new EmbedBuilder()
-                .setColor('#ed4245')
+                .setColor(themeColor(interaction.guildId, 'danger'))
                 .setTitle('Not Configured')
                 .setDescription(`${channel} is not configured or has no active deck. Use \`/qotd setup channel\` and \`/qotd deck select\`.`)
             ]
@@ -944,7 +1080,7 @@ async function handlePost(interaction) {
 
     if (result.success) {
         const embed = new EmbedBuilder()
-            .setColor('#57f287')
+            .setColor(themeColor(interaction.guildId, 'success'))
             .setTitle('QOTD Posted')
             .setDescription(`Successfully posted to ${channel}`)
             .addFields({ name: 'Content', value: result.content.substring(0, 1024) })
@@ -970,7 +1106,7 @@ async function handleView(interaction) {
     if (!config) {
         return interaction.editReply({
             embeds: [new EmbedBuilder()
-                .setColor('#ffa500')
+                .setColor(themeColor(interaction.guildId, 'warning'))
                 .setTitle('Not Configured')
                 .setDescription(`${channel} has not been set up for QOTD.`)
             ]
@@ -995,8 +1131,8 @@ async function handleView(interaction) {
         .setDescription(`Settings for ${channel}`)
         .addFields(
             { name: 'Status', value: config.enabled ? '✅ Enabled' : '❌ Disabled', inline: true },
-            { name: 'Schedule', value: config.schedule_type.charAt(0).toUpperCase() + config.schedule_type.slice(1), inline: true },
-            { name: 'Post Time', value: config.schedule_time || 'Not set', inline: true },
+            { name: 'Schedule', value: scheduleText(config), inline: true },
+            { name: 'Post Time', value: config.schedule_type === 'custom' ? '—' : `${String(config.schedule_time || '09:00').slice(0, 5)} ${config.timezone || 'UTC'}`, inline: true },
             { name: 'Active Deck', value: deckInfo, inline: true },
             { name: 'Mode', value: config.mode.charAt(0).toUpperCase() + config.mode.slice(1), inline: true },
             { name: 'Threads', value: config.thread_enabled ? 'Enabled' : 'Disabled', inline: true },
@@ -1006,4 +1142,207 @@ async function handleView(interaction) {
         .setTimestamp();
 
     await interaction.editReply({ embeds: [embed] });
+}
+
+
+// Library handlers — the shared pool and its anti-repetition rules.
+async function handleLibrary(interaction, subcommand) {
+    await interaction.deferReply();
+
+    if (subcommand === 'stats') {
+        const [[channel]] = await pool.execute(
+            'SELECT repeat_window_days FROM qotd_channels WHERE guild_id = ? ORDER BY created_at LIMIT 1',
+            [interaction.guild.id]
+        );
+        const windowDays = channel?.repeat_window_days || DEFAULT_WINDOW_DAYS;
+        const coverage = await libraryCoverage(interaction.guild.id, windowDays);
+
+        const [themes] = await pool.execute(
+            'SELECT theme, COUNT(*) AS n FROM qotd_library WHERE active = 1 GROUP BY theme ORDER BY theme'
+        );
+        const [[recent]] = await pool.execute(
+            `SELECT COUNT(*) AS posts, COUNT(DISTINCT variant_group) AS distinct_qs
+             FROM qotd_history WHERE guild_id = ? AND posted_at > DATE_SUB(NOW(), INTERVAL ? DAY)`,
+            [interaction.guild.id, windowDays]
+        );
+
+        // Runway is in groups, not rows: two rewordings of one question are one slot.
+        const daysOfRunway = coverage.remaining;
+
+        const embed = new EmbedBuilder()
+            .setColor(themeColor(interaction.guildId, 'primary'))
+            .setTitle('QOTD Library')
+            .setDescription(
+                `**${coverage.libraryQuestions}** questions in **${themes.length}** themes, ` +
+                `**${coverage.distinctGroups}** of them distinct once rewordings are collapsed.`
+            )
+            .addFields(
+                { name: 'No-repeat window', value: `${windowDays} days`, inline: true },
+                { name: 'Used in that window', value: `${coverage.usedInWindow}`, inline: true },
+                { name: 'Days of runway left', value: `${daysOfRunway}`, inline: true },
+                { name: 'Posted here recently', value: `${recent.posts} posts, ${recent.distinct_qs} distinct questions`, inline: false },
+                { name: 'Themes', value: themes.map(t => `${t.theme} (${t.n})`).join(' · ').slice(0, 1024), inline: false }
+            )
+            .setTimestamp();
+
+        return interaction.editReply({ embeds: [embed] });
+    }
+
+    if (subcommand === 'preview') {
+        const channel = interaction.options.getChannel('channel');
+        const days = interaction.options.getInteger('days') || 7;
+
+        const [[config]] = await pool.execute(
+            'SELECT * FROM qotd_channels WHERE channel_id = ?', [channel.id]
+        );
+        if (!config) {
+            return interaction.editReply({
+                embeds: [new EmbedBuilder()
+                    .setColor(themeColor(interaction.guildId, 'danger'))
+                    .setTitle('Not configured')
+                    .setDescription(`${channel} has no QOTD setup. Run \`/qotd setup channel\` first.`)]
+            });
+        }
+
+        // Preview only reads — it never writes history, so the real rotation is unaffected.
+        // That also means each previewed day is picked as if it were the only one: two
+        // consecutive previews can show the same question twice where the live run would not.
+        const lines = [];
+        for (let d = 0; d < days; d++) {
+            const { question, tier } = await selectLibraryQuestion(config, { dayOffset: d });
+            lines.push(question
+                ? `**+${d}d** \`${question.theme}\` ${question.content}${tier === 'exhausted' ? ' ⚠️' : ''}`
+                : `**+${d}d** — nothing available`);
+        }
+
+        const embed = new EmbedBuilder()
+            .setColor(themeColor(interaction.guildId, 'primary'))
+            .setTitle(`Next ${days} days in #${channel.name}`)
+            .setDescription(lines.join('\n\n').slice(0, 4000))
+            .setFooter({ text: 'Preview is read-only and approximate — it does not reserve these questions.' })
+            .setTimestamp();
+
+        return interaction.editReply({ embeds: [embed] });
+    }
+
+    if (subcommand === 'source') {
+        const channel = interaction.options.getChannel('channel');
+        const mode = interaction.options.getString('mode');
+        const window = interaction.options.getInteger('window');
+
+        const [[config]] = await pool.execute(
+            'SELECT * FROM qotd_channels WHERE channel_id = ?', [channel.id]
+        );
+        if (!config) {
+            return interaction.editReply({
+                embeds: [new EmbedBuilder()
+                    .setColor(themeColor(interaction.guildId, 'danger'))
+                    .setTitle('Not configured')
+                    .setDescription(`${channel} has no QOTD setup. Run \`/qotd setup channel\` first.`)]
+            });
+        }
+
+        if (mode === 'deck' && !config.active_deck_id) {
+            return interaction.editReply({
+                embeds: [new EmbedBuilder()
+                    .setColor(themeColor(interaction.guildId, 'danger'))
+                    .setTitle('No deck selected')
+                    .setDescription('Deck-only mode needs a deck. Use `/qotd deck select` first, or pick the shared library.')]
+            });
+        }
+
+        await pool.execute(
+            `UPDATE qotd_channels SET source_mode = ?${window ? ', repeat_window_days = ?' : ''} WHERE channel_id = ?`,
+            window ? [mode, window, channel.id] : [mode, channel.id]
+        );
+
+        const explain = {
+            library: 'Questions come from the shared library, filtered so nothing repeats here inside the window and other servers get different questions.',
+            deck: 'Questions come only from this server\'s own deck. The no-repeat window does not apply.',
+            mixed: 'This server\'s unposted deck cards go out first, then the shared library takes over.',
+        }[mode];
+
+        return interaction.editReply({
+            embeds: [new EmbedBuilder()
+                .setColor(themeColor(interaction.guildId, 'success'))
+                .setTitle('Question source updated')
+                .setDescription(explain)
+                .addFields(
+                    { name: 'Channel', value: `${channel}`, inline: true },
+                    { name: 'Source', value: mode, inline: true },
+                    { name: 'No-repeat window', value: `${window || config.repeat_window_days || DEFAULT_WINDOW_DAYS} days`, inline: true }
+                )
+                .setTimestamp()]
+        });
+    }
+
+    if (subcommand === 'themes') {
+        const channel = interaction.options.getChannel('channel');
+        const mute = interaction.options.getString('mute');
+
+        const [themes] = await pool.execute(
+            'SELECT theme, COUNT(*) AS n FROM qotd_library WHERE active = 1 GROUP BY theme ORDER BY theme'
+        );
+        const known = new Set(themes.map(t => t.theme));
+
+        if (mute !== null && !channel) {
+            return interaction.editReply({
+                embeds: [new EmbedBuilder()
+                    .setColor(themeColor(interaction.guildId, 'danger'))
+                    .setTitle('Which channel?')
+                    .setDescription('Muting themes is per-channel — pass the QOTD channel as well.')]
+            });
+        }
+
+        if (mute === null) {
+            return interaction.editReply({
+                embeds: [new EmbedBuilder()
+                    .setColor(themeColor(interaction.guildId, 'primary'))
+                    .setTitle('Library themes')
+                    .setDescription(themes.map(t => `\`${t.theme}\` — ${t.n} questions`).join('\n'))
+                    .setFooter({ text: 'Mute themes with /qotd library themes channel:#chan mute:absurd,sports' })]
+            });
+        }
+
+        const requested = mute.toLowerCase() === 'none'
+            ? []
+            : mute.split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+        const unknown = requested.filter(t => !known.has(t));
+        if (unknown.length) {
+            return interaction.editReply({
+                embeds: [new EmbedBuilder()
+                    .setColor(themeColor(interaction.guildId, 'danger'))
+                    .setTitle('Unknown theme')
+                    .setDescription(`No such theme: ${unknown.map(t => `\`${t}\``).join(', ')}\n\nValid: ${[...known].join(', ')}`)]
+            });
+        }
+        if (requested.length >= known.size) {
+            return interaction.editReply({
+                embeds: [new EmbedBuilder()
+                    .setColor(themeColor(interaction.guildId, 'danger'))
+                    .setTitle('That mutes everything')
+                    .setDescription('Muting every theme would leave nothing to post. Leave at least one unmuted.')]
+            });
+        }
+
+        await pool.execute(
+            'UPDATE qotd_channels SET theme_blocklist = ? WHERE channel_id = ?',
+            [requested.length ? JSON.stringify(requested) : null, channel.id]
+        );
+
+        const remaining = themes.filter(t => !requested.includes(t.theme));
+        return interaction.editReply({
+            embeds: [new EmbedBuilder()
+                .setColor(themeColor(interaction.guildId, 'success'))
+                .setTitle(requested.length ? 'Themes muted' : 'Theme filter cleared')
+                .setDescription(requested.length
+                    ? `${channel} will never post: ${requested.map(t => `\`${t}\``).join(', ')}`
+                    : `${channel} now draws from every theme.`)
+                .addFields({
+                    name: 'Questions still available',
+                    value: `${remaining.reduce((n, t) => n + t.n, 0)} across ${remaining.length} themes`,
+                })
+                .setTimestamp()]
+        });
+    }
 }

@@ -2,6 +2,8 @@ import { Events, EmbedBuilder } from 'discord.js';
 import logger from '../utils/logger.js';
 import { sendLogEmbed, saveAuditLog } from '../core/log-manager.js';
 import { shouldIgnoreGuild } from '../utils/custom-bot-check.js';
+import { themeColor } from '../core/guild-theme.js';
+import { handleUserRemove } from '../core/event-reminder-manager.js';
 
 export default {
     name: Events.GuildScheduledEventUserRemove,
@@ -12,6 +14,14 @@ export default {
 
             if (event.client.isDefaultBot && await shouldIgnoreGuild(guild.id)) return;
 
+            // Reminder / recurring-event bookkeeping (core/event-reminder-manager.js). Kept apart
+            // from the log embed below so a failure in one never suppresses the other.
+            try {
+                await handleUserRemove(event, user);
+            } catch (trackError) {
+                logger.error('[ScheduledEvent] Event tracking failed', { error: trackError.message, guildId: guild.id, eventId: event.id });
+            }
+
             logger.info(`[ScheduledEvent] User ${user.tag} un-RSVPed from ${event.name}`, {
                 guildId: guild.id,
                 eventId: event.id,
@@ -20,7 +30,7 @@ export default {
             });
 
             const embed = new EmbedBuilder()
-                .setColor(0xED4245)
+                .setColor(themeColor(guild?.id, 'danger'))
                 .setTitle('📅 Event RSVP Removed')
                 .setDescription(`${user} is no longer interested in **${event.name}**`)
                 .addFields(

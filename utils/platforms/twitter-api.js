@@ -2,10 +2,8 @@ import axios from 'axios';
 import { XMLParser } from 'fast-xml-parser';
 import logger from '../logger.js';
 
-// List of RSS sources to try (rotates through on failure)
-// NOTE: Free Twitter scraping is unreliable due to Twitter/X's anti-scraping measures
-// Most Nitter/RssBridge instances are blocked or rate-limited
-// If reliable Twitter feeds are needed, consider adding RapidAPI integration
+// Tweets come from FxTwitter's profile timeline first (fetchViaFxTimeline). These RSS sources are only a
+// fallback: as of 2026-10 every one of them was unreachable from the server or redirected away.
 const RSS_SOURCES = [
     // Nitter instances (try various ones)
     { type: 'nitter', url: 'https://nitter.poast.org/{username}/rss' },
@@ -250,18 +248,64 @@ async function getTweetDetails(tweetUrl) {
 /**
  * Get user's recent tweets - tries multiple sources
  */
+/**
+ * A FxTwitter timeline status -> the tweet shape the callers use (same as parseRSSItem's).
+ * A repost keeps its original author and id, marked with is_retweet (FxTwitter's `reposted_by`).
+ */
+function fxStatusToTweet(status, username) {
+    const author = status.author || {};
+    const media = [
+        ...(status.media?.photos || []).map(p => ({ type: 'photo', url: p.url })),
+        ...(status.media?.videos || []).map(v => ({ type: 'video', url: v.url, thumbnail: v.thumbnail_url || null })),
+    ].filter(m => m.url);
+    const screenName = author.screen_name || username;
+    return {
+        id: String(status.id),
+        text: status.text || status.raw_text?.text || '',
+        author: { username: screenName, name: author.name || screenName, avatar: author.avatar_url || null },
+        created_at: status.created_timestamp
+            ? new Date(status.created_timestamp * 1000).toISOString()
+            : new Date(status.created_at || Date.now()).toISOString(),
+        url: status.url || `https://x.com/${screenName}/status/${status.id}`,
+        media,
+        is_retweet: !!status.reposted_by,
+        is_reply: !!status.replying_to,
+        metrics: { likes: status.likes || 0, retweets: status.reposts || 0, replies: status.replies || 0 },
+        source: 'fxtwitter',
+    };
+}
+
+/**
+ * Recent posts from FxTwitter's profile timeline, in timeline order (newest first; reposts sit where they
+ * were reposted). The public Nitter instances below are mostly gone, so this is the primary source.
+ */
+async function fetchViaFxTimeline(username, count = 10) {
+    try {
+        const { data } = await axios.get(`https://api.fxtwitter.com/2/profile/${encodeURIComponent(username)}/statuses`, {
+            timeout: 15000,
+            headers: { 'User-Agent': 'CertiFriedBot/1.0 (+https://certifriedmultitool.com)' },
+        });
+        const results = Array.isArray(data?.results) ? data.results : [];
+        return results.slice(0, count).map(status => fxStatusToTweet(status, username));
+    } catch (error) {
+        logger.warn(`[Twitter API] FxTwitter timeline failed for ${username}: ${error.response?.status || error.code || error.message}`);
+        return [];
+    }
+}
+
 async function getUserTweets(username, count = 10) {
     username = username.replace(/^@/, '').toLowerCase();
 
     // Check cache
     const cached = userCache.get(`tweets:${username}`);
     if (cached && Date.now() - cached.timestamp < CACHE_DURATION) {
-        logger.info(`[Twitter API] Using cached tweets for ${username}`);
+        logger.debug(`[Twitter API] Using cached tweets for ${username}`);
         return cached.data;
     }
 
-    // Try RSS sources
-    const tweets = await fetchViaRSS(username, count);
+    // FxTwitter first; the Nitter RSS mirrors only as a fallback
+    let tweets = await fetchViaFxTimeline(username, count);
+    if (!tweets.length) tweets = await fetchViaRSS(username, count);
     if (tweets && tweets.length > 0) {
         userCache.set(`tweets:${username}`, { data: tweets, timestamp: Date.now() });
         return tweets;
@@ -430,6 +474,7 @@ function extractMediaFromHtml(html) {
 
 export {
     getUserTweets,
+    fxStatusToTweet,
     getUserProfile,
     validateUser,
     getTweetDetails

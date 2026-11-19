@@ -1,6 +1,8 @@
 import pool from '../utils/db.js';
 import { EmbedBuilder } from 'discord.js';
 import logger from '../utils/logger.js';
+import { displayNameFor } from '../utils/display-name.js';
+import { getOrCreateUserEconomy, getEconomyConfig, logTransaction, economyStatus } from './economy-manager.js';
 
 /**
  * Achievement Manager - Cross-feature achievement tracking system
@@ -82,7 +84,7 @@ export default class AchievementManager {
 
       // Check if achievement is now complete
       if (this.checkAchievementComplete(achievement, userAchievement.progress, eventData)) {
-        return await this.completeAchievement(userId, guildId, achievement);
+        return await this.completeAchievement(userId, guildId, achievement, userAchievement.progress);
       }
 
       return null;
@@ -127,17 +129,31 @@ export default class AchievementManager {
    * @param {string} guildId - Discord guild ID
    * @param {Object} achievement - Achievement object
    */
-  async completeAchievement(userId, guildId, achievement) {
+  async completeAchievement(userId, guildId, achievement, progressSeen = null) {
     try {
       const completedAt = new Date();
 
-      // Update user achievement to completed
-      await pool.execute(
-        `UPDATE user_achievements
-         SET completed = TRUE, completed_at = ?, times_completed = times_completed + 1
-         WHERE user_id = ? AND guild_id = ? AND achievement_id = ?`,
-        [completedAt, userId, guildId, achievement.id]
-      );
+      // Claim the completion. Now that achievements pay rewards, two events landing at once (a
+      // message and a voice update, say) must not both complete — and pay — the same achievement:
+      // only the call whose guarded UPDATE changes the row goes on. A repeatable achievement starts
+      // counting again from 0, guarded on the progress this call saw.
+      const repeatable = Number(achievement.is_repeatable) === 1;
+      const [claim] = repeatable
+        ? await pool.execute(
+          `UPDATE user_achievements
+           SET completed = TRUE, completed_at = ?, times_completed = times_completed + 1, progress = 0
+           WHERE user_id = ? AND guild_id = ? AND achievement_id = ? AND (? IS NULL OR progress = ?)`,
+          [completedAt, userId, guildId, achievement.id, progressSeen, progressSeen]
+        )
+        : await pool.execute(
+          `UPDATE user_achievements
+           SET completed = TRUE, completed_at = ?, times_completed = times_completed + 1
+           WHERE user_id = ? AND guild_id = ? AND achievement_id = ? AND completed = FALSE`,
+          [completedAt, userId, guildId, achievement.id]
+        );
+      if (!claim || claim.affectedRows === 0) {
+        return null; // another event completed it first
+      }
 
       // Update achievement statistics
       await pool.execute(
@@ -151,12 +167,12 @@ export default class AchievementManager {
       );
 
       // Get rewards for this achievement
-      const rewards = await this.getAchievementRewards(achievement.id);
+      const allRewards = await this.getAchievementRewards(achievement.id);
 
-      // Award rewards
-      if (rewards.length > 0) {
-        await this.awardRewards(userId, guildId, rewards);
-      }
+      // Award rewards — only the ones this server has switched on are paid (and announced)
+      const rewards = allRewards.length > 0
+        ? await this.awardRewards(userId, guildId, allRewards, achievement)
+        : [];
 
       // Send notification
       await this.sendAchievementNotification(userId, guildId, achievement, rewards);
@@ -203,27 +219,50 @@ export default class AchievementManager {
    * @param {string} userId - Discord user ID
    * @param {string} guildId - Discord guild ID
    * @param {Array} rewards - Array of reward objects
+   * @param {Object} [achievement] - The achievement being rewarded (for the transaction description)
    */
-  async awardRewards(userId, guildId, rewards) {
+  async awardRewards(userId, guildId, rewards, achievement = null) {
+    const label = achievement?.name ? `Achievement reward: ${achievement.name}` : 'Achievement reward';
+    const paid = [];
+
+    // Per-server switches, read once: coins only where the economy is switched on
+    // (economy_config.enabled = 1 — the rule counting/hangman/trivia rewards use), XP only where
+    // leveling is switched on.
+    let economyOn = null;
+    let levelingOn = null;
+
     for (const reward of rewards) {
       try {
+        const amount = Number(reward.reward_amount) || 0;
+
         switch (reward.reward_type) {
           case 'currency':
-            // Award coins through economy system
-            await pool.execute(
-              `INSERT INTO economy (user_id, balance) VALUES (?, ?)
-               ON DUPLICATE KEY UPDATE balance = balance + ?`,
-              [userId, reward.reward_amount, reward.reward_amount]
-            );
+            // Award coins into the live economy wallet (user_economy) with a ledger row
+            if (amount <= 0) break;
+            if (economyOn === null) economyOn = (await economyStatus(guildId)) === 'enabled';
+            if (!economyOn) break;
+            await this.payCurrency(userId, guildId, amount, label);
+            paid.push(reward);
             break;
 
-          case 'xp':
-            // Award XP through leveling system
-            await pool.execute(
-              `UPDATE levels SET xp = xp + ? WHERE user_id = ? AND guild_id = ?`,
-              [reward.reward_amount, userId, guildId]
-            );
+          case 'xp': {
+            // Award XP through the leveling manager (user_levels, level maths included)
+            if (amount <= 0) break;
+            const levelingManager = this.getLevelingManager(guildId);
+            if (!levelingManager) {
+              logger.error('[Achievement Manager] Leveling manager unavailable — XP reward not paid', { userId, guildId, amount });
+              break;
+            }
+            if (levelingOn === null) {
+              levelingOn = typeof levelingManager.isEnabledForGuild === 'function'
+                ? await levelingManager.isEnabledForGuild(guildId)
+                : true;
+            }
+            if (!levelingOn) break;
+            await levelingManager.addXP(guildId, userId, amount);
+            paid.push(reward);
             break;
+          }
 
           case 'item':
             // Award item through RPG system (if exists)
@@ -242,9 +281,43 @@ export default class AchievementManager {
       } catch (error) {
         logger.error('[Achievement Manager] Error awarding reward', {
           error: error.message,
-          rewardType: reward.reward_type
+          rewardType: reward.reward_type,
+          userId,
+          guildId
         });
       }
+    }
+
+    return paid;
+  }
+
+  /**
+   * The leveling manager for the bot serving this guild (custom bots each carry their own).
+   */
+  getLevelingManager(guildId) {
+    return this.client?.levelingManager
+      || global.botManager?.getClientForGuild?.(guildId)?.levelingManager
+      || null;
+  }
+
+  /**
+   * Pay currency into user_economy.wallet and record it in economy_transactions.
+   * The ledger insert runs after the wallet changed, so its failure is logged, not thrown.
+   */
+  async payCurrency(userId, guildId, amount, description) {
+    const config = await getEconomyConfig(guildId);
+    const economy = await getOrCreateUserEconomy(guildId, userId, config);
+    const before = Number(economy.wallet) || 0;
+
+    await pool.execute(
+      'UPDATE user_economy SET wallet = wallet + ?, total_earned = total_earned + ? WHERE guild_id = ? AND user_id = ?',
+      [amount, amount, guildId, userId]
+    );
+
+    try {
+      await logTransaction(guildId, userId, 'reward', amount, before, before + amount, description);
+    } catch (error) {
+      logger.error('[Achievement Manager] Failed to log reward transaction', { error: error.message, userId, guildId, amount });
     }
   }
 
@@ -296,17 +369,18 @@ export default class AchievementManager {
           { name: 'Tier', value: achievement.tier.charAt(0).toUpperCase() + achievement.tier.slice(1), inline: true },
           { name: 'Points', value: `${achievement.points} pts`, inline: true }
         )
-        .setAuthor({ name: member.user.username, iconURL: member.user.displayAvatarURL() })
+        .setAuthor({ name: displayNameFor(member), iconURL: member.user.displayAvatarURL() })
         .setTimestamp();
 
       // Add rewards if any
       if (rewards.length > 0) {
+        const economyConfig = rewards.some(r => r.reward_type === 'currency') ? await getEconomyConfig(guildId) : null;
         const rewardText = rewards.map(r => {
           switch (r.reward_type) {
             case 'currency':
-              return `💰 ${r.reward_amount.toLocaleString()} coins`;
+              return `💰 ${Number(r.reward_amount).toLocaleString()} ${economyConfig?.currency_name || 'coins'}`;
             case 'xp':
-              return `⭐ ${r.reward_amount.toLocaleString()} XP`;
+              return `⭐ ${Number(r.reward_amount).toLocaleString()} XP`;
             case 'item':
               return `📦 ${r.reward_value}`;
             case 'title':

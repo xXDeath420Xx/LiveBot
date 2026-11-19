@@ -10,6 +10,7 @@ import { gaussian, clamp, applyVariance, randomInt } from './rng.js';
 import { getBonuses } from './bonus-resolver.js';
 import { updateQuestProgress } from './quest-system.js';
 import { rollMutation } from '../routes/mutations.js';
+import { seasonSalesSql } from './season-system.js';
 
 /**
  * Calculate grow time with all modifiers
@@ -291,7 +292,7 @@ export async function plantSeed(playerId, slotNumber, strainId) {
         connection.release();
     }
 
-    logger.info('[GrowthSystem] Seed planted and consumed', {
+    logger.debug('[GrowthSystem] Seed planted and consumed', {
         playerId,
         slotNumber,
         strainId,
@@ -402,7 +403,7 @@ export async function harvestPlant(playerId, slotNumber) {
 
         // Update lifetime stats (lifetime_sales tracks total harvests completed)
         await connection.execute(
-            'UPDATE cfx_players SET lifetime_sales = lifetime_sales + 1 WHERE id = ?',
+            `UPDATE cfx_players SET lifetime_sales = lifetime_sales + 1${seasonSalesSql()} WHERE id = ?`,
             [playerId]
         );
 

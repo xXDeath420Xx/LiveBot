@@ -1,9 +1,37 @@
-import { SlashCommandBuilder } from 'discord.js';
+import { SlashCommandBuilder, MessageFlags, MessageFlagsBitField } from 'discord.js';
+import { getConfig } from '../../core/feature-config.js';
 import { execute as handleHabit } from './selfcare/habit.js';
 import { execute as handleChallenges } from './selfcare/challenges.js';
 import { execute as handleWellness } from './selfcare/wellness.js';
 import { execute as handleTasks } from './selfcare/tasks.js';
 import logger from '../../utils/logger.js';
+
+function isOn(v) {
+    return v === true || v === 1 || v === '1';
+}
+
+/** Reply options with the Ephemeral flag added (a MessagePayload passes through untouched). */
+function privately(options) {
+    if (options === undefined || options === null) return { flags: MessageFlags.Ephemeral };
+    if (typeof options === 'string') return { content: options, flags: MessageFlags.Ephemeral };
+    if (typeof options !== 'object' || options.constructor?.name === 'MessagePayload') return options;
+    const out = { ...options };
+    delete out.ephemeral;
+    out.flags = new MessageFlagsBitField(options.flags ?? 0).add(MessageFlags.Ephemeral).bitfield;
+    return out;
+}
+
+/**
+ * Self-Care page, "Replies are private by default": every /selfcare reply (and the Pomodoro
+ * follow-up) is shown only to the member. When it is off, each subcommand keeps its own choice:
+ * progress and streaks are posted openly, settings changes and errors stay private.
+ */
+function makeRepliesPrivate(interaction) {
+    for (const method of ['reply', 'deferReply', 'followUp']) {
+        const original = interaction[method]?.bind(interaction);
+        if (original) interaction[method] = (options) => original(privately(options));
+    }
+}
 
 export default {
     category: 'tools',
@@ -210,6 +238,11 @@ export default {
         const group = interaction.options.getSubcommandGroup();
 
         try {
+            if (interaction.guildId) {
+                const cfg = await getConfig('selfcare', interaction.guildId);
+                if (isOn(cfg.private_by_default)) makeRepliesPrivate(interaction);
+            }
+
             switch (group) {
                 case 'habit':
                     return await handleHabit(interaction);

@@ -173,13 +173,19 @@ class ApiClient {
 
         if (options.dedupe !== false) {
             this.pendingRequests.set(requestKey, requestPromise);
-            requestPromise.finally(() => this.pendingRequests.delete(requestKey));
+            // Cleanup only: the caller handles requestPromise; without the catch every failed request
+            // also raised an unhandled rejection
+            requestPromise.finally(() => this.pendingRequests.delete(requestKey)).catch(() => {});
         }
 
         return requestPromise;
     }
 
     async _executeRequest(method, url, data, options, attempt = 1) {
+        // Frozen (H-636): no requests at all any more, so nothing retries or polls
+        const frozen = store.get('ui.frozen');
+        if (frozen) throw new ApiError(frozen, 503, { code: 'FROZEN', message: frozen });
+
         const headers = this.getAuthHeaders();
 
         const fetchOptions = {
@@ -195,7 +201,10 @@ class ApiClient {
         try {
             const response = await fetch(url, fetchOptions);
 
-            // Handle auth errors
+            // Handle auth errors: on the website, swap the expired game token for a new one once (H-405)
+            if (response.status === 401 && !options._refreshed && await this._refreshSession()) {
+                return this._executeRequest(method, url, data, { ...options, _refreshed: true }, attempt);
+            }
             if (response.status === 401) {
                 store.set('auth.isAuthenticated', false);
                 store.set('ui.connectionError', 'Session expired. Please refresh.');
@@ -222,6 +231,11 @@ class ApiClient {
                 responseData = await response.text();
             }
 
+            // The game is frozen (H-636): tell the app once; the page swaps to the frozen screen
+            if (response.status === 503 && responseData?.code === 'FROZEN' && !store.get('ui.frozen')) {
+                store.set('ui.frozen', responseData.message || 'CertiFried Tycoon is being rebuilt. The new game is coming soon.');
+            }
+
             // Handle error responses
             if (!response.ok) {
                 const message = responseData?.error || responseData?.message || 'Request failed';
@@ -243,6 +257,36 @@ class ApiClient {
 
     _delay(ms) {
         return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    /**
+     * Website only: trade the refresh token for a new game token (one request at a time).
+     * @returns {Promise<boolean>} true when a new token is in place
+     */
+    _refreshSession() {
+        const { mode, refreshToken } = store.get('auth') || {};
+        const stored = refreshToken || (() => { try { return localStorage.getItem('cfx_refresh'); } catch { return null; } })();
+        if (mode !== 'standalone' || !stored) return Promise.resolve(false);
+        if (!this._refreshing) {
+            this._refreshing = fetch(`${this.baseUrl}/auth/refresh`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ refreshToken: stored })
+            })
+                .then(r => (r.ok ? r.json() : null))
+                .then(d => {
+                    if (!d?.token) return false;
+                    try {
+                        localStorage.setItem('cfx_token', d.token);
+                        if (d.refreshToken) localStorage.setItem('cfx_refresh', d.refreshToken);
+                    } catch (e) { /* private mode */ }
+                    store.merge('auth', { token: d.token, refreshToken: d.refreshToken || stored });
+                    return true;
+                })
+                .catch(() => false)
+                .finally(() => { setTimeout(() => { this._refreshing = null; }, 0); });
+        }
+        return this._refreshing;
     }
 
     // Convenience methods
@@ -432,7 +476,12 @@ class ApiClient {
     // ============ Social ============
 
     async getLeaderboard(type = 'level', limit = 50) {
-        return this.get(`/social/leaderboard?type=${type}&limit=${limit}`);
+        return this.get(`/social/leaderboard?type=${encodeURIComponent(type)}&limit=${limit}`);
+    }
+
+    /** Running season (live standings) + last ended season (final standings) */
+    async getSeasons(limit = 25) {
+        return this.get(`/seasons?limit=${limit}`);
     }
 
     async getProfile(playerId) {
@@ -476,8 +525,9 @@ class ApiClient {
         return this.get('/bits/products');
     }
 
-    async redeemBits(productId, transactionId) {
-        return this.post('/bits/redeem', { product_id: productId, transaction_id: transactionId });
+    /** @param {string} transactionReceipt - the signed receipt from Twitch.ext.bits.onTransactionComplete */
+    async redeemBits(transactionReceipt) {
+        return this.post('/bits/redeem', { transactionReceipt });
     }
 
     // ============ Prestige ============

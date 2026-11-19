@@ -1,112 +1,119 @@
+<%
+    // Rows come from core/trade-manager.js loadTradingPageData(): *_items are arrays of labels
+    // ("2x Sword (ID 12)", "Card #45"); older shapes passed a comma-separated string.
+    const tradeItemList = (v) => Array.isArray(v) ? v : (v ? String(v).split(',').map(x => x.trim()).filter(Boolean) : []);
+    const tradeCoins = (v) => Number(v) || 0;
+    const tradeWho = (name, id) => name ? name : id;
+    const tdCap = (v) => { const t = String(v == null ? '' : v); return t.charAt(0).toUpperCase() + t.slice(1); };
+    const tdHistoryTone = { completed: 'is-ok', cancelled: 'is-bad', declined: 'is-warn' };
+%>
+<%# Built on the settings-row kit (cf-settings.css); field names and routes are unchanged. %>
+<%- include('_game-kit') %>
+<style>
+    .td-id { font-family: var(--cf-mono); font-size: var(--cf-text-xs); color: var(--cf-text-2); }
+    .td-who { color: var(--cf-text); overflow-wrap: anywhere; }
+    .td-sub { display: block; margin-top: 2px; font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+</style>
+
 <div class="page-section">
     <div class="page-section-header">
         <div>
             <div class="page-section-title">
                 <i class="fas fa-exchange-alt"></i>
-                <span>Trading System</span>
+                <span>Trading</span>
             </div>
-            <div class="page-section-subtitle">
-                Monitor active trades, view trade history, and manage trading activity
-            </div>
+            <div class="page-section-subtitle">Offers made with <code>/economy trade offer</code> and card swaps from <code>/games trade</code>.</div>
         </div>
     </div>
 
-    <!-- Stats Overview -->
-    <div class="grid grid-cols-3" style="margin-bottom: var(--spacing-6);">
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Active Trades</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-primary-400);"><%= tradeStats?.active_trades || 0 %></div>
-        </div>
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Completed Trades</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-success);"><%= tradeStats?.completed_trades || 0 %></div>
-        </div>
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Cancelled Trades</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-danger);"><%= tradeStats?.cancelled_trades || 0 %></div>
-        </div>
-    </div>
+    <dl class="cf-kpis" aria-label="Trading at a glance">
+        <div class="cf-kpi"><dt>Active</dt><dd class="cf-kpi-value"><%= tradeStats?.active_trades || 0 %></dd></div>
+        <div class="cf-kpi"><dt>Completed</dt><dd class="cf-kpi-value"><%= tradeStats?.completed_trades || 0 %></dd></div>
+        <div class="cf-kpi"><dt>Cancelled</dt><dd class="cf-kpi-value"><%= tradeStats?.cancelled_trades || 0 %></dd></div>
+    </dl>
 
-    <!-- Active Trades -->
-    <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6); margin-bottom: var(--spacing-6);">
-        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
-            <i class="fas fa-handshake"></i> Active Trades
-        </h3>
-
+    <section class="cf-section" aria-labelledby="td-active-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="td-active-title">Active trades <span class="gk-cmd-count"><%= (activeTrades || []).length || '' %></span></h2>
+                <p class="cf-section-desc">Offers still waiting on one side. Nothing is held while an offer is open, so cancelling one closes it for both members with nothing to return.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
         <% if (activeTrades && activeTrades.length > 0) { %>
-            <div class="table-container">
-                <table class="data-table">
+            <div class="cf-table-wrap">
+                <table class="cf-table cf-table--stack">
                     <thead>
                         <tr>
-                            <th>Trade ID</th>
-                            <th>Initiator</th>
-                            <th>Partner</th>
-                            <th>Initiator Offer</th>
-                            <th>Partner Offer</th>
-                            <th>Status</th>
-                            <th>Created</th>
-                            <th class="text-end">Actions</th>
+                            <th scope="col">Trade</th>
+                            <th scope="col">From</th>
+                            <th scope="col">To</th>
+                            <th scope="col">Offered</th>
+                            <th scope="col">Asked for</th>
+                            <th scope="col">Status</th>
+                            <th scope="col">Created</th>
+                            <th scope="col"><span class="visually-hidden">Cancel</span></th>
                         </tr>
                     </thead>
                     <tbody>
                         <% activeTrades.forEach(trade => { %>
                             <tr>
-                                <td>
-                                    <code style="color: var(--color-primary-400); font-weight: var(--font-weight-semibold);">#<%= trade.trade_id %></code>
-                                </td>
-                                <td>
-                                    <code style="font-size: var(--font-size-xs); color: var(--color-text-secondary);"><%= trade.initiator_id %></code>
-                                </td>
-                                <td>
-                                    <code style="font-size: var(--font-size-xs); color: var(--color-text-secondary);"><%= trade.partner_id %></code>
-                                </td>
-                                <td>
-                                    <div style="display: flex; gap: var(--spacing-2); flex-wrap: wrap;">
-                                        <% if (trade.initiator_currency > 0) { %>
-                                            <span class="badge" style="background: var(--color-warning);"><%= trade.initiator_currency.toLocaleString() %> coins</span>
+                                <td data-label="Trade"><span class="td-id">#<%= trade.trade_id %></span></td>
+                                <td data-label="From"><span class="td-who" title="<%= trade.initiator_id %>"><%= tradeWho(trade.initiator_name, trade.initiator_id) %></span></td>
+                                <td data-label="To"><span class="td-who" title="<%= trade.partner_id %>"><%= tradeWho(trade.partner_name, trade.partner_id) %></span></td>
+                                <td data-label="Offered">
+                                    <div class="cf-chips">
+                                        <% const initiatorItems = tradeItemList(trade.initiator_items); %>
+                                        <% if (tradeCoins(trade.initiator_currency) > 0) { %>
+                                            <span class="cf-pill is-warn"><%= tradeCoins(trade.initiator_currency).toLocaleString() %> coins</span>
                                         <% } %>
-                                        <% if (trade.initiator_items && trade.initiator_items.length > 0) { %>
-                                            <span class="badge" style="background: var(--color-accent-purple);"><%= trade.initiator_items.split(',').length %> items</span>
+                                        <% initiatorItems.slice(0, 4).forEach(label => { %>
+                                            <span class="cf-pill"><%= label %></span>
+                                        <% }); %>
+                                        <% if (initiatorItems.length > 4) { %>
+                                            <span class="cf-pill">+<%= initiatorItems.length - 4 %> more</span>
                                         <% } %>
-                                        <% if (!trade.initiator_currency && (!trade.initiator_items || !trade.initiator_items.length)) { %>
-                                            <span style="color: var(--color-text-muted); font-size: var(--font-size-xs);">Nothing</span>
+                                        <% if (!tradeCoins(trade.initiator_currency) && !initiatorItems.length) { %>
+                                            <span class="cf-cell-muted">Nothing</span>
                                         <% } %>
                                     </div>
                                 </td>
-                                <td>
-                                    <div style="display: flex; gap: var(--spacing-2); flex-wrap: wrap;">
-                                        <% if (trade.partner_currency > 0) { %>
-                                            <span class="badge" style="background: var(--color-warning);"><%= trade.partner_currency.toLocaleString() %> coins</span>
+                                <td data-label="Asked for">
+                                    <div class="cf-chips">
+                                        <% const partnerItems = tradeItemList(trade.partner_items); %>
+                                        <% if (tradeCoins(trade.partner_currency) > 0) { %>
+                                            <span class="cf-pill is-warn"><%= tradeCoins(trade.partner_currency).toLocaleString() %> coins</span>
                                         <% } %>
-                                        <% if (trade.partner_items && trade.partner_items.length > 0) { %>
-                                            <span class="badge" style="background: var(--color-accent-purple);"><%= trade.partner_items.split(',').length %> items</span>
+                                        <% partnerItems.slice(0, 4).forEach(label => { %>
+                                            <span class="cf-pill"><%= label %></span>
+                                        <% }); %>
+                                        <% if (partnerItems.length > 4) { %>
+                                            <span class="cf-pill">+<%= partnerItems.length - 4 %> more</span>
                                         <% } %>
-                                        <% if (!trade.partner_currency && (!trade.partner_items || !trade.partner_items.length)) { %>
-                                            <span style="color: var(--color-text-muted); font-size: var(--font-size-xs);">Nothing</span>
+                                        <% if (!tradeCoins(trade.partner_currency) && !partnerItems.length) { %>
+                                            <span class="cf-cell-muted">Nothing</span>
                                         <% } %>
                                     </div>
                                 </td>
-                                <td>
+                                <td data-label="Status">
+                                    <div>
                                     <% if (trade.status === 'pending') { %>
-                                        <span class="badge" style="background: var(--color-warning);">Pending</span>
+                                        <span class="cf-pill is-warn">Pending</span>
+                                        <% if (trade.awaiting_id) { %>
+                                            <span class="td-sub">Waiting on <%= trade.awaiting_id === trade.initiator_id ? tradeWho(trade.initiator_name, trade.initiator_id) : tradeWho(trade.partner_name, trade.partner_id) %></span>
+                                        <% } %>
                                     <% } else if (trade.status === 'accepted') { %>
-                                        <span class="badge badge-success">Accepted</span>
+                                        <span class="cf-pill is-ok">Accepted</span>
                                     <% } else { %>
-                                        <span class="badge badge-secondary" style="text-transform: capitalize;"><%= trade.status %></span>
+                                        <span class="cf-pill"><%= tdCap(trade.status) %></span>
                                     <% } %>
-                                </td>
-                                <td>
-                                    <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">
-                                        <%= new Date(trade.created_at).toLocaleString() %>
                                     </div>
                                 </td>
-                                <td class="text-end">
-                                    <form action="/manage/<%= guild.id %>/trading/cancel" method="POST" style="display: inline;">
+                                <td data-label="Created" class="cf-cell-muted"><%= new Date(trade.created_at).toLocaleString() %></td>
+                                <td class="cf-cell-end">
+                                    <form action="/manage/<%= guild.id %>/trading/cancel" method="POST">
                                         <input type="hidden" name="trade_id" value="<%= trade.trade_id %>">
-                                        <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Cancel this trade?')">
-                                            <i class="fas fa-times"></i>
-                                            <span>Cancel</span>
-                                        </button>
+                                        <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Cancel this trade?')">Cancel trade</button>
                                     </form>
                                 </td>
                             </tr>
@@ -115,179 +122,102 @@
                 </table>
             </div>
         <% } else { %>
-            <div class="empty-state">
-                <div class="empty-state-icon">
-                    <i class="fas fa-handshake"></i>
-                </div>
-                <div class="empty-state-title">No Active Trades</div>
-                <div class="empty-state-description">
-                    No trades are currently in progress
-                </div>
-            </div>
+            <%- include('../kit/_state', { kind: 'empty', title: 'No active trades', text: 'Trades in progress will be listed here.', id: null, boxed: false, compact: false }) %>
         <% } %>
-    </div>
+        </div>
+    </section>
 
-    <!-- Recent Trade History -->
-    <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6);">
-        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
-            <i class="fas fa-history"></i> Recent Trade History (Last 50)
-        </h3>
-
+    <section class="cf-section" aria-labelledby="td-history-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="td-history-title">Trade history</h2>
+                <p class="cf-section-desc">The last 50 trades that finished.</p>
+            </div>
+            <% if (tradeHistory && tradeHistory.length > 15) { %>
+            <div class="cf-section-actions">
+                <label class="cf-search"><i class="fas fa-search" aria-hidden="true"></i><input type="search" class="form-control" id="td-search" placeholder="Search by member or item" aria-label="Search trade history" data-no-savebar autocomplete="off"></label>
+            </div>
+            <% } %>
+        </header>
+        <div class="cf-rows">
         <% if (tradeHistory && tradeHistory.length > 0) { %>
-            <div class="table-container">
-                <table class="data-table">
+            <div class="cf-table-wrap">
+                <table class="cf-table cf-table--stack">
                     <thead>
                         <tr>
-                            <th>Trade ID</th>
-                            <th>Initiator</th>
-                            <th>Partner</th>
-                            <th>Initiator Gave</th>
-                            <th>Partner Gave</th>
-                            <th>Status</th>
-                            <th>Completed</th>
+                            <th scope="col">Trade</th>
+                            <th scope="col">From</th>
+                            <th scope="col">To</th>
+                            <th scope="col">From gave</th>
+                            <th scope="col">To gave</th>
+                            <th scope="col">Status</th>
+                            <th scope="col">Finished</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody id="td-history-body">
                         <% tradeHistory.forEach(trade => { %>
-                            <tr>
-                                <td>
-                                    <code style="color: var(--color-primary-400); font-weight: var(--font-weight-semibold);">#<%= trade.trade_id %></code>
-                                </td>
-                                <td>
-                                    <code style="font-size: var(--font-size-xs); color: var(--color-text-secondary);"><%= trade.initiator_id %></code>
-                                </td>
-                                <td>
-                                    <code style="font-size: var(--font-size-xs); color: var(--color-text-secondary);"><%= trade.partner_id %></code>
-                                </td>
-                                <td>
-                                    <div style="color: var(--color-text-primary); font-size: var(--font-size-sm);">
-                                        <% if (trade.initiator_currency > 0) { %>
-                                            <span style="color: var(--color-warning);"><%= trade.initiator_currency.toLocaleString() %> coins</span>
+                            <tr data-td-text="<%= [trade.trade_id, trade.initiator_name, trade.partner_name, trade.status].concat(tradeItemList(trade.initiator_items), tradeItemList(trade.partner_items)).filter(Boolean).join(' ').toLowerCase() %>">
+                                <td data-label="Trade"><span class="td-id">#<%= trade.trade_id %></span></td>
+                                <td data-label="From"><span class="td-who" title="<%= trade.initiator_id %>"><%= tradeWho(trade.initiator_name, trade.initiator_id) %></span></td>
+                                <td data-label="To"><span class="td-who" title="<%= trade.partner_id %>"><%= tradeWho(trade.partner_name, trade.partner_id) %></span></td>
+                                <td data-label="From gave">
+                                    <div>
+                                        <% const initiatorGave = tradeItemList(trade.initiator_items); %>
+                                        <% if (tradeCoins(trade.initiator_currency) > 0) { %>
+                                            <span><%= tradeCoins(trade.initiator_currency).toLocaleString() %> coins</span>
                                         <% } %>
-                                        <% if (trade.initiator_items && trade.initiator_items.length > 0) { %>
-                                            <% if (trade.initiator_currency > 0) { %> + <% } %>
-                                            <span style="color: var(--color-accent-purple);"><%= trade.initiator_items.split(',').length %> items</span>
+                                        <% if (initiatorGave.length > 0) { %>
+                                            <% if (tradeCoins(trade.initiator_currency) > 0) { %> + <% } %>
+                                            <span title="<%= initiatorGave.join(', ') %>"><%= initiatorGave.length <= 2 ? initiatorGave.join(', ') : initiatorGave.length + ' items' %></span>
                                         <% } %>
-                                        <% if (!trade.initiator_currency && (!trade.initiator_items || !trade.initiator_items.length)) { %>
-                                            <span style="color: var(--color-text-muted);">Nothing</span>
+                                        <% if (!tradeCoins(trade.initiator_currency) && !initiatorGave.length) { %>
+                                            <span class="cf-cell-muted">Nothing</span>
                                         <% } %>
                                     </div>
                                 </td>
-                                <td>
-                                    <div style="color: var(--color-text-primary); font-size: var(--font-size-sm);">
-                                        <% if (trade.partner_currency > 0) { %>
-                                            <span style="color: var(--color-warning);"><%= trade.partner_currency.toLocaleString() %> coins</span>
+                                <td data-label="To gave">
+                                    <div>
+                                        <% const partnerGave = tradeItemList(trade.partner_items); %>
+                                        <% if (tradeCoins(trade.partner_currency) > 0) { %>
+                                            <span><%= tradeCoins(trade.partner_currency).toLocaleString() %> coins</span>
                                         <% } %>
-                                        <% if (trade.partner_items && trade.partner_items.length > 0) { %>
-                                            <% if (trade.partner_currency > 0) { %> + <% } %>
-                                            <span style="color: var(--color-accent-purple);"><%= trade.partner_items.split(',').length %> items</span>
+                                        <% if (partnerGave.length > 0) { %>
+                                            <% if (tradeCoins(trade.partner_currency) > 0) { %> + <% } %>
+                                            <span title="<%= partnerGave.join(', ') %>"><%= partnerGave.length <= 2 ? partnerGave.join(', ') : partnerGave.length + ' items' %></span>
                                         <% } %>
-                                        <% if (!trade.partner_currency && (!trade.partner_items || !trade.partner_items.length)) { %>
-                                            <span style="color: var(--color-text-muted);">Nothing</span>
+                                        <% if (!tradeCoins(trade.partner_currency) && !partnerGave.length) { %>
+                                            <span class="cf-cell-muted">Nothing</span>
                                         <% } %>
                                     </div>
                                 </td>
-                                <td>
-                                    <% if (trade.status === 'completed') { %>
-                                        <span class="badge badge-success">Completed</span>
-                                    <% } else if (trade.status === 'cancelled') { %>
-                                        <span class="badge badge-danger">Cancelled</span>
-                                    <% } else if (trade.status === 'declined') { %>
-                                        <span class="badge" style="background: var(--color-warning);">Declined</span>
-                                    <% } else { %>
-                                        <span class="badge badge-secondary" style="text-transform: capitalize;"><%= trade.status %></span>
-                                    <% } %>
-                                </td>
-                                <td>
-                                    <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">
-                                        <%= new Date(trade.updated_at || trade.created_at).toLocaleString() %>
-                                    </div>
-                                </td>
+                                <td data-label="Status"><span class="cf-pill <%= tdHistoryTone[trade.status] || '' %>"><%= tdCap(trade.status) %></span></td>
+                                <td data-label="Finished" class="cf-cell-muted"><%= new Date(trade.completed_at || trade.updated_at || trade.created_at).toLocaleString() %></td>
                             </tr>
                         <% }); %>
                     </tbody>
                 </table>
             </div>
+            <div class="cf-state cf-state--compact" id="td-none" hidden><p class="cf-state-text">No trades match.</p></div>
         <% } else { %>
-            <div style="background: var(--color-dark-700); border: 1px solid var(--color-dark-400); border-radius: var(--radius-md); padding: var(--spacing-8); text-align: center;">
-                <div style="font-size: var(--font-size-base); color: var(--color-text-muted);">
-                    No trade history yet
-                </div>
-            </div>
+            <%- include('../kit/_state', { kind: 'empty', title: 'No trade history yet', text: 'Completed, cancelled, declined and expired trades will be listed here.', id: null, boxed: false, compact: false }) %>
         <% } %>
-    </div>
+        </div>
+    </section>
+
+    <%- include('_game-commands', { gkCommands: [{ cmd: 'economy', groups: ['trade'] }], gkCmdNote: 'Card swaps use /games trade, part of the card collection game.' }) %>
 </div>
-
-<style>
-.table-container {
-    overflow-x: auto;
-    border: 1px solid var(--color-dark-400);
-    border-radius: var(--radius-lg);
-}
-
-.data-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-.data-table thead {
-    background: var(--color-dark-600);
-    border-bottom: 2px solid var(--color-dark-400);
-}
-
-.data-table th {
-    padding: var(--spacing-4);
-    text-align: left;
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-
-.data-table td {
-    padding: var(--spacing-4);
-    border-bottom: 1px solid var(--color-dark-400);
-    color: var(--color-text-secondary);
-}
-
-.data-table tbody tr {
-    transition: background var(--transition-base);
-}
-
-.data-table tbody tr:hover {
-    background: var(--color-dark-700);
-}
-
-.data-table tbody tr:last-child td {
-    border-bottom: none;
-}
-
-.empty-state {
-    text-align: center;
-    padding: var(--spacing-12) var(--spacing-8);
-}
-
-.empty-state-icon {
-    font-size: 4rem;
-    color: var(--color-text-muted);
-    margin-bottom: var(--spacing-4);
-}
-
-.empty-state-title {
-    font-size: var(--font-size-xl);
-    font-weight: var(--font-weight-bold);
-    color: var(--color-text-primary);
-    margin-bottom: var(--spacing-2);
-}
-
-.empty-state-description {
-    font-size: var(--font-size-base);
-    color: var(--color-text-secondary);
-    margin-bottom: var(--spacing-6);
-}
-
-.text-end {
-    text-align: right;
-}
-</style>
+<script>
+(function () {
+    var input = document.getElementById('td-search');
+    if (!input) return;
+    input.addEventListener('input', function () {
+        var q = input.value.trim().toLowerCase(), shown = 0;
+        document.querySelectorAll('#td-history-body > tr').forEach(function (tr) {
+            var hit = !q || tr.getAttribute('data-td-text').indexOf(q) !== -1;
+            tr.hidden = !hit;
+            if (hit) shown++;
+        });
+        document.getElementById('td-none').hidden = shown > 0;
+    });
+})();
+</script>

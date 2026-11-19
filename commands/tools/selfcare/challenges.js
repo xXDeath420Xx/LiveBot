@@ -1,5 +1,6 @@
 import { EmbedBuilder } from 'discord.js';
 import * as challengeManager from '../../../core/daily-challenges-manager.js';
+import { themeColor } from '../../../core/guild-theme.js';
 
 export async function execute(interaction) {
     const subcommand = interaction.options.getSubcommand();
@@ -37,7 +38,7 @@ async function handleView(interaction) {
     }
 
     const embed = new EmbedBuilder()
-        .setColor('#3498DB')
+        .setColor(themeColor(interaction.guildId, 'primary'))
         .setTitle('📋 Your Daily Challenges')
         .setDescription('Complete challenges to earn XP and currency!')
         .setThumbnail(interaction.user.displayAvatarURL())
@@ -85,7 +86,7 @@ async function handleStats(interaction) {
     }
 
     const embed = new EmbedBuilder()
-        .setColor('#FFD700')
+        .setColor(themeColor(interaction.guildId, 'warning'))
         .setTitle(`📊 Challenge Statistics - ${targetUser.username}`)
         .setThumbnail(targetUser.displayAvatarURL())
         .addFields(
@@ -181,7 +182,7 @@ async function handleClaim(interaction) {
     }
 
     const embed = new EmbedBuilder()
-        .setColor('#00FF00')
+        .setColor(themeColor(interaction.guildId, 'success'))
         .setTitle('🎉 Rewards Claimed!')
         .setDescription(`You've successfully claimed rewards for:\n**${result.challenge}**`)
         .addFields(

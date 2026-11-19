@@ -1,0 +1,21 @@
+/* CertiFried Sand: CertiFried Light with warm paper tones. Choose it in OBS under Settings, Appearance:
+ * Theme "Yami", Style "CertiFried Sand". OBS 30.2 or later. */
+
+@OBSThemeMeta {
+    name: 'CertiFried Sand';
+    id: 'com.certifried.studio.Sand';
+    extends: 'com.certifried.studio.Light';
+    author: 'CertiFried';
+    dark: 'false';
+}
+
+@OBSThemeVars {
+    --grey1: #9a8f7c;
+    --grey2: #fffdf9;
+    --grey3: #fffdf9;
+    --grey4: #faf6ef;
+    --grey5: #f2ece1;
+    --grey6: #e9e1d3;
+    --grey7: #e4dac9;
+    --grey8: #cbbfa9;
+}

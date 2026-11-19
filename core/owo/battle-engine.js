@@ -75,8 +75,9 @@ function pickAliveTarget(pool) {
     return alive[Math.floor(Math.random() * alive.length)];
 }
 
+/** Returns true when this hit killed the target (for takedown trackers). */
 function doAttack(log, attacker, target) {
-    if (!attacker.alive || !target || !target.alive) return;
+    if (!attacker.alive || !target || !target.alive) return false;
     const atk = effectiveAttack(attacker);
     const def = effectiveDefense(target);
     const roll = atk + Math.floor(Math.random() * (atk / 2)) - Math.floor(def / 2);
@@ -87,22 +88,38 @@ function doAttack(log, attacker, target) {
         : '';
     const stateTag = target.currentHp === 0 ? ' 💀' : '';
     log.push(`${attacker.display}${wepTag} → ${target.display}: **-${damage} HP** (${target.currentHp}/${target.maxHp})${stateTag}`);
-    if (target.currentHp === 0) target.alive = false;
+    if (target.currentHp === 0) {
+        target.alive = false;
+        return true;
+    }
+    return false;
+}
+
+/** Count a kill for the attacker's weapon (only real, saved weapons — CPU weapons have uwid 0). */
+function tallyKill(kills, attacker, side) {
+    const uwid = Number(attacker.weapon?.uwid) || 0;
+    if (!uwid) return;
+    const key = `${side}:${uwid}`;
+    const entry = kills.get(key) ?? { side, uwid, count: 0 };
+    entry.count += 1;
+    kills.set(key, entry);
 }
 
 /**
  * Simulate a battle between two teams.
  * @param {object} team1 - team details from getTeamDetails()
  * @param {object} team2 - ditto
- * @returns {{ winner: 'team1'|'team2'|'draw', turns: number, log: string[], finalState: {team1, team2} }}
+ * @returns {{ winner: 'team1'|'team2'|'draw', turns: number, log: string[],
+ *            kills: Array<{side: string, uwid: number, count: number}>, finalState: {team1, team2} }}
  */
 export function simulateBattle(team1, team2) {
-    if (!team1?.animals?.length) return { winner: 'team2', turns: 0, log: ['*Team 1 has no animals.*'], finalState: null };
-    if (!team2?.animals?.length) return { winner: 'team1', turns: 0, log: ['*Team 2 has no animals.*'], finalState: null };
+    if (!team1?.animals?.length) return { winner: 'team2', turns: 0, log: ['*Team 1 has no animals.*'], kills: [], finalState: null };
+    if (!team2?.animals?.length) return { winner: 'team1', turns: 0, log: ['*Team 2 has no animals.*'], kills: [], finalState: null };
 
     const state1 = toCombatState(team1, 'A');
     const state2 = toCombatState(team2, 'B');
     const log = [];
+    const kills = new Map();
 
     log.push(`⚔️  **${team1.tname}** vs **${team2.tname}**`);
     log.push(`Team A: ${state1.map(a => a.display + ' (' + a.maxHp + ' HP)').join(', ')}`);
@@ -119,7 +136,7 @@ export function simulateBattle(team1, team2) {
             if (!a.alive) continue;
             if (!state2.some(x => x.alive)) break;
             const target = pickAliveTarget(state2);
-            doAttack(log, a, target);
+            if (doAttack(log, a, target)) tallyKill(kills, a, 'team1');
         }
 
         // Check end
@@ -130,7 +147,7 @@ export function simulateBattle(team1, team2) {
             if (!b.alive) continue;
             if (!state1.some(x => x.alive)) break;
             const target = pickAliveTarget(state1);
-            doAttack(log, b, target);
+            if (doAttack(log, b, target)) tallyKill(kills, b, 'team2');
         }
 
         if (!state1.some(x => x.alive)) { log.push(`\n🏆 **Team B wins** in ${turn} turn${turn === 1 ? '' : 's'}.`); break; }
@@ -161,6 +178,8 @@ export function simulateBattle(team1, team2) {
         winner,
         turns: turn,
         log,
+        // [{side: 'team1'|'team2', uwid, count}] — kills per equipped weapon, for takedown trackers.
+        kills: [...kills.values()],
         finalState: {
             team1: state1.map(a => ({ name: a.name, display: a.display, alive: a.alive, hp: a.currentHp, max: a.maxHp })),
             team2: state2.map(a => ({ name: a.name, display: a.display, alive: a.alive, hp: a.currentHp, max: a.maxHp })),

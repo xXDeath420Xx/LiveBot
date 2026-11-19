@@ -5,6 +5,7 @@
  */
 
 const mysql = require('mysql2/promise');
+const { installPoolGuards } = require('./db-guards.cjs');
 require('dotenv').config();
 
 // Create database connection pool
@@ -16,13 +17,18 @@ const pool = mysql.createPool({
   charset: 'utf8mb4',
   waitForConnections: true,
   connectionLimit: 20,
-  queueLimit: 0,
+  queueLimit: 200,   // was 0 (unbounded); matches utils/db.js
+  maxIdle: 10,
   connectTimeout: 10000,
   enableKeepAlive: true,
   keepAliveInitialDelay: 0,
   // CRITICAL: Force UTC timezone to prevent 8-hour offset between MySQL (PST) and Node.js (UTC)
   timezone: '+00:00'
 });
+
+// Same guards as utils/db.js (utils/db-guards.cjs): idempotent release, and pool.pool locked to
+// the core pool (H-314, see the exports at the bottom).
+installPoolGuards(pool, { label: 'db.cjs', warn: (msg, meta) => console.warn(msg, meta ? JSON.stringify(meta) : '') });
 
 // Test the connection on startup
 pool.getConnection()
@@ -68,9 +74,12 @@ async function transaction(callback) {
   }
 }
 
+// The exports object IS the promise pool, so nothing may be assigned over the pool's own members.
+// This used to also set .pool, .query and .getConnection: `.pool = pool` made pool.pool point at
+// the promise pool itself, so every execute(sql, params) recursed until the stack overflowed and
+// never settled (H-314; the AI DJ, the only user, hung on every lookup), and the getConnection
+// helper called pool.getConnection, i.e. itself. pool.query / pool.getConnection are mysql2's own.
 module.exports = pool;
 module.exports.default = pool;
-module.exports.pool = pool;
-module.exports.query = query;
-module.exports.getConnection = getConnection;
 module.exports.transaction = transaction;
+module.exports.queryRows = query;

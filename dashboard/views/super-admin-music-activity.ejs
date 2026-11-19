@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>" lang="en">
+<head>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="/css/super-admin-music.css?v=5">
+
+<%- include('partials/site-head', { title: 'Music activity · Owner console · CertiFried', noindex: true }) %>
+</head>
+<body>
+    <%- include('partials/site-header', { user }) %>
+
+    <main id="main-content" tabindex="-1">
+        <div class="container">
+            <%- include('partials/site/_owner-nav', { ownerActive: 'music-activity' }) %>
+            <div class="page-header">
+                <div class="page-header-content">
+                    <div class="page-icon" aria-hidden="true"><i class="fas fa-headphones"></i></div>
+                    <div>
+                        <h1 class="page-title">Music activity</h1>
+                        <p class="page-subtitle">Every song the bot played: where, for whom, how it played and how it ended.</p>
+                    </div>
+                </div>
+                <div class="controls">
+                    <div class="seg" role="group" aria-label="Time range">
+                        <button type="button" data-range="24h" aria-pressed="false">24h</button>
+                        <button type="button" data-range="7d" aria-pressed="true">7 days</button>
+                        <button type="button" data-range="30d" aria-pressed="false">30 days</button>
+                        <button type="button" data-range="90d" aria-pressed="false">90 days</button>
+                    </div>
+                    <button type="button" class="btn" id="refresh"><i class="fas fa-rotate-right" aria-hidden="true"></i> Refresh</button>
+                    <span class="updated" id="updated"></span>
+                </div>
+            </div>
+            <nav class="tabs" aria-label="Music pages">
+                <a href="/super-admin/music-health">Health</a>
+                <a href="/super-admin/music-activity" aria-current="page">Activity</a>
+            </nav>
+
+            <form class="filters" id="filters" role="search" onsubmit="return false">
+                <label class="sr-only" for="f-context">Where it played</label>
+                <select class="field" id="f-context">
+                    <option value="">Discord and streams</option>
+                    <option value="discord">Discord servers</option>
+                    <option value="stream">Streams (song requests)</option>
+                </select>
+                <label class="sr-only" for="f-guild">Server or stream</label>
+                <select class="field" id="f-guild"><option value="">All servers and streams</option></select>
+                <label class="sr-only" for="f-source">Requested from</label>
+                <select class="field" id="f-source">
+                    <option value="">Any source</option>
+                    <option value="spotify">Spotify</option>
+                    <option value="youtube">YouTube link</option>
+                    <option value="search">Search</option>
+                    <option value="soundcloud">SoundCloud</option>
+                    <option value="other">Other</option>
+                </select>
+                <label class="sr-only" for="f-outcome">Result</label>
+                <select class="field" id="f-outcome">
+                    <option value="">Any result</option>
+                    <option value="completed">Completed</option>
+                    <option value="skipped">Skipped</option>
+                    <option value="failed">Failed</option>
+                    <option value="stopped">Stopped early</option>
+                    <option value="interrupted">Interrupted</option>
+                    <option value="playing">Playing now</option>
+                </select>
+                <label class="sr-only" for="f-q">Search songs, artists, people, servers</label>
+                <input class="field search" id="f-q" type="search" placeholder="Search songs, artists, people, servers" autocomplete="off">
+                <button type="button" class="btn" id="f-clear"><i class="fas fa-xmark" aria-hidden="true"></i> Clear</button>
+            </form>
+
+            <div id="error"></div>
+
+            <section class="card now-playing" aria-labelledby="t-live">
+                <div class="card-header">
+                    <h2 class="card-title" id="t-live"><i class="fas fa-circle live-dot" aria-hidden="true"></i>Playing now</h2>
+                    <span class="chart-total" id="live-note"></span>
+                </div>
+                <div class="card-body" id="live"><div class="empty">Checking what's playing…</div></div>
+            </section>
+
+            <div class="kpis" id="kpis" aria-live="polite"></div>
+
+            <section class="card chart" aria-labelledby="t-plays">
+                <div class="card-header"><h2 class="card-title" id="t-plays">Plays over time</h2><span class="chart-total" id="plays-note"></span></div>
+                <div class="card-body" id="plays-chart"></div>
+            </section>
+
+            <h2 class="section-title"><i class="fas fa-shuffle" aria-hidden="true"></i> Where plays come from and how they played</h2>
+            <div class="grid" id="breakdowns"></div>
+
+            <h2 class="section-title"><i class="fas fa-trophy" aria-hidden="true"></i> Top</h2>
+            <div class="grid" id="tops"></div>
+
+            <h2 class="section-title"><i class="fas fa-circle-exclamation" aria-hidden="true"></i> Why plays failed</h2>
+            <div class="card"><div class="table-wrap" id="failures"></div></div>
+
+            <h2 class="section-title"><i class="fas fa-list" aria-hidden="true"></i> Recent plays <span class="section-note" id="recent-note"></span></h2>
+            <div class="card"><div class="table-wrap" id="recent"></div><div class="more" id="more"></div></div>
+        </div>
+    </main>
+    <%- include('partials/site-footer') %>
+
+    <script>
+    (function () {
+        'use strict';
+        const API = '/api/super-admin/music-activity';
+        const REFRESH_MS = 60000;
+        const RANGES = ['24h', '7d', '30d', '90d'];
+
+        // Filters live in the URL so a filtered view can be bookmarked or shared.
+        const params = new URLSearchParams(location.search);
+        const state = {
+            range: RANGES.includes(params.get('range')) ? params.get('range') : '7d',
+            context: ['discord', 'stream'].includes(params.get('context')) ? params.get('context') : '',
+            guild: params.get('guild') || '', source: params.get('source') || '', outcome: params.get('outcome') || '', q: params.get('q') || '',
+        };
+        let data = null, loadedAt = 0, inFlight = null, recentRows = [];
+
+        // Every node is built here: text goes in as text nodes and attributes via setAttribute, so
+        // nothing from the log (song titles, names, server names, errors) can be parsed as HTML.
+        const SVG_NS = 'http://www.w3.org/2000/svg';
+        const SVG_TAGS = new Set(['svg', 'rect', 'line', 'title']);
+        function h(tag, attrs, ...kids) {
+            const el = SVG_TAGS.has(tag) ? document.createElementNS(SVG_NS, tag) : document.createElement(tag);
+            for (const [k, v] of Object.entries(attrs || {})) if (v != null && v !== false) el.setAttribute(k, String(v));
+            for (const kid of kids.flat(Infinity)) if (kid != null && kid !== false) el.append(kid instanceof Node ? kid : String(kid));
+            return el;
+        }
+        const $ = (id) => document.getElementById(id);
+        const put = (id, ...nodes) => $(id).replaceChildren(...nodes.flat(Infinity).filter(n => n != null && n !== false));
+        const empty = (text) => h('div', { class: 'empty' }, text);
+        const icon = (cls) => h('i', { class: cls, 'aria-hidden': 'true' });
+
+        const fmtFull = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        const fmtNum = new Intl.NumberFormat();
+        const pct = (a, b) => (b ? `${Math.round((a / b) * 100)}%` : '—');
+        const clock = (s) => (s == null ? '—' : `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`);
+        function hours(sec) {
+            if (!sec) return '0 min';
+            if (sec < 3600) return `${Math.round(sec / 60)} min`;
+            if (sec < 86400 * 2) return `${(sec / 3600).toFixed(1)} h`;
+            return `${(sec / 86400).toFixed(1)} days`;
+        }
+        function ago(ms) {
+            const s = Math.max(0, Math.round(ms / 1000));
+            return s < 60 ? `${s}s ago` : s < 3600 ? `${Math.round(s / 60)}m ago` : `${Math.floor(s / 3600)}h ago`;
+        }
+
+        const SOURCE = { spotify: 'Spotify', youtube: 'YouTube link', search: 'Search', soundcloud: 'SoundCloud', other: 'Other' };
+        const PLAYBACK = { spotify: 'Spotify, direct', 'relay:server2': 'YouTube via server2', 'relay:workstation': 'YouTube via workstation',
+            'server1-direct': "YouTube from server1's IP", direct: 'Direct link', unknown: 'Not recorded' };
+        const playbackLabel = (k) => PLAYBACK[k] || (k && k.startsWith('relay:') ? `YouTube via ${k.slice(6)}` : k || '—');
+        const MATCH = { ytmusic: 'YouTube Music match', ytsearch: 'YouTube search match', none: 'Not matched' };
+        const OUTCOME = {
+            completed: ['up', 'Completed', 'fa-circle-check'], skipped: ['degraded', 'Skipped', 'fa-forward'], failed: ['down', 'Failed', 'fa-circle-xmark'],
+            stopped: ['none', 'Stopped early', 'fa-circle-stop'], interrupted: ['orange', 'Interrupted', 'fa-plug-circle-xmark'], playing: ['play', 'Playing', 'fa-play'],
+        };
+        const OUTCOME_COLOR = { completed: 'var(--accent-green)', skipped: 'var(--accent-yellow)', failed: 'var(--accent-red)',
+            stopped: 'var(--text-muted)', interrupted: 'var(--accent-orange)', playing: 'var(--accent-blue)' };
+        const pill = (outcome) => { const [tone, label, ic] = OUTCOME[outcome] || ['none', outcome, 'fa-circle']; return h('span', { class: `pill tone-${tone}` }, icon(`fas ${ic}`), label); };
+
+        // ── loading ────────────────────────────────────────────────────────────
+        function query(extra = {}) {
+            const p = new URLSearchParams();
+            for (const [k, v] of Object.entries({ ...state, ...extra })) if (v) p.set(k, v);
+            return p;
+        }
+        async function load({ append = false } = {}) {
+            const ctrl = new AbortController();
+            if (inFlight) inFlight.abort();
+            inFlight = ctrl;
+            const extra = append && recentRows.length ? { before: String(recentRows[recentRows.length - 1].id) } : {};
+            try {
+                const r = await fetch(`${API}?${query(extra)}`, { credentials: 'same-origin', headers: { accept: 'application/json' }, signal: ctrl.signal });
+                if (!(r.headers.get('content-type') || '').includes('application/json')) throw new Error('Your session expired — reload the page to sign in again.');
+                const body = await r.json();
+                if (!r.ok) throw new Error(body.error || `HTTP ${r.status}`);
+                if (append) { recentRows = recentRows.concat(body.recent); renderRecent(body.recent.length === 50); return; }
+                data = body; loadedAt = Date.now(); recentRows = body.recent;
+                put('error');
+                render();
+            } catch (e) {
+                if (e.name === 'AbortError') return;
+                put('error', h('div', { class: 'banner tone-down', role: 'alert' }, h('div', { class: 'banner-icon' }, icon('fas fa-circle-xmark')),
+                    h('div', null, h('h2', null, 'Could not load music activity'), h('p', null, e.message))));
+            } finally { if (inFlight === ctrl) inFlight = null; tickUpdated(); }
+        }
+
+        // ── rendering ──────────────────────────────────────────────────────────
+        function render() {
+            renderGuildFilter();
+            renderKpis();
+            renderPlaysChart();
+            renderBreakdowns();
+            renderTops();
+            renderFailures();
+            renderRecent(data.recent.length === 50);
+        }
+
+        function renderGuildFilter() {
+            const sel = $('f-guild');
+            // Discord servers and stream bot profiles (guild id sb:<profile>) in their own groups.
+            const opt = (g) => h('option', { value: g.id }, `${g.name || g.id} (${fmtNum.format(g.plays)})`);
+            const servers = data.guilds.filter(g => !g.stream), streams = data.guilds.filter(g => g.stream);
+            const opts = [h('option', { value: '' }, 'All servers and streams')];
+            if (servers.length) opts.push(h('optgroup', { label: 'Discord servers' }, servers.map(opt)));
+            if (streams.length) opts.push(h('optgroup', { label: 'Streams' }, streams.map(opt)));
+            if (state.guild && !data.guilds.some(g => g.id === state.guild)) opts.push(h('option', { value: state.guild }, state.guild));
+            sel.replaceChildren(...opts);
+            sel.value = state.guild;
+        }
+
+        function renderKpis() {
+            const t = data.totals;
+            const kpi = (value, label, sub) => h('div', { class: 'kpi' }, h('div', { class: 'kpi-value' }, value), h('div', { class: 'kpi-label' }, label), sub ? h('div', { class: 'kpi-sub' }, sub) : null);
+            const finished = t.plays - t.playing;
+            put('kpis',
+                kpi(fmtNum.format(t.plays), 'Plays', t.playing ? `${t.playing} playing now` : null),
+                kpi(hours(t.listened), 'Listened'),
+                kpi(pct(t.completed, finished), 'Completed', `${fmtNum.format(t.completed)} played out`),
+                kpi(fmtNum.format(t.skipped), 'Skipped', pct(t.skipped, finished)),
+                kpi(fmtNum.format(t.failed), 'Failed', pct(t.failed, finished)),
+                kpi(fmtNum.format(t.listeners), 'People', 'who requested songs'),
+                kpi(fmtNum.format(t.servers), 'Servers', 'Discord voice'),
+                kpi(fmtNum.format(t.streamPlays || 0), 'Stream plays', t.streams ? `on ${t.streams} stream${t.streams === 1 ? '' : 's'}` : 'song requests on stream'));
+        }
+
+        function renderPlaysChart() {
+            const n = Math.max(1, Math.round((data.to - data.from) / data.bucketMs));
+            const start = Math.floor(data.from / data.bucketMs) * data.bucketMs;
+            const order = ['completed', 'skipped', 'stopped', 'interrupted', 'failed', 'playing'];
+            const series = Object.fromEntries(order.map(o => [o, Array(n + 1).fill(0)]));
+            for (const p of data.timeline) {
+                const i = Math.round((p.t - start) / data.bucketMs);
+                if (i >= 0 && i <= n && series[p.outcome]) series[p.outcome][i] += p.n;
+            }
+            const totals = Array.from({ length: n + 1 }, (_, i) => order.reduce((s, o) => s + series[o][i], 0));
+            const max = Math.max(5, ...totals);
+            const W = 900, H = 160, step = W / (n + 1), bw = Math.max(1, step - 2);
+            const shapes = [];
+            totals.forEach((tot, i) => {
+                let y = H;
+                for (const o of order) {
+                    const v = series[o][i];
+                    if (!v) continue;
+                    const hgt = (v / max) * (H - 6);
+                    y -= hgt;
+                    shapes.push(h('rect', { x: (i * step + 1).toFixed(1), y: y.toFixed(1), width: bw.toFixed(1), height: Math.max(0.5, hgt).toFixed(1), fill: OUTCOME_COLOR[o], rx: 1 },
+                        h('title', null, `${fmtFull.format(new Date(start + i * data.bucketMs))} · ${OUTCOME[o][1]}: ${v}`)));
+                }
+            });
+            $('plays-note').textContent = data.totals.plays ? `peak ${Math.max(...totals)} per ${data.bucketMs >= 86400000 ? `${data.bucketMs / 86400000} day(s)` : `${data.bucketMs / 3600000} h`}` : '';
+            put('plays-chart', data.totals.plays
+                ? [h('svg', { viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: 'none', role: 'img', 'aria-label': `Plays over time, ${data.totals.plays} in total` },
+                    h('line', { class: 'grid-line', x1: 0, x2: W, y1: H - 0.5, y2: H - 0.5, 'vector-effect': 'non-scaling-stroke' }), shapes),
+                   h('div', { class: 'chart-legend' }, order.filter(o => data.totals[o]).map(o => h('span', { style: `--c:${OUTCOME_COLOR[o]}` }, OUTCOME[o][1])))]
+                : empty('No plays in this range yet. Plays are logged from now on.'));
+        }
+
+        function breakdown(title, rows, labelOf, tone) {
+            const total = rows.reduce((s, r) => s + r.n, 0);
+            return h('section', { class: 'card' },
+                h('div', { class: 'card-header' }, h('h3', { class: 'card-title' }, title), h('span', { class: 'chart-total' }, total ? `${fmtNum.format(total)} play${total === 1 ? '' : 's'}` : '')),
+                h('div', { class: 'card-body' }, rows.length ? h('div', { class: 'breakdown' }, rows.map(r =>
+                    h('div', { class: 'bd-row' },
+                        h('span', { class: 'bd-label' }, labelOf(r.k)),
+                        h('span', { class: 'bd-track', role: 'img', 'aria-label': `${labelOf(r.k)}: ${pct(r.n, total)}` }, h('span', { class: 'bd-fill', style: `width:${((r.n / total) * 100).toFixed(1)}%;${tone ? `--tone:${tone(r.k)}` : ''}` })),
+                        h('span', { class: 'bd-n' }, pct(r.n, total))))) : empty('Nothing yet.')));
+        }
+
+        function renderBreakdowns() {
+            const PB_TONE = (k) => (k === 'spotify' ? 'var(--accent-green)' : k === 'server1-direct' ? 'var(--accent-orange)' : k === 'relay:workstation' ? 'var(--accent-purple)' : 'var(--accent-blue)');
+            put('breakdowns',
+                breakdown('Requested from', data.bySource, k => SOURCE[k] || k),
+                breakdown('Played via', data.byPlayback, playbackLabel, PB_TONE),
+                breakdown('Spotify songs that played from YouTube', data.matcher, k => MATCH[k] || k));
+        }
+
+        function rankCard(title, rows, cols, rowCells) {
+            return h('section', { class: 'card' },
+                h('div', { class: 'card-header' }, h('h3', { class: 'card-title' }, title)),
+                h('div', { class: 'table-wrap' }, rows.length ? h('table', { class: 'rank' },
+                    h('thead', null, h('tr', null, h('th', { scope: 'col' }, h('span', { class: 'sr-only' }, 'Rank'), '#'), cols.map(c => h('th', { scope: 'col', class: c.num ? 'num' : null }, c.label)))),
+                    h('tbody', null, rows.map((r, i) => h('tr', null, h('td', null, String(i + 1)), rowCells(r)))))
+                    : empty('Nothing yet.')));
+        }
+
+        function renderTops() {
+            put('tops',
+                rankCard('Songs', data.topSongs, [{ label: 'Song' }, { label: 'Plays', num: true }, { label: 'Skips', num: true }],
+                    r => [h('td', null, h('div', { class: 'song-title' }, r.title), h('div', { class: 'muted small' }, r.author || '')),
+                          h('td', { class: 'num' }, fmtNum.format(r.plays)), h('td', { class: 'num' }, fmtNum.format(r.skips))]),
+                rankCard('Requesters', data.topRequesters, [{ label: 'Person' }, { label: 'Plays', num: true }, { label: 'Listened', num: true }],
+                    r => [h('td', null, r.name || r.id, h('div', { class: 'muted small' }, r.id)), h('td', { class: 'num' }, fmtNum.format(r.plays)), h('td', { class: 'num' }, hours(r.listened))]),
+                rankCard('Servers', data.topServers, [{ label: 'Server' }, { label: 'Plays', num: true }, { label: 'People', num: true }],
+                    r => [h('td', null, r.name || r.id, h('div', { class: 'muted small' }, r.id)), h('td', { class: 'num' }, fmtNum.format(r.plays)), h('td', { class: 'num' }, fmtNum.format(r.listeners))]),
+                (data.topStreams || []).length ? rankCard('Streams', data.topStreams, [{ label: 'Stream' }, { label: 'Plays', num: true }, { label: 'People', num: true }],
+                    r => [h('td', null, r.name || r.id, h('div', { class: 'muted small' }, r.id)), h('td', { class: 'num' }, fmtNum.format(r.plays)), h('td', { class: 'num' }, fmtNum.format(r.listeners))]) : null,
+                rankCard('Most skips', data.skippers, [{ label: 'Person' }, { label: 'Skips', num: true }],
+                    r => [h('td', null, r.name || r.id), h('td', { class: 'num' }, fmtNum.format(r.skips))]));
+        }
+
+        function renderFailures() {
+            put('failures', data.failures.length ? h('table', null,
+                h('thead', null, h('tr', null, h('th', { scope: 'col' }, 'Reason'), h('th', { scope: 'col', class: 'num' }, 'Count'), h('th', { scope: 'col', class: 'num' }, 'Last'))),
+                h('tbody', null, data.failures.map(f => h('tr', null, h('td', { class: 'detail' }, f.error), h('td', { class: 'num' }, fmtNum.format(f.n)),
+                    h('td', { class: 'num' }, f.last ? fmtFull.format(new Date(f.last)) : '—')))))
+                : empty('No failed plays in this range. 🎉'));
+        }
+
+        function resultCell(r) {
+            const detail = r.outcome === 'skipped' ? (r.skipped_by_name ? `by ${r.skipped_by_name}` : r.skip_reason && r.skip_reason !== 'MANUAL' ? r.skip_reason.toLowerCase().replace(/_/g, ' ') : '')
+                : r.outcome === 'failed' ? (r.error || '') : '';
+            return [pill(r.outcome), detail ? h('div', { class: 'muted small', style: 'margin-top:0.25rem;max-width:18rem' }, detail) : null];
+        }
+
+        function renderRecent(hasMore) {
+            $('recent-note').textContent = recentRows.length ? `newest first · ${recentRows.length} shown` : '';
+            // data-label: on phones each row becomes a stacked card with these as field labels (CSS .stack).
+            put('recent', recentRows.length ? h('table', { class: 'stack' },
+                h('thead', null, h('tr', null, ['When', 'Server or stream', 'Requested by', 'Song', 'From', 'Played via', 'Result', 'Listened'].map((c, i) =>
+                    h('th', { scope: 'col', class: i === 7 ? 'num' : null }, c)))),
+                h('tbody', null, recentRows.map(r => {
+                    const via = [playbackLabel(r.playback), r.prefetched ? ' · prefetched' : '', r.spotify_account ? ` · ${r.spotify_account} account` : ''].join('');
+                    return h('tr', null,
+                        h('td', { class: 'num', 'data-label': 'When' }, fmtFull.format(new Date(r.t))),
+                        h('td', { 'data-label': 'Server or stream' }, r.guild_name || r.guild_id, r.context === 'stream' ? h('div', { class: 'muted small' }, 'Stream song request') : null),
+                        h('td', { 'data-label': 'Requested by' }, r.requester_name || h('span', { class: 'muted' }, r.added_by === 'dj' ? 'DJ mode' : 'Autoplay')),
+                        h('td', { 'data-label': 'Song' },
+                            h('div', { class: 'song-title' }, r.url && /^https:\/\//.test(r.url) ? h('a', { href: r.url, target: '_blank', rel: 'noopener noreferrer' }, r.title) : r.title,
+                                r.explicit ? h('span', { class: 'badge-e', title: 'Explicit' }, 'E') : null),
+                            h('div', { class: 'muted small' }, r.author || ''),
+                            r.playlist ? h('div', { class: 'muted small' }, `from “${r.playlist}”`) : null,
+                            r.matched_title ? h('div', { class: 'muted small' }, `→ played as ${r.matched_title} (${MATCH[r.matched_via] || r.matched_via || 'match'})`) : null),
+                        h('td', { 'data-label': 'From' }, SOURCE[r.request_source] || r.request_source),
+                        h('td', { class: 'small', 'data-label': 'Played via' }, r.outcome === 'failed' && !r.playback ? '—' : via),
+                        h('td', { 'data-label': 'Result' }, resultCell(r)),
+                        r.outcome === 'playing'
+                            // Still playing: listened time is only stored when the song ends, so the live view fills it in.
+                            ? h('td', { class: 'num', 'data-label': 'Listened', 'data-live-play': String(r.id), 'data-dur': r.duration_sec ?? '' }, `… / ${clock(r.duration_sec)}`)
+                            : h('td', { class: 'num', 'data-label': 'Listened' }, r.outcome === 'failed' ? '—' : `${clock(r.listened_sec)} / ${clock(r.duration_sec)}`));
+                }))) : empty('No plays match these filters yet.'));
+            put('more', hasMore ? h('button', { type: 'button', class: 'btn', id: 'load-more' }, icon('fas fa-angles-down'), 'Load more') : null);
+            if (hasMore) $('load-more').addEventListener('click', () => load({ append: true }));
+            tickLive();
+        }
+
+        // ── playing now ────────────────────────────────────────────────────────
+        // Positions come from the players every few seconds; between polls the countdown advances on
+        // the browser's clock (paused tracks don't move). When a song should have ended, poll at once.
+        const LIVE_POLL_MS = 5000;
+        let live = { plays: [], fetchedAt: 0, ids: '' }, liveBusy = false, liveFailed = false;
+        const mmss = (ms) => { const s = Math.max(0, Math.floor(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+        const livePos = (p) => (p.paused ? p.positionMs : p.positionMs + (Date.now() - live.fetchedAt));
+
+        async function loadLive() {
+            if (liveBusy) return;
+            liveBusy = true;
+            try {
+                const r = await fetch(`${API}/live`, { credentials: 'same-origin', headers: { accept: 'application/json' } });
+                if (!(r.headers.get('content-type') || '').includes('application/json')) throw new Error('session');
+                const body = await r.json();
+                if (!r.ok) throw new Error(body.error || `HTTP ${r.status}`);
+                const ids = body.plays.map(p => p.playId).join(',');
+                const changed = live.fetchedAt && ids !== live.ids;
+                live = { plays: body.plays, fetchedAt: Date.now(), ids };
+                liveFailed = false;
+                renderLive();
+                if (changed && !document.hidden && recentRows.length <= 50) load(); // a song started or ended: refresh the table too
+            } catch (e) {
+                if (!liveFailed) { liveFailed = true; $('live-note').textContent = 'Live view unavailable — retrying'; }
+            } finally { liveBusy = false; }
+        }
+
+        function renderLive() {
+            $('live-note').textContent = live.plays.length ? `${live.plays.length} server${live.plays.length === 1 ? '' : 's'} listening` : '';
+            put('live', live.plays.length ? live.plays.map(p => {
+                const art = p.thumbnail && /^https:\/\//.test(p.thumbnail)
+                    ? h('img', { class: 'np-art', src: p.thumbnail, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' })
+                    : h('div', { class: 'np-art' }, icon('fas fa-music'));
+                const who = p.requester_name || (p.added_by === 'dj' ? 'DJ mode' : 'Autoplay');
+                const where = [p.guild_name || p.guild_id, p.voice_channel_name ? `🔊 ${p.voice_channel_name}` : null, who, playbackLabel(p.playback)].filter(Boolean).join(' · ');
+                return h('div', { class: `np${p.paused ? ' is-paused' : ''}`, 'data-key': p.guild_id },
+                    art,
+                    h('div', { class: 'np-main' },
+                        h('div', { class: 'np-title' }, p.url && /^https:\/\//.test(p.url) ? h('a', { href: p.url, target: '_blank', rel: 'noopener noreferrer' }, p.title) : p.title),
+                        h('div', { class: 'muted small' }, p.author || ''),
+                        h('div', { class: 'muted small' }, where, p.upNext ? ` · ${p.upNext} up next` : ''),
+                        h('div', { class: 'np-progress' },
+                            h('span', { class: 'bd-track', role: 'progressbar', 'aria-label': `Progress of ${p.title}`, 'aria-valuemin': 0, 'aria-valuemax': Math.round((p.durationMs || 0) / 1000) },
+                                h('span', { class: 'bd-fill', 'data-np': 'fill' })),
+                            h('span', { class: 'np-time', 'data-np': 'time' }))));
+            }) : empty('Nothing is playing right now.'));
+            tickLive();
+        }
+
+        function tickLive() {
+            let overdue = false;
+            for (const el of document.querySelectorAll('#live .np')) {
+                const p = live.plays.find(x => String(x.guild_id) === el.dataset.key);
+                if (!p) continue;
+                const fill = el.querySelector('[data-np="fill"]'), time = el.querySelector('[data-np="time"]');
+                const pos = livePos(p);
+                if (p.durationMs > 0) {
+                    const shown = Math.min(pos, p.durationMs);
+                    fill.style.width = `${((shown / p.durationMs) * 100).toFixed(2)}%`;
+                    fill.parentElement.setAttribute('aria-valuenow', String(Math.floor(shown / 1000)));
+                    time.replaceChildren(h('strong', null, `−${mmss(p.durationMs - shown)}`), ` · ${mmss(shown)} / ${mmss(p.durationMs)}${p.paused ? ' · paused' : ''}`);
+                    if (!p.paused && pos > p.durationMs + 2000 && !p.resynced) { p.resynced = true; overdue = true; }
+                } else {
+                    fill.style.width = '100%';
+                    time.replaceChildren(h('strong', null, 'LIVE'), ` · ${mmss(pos)}${p.paused ? ' · paused' : ''}`);
+                }
+            }
+            // "Listened" for rows still playing in the Recent plays table
+            for (const cell of document.querySelectorAll('[data-live-play]')) {
+                const p = live.plays.find(x => String(x.playId) === cell.dataset.livePlay);
+                const dur = cell.dataset.dur ? Number(cell.dataset.dur) * 1000 : 0;
+                if (p) cell.textContent = `${mmss(dur ? Math.min(livePos(p), dur) : livePos(p))} / ${dur ? mmss(dur) : '—'}`;
+            }
+            if (overdue) loadLive();
+        }
+        setInterval(() => { if (!document.hidden) tickLive(); }, 1000);
+        setInterval(() => { if (!document.hidden) loadLive(); }, LIVE_POLL_MS);
+        document.addEventListener('visibilitychange', () => { if (!document.hidden) loadLive(); });
+        loadLive();
+
+        // ── controls ───────────────────────────────────────────────────────────
+        function apply() {
+            history.replaceState(null, '', `${location.pathname}?${query()}`);
+            document.querySelectorAll('.seg button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.range === state.range)));
+            load();
+        }
+        document.querySelectorAll('.seg button').forEach(b => b.addEventListener('click', () => { state.range = b.dataset.range; apply(); }));
+        for (const [id, key] of [['f-context', 'context'], ['f-guild', 'guild'], ['f-source', 'source'], ['f-outcome', 'outcome']]) {
+            $(id).value = state[key];
+            $(id).addEventListener('change', (e) => { state[key] = e.target.value; apply(); });
+        }
+        let typing = null;
+        $('f-q').value = state.q;
+        $('f-q').addEventListener('input', (e) => { clearTimeout(typing); typing = setTimeout(() => { state.q = e.target.value.trim(); apply(); }, 350); });
+        $('f-clear').addEventListener('click', () => {
+            Object.assign(state, { context: '', guild: '', source: '', outcome: '', q: '' });
+            for (const id of ['f-context', 'f-guild', 'f-source', 'f-outcome', 'f-q']) $(id).value = '';
+            apply();
+        });
+        $('refresh').addEventListener('click', () => load());
+        function tickUpdated() { $('updated').textContent = loadedAt ? `Updated ${ago(Date.now() - loadedAt)}` : ''; }
+        setInterval(tickUpdated, 1000);
+        setInterval(() => { if (!document.hidden && recentRows.length <= 50) load(); }, REFRESH_MS); // don't clobber "Load more"
+        apply();
+    })();
+    </script>
+</body>
+</html>

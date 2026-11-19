@@ -1,0 +1,277 @@
+<%#
+  Channel access: finds channels whose access is granted one member at a time (per-user permission
+  overwrites) and converts each list into a role (GET/POST /api/guilds/:id/channel-access).
+  API-driven; needs `guild` and `roles`. Built on the settings-row kit (cf-settings.css); the list
+  and results are built with createElement/textContent.
+%>
+<%
+// Roles the bot cannot give (core/channel-access-manager.js refuses them too): managed by an
+// integration, or at/above the bot's highest role.
+const caBotTop = (guild && guild.members && guild.members.me && guild.members.me.roles && guild.members.me.roles.highest)
+    ? guild.members.me.roles.highest.position : null;
+const caRoles = (locals.roles || []).map(r => ({
+    id: r.id, name: r.name,
+    blocked: !!r.managed || (typeof caBotTop === 'number' && Number(r.position) >= caBotTop),
+}));
+%>
+<style>
+    /* A channel: the kit's multi-line list row (title, meta) with the grant count on the right and
+       its controls and result under it. */
+    #chanAccessPage .ca-item { flex-direction: column; align-items: stretch; gap: var(--cf-3); padding-top: var(--cf-4); padding-bottom: var(--cf-4); }
+    #chanAccessPage .ca-top { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--cf-3); min-width: 0; }
+    #chanAccessPage .cf-list-title .fas { color: var(--cf-text-3); font-size: var(--cf-text-sm); }
+    #chanAccessPage .ca-count { flex: none; font-size: var(--cf-text-xl); font-weight: 600; color: var(--cf-text); font-variant-numeric: tabular-nums; line-height: 1.2; }
+    #chanAccessPage .ca-controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--cf-2) var(--cf-3); }
+    #chanAccessPage .ca-select { flex: 1 1 14rem; width: auto; min-width: 0; }
+    #chanAccessPage .ca-select option { background: var(--cf-surface); color: var(--cf-text); }
+    #chanAccessPage .ca-watch { margin: 0; white-space: nowrap; }
+    #chanAccessPage .ca-result { margin: 0; }
+    #chanAccessPage .ca-result p { margin: 0; white-space: pre-line; }
+    #chanAccessPage .ca-result p + p { margin-top: var(--cf-2); }
+    #chanAccessPage .ca-filter { padding: var(--cf-3) var(--cf-5); }
+    #chanAccessPage .ca-filter .cf-search { width: 100%; }
+    #chanAccessPage .ca-sec-count { font-weight: 400; color: var(--cf-text-3); }
+    #chanAccessPage .ca-rules { margin: 0; padding-left: 1.1rem; display: grid; gap: var(--cf-2); font-size: var(--cf-text-sm); line-height: 1.55; color: var(--cf-text-2); }
+    #chanAccessPage .ca-rules strong, #chanAccessPage .ca-rules em { color: var(--cf-text); }
+    @media (max-width: 640px) {
+        #chanAccessPage .ca-select { flex-basis: 100%; }
+        #chanAccessPage .ca-controls .btn { flex: 1 1 auto; justify-content: center; }
+        #chanAccessPage .ca-filter { padding: var(--cf-3) var(--cf-4); }
+    }
+</style>
+
+<div class="page-section" id="chanAccessPage" data-guild-id="<%= guild.id %>">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-users-cog"></i>
+                <span>Channel access</span>
+            </div>
+            <div class="page-section-subtitle">Nothing changes until you press Convert on a channel.</div>
+        </div>
+    </div>
+
+    <div id="caError" class="cf-notice is-bad" role="alert" hidden></div>
+
+    <dl class="cf-kpis" id="caTotals" aria-label="Scan results" hidden>
+        <div class="cf-kpi"><dt>Channels affected</dt><dd class="cf-kpi-value" id="caStatChannels">0</dd></div>
+        <div class="cf-kpi"><dt>Per-user grants</dt><dd class="cf-kpi-value" id="caStatGrants">0</dd></div>
+        <div class="cf-kpi"><dt>Worth converting</dt><dd class="cf-kpi-value" id="caStatConvertible">0</dd></div>
+    </dl>
+
+    <section class="cf-section" aria-labelledby="ca-channels-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="ca-channels-title">Channels with per-user access <span class="ca-sec-count"></span></h2>
+                <p class="cf-section-desc">Pick the role that should grant access, preview the change, then convert.</p>
+            </div>
+            <div class="cf-section-actions">
+                <button type="button" class="btn btn-secondary" id="caScan">Scan again</button>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="ca-filter" hidden>
+                <span class="cf-search"><i class="fas fa-search" aria-hidden="true"></i><input type="search" class="form-control" placeholder="Filter channels" aria-label="Filter channels"></span>
+            </div>
+            <div id="caList" class="cf-list">
+                <div class="cf-state cf-state--loading" role="status" aria-live="polite"><span class="cf-spinner" aria-hidden="true"></span><p class="cf-state-title">Scanning channels</p></div>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="ca-rules-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="ca-rules-title">How the conversion works</h2>
+                <p class="cf-section-desc">What changes, and what is left alone.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--stack">
+                <ul class="ca-rules">
+                    <li>Everyone on the channel's list gets the role.</li>
+                    <li>The role gets only the permissions <strong>every</strong> listed member shares, never the sum of them, so one person's extra permission does not become everyone's.</li>
+                    <li>A per-user overwrite is deleted only once the role makes it redundant. Anything that grants more than the role is kept and reported instead.</li>
+                    <li>Member overwrites that only <em>deny</em> permissions are restrictions, not access grants. They are never counted or changed.</li>
+                    <li>Ticket channels are skipped: their per-user overwrites <em>are</em> the access control.</li>
+                    <li>Channels with fewer than <strong id="caMin">3</strong> listed members are not worth a role. Change those by hand.</li>
+                    <li>"Keep it enforced" moves anyone later given access one at a time onto the role automatically.</li>
+                </ul>
+            </div>
+        </div>
+    </section>
+</div>
+
+<script>
+(function () {
+  const root = document.getElementById('chanAccessPage');
+  if (!root) return;
+  const guildId = root.dataset.guildId;
+  const api = (p) => `/api/guilds/${guildId}/channel-access${p}`;
+  const $ = (id) => document.getElementById(id);
+
+  // `blocked`: the bot cannot give that role (managed, or at/above its highest role).
+  const ROLES = <%- JSON.stringify(caRoles).replace(/</g, '\\u003c') %>;
+
+  function el(tag, props, ...kids) {
+    const n = document.createElement(tag);
+    if (props) for (const [k, v] of Object.entries(props)) {
+      if (v === null || v === undefined || v === false) continue;
+      if (k === 'text') n.textContent = v;
+      else if (k === 'className') n.className = v;
+      else if (k === 'hidden') n.hidden = !!v;
+      else if (k === 'value') n.value = v;
+      else if (k === 'checked') n.checked = !!v;
+      else n.setAttribute(k, v === true ? '' : v);
+    }
+    for (const kid of kids.flat(Infinity)) if (kid !== null && kid !== undefined && kid !== false) n.appendChild(typeof kid === 'string' ? document.createTextNode(kid) : kid);
+    return n;
+  }
+
+  async function req(url, options) {
+    const res = await fetch(url, { credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, ...options });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
+    return body;
+  }
+  const showError = (m) => { const box = $('caError'); if (!m) { box.hidden = true; return; } box.textContent = m; box.hidden = false; };
+  const state = (title, text) => el('div', { className: 'cf-state' }, el('p', { className: 'cf-state-title', text: title }), text ? el('p', { className: 'cf-state-text', text }) : null);
+
+  // The API returns Discord-flavoured markdown (**bold**, <@&role>) so the slash command and this
+  // page read identically. Rebuild just those two as nodes; everything else stays text.
+  const BOLD = /^\*\*([^*]+)\*\*$/;
+  const MENTION = /^<@&(\d+)>$/;
+  function rich(text) {
+    return String(text ?? '').split(/\n{2,}/).map(para => {
+      const p = el('p');
+      para.split(/(\*\*[^*]+\*\*|<@&\d+>)/g).forEach(part => {
+        if (!part) return;
+        const bold = part.match(BOLD);
+        const mention = part.match(MENTION);
+        if (bold) p.appendChild(el('strong', { text: bold[1] }));
+        else if (mention) p.appendChild(document.createTextNode('@' + ((ROLES.find(r => r.id === mention[1]) || {}).name || mention[1])));
+        else p.appendChild(document.createTextNode(part));
+      });
+      return p;
+    });
+  }
+
+  function roleSelect(c) {
+    const pick = el('select', { className: 'form-select ca-select', 'aria-label': `Role for ${c.name}`, 'data-role-for': String(c.channelId) },
+      el('option', { value: '', text: 'Choose a role' }),
+      ROLES.map(r => el('option', { value: r.id, disabled: r.blocked && r.id !== c.watchedRoleId, text: r.name + (r.blocked ? ' (above the bot)' : '') })));
+    if (c.watchedRoleId) pick.value = c.watchedRoleId;
+    return pick;
+  }
+
+  function channelCard(c) {
+    const skip = c.isTicket || !c.convertible;
+    const id = String(c.channelId);
+    const count = Number(c.userCount) || 0;
+    const pills = [
+      c.isTicket ? el('span', { className: 'cf-pill is-bad', text: 'Ticket, skipped' }) : null,
+      (!c.isTicket && !c.convertible) ? el('span', { className: 'cf-pill is-warn', text: 'Under the minimum' }) : null,
+      c.watchedRoleId ? el('span', { className: 'cf-pill is-info', text: 'Enforced' }) : null,
+    ];
+    const controls = skip ? null : el('div', { className: 'ca-controls' },
+      roleSelect(c),
+      el('label', { className: 'cf-choice ca-watch' }, el('input', { type: 'checkbox', 'data-watch-for': id, checked: !!c.watchedRoleId }), el('span', { text: 'Keep it enforced' })),
+      el('button', { type: 'button', className: 'btn btn-secondary', 'data-preview': id, text: 'Preview' }),
+      el('button', { type: 'button', className: 'btn btn-primary', 'data-convert': id, text: 'Convert' }));
+
+    return el('div', { className: 'cf-list-item cf-list-item--multi ca-item', 'data-card': id, 'data-name': String(c.name || '').toLowerCase() },
+      el('div', { className: 'ca-top' },
+        el('div', { className: 'cf-list-main' },
+          el('h3', { className: 'cf-list-title' }, c.isCategory ? el('i', { className: 'fas fa-folder', 'aria-hidden': 'true' }) : '#', String(c.name || ''), pills),
+          el('p', { className: 'cf-list-meta', text: `${count} per-user grant${count === 1 ? '' : 's'}${c.isCategory ? ' · category (channels inside may inherit)' : ''}` })),
+        el('div', { className: 'ca-count', 'aria-hidden': 'true', text: String(count) })),
+      controls,
+      el('div', { className: 'cf-notice ca-result', 'data-result-for': id, role: 'status', hidden: true }));
+  }
+
+  function applyFilter() {
+    const q = root.querySelector('.ca-filter input').value.trim().toLowerCase();
+    root.querySelectorAll('#caList [data-card]').forEach(card => { card.hidden = !!q && !card.dataset.name.includes(q); });
+  }
+  root.querySelector('.ca-filter input').addEventListener('input', applyFilter);
+
+  async function scan() {
+    showError('');
+    const btn = $('caScan');
+    btn.disabled = true;
+    try {
+      const data = await req(api('/'));
+      $('caMin').textContent = data.minimum;
+      $('caStatChannels').textContent = data.totals.channels;
+      $('caStatGrants').textContent = data.totals.grants;
+      $('caStatConvertible').textContent = data.totals.convertible;
+      $('caTotals').hidden = false;
+      root.querySelector('.ca-sec-count').textContent = data.channels.length ? `(${data.channels.length})` : '';
+      root.querySelector('.ca-filter').hidden = data.channels.length <= 15;
+
+      $('caList').replaceChildren(...(data.channels.length
+        ? data.channels.map(channelCard)
+        : [state('Nothing to convert', 'Every channel in this server grants access by role.')]));
+      applyFilter();
+    } catch (err) {
+      showError(err.message);
+      if (!$('caList').querySelector('[data-card]')) $('caList').replaceChildren(state('The scan did not finish', 'Use Scan again to retry.'));
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  const find = (attr, id) => root.querySelector(`[${attr}="${CSS.escape(String(id))}"]`);
+
+  async function convert(channelId, dryRun) {
+    const roleSel = find('data-role-for', channelId);
+    const out = find('data-result-for', channelId);
+    const watch = find('data-watch-for', channelId)?.checked ?? false;
+    const show = (tone, nodes) => { out.hidden = false; out.className = `cf-notice is-${tone} ca-result`; out.replaceChildren(el('div', { className: 'cf-notice-body' }, nodes)); };
+    if (!roleSel?.value) return show('bad', [el('p', { text: 'Pick the role that should grant access.' })]);
+    if (!dryRun) {
+      const name = roleSel.selectedOptions[0]?.textContent || 'that role';
+      if (!confirm(`Give ${name} to everyone on this channel's list and replace their per-user access with it?`)) return;
+    }
+    show('info', [el('p', { text: dryRun ? 'Working out what would change…' : 'Converting…' })]);
+    try {
+      const data = await req(api('/convert'), {
+        method: 'POST',
+        body: JSON.stringify({ channelId, roleId: roleSel.value, dryRun, watch }),
+      });
+      show('ok', [
+        ...rich(data.summary),
+        data.result.dryRun ? el('p', null, el('em', { text: 'Nothing has changed yet. Press Convert to apply it.' })) : null,
+        data.watching ? el('p', { text: 'Enforced: new per-user grants on this channel will be moved to the role automatically.' }) : null,
+      ]);
+      if (!dryRun) setTimeout(scan, 1200);
+    } catch (err) {
+      show('warn', rich(err.message));
+    }
+  }
+
+  $('caScan').addEventListener('click', scan);
+  root.addEventListener('click', (e) => {
+    const preview = e.target.closest('[data-preview]');
+    if (preview) return convert(preview.dataset.preview, true);
+    const apply = e.target.closest('[data-convert]');
+    if (apply) return convert(apply.dataset.convert, false);
+  });
+  root.addEventListener('change', async (e) => {
+    const box = e.target.closest('[data-watch-for]');
+    if (!box) return;
+    const channelId = box.dataset.watchFor;
+    const roleId = find('data-role-for', channelId)?.value;
+    // Unchecking always applies immediately; checking without a role waits for the convert click.
+    if (box.checked && !roleId) return;
+    try {
+      await req(api('/watch'), { method: 'POST', body: JSON.stringify({ channelId, roleId, enabled: box.checked }) });
+    } catch (err) {
+      box.checked = !box.checked;
+      showError(err.message);
+    }
+  });
+
+  scan();
+})();
+</script>

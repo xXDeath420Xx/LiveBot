@@ -1,6 +1,7 @@
 import { EmbedBuilder } from 'discord.js';
 import pool from '../../utils/db.js';
 import logger from '../../utils/logger.js';
+import { themeColor } from '../../core/guild-theme.js';
 
 export async function handleStatsCommunity(interaction) {
     await interaction.deferReply();
@@ -18,8 +19,8 @@ export async function handleStatsCommunity(interaction) {
             `SELECT
                 COUNT(*) as total_journals,
                 COUNT(DISTINCT user_id) as unique_growers,
-                SUM(CASE WHEN is_active = TRUE THEN 1 ELSE 0 END) as active_grows,
-                SUM(CASE WHEN current_stage = 'complete' THEN 1 ELSE 0 END) as completed_grows
+                COALESCE(SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END), 0) as active_grows,
+                COALESCE(SUM(CASE WHEN status = 'harvested' THEN 1 ELSE 0 END), 0) as completed_grows
              FROM grow_journals WHERE guild_id = ?`,
             [guildId]
         ),
@@ -38,7 +39,7 @@ export async function handleStatsCommunity(interaction) {
         pool.execute(
             `SELECT
                 COUNT(*) as total_trades,
-                SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed_trades
+                COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0) as completed_trades
              FROM trade_escrow WHERE guild_id = ?`,
             [guildId]
         ),
@@ -50,7 +51,7 @@ export async function handleStatsCommunity(interaction) {
         ),
         pool.execute(
             `SELECT current_stage, COUNT(*) as count
-             FROM grow_journals WHERE guild_id = ? AND is_active = TRUE
+             FROM grow_journals WHERE guild_id = ? AND status = 'active'
              GROUP BY current_stage ORDER BY count DESC`,
             [guildId]
         )
@@ -98,7 +99,8 @@ export async function handleStatsCommunity(interaction) {
 }
 
 export async function handleStatsLeaderboard(interaction) {
-    const type = interaction.options.getString('type');
+    // The prefix command (!growleaderboard) passes no type — show most active growers.
+    const type = interaction.options.getString('type') || 'active';
     await interaction.deferReply();
 
     let leaderboardData = [];
@@ -109,7 +111,7 @@ export async function handleStatsLeaderboard(interaction) {
         case 'active':
             [leaderboardData] = await pool.execute(
                 `SELECT user_id, COUNT(*) as count
-                 FROM grow_journals WHERE guild_id = ? AND is_active = TRUE
+                 FROM grow_journals WHERE guild_id = ? AND status = 'active'
                  GROUP BY user_id ORDER BY count DESC LIMIT 10`,
                 [interaction.guild.id]
             );
@@ -120,7 +122,7 @@ export async function handleStatsLeaderboard(interaction) {
         case 'completed':
             [leaderboardData] = await pool.execute(
                 `SELECT user_id, COUNT(*) as count
-                 FROM grow_journals WHERE guild_id = ? AND current_stage = 'complete'
+                 FROM grow_journals WHERE guild_id = ? AND status = 'harvested'
                  GROUP BY user_id ORDER BY count DESC LIMIT 10`,
                 [interaction.guild.id]
             );
@@ -175,7 +177,7 @@ export async function handleStatsLeaderboard(interaction) {
     }
 
     const embed = new EmbedBuilder()
-        .setColor('#FFD700')
+        .setColor(themeColor(interaction.guildId, 'warning'))
         .setTitle(`${emoji} ${title}`)
         .setTimestamp();
 
@@ -197,7 +199,7 @@ export async function handleStatsStrains(interaction) {
 
     const [strainStats] = await pool.execute(
         `SELECT strain_name, COUNT(*) as grow_count,
-                SUM(CASE WHEN current_stage = 'complete' THEN 1 ELSE 0 END) as completed_count
+                COALESCE(SUM(CASE WHEN status = 'harvested' THEN 1 ELSE 0 END), 0) as completed_count
          FROM grow_journals WHERE guild_id = ? AND strain_name IS NOT NULL
          GROUP BY strain_name ORDER BY grow_count DESC LIMIT 15`,
         [interaction.guild.id]
@@ -210,7 +212,7 @@ export async function handleStatsStrains(interaction) {
     }
 
     const embed = new EmbedBuilder()
-        .setColor('#9B59B6')
+        .setColor(themeColor(interaction.guildId, 'accent'))
         .setTitle(' Popular Strains in This Community')
         .setTimestamp();
 
@@ -246,9 +248,9 @@ export async function handleStatsPersonal(interaction) {
         pool.execute(
             `SELECT
                 COUNT(*) as total_journals,
-                SUM(CASE WHEN is_active = TRUE THEN 1 ELSE 0 END) as active_grows,
-                SUM(CASE WHEN current_stage = 'complete' THEN 1 ELSE 0 END) as completed_grows,
-                AVG(CASE WHEN current_stage = 'complete' THEN DATEDIFF(updated_at, start_date) END) as avg_grow_days
+                COALESCE(SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END), 0) as active_grows,
+                COALESCE(SUM(CASE WHEN status = 'harvested' THEN 1 ELSE 0 END), 0) as completed_grows,
+                AVG(CASE WHEN status = 'harvested' THEN DATEDIFF(updated_at, start_date) END) as avg_grow_days
              FROM grow_journals WHERE user_id = ?`,
             [userId]
         ),
@@ -274,7 +276,7 @@ export async function handleStatsPersonal(interaction) {
         pool.execute(
             `SELECT
                 COUNT(*) as total_trades,
-                SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END) as completed_trades
+                COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0) as completed_trades
              FROM trade_escrow WHERE seller_id = ? OR buyer_id = ?`,
             [userId, userId]
         ),
@@ -286,7 +288,7 @@ export async function handleStatsPersonal(interaction) {
     ]);
 
     const embed = new EmbedBuilder()
-        .setColor('#27AE60')
+        .setColor(themeColor(interaction.guildId, 'success'))
         .setTitle(` ${targetUser.username}'s Grow Profile`)
         .setThumbnail(targetUser.displayAvatarURL())
         .addFields(
@@ -353,15 +355,16 @@ export async function handleStatsTrends(interaction) {
         [interaction.guild.id]
     );
 
+    // Indoor / outdoor / greenhouse — the journal create command's "type" option (grow_environment).
     const [growTypeStats] = await pool.execute(
-        `SELECT grow_type, COUNT(*) as count
-         FROM grow_journals WHERE guild_id = ?
-         GROUP BY grow_type ORDER BY count DESC`,
+        `SELECT grow_environment AS grow_type, COUNT(*) as count
+         FROM grow_journals WHERE guild_id = ? AND grow_environment IS NOT NULL
+         GROUP BY grow_environment ORDER BY count DESC`,
         [interaction.guild.id]
     );
 
     const embed = new EmbedBuilder()
-        .setColor('#3498DB')
+        .setColor(themeColor(interaction.guildId, 'primary'))
         .setTitle(' Community Growing Trends')
         .setTimestamp();
 

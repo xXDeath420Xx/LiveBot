@@ -1,135 +1,82 @@
+<%#
+  Weather alerts: the on/off switch and check interval (one form, POST weather/config), usage
+  numbers, and the member commands. Built on the settings-row kit (cf-settings.css); field names
+  and ids are unchanged.
+%>
+<% const wc = (typeof weatherConfig !== 'undefined' && weatherConfig) ? weatherConfig : {}; %>
+<style>
+    .wx-cmds .cf-list-main code { font-family: var(--cf-mono); font-size: var(--cf-text-sm); color: var(--cf-text); overflow-wrap: anywhere; }
+    .wx-cmds .wx-cmd-desc { display: block; margin-top: 2px; color: var(--cf-text-3); }
+</style>
+
 <div class="page-section">
     <div class="page-section-header">
         <div>
             <div class="page-section-title">
                 <i class="fas fa-cloud-sun"></i>
-                <span>Weather Alert System</span>
+                <span>Weather alerts</span>
             </div>
-            <div class="page-section-subtitle">
-                Configure automatic weather alerts for your server members
-            </div>
+            <div class="page-section-subtitle">Members opt in by saving a US ZIP code with <code>/weather check setlocation</code>.</div>
         </div>
     </div>
 
-    <!-- Stats Overview -->
     <% if (weatherStats) { %>
-        <div class="grid grid-cols-3" style="margin-bottom: var(--spacing-6);">
-            <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-                <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Users with Locations</div>
-                <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary);"><%= weatherStats.totalUsers || 0 %></div>
-            </div>
-            <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-                <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Active Alerts</div>
-                <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-warning);"><%= weatherStats.activeAlerts || 0 %></div>
-            </div>
-            <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-                <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Alerts Sent (24h)</div>
-                <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-success);"><%= weatherStats.alertsSent || 0 %></div>
-            </div>
-        </div>
+    <dl class="cf-kpis" aria-label="Weather alerts at a glance">
+        <div class="cf-kpi"><dt>Members with a location</dt><dd class="cf-kpi-value"><%= weatherStats.totalUsers || 0 %></dd></div>
+        <%# weather_alerts has one row per National Weather Service alert, for every server together. %>
+        <div class="cf-kpi"><dt>Active alerts, all servers</dt><dd class="cf-kpi-value"><%= weatherStats.activeAlerts || 0 %></dd></div>
+        <div class="cf-kpi"><dt>New alerts in 24h, all servers</dt><dd class="cf-kpi-value"><%= weatherStats.alertsSent || 0 %></dd></div>
+    </dl>
     <% } %>
 
-    <!-- Configuration -->
-    <div style="margin-bottom: var(--spacing-6);">
-        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
-            <i class="fas fa-cog" style="color: var(--color-primary-400);"></i>
-            Weather Alert Configuration
-        </h3>
-        <form action="/manage/<%= guild.id %>/weather/config" method="POST">
-            <div class="form-check" style="margin-bottom: var(--spacing-4);">
-                <input class="form-check-input" type="checkbox" id="weatherEnabled" name="enabled" <%= (weatherConfig && weatherConfig.enabled) ? 'checked' : '' %>>
-                <label class="form-check-label" for="weatherEnabled">
-                    Enable Weather Alerts
-                </label>
+    <form class="wx-form" action="/manage/<%= guild.id %>/weather/config" method="POST">
+        <section class="cf-section" aria-labelledby="wx-config-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="wx-config-title">Alert settings</h2>
+                    <p class="cf-section-desc">Alerts come from the US National Weather Service and cover every US ZIP code.</p>
+                </div>
+            </header>
+            <div class="cf-rows">
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="weatherEnabled">Weather alerts</label>
+                        <p class="cf-row-desc" id="weatherEnabled-desc">Members who saved a location get a direct message when a severe weather alert affects their area.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="checkbox" class="cf-switch" role="switch" id="weatherEnabled" name="enabled" data-feature-switch aria-describedby="weatherEnabled-desc" <%= wc.enabled ? 'checked' : '' %>>
+                    </div>
+                </div>
+                <%# The bot checks every server's saved locations on one timer (index.js starts it at 180 s), so a
+                    per-server interval would do nothing; the old field stays as a hidden value for the route. %>
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-row-text">
+                        <span class="cf-row-label">How alerts are sent</span>
+                        <p class="cf-row-desc" id="f-weather-checkinterval-desc">New alerts are checked every 3 minutes for the ZIP codes members saved. Each alert is sent once, by direct message, to the members it covers; a bot restart does not send it again.</p>
+                    </div>
+                    <input id="f-weather-checkinterval" type="hidden" name="checkInterval" value="<%= wc.check_interval ? wc.check_interval : 60 %>">
+                </div>
+                <div class="cf-section-foot">
+                    <button type="submit" class="btn btn-primary">Save</button>
+                </div>
             </div>
-            <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary); margin-bottom: var(--spacing-4);">
-                When enabled, users with saved locations will receive DMs for severe weather alerts
-            </div>
+        </section>
+    </form>
 
-            <div style="margin-bottom: var(--spacing-4);">
-                <label class="form-label">Check Interval (seconds)</label>
-                <input type="number" class="form-control" name="checkInterval" value="<%= (weatherConfig && weatherConfig.check_interval) ? weatherConfig.check_interval : 60 %>" min="30" max="300">
-                <div class="form-help">How often to check for new weather alerts (30-300 seconds)</div>
+    <section class="cf-section" aria-labelledby="wx-cmds-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="wx-cmds-title">Member commands</h2>
+                <p class="cf-section-desc">Members save their own ZIP code; alerts only go to members who have one saved.</p>
             </div>
-
-            <button type="submit" class="btn btn-primary">
-                <i class="fas fa-save"></i>
-                <span>Save Weather Settings</span>
-            </button>
-        </form>
-    </div>
-
-    <!-- How It Works -->
-    <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-5); margin-bottom: var(--spacing-6);">
-        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
-            <i class="fas fa-info-circle" style="color: var(--color-primary-400);"></i>
-            How It Works
-        </h3>
-        <p style="font-size: var(--font-size-sm); color: var(--color-text-secondary); margin-bottom: var(--spacing-3);">
-            The weather alert system uses the National Weather Service API to monitor severe weather:
-        </p>
-        <ul style="font-size: var(--font-size-sm); color: var(--color-text-secondary); margin: 0; padding-left: var(--spacing-5);">
-            <li style="margin-bottom: var(--spacing-2);">Users set their location using <code style="color: var(--color-primary-400);">/weather setlocation [zipcode]</code></li>
-            <li style="margin-bottom: var(--spacing-2);">System monitors NWS alerts for affected zones</li>
-            <li style="margin-bottom: var(--spacing-2);">Users receive DMs when alerts affect their area</li>
-            <li>Supports all US locations via ZIP code lookup</li>
-        </ul>
-    </div>
-
-    <!-- User Commands -->
-    <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-5);">
-        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
-            <i class="fas fa-terminal" style="color: var(--color-accent-purple);"></i>
-            User Commands
-        </h3>
-        <div class="grid grid-cols-1" style="gap: var(--spacing-3);">
-            <div style="background: var(--color-dark-700); padding: var(--spacing-3); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-                <code style="color: var(--color-primary-400);">/weather setlocation [zipcode]</code>
-                <div style="font-size: var(--font-size-sm); color: var(--color-text-muted); margin-top: var(--spacing-1);">Set ZIP code for weather alerts</div>
-            </div>
-            <div style="background: var(--color-dark-700); padding: var(--spacing-3); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-                <code style="color: var(--color-primary-400);">/weather location</code>
-                <div style="font-size: var(--font-size-sm); color: var(--color-text-muted); margin-top: var(--spacing-1);">View saved location</div>
-            </div>
-            <div style="background: var(--color-dark-700); padding: var(--spacing-3); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-                <code style="color: var(--color-primary-400);">/weather remove</code>
-                <div style="font-size: var(--font-size-sm); color: var(--color-text-muted); margin-top: var(--spacing-1);">Remove saved location</div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-list wx-cmds">
+                <div class="cf-list-item"><div class="cf-list-main"><code>/weather check setlocation zipcode:</code><span class="wx-cmd-desc">Save a ZIP code for alerts.</span></div></div>
+                <div class="cf-list-item"><div class="cf-list-main"><code>/weather check location</code><span class="wx-cmd-desc">Show the saved location.</span></div></div>
+                <div class="cf-list-item"><div class="cf-list-main"><code>/weather check removelocation</code><span class="wx-cmd-desc">Remove the saved location and stop alerts.</span></div></div>
+                <div class="cf-list-item"><div class="cf-list-main"><code>/weather check config enabled:</code><span class="wx-cmd-desc">Administrators: the same switch as on this page.</span></div></div>
             </div>
         </div>
-    </div>
+    </section>
 </div>
-
-<style>
-.form-label {
-    display: block;
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-primary);
-    margin-bottom: var(--spacing-2);
-}
-
-.form-help {
-    font-size: var(--font-size-xs);
-    color: var(--color-text-muted);
-    margin-top: var(--spacing-2);
-}
-
-.form-check {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-2);
-}
-
-.form-check-input {
-    width: 18px;
-    height: 18px;
-    cursor: pointer;
-}
-
-.form-check-label {
-    font-size: var(--font-size-sm);
-    color: var(--color-text-secondary);
-    cursor: pointer;
-    user-select: none;
-}
-</style>

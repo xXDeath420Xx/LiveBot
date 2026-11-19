@@ -102,7 +102,7 @@ export async function raidTick() {
 
                     if (result.success) {
                         raidsExecuted++;
-                        logger.info('[RaidTick] Raid executed', {
+                        logger.debug('[RaidTick] Raid executed', {
                             playerId: player.id,
                             cashSeized: result.seizure.cashSeized,
                             itemsDestroyed: result.seizure.inventoryDestroyed,
@@ -121,7 +121,7 @@ export async function raidTick() {
 
         const duration = Date.now() - startTime;
         if (playersChecked > 0 || raidsExecuted > 0) {
-            logger.info('[RaidTick] Complete', {
+            logger.debug('[RaidTick] Complete', {
                 playersChecked,
                 raidsExecuted,
                 duration

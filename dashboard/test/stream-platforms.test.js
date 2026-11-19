@@ -3,9 +3,11 @@ import assert from 'node:assert';
 import { PLATFORMS, getPreset, isKnownPlatform } from '../services/stream-platforms.js';
 
 test('exposes the required platforms', () => {
-  for (const p of ['twitch', 'youtube', 'kick', 'trovo', 'instagram', 'tiktok', 'twitter', 'facebook', 'custom']) {
+  for (const p of ['twitch', 'youtube', 'kick', 'instagram', 'tiktok', 'twitter', 'facebook', 'custom']) {
     assert.ok(PLATFORMS[p], `missing preset: ${p}`);
   }
+  // Trovo shut down 2026-06-30 and was retired (migrations/203_remove_trovo.js).
+  assert.ok(!PLATFORMS.trovo, 'trovo preset should stay retired');
 });
 
 test('getPreset returns rtmp base for youtube', () => {

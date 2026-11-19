@@ -11,8 +11,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const state = JSON.parse(fs.readFileSync(path.join(__dirname, 'pac-state.json'), 'utf8'));
 
 const GUILD = '1099732505243959407';
-const NEW_BOT_ID = '1496352090950467595';  // Twatwaffle Patrol
-const OLD_BOT_ID = '1409904443125665875';  // CertiFried Utility (no longer in guild)
+// The acting bot is resolved from guild_bot_mapping, never pinned.
+const OLD_BOT_ID = '1409904443125665875';  // bot-id-ok: historical author of the messages being replaced, not a credential
 
 const RULES_CH       = '1496351042017824859';
 const ROLES_CH       = '1456056474097680394';
@@ -25,10 +25,9 @@ const TICKETS_PANEL  = state.channels.ticketsPanel;
 const COLOR = 0xCDC3FF;
 
 async function getToken(pool) {
-    const enc = (await import('../../utils/encryption.js')).default;
-    const [r] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id = ?', [NEW_BOT_ID]);
-    if (!r.length) throw new Error('TwatWaffle Patrol bot not found in custom_bots');
-    return enc.decrypt(JSON.parse(r[0].bot_token));
+    const { resolveBotForGuild } = await import('../../utils/bot-resolver.js');
+    const bot = await resolveBotForGuild(GUILD, { db: pool });
+    return bot.token;
 }
 
 function H(token, extra = {}) {
@@ -236,7 +235,7 @@ async function rebuildStreamSignup(token, pool) {
             "• Reach **level 3** in the server — you'll get the **Shoutout Eligible** role automatically at lvl 3",
             '• Post a single supported link per message',
             '',
-            '**Supported platforms:** Twitch, Kick, YouTube, TikTok, Trovo, Facebook.',
+            '**Supported platforms:** Twitch, Kick, YouTube, TikTok, Rumble, Facebook.',
             '',
             '**Rules**',
             '• Non-link messages are removed automatically',
@@ -276,7 +275,7 @@ async function main() {
     const pool = createPool();
     try {
         const token = await getToken(pool);
-        console.log('acting as Twatwaffle Patrol (' + NEW_BOT_ID + ')');
+        console.log('acting as the guild\'s mapped bot');
 
         await rebuildRules(token, pool);
         await rebuildRoles(token, pool);

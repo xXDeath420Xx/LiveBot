@@ -56,7 +56,7 @@ export async function claim(guildId, userId) {
         'SELECT start FROM owo_autohunt WHERE guild_id = ? AND id = ?',
         [guildId, userId]
     );
-    if (!row) return { error: 'Autohunt is not enabled. Use `/autohunt enable` first.' };
+    if (!row) return { error: 'Autohunt is not enabled. Use `/owo autohunt enable` first.' };
 
     const startedAt = new Date(row.start).getTime();
     const elapsed = Date.now() - startedAt;

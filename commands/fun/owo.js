@@ -5,7 +5,10 @@
  * /owoify lives in its own command file (commands/fun/owoify.js) since it's
  * independent of the CC-BY-NC-SA gameplay (uses MIT @zuzak/owo package).
  */
-import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
+import {
+    SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits,
+    ActionRowBuilder, ButtonBuilder, ButtonStyle, ComponentType,
+} from 'discord.js';
 import {
     hunt, getZoo, getLeaderboard, isEnabled, setEnabled,
     sellRank, sacrificeRank, getStats, claimDaily, transferCurrency, getBalance,
@@ -24,6 +27,10 @@ import {
 } from '../../core/owo/teams-service.js';
 import { simulateBattle, generateCpuTeam } from '../../core/owo/battle-engine.js';
 import { renderHunt, renderCrateDrop } from '../../core/owo/hunt-text.js';
+import { displayNameFor } from '../../utils/display-name.js';
+import { runBattle } from '../../core/owo/battle-pvp.js';
+import { MAX_BATTLE_BET } from '../../core/owo/social-math.js';
+import { marriageDailyLine } from '../../handlers/owo-social.js';
 // The guild-boss handler is context-agnostic (works on an interaction the same as a prefix ctx),
 // so the slash path reuses the one in owo-prefix rather than duplicating it.
 import { handleBoss } from '../../handlers/owo-prefix.js';
@@ -41,6 +48,7 @@ import { formatMoney } from '../../core/economy-manager.js';
 import { getCurrencyMeta } from '../../core/owo/cowoncy.js';
 import { sendLogEmbed } from '../../core/log-manager.js';
 import logger from '../../utils/logger.js';
+import { themeColor } from '../../core/guild-theme.js';
 
 const AUDITABLE_RANKS = new Set(['epic', 'mythical', 'legendary', 'fabled', 'hidden']);
 
@@ -151,7 +159,8 @@ const data = new SlashCommandBuilder()
         .addStringOption(opt => opt.setName('nickname').setDescription('Nickname (max 35 chars)').setRequired(true)))
     .addSubcommand(sub => sub.setName('battle')
         .setDescription('Fight a PvE ambush (or another member if provided) with your active team.')
-        .addUserOption(opt => opt.setName('opponent').setDescription('Challenge a member (uses their active team)').setRequired(false)))
+        .addUserOption(opt => opt.setName('opponent').setDescription('Challenge a member (uses their active team)').setRequired(false))
+        .addIntegerOption(opt => opt.setName('bet').setDescription('Cowoncy each side stakes on a member battle; winner takes both').setRequired(false).setMinValue(1).setMaxValue(MAX_BATTLE_BET)))
     .addSubcommand(sub => sub.setName('quest')
         .setDescription('View or claim your quests.')
         .addStringOption(opt => opt.setName('action').setDescription('What to do').setRequired(false)
@@ -282,100 +291,15 @@ async function handleQuest(interaction) {
         return `**\`${q.qid}\` ${q.description}** — ${status}\n    reward: ${q.reward} ${rewardEmoji}`;
     });
     const embed = new EmbedBuilder()
-        .setColor(0xF0A500)
-        .setAuthor({ name: `${interaction.user.username}'s Quests`, iconURL: interaction.user.displayAvatarURL() })
+        .setColor(themeColor(interaction.guildId, 'warning'))
+        .setAuthor({ name: `${displayNameFor(interaction.user, interaction.guild)}'s Quests`, iconURL: interaction.user.displayAvatarURL() })
         .setDescription(lines.join('\n\n'))
         .setFooter({ text: 'Claim with /owo quest slot:<#> · /owo quest action:claim-all' });
     await interaction.editReply({ embeds: [embed] });
 }
 
 async function handleBattle(interaction) {
-    await interaction.deferReply();
-    const opponent = interaction.options.getUser('opponent');
-    const player = await getTeamDetails(interaction.guildId, interaction.user.id);
-    if (!player || player.animals.length === 0) {
-        return interaction.editReply('🗡️ Build a team first with `/owo team-add <animal>`.');
-    }
-
-    let enemy;
-    let isPvP = false;
-    if (opponent) {
-        if (opponent.id === interaction.user.id) return interaction.editReply('❌ You can\'t battle yourself.');
-        if (opponent.bot) return interaction.editReply('❌ Can\'t battle a bot.');
-        enemy = await getTeamDetails(interaction.guildId, opponent.id);
-        if (!enemy || enemy.animals.length === 0) {
-            return interaction.editReply(`❌ <@${opponent.id}> doesn't have a team yet.`);
-        }
-        isPvP = true;
-    } else {
-        enemy = await generateCpuTeam(player);
-    }
-
-    const result = simulateBattle(player, enemy);
-    const econ = await getCurrencyMeta(interaction.guildId);
-
-    // Update W/L on the player's team (only for active player, not opponent — PvP
-    // would need both-sided update; keep simple for v1).
-    const playerWon = result.winner === 'team1';
-    const playerLost = result.winner === 'team2';
-    try {
-        if (playerWon) {
-            await pool.execute(
-                'UPDATE owo_pet_team SET win = win + 1, streak = streak + 1, highest_streak = GREATEST(highest_streak, streak + 1) WHERE guild_id = ? AND uid = ? AND pgid = ?',
-                [interaction.guildId, interaction.user.id, player.pgid]
-            );
-        } else if (playerLost) {
-            await pool.execute(
-                'UPDATE owo_pet_team SET lose = lose + 1, streak = 0 WHERE guild_id = ? AND uid = ? AND pgid = ?',
-                [interaction.guildId, interaction.user.id, player.pgid]
-            );
-        }
-    } catch (e) {
-        logger.warn('[OwO] battle W/L update failed (non-fatal)', { err: e.message });
-    }
-
-    // Reward + battle-win quest (the owo-command quest is bumped at dispatch)
-    let reward = 0;
-    if (playerWon) {
-        reward = 25 + Math.floor(Math.random() * 50);
-        try { await addCowoncy(interaction.guildId, interaction.user.id, reward, 'OwO battle win'); } catch { /* ignore */ }
-        progressQuest(interaction.guildId, interaction.user.id, 'battle', 1).catch(() => {});
-    }
-
-    const color = playerWon ? 0x4CAF50 : (playerLost ? 0xF44336 : 0x9E9E9E);
-    const resultLine = playerWon
-        ? `🏆 **Victory!** +${reward} ${econ.currency_emoji || '💰'}`
-        : (playerLost ? '💀 **Defeat.**' : '🤝 **Draw.**');
-
-    // Trim log to fit Discord embed limits (4096 chars).
-    const logText = result.log.join('\n').slice(0, 3000);
-
-    // Team-vs-team: the two rosters as side-by-side fields under a "<name> goes into battle!"
-    // author line, matching the bot we replace.
-    const embed = new EmbedBuilder()
-        .setColor(color)
-        .setAuthor({
-            name: `${interaction.user.username} goes into battle!`,
-            iconURL: interaction.user.displayAvatarURL(),
-        })
-        .setDescription(resultLine + '\n\n' + logText)
-        .addFields(
-            {
-                name: player.tname || `${interaction.user.username}'s Team`,
-                value: rosterField(player),
-                inline: true,
-            },
-            { name: enemy.tname || 'Enemy Team', value: rosterField(enemy), inline: true },
-        )
-        .setFooter({ text: `Turns: ${result.turns}${playerWon ? ' · +1 win streak' : ''}` });
-
-    await interaction.editReply({ embeds: [embed] });
-
-    // A battle can drop a weapon crate: guaranteed on the first battle after midnight, then 5%,
-    // three a day.
-    const crate = await rollDailyDrop('crate', interaction.guildId, interaction.user.id);
-    const crateText = renderCrateDrop(interaction.user.username, crate);
-    if (crateText) await interaction.followUp(crateText).catch(() => {});
+    return runBattle(interaction, { opponent: interaction.options.getUser('opponent'), bet: interaction.options.getInteger('bet') ?? 0 });
 }
 
 /** One roster as an embed field: "🐊 Snappy — 120 HP". */
@@ -397,15 +321,15 @@ async function handleLootboxSlash(interaction) {
 
     const many = result.opened > 1;
     await interaction.editReply(many
-        ? `**▫️ | ${user.username}** opens ${result.opened} lootboxes\n**🫨 |** and finds...`
-        : `**▫️ | ${user.username}** opens a lootbox\n**🫨 |** and finds a ...`);
+        ? `**▫️ | ${displayNameFor(user, interaction.guild)}** opens ${result.opened} lootboxes\n**🫨 |** and finds...`
+        : `**▫️ | ${displayNameFor(user, interaction.guild)}** opens a lootbox\n**🫨 |** and finds a ...`);
 
     const reveal = many
-        ? `**▫️ | ${user.username}** opens ${result.opened} lootboxes\n**📭 |** and finds: `
+        ? `**▫️ | ${displayNameFor(user, interaction.guild)}** opens ${result.opened} lootboxes\n**📭 |** and finds: `
           + result.gems.map(g => `${g.gem.emoji}${superscript(g.count)}`).join(' ')
         : (() => {
             const g = result.gems[0].gem;
-            return `${g.emoji} **| ${user.username}** opens a lootbox\n`
+            return `${g.emoji} **| ${displayNameFor(user, interaction.guild)}** opens a lootbox\n`
                 + `**📭 |** and finds ${article(g)} **${gemName(g)}**!`;
         })();
 
@@ -429,7 +353,7 @@ async function handleGemsSlash(interaction) {
 
     const embed = new EmbedBuilder()
         .setColor(0x8E7CC3)
-        .setAuthor({ name: `${user.username}'s gems`, iconURL: user.displayAvatarURL() })
+        .setAuthor({ name: `${displayNameFor(user, interaction.guild)}'s gems`, iconURL: user.displayAvatarURL() })
         .setDescription(
             (activeLines.length ? `**Active**\n${activeLines.join('\n')}\n\n` : '')
             + (ownedLines.length ? `**Inventory**\n${ownedLines.join('\n')}` : '*No gems — hunt for lootboxes.*')
@@ -486,8 +410,8 @@ async function handleTeamView(interaction) {
         }).join('\n')
         : '*Empty. Add animals with `/owo team-add`.*';
     const embed = new EmbedBuilder()
-        .setColor(0xF0A500)
-        .setAuthor({ name: `${interaction.user.username}'s team`, iconURL: interaction.user.displayAvatarURL() })
+        .setColor(themeColor(interaction.guildId, 'warning'))
+        .setAuthor({ name: `${displayNameFor(interaction.user, interaction.guild)}'s team`, iconURL: interaction.user.displayAvatarURL() })
         .setTitle(`⚔️ ${team.tname}`)
         .setDescription(lines)
         .setFooter({ text: `pgid: ${team.pgid} · ${team.win}W / ${team.lose}L · streak ${team.streak} (best ${team.highestStreak})` });
@@ -586,6 +510,7 @@ async function handleWeapon(interaction) {
                 { name: 'Wear', value: WEAR_NAMES[w.wearId] || '?', inline: true },
                 { name: 'Favorite', value: w.favorite ? '⭐' : '—', inline: true }
             );
+        if (w.tracker) embed.addFields({ name: '🎯 Takedown Tracker', value: `**Kills:** \`${w.tracker.kills.toLocaleString()}\``, inline: true });
         if (w.passives?.length) {
             embed.addFields({
                 name: 'Passives',
@@ -599,10 +524,10 @@ async function handleWeapon(interaction) {
     if (!list.length) {
         return interaction.editReply('🗡️ You don\'t own any weapons yet. Open a `/owo crate` to roll one!');
     }
-    const lines = list.map(w => `\`#${w.uwid}\` ${w.emoji} **${w.rank}** ${w.name} · stat ${w.stat} · ${WEAR_NAMES[w.wearId] || '?'}${w.favorite ? ' ⭐' : ''}`);
+    const lines = list.map(w => `\`#${w.uwid}\` ${w.emoji} **${w.rank}** ${w.name}${w.tracker ? ` [${w.tracker.kills.toLocaleString()}]` : ''} · stat ${w.stat} · ${WEAR_NAMES[w.wearId] || '?'}${w.favorite ? ' ⭐' : ''}`);
     const embed = new EmbedBuilder()
-        .setColor(0xF0A500)
-        .setAuthor({ name: `${interaction.user.username}'s Armory`, iconURL: interaction.user.displayAvatarURL() })
+        .setColor(themeColor(interaction.guildId, 'warning'))
+        .setAuthor({ name: `${displayNameFor(interaction.user, interaction.guild)}'s Armory`, iconURL: interaction.user.displayAvatarURL() })
         .setDescription(lines.join('\n').slice(0, 4000))
         .setFooter({ text: `${list.length} weapon${list.length === 1 ? '' : 's'} · /owo weapon id:<#> for details` });
     await interaction.editReply({ embeds: [embed] });
@@ -625,6 +550,7 @@ async function handleCrate(interaction) {
                 { name: 'Wear', value: WEAR_NAMES[weapon.wearId] || 'Worn', inline: true },
                 { name: 'Rank', value: weapon.rank, inline: true }
             );
+        if (weapon.tracker) embed.addFields({ name: '🎯 Takedown Tracker', value: 'This weapon counts every kill it lands!' });
         if (weapon.passives?.length) {
             embed.addFields({
                 name: 'Passives',
@@ -667,7 +593,7 @@ async function handleHunt(interaction) {
 
     // Plain text, one line — see core/owo/hunt-text.js. Same renderer as the chat path, so `owoh`
     // and `/owo hunt` cannot drift apart.
-    await interaction.editReply(renderHunt(user.username, result));
+    await interaction.editReply(renderHunt(displayNameFor(user, interaction.guild), result));
 
     if (AUDITABLE_RANKS.has(result.rank) && result.announceRare !== false && interaction.guild) {
         try {
@@ -684,7 +610,7 @@ async function handleHunt(interaction) {
                     { name: 'Rarity', value: `${rank?.rarity ?? '?'}%`, inline: true }
                 )
                 .setTimestamp();
-            await sendLogEmbed(interaction.guild, 'owoRareCatch', auditEmbed);
+            await sendLogEmbed(interaction.guild, 'owoRareCatch', auditEmbed, `owoRareCatch.${result.rank}`);
         } catch (e) {
             logger.warn('[OwO] audit log emit failed (non-fatal)', { err: e.message });
         }
@@ -706,8 +632,8 @@ async function handleZoo(interaction) {
     }
 
     const embed = new EmbedBuilder()
-        .setColor(0xF0A500)
-        .setAuthor({ name: `${targetUser.username}'s Zoo`, iconURL: targetUser.displayAvatarURL() })
+        .setColor(themeColor(interaction.guildId, 'warning'))
+        .setAuthor({ name: `${displayNameFor(targetUser, interaction.guild)}'s Zoo`, iconURL: targetUser.displayAvatarURL() })
         .setDescription(lines.length ? lines.join('\n\n') : '*No animals yet — try `/owo hunt`!*')
         .setFooter({
             text: `${zoo.uniqueAnimals}/${zoo.catalogSize} unique · ${zoo.totalCatches} total · ${zoo.completionPct.toFixed(1)}% complete`,
@@ -726,7 +652,7 @@ async function handleLeaderboard(interaction) {
         return `${badge} <@${r.user_id}> — **${r.total.toLocaleString()}** catches · ${r.unique_animals} unique`;
     });
     const embed = new EmbedBuilder()
-        .setColor(0xF0A500)
+        .setColor(themeColor(interaction.guildId, 'warning'))
         .setTitle('🏆 OwO Hunt Leaderboard')
         .setDescription(lines.join('\n'))
         .setFooter({ text: `Top ${rows.length} hunters in ${interaction.guild.name}` });
@@ -743,7 +669,7 @@ async function handleCatalog(interaction) {
         sections.push(`**${tier.rank[0].toUpperCase() + tier.rank.slice(1)}** *(${tier.rarity}%)*\n${items}`);
     }
     const embed = new EmbedBuilder()
-        .setColor(0xF0A500)
+        .setColor(themeColor(interaction.guildId, 'warning'))
         .setTitle('🐾 OwO Animal Catalog')
         .setDescription(sections.join('\n\n').slice(0, 4000));
     await interaction.editReply({ embeds: [embed] });
@@ -782,18 +708,20 @@ async function handleDaily(interaction) {
     const result = await claimDaily(interaction.guildId, interaction.user.id).catch(e => ({ error: e.message }));
     if (result.error) return interaction.editReply(`❌ ${result.error}`);
     if (result.cooldown) {
-        return interaction.editReply(
-            `⏳ Already claimed your OwO daily — come back in **${result.remainingHours}h ${result.remainingMinutes}m**.`
-        );
+        return interaction.editReply({
+            content: `⏳ Already claimed your OwO daily — come back in **${result.remainingHours}h ${result.remainingMinutes}m**.${marriageDailyLine(result.marriage)}`,
+            allowedMentions: { parse: [] }
+        });
     }
     const econ = await getCurrencyMeta(interaction.guildId);
     const amount = result.totalAmount ?? result.reward ?? result.amount ?? 0;
     const streakLine = result.streak > 1
         ? `\n🔥 Streak: **${result.streak} days**${result.streakBonus ? ` (+${result.streakBonus.toLocaleString()} bonus)` : ''}`
         : '';
-    await interaction.editReply(
-        `🎁 OwO daily claimed: ${formatMoney(amount, econ)}!${streakLine}\n*Separate from \`/economy earn daily\` — that's its own reward.*`
-    );
+    await interaction.editReply({
+        content: `🎁 OwO daily claimed: ${formatMoney(amount, econ)}!${streakLine}\n*Separate from \`/economy earn daily\` — that's its own reward.*${marriageDailyLine(result.marriage)}`,
+        allowedMentions: { parse: [] }
+    });
 }
 
 async function handleBalance(interaction) {
@@ -801,8 +729,8 @@ async function handleBalance(interaction) {
     const wallet = await getBalance(interaction.guildId, interaction.user.id);
     const econ = await getCurrencyMeta(interaction.guildId);
     const embed = new EmbedBuilder()
-        .setColor(0xF0A500)
-        .setAuthor({ name: interaction.user.username, iconURL: interaction.user.displayAvatarURL() })
+        .setColor(themeColor(interaction.guildId, 'warning'))
+        .setAuthor({ name: displayNameFor(interaction.user, interaction.guild), iconURL: interaction.user.displayAvatarURL() })
         .addFields(
             { name: 'Wallet', value: formatMoney(wallet, econ), inline: true }
         );
@@ -839,8 +767,8 @@ async function handleStats(interaction) {
     }
 
     const embed = new EmbedBuilder()
-        .setColor(0xF0A500)
-        .setAuthor({ name: `${target.username}'s OwO Stats`, iconURL: target.displayAvatarURL() })
+        .setColor(themeColor(interaction.guildId, 'warning'))
+        .setAuthor({ name: `${displayNameFor(target, interaction.guild)}'s OwO Stats`, iconURL: target.displayAvatarURL() })
         .setDescription(rankLines.join('\n') || '*No catches yet.*')
         .addFields(
             { name: 'Unique Animals', value: `${s.uniqueAnimals.toLocaleString()}`, inline: true },

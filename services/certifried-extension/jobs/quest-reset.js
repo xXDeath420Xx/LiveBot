@@ -67,7 +67,7 @@ export async function questReset(type) {
         }
     }
 
-    logger.info('[QuestReset] Complete', {
+    logger.debug('[QuestReset] Complete', {
         type,
         players: players.length,
         questsAssigned: assigned,

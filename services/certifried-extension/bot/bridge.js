@@ -5,71 +5,24 @@
 
 import pool from '../../../utils/db.js';
 import logger from '../../../utils/logger.js';
-import { getPlayerMutex } from '../game/engine.js';
+import { getPlayerMutex, awardCash, awardXp } from '../game/engine.js';
+import { getOrCreatePlayer as createOrFindPlayer } from '../game/player-factory.js';
 import { calculateBotBonuses } from '../game/bonus-resolver.js';
 import { GAME, MARKET } from '../config/game-constants.js';
 
 /**
- * Get or create a CFX player from bot user data
+ * Get or create a CFX player from bot user data. Uses the shared factory so a
+ * player who starts from a chat command gets the same start as one who signs
+ * in on the website (H-406).
  * @param {object} botUser - Bot user data
  * @param {'discord' | 'twitch' | 'kick'} platform
  * @returns {Promise<object>} Player data
  */
 export async function getOrCreatePlayer(botUser, platform) {
-    const release = await getPlayerMutex(`${platform}:${botUser.id}`);
-
-    try {
-        // Check if player exists
-        const [[existing]] = await pool.execute(
-            `SELECT * FROM cfx_players WHERE platform = ? AND platform_user_id = ?`,
-            [platform, botUser.id]
-        );
-
-        if (existing) {
-            return existing;
-        }
-
-        // Create new player
-        const displayName = botUser.displayName || botUser.username || botUser.id;
-        const avatarUrl = botUser.avatar || botUser.avatarURL || null;
-
-        const [result] = await pool.execute(
-            `INSERT INTO cfx_players
-             (platform, platform_user_id, display_name, avatar_url, facility_level, max_plots)
-             VALUES (?, ?, ?, ?, 1, ?)`,
-            [platform, botUser.id, displayName, avatarUrl, GAME.STARTING_PLOTS]
-        );
-
-        // Grant starter strains
-        const [[starterStrain]] = await pool.execute(
-            `SELECT id FROM cfx_strains WHERE rarity = 'common' AND is_starter = 1 LIMIT 1`
-        );
-
-        if (starterStrain) {
-            await pool.execute(
-                `INSERT INTO cfx_player_strains (player_id, strain_id, source)
-                 VALUES (?, ?, 'starter')`,
-                [result.insertId, starterStrain.id]
-            );
-        }
-
-        // Fetch and return new player
-        const [[newPlayer]] = await pool.execute(
-            `SELECT * FROM cfx_players WHERE id = ?`,
-            [result.insertId]
-        );
-
-        logger.info('[BotBridge] Created CFX player', {
-            id: newPlayer.id,
-            platform,
-            displayName
-        });
-
-        return newPlayer;
-
-    } finally {
-        release();
-    }
+    const displayName = botUser.displayName || botUser.username || botUser.id;
+    const avatarUrl = botUser.avatar || botUser.avatarURL || null;
+    const { player } = await createOrFindPlayer(platform, String(botUser.id), displayName, avatarUrl);
+    return player;
 }
 
 /**
@@ -90,52 +43,33 @@ export async function getPlayer(platformUserId, platform) {
 }
 
 /**
- * Reward currency to player (from bot commands, tokes, etc)
+ * Reward cash to player (from bot commands, tokes, etc). Pays into `cash`, the
+ * balance the game shows and spends; before 2026-11-18 this paid into
+ * `currency`, which nothing in the game reads (H-407).
  * @param {string} platformUserId
  * @param {'discord' | 'twitch' | 'kick'} platform
  * @param {number} amount
  * @param {string} source - Reason for reward
- * @returns {Promise<{success: boolean, newBalance?: number, error?: string}>}
+ * @returns {Promise<{success: boolean, amount?: number, newBalance?: number, error?: string}>}
  */
 export async function rewardCurrency(platformUserId, platform, amount, source = 'bot_reward') {
     const player = await getPlayer(platformUserId, platform);
 
     if (!player) {
-        return { success: false, error: 'Player not found. Start playing at the extension first!' };
+        return { success: false, error: 'Player not found. Start playing at certifriedmultitool.com/game first!' };
     }
 
-    const release = await getPlayerMutex(player.id);
-
-    try {
-        await pool.execute(
-            `UPDATE cfx_players SET currency = currency + ? WHERE id = ?`,
-            [amount, player.id]
-        );
-
-        // Log transaction
+    const result = await awardCash(player.id, amount);
+    if (result.cashAwarded > 0) {
         await pool.execute(
             `INSERT INTO cfx_transactions (player_id, type, amount, source, balance_after)
-             VALUES (?, 'credit', ?, ?, (SELECT currency FROM cfx_players WHERE id = ?))`,
-            [player.id, amount, source, player.id]
+             SELECT id, 'credit', ?, ?, cash FROM cfx_players WHERE id = ?`,
+            [result.cashAwarded, String(source).slice(0, 100), player.id]
         );
-
-        const [[updated]] = await pool.execute(
-            `SELECT currency FROM cfx_players WHERE id = ?`,
-            [player.id]
-        );
-
-        logger.debug('[BotBridge] Rewarded currency', {
-            playerId: player.id,
-            amount,
-            source,
-            newBalance: updated.currency
-        });
-
-        return { success: true, newBalance: updated.currency };
-
-    } finally {
-        release();
     }
+
+    logger.debug('[BotBridge] Rewarded cash', { playerId: player.id, amount: result.cashAwarded, source });
+    return { success: true, amount: result.cashAwarded, newBalance: result.newCash };
 }
 
 /**
@@ -153,48 +87,11 @@ export async function rewardXP(platformUserId, platform, amount, source = 'bot_r
         return { success: false, error: 'Player not found' };
     }
 
-    const release = await getPlayerMutex(player.id);
-
-    try {
-        // Apply XP bonus from bot bonuses
-        const bonus = player.xp_bonus || 0;
-        const totalXP = Math.floor(amount * (1 + bonus));
-
-        await pool.execute(
-            `UPDATE cfx_players SET xp = xp + ? WHERE id = ?`,
-            [totalXP, player.id]
-        );
-
-        // Check for level up
-        const [[updated]] = await pool.execute(
-            `SELECT xp, level FROM cfx_players WHERE id = ?`,
-            [player.id]
-        );
-
-        const xpRequired = GAME.BASE_XP_PER_LEVEL * Math.pow(GAME.XP_SCALING_FACTOR, updated.level - 1);
-        let leveledUp = false;
-        let newLevel = updated.level;
-
-        if (updated.xp >= xpRequired) {
-            // Level up
-            newLevel = updated.level + 1;
-            await pool.execute(
-                `UPDATE cfx_players SET level = ?, xp = xp - ? WHERE id = ?`,
-                [newLevel, xpRequired, player.id]
-            );
-            leveledUp = true;
-
-            logger.info('[BotBridge] Player leveled up', {
-                playerId: player.id,
-                newLevel
-            });
-        }
-
-        return { success: true, leveledUp, newLevel };
-
-    } finally {
-        release();
-    }
+    // The game's XP model (cumulative XP, levels from engine.levelFromXp, season XP);
+    // this used to subtract XP on level-up, which the game's level maths does not expect.
+    const bonus = Number(player.xp_bonus) || 0;
+    const result = await awardXp(player.id, Math.floor(amount * (1 + bonus)));
+    return { success: true, leveledUp: !!result.leveledUp, newLevel: result.newLevel };
 }
 
 /**
@@ -238,7 +135,7 @@ export async function grantStrain(platformUserId, platform, strainId, source = '
         [player.id, strainId, source]
     );
 
-    logger.info('[BotBridge] Granted strain', {
+    logger.debug('[BotBridge] Granted strain', {
         playerId: player.id,
         strainId,
         strainName: strain.name
@@ -351,24 +248,25 @@ export async function getPlayerStats(platformUserId, platform) {
     );
 
     const [[plotCount]] = await pool.execute(
-        `SELECT COUNT(*) as count FROM cfx_growing_plots WHERE player_id = ?`,
+        `SELECT SUM(status IN ('growing', 'ready')) AS active, COUNT(*) AS total FROM cfx_grow_slots WHERE player_id = ?`,
         [player.id]
     );
 
     const [[strainCount]] = await pool.execute(
-        `SELECT COUNT(*) as count FROM cfx_player_strains WHERE player_id = ?`,
+        `SELECT COUNT(*) as count FROM cfx_strain_discoveries WHERE player_id = ?`,
         [player.id]
     );
 
     return {
         level: player.level,
         xp: player.xp,
-        currency: player.currency,
+        cash: player.cash,
+        currency: player.cash,
         premiumCurrency: player.premium_currency,
         prestigeLevel: player.prestige_level,
         facilityLevel: player.facility_level,
-        maxPlots: player.max_plots,
-        activePlots: plotCount.count,
+        maxPlots: Math.max(Number(player.max_grow_slots) || 0, Number(plotCount.total) || 0),
+        activePlots: Number(plotCount.active) || 0,
         inventoryItems: inventoryCount.total,
         unlockedStrains: strainCount.count,
         bonuses: {

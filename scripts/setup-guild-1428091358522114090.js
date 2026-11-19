@@ -26,10 +26,10 @@ import {
     EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
 } from 'discord.js';
 import pool from '../utils/db.js';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 
 const GUILD_ID = '1428091358522114090';
-const BOT_ID = '1506374126594691092';
+// The acting bot comes from guild_bot_mapping — never pinned here.
 
 const PRESERVED = {
     welcomeChannelId: '1428141508804087829',
@@ -61,10 +61,10 @@ const LEVEL_REWARDS = [
 ];
 
 async function main() {
-    const [bots] = await pool.execute('SELECT bot_token, bot_name FROM custom_bots WHERE bot_id = ?', [BOT_ID]);
-    if (!bots.length) { console.error(`Bot ${BOT_ID} not found in custom_bots`); process.exit(1); }
-    const token = encryption.decrypt(JSON.parse(bots[0].bot_token));
-    console.log(`Using custom bot: ${bots[0].bot_name} (${BOT_ID})`);
+    const bot = await resolveBotForGuild(GUILD_ID, { db: pool });
+    const BOT_ID = bot.botId;
+    const token = bot.token;
+    console.log(`Using custom bot: ${bot.botName} (${BOT_ID})`);
 
     const client = new Client({
         intents: [

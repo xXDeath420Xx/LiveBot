@@ -9,7 +9,8 @@ test('parseLinksBlock: extracts + dedupes platforms from pasted links (any separ
   https://twitch.tv/myname`; // dup of first (case-insensitive)
   const out = parseLinksBlock(text);
   const platforms = out.map(o => o.platform).sort();
-  assert.deepEqual(platforms, ['kick', 'trovo', 'twitch', 'youtube']);
+  // Trovo is no longer a supported platform, so its link is ignored rather than parsed.
+  assert.deepEqual(platforms, ['kick', 'twitch', 'youtube']);
 });
 
 test('parseLinksBlock: ignores non-stream text', () => {

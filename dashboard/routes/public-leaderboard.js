@@ -41,6 +41,7 @@ router.get('/lb/:guildId', async (req, res) => {
         if (!guild) {
             return res.status(404).render('public-leaderboard', {
                 title: 'Leaderboard Not Found',
+                user: req.user || null,
                 guild: null,
                 users: [],
                 pagination: null,
@@ -57,6 +58,7 @@ router.get('/lb/:guildId', async (req, res) => {
         if (configRows.length === 0 || !configRows[0].enabled) {
             return res.render('public-leaderboard', {
                 title: `${guild.name} - Leaderboard`,
+                user: req.user || null,
                 guild: {
                     id: guild.id,
                     name: guild.name,
@@ -74,13 +76,14 @@ router.get('/lb/:guildId', async (req, res) => {
             SELECT user_id, xp, level
             FROM user_levels
             WHERE guild_id = ? AND (level > 0 OR xp > 0)
+              AND user_id NOT IN (SELECT user_id FROM user_privacy_settings WHERE opt_out_leaderboards = 1)
             ORDER BY level DESC, xp DESC
             LIMIT ? OFFSET ?
         `, [guildId, limit, offset]);
 
         // Count total users for pagination
         const [countResult] = await pool.execute(
-            'SELECT COUNT(*) as total FROM user_levels WHERE guild_id = ? AND (level > 0 OR xp > 0)',
+            'SELECT COUNT(*) as total FROM user_levels WHERE guild_id = ? AND (level > 0 OR xp > 0) AND user_id NOT IN (SELECT user_id FROM user_privacy_settings WHERE opt_out_leaderboards = 1)',
             [guildId]
         );
         const total = countResult[0].total;
@@ -142,6 +145,7 @@ router.get('/lb/:guildId', async (req, res) => {
 
         res.render('public-leaderboard', {
             title: `${guild.name} - Leaderboard`,
+            user: req.user || null,
             guild: {
                 id: guild.id,
                 name: guild.name,
@@ -162,6 +166,7 @@ router.get('/lb/:guildId', async (req, res) => {
         logger.error('[Public Leaderboard] Error:', { error: error.message, guildId: req.params.guildId });
         res.status(500).render('public-leaderboard', {
             title: 'Leaderboard Error',
+            user: req.user || null,
             guild: null,
             users: [],
             pagination: null,

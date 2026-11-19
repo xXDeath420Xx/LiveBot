@@ -20,7 +20,7 @@ export async function fireboardCommand(ctx) {
             query = `
                 SELECT display_name, lifetime_tokes as tokes, level
                 FROM tokes_profiles
-                WHERE is_claimed = 1
+                WHERE is_claimed = 1 AND show_on_leaderboard = 1
                 ORDER BY lifetime_tokes DESC
                 LIMIT 10
             `;
@@ -30,7 +30,7 @@ export async function fireboardCommand(ctx) {
             query = `
                 SELECT display_name, current_streak as streak, best_streak
                 FROM tokes_profiles
-                WHERE is_claimed = 1 AND current_streak > 0
+                WHERE is_claimed = 1 AND show_on_leaderboard = 1 AND current_streak > 0
                 ORDER BY current_streak DESC
                 LIMIT 10
             `;
@@ -40,20 +40,23 @@ export async function fireboardCommand(ctx) {
             query = `
                 SELECT display_name, level, xp
                 FROM tokes_profiles
-                WHERE is_claimed = 1
+                WHERE is_claimed = 1 AND show_on_leaderboard = 1
                 ORDER BY level DESC, xp DESC
                 LIMIT 10
             `;
             title = 'Top Levels';
         } else {
-            // Default: Channel leaderboard
+            // Default: Channel leaderboard (skips chatters who opted out of public
+            // leaderboards on their Tokes profile)
             const [rows] = await pool.execute(
-                `SELECT display_name, tokes
-                 FROM tokes_channel_stats
-                 WHERE channel_id = ?
-                 ORDER BY tokes DESC
+                `SELECT cs.display_name, cs.tokes
+                 FROM tokes_channel_stats cs
+                 LEFT JOIN tokes_profiles p
+                   ON p.platform = ? AND p.platform_user_id = cs.platform_user_id
+                 WHERE cs.channel_id = ? AND COALESCE(p.show_on_leaderboard, 1) = 1
+                 ORDER BY cs.tokes DESC
                  LIMIT 10`,
-                [channel.id]
+                [channel.platform, channel.id]
             );
 
             if (rows.length === 0) {

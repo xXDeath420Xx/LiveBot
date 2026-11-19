@@ -1,0 +1,746 @@
+<%#
+  Activity audit: a sortable, filterable member table measured by messages and time in voice.
+  API-driven (/api/guilds/:id/activity-audit); needs `guild` in locals. Built on the settings-row
+  kit (cf-settings.css); ids, data attributes and the script are unchanged. The member table keeps
+  its own look (#activityAuditPage .aa-* overrides at the end of cf-manage.css) and scrolls in
+  its own box.
+%>
+<div class="page-section" id="activityAuditPage" data-guild-id="<%= guild.id %>">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-user-clock"></i>
+                <span>Activity audit</span>
+            </div>
+            <div class="page-section-subtitle">
+                A member who joins voice every night but never types still counts as active.
+            </div>
+        </div>
+    </div>
+
+    <div id="aaError" class="cf-notice is-bad" role="alert" hidden></div>
+    <div id="aaNotice" class="cf-notice is-warn" role="status" hidden></div>
+
+    <section class="cf-section" aria-labelledby="aa-run-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="aa-run-title">Audit</h2>
+                <p class="cf-section-desc">Each audit is a snapshot. Open an earlier one, or run a new one over the window you choose.</p>
+            </div>
+            <div class="cf-section-actions">
+                <a id="aaCsv" class="btn btn-secondary btn-sm" href="#" download>Download CSV</a>
+                <button id="aaPost" class="btn btn-secondary btn-sm">Post to Discord</button>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="aaAuditPick">Snapshot</label>
+                    <p class="cf-row-desc">The audit shown below.</p>
+                </div>
+                <div class="cf-row-control">
+                    <select id="aaAuditPick" class="form-select"></select>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="aaDays">Window</label>
+                    <p class="cf-row-desc">How far back a new audit looks.</p>
+                </div>
+                <div class="cf-row-control">
+                    <select id="aaDays" class="form-select">
+                        <option value="30">30 days</option>
+                        <option value="60">60 days</option>
+                        <option value="90" selected>90 days</option>
+                        <option value="180">180 days</option>
+                        <option value="365">1 year</option>
+                    </select>
+                </div>
+            </div>
+            <div id="aaProgress" class="aa-progress" hidden>
+                <div class="aa-progress-bar"><span id="aaProgressFill"></span></div>
+                <div id="aaProgressText" class="aa-muted">Starting…</div>
+            </div>
+            <div class="cf-section-foot">
+                <button id="aaRun" class="btn btn-primary">Run new audit</button>
+            </div>
+        </div>
+    </section>
+
+    <div id="aaStats" class="cf-kpis" hidden></div>
+
+    <section class="cf-section" aria-labelledby="aa-members-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="aa-members-title">Members</h2>
+                <p class="cf-section-desc">Pick a group to narrow the table. A member can be in several groups at once.</p>
+            </div>
+        </header>
+        <div class="cf-rows aa-filterpanel">
+            <div class="cf-row cf-row--stack aa-segrow">
+                <div id="aaSegments" class="cf-segmented" role="group" aria-label="Filter by activity group"></div>
+                <p id="aaSegDesc" class="aa-segdesc"></p>
+            </div>
+            <div class="cf-row cf-row--stack">
+                <div class="aa-filter-row">
+                    <span class="cf-search"><i class="fas fa-search" aria-hidden="true"></i><input id="aaSearch" type="search" class="form-control" placeholder="Find a name or handle" aria-label="Find a member"></span>
+                    <label class="cf-choice"><input type="checkbox" id="aaHideBots"> Hide members who left</label>
+                    <span id="aaShown" class="cf-status-line" aria-live="polite"></span>
+                </div>
+            </div>
+        </div>
+
+        <div class="aa-tablewrap cf-table-wrap">
+            <table class="aa-table" id="aaTable">
+                <thead>
+                    <tr>
+                        <th data-sort="rank" class="aa-num">#</th>
+                        <th data-sort="displayName">Member</th>
+                        <th data-sort="messages" class="aa-num aa-sortable">Messages</th>
+                        <th data-sort="channelsPosted" class="aa-num aa-sortable">Channels</th>
+                        <th data-sort="voiceSeconds" class="aa-num aa-sortable">Voice</th>
+                        <th data-sort="voiceSessions" class="aa-num aa-sortable">Sessions</th>
+                        <th data-sort="daysSinceActive" class="aa-num aa-sortable">Last active</th>
+                        <th data-sort="joinedGuildAt" class="aa-sortable">Joined</th>
+                        <th>Flags</th>
+                    </tr>
+                </thead>
+                <tbody id="aaBody"></tbody>
+            </table>
+        </div>
+        <%# Outside the table box: the kit hides a .cf-table-wrap whose body is empty. %>
+        <div id="aaEmpty" class="cf-state cf-state--compact cf-state--boxed aa-empty" hidden><p class="cf-state-title">No member matches this filter.</p></div>
+        <p class="aa-method" id="aaMethod" hidden></p>
+    </section>
+
+    <section class="cf-section" aria-labelledby="aa-adv-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="aa-adv-title">Advanced filters and bulk actions</h2>
+                <p class="cf-section-desc">Narrow the table by numbers and roles, then preview an action on everyone who matches.</p>
+            </div>
+        </header>
+        <details class="cf-rows aa-adv" id="aaAdv">
+            <summary class="aa-adv-summary">Show filters and actions</summary>
+            <div class="cf-rows-head">Filters</div>
+            <div class="cf-row cf-row--stack">
+                <div class="cf-fields">
+                    <div class="cf-field"><label for="fMsgMin">Messages at least</label><input type="number" min="0" id="fMsgMin" class="form-control"></div>
+                    <div class="cf-field"><label for="fMsgMax">Messages at most</label><input type="number" min="0" id="fMsgMax" class="form-control"></div>
+                    <div class="cf-field"><label for="fVoiceMin">Voice minutes at least</label><input type="number" min="0" id="fVoiceMin" class="form-control"></div>
+                    <div class="cf-field"><label for="fVoiceMax">Voice minutes at most</label><input type="number" min="0" id="fVoiceMax" class="form-control"></div>
+                    <div class="cf-field"><label for="fSessMin">Voice sessions at least</label><input type="number" min="0" id="fSessMin" class="form-control"></div>
+                    <div class="cf-field"><label for="fSessMax">Voice sessions at most</label><input type="number" min="0" id="fSessMax" class="form-control"></div>
+                    <div class="cf-field"><label for="fQuietMin">Quiet for at least (days)</label><input type="number" min="0" id="fQuietMin" class="form-control"></div>
+                    <div class="cf-field"><label for="fQuietMax">Quiet for at most (days)</label><input type="number" min="0" id="fQuietMax" class="form-control"></div>
+                    <div class="cf-field"><label for="fMemMin">In the server at least (days)</label><input type="number" min="0" id="fMemMin" class="form-control"></div>
+                    <div class="cf-field"><label for="fMemMax">In the server at most (days)</label><input type="number" min="0" id="fMemMax" class="form-control"></div>
+                    <div class="cf-field"><label for="fHasRoles">Has any of these roles</label><select id="fHasRoles" class="form-select" multiple size="4"></select></div>
+                    <div class="cf-field"><label for="fLacksRoles">Has none of these roles</label><select id="fLacksRoles" class="form-select" multiple size="4"></select></div>
+                </div>
+            </div>
+            <div class="cf-section-foot">
+                <span id="aaAdvLabel" class="cf-foot-note"></span>
+                <button id="aaClearAdv" class="btn btn-secondary">Clear</button>
+                <button id="aaApplyAdv" class="btn btn-primary">Apply filters</button>
+            </div>
+            <div class="cf-rows-head">Bulk action</div>
+            <div class="cf-row cf-row--stack">
+                <div class="cf-fields">
+                    <div class="cf-field"><label for="aaActionType">Do this to everyone matching</label><select id="aaActionType" class="form-select"></select></div>
+                    <div class="cf-field" id="aaRoleWrap" hidden><label for="aaActionRole">Role</label><select id="aaActionRole" class="form-select"></select></div>
+                    <div class="cf-field"><label for="aaGrace">Kick grace period (days)</label><input type="number" min="0" max="90" id="aaGrace" class="form-control" value="7"></div>
+                    <div class="cf-field aa-grow"><label for="aaReason">Reason (Discord audit log)</label><input type="text" id="aaReason" class="form-control" maxlength="200" placeholder="Inactive member sweep"></div>
+                </div>
+            </div>
+            <div class="cf-section-foot">
+                <span class="cf-foot-note">Preview never changes anything. It re-checks every member against the server now and any activity since the snapshot, then lists who would be affected and who is protected.</span>
+                <button id="aaPreview" class="btn btn-primary">Preview</button>
+            </div>
+        </details>
+    </section>
+</div>
+
+<!-- Bulk action plan modal -->
+<div id="aaPlanModal" class="cf-modal" hidden>
+    <div class="cf-modal-dialog is-wide" role="dialog" aria-modal="true" aria-labelledby="aaPlanTitle">
+        <header class="cf-modal-head">
+            <div>
+                <h3 class="cf-modal-title" id="aaPlanTitle">Review before acting</h3>
+                <p id="aaPlanFilter" class="cf-modal-desc"></p>
+            </div>
+        </header>
+        <div class="cf-modal-body">
+            <div id="aaPlanCounts" class="cf-kpis"></div>
+            <div id="aaPlanWarnings"></div>
+            <div class="aa-plan-cols">
+                <div>
+                    <h4>Will be affected (<span id="aaPlanEligibleN">0</span>)</h4>
+                    <ul id="aaPlanEligible" class="aa-plan-list"></ul>
+                </div>
+                <div>
+                    <h4>Protected (<span id="aaPlanBlockedN">0</span>)</h4>
+                    <ul id="aaPlanBlocked" class="aa-plan-list"></ul>
+                </div>
+            </div>
+            <div id="aaConfirmWrap" class="cf-rows">
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="aaConfirmInput">Confirm</label>
+                        <p class="cf-row-desc">Type <code id="aaConfirmWord">CONFIRM</code> to go ahead.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="text" id="aaConfirmInput" class="form-control" autocomplete="off">
+                    </div>
+                </div>
+            </div>
+        </div>
+        <footer class="cf-modal-foot">
+            <button id="aaPlanCancel" class="btn btn-secondary">Cancel</button>
+            <button id="aaPlanGo" class="btn btn-danger" disabled>Apply</button>
+        </footer>
+    </div>
+</div>
+
+<!-- Post-to-Discord modal -->
+<div id="aaPostModal" class="cf-modal" hidden>
+    <div class="cf-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="aa-post-title">
+        <header class="cf-modal-head">
+            <div>
+                <h3 class="cf-modal-title" id="aa-post-title">Post this audit to Discord</h3>
+                <p class="cf-modal-desc">The full report (summary, flagged groups, changes since the last audit and both member lists) is posted as embeds. Long lists are split across messages.</p>
+            </div>
+        </header>
+        <div class="cf-modal-body">
+            <div class="cf-rows">
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-row-text"><label class="cf-row-label" for="aaPostChannel">Channel</label></div>
+                    <div class="cf-row-control"><select id="aaPostChannel" class="form-select"></select></div>
+                </div>
+            </div>
+        </div>
+        <footer class="cf-modal-foot">
+            <button id="aaPostCancel" class="btn btn-secondary">Cancel</button>
+            <button id="aaPostGo" class="btn btn-primary">Post</button>
+        </footer>
+    </div>
+</div>
+
+<style>
+    .aa-muted { color: var(--cf-text-2); font-size: var(--cf-text-sm); }
+
+    .aa-progress { padding: var(--cf-3) var(--cf-5); }
+    .aa-progress-bar { height: 6px; background: var(--cf-surface-3); border-radius: 999px; overflow: hidden; }
+    .aa-progress-bar span { display: block; height: 100%; width: 0; background: var(--cf-accent); transition: width .4s var(--cf-ease); }
+    #aaProgressText { margin-top: 6px; }
+
+    /* Activity groups: a segmented filter whose counts carry the group's tone. */
+    #aaStats .aa-stat-hero .cf-kpi-value { color: var(--cf-accent-fg); }
+    #aaSegments .n { font-size: var(--cf-text-xs); color: var(--cf-text-3); font-variant-numeric: tabular-nums; }
+    #aaSegments .tone-warn .n { color: var(--cf-warning); }
+    #aaSegments .tone-bad .n { color: var(--cf-danger); }
+    .aa-segdesc { margin: var(--cf-2) 0 0; font-size: var(--cf-text-sm); color: var(--cf-text-2); }
+    .aa-segdesc:empty { display: none; }
+    .aa-filter-row { display: flex; flex-wrap: wrap; gap: var(--cf-2) var(--cf-4); align-items: center; }
+    .aa-filter-row > .cf-search { flex: 1 1 14rem; max-width: 22rem; }
+    .aa-filterpanel { margin-bottom: var(--cf-3); }
+    .cf-rows .aa-segrow:has(#aaSegments:empty) { display: none; }
+    .cf-rows .aa-segrow:has(#aaSegments:empty) + .cf-row { border-top-color: transparent; }
+
+    /* The table box (the rest of its look is in cf-manage.css). */
+    .aa-table { width: 100%; border-collapse: collapse; }
+    .aa-table th, .aa-table td { text-align: left; white-space: nowrap; }
+    .aa-table thead th { position: sticky; top: 0; z-index: 2; }
+    .aa-table th.aa-sortable { cursor: pointer; user-select: none; }
+    .aa-table th.sorted::after { content: '\25BE'; margin-left: 5px; }
+    .aa-table th.sorted.asc::after { content: '\25B4'; }
+    .aa-num { text-align: right !important; font-variant-numeric: tabular-nums; }
+    .aa-delta { font-size: var(--cf-text-xs); margin-left: 5px; font-variant-numeric: tabular-nums; }
+    .aa-delta.up { color: var(--cf-success); }
+    .aa-empty { margin-top: var(--cf-3); }
+    .aa-method { margin: var(--cf-4) 0 0; font-size: var(--cf-text-sm); color: var(--cf-text-2); line-height: 1.6; max-width: 90ch; }
+
+    .aa-adv > summary.aa-adv-summary { cursor: pointer; padding: var(--cf-4) var(--cf-5); font-size: var(--cf-text-md); font-weight: 500; color: var(--cf-text); list-style-position: inside; }
+    .aa-adv > summary.aa-adv-summary:focus-visible { outline: 2px solid var(--cf-accent); outline-offset: -2px; }
+    .aa-adv:not([open]) > summary.aa-adv-summary { border-radius: inherit; }
+    .aa-adv .aa-grow { grid-column: span 2; }
+    .aa-adv .cf-foot-note { max-width: 70ch; }
+
+    /* The bulk-action review: counts, warnings, and the two member lists side by side. */
+    #aaPlanCounts.cf-kpis { margin: 0; }
+    #aaPlanWarnings:empty { display: none; }
+    #aaPlanWarnings .cf-notice { margin: 0; }
+    .aa-plan-cols { display: grid; grid-template-columns: 1fr 1fr; gap: var(--cf-4); }
+    .aa-plan-cols h4 { margin: 0 0 6px; font-size: var(--cf-text-sm); font-weight: 600; color: var(--cf-text-2); }
+    .aa-plan-list { list-style: none; margin: 0; padding: 0; max-height: 230px; overflow: auto;
+        border: 1px solid var(--cf-border); border-radius: var(--cf-radius); font-size: var(--cf-text-sm); }
+    .aa-plan-list li { padding: 6px 10px; border-bottom: 1px solid var(--cf-border); overflow-wrap: anywhere; }
+    .aa-plan-list li:last-child { border-bottom: 0; }
+    .aa-plan-list li span { color: var(--cf-text-3); font-size: var(--cf-text-xs); }
+    @media (max-width: 760px) { .aa-plan-cols { grid-template-columns: 1fr; } }
+    @media (max-width: 640px) {
+        .aa-progress, .aa-adv > summary.aa-adv-summary { padding-left: var(--cf-4); padding-right: var(--cf-4); }
+        .aa-adv .aa-grow { grid-column: auto; }
+        .aa-filter-row > .cf-search { max-width: none; }
+    }
+</style>
+
+<script>
+(function () {
+    const root = document.getElementById('activityAuditPage');
+    if (!root) return;
+    const guildId = root.dataset.guildId;
+    const base = `/api/guilds/${guildId}/activity-audit`;
+
+    const $ = (id) => document.getElementById(id);
+    const el = {
+        err: $('aaError'), notice: $('aaNotice'), pick: $('aaAuditPick'), days: $('aaDays'),
+        run: $('aaRun'), csv: $('aaCsv'), post: $('aaPost'),
+        progress: $('aaProgress'), fill: $('aaProgressFill'), progressText: $('aaProgressText'),
+        stats: $('aaStats'), segments: $('aaSegments'), segDesc: $('aaSegDesc'),
+        search: $('aaSearch'), hideLeft: $('aaHideBots'), shown: $('aaShown'),
+        body: $('aaBody'), empty: $('aaEmpty'), table: $('aaTable'), method: $('aaMethod'),
+        modal: $('aaPostModal'), postChannel: $('aaPostChannel'),
+        postGo: $('aaPostGo'), postCancel: $('aaPostCancel'),
+    };
+
+    let SEGMENTS = [], members = [], audit = null, compared = null;
+    let filter = 'all', sortKey = 'messages', sortDir = -1;
+
+    const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    const num = (v) => Number(v ?? 0).toLocaleString();
+    const showErr = (m) => { el.err.textContent = m; el.err.hidden = !m; };
+    const showNotice = (m) => { el.notice.textContent = m; el.notice.hidden = !m; };
+
+    const fmtDur = (s) => {
+        if (!s) return '—';
+        if (s >= 36000) return Math.round(s / 3600) + 'h';
+        if (s >= 3600) return (s / 3600).toFixed(1).replace(/\.0$/, '') + 'h';
+        if (s >= 60) return Math.round(s / 60) + 'm';
+        return s + 's';
+    };
+    const fmtDays = (d) => d === null ? 'never' : d === 0 ? 'today' : d === 1 ? 'yesterday' : d + 'd ago';
+    const fmtDate = (iso) => iso ? new Date(iso).toISOString().slice(0, 10) : '—';
+
+    async function api(path, opts) {
+        const res = await fetch(base + path, {
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin', ...opts,
+        });
+        const json = await res.json().catch(() => ({ success: false, error: `HTTP ${res.status}` }));
+        if (!res.ok || json.success === false) throw new Error(json.error || `HTTP ${res.status}`);
+        return json;
+    }
+
+    /* ── segments: a member can be in several, so flags are additive, not exclusive ── */
+    function matches(m, key) {
+        switch (key) {
+            case 'all': return true;
+            case 'active': return m.messages > 0 || m.voiceSeconds > 0;
+            case 'text_and_voice': return m.messages > 0 && m.voiceSeconds > 0;
+            case 'text_only': return m.messages > 0 && m.voiceSeconds === 0;
+            case 'voice_only': return m.voiceSeconds > 0 && m.messages === 0;
+            case 'one_message_no_voice': return m.messages === 1 && m.voiceSeconds === 0;
+            case 'one_voice_no_text': return m.voiceSessions === 1 && m.messages === 0;
+            case 'dormant_30': return (m.messages > 0 || m.voiceSeconds > 0) && m.daysSinceActive !== null && m.daysSinceActive >= 30;
+            case 'dormant_60': return (m.messages > 0 || m.voiceSeconds > 0) && m.daysSinceActive !== null && m.daysSinceActive >= 60;
+            case 'never_active': return m.messages === 0 && m.voiceSeconds === 0;
+            case 'newcomer': return !!m.joinedGuildAt && Date.parse(m.joinedGuildAt) >= windowStart();
+            case 'newcomer_silent': return !!m.joinedGuildAt && Date.parse(m.joinedGuildAt) >= windowStart()
+                && m.messages === 0 && m.voiceSeconds === 0;
+            case 'departed': return !m.inGuild;
+            default: return true;
+        }
+    }
+    function windowStart() {
+        const end = audit?.completedAt ? Date.parse(audit.completedAt) : Date.now();
+        return end - (audit?.windowDays ?? 90) * 86400000;
+    }
+
+    // Only the judgemental ones earn a tag in the table; "active" on every active row is noise.
+    const TAG_KEYS = ['voice_only', 'text_only', 'one_message_no_voice', 'one_voice_no_text',
+                      'dormant_30', 'dormant_60', 'never_active', 'newcomer', 'departed'];
+    const TAG_TONE = { warn: 'is-warn', bad: 'is-bad', good: 'is-ok' };
+
+    function renderChips() {
+        el.segments.innerHTML = SEGMENTS.map(s => {
+            const count = members.filter(m => matches(m, s.key)).length;
+            return `<button type="button" class="cf-segment tone-${esc(s.tone)}" data-seg="${esc(s.key)}" ` +
+                   `aria-pressed="${s.key === filter}" title="${esc(s.describe)}">` +
+                   `${esc(s.label)}<span class="n">${count}</span></button>`;
+        }).join('');
+        el.segments.querySelectorAll('[data-seg]').forEach(b => b.addEventListener('click', () => {
+            filter = b.dataset.seg;
+            el.segments.querySelectorAll('[data-seg]').forEach(o => o.setAttribute('aria-pressed', String(o === b)));
+            const s = SEGMENTS.find(x => x.key === filter);
+            el.segDesc.textContent = s ? s.describe : '';
+            render();
+        }));
+        const s = SEGMENTS.find(x => x.key === filter);
+        el.segDesc.textContent = s ? s.describe : '';
+    }
+
+    function renderStats() {
+        if (!audit) { el.stats.hidden = true; return; }
+        const t = audit.totals || {};
+        const active = members.filter(m => m.messages > 0 || m.voiceSeconds > 0).length;
+        const tiles = [
+            ['hero', num(active), 'Active members'],
+            ['hero', num(t.posters), 'Posted'],
+            ['', audit.voiceTracked ? num(t.voiceUsers) : '—', 'In voice'],
+            ['', num(t.humanMessages), 'Messages'],
+            ['', audit.voiceTracked ? num(Math.round((t.voiceSeconds || 0) / 3600)) : '—', 'Voice hours'],
+            ['', num(members.filter(m => matches(m, 'never_active')).length), 'No activity'],
+        ];
+        el.stats.innerHTML = tiles.map(([cls, v, label]) =>
+            `<div class="cf-kpi${cls ? ' aa-stat-hero' : ''}"><div class="cf-kpi-label">${esc(label)}</div><div class="cf-kpi-value">${esc(v)}</div></div>`).join('');
+        el.stats.hidden = false;
+
+        const sc = audit.scanned || {};
+        const coverage = (sc.denied || 0) === 0
+            ? `All ${esc(sc.containers)} channels and threads were read to the cutoff — a complete census.`
+            : `<strong>${esc(sc.denied)} of ${esc(sc.containers)} channels could not be read by the bot</strong> and are excluded from every figure.`;
+        const voiceNote = audit.voiceTracked
+            ? `Voice comes from the bot's own session log, which reaches back to ${fmtDate(audit.voiceFrom)}.`
+            : `<strong>Voice is not tracked for this window.</strong> Discord does not expose voice history through its API, so voice time only exists where the bot has been logging it — the log here starts ${fmtDate(audit.voiceFrom)}, after this window opens. Voice columns are blank because it was not measured, not because nobody joined.`;
+        el.method.innerHTML = `${coverage} ${voiceNote}` +
+            (compared ? ` Compared against audit #${esc(compared.id)} by user id, so a rename stays one member.` : '');
+        el.method.hidden = false;
+        showNotice(audit.voiceTracked ? '' : 'Voice activity is not tracked for this window — voice columns are blank because there is no data, not because members were absent.');
+    }
+
+    function render() {
+        const term = el.search.value.trim().toLowerCase();
+        const hideLeft = el.hideLeft.checked;
+        let rows = members.filter(m => matches(m, filter));
+        if (advIds) rows = rows.filter(m => advIds.has(m.userId));
+        if (hideLeft) rows = rows.filter(m => m.inGuild);
+        if (term) rows = rows.filter(m =>
+            (m.displayName || '').toLowerCase().includes(term) || (m.username || '').toLowerCase().includes(term));
+
+        rows.sort((a, b) => {
+            let av = a[sortKey], bv = b[sortKey];
+            // "Last active" is stored as days-since, so nulls are members who were never
+            // active — they belong at the far end, not sorted as though they were here today.
+            if (sortKey === 'daysSinceActive') { av = av === null ? Infinity : av; bv = bv === null ? Infinity : bv; }
+            if (sortKey === 'joinedGuildAt') { av = av ? Date.parse(av) : 0; bv = bv ? Date.parse(bv) : 0; }
+            if (typeof av === 'string' || typeof bv === 'string') {
+                return String(av ?? '').localeCompare(String(bv ?? '')) * sortDir;
+            }
+            return ((av ?? 0) - (bv ?? 0)) * sortDir;
+        });
+
+        el.body.innerHTML = rows.map((m, i) => {
+            const tags = TAG_KEYS.filter(k => matches(m, k)).map(k => {
+                const s = SEGMENTS.find(x => x.key === k);
+                return s ? `<span class="cf-chip ${TAG_TONE[s.tone] || ''}">${esc(s.label)}</span>` : '';
+            }).join('');
+            const dMsg = m.messageDelta > 0 ? `<span class="aa-delta up">+${num(m.messageDelta)}</span>` : '';
+            const dVoice = m.voiceDelta > 0 ? `<span class="aa-delta up">+${fmtDur(m.voiceDelta)}</span>` : '';
+            return `<tr>
+                <td class="aa-num">${i + 1}</td>
+                <td><span class="aa-name">${esc(m.displayName)}</span><span class="aa-handle">@${esc(m.username || '?')}</span></td>
+                <td class="aa-num ${m.messages ? '' : 'aa-zero'}">${num(m.messages)}${dMsg}</td>
+                <td class="aa-num ${m.channelsPosted ? '' : 'aa-zero'}">${num(m.channelsPosted)}</td>
+                <td class="aa-num ${m.voiceSeconds ? '' : 'aa-zero'}">${esc(fmtDur(m.voiceSeconds))}${dVoice}</td>
+                <td class="aa-num ${m.voiceSessions ? '' : 'aa-zero'}">${num(m.voiceSessions)}</td>
+                <td class="aa-num ${m.daysSinceActive === null ? 'aa-zero' : ''}">${esc(fmtDays(m.daysSinceActive))}</td>
+                <td>${esc(fmtDate(m.joinedGuildAt))}</td>
+                <td>${tags ? `<span class="cf-chips">${tags}</span>` : ''}</td>
+            </tr>`;
+        }).join('');
+        el.empty.hidden = rows.length !== 0;
+        el.shown.textContent = `${rows.length} of ${members.length} shown`;
+
+        el.table.querySelectorAll('th[data-sort]').forEach(th => {
+            th.classList.toggle('sorted', th.dataset.sort === sortKey);
+            th.classList.toggle('asc', th.dataset.sort === sortKey && sortDir === 1);
+        });
+    }
+
+    async function loadAudit(id) {
+        try {
+            const data = await api('/' + id);
+            audit = data.audit; members = data.members; compared = data.comparedWith;
+            el.csv.href = `${base}/${id}/export.csv`;
+            renderStats(); renderChips(); render();
+            showErr('');
+        } catch (e) { showErr('Could not load that audit: ' + e.message); }
+    }
+
+    async function boot() {
+        try {
+            const data = await api('/');
+            SEGMENTS = data.segments;
+            ACTION_META = data.actions || [];
+            LIMITS = data.limits || {};
+            renderActionMeta();
+            loadRoles();
+            el.days.value = String(data.defaultWindowDays);
+            el.pick.innerHTML = data.audits.map(a => {
+                const when = new Date(a.completedAt || a.startedAt).toISOString().slice(0, 16).replace('T', ' ');
+                const bits = a.status === 'complete'
+                    ? `${a.totals ? a.totals.posters + ' posters' : 'no totals'}`
+                    : a.status;
+                return `<option value="${esc(a.id)}">#${esc(a.id)} · ${when} · ${esc(a.windowDays)}d · ${esc(bits)}</option>`;
+            }).join('') || '<option value="">No audits yet — run one</option>';
+
+            if (data.audits.length) { el.pick.value = String(data.latestId ?? data.audits[0].id); await loadAudit(el.pick.value); }
+            if (data.running && !data.running.finished) pollProgress();
+        } catch (e) { showErr('Could not load audits: ' + e.message); }
+    }
+
+    function pollProgress() {
+        el.progress.hidden = false;
+        el.run.disabled = true;
+        const tick = async () => {
+            try {
+                const { running } = await api('/status');
+                if (!running) { el.progress.hidden = true; el.run.disabled = false; return; }
+                if (running.error) { showErr('Audit failed: ' + running.error); el.progress.hidden = true; el.run.disabled = false; return; }
+                if (running.finished) {
+                    el.progress.hidden = true; el.run.disabled = false;
+                    el.progressText.textContent = 'Done.';
+                    await boot();
+                    return;
+                }
+                const pct = running.total ? Math.round((running.done / running.total) * 100) : 5;
+                el.fill.style.width = pct + '%';
+                el.progressText.textContent = running.total
+                    ? `Swept ${running.done} of ${running.total} channels and threads…`
+                    : 'Listing channels…';
+                setTimeout(tick, 2500);
+            } catch { setTimeout(tick, 5000); }
+        };
+        tick();
+    }
+
+    el.run.addEventListener('click', async () => {
+        showErr('');
+        try {
+            await api('/run', { method: 'POST', body: JSON.stringify({ days: Number(el.days.value) }) });
+            pollProgress();
+        } catch (e) { showErr(e.message); }
+    });
+
+    el.pick.addEventListener('change', () => el.pick.value && loadAudit(el.pick.value));
+    el.search.addEventListener('input', render);
+    el.hideLeft.addEventListener('change', render);
+    el.table.querySelectorAll('th.aa-sortable').forEach(th => th.addEventListener('click', () => {
+        const key = th.dataset.sort;
+        if (key === sortKey) sortDir = -sortDir; else { sortKey = key; sortDir = -1; }
+        render();
+    }));
+
+    /* ── post to Discord ── */
+    el.post.addEventListener('click', async () => {
+        if (!audit) return;
+        try {
+            const res = await fetch(`/api/guilds/${guildId}/core/channels`, { credentials: 'same-origin' });
+            const data = await res.json().catch(() => null);
+            const list = Array.isArray(data) ? data : (data?.channels ?? []);
+            const text = list.filter(c => c.type === 0 || c.type === 5);
+            el.postChannel.innerHTML = text.length
+                ? text.map(c => `<option value="${esc(c.id)}">#${esc(c.name)}</option>`).join('')
+                : '<option value="">No text channels available</option>';
+        } catch {
+            el.postChannel.innerHTML = '<option value="">Could not list channels</option>';
+        }
+        el.modal.hidden = false;
+    });
+    el.postCancel.addEventListener('click', () => { el.modal.hidden = true; });
+    el.postGo.addEventListener('click', async () => {
+        const channelId = el.postChannel.value;
+        if (!channelId) return;
+        el.postGo.disabled = true;
+        try {
+            const r = await api(`/${audit.id}/post`, { method: 'POST', body: JSON.stringify({ channelId }) });
+            el.modal.hidden = true;
+            showNotice(`Posted to #${r.channel} as ${r.messageIds.length} message${r.messageIds.length === 1 ? '' : 's'}.`);
+        } catch (e) { showErr(e.message); }
+        finally { el.postGo.disabled = false; }
+    });
+
+    /* ── advanced filters + bulk actions ─────────────────────────────────────
+     * The filter sent to the server is built from the same inputs the table renders from,
+     * so the count on screen and the count in the action plan cannot drift apart. Anything
+     * else risks acting on members who were never displayed.
+     */
+    let ACTION_META = [], LIMITS = {}, advFilter = null, currentPlan = null;
+
+    const numOrNull = (id) => {
+        const v = $(id).value.trim();
+        if (v === '') return null;
+        const n = Number(v);
+        return Number.isFinite(n) ? Math.trunc(n) : null;
+    };
+    const picked = (id) => Array.from($(id).selectedOptions).map(o => o.value).filter(Boolean);
+
+    function buildFilter() {
+        const minutes = (id) => { const v = numOrNull(id); return v === null ? null : v * 60; };
+        return {
+            segments: filter === 'all' ? [] : [filter],
+            messagesMin: numOrNull('fMsgMin'), messagesMax: numOrNull('fMsgMax'),
+            voiceSecondsMin: minutes('fVoiceMin'), voiceSecondsMax: minutes('fVoiceMax'),
+            voiceSessionsMin: numOrNull('fSessMin'), voiceSessionsMax: numOrNull('fSessMax'),
+            daysSinceActiveMin: numOrNull('fQuietMin'), daysSinceActiveMax: numOrNull('fQuietMax'),
+            membershipDaysMin: numOrNull('fMemMin'), membershipDaysMax: numOrNull('fMemMax'),
+            hasRoles: picked('fHasRoles'), lacksRoles: picked('fLacksRoles'),
+            // Mirrors the table's own checkbox so the two always select the same people.
+            includeLeft: !el.hideLeft.checked,
+            includeBots: false,
+            search: el.search.value.trim(),
+        };
+    }
+
+    async function applyAdvanced() {
+        if (!audit) return;
+        try {
+            const f = buildFilter();
+            const r = await api(`/${audit.id}/filter`, { method: 'POST', body: JSON.stringify({ filter: f }) });
+            advFilter = f;
+            $('aaAdvLabel').textContent = `${r.count} match — ${r.label}`;
+            if (!r.roleDataAvailable && (f.hasRoles.length || f.lacksRoles.length)) {
+                showErr('Role conditions could not be evaluated (member cache unavailable), so no members matched them.');
+            } else { showErr(''); }
+            // Narrow the visible table to the same set, by id, so what you see is what acts.
+            const ids = new Set(r.members.map(m => m.userId));
+            advIds = ids;
+            render();
+        } catch (e) { showErr(e.message); }
+    }
+    let advIds = null;
+
+    $('aaApplyAdv').addEventListener('click', applyAdvanced);
+    $('aaClearAdv').addEventListener('click', () => {
+        ['fMsgMin','fMsgMax','fVoiceMin','fVoiceMax','fSessMin','fSessMax',
+         'fQuietMin','fQuietMax','fMemMin','fMemMax'].forEach(id => { $(id).value = ''; });
+        $('fHasRoles').selectedIndex = -1; $('fLacksRoles').selectedIndex = -1;
+        advFilter = null; advIds = null; $('aaAdvLabel').textContent = ''; showErr(''); render();
+    });
+
+    function renderActionMeta() {
+        $('aaActionType').innerHTML = ACTION_META
+            .map(a => `<option value="${esc(a.key)}" data-role="${a.needsRole}">${esc(a.label)}</option>`).join('');
+        $('aaGrace').value = String(LIMITS.defaultMinMembershipDays ?? 7);
+        syncRoleVisibility();
+    }
+    function syncRoleVisibility() {
+        const opt = $('aaActionType').selectedOptions[0];
+        $('aaRoleWrap').hidden = !(opt && opt.dataset.role === 'true');
+    }
+    $('aaActionType').addEventListener('change', syncRoleVisibility);
+
+    async function loadRoles() {
+        try {
+            const res = await fetch(`/api/guilds/${guildId}/core/roles`, { credentials: 'same-origin' });
+            const data = await res.json().catch(() => null);
+            const list = (Array.isArray(data) ? data : (data?.roles ?? [])).filter(r => r.name !== '@everyone');
+            const top = data && typeof data.botHighestPosition === 'number' ? data.botHighestPosition : null;
+            // Options built with textContent (role names are user text). The bulk-action picker greys
+            // out roles the bot cannot give or take: managed ones and any at or above its own top role.
+            const build = (forAction) => list.map(r => {
+                const o = document.createElement('option');
+                o.value = r.id;
+                o.setAttribute('data-kind', 'role');
+                if (r.color) o.setAttribute('data-color', '#' + Number(r.color).toString(16).padStart(6, '0'));
+                const blocked = forAction && (r.managed || (top !== null && r.position >= top));
+                o.textContent = r.name + (blocked ? (r.managed ? ' (managed)' : ' (above the bot)') : '');
+                o.disabled = !!blocked;
+                return o;
+            });
+            const action = build(true);
+            if (!action.length) { const none = document.createElement('option'); none.value = ''; none.textContent = 'No roles available'; action.push(none); }
+            $('aaActionRole').replaceChildren(...action);
+            const firstOk = action.find(o => !o.disabled && o.value);
+            if (firstOk) $('aaActionRole').value = firstOk.value;
+            $('fHasRoles').replaceChildren(...build(false));
+            $('fLacksRoles').replaceChildren(...build(false));
+        } catch { /* role filters simply stay empty; applyFilter fails them closed */ }
+    }
+
+    $('aaPreview').addEventListener('click', async () => {
+        if (!audit) return;
+        const actionType = $('aaActionType').value;
+        const needsRole = $('aaActionType').selectedOptions[0]?.dataset.role === 'true';
+        const roleId = needsRole ? $('aaActionRole').value : null;
+        if (needsRole && !roleId) return showErr('Pick a role for that action.');
+
+        try {
+            const body = {
+                actionType, roleId, filter: buildFilter(),
+                minMembershipDays: numOrNull('aaGrace') ?? LIMITS.defaultMinMembershipDays,
+                reason: $('aaReason').value.trim() || null,
+            };
+            const r = await api(`/${audit.id}/plan-action`, { method: 'POST', body: JSON.stringify(body) });
+            currentPlan = { ...r.plan, request: body };
+            showPlan(currentPlan);
+            showErr('');
+        } catch (e) { showErr(e.message); }
+    });
+
+    function showPlan(plan) {
+        const meta = ACTION_META.find(a => a.key === plan.actionType);
+        $('aaPlanTitle').textContent = `Review — ${meta ? meta.label : plan.actionType}`;
+        $('aaPlanFilter').textContent = plan.filterLabel;
+        $('aaPlanCounts').innerHTML = [
+            [plan.counts.selected, 'Matched'],
+            [plan.counts.eligible, 'Will be affected'],
+            [plan.counts.blocked, 'Protected'],
+        ].map(([v, l]) => `<div class="cf-kpi"><div class="cf-kpi-label">${l}</div><div class="cf-kpi-value">${num(v)}</div></div>`).join('');
+        $('aaPlanWarnings').innerHTML = plan.warnings.length
+            ? `<div class="cf-notice is-warn"><i class="fas fa-triangle-exclamation" aria-hidden="true"></i><div class="cf-notice-body">${plan.warnings.map(esc).join('<br>')}</div></div>` : '';
+        $('aaPlanEligibleN').textContent = plan.eligible.length;
+        $('aaPlanBlockedN').textContent = plan.blocked.length;
+        $('aaPlanEligible').innerHTML = plan.eligible.map(e =>
+            `<li>${esc(e.displayName)} <span>${num(e.messages)} msg · ${esc(fmtDur(e.voiceSeconds))}</span></li>`).join('')
+            || '<li><span>Nobody</span></li>';
+        $('aaPlanBlocked').innerHTML = plan.blocked.map(b =>
+            `<li>${esc(b.displayName)} <span>${esc(b.reason)}</span></li>`).join('')
+            || '<li><span>Nobody</span></li>';
+
+        // Destructive actions demand the exact count be typed, so "Apply" cannot be muscle
+        // memory and the number of people affected has to be read.
+        const destructive = meta?.destructive;
+        const word = destructive ? String(plan.eligible.length) : 'CONFIRM';
+        $('aaConfirmWord').textContent = word;
+        $('aaConfirmInput').value = '';
+        $('aaPlanGo').disabled = true;
+        $('aaPlanGo').textContent = destructive ? `Kick ${plan.eligible.length}` : 'Apply';
+        $('aaConfirmWrap').hidden = plan.eligible.length === 0;
+        $('aaConfirmInput').oninput = () => {
+            $('aaPlanGo').disabled = $('aaConfirmInput').value.trim() !== word || plan.eligible.length === 0;
+        };
+        $('aaPlanModal').hidden = false;
+    }
+
+    $('aaPlanCancel').addEventListener('click', () => { $('aaPlanModal').hidden = true; currentPlan = null; });
+
+    // Escape or a click on the dimmed backdrop closes either dialog (nothing is applied).
+    const closeModals = () => { $('aaPlanModal').hidden = true; currentPlan = null; el.modal.hidden = true; };
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && (!$('aaPlanModal').hidden || !el.modal.hidden)) closeModals(); });
+    [$('aaPlanModal'), el.modal].forEach((m) => m.addEventListener('click', (e) => { if (e.target === m) closeModals(); }));
+
+    $('aaPlanGo').addEventListener('click', async () => {
+        if (!currentPlan) return;
+        $('aaPlanGo').disabled = true;
+        try {
+            const r = await api(`/${audit.id}/execute-action`, {
+                method: 'POST',
+                body: JSON.stringify({ ...currentPlan.request, token: currentPlan.token }),
+            });
+            $('aaPlanModal').hidden = true;
+            showNotice(`Done — ${r.result.done} applied, ${r.result.skipped} skipped, ${r.result.failed} failed (action #${r.result.actionId}).`);
+            currentPlan = null;
+            await boot();
+        } catch (e) {
+            // A stale plan is a designed refusal: the set moved, so the operator re-reviews.
+            showErr(e.message);
+            $('aaPlanModal').hidden = true;
+            currentPlan = null;
+        }
+    });
+
+    boot();
+})();
+</script>

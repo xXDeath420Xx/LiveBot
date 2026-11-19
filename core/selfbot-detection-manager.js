@@ -2,6 +2,29 @@ import pool from '../utils/db.js';
 import logger from '../utils/logger.js';
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } from 'discord.js';
 import { isProtectedFromBanCommands } from '../utils/owner-protection.js';
+import { themeColor } from './guild-theme.js';
+import { protectionHold } from './protection-exempt.js';
+import { whyCannot, reportManualAction } from './manual-action.js';
+
+/**
+ * Timeout length for the 'mute' action when selfbot_detection_config.mute_duration_minutes is
+ * missing/NULL. That column (and purge_messages) only arrive with migration 271; until then the
+ * value was `undefined`, so `timeout(NaN)` threw and neither the mute nor the alert ever happened.
+ */
+const DEFAULT_SELFBOT_MUTE_MINUTES = 60;
+
+/** Discord refuses timeouts longer than 28 days. */
+const MAX_TIMEOUT_MINUTES = 28 * 24 * 60;
+
+/** Most messages purged per detection when purge_messages is on (there is no purge_limit column). */
+const SELFBOT_PURGE_LIMIT = 100;
+
+/** The configured self-bot timeout, in minutes — always a usable positive number. */
+function selfbotMuteMinutes(config) {
+    const minutes = Number(config.mute_duration_minutes);
+    if (!Number.isFinite(minutes) || minutes <= 0) return DEFAULT_SELFBOT_MUTE_MINUTES;
+    return Math.min(Math.round(minutes), MAX_TIMEOUT_MINUTES);
+}
 
 /**
  * Self-Bot Detection Manager - Detects users running unauthorized automation
@@ -239,24 +262,37 @@ class SelfbotDetectionManager {
         );
 
         // Execute actions
-        const results = { muted: false, purged: 0 };
+        const results = { muted: false, muteMinutes: null, purged: 0, held: null };
+
+        // Unified allowlist / global pause: detected and alerted, but no purge and no action.
+        if (member && (config.purge_messages || ['mute', 'kick', 'ban'].includes(config.action))) {
+            const doing = ['mute', 'timeout'].includes(config.action) ? 'timeout' : ['kick', 'ban'].includes(config.action) ? config.action : 'purge';
+            results.held = await protectionHold(member, doing, 'Self-bot detection');
+        }
 
         // Purge messages if enabled
-        if (config.purge_messages) {
-            results.purged = await this.purgeUserMessages(guild, author.id, config.purge_limit);
+        if (config.purge_messages && !results.held) {
+            results.purged = await this.purgeUserMessages(guild, author.id, SELFBOT_PURGE_LIMIT);
         }
 
         // Execute configured action
-        if (member && member.id !== guild.ownerId && !isProtectedFromBanCommands(member.id)) {
-            switch (config.action) {
+        if (member && !results.held && member.id !== guild.ownerId && !isProtectedFromBanCommands(member.id)) {
+            // The bot cannot do it: say exactly why (core/manual-action.js) rather than skip silently.
+            const verb = { mute: 'timeout', kick: 'kick', ban: 'ban' }[config.action];
+            const cannot = verb ? whyCannot(guild, verb, { member }) : null;
+            if (cannot) await reportManualAction(guild, { action: verb, member, source: 'Self-bot detection', problem: cannot });
+            else switch (config.action) {
+                case 'timeout': // older value; same as mute (H-676)
                 case 'mute':
                     if (member.moderatable) {
+                        const muteMinutes = selfbotMuteMinutes(config);
                         await member.timeout(
-                            config.mute_duration_minutes * 60 * 1000,
+                            muteMinutes * 60 * 1000,
                             'Self-bot Detection: Automated behavior detected'
                         );
                         results.muted = true;
-                        await this.logInfractionForSelfbot(guild, author, 'mute', config.mute_duration_minutes);
+                        results.muteMinutes = muteMinutes;
+                        await this.logInfractionForSelfbot(guild, author, 'mute', muteMinutes);
                     }
                     break;
 
@@ -429,10 +465,13 @@ class SelfbotDetectionManager {
             .setFooter({ text: `Detection ID: ${detectionId} | Self-Bot Detection System` });
 
         if (results.muted) {
-            embed.addFields({ name: 'Muted', value: `${config.mute_duration_minutes} minutes`, inline: true });
+            embed.addFields({ name: 'Muted', value: `${results.muteMinutes} minutes`, inline: true });
         }
         if (results.purged > 0) {
             embed.addFields({ name: 'Messages Purged', value: `${results.purged}`, inline: true });
+        }
+        if (results.held) {
+            embed.addFields({ name: 'Held', value: results.held.text.slice(0, 1024), inline: false });
         }
 
         // Create action buttons
@@ -522,7 +561,7 @@ class SelfbotDetectionManager {
             // Update embed
             const message = interaction.message;
             const embed = EmbedBuilder.from(message.embeds[0])
-                .setColor(0xff0000)
+                .setColor(themeColor(interaction.guildId, 'danger'))
                 .addFields({ name: 'Escalated', value: `Kicked by ${interaction.user.tag}` });
 
             await message.edit({ embeds: [embed], components: [] });
@@ -632,7 +671,7 @@ class SelfbotDetectionManager {
             }).join('\n\n');
 
             const embed = new EmbedBuilder()
-                .setColor(0x3498db)
+                .setColor(themeColor(interaction.guildId, 'primary'))
                 .setTitle(`Detection History for <@${userId}>`)
                 .setDescription(historyLines)
                 .setFooter({ text: `Showing last ${detections.length} detections` });
@@ -690,50 +729,6 @@ class SelfbotDetectionManager {
         } catch (error) {
             logger.error('[SelfbotDetection] Error fetching config', { error: error.message, guildId });
             return null;
-        }
-    }
-
-    /**
-     * Update self-bot detection configuration
-     */
-    async updateConfig(guildId, config) {
-        try {
-            await pool.execute(
-                `INSERT INTO selfbot_detection_config (guild_id, enabled, min_response_time_ms, message_burst_threshold,
-                    message_burst_window_ms, pattern_threshold, action, alert_channel_id, mute_duration_minutes,
-                    purge_messages, purge_limit, exempt_roles)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                 ON DUPLICATE KEY UPDATE
-                    enabled = VALUES(enabled),
-                    min_response_time_ms = VALUES(min_response_time_ms),
-                    message_burst_threshold = VALUES(message_burst_threshold),
-                    message_burst_window_ms = VALUES(message_burst_window_ms),
-                    pattern_threshold = VALUES(pattern_threshold),
-                    action = VALUES(action),
-                    alert_channel_id = VALUES(alert_channel_id),
-                    mute_duration_minutes = VALUES(mute_duration_minutes),
-                    purge_messages = VALUES(purge_messages),
-                    purge_limit = VALUES(purge_limit),
-                    exempt_roles = VALUES(exempt_roles)`,
-                [
-                    guildId,
-                    config.enabled ?? false,
-                    config.min_response_time_ms ?? 50,
-                    config.message_burst_threshold ?? 20,
-                    config.message_burst_window_ms ?? 1000,
-                    config.pattern_threshold ?? 3,
-                    config.action ?? 'mute',
-                    config.alert_channel_id ?? null,
-                    config.mute_duration_minutes ?? 60,
-                    config.purge_messages ?? true,
-                    config.purge_limit ?? 100,
-                    config.exempt_roles ? JSON.stringify(config.exempt_roles) : null
-                ]
-            );
-            return true;
-        } catch (error) {
-            logger.error('[SelfbotDetection] Error updating config', { error: error.message, guildId });
-            return false;
         }
     }
 

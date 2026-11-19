@@ -2,6 +2,7 @@ import { Events, EmbedBuilder } from 'discord.js';
 import logger from '../utils/logger.js';
 import { sendLogEmbed, saveAuditLog } from '../core/log-manager.js';
 import { shouldIgnoreGuild } from '../utils/custom-bot-check.js';
+import { themeColor } from '../core/guild-theme.js';
 
 export default {
     name: Events.StageInstanceCreate,
@@ -19,7 +20,7 @@ export default {
             });
 
             const embed = new EmbedBuilder()
-                .setColor(0x57F287)
+                .setColor(themeColor(guild?.id, 'success'))
                 .setTitle('🎭 Stage Started')
                 .setDescription(`Stage instance started`)
                 .addFields(

@@ -1,0 +1,95 @@
+<%#
+  Discord's own server features: a list of the editors on /manage/<guildId>/discord-native (its own
+  tabbed page, dashboard/routes/discord-native-page.js). Each row shows the feature's current state,
+  read from the same GET endpoints that page uses, and opens its tab. Application emojis are a
+  super-admin tool and only listed for super admins.
+%>
+<% const dnSuper = !!(typeof user !== 'undefined' && user && user.isSuperAdmin); %>
+<style>
+    .dn-state { font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+    .dn-state.is-on { color: var(--cf-success); }
+</style>
+
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fa-brands fa-discord"></i>
+                <span>Discord server features</span>
+            </div>
+            <div class="page-section-subtitle">Changes here are saved in Discord, not by the bot.</div>
+        </div>
+    </div>
+
+    <section class="cf-section" aria-labelledby="dn-list-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="dn-list-title">Editors</h2>
+                <p class="cf-section-desc">Each one opens on its own page.</p>
+            </div>
+        </header>
+        <div class="cf-rows cf-list" id="dnList" data-guild="<%= guild.id %>">
+            <% [
+                { tab: 'welcome-screen', title: 'Welcome screen', desc: 'The description and featured channels Discord shows new members and invite previews.' },
+                { tab: 'onboarding', title: 'Onboarding', desc: 'The questions and default channels Discord shows members when they join.' },
+                { tab: 'soundboard', title: 'Soundboard', desc: "The server's sounds in Discord's own soundboard. The bot's voice-channel sounds are on the Soundboard page." },
+                { tab: 'events', title: 'Scheduled events', desc: 'Create, edit and cancel server events. How an event repeats is set in Discord.' },
+            ].concat(dnSuper ? [{ tab: 'app-emojis', title: 'Application emojis', desc: "Emojis owned by the bot's application, usable in every server. Super admins only." }] : []).forEach(function (r) { %>
+            <div class="cf-list-item cf-list-item--multi">
+                <div class="cf-list-main">
+                    <p class="cf-list-title"><%= r.title %></p>
+                    <p class="cf-list-body"><%= r.desc %></p>
+                    <span class="dn-state" data-dn-state="<%= r.tab %>"></span>
+                </div>
+                <div class="cf-list-actions">
+                    <a class="btn btn-sm btn-secondary" href="/manage/<%= guild.id %>/discord-native?tab=<%= r.tab %>">Open</a>
+                </div>
+            </div>
+            <% }); %>
+        </div>
+    </section>
+</div>
+
+<script>
+(function () {
+    var list = document.getElementById('dnList');
+    if (!list) return;
+    var gid = list.getAttribute('data-guild');
+    function setState(tab, text, on) {
+        var el = list.querySelector('[data-dn-state="' + tab + '"]');
+        if (!el) return;
+        el.textContent = text;
+        el.classList.toggle('is-on', !!on);
+    }
+    function get(path) {
+        return fetch(path, { credentials: 'include' }).then(function (r) { return r.ok ? r.json() : null; }).catch(function () { return null; });
+    }
+    function plural(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
+
+    get('/api/guilds/' + gid + '/welcome-screen').then(function (d) {
+        var ws = d && d.welcomeScreen;
+        if (!ws) return setState('welcome-screen', 'Not set up', false);
+        var n = (ws.channels || []).length;
+        setState('welcome-screen', (ws.enabled ? 'On' : 'Off') + ' · ' + plural(n, 'featured channel', 'featured channels'), ws.enabled);
+    });
+    get('/api/guilds/' + gid + '/onboarding').then(function (d) {
+        var ob = d && d.onboarding;
+        if (!ob) return setState('onboarding', 'Not available', false);
+        setState('onboarding', (ob.enabled ? 'On' : 'Off') + ' · ' + plural((ob.prompts || []).length, 'question', 'questions'), ob.enabled);
+    });
+    get('/api/guilds/' + gid + '/discord-soundboard').then(function (d) {
+        if (!d || !Array.isArray(d.sounds)) return;
+        setState('soundboard', d.sounds.length ? plural(d.sounds.length, 'sound', 'sounds') : 'No sounds yet', d.sounds.length > 0);
+    });
+    get('/api/guilds/' + gid + '/scheduled-events').then(function (d) {
+        if (!d || !Array.isArray(d.events)) return;
+        setState('events', d.events.length ? plural(d.events.length, 'event', 'events') + ' scheduled' : 'No events scheduled', d.events.length > 0);
+    });
+    if (list.querySelector('[data-dn-state="app-emojis"]')) {
+        get('/api/app-emojis').then(function (d) {
+            if (!d || typeof d.count === 'undefined') return;
+            setState('app-emojis', plural(Number(d.count) || 0, 'emoji', 'emojis'), d.count > 0);
+        });
+    }
+})();
+</script>

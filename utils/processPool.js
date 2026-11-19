@@ -6,6 +6,21 @@ import { spawn } from 'child_process';
 import logger from './logger.js';
 import { ytdlpSourceArgs } from './ipv6-rotator.js';
 
+/**
+ * Did YouTube refuse the address we bound to, rather than the video itself?
+ *
+ * These are the responses a distrusted source IP gets — "Video unavailable"/"This content isn't
+ * available" (verbatim, including YouTube's curly apostrophe) and the bot wall — plus the local
+ * bind failure you get when the AnyIP route isn't actually configured on the host. A genuinely
+ * dead video produces the same "Video unavailable", so this can misfire; the cost of that is one
+ * extra spawn, against a play that would otherwise be lost outright.
+ */
+function refusedTheSource(result) {
+  if (result.code === 0 || result.timedOut) return false;
+  return /video unavailable|content isn.t available|sign in to confirm|not a bot|cannot assign requested address/i
+    .test(result.stderr || '');
+}
+
 class ProcessPool {
   constructor(options = {}) {
     // Maximum concurrent processes
@@ -22,7 +37,8 @@ class ProcessPool {
       completed: 0,
       failed: 0,
       timedOut: 0,
-      queued: 0
+      queued: 0,
+      rotationFallbacks: 0
     };
 
     logger.info('[ProcessPool] Initialized', {
@@ -38,6 +54,24 @@ class ProcessPool {
    * @returns {Promise<{stdout: string, stderr: string, code: number}>}
    */
   async execute(args, options = {}) {
+    const result = await this._enqueue(args, options);
+
+    // A rotated source address that YouTube refuses is indistinguishable, from up the stack, from
+    // a video that doesn't exist: yt-dlp just says "Video unavailable" and every layer above takes
+    // it at face value — which is how a working video became "No results found". One bad address
+    // out of a /64 must not kill the play, so retry the same request on the host's default egress
+    // (the route the bot used before rotation existed, and the one that still works).
+    if (result.rotatedFrom && refusedTheSource(result)) {
+      this.stats.rotationFallbacks++;
+      logger.warn(`[ProcessPool] YouTube refused rotated source ${result.rotatedFrom}; retrying on default egress`);
+      return this._enqueue(args, { ...options, noRotate: true });
+    }
+
+    return result;
+  }
+
+  /** Queue a single spawn. @private */
+  async _enqueue(args, options = {}) {
     this.stats.totalRequests++;
 
     return new Promise((resolve, reject) => {
@@ -74,7 +108,15 @@ class ProcessPool {
     // there's no single IP for YouTube to rate-limit. No-op (prepends nothing) unless
     // YTDLP_IPV6_SUBNET is set. A new address is chosen per spawn, so retries — which
     // are separate execute() calls — automatically get a different IP too.
-    const args = [...ytdlpSourceArgs(baseArgs), ...baseArgs];
+    // YTDLP_PROXY (e.g. a residential proxy) carries YouTube traffic only — SoundCloud and the
+    // local PO-token provider keep direct routing. A proxy replaces IPv6 source rotation.
+    const isYoutubeTarget = /ytsearch|youtube\.com|youtu\.be/i.test(baseArgs.join(' '));
+    const proxyArgs = process.env.YTDLP_PROXY && isYoutubeTarget ? ['--proxy', process.env.YTDLP_PROXY] : [];
+    const sourceArgs = proxyArgs.length ? proxyArgs : (options.noRotate ? [] : ytdlpSourceArgs(baseArgs));
+    const rotatedFrom = (!proxyArgs.length && sourceArgs.length) ? sourceArgs[1] : null;   // the IPv6 address we bound to, if any
+    // --no-update: a stale yt-dlp prints a 4-line "older than 90 days" banner first on stderr,
+    // which filled every truncated error log and hid the actual failure reason.
+    const args = [...sourceArgs, '--no-update', ...baseArgs];
 
     const waitTime = Date.now() - queuedAt;
     if (waitTime > 100) {
@@ -133,16 +175,17 @@ class ProcessPool {
           stdout,
           stderr: stderr + '\nProcess killed due to timeout',
           code: -1,
-          timedOut: true
+          timedOut: true,
+          rotatedFrom
         });
       } else if (code === 0) {
         this.stats.completed++;
         logger.debug(`[ProcessPool] Process completed in ${duration}ms`);
-        resolve({ stdout, stderr, code });
+        resolve({ stdout, stderr, code, rotatedFrom });
       } else {
         this.stats.failed++;
         logger.debug(`[ProcessPool] Process failed with code ${code} in ${duration}ms`);
-        resolve({ stdout, stderr, code });
+        resolve({ stdout, stderr, code, rotatedFrom });
       }
 
       // Process next in queue
@@ -160,7 +203,8 @@ class ProcessPool {
         stdout: '',
         stderr: error.message,
         code: -1,
-        error: true
+        error: true,
+        rotatedFrom
       });
 
       // Process next in queue

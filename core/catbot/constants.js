@@ -58,6 +58,12 @@ export const MIN_SPAWN_FLOOR = 20;   // admins can't go below this
 export const RESPAWN_GRACE = 10;     // padding on yet_to_spawn so the sweeper doesn't double-fire
 export const SWEEP_INTERVAL_MS = 5 * 60 * 1000;
 
+// Activity booster (Pokémon-style): a channel's chatter pulls its next cat earlier. spawn_min is the
+// floor (no cat can spawn before it), spawn_max the ceiling (a dead-quiet channel still gets one).
+// Between them, this many human messages triggers an early spawn — a busy channel hits it fast.
+export const ACTIVITY_MIN_MSGS = 8;
+export const ACTIVITY_MAX_MSGS = 25;
+
 // ── Catching ─────────────────────────────────────────────────────────────────
 export const CATCH_WORD = 'cat';
 export const BELATED_WINDOW_MS = 5000;      // late catchers still get a cat

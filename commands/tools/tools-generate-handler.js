@@ -1,5 +1,6 @@
 import { EmbedBuilder } from 'discord.js';
 import axios from 'axios';
+import { themeColor } from '../../core/guild-theme.js';
 
 function generateEmail() {
     const names = ['john', 'jane', 'bob', 'alice', 'charlie', 'emma', 'david', 'sarah'];
@@ -82,7 +83,7 @@ export async function handleDataGenerator(interaction) {
         }
 
         const embed = new EmbedBuilder()
-            .setColor('#3498DB')
+            .setColor(themeColor(interaction.guildId, 'primary'))
             .setTitle(`\ud83d\udd27 Generated ${count} ${type === 'user' ? 'User Profile' : type === 'lorem' ? 'Lorem Ipsum' : type.charAt(0).toUpperCase() + type.slice(1)}${count > 1 ? 's' : ''}`)
             .setDescription(results.join('\n\n\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\n\n'))
             .setFooter({ text: '\u26a0\ufe0f Test data only - Not for real use' })
@@ -112,7 +113,7 @@ export async function handlePassword(interaction) {
     }
 
     const embed = new EmbedBuilder()
-        .setColor('#2ECC71')
+        .setColor(themeColor(interaction.guildId, 'success'))
         .setTitle('\ud83d\udd10 Generated Password')
         .setDescription(`\`\`\`${password}\`\`\``)
         .addFields(
@@ -143,7 +144,7 @@ export async function handleUUID(interaction) {
     }
 
     const embed = new EmbedBuilder()
-        .setColor('#9B59B6')
+        .setColor(themeColor(interaction.guildId, 'accent'))
         .setTitle(`\ud83c\udd94 Generated ${count} UUID${count > 1 ? 's' : ''}`)
         .setDescription('```\n' + uuids.join('\n') + '\n```')
         .setFooter({ text: 'Universally Unique Identifier (Version 4)' })
@@ -163,7 +164,7 @@ export async function handleHash(interaction) {
     const sha256 = crypto.createHash('sha256').update(text).digest('hex');
 
     const embed = new EmbedBuilder()
-        .setColor('#E74C3C')
+        .setColor(themeColor(interaction.guildId, 'danger'))
         .setTitle('\ud83d\udd12 Generated Hashes')
         .addFields(
             { name: 'MD5', value: `\`\`\`${md5}\`\`\``, inline: false },
@@ -189,7 +190,7 @@ export async function handleBase64(interaction) {
         }
 
         const embed = new EmbedBuilder()
-            .setColor('#F39C12')
+            .setColor(themeColor(interaction.guildId, 'warning'))
             .setTitle(`\ud83d\udd04 Base64 ${action === 'encode' ? 'Encoded' : 'Decoded'}`)
             .addFields(
                 { name: 'Input', value: `\`\`\`${text.substring(0, 500)}\`\`\``, inline: false },

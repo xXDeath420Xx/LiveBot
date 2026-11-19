@@ -11,7 +11,7 @@ import logger from '../../../../utils/logger.js';
  * guild-admin gating, because this is a per-USER resource, not per-guild.
  *
  * Scope: LINK / UNLINK / STATUS only. Announce-channel selection stays on the
- * Discord `/buymeacoffee announce` command; we only SHOW current targets here.
+ * Discord `/creator buymeacoffee announce` command; we only SHOW current targets here.
  *
  * The manager's linkUser/unlinkUser/getUserStatus only need DB + an HTTP fetch
  * (no Discord client), so `new BuyMeACoffeeManager(null)` is safe.

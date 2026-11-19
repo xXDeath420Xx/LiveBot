@@ -1,8 +1,11 @@
 import 'dotenv/config';
 import pool from '../utils/db.js';
+import { resolveBotIdForGuild } from '../utils/bot-resolver.js';
 
 try {
-    const [bot] = await pool.execute('SELECT bot_id, bot_name FROM custom_bots WHERE bot_id = ?', ['1476040458680406214']);
+    // The bot to report on comes from guild_bot_mapping — never pinned here.
+    const botId = await resolveBotIdForGuild('902393911958470717', { db: pool });
+    const [bot] = await pool.execute('SELECT bot_id, bot_name FROM custom_bots WHERE bot_id = ?', [botId]);
     console.log('=== Custom Bot ===');
     console.log(bot[0] || 'NOT FOUND');
 

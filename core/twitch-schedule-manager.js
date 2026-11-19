@@ -1,7 +1,9 @@
-import { EmbedBuilder, AttachmentBuilder } from 'discord.js';
+import { EmbedBuilder } from 'discord.js';
 import crypto from 'crypto';
+import { normalizeAltText } from '../utils/accessible-attachment.js';
 import pool from '../utils/db.js';
 import logger from '../utils/logger.js';
+import { toPlain } from '../utils/channel-name-style.js';
 import { getStreamSchedule, getTwitchUser } from '../utils/platforms/twitch-api.js';
 import {
   getGuildTimezone,
@@ -9,8 +11,52 @@ import {
   getZoneAbbreviation,
   getLocalDateParts
 } from '../utils/guild-timezone.js';
+import { logFeatureEvent } from './feature-log.js';
+import { discardReplacedUpload } from './server-image-uploads.js';
+import { servedByAnotherClient } from './guild-presence-logic.js';
+import {
+  loadCustomDays, hashCustomDays, mergeSegments, localDayKey, posterMonth,
+  buildMonth, firstWeekday, monthName,
+} from './schedule-calendar.js';
 
 const CHANGE_COOLDOWN_MS = 10 * 60 * 1000; // 10 minutes — wait for streamer to finish editing
+
+// A schedule whose channel is unreachable for a reason that may pass (missing permission, network)
+// keeps retrying; its warning is logged at most once per 6 hours per sync instead of every tick.
+const MISSING_CHANNEL_WARN_MS = 6 * 60 * 60 * 1000;
+const missingChannelWarnedAt = new Map(); // sync id -> ms
+
+/**
+ * Why a schedule sync is paused (twitch_schedule_sync_config.paused_reason, migration 434):
+ *   channel_deleted  its channel is gone; the server picks a new one on the Twitch Schedules page
+ *   guild_left       no bot of ours is in the server any more; resumes by itself if one comes back
+ * Paused syncs also have is_enabled = 0, so nothing else needs to know about the column.
+ */
+export const SCHEDULE_PAUSE_REASONS = Object.freeze({
+  channel_deleted: 'Paused: channel deleted',
+  guild_left: 'Paused: the bot is no longer in this server',
+});
+
+/** Guild for a sync's server-log posts: the channel's own, else whichever bot serves the server. */
+function scheduleLogGuild(client, syncConfig, channel = null) {
+  return channel?.guild
+    || client?.guilds?.cache?.get(syncConfig.guild_id)
+    || global.botManager?.getClientForGuild?.(syncConfig.guild_id)?.guilds.cache.get(syncConfig.guild_id);
+}
+
+/** A broken sync retries every tick, so its failure is posted at most once a day per sync. */
+function logScheduleFailed(client, syncConfig, why, channel = null) {
+  void logFeatureEvent(() => (scheduleLogGuild(client, syncConfig, channel)), 'twitch-schedule.failed', () => ({
+    title: '⚠️ Schedule Sync Failed',
+    description: `The Twitch schedule for **${syncConfig.username}** could not be posted. It keeps retrying; this is reported at most once a day.`,
+    fields: [
+      ['Streamer', syncConfig.username],
+      ['Channel', syncConfig.discord_channel_id ? `<#${syncConfig.discord_channel_id}>` : null],
+      ['Why', String(why || 'Unknown error').slice(0, 300), false],
+    ],
+    throttle: { key: 'tsched-fail:' + syncConfig.id, ms: 86400000 },
+  }));
+}
 
 // Canvas is optional. If not installed, image generation is skipped and we fall back
 // to the text embed.
@@ -58,6 +104,17 @@ export default class TwitchScheduleManager {
           tss.last_weekly_refresh,
           tss.view_mode,
           tss.force_refresh,
+          tss.layout,
+          tss.background_mode,
+          tss.background_url,
+          tss.background_prompt,
+          tss.background_cache_url,
+          tss.accent_color,
+          tss.card_title,
+          tss.card_footer,
+          tss.schedule_source,
+          tss.side_art_url,
+          tss.card_disclaimer,
           s.platform_user_id,
           s.username,
           s.profile_image_url
@@ -139,30 +196,32 @@ export default class TwitchScheduleManager {
    */
   async syncSchedule(syncConfig, { skipCooldown = false } = {}) {
     try {
-      const twitchUserId = await this.getTwitchUserId(syncConfig);
+      const source = syncConfig.schedule_source || 'twitch';
+      const customDays = source === 'twitch' ? new Map() : await loadCustomDays(syncConfig.id);
+      syncConfig._customDays = customDays;
+      const tz = source === 'twitch' && syncConfig.layout !== 'calendar' ? null : await getGuildTimezone(syncConfig.guild_id);
 
-      if (!twitchUserId) {
-        logger.warn(`[TwitchScheduleManager] No valid Twitch user ID for streamer ${syncConfig.username}`);
-        if (syncConfig.force_refresh) {
-          await pool.execute('UPDATE twitch_schedule_sync_config SET force_refresh = 0 WHERE id = ?', [syncConfig.id]);
+      let twitchSegments = [];
+      if (source !== 'custom') {
+        const twitchUserId = await this.getTwitchUserId(syncConfig);
+
+        if (!twitchUserId && !customDays.size) {
+          logger.warn(`[TwitchScheduleManager] No valid Twitch user ID for streamer ${syncConfig.username}`);
+          if (syncConfig.force_refresh) {
+            await pool.execute('UPDATE twitch_schedule_sync_config SET force_refresh = 0 WHERE id = ?', [syncConfig.id]);
+          }
+          logScheduleFailed(this.client, syncConfig, `Could not find the Twitch account **${syncConfig.username}** (renamed or deleted?)`);
+          return;
         }
-        return;
+
+        // Fetch schedule from Twitch API
+        const scheduleResponse = twitchUserId ? await getStreamSchedule(twitchUserId) : null;
+        twitchSegments = scheduleResponse?.data?.data?.segments || [];
       }
 
-      // Fetch schedule from Twitch API
-      const scheduleResponse = await getStreamSchedule(twitchUserId);
+      const scheduleData = { segments: source === 'twitch' ? twitchSegments : mergeSegments(source, twitchSegments, customDays, tz) };
 
-      if (!scheduleResponse || !scheduleResponse.data) {
-        logger.debug(`[TwitchScheduleManager] No schedule data available for ${syncConfig.username}`);
-        if (syncConfig.force_refresh) {
-          await pool.execute('UPDATE twitch_schedule_sync_config SET force_refresh = 0 WHERE id = ?', [syncConfig.id]);
-        }
-        return;
-      }
-
-      const scheduleData = scheduleResponse.data.data;
-
-      if (!scheduleData || !scheduleData.segments || scheduleData.segments.length === 0) {
+      if (scheduleData.segments.length === 0 && !customDays.size) {
         logger.debug(`[TwitchScheduleManager] No scheduled streams for ${syncConfig.username}`);
         if (syncConfig.force_refresh) {
           await pool.execute('UPDATE twitch_schedule_sync_config SET force_refresh = 0 WHERE id = ?', [syncConfig.id]);
@@ -170,8 +229,13 @@ export default class TwitchScheduleManager {
         return;
       }
 
-      // Hash the schedule to detect changes
-      const newHash = this.hashSchedule(scheduleData.segments);
+      // Hash the schedule to detect changes. A filled-in day off has no segment, and a month poster
+      // has to move on when the month does, so both go into the hash.
+      const parts = [this.hashSchedule(scheduleData.segments)];
+      if (customDays.size) parts.push(hashCustomDays(customDays));
+      if (syncConfig.layout === 'calendar') { const m = posterMonth(tz); parts.push(`${m.year}-${m.month}`); }
+      const newHash = parts.length === 1 ? parts[0]
+        : crypto.createHash('sha256').update(parts.join('|')).digest('hex').substring(0, 16);
       const oldHash = syncConfig.schedule_hash;
 
       // Weekly refresh — if enabled and 7+ days have passed, always proceed even if hash is unchanged
@@ -186,6 +250,12 @@ export default class TwitchScheduleManager {
       // is wanted even when Twitch's data is identical to what's already posted.
       if (!skipCooldown && newHash === oldHash && syncConfig.last_message_id && !syncConfig.change_detected_at && !weeklyDue) {
         logger.debug(`[TwitchScheduleManager] Schedule unchanged for ${syncConfig.username}`);
+        // Every other early return clears this; without it here a force_refresh
+        // set while the schedule happens to be unchanged would stay pending for
+        // good, making the row permanently "due" on every single tick.
+        if (syncConfig.force_refresh) {
+          await pool.execute('UPDATE twitch_schedule_sync_config SET force_refresh = 0 WHERE id = ?', [syncConfig.id]);
+        }
         return;
       }
 
@@ -222,9 +292,10 @@ export default class TwitchScheduleManager {
       }
 
       // Ready to post/edit — cooldown passed or first-time post
-      const channel = await this.client.channels.fetch(syncConfig.discord_channel_id).catch(() => null);
+      let channelError = null;
+      const channel = await this.client.channels.fetch(syncConfig.discord_channel_id).catch(err => { channelError = err; return null; });
       if (!channel) {
-        logger.warn(`[TwitchScheduleManager] Channel ${syncConfig.discord_channel_id} not found for guild ${syncConfig.guild_id}`);
+        await this.handleMissingChannel(syncConfig, channelError);
         return;
       }
 
@@ -235,11 +306,13 @@ export default class TwitchScheduleManager {
       try { previousSegments = syncConfig.previous_segments_json ? JSON.parse(syncConfig.previous_segments_json) : []; } catch {}
       const nowMs = Date.now();
       const currentIds = new Set(scheduleData.segments.map(s => s.id));
-      const canceledSegments = previousSegments
-        .filter(p => p?.id && !currentIds.has(p.id) && p.start_time && new Date(p.start_time).getTime() > nowMs);
+      const canceledSegments = source === 'custom' ? [] : previousSegments
+        .filter(p => p?.id && !currentIds.has(p.id) && p.start_time && new Date(p.start_time).getTime() > nowMs)
+        .filter(p => !String(p.id).startsWith('custom:') && !(tz && customDays.has(localDayKey(p.start_time, tz))));
 
       const embed = await this.buildScheduleEmbed(syncConfig, scheduleData);
-      const scheduleImage = await this.buildScheduleImage(syncConfig, scheduleData, canceledSegments).catch(err => {
+      const drawn = {};
+      const scheduleImage = await this.buildScheduleImage(syncConfig, scheduleData, canceledSegments, drawn).catch(err => {
         logger.warn(`[TwitchScheduleManager] image render failed for ${syncConfig.username}: ${err.message}`);
         return null;
       });
@@ -254,11 +327,6 @@ export default class TwitchScheduleManager {
         }
       }
 
-      const messagePayload = { content: messageContent, embeds: [embed] };
-      if (scheduleImage) {
-        messagePayload.files = [new AttachmentBuilder(scheduleImage, { name: `${syncConfig.username}-schedule.png` })];
-        embed.setImage(`attachment://${syncConfig.username}-schedule.png`);
-      }
       let messageId = syncConfig.last_message_id;
 
       // Weekly refresh already computed above as `weeklyDue`.
@@ -278,24 +346,28 @@ export default class TwitchScheduleManager {
         messageId = null; // force a fresh send
       }
 
-      // Try to edit existing message first (unless weekly refresh cleared it)
-      if (messageId) {
-        try {
-          const existingMsg = await channel.messages.fetch(messageId);
-          await existingMsg.edit(messagePayload);
-          logger.info(`[TwitchScheduleManager] Edited schedule for ${syncConfig.username} in guild ${syncConfig.guild_id}`);
-        } catch (err) {
-          logger.warn(`[TwitchScheduleManager] Failed to edit existing schedule message ${messageId} for ${syncConfig.username} in guild ${syncConfig.guild_id} (${err.message}) — sending new message`);
-          messageId = null;
+      this._lastUser = syncConfig.username;
+      const written = await this.writeScheduleMessage({
+        channelId: channel.id,
+        messageId,
+        content: messageContent,
+        embed,
+        image: scheduleImage,
+        filename: `${syncConfig.username}-schedule.png`,
+        /* The card's own description of itself when it drew one — the API
+           response describes far more streams than any card shows. */
+        altText: normalizeAltText(drawn.alt
+          || describeTwitchSchedule(syncConfig.username, scheduleData.segments, canceledSegments)),
+      });
+      if (!written) {
+        logger.error(`[TwitchScheduleManager] Could not write the schedule for ${syncConfig.username} in guild ${syncConfig.guild_id}`);
+        if (syncConfig.force_refresh) {
+          await pool.execute('UPDATE twitch_schedule_sync_config SET force_refresh = 0 WHERE id = ?', [syncConfig.id]);
         }
+        logScheduleFailed(this.client, syncConfig, 'Discord refused the schedule message — check the bot can send messages and attach files in that channel', channel);
+        return;
       }
-
-      // Send new message if no existing message to edit
-      if (!messageId) {
-        const newMsg = await channel.send(messagePayload);
-        messageId = newMsg.id;
-        logger.info(`[TwitchScheduleManager] Posted new schedule for ${syncConfig.username} in guild ${syncConfig.guild_id}`);
-      }
+      messageId = written;
 
       // Snapshot current segments so the next sync can diff for cancellations.
       const segmentsSnapshot = JSON.stringify(scheduleData.segments.map(s => ({
@@ -322,12 +394,34 @@ export default class TwitchScheduleManager {
           await pool.execute('UPDATE twitch_schedule_sync_config SET schedule_hash = ?, last_message_id = ?, last_synced = NOW(), change_detected_at = NULL, force_refresh = 0 WHERE id = ?', [newHash, messageId, syncConfig.id]);
         });
       }
+
+      // The old message was deleted for the weekly repost; an edit keeps its id; anything else is a fresh post.
+      const previousId = syncConfig.last_message_id;
+      const messageUrl = `https://discord.com/channels/${syncConfig.guild_id}/${channel.id}/${messageId}`;
+      void logFeatureEvent(() => (scheduleLogGuild(this.client, syncConfig, channel)),
+        () => (weeklyDue && previousId ? 'twitch-schedule.weekly' : previousId && messageId === previousId ? 'twitch-schedule.updated' : 'twitch-schedule.posted'), () => ({
+          title: weeklyDue && previousId ? '🗓️ Schedule Reposted (Weekly)' : previousId && messageId === previousId ? '🔄 Schedule Updated' : '📅 Schedule Posted',
+          description: `[${syncConfig.username}'s Twitch schedule](${messageUrl}) in ${channel}.`,
+          fields: [
+            ['Streamer', syncConfig.username],
+            ['Channel', `${channel}`],
+            ['Streams listed', scheduleData.segments.length],
+            ['Cancelled', canceledSegments.length || null],
+          ],
+          url: messageUrl,
+          avoidChannelIds: [channel.id],
+        }));
     } catch (error) {
+      if (error?.status || error?.rawError) {
+        logger.error(`[TwitchScheduleManager] DISCORD ${error.status} for ${syncConfig.username}: `
+          + `${JSON.stringify(error.rawError || {}).slice(0, 600)} | url=${error.url || '?'}`);
+      }
       logger.error(`[TwitchScheduleManager] Error syncing schedule for ${syncConfig.username}:`, {
         error: error.message,
         stack: error.stack,
         guildId: syncConfig.guild_id
       });
+      logScheduleFailed(this.client, syncConfig, error?.status ? `Discord error ${error.status}: ${error.message}` : error?.message);
     }
   }
 
@@ -337,6 +431,67 @@ export default class TwitchScheduleManager {
    * @param {Object} scheduleData - The schedule data from Twitch
    * @returns {Promise<EmbedBuilder>}
    */
+
+  /**
+   * Write the schedule message through plain REST rather than discord.js.
+   *
+   * discord.js returns HTTP 500 with an empty body for this payload — on edit AND
+   * on send — while the identical content posted as hand-built multipart returns
+   * 200 every time. That was verified against the real data: 20 segments, the
+   * decorated titles, the full 1024-character alt text, with and without the
+   * file, at 10/3/0 embed fields. The data is not the problem; the builder is.
+   *
+   * Returns the message id, or null if the write failed.
+   */
+  async writeScheduleMessage({ channelId, messageId, content, embed, image, filename, altText }) {
+    const token = this.client?.token;
+    if (!token) return null;
+    const base = `https://discord.com/api/v10/channels/${channelId}/messages`;
+    const headers = { Authorization: `Bot ${token}` };
+
+    const payload = { content, embeds: [embed.toJSON ? embed.toJSON() : embed] };
+    const form = new FormData();
+    if (image) {
+      payload.embeds[0].image = { url: `attachment://${filename}` };
+      // Naming the attachment explicitly is what lets the embed reference it and
+      // what carries the alt text; on an edit it also replaces the old file.
+      payload.attachments = [{ id: 0, filename, description: altText }];
+    } else if (messageId) {
+      /* Dropping the attachment while leaving embed.image pointed at the old CDN
+         URL is what produces "image failed to load": the link stays in the embed
+         and 404s the moment the file it named is gone. If there is no file this
+         time, the image reference has to go with it. */
+      delete payload.embeds[0].image;
+      payload.attachments = [];
+    }
+    form.append('payload_json', JSON.stringify(payload));
+    if (image) form.append('files[0]', new Blob([image], { type: 'image/png' }), filename);
+
+    const attempt = async (url, method) => {
+      const res = await fetch(url, { method, headers, body: form });
+      if (res.ok) return res.json();
+      const body = await res.text().catch(() => '');
+      throw Object.assign(new Error(`HTTP ${res.status}`), { status: res.status, body });
+    };
+
+    if (messageId) {
+      try {
+        const msg = await attempt(`${base}/${messageId}`, 'PATCH');
+        logger.info(`[TwitchScheduleManager] Edited schedule for ${this._lastUser || 'streamer'}`);
+        return msg.id;
+      } catch (e) {
+        logger.warn(`[TwitchScheduleManager] Edit failed (${e.status}${e.body ? ' ' + e.body.slice(0, 120) : ''}) — posting fresh`);
+      }
+    }
+    try {
+      const msg = await attempt(base, 'POST');
+      return msg.id;
+    } catch (e) {
+      logger.error(`[TwitchScheduleManager] Post failed: ${e.status} ${e.body?.slice(0, 200) || ''}`);
+      return null;
+    }
+  }
+
   async buildScheduleEmbed(syncConfig, scheduleData) {
     const embed = new EmbedBuilder()
       .setColor('#9146FF') // Twitch purple
@@ -348,8 +503,20 @@ export default class TwitchScheduleManager {
       embed.setThumbnail(syncConfig.profile_image_url);
     }
 
-    // Add scheduled streams (limit to next 10)
-    const segments = scheduleData.segments.slice(0, 10);
+    /* The same week the card shows, not everything Twitch returns.
+     *
+     * These layouts draw one week. Listing a month underneath it contradicts the
+     * picture — the owner's six-nights-a-week schedule came back as 20 segments
+     * and the embed footer announced all of them. The month grid still lists the
+     * month, because that is what it draws. */
+    const weekly = syncConfig.layout === 'overlay' || syncConfig.layout === 'rows' || syncConfig.layout === 'poster';
+    const pool_ = weekly
+      ? weekWindow(scheduleData.segments, await getGuildTimezone(syncConfig.guild_id))
+      : syncConfig.layout === 'calendar'
+        // A filled-in month keeps its past days; the list under the poster is what's still to come.
+        ? scheduleData.segments.filter(s => new Date(s.end_time || s.start_time).getTime() > Date.now())
+        : scheduleData.segments;
+    const segments = pool_.slice(0, 10);
 
     for (const segment of segments) {
       const startTime = new Date(segment.start_time);
@@ -368,9 +535,13 @@ export default class TwitchScheduleManager {
       });
     }
 
-    if (scheduleData.segments.length > 10) {
+    if (pool_.length > 10) {
       embed.setFooter({
-        text: `Showing 10 of ${scheduleData.segments.length} scheduled streams`
+        text: `Showing 10 of ${pool_.length} scheduled streams`
+      });
+    } else if (weekly && pool_.length) {
+      embed.setFooter({
+        text: `${pool_.length} stream${pool_.length === 1 ? '' : 's'} scheduled this week`
       });
     }
 
@@ -383,10 +554,11 @@ export default class TwitchScheduleManager {
    * and segments are bucketed into the guild-local day so a stream that's "tonight"
    * locally never appears under tomorrow's date because of UTC rollover.
    */
-  async buildScheduleImage(syncConfig, scheduleData, canceledSegments = []) {
+  async buildScheduleImage(syncConfig, scheduleData, canceledSegments = [], out = {}) {
     if (!Canvas) return null;
     const segments = scheduleData.segments || [];
-    if (!segments.length && !canceledSegments.length) return null;
+    const hasCustomDays = !!syncConfig._customDays?.size;
+    if (!segments.length && !canceledSegments.length && !hasCustomDays) return null;
 
     const tz = await getGuildTimezone(syncConfig.guild_id);
     const referenceDate = new Date(
@@ -394,11 +566,363 @@ export default class TwitchScheduleManager {
     );
     const zoneAbbr = getZoneAbbreviation(tz, referenceDate);
 
+    /* The month grid is one of three looks now. `layout` decides; anything it
+       does not name falls through to the grid this class has always drawn, so a
+       guild that never picks a style keeps exactly what it had. */
+    const layout = syncConfig.layout || 'month';
+    if (layout === 'calendar') {
+      const art = await this.buildCalendarPoster(syncConfig, segments, canceledSegments, tz, posterMonth(tz), out);
+      if (art) return art;
+      logger.warn(`[TwitchSchedule] calendar poster failed for guild ${syncConfig.guild_id}, using the grid`,
+        { category: 'twitch' });
+    }
+    if (layout === 'overlay' || layout === 'rows' || layout === 'exact' || layout === 'poster') {
+      const art = await this._buildArtCard(syncConfig, segments, canceledSegments, tz, zoneAbbr, layout, out);
+      if (art) return art;
+      // Falling through is deliberate: a backdrop that will not load or a
+      // renderer that returns nothing must not cost the guild its schedule post.
+      logger.warn(`[TwitchSchedule] ${layout} card failed for guild ${syncConfig.guild_id}, using the grid`,
+        { category: 'twitch' });
+    }
+
     const mode = syncConfig.view_mode === 'weekly' ? 'weekly' : 'monthly';
     if (mode === 'weekly') {
       return this._buildWeeklyImage(syncConfig, segments, canceledSegments, tz, zoneAbbr);
     }
     return this._buildMonthlyImage(syncConfig, segments, canceledSegments, tz, zoneAbbr);
+  }
+
+  /** The month poster. Also what the dashboard preview draws. */
+  async buildCalendarPoster(syncConfig, segments, canceledSegments, tz, { year, month }, out = {}) {
+    const { drawCalendar } = await import('./schedule-calendar-art.js');
+    const days = buildMonth({
+      year, month, tz, segments, canceled: canceledSegments,
+      source: syncConfig.schedule_source || 'twitch',
+      days: syncConfig._customDays || new Map(),
+    });
+    const name = monthName(year, month);
+    const planned = days.filter(d => d.kind === 'stream');
+    out.alt = planned.length
+      ? `${syncConfig.username}'s ${name} ${year} stream schedule: ${planned.map(d => `${name} ${d.date}, ${d.title}${d.time ? `, ${d.time}` : ''}`).join('; ')}.`
+      : `${syncConfig.username}'s ${name} ${year} stream schedule: no streams planned.`;
+
+    let sideArt = null;
+    if (syncConfig.side_art_url) {
+      const { download } = await import('../utils/schedule-background.js');
+      sideArt = await download(syncConfig.side_art_url).catch(e => {
+        logger.warn(`[TwitchSchedule] side art failed for guild ${syncConfig.guild_id}: ${e.message}`, { category: 'twitch' });
+        return null;
+      });
+    }
+    return drawCalendar({
+      monthName: name, year, firstWeekday: firstWeekday(year, month), days,
+      title: syncConfig.card_title || 'Stream Schedule',
+      disclaimer: syncConfig.card_disclaimer || null,
+      sideArt,
+    });
+  }
+
+  /**
+   * The overlay and rows cards. Segments are collapsed to one line per weekday —
+   * both layouts are a week at a glance, not a month, and a day with two streams
+   * reads better as "8PM, 11PM" than as two rows saying the same weekday twice.
+   */
+  async _buildArtCard(syncConfig, segments, canceledSegments, tz, zoneAbbr, layout, out = {}) {
+    const { renderSchedule } = await import('./schedule-art.js');
+    const { resolveBackground } = await import('../utils/schedule-background.js');
+
+    /* One week, not everything Twitch returns.
+     *
+     * A recurring schedule comes back as 20+ segments stretching a month ahead.
+     * Collapsing those by weekday without a window gives "Monday: 10PM, 10PM,
+     * 10PM" — the same slot repeated once per week. These layouts show a week. */
+    const inWindow = new Set(weekWindow([...segments, ...canceledSegments], tz));
+
+    const byDay = new Map();
+    const note = (seg, cancelled) => {
+      const start = new Date(seg.start_time);
+      const day = formatTimeInZone(start, tz, { weekday: 'long' });
+      const time = formatTimeInZone(start, tz, { hour: 'numeric', minute: '2-digit' });
+      const end = seg.end_time
+        ? formatTimeInZone(new Date(seg.end_time), tz, { hour: 'numeric', minute: '2-digit' })
+        : null;
+      const entry = byDay.get(day) || { day, times: [], titles: [], cancelled: true };
+      // Twitch can hand back the same slot twice; one day never lists a time twice.
+      const slot = end ? `${time} – ${end}` : time;
+      if (!entry.times.includes(slot)) entry.times.push(slot);
+      /* Prefer the CATEGORY over the stream title when the title is decorated.
+         *
+         * Titles come styled — Mathematical Script letters the display faces have
+         * no glyphs for, and emoji scattered through the words. Either way the
+         * drawn result is wrong: boxes, or words with pieces missing. The category
+         * is the plain game name Twitch already holds, and it is what a schedule
+         * card wants to say. A plain title is used as written. */
+      const raw = seg.title || seg.category?.name || '';  // use the EXACT Twitch stream title verbatim
+      const title = toPlain(raw)
+        .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '')
+        .replace(/\s+/g, ' ').trim();
+      if (title && !entry.titles.includes(title)) entry.titles.push(title);
+      // A day is only "cancelled" if every stream on it is.
+      if (!cancelled) entry.cancelled = false;
+      byDay.set(day, entry);
+    };
+    for (const seg of segments.filter((s) => inWindow.has(s))) note(seg, false);
+    for (const seg of canceledSegments.filter((s) => inWindow.has(s))) note(seg, true);
+    // Nothing this week is not an error — fall back rather than draw an empty card.
+    if (!byDay.size) return null;
+
+    const ORDER = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+    const rows = [...byDay.values()]
+      .sort((a, b) => ORDER.indexOf(a.day) - ORDER.indexOf(b.day))
+      .map(e => ({
+        day: e.day,
+        times: e.times,
+        zone: zoneAbbr,
+        time: `${e.times.join(', ')} ${zoneAbbr}`.trim(),
+        title: e.titles.join(' + '),
+        cancelled: e.cancelled,
+      }));
+    if (!rows.length) return null;
+
+    const windowed = [...inWindow]
+      .sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
+    const first = new Date((windowed[0] || segments[0] || canceledSegments[0]).start_time);
+    const span = formatTimeInZone(first, tz, { month: 'long', day: 'numeric' });
+    out.alt = describeScheduleRows(syncConfig.username, rows, span);
+
+    /* 'exact' layout is a separate pipeline: fetch the raw uploaded image
+       (no restyle, no blur), detect panel regions once per uploaded image, and
+       hand both to the renderer. If anything in this path fails, fall through
+       to the normal background-generation flow so the schedule still ships. */
+    if (layout === 'exact' && syncConfig.background_mode === 'exact' && syncConfig.background_url) {
+      try {
+        const [{ download }, { getCachedPanels }] = await Promise.all([
+          import('../utils/schedule-background.js'),
+          import('../utils/schedule-panel-detect.js'),
+        ]);
+        const rawBuffer = await download(syncConfig.background_url);
+        const regions = await getCachedPanels(syncConfig, syncConfig.background_url, rawBuffer, pool);
+        const ORDER_INLINE = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+        const byDayLocal = new Map();
+        const noteLocal = (seg, cancelled) => {
+          const start = new Date(seg.start_time);
+          const day = formatTimeInZone(start, tz, { weekday: 'long' });
+          const time = formatTimeInZone(start, tz, { hour: 'numeric', minute: '2-digit' });
+          const end = seg.end_time
+            ? formatTimeInZone(new Date(seg.end_time), tz, { hour: 'numeric', minute: '2-digit' })
+            : null;
+          const entry = byDayLocal.get(day) || { day, times: [], titles: [], cancelled: true };
+          const slot = end ? `${time} – ${end}` : time;
+          if (!entry.times.includes(slot)) entry.times.push(slot);
+          const raw = seg.title || seg.category?.name || '';  // use the EXACT Twitch stream title verbatim
+          const title = toPlain(raw).replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '').replace(/\s+/g, ' ').trim();
+          if (title && !entry.titles.includes(title)) entry.titles.push(title);
+          if (!cancelled) entry.cancelled = false;
+          byDayLocal.set(day, entry);
+        };
+        const inWindowLocal = new Set(weekWindow([...segments, ...canceledSegments], tz));
+        for (const seg of segments.filter(s => inWindowLocal.has(s))) noteLocal(seg, false);
+        for (const seg of canceledSegments.filter(s => inWindowLocal.has(s))) noteLocal(seg, true);
+        const rowsLocal = [...byDayLocal.values()]
+          .sort((a, b) => ORDER_INLINE.indexOf(a.day) - ORDER_INLINE.indexOf(b.day))
+          .map(e => ({
+            day: e.day, times: e.times, zone: zoneAbbr,
+            time: `${e.times.join(', ')} ${zoneAbbr}`.trim(),
+            title: e.titles.join(' + '),
+            cancelled: e.cancelled,
+          }));
+        if (regions?.panels?.length) {
+          const { renderSchedule } = await import('./schedule-art.js');
+          return renderSchedule({
+            layout: 'exact',
+            title: syncConfig.card_title || syncConfig.username || 'Stream schedule',
+            subtitle: `Week of ${formatTimeInZone(new Date((segments[0] || canceledSegments[0])?.start_time || Date.now()), tz, { month: 'long', day: 'numeric' })}`,
+            footer: syncConfig.card_footer || `All times ${zoneAbbr}`,
+            accent: syncConfig.accent_color || '#C7A5E8',
+            rows: rowsLocal,
+            imageBuffer: rawBuffer,
+            regions,
+          });
+        }
+        logger.warn(`[TwitchSchedule] no panels detected for guild ${syncConfig.guild_id}, using 'rows' fallback`,
+          { category: 'twitch' });
+      } catch (e) {
+        logger.warn(`[TwitchSchedule] exact-mode render failed for guild ${syncConfig.guild_id}: ${e.message}`,
+          { category: 'twitch' });
+      }
+    }
+
+    /* Second exact-mode branch: background_mode='style' means Gemini should
+       generate a BLANK stylized template from the owner's reference, and the
+       renderer overlays schedule text onto that empty surface using an
+       auto-computed 7-panel layout. This is the right path when the owner's
+       upload is a FINISHED poster with baked-in text — writing on top of
+       baked-in text produces the double-text ugliness that shipped before. */
+    if (layout === 'exact' && (syncConfig.background_mode === 'style'
+                               || syncConfig.background_mode === 'prompt')) {
+      try {
+        const { renderSchedule, defaultPanels } = await import('./schedule-art.js');
+        const bg = await resolveBackground({ ...syncConfig, layout: 'rows' }, pool);
+        if (bg.buffer) {
+          // Save the generated template URL so Gemini isn't rebilled every sync.
+          if (bg.cacheUrl && bg.cacheUrl !== syncConfig.background_cache_url) {
+            await pool.execute(
+              'UPDATE twitch_schedule_sync_config SET background_cache_url = ? WHERE id = ?',
+              [bg.cacheUrl, syncConfig.id]
+            ).catch(() => {});
+            const replacedCache = syncConfig.background_cache_url;
+            syncConfig.background_cache_url = bg.cacheUrl;
+            void discardReplacedUpload(replacedCache, bg.cacheUrl);   // H-706
+          }
+          const { default: sharp } = await import('sharp');
+          const meta = await sharp(bg.buffer).metadata();
+          const regions = defaultPanels(meta.width || 1080, meta.height || 1920);
+          const ORDER = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+          const byDay = new Map();
+          const inWindow = new Set(weekWindow([...segments, ...canceledSegments], tz));
+          const note = (seg, cancelled) => {
+            const start = new Date(seg.start_time);
+            const day = formatTimeInZone(start, tz, { weekday: 'long' });
+            const time = formatTimeInZone(start, tz, { hour: 'numeric', minute: '2-digit' });
+            const end = seg.end_time
+              ? formatTimeInZone(new Date(seg.end_time), tz, { hour: 'numeric', minute: '2-digit' })
+              : null;
+            const entry = byDay.get(day) || { day, times: [], titles: [], cancelled: true };
+            const slot = end ? `${time} – ${end}` : time;
+            if (!entry.times.includes(slot)) entry.times.push(slot);
+            const raw = seg.title || seg.category?.name || '';  // use the EXACT Twitch stream title verbatim
+            const title = toPlain(raw)
+              .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '')
+              .replace(/\s+/g, ' ').trim();
+            if (title && !entry.titles.includes(title)) entry.titles.push(title);
+            if (!cancelled) entry.cancelled = false;
+            byDay.set(day, entry);
+          };
+          for (const seg of segments.filter(s => inWindow.has(s))) note(seg, false);
+          for (const seg of canceledSegments.filter(s => inWindow.has(s))) note(seg, true);
+          const rowsStyle = [...byDay.values()]
+            .sort((a, b) => ORDER.indexOf(a.day) - ORDER.indexOf(b.day))
+            .map(e => ({
+              day: e.day, times: e.times, zone: zoneAbbr,
+              time: `${e.times.join(', ')} ${zoneAbbr}`.trim(),
+              title: e.titles.join(' + '),
+              cancelled: e.cancelled,
+            }));
+          const windowed = [...inWindow].sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
+          const first = new Date((windowed[0] || segments[0] || canceledSegments[0]).start_time);
+          const spanLabel = formatTimeInZone(first, tz, { month: 'long', day: 'numeric' });
+          out.alt = describeScheduleRows(syncConfig.username, rowsStyle, spanLabel);
+          return renderSchedule({
+            layout: 'exact',
+            title: syncConfig.card_title || syncConfig.username || 'Stream schedule',
+            subtitle: `Week of ${spanLabel}`,
+            footer: syncConfig.card_footer || `All times ${zoneAbbr}`,
+            accent: syncConfig.accent_color || '#C7A5E8',
+            rows: rowsStyle,
+            imageBuffer: bg.buffer,
+            regions,
+          });
+        }
+      } catch (e) {
+        logger.warn(`[TwitchSchedule] exact+style render failed for guild ${syncConfig.guild_id}: ${e.message}`,
+          { category: 'twitch' });
+      }
+    }
+
+    /* Poster branch — same style pipeline as exact+style (Gemini scrubs text
+       off the reference), but renders the Canva-style poster layout: big
+       metallic "STREAM SCHEDULE", purple→pink date range, one day per line
+       with the stream title as a sub-caption, and a brush-script handle at
+       the bottom. Driven by canvas size — no region detection needed. */
+    if (layout === 'poster'
+        && (syncConfig.background_mode === 'style' || syncConfig.background_mode === 'prompt'
+            || syncConfig.background_mode === 'upload')) {
+      try {
+        const { renderSchedule } = await import('./schedule-art.js');
+        const bg = await resolveBackground({ ...syncConfig, layout: 'rows' }, pool);
+        if (bg.buffer) {
+          if (bg.cacheUrl && bg.cacheUrl !== syncConfig.background_cache_url) {
+            await pool.execute(
+              'UPDATE twitch_schedule_sync_config SET background_cache_url = ? WHERE id = ?',
+              [bg.cacheUrl, syncConfig.id]
+            ).catch(() => {});
+            const replacedCache = syncConfig.background_cache_url;
+            syncConfig.background_cache_url = bg.cacheUrl;
+            void discardReplacedUpload(replacedCache, bg.cacheUrl);   // H-706
+          }
+          const ORDER = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+          const byDay = new Map();
+          const inWindow = new Set(weekWindow([...segments, ...canceledSegments], tz));
+          const note = (seg, cancelled) => {
+            const start = new Date(seg.start_time);
+            const day = formatTimeInZone(start, tz, { weekday: 'long' });
+            const time = formatTimeInZone(start, tz, { hour: 'numeric', minute: '2-digit' });
+            const entry = byDay.get(day) || { day, times: [], titles: [], cancelled: true };
+            if (!entry.times.includes(time)) entry.times.push(time);
+            const title = toPlain(seg.title || seg.category?.name || '')
+              .replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '')
+              .replace(/\s+/g, ' ').trim();
+            if (title && !entry.titles.includes(title)) entry.titles.push(title);
+            if (!cancelled) entry.cancelled = false;
+            byDay.set(day, entry);
+          };
+          for (const seg of segments.filter(s => inWindow.has(s))) note(seg, false);
+          for (const seg of canceledSegments.filter(s => inWindow.has(s))) note(seg, true);
+          const rowsStyle = [...byDay.values()]
+            .sort((a, b) => ORDER.indexOf(a.day) - ORDER.indexOf(b.day))
+            .map(e => ({
+              day: e.day, times: e.times, zone: zoneAbbr,
+              title: e.titles.join(' · '),
+              cancelled: e.cancelled,
+            }));
+          const windowed = [...inWindow].sort((a, b) => new Date(a.start_time) - new Date(b.start_time));
+          const first = windowed.length ? new Date(windowed[0].start_time) : new Date();
+          const last  = windowed.length ? new Date(windowed[windowed.length - 1].start_time) : first;
+          const fmtMD = (d) => formatTimeInZone(d, tz, { month: 'short', day: 'numeric' });
+          const spanText = windowed.length
+            ? (fmtMD(first) === fmtMD(last) ? fmtMD(first) : `${fmtMD(first)} to ${fmtMD(last)}`)
+            : fmtMD(first);
+          out.alt = describeScheduleRows(syncConfig.username, rowsStyle, spanText);
+          return renderSchedule({
+            layout: 'poster',
+            title: syncConfig.card_title || 'Stream Schedule',
+            subtitle: spanText,
+            footer: syncConfig.card_footer || `@${syncConfig.username} on Twitch`,
+            accent: syncConfig.accent_color || '#9146FF',
+            rows: rowsStyle,
+            imageBuffer: bg.buffer,
+          });
+        }
+      } catch (e) {
+        logger.warn(`[TwitchSchedule] poster render failed for guild ${syncConfig.guild_id}: ${e.message}`,
+          { category: 'twitch' });
+      }
+    }
+
+
+    const { buffer, cacheUrl } = await resolveBackground(syncConfig, pool);
+    /* Save the generated artwork URL so we don't rebill the provider every
+     * sync. resolveBackground re-downloads from this URL on later calls and
+     * only regenerates when the URL stops working or the reference changes. */
+    if (cacheUrl && cacheUrl !== syncConfig.background_cache_url) {
+      await pool.execute(
+        'UPDATE twitch_schedule_sync_config SET background_cache_url = ? WHERE id = ?',
+        [cacheUrl, syncConfig.id]
+      ).catch(() => {});
+      const replacedCache = syncConfig.background_cache_url;
+      syncConfig.background_cache_url = cacheUrl;
+      void discardReplacedUpload(replacedCache, cacheUrl);   // H-706
+    }
+    return renderSchedule({
+      layout,
+      title: syncConfig.card_title || syncConfig.username || 'Stream schedule',
+      subtitle: `Twitch schedule · week of ${span}`,
+      footer: syncConfig.card_footer || `All times ${zoneAbbr}`,
+      accent: syncConfig.accent_color || '#C7A5E8',
+      rows,
+      mode: buffer ? (syncConfig.background_mode || 'upload') : 'default',
+      imageBuffer: buffer,
+    });
   }
 
   /**
@@ -732,12 +1256,99 @@ export default class TwitchScheduleManager {
   }
 
   /**
+   * The schedule's channel could not be fetched (H-312). Until 2026-11-18 a sync whose channel or
+   * server was gone warned on every tick forever (513 warnings in 48 h for one sync) and the server
+   * was never told. Now:
+   *   - Unknown Channel (10003), or the channel missing from a server this bot has cached: the
+   *     channel was deleted. Pause with reason channel_deleted, tell the server once in its log
+   *     channel; the dashboard shows "Paused: channel deleted" with a channel picker.
+   *   - No bot of ours is in the server (and bots are not still starting): pause with reason
+   *     guild_left; processAllSyncs resumes it if a bot is back.
+   *   - Anything else (missing permission, network): keep retrying, warn once per 6 hours.
+   */
+  async handleMissingChannel(syncConfig, channelError) {
+    const guildId = syncConfig.guild_id;
+    const channelId = syncConfig.discord_channel_id;
+    const guild = this.client.guilds.cache.get(guildId);
+    const bm = global.botManager;
+    let reason = null;
+    if (guild) {
+      if (channelError?.code === 10003 || (!channelError && !guild.channels.cache.has(channelId))) reason = 'channel_deleted';
+    } else if (this.client.isReady?.() && !bm?.isStarting?.() && !servedByAnotherClient(bm, guildId, this.client)) {
+      reason = 'guild_left';
+    }
+
+    if (reason && await this.pauseSync(syncConfig, reason)) {
+      logger.warn(`[TwitchScheduleManager] Paused schedule sync ${syncConfig.id} (${syncConfig.username}) in guild ${guildId}: ${reason === 'channel_deleted' ? `channel ${channelId} was deleted` : 'no bot of ours is in that server'}`, {
+        guildId, channelId, reason, error: channelError?.message,
+      });
+      missingChannelWarnedAt.delete(syncConfig.id);
+      if (reason === 'channel_deleted') {
+        void logFeatureEvent(() => guild, 'system.featureDisabled', () => ({
+          title: '⛔ Feature Auto-Disabled',
+          fields: [
+            ['Feature', 'Twitch schedule sync'], ['Streamer', syncConfig.username],
+            ['Why', `Its channel (${channelId}) was deleted`],
+            ['Fix', 'Pick a new channel for it on the Twitch Schedules page; it starts posting again there', false],
+          ],
+        }));
+      }
+      return;
+    }
+
+    const last = missingChannelWarnedAt.get(syncConfig.id) || 0;
+    if (Date.now() - last >= MISSING_CHANNEL_WARN_MS) {
+      missingChannelWarnedAt.set(syncConfig.id, Date.now());
+      logger.warn(`[TwitchScheduleManager] Channel ${channelId} not reachable for guild ${guildId} (sync ${syncConfig.id}, ${syncConfig.username}): ${channelError?.message || 'not in cache'}. Retrying; next warning in 6 hours`, {
+        guildId, channelId, code: channelError?.code,
+      });
+      if (guild) logScheduleFailed(this.client, syncConfig, `The bot cannot open the schedule channel: ${channelError?.message || 'not visible to the bot'}`);
+    }
+  }
+
+  /** Switch a sync off and record why. False when nothing was changed. */
+  async pauseSync(syncConfig, reason) {
+    try {
+      const [res] = await pool.execute(
+        'UPDATE twitch_schedule_sync_config SET is_enabled = 0, paused_reason = ?, paused_at = NOW() WHERE id = ? AND is_enabled = 1',
+        [reason, syncConfig.id]);
+      return res.affectedRows > 0;
+    } catch (e) {
+      if (e.code !== 'ER_BAD_FIELD_ERROR') throw e;
+      // Migration 434 not applied yet. A deleted channel never comes back, so switch it off anyway;
+      // a server we left might take the bot back, and without the reason column it could never be
+      // resumed automatically, so leave that one running (its warning is throttled above).
+      if (reason !== 'channel_deleted') return false;
+      const [res] = await pool.execute('UPDATE twitch_schedule_sync_config SET is_enabled = 0 WHERE id = ? AND is_enabled = 1', [syncConfig.id]);
+      return res.affectedRows > 0;
+    }
+  }
+
+  /** Resume guild_left syncs for servers this bot is back in. */
+  async resumeReturnedGuilds() {
+    let rows;
+    try {
+      [rows] = await pool.execute("SELECT id, guild_id FROM twitch_schedule_sync_config WHERE paused_reason = 'guild_left'");
+    } catch (e) {
+      if (e.code === 'ER_BAD_FIELD_ERROR') return;
+      throw e;
+    }
+    const back = rows.filter(r => this.client.guilds.cache.has(r.guild_id)).map(r => r.id);
+    if (!back.length) return;
+    await pool.query(
+      "UPDATE twitch_schedule_sync_config SET is_enabled = 1, paused_reason = NULL, paused_at = NULL WHERE paused_reason = 'guild_left' AND id IN (?)",
+      [back]);
+    logger.info(`[TwitchScheduleManager] Resumed ${back.length} schedule sync(s): the bot is back in their server`, { ids: back });
+  }
+
+  /**
    * Process all enabled schedule syncs.
    * Skips syncs whose sync_interval_minutes hasn't elapsed since last_synced
    * AND which are not due for a weekly refresh — avoids redundant Twitch API calls.
    */
   async processAllSyncs() {
     try {
+      await this.resumeReturnedGuilds().catch(e => logger.warn(`[TwitchScheduleManager] Could not check paused syncs: ${e.message}`));
       const syncs = await this.getEnabledSyncs();
 
       if (syncs.length === 0) {
@@ -786,3 +1397,99 @@ export default class TwitchScheduleManager {
     }
   }
 }
+
+/**
+ * The eight days the card actually draws.
+ *
+ * A recurring Twitch schedule answers with a month or more of segments — 20+ for
+ * a six-night-a-week streamer. Everything the viewer reads has to agree with the
+ * picture beside it, so the window is defined once here and used by the card, the
+ * embed's list, and the alt text alike. Yesterday is included: a stream that ran
+ * last night is still part of "this week" to someone reading in the morning.
+ */
+export function weekWindow(segments = [], tz = 'UTC') {
+  /* Seven guild-local calendar days, starting on the day of the first stream
+     that has not already passed.
+   *
+   * This used to be "yesterday through eight days out" — nine days, so a weekly
+   * schedule always caught next week's Monday and Tuesday too, and the card drew
+   * "10:00 PM – 12:30 AM, 10:00 PM – 12:30 AM" on those rows. Calendar days in the
+   * guild's zone guarantee each weekday appears at most once. */
+  const now = Date.now();
+  const dated = segments
+    .map((seg) => ({ seg, t: new Date(seg?.start_time).getTime() }))
+    .filter(({ t }) => Number.isFinite(t));
+  const anchor = dated
+    .filter(({ t }) => t >= now - 86400000)
+    .sort((a, b) => a.t - b.t)[0];
+  if (!anchor) return [];
+  const dayKey = (t) => {
+    const p = getLocalDateParts(new Date(t), tz);
+    return Date.UTC(p.year, p.month, p.day);
+  };
+  const first = dayKey(anchor.t);
+  return dated
+    .filter(({ t }) => { const k = dayKey(t); return k >= first && k < first + 7 * 86400000; })
+    .map(({ seg }) => seg);
+}
+
+/**
+ * Alt text for a card, written from the rows the card drew.
+ *
+ * Describing the raw API response instead produced "20 scheduled streams this
+ * week" over a picture of six — the segments stretched a month ahead and the
+ * count came from all of them. The rows are the only honest source: one line per
+ * day, already collapsed and already windowed.
+ */
+function describeScheduleRows(username, rows, spanLabel) {
+  const live = rows.filter((r) => !r.cancelled);
+  const dead = rows.filter((r) => r.cancelled);
+  const week = spanLabel ? ` for the week of ${spanLabel}` : '';
+  if (!live.length && !dead.length) return `${username} has no streams scheduled${week}.`;
+
+  const say = (r) => `${r.day} ${r.time}${r.title ? `: ${r.title}` : ''}`;
+  const head = live.length
+    ? `${live.length} streaming ${live.length === 1 ? 'day' : 'days'}${week}. `
+    : `No streams going ahead${week}. `;
+  const cancelled = dead.length
+    ? ` Cancelled: ${dead.map(say).join('. ')}.`
+    : '';
+  return `${username}'s streaming schedule. ${head}${live.map(say).join('. ')}.${cancelled}`;
+}
+
+/**
+ * Text rendering of the weekly stream schedule graphic.
+ *
+ * The image is the whole point of this feature — a subscriber checking when
+ * their streamer is live next gets nothing from it without sight. The embed
+ * beside it carries some of this, but not the per-day breakdown, and the
+ * cancellations only exist as strikethrough in the picture.
+ */
+function describeTwitchSchedule(username, segments = [], canceledSegments = []) {
+  if (!segments.length) return `${username} has no streams scheduled.`;
+
+  const fmt = (iso) => {
+    const d = new Date(iso);
+    return Number.isNaN(d.getTime())
+      ? 'time to be confirmed'
+      : d.toLocaleString('en-US', {
+          weekday: 'long', month: 'short', day: 'numeric',
+          hour: 'numeric', minute: '2-digit', timeZone: 'UTC', timeZoneName: 'short',
+        });
+  };
+
+  const lines = segments.map((seg) => {
+    const what = seg.title || 'Untitled stream';
+    const cat = seg.category?.name ? ` (${seg.category.name})` : '';
+    return `${fmt(seg.start_time)}: ${what}${cat}`;
+  });
+
+  const canceled = canceledSegments.length
+    ? ` ${canceledSegments.length} stream${canceledSegments.length === 1 ? '' : 's'} cancelled: ` +
+      canceledSegments.map((c) => `${c.title || 'Untitled'} on ${fmt(c.start_time)}`).join('; ') + '.'
+    : '';
+
+  return `${username}'s streaming schedule. ${segments.length} stream${segments.length === 1 ? '' : 's'} scheduled. ` +
+    `${lines.join('. ')}.${canceled}`;
+}
+

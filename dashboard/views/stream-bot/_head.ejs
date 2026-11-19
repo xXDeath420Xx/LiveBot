@@ -1,0 +1,17 @@
+<%#
+  Stream bot pages (/stream/bot, dashboard/routes/stream-bot.js): the shared frame. Pair with _tabs.ejs and _foot.ejs.
+  Locals: pageTitle (the page's name), active (tab key, read by _tabs.ejs), sbPage (which part of
+  /js/stream-bot.js runs; defaults to active). The site head/header/footer, /css/cf-ui.css tokens and the
+  settings kit (/css/cf-settings.css) carry the look; /css/stream-bot.css has the few pieces of its own.
+%>
+<!DOCTYPE html>
+<html data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>" lang="en">
+<head>
+<%- include('partials/site-head', { title: (locals.pageTitle ? locals.pageTitle + ' · ' : '') + 'Stream bot · CertiFried', description: 'Automations, live events and devices for your Twitch and Kick channels.', noindex: true }) %>
+    <link rel="stylesheet" href="/css/cf-settings.css">
+    <link rel="stylesheet" href="/css/stream-bot.css">
+</head>
+<body class="cfs-body cf-site">
+<%- include('partials/site-header', { user: locals.user || null }) %>
+<main id="main-content" class="cf-main" tabindex="-1" data-sb-page="<%= locals.sbPage || locals.active || '' %>">
+<div class="cf-page">

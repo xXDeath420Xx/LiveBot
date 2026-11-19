@@ -12,7 +12,7 @@ const BANNER_LOCAL  = '/home/death/CertiFriedUtility/dashboard/public/images/cer
 const BANNER_URL    = 'https://certifriedmultitool.com/images/certifried-banner.png';
 const THUMB_URL     = 'https://certifriedmultitool.com/images/CertiFried.png';
 const SITE_URL      = 'https://certifriedmultitool.com';
-const INVITE_URL    = 'https://discord.com/api/oauth2/authorize?client_id=1409904443125665875&permissions=8&scope=bot+applications.commands';
+const INVITE_URL    = 'https://discord.com/api/oauth2/authorize?client_id=1409904443125665875&permissions=8&scope=bot+applications.commands';  // bot-id-ok: the main bot's public invite link, not a credential
 const DASHBOARD_URL = 'https://certifriedmultitool.com/dashboard';
 
 const GUILDS = [
@@ -20,13 +20,11 @@ const GUILDS = [
         name: 'Mama Bear\'s Lair',
         guildId: '1216126780767731722',
         supportCategoryId: '1219862861514543151', // "Lair Bear Care" category
-        botId: '1496406792417185802',              // CertiFried Bear (custom)
     },
     {
         name: 'The Pac',
         guildId: '1099732505243959407',
         supportCategoryId: '1412158772868022372', // "Pacs Party" (holds pacSupport channel)
-        botId: '1496352090950467595',              // Twatwaffle Patrol (custom, assigned via guild_bot_mapping)
     },
 ];
 
@@ -34,13 +32,12 @@ const pool = mysql.createPool({
     host: process.env.DB_HOST, user: process.env.DB_USER,
     password: process.env.DB_PASSWORD, database: process.env.DB_NAME,
 });
-const enc = (await import('/home/death/CertiFriedUtility/utils/encryption.js')).default;
+const { resolveBotForGuild } = await import('/home/death/CertiFriedUtility/utils/bot-resolver.js');
 
-async function tokenFor(botId) {
-    if (botId === '1409904443125665875') return process.env.DISCORD_TOKEN;
-    const [r] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id = ?', [botId]);
-    if (!r[0]) throw new Error(`no custom_bots row for ${botId}`);
-    return enc.decrypt(JSON.parse(r[0].bot_token));
+// The acting bot comes from guild_bot_mapping — never pinned here.
+async function tokenFor(guildId) {
+    const bot = await resolveBotForGuild(guildId, { db: pool });
+    return bot.token;
 }
 
 async function rest(token, method, url, body, { raw = false } = {}) {
@@ -95,9 +92,9 @@ async function pin(token, channelId, messageId) {
     return !!(r?.__ok || r === null ? false : true) || r?.__ok;
 }
 
-async function setupGuild({ name, guildId, supportCategoryId, botId }) {
+async function setupGuild({ name, guildId, supportCategoryId }) {
     console.log(`\n== ${name} (${guildId}) ==`);
-    const token = await tokenFor(botId);
+    const token = await tokenFor(guildId);
 
     // Fetch all channels
     const channels = await rest(token, 'GET',

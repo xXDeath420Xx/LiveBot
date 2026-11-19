@@ -1,5 +1,7 @@
-import { EmbedBuilder, AttachmentBuilder } from 'discord.js';
+import { EmbedBuilder } from 'discord.js';
 import axios from 'axios';
+import { accessibleAttachment } from '../../utils/accessible-attachment.js';
+import { themeColor } from '../../core/guild-theme.js';
 
 export async function handleQrGenerate(interaction) {
     await interaction.deferReply();
@@ -29,7 +31,12 @@ export async function handleQrGenerate(interaction) {
             timeout: 10000
         });
 
-        const attachment = new AttachmentBuilder(Buffer.from(response.data), { name: 'qrcode.png' });
+        // The whole point of a QR code is the payload, and a screen-reader user
+        // cannot scan it — put the encoded content in the alt text.
+        const attachment = accessibleAttachment(Buffer.from(response.data), {
+            name: 'qrcode.png',
+            description: `QR code encoding: ${content}`,
+        });
 
         const embed = new EmbedBuilder()
             .setColor(`#${color}`)
@@ -87,7 +94,7 @@ export async function handleQrDecode(interaction) {
         } catch {}
 
         const embed = new EmbedBuilder()
-            .setColor('#00FF00')
+            .setColor(themeColor(interaction.guildId, 'success'))
             .setTitle('\u2705 QR Code Decoded Successfully')
             .addFields({
                 name: isUrl ? '\ud83d\udd17 Decoded URL' : '\ud83d\udcdd Decoded Content',

@@ -1,240 +1,33 @@
+<%#
+  Welcome and farewell messages: one form (POST update-welcome, multipart for the banner upload)
+  covering the join message, its banner image and the leave message. Built on the settings-row
+  kit (cf-settings.css); field names and ids are unchanged.
+%>
+<%# The page map passes the welcome settings as `settings`; older callers set `welcomeSettings`. %>
+<% const ws = (typeof settings !== 'undefined' && settings) ? settings : ((typeof welcomeSettings !== 'undefined' && welcomeSettings) ? welcomeSettings : {}); %>
+<%#
+  Also on this form: the welcome DM (dm_welcome_*), plain-text or embed style for each message
+  (message_type, goodbye_message_type, ban_message_type; embed_color for the welcome embed) and the
+  ban announcement (ban_*), read by core/greeting-manager.js. Each message has a preview that fills
+  the variables in the browser with sample values (the script at the end).
+%>
+<%
+// A row saved before the style choice existed: the bot posts an embed when the banner is on.
+const wlStyle = (ws.message_type === 'text' || ws.message_type === 'embed') ? ws.message_type : (ws.banner_enabled ? 'embed' : 'text');
+const wlStyleOf = (v) => (v === 'embed' ? 'embed' : 'text');
+const wlColour = /^#[0-9a-fA-F]{6}$/.test(String(ws.embed_color || '')) ? ws.embed_color : '';
+// Sample values for the previews. JSON with '<' escaped, so a server name cannot close the script.
+const wlSample = JSON.stringify({
+    server: (guild && guild.name) || 'Your server',
+    members: Number(guild && guild.memberCount) || 100,
+    light: String(ws.card_style || 'dark').toLowerCase() === 'light',
+}).replace(/</g, '\\u003c');
+%>
 <style>
-/* Compact Welcome Page Styles */
-.welcome-section-card {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(167, 139, 250, 0.15);
-    border-radius: 12px;
-    overflow: hidden;
-    margin-bottom: 16px;
-}
-
-.welcome-section-header {
-    background: rgba(167, 139, 250, 0.08);
-    padding: 14px 18px;
-    border-bottom: 1px solid rgba(167, 139, 250, 0.15);
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.welcome-section-header i { font-size: 1rem; color: #a78bfa; }
-.welcome-section-header.farewell i { color: #f87171; }
-.welcome-section-header h3 { font-size: 0.95rem; font-weight: 600; color: #ffffff; margin: 0; }
-.welcome-section-header p { font-size: 0.75rem; color: rgba(255, 255, 255, 0.5); margin: 2px 0 0 0; }
-
-.welcome-section-body { padding: 18px; }
-
-/* Form Group */
-.welcome-form-group { margin-bottom: 16px; }
-
-.welcome-form-label {
-    display: block;
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: rgba(255, 255, 255, 0.9);
-    margin-bottom: 6px;
-}
-
-.welcome-form-label i { color: #a78bfa; margin-right: 6px; }
-
-.welcome-form-input,
-.welcome-form-select,
-.welcome-form-textarea {
-    width: 100%;
-    padding: 10px 14px;
-    background: rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 8px;
-    color: #ffffff;
-    font-size: 0.85rem;
-    transition: all 0.2s;
-}
-
-.welcome-form-textarea {
-    min-height: 70px;
-    resize: vertical;
-    font-family: inherit;
-}
-
-.welcome-form-input:focus,
-.welcome-form-select:focus,
-.welcome-form-textarea:focus {
-    outline: none;
-    border-color: rgba(167, 139, 250, 0.5);
-    box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.1);
-}
-
-.welcome-form-select option { background: #1a1d21; color: #ffffff; }
-
-.welcome-form-hint {
-    display: block;
-    margin-top: 4px;
-    font-size: 0.7rem;
-    color: rgba(255, 255, 255, 0.45);
-}
-
-.welcome-form-hint code {
-    background: rgba(167, 139, 250, 0.15);
-    padding: 2px 5px;
-    border-radius: 3px;
-    color: #a78bfa;
-    font-size: 0.7rem;
-}
-
-/* Toggle Switch */
-.welcome-toggle-wrapper {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 12px 16px;
-    background: rgba(0, 0, 0, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 10px;
-    cursor: pointer;
-    transition: all 0.2s;
-    margin-bottom: 16px;
-}
-
-.welcome-toggle-wrapper:hover {
-    background: rgba(0, 0, 0, 0.3);
-    border-color: rgba(167, 139, 250, 0.3);
-}
-
-.welcome-toggle {
-    position: relative;
-    width: 44px;
-    height: 24px;
-    flex-shrink: 0;
-}
-
-.welcome-toggle input { opacity: 0; width: 0; height: 0; }
-
-.welcome-toggle-slider {
-    position: absolute;
-    cursor: pointer;
-    inset: 0;
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    transition: 0.2s;
-    border-radius: 24px;
-}
-
-.welcome-toggle-slider:before {
-    position: absolute;
-    content: "";
-    height: 18px;
-    width: 18px;
-    left: 2px;
-    bottom: 2px;
-    background-color: white;
-    transition: 0.2s;
-    border-radius: 50%;
-}
-
-.welcome-toggle input:checked + .welcome-toggle-slider {
-    background: linear-gradient(135deg, #7c3aed, #a78bfa);
-    border-color: #a78bfa;
-}
-
-.welcome-toggle input:checked + .welcome-toggle-slider:before {
-    transform: translateX(20px);
-}
-
-.welcome-toggle-label { font-weight: 600; color: #ffffff; font-size: 0.85rem; }
-.welcome-toggle-desc { font-size: 0.7rem; color: rgba(255, 255, 255, 0.5); margin-top: 2px; }
-
-/* Banner Subsection */
-.welcome-banner-section {
-    background: rgba(0, 0, 0, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 10px;
-    padding: 14px;
-    margin-top: 16px;
-}
-
-.welcome-banner-header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 14px;
-}
-
-.welcome-banner-header i { color: #a78bfa; font-size: 0.9rem; }
-.welcome-banner-header h4 { font-size: 0.9rem; font-weight: 600; color: #ffffff; margin: 0; }
-
-.welcome-form-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 14px;
-}
-
-/* Placeholder Tags */
-.placeholder-tags {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-top: 8px;
-}
-
-.placeholder-tag {
-    display: inline-flex;
-    align-items: center;
-    padding: 4px 8px;
-    background: rgba(167, 139, 250, 0.15);
-    border: 1px solid rgba(167, 139, 250, 0.3);
-    border-radius: 4px;
-    color: #a78bfa;
-    font-size: 0.7rem;
-    font-family: monospace;
-    font-weight: 600;
-}
-
-/* Button Group */
-.welcome-button-group {
-    display: flex;
-    gap: 10px;
-    margin-top: 20px;
-}
-
-.welcome-save-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 20px;
-    background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%);
-    border: none;
-    border-radius: 8px;
-    color: #ffffff;
-    font-size: 0.85rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.welcome-save-btn:hover { box-shadow: 0 4px 16px rgba(124, 58, 237, 0.4); }
-
-.welcome-reset-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 16px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 8px;
-    color: rgba(255, 255, 255, 0.7);
-    font-size: 0.85rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.welcome-reset-btn:hover { background: rgba(255, 255, 255, 0.1); color: #ffffff; }
-
-@media (max-width: 768px) {
-    .welcome-form-grid { grid-template-columns: 1fr; }
-    .welcome-button-group { flex-direction: column; }
-    .welcome-save-btn, .welcome-reset-btn { width: 100%; justify-content: center; }
-}
+    .wl-vars { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 4px var(--cf-4); font-size: var(--cf-text-sm); color: var(--cf-text-2); }
+    .wl-vars dt { margin: 0; font-family: var(--cf-mono); color: var(--cf-text); }
+    .wl-vars dd { margin: 0; }
+    @media (max-width: 640px) { .wl-vars { grid-template-columns: 1fr; } .wl-vars dd { margin-bottom: 6px; } }
 </style>
 
 <div class="page-section">
@@ -242,161 +35,391 @@
         <div>
             <div class="page-section-title">
                 <i class="fas fa-door-open"></i>
-                <span>Welcome & Farewell</span>
+                <span>Welcome and farewell</span>
             </div>
-            <div class="page-section-subtitle">
-                Set up messages to greet new members and say goodbye to those who leave
-            </div>
+            <div class="page-section-subtitle">Messages for arrivals, departures and bans, and a DM for new members.</div>
         </div>
     </div>
 
     <form action="/manage/<%= guild.id %>/update-welcome" method="POST" enctype="multipart/form-data">
-        <!-- Welcome Settings Section -->
-        <div class="welcome-section-card">
-            <div class="welcome-section-header">
-                <i class="fas fa-hand-sparkles"></i>
+        <details class="cf-section cf-fold" open>
+            <summary class="cf-section-head">
                 <div>
-                    <h3>Welcome Settings</h3>
-                    <p>Greet new members when they join your server</p>
+                    <h2 class="cf-section-title" id="wl-join-title">Welcome message</h2>
+                    <p class="cf-section-desc">Posted in a channel when someone joins.</p>
+                </div>
+            </summary>
+            <div class="cf-rows">
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-welcome-channel_id">Welcome channel</label>
+                        <p class="cf-row-desc" id="f-welcome-channel_id-desc">Choose a channel to switch welcome messages on.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <select id="f-welcome-channel_id" class="form-select" name="channel_id" aria-describedby="f-welcome-channel_id-desc">
+                            <%- include('../kit/_pick-options', { items: channels, selected: ws.channel_id || null, kind: 'channel', only: 'text', empty: 'Off' }) %>
+                        </select>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-welcome-message_type">Message style</label>
+                    </div>
+                    <div class="cf-opts" role="radiogroup" aria-label="Message style" aria-describedby="f-welcome-message_type-desc">
+                        <label class="cf-opt">
+                            <input type="radio" id="f-welcome-message_type" name="message_type" value="text"<%= wlStyle === 'text' ? ' checked' : '' %>>
+                            <span class="cf-opt-body"><span class="cf-opt-title">Plain text</span><span class="cf-opt-desc">An ordinary message.</span></span>
+                        </label>
+                        <label class="cf-opt">
+                            <input type="radio" name="message_type" value="embed"<%= wlStyle === 'embed' ? ' checked' : '' %>>
+                            <span class="cf-opt-body"><span class="cf-opt-title">Embed</span><span class="cf-opt-desc" id="f-welcome-message_type-desc">A coloured box with their name and the member count. They are mentioned above it so they are still notified.</span></span>
+                        </label>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--sub">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-welcome-embed_color">Embed colour</label>
+                        <p class="cf-row-desc" id="f-welcome-embed_color-desc">A hex colour such as <code>#5865F2</code>. Leave it empty for the default.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input id="f-welcome-embed_color" type="text" class="form-control" name="embed_color" value="<%= wlColour %>" placeholder="#CDC3FF" maxlength="7" pattern="#?[0-9a-fA-F]{6}" spellcheck="false" autocomplete="off" aria-describedby="f-welcome-embed_color-desc">
+                    </div>
+                </div>
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-welcome-message">Welcome text</label>
+                        <p class="cf-row-desc" id="f-welcome-message-desc">You can use <code>{user}</code>, <code>{user.mention}</code>, <code>{server}</code> and <code>{memberCount}</code>; they are filled in when the message is posted. The full list is under the preview.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <textarea id="f-welcome-message" class="form-control" name="message" rows="3" maxlength="2000" aria-describedby="f-welcome-message-desc" placeholder="Welcome to {server}, {user}. You are member number {memberCount}."><%= ws.message || '' %></textarea>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-row-text">
+                        <span class="cf-row-label" id="wl-pv-join-title">Preview</span>
+                        <p class="cf-row-desc" id="wl-pv-join-desc">With a sample member called New Member. A <code>{choice:…}</code> or <code>{random:…}</code> shows its first option here; the bot picks one at random each time.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="cf-dc-frame" id="wl-pv-join" aria-live="polite" aria-labelledby="wl-pv-join-title"></div>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-row-text">
+                        <span class="cf-row-label" id="wl-vars-title">Variables you can use</span>
+                        <p class="cf-row-desc" id="wl-vars-desc">In every message on this page, in curly brackets.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <dl class="wl-vars" aria-labelledby="wl-vars-title">
+                            <dt>{user}</dt><dd>Their username, as text</dd>
+                            <dt>{user.mention}</dt><dd>A mention of them (the ban message shows it as text)</dd>
+                            <dt>{user.display}</dt><dd>Their display name in this server</dd>
+                            <dt>{user.id}</dt><dd>Their user ID</dd>
+                            <dt>{server}</dt><dd>The server's name</dd>
+                            <dt>{memberCount}</dt><dd>How many members the server has</dd>
+                            <dt>{quirky}</dt><dd>Welcome only: a random greeting line that mentions them</dd>
+                            <dt>{reason}</dt><dd>Ban only: the reason given for the ban</dd>
+                            <dt>{moderator}</dt><dd>Ban only: who banned them</dd>
+                            <dt>{choice:a|b|c}</dt><dd>One of the options, picked at random</dd>
+                            <dt>{random:1-100}</dt><dd>A random number in that range</dd>
+                        </dl>
+                    </div>
+                </div>
+
+                <div class="cf-rows-head" id="wl-banner-head">Banner image</div>
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="banner_enabled">Banner image</label>
+                        <p class="cf-row-desc" id="banner_enabled-desc">Adds a picture with the member's avatar and name to the welcome message.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="checkbox" class="cf-switch" role="switch" id="banner_enabled" name="banner_enabled" aria-describedby="banner_enabled-desc" <%= ws.banner_enabled ? 'checked' : '' %>>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--sub">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-welcome-card_title_text">Banner title</label>
+                        <p class="cf-row-desc">The large line on the banner.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input id="f-welcome-card_title_text" type="text" class="form-control" name="card_title_text" value="<%= ws.card_title_text ? ws.card_title_text : 'Welcome, {user}!' %>" placeholder="Welcome, {user}!">
+                    </div>
+                </div>
+                <div class="cf-row cf-row--sub">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-welcome-card_subtitle_text">Banner subtitle</label>
+                        <p class="cf-row-desc">The smaller line under it.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input id="f-welcome-card_subtitle_text" type="text" class="form-control" name="card_subtitle_text" value="<%= ws.card_subtitle_text ? ws.card_subtitle_text : 'Welcome to {server}!' %>" placeholder="Welcome to {server}!">
+                    </div>
+                </div>
+                <div class="cf-row cf-row--sub">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-welcome-card_background_file">Background image</label>
+                        <p class="cf-row-desc" id="f-welcome-card_background_file-desc">A JPG or PNG up to 5 MB. An uploaded image is used instead of the link below.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input id="f-welcome-card_background_file" type="file" class="form-control" name="card_background_file" accept="image/png,image/jpeg,image/jpg" aria-describedby="f-welcome-card_background_file-desc">
+                    </div>
+                </div>
+                <div class="cf-row cf-row--sub">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-welcome-card_background_url">Background image link</label>
+                        <p class="cf-row-desc">Or paste the address of an image that is already online.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input id="f-welcome-card_background_url" type="text" class="form-control" name="card_background_url" value="<%= ws.card_background_url || '' %>" placeholder="https://example.com/image.png" inputmode="url">
+                    </div>
+                </div>
+
+                <div class="cf-rows-head" id="wl-dm-head">Direct message</div>
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="dm_welcome_enabled">Send a DM on join</label>
+                        <p class="cf-row-desc" id="dm_welcome_enabled-desc">Also sends the new member a private message. It goes out even when no welcome channel is set. Members who do not accept DMs from server members do not get it.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="checkbox" class="cf-switch" role="switch" id="dm_welcome_enabled" name="dm_welcome_enabled" aria-describedby="dm_welcome_enabled-desc" <%= Number(ws.dm_welcome_enabled) ? 'checked' : '' %>>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--stack cf-row--sub">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-welcome-dm_welcome_message">DM text</label>
+                        <p class="cf-row-desc" id="f-welcome-dm_welcome_message-desc">Plain text. A bot is in many servers, so it helps to name yours with <code>{server}</code>.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <textarea id="f-welcome-dm_welcome_message" class="form-control" name="dm_welcome_message" rows="3" maxlength="2000" aria-describedby="f-welcome-dm_welcome_message-desc" placeholder="Welcome to {server}, {user.display}!"><%= ws.dm_welcome_message || '' %></textarea>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--stack cf-row--sub">
+                    <div class="cf-row-text">
+                        <span class="cf-row-label" id="wl-pv-dm-title">DM preview</span>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="cf-dc-frame" id="wl-pv-dm" aria-live="polite" aria-labelledby="wl-pv-dm-title"></div>
+                    </div>
                 </div>
             </div>
-            <div class="welcome-section-body">
-                <!-- Channel Select -->
-                <div class="welcome-form-group">
-                    <label class="welcome-form-label">
-                        <i class="fas fa-hashtag"></i>Welcome Channel
-                    </label>
-                    <select class="welcome-form-select" name="channel_id">
-                        <option value="">Disabled</option>
-                        <% channels.forEach(channel => { %>
-                            <option value="<%= channel.id %>" <%= (welcomeSettings && welcomeSettings.channel_id === channel.id) ? 'selected' : '' %>>#<%= channel.name %></option>
-                        <% }) %>
-                    </select>
-                    <span class="welcome-form-hint">Channel where welcome messages will be posted</span>
-                </div>
+        </details>
 
-                <!-- Welcome Message -->
-                <div class="welcome-form-group">
-                    <label class="welcome-form-label">
-                        <i class="fas fa-comment-dots"></i>Welcome Message
-                    </label>
-                    <textarea class="welcome-form-textarea" name="message" placeholder="Welcome {user} to {server}! We now have {memberCount} members!"><%= (welcomeSettings && welcomeSettings.message) ? welcomeSettings.message : '' %></textarea>
-                    <span class="welcome-form-hint">Available placeholders:</span>
-                    <div class="placeholder-tags">
-                        <span class="placeholder-tag">{user}</span>
-                        <span class="placeholder-tag">{server}</span>
-                        <span class="placeholder-tag">{memberCount}</span>
-                    </div>
-                </div>
-
-                <!-- Welcome Banner Section -->
-                <div class="welcome-banner-section">
-                    <div class="welcome-banner-header">
-                        <i class="fas fa-image"></i>
-                        <h4>Welcome Banner</h4>
-                    </div>
-
-                    <label class="welcome-toggle-wrapper">
-                        <div class="welcome-toggle">
-                            <input type="checkbox" id="banner_enabled" name="banner_enabled" <%= (welcomeSettings && welcomeSettings.banner_enabled) ? 'checked' : '' %>>
-                            <span class="welcome-toggle-slider"></span>
-                        </div>
-                        <div>
-                            <div class="welcome-toggle-label">Enable Welcome Banner Image</div>
-                            <div class="welcome-toggle-desc">Generate a custom welcome image for new members</div>
-                        </div>
-                    </label>
-
-                    <div class="welcome-form-grid">
-                        <div class="welcome-form-group" style="margin-bottom: 0;">
-                            <label class="welcome-form-label">Title Text</label>
-                            <input type="text" class="welcome-form-input" name="card_title_text" value="<%= (welcomeSettings && welcomeSettings.card_title_text) ? welcomeSettings.card_title_text : 'Welcome, {user}!' %>" placeholder="Welcome, {user}!">
-                        </div>
-                        <div class="welcome-form-group" style="margin-bottom: 0;">
-                            <label class="welcome-form-label">Subtitle Text</label>
-                            <input type="text" class="welcome-form-input" name="card_subtitle_text" value="<%= (welcomeSettings && welcomeSettings.card_subtitle_text) ? welcomeSettings.card_subtitle_text : 'Welcome to {server}!' %>" placeholder="Welcome to {server}!">
-                        </div>
-                    </div>
-
-                    <div class="welcome-form-group" style="margin-top: 16px; margin-bottom: 0;">
-                        <label class="welcome-form-label">Background Image</label>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; align-items: start;">
-                            <div>
-                                <label style="font-size: 0.7rem; color: rgba(255,255,255,0.5); display: block; margin-bottom: 4px;">Upload Image</label>
-                                <input type="file" class="welcome-form-input" name="card_background_file" accept="image/png,image/jpeg,image/jpg" style="padding: 6px;">
-                            </div>
-                            <div>
-                                <label style="font-size: 0.7rem; color: rgba(255,255,255,0.5); display: block; margin-bottom: 4px;">Or paste URL</label>
-                                <input type="text" class="welcome-form-input" name="card_background_url" value="<%= (welcomeSettings && welcomeSettings.card_background_url) ? welcomeSettings.card_background_url : '' %>" placeholder="https://example.com/image.png">
-                            </div>
-                        </div>
-                        <span class="welcome-form-hint">Upload a file or paste a URL. <strong>Supported: JPG, PNG</strong> (max 5MB). Uploaded file takes priority over URL.</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Farewell Settings Section -->
-        <div class="welcome-section-card">
-            <div class="welcome-section-header farewell">
-                <i class="fas fa-door-closed"></i>
+        <details class="cf-section cf-fold" open>
+            <summary class="cf-section-head">
                 <div>
-                    <h3>Farewell Settings</h3>
-                    <p>Announce when a member leaves the server</p>
+                    <h2 class="cf-section-title" id="wl-leave-title">Farewell message</h2>
+                    <p class="cf-section-desc">Posted when a member leaves the server.</p>
+                </div>
+            </summary>
+            <div class="cf-rows">
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="goodbye_enabled">Farewell messages</label>
+                        <p class="cf-row-desc" id="goodbye_enabled-desc">Post a message in the channel below when someone leaves.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="checkbox" class="cf-switch" role="switch" id="goodbye_enabled" name="goodbye_enabled" aria-describedby="goodbye_enabled-desc" <%= ws.goodbye_enabled ? 'checked' : '' %>>
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-welcome-goodbye_channel_id">Farewell channel</label>
+                        <p class="cf-row-desc">Where farewell messages are posted.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <select id="f-welcome-goodbye_channel_id" class="form-select" name="goodbye_channel_id">
+                            <%- include('../kit/_pick-options', { items: channels, selected: ws.goodbye_channel_id || null, kind: 'channel', only: 'text', empty: 'Off' }) %>
+                        </select>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-welcome-goodbye_message_type">Message style</label>
+                    </div>
+                    <div class="cf-opts" role="radiogroup" aria-label="Message style" aria-describedby="f-welcome-goodbye_message_type-desc">
+                        <label class="cf-opt">
+                            <input type="radio" id="f-welcome-goodbye_message_type" name="goodbye_message_type" value="text"<%= wlStyleOf(ws.goodbye_message_type) === 'text' ? ' checked' : '' %>>
+                            <span class="cf-opt-body"><span class="cf-opt-title">Plain text</span><span class="cf-opt-desc">An ordinary message.</span></span>
+                        </label>
+                        <label class="cf-opt">
+                            <input type="radio" name="goodbye_message_type" value="embed"<%= wlStyleOf(ws.goodbye_message_type) === 'embed' ? ' checked' : '' %>>
+                            <span class="cf-opt-body"><span class="cf-opt-title">Embed</span><span class="cf-opt-desc" id="f-welcome-goodbye_message_type-desc">A grey box with their name and avatar.</span></span>
+                        </label>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-welcome-goodbye_message">Farewell text</label>
+                        <p class="cf-row-desc" id="f-welcome-goodbye_message-desc">You can use <code>{user}</code> and <code>{server}</code>. Left empty, the bot posts their name and "left the server".</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <textarea id="f-welcome-goodbye_message" class="form-control" name="goodbye_message" rows="3" maxlength="2000" aria-describedby="f-welcome-goodbye_message-desc" placeholder="Goodbye {user}, thanks for being part of {server}."><%= ws.goodbye_message || '' %></textarea>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-row-text">
+                        <span class="cf-row-label" id="wl-pv-leave-title">Preview</span>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="cf-dc-frame" id="wl-pv-leave" aria-live="polite" aria-labelledby="wl-pv-leave-title"></div>
+                    </div>
                 </div>
             </div>
-            <div class="welcome-section-body">
-                <!-- Enable Toggle -->
-                <label class="welcome-toggle-wrapper">
-                    <div class="welcome-toggle">
-                        <input type="checkbox" id="goodbye_enabled" name="goodbye_enabled" <%= (welcomeSettings && welcomeSettings.goodbye_enabled) ? 'checked' : '' %>>
-                        <span class="welcome-toggle-slider"></span>
-                    </div>
-                    <div>
-                        <div class="welcome-toggle-label">Enable Farewell Messages</div>
-                        <div class="welcome-toggle-desc">Post a message when members leave</div>
-                    </div>
-                </label>
+        </details>
 
-                <!-- Channel Select -->
-                <div class="welcome-form-group">
-                    <label class="welcome-form-label">
-                        <i class="fas fa-hashtag"></i>Farewell Channel
-                    </label>
-                    <select class="welcome-form-select" name="goodbye_channel_id">
-                        <option value="">Disabled</option>
-                        <% channels.forEach(channel => { %>
-                            <option value="<%= channel.id %>" <%= (welcomeSettings && welcomeSettings.goodbye_channel_id === channel.id) ? 'selected' : '' %>>#<%= channel.name %></option>
-                        <% }) %>
-                    </select>
-                    <span class="welcome-form-hint">Channel where farewell messages will be posted</span>
+        <details class="cf-section cf-fold" open>
+            <summary class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="wl-ban-title">Ban announcement</h2>
+                    <p class="cf-section-desc">Posted when a member is banned, whether by a moderator, another bot or the bot's own protection.</p>
                 </div>
-
-                <!-- Farewell Message -->
-                <div class="welcome-form-group" style="margin-bottom: 0;">
-                    <label class="welcome-form-label">
-                        <i class="fas fa-comment-dots"></i>Farewell Message
-                    </label>
-                    <textarea class="welcome-form-textarea" name="goodbye_message" placeholder="Goodbye {user}, thanks for being part of {server}!"><%= (welcomeSettings && welcomeSettings.goodbye_message) ? welcomeSettings.goodbye_message : '' %></textarea>
-                    <span class="welcome-form-hint">Available placeholders:</span>
-                    <div class="placeholder-tags">
-                        <span class="placeholder-tag">{user}</span>
-                        <span class="placeholder-tag">{server}</span>
+            </summary>
+            <div class="cf-rows">
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="ban_enabled">Ban announcements</label>
+                        <p class="cf-row-desc" id="ban_enabled-desc">At most five a minute are posted, so a mass ban during a raid does not flood the channel. Nobody is pinged by it.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="checkbox" class="cf-switch" role="switch" id="ban_enabled" name="ban_enabled" aria-describedby="ban_enabled-desc" <%= Number(ws.ban_enabled) ? 'checked' : '' %>>
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-welcome-ban_channel_id">Ban channel</label>
+                        <p class="cf-row-desc" id="f-welcome-ban_channel_id-desc">Where ban announcements are posted.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <select id="f-welcome-ban_channel_id" class="form-select" name="ban_channel_id" aria-describedby="f-welcome-ban_channel_id-desc">
+                            <%- include('../kit/_pick-options', { items: channels, selected: ws.ban_channel_id || null, kind: 'channel', only: 'text', empty: 'Off' }) %>
+                        </select>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-welcome-ban_message_type">Message style</label>
+                    </div>
+                    <div class="cf-opts" role="radiogroup" aria-label="Message style" aria-describedby="f-welcome-ban_message_type-desc">
+                        <label class="cf-opt">
+                            <input type="radio" id="f-welcome-ban_message_type" name="ban_message_type" value="text"<%= wlStyleOf(ws.ban_message_type) === 'text' ? ' checked' : '' %>>
+                            <span class="cf-opt-body"><span class="cf-opt-title">Plain text</span><span class="cf-opt-desc">An ordinary message.</span></span>
+                        </label>
+                        <label class="cf-opt">
+                            <input type="radio" name="ban_message_type" value="embed"<%= wlStyleOf(ws.ban_message_type) === 'embed' ? ' checked' : '' %>>
+                            <span class="cf-opt-body"><span class="cf-opt-title">Embed</span><span class="cf-opt-desc" id="f-welcome-ban_message_type-desc">A red box with their name and avatar.</span></span>
+                        </label>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-welcome-ban_message">Ban text</label>
+                        <p class="cf-row-desc" id="f-welcome-ban_message-desc">You can use <code>{user}</code>, <code>{server}</code>, <code>{reason}</code> and <code>{moderator}</code>. Left empty, the bot posts their name and "was banned from" the server name.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <textarea id="f-welcome-ban_message" class="form-control" name="ban_message" rows="3" maxlength="2000" aria-describedby="f-welcome-ban_message-desc" placeholder="{user} was banned. Reason: {reason}"><%= ws.ban_message || '' %></textarea>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-row-text">
+                        <span class="cf-row-label" id="wl-pv-ban-title">Preview</span>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="cf-dc-frame" id="wl-pv-ban" aria-live="polite" aria-labelledby="wl-pv-ban-title"></div>
                     </div>
                 </div>
             </div>
-        </div>
+        </details>
 
-        <!-- Button Group -->
-        <div class="welcome-button-group">
-            <button type="submit" class="welcome-save-btn">
-                <i class="fas fa-save"></i>
-                Save Settings
-            </button>
-            <button type="button" class="welcome-reset-btn" onclick="location.reload()">
-                <i class="fas fa-undo"></i>
-                Reset Form
-            </button>
+        <div class="cf-form-actions">
+            <button type="button" class="btn btn-secondary" onclick="location.reload()">Discard changes</button>
+            <button type="submit" class="btn btn-primary">Save</button>
         </div>
     </form>
 </div>
+
+<script src="/js/cf-msgpreview.js"></script>
+<script>
+(function () {
+    // Live previews: the same variables core/template-resolver.js fills in, with sample values.
+    // Drawn by /js/cf-msgpreview.js with textContent only; nothing typed here is parsed as HTML.
+    var S = <%- wlSample %>;
+    var NAME = 'newmember', DISPLAY = 'New Member', ID = '123456789012345678';
+    var $ = function (id) { return document.getElementById(id); };
+    if (!$('wl-pv-join') || !window.CFPreview) return;
+    var P = window.CFPreview;
+    var AT = P.mention('@' + DISPLAY);
+
+    function fill(tpl, extra) {
+        var t = String(tpl || '');
+        t = t.replace(/\{random:(-?\d+)-(-?\d+)\}/g, function (m, a, b) { return String(Math.min(Number(a), Number(b))); });
+        t = t.replace(/\{choice:([^}]*)\}/g, function (m, list) { return list.split('|')[0]; });
+        var v = {
+            'user.mention': AT, 'user.name': NAME, 'user.tag': NAME, 'user.id': ID, 'user.display': DISPLAY, 'user.avatar': '',
+            username: NAME, mention: AT, user: NAME,
+            'server.name': S.server, 'server.id': '', 'server.members': String(S.members), 'server.icon': '',
+            server: S.server, guild: S.server, memberCount: String(S.members), member_count: String(S.members), count: String(S.members)
+        };
+        for (var k in (extra || {})) v[k] = extra[k];
+        return P.fill(t, v);
+    }
+    function val(id) { var n = $(id); return n ? n.value : ''; }
+    function on(id) { var n = $(id); return !!(n && n.checked); }
+    function style(name) { var r = document.querySelector('input[name="' + name + '"]:checked'); return r ? r.value : 'text'; }
+    function bannerBox() {
+        var b = document.createElement('div');
+        b.className = 'cf-dc-image cf-dc-ph';
+        var t = document.createElement('strong');
+        t.textContent = P.fill(val('f-welcome-card_title_text') || 'Welcome, {user}!', { user: DISPLAY, server: S.server, memberCount: String(S.members) });
+        b.appendChild(t);
+        b.appendChild(document.createTextNode(P.fill(val('f-welcome-card_subtitle_text') || 'Welcome to {server}!', { user: DISPLAY, server: S.server, memberCount: String(S.members) })));
+        return b;
+    }
+
+    function render() {
+        var extraJoin = { quirky: AT + ' just showed up!', quirky_plain: DISPLAY + ' just showed up!' };
+        var foot = S.server + ' \u2022 Member #' + S.members;
+        var embedJoin = style('message_type') === 'embed';
+        var colourRow = $('f-welcome-embed_color') && $('f-welcome-embed_color').closest('.cf-row');
+        if (colourRow) colourRow.hidden = !embedJoin;
+
+        // Welcome
+        var text = fill(val('f-welcome-message') || 'Welcome {user.mention}!', extraJoin);
+        var banner = on('banner_enabled');
+        var joinNote = $('f-welcome-channel_id') && !$('f-welcome-channel_id').value ? 'Off: choose a welcome channel to post this.' : '';
+        if (embedJoin) {
+            P.render($('wl-pv-join'), { content: AT, embed: {
+                colour: P.colour(val('f-welcome-embed_color'), banner && S.light ? '#8fc7f0' : '#cdc3ff'),
+                author: banner ? null : DISPLAY,
+                title: banner && !S.light ? 'A random greeting line, like "' + DISPLAY + ' just showed up!"' : null,
+                text: text, image: banner ? bannerBox() : null, foot: foot
+            }, note: joinNote });
+        } else {
+            var box = $('wl-pv-join');
+            P.render(box, { content: text, note: joinNote });
+            if (banner) box.insertBefore(bannerBox(), box.children[1] || null);
+        }
+
+        // DM
+        P.render($('wl-pv-dm'), { content: fill(val('f-welcome-dm_welcome_message') || 'Welcome to {server}, {user.display}!'),
+            note: on('dm_welcome_enabled') ? '' : 'Off: switch it on above to send this.' });
+
+        // Farewell
+        var bye = fill(val('f-welcome-goodbye_message') || '**{user}** left the server.');
+        var byeNote = on('goodbye_enabled') ? '' : 'Off: switch farewell messages on to post this.';
+        P.render($('wl-pv-leave'), style('goodbye_message_type') === 'embed'
+            ? { embed: { colour: '#99aab5', author: DISPLAY, text: bye, foot: S.server + ' \u2022 ' + S.members + ' members' }, note: byeNote }
+            : { content: bye, note: byeNote });
+
+        // Ban: nothing in a ban post pings, so a mention shows as plain text
+        var ban = fill(val('f-welcome-ban_message') || '**{user}** was banned from {server}.', { reason: 'Posting scam links', moderator: 'a moderator', 'user.mention': '@' + NAME, mention: '@' + NAME });
+        var banNote = on('ban_enabled') ? '' : 'Off: switch ban announcements on to post this.';
+        P.render($('wl-pv-ban'), style('ban_message_type') === 'embed'
+            ? { embed: { colour: '#ed4245', author: NAME, text: ban, foot: S.server }, note: banNote }
+            : { content: ban, note: banNote });
+    }
+
+    var form = $('wl-pv-join').closest('form');
+    if (form) { form.addEventListener('input', render); form.addEventListener('change', render); }
+    // A required field inside a folded section: open it so the browser can point at the field.
+    if (form) form.addEventListener('invalid', function (e) { var d = e.target.closest && e.target.closest('details'); if (d) d.open = true; }, true);
+    render();
+})();
+</script>

@@ -5,8 +5,16 @@ import { Client, GatewayIntentBits } from 'discord.js';
 import mysql from 'mysql2/promise';
 
 export const GUILD_ID = '1099732505243959407';
-export const BOT_ID = '1409904443125665875';
 export const OWNER_USER_ID = '365905620060340224';
+
+// The bot that owns this guild is NOT pinned here — it moved from the main bot to
+// a custom bot, and a pinned id would keep pointing at a token that is no longer a
+// member of the guild. Ask the database: `await getBot()`.
+/** The bot that currently owns this guild: { botId, botName, token, auth, rest }. */
+export async function getBot() {
+    const { resolveBotForGuild } = await import('../../utils/bot-resolver.js');
+    return resolveBotForGuild(GUILD_ID);
+}
 
 // Role ids already present / created previously
 export const ROLES_EXISTING = {
@@ -90,8 +98,10 @@ export function createPool() {
 }
 
 export async function connectClient() {
-    const token = process.env.DISCORD_TOKEN;
-    if (!token) throw new Error('DISCORD_TOKEN missing in env');
+    // Log in as whichever bot owns the guild today — DISCORD_TOKEN is the main bot,
+    // which was retired out of this guild, so a gateway login with it sees nothing.
+    const { token } = await getBot();
+    if (!token) throw new Error(`no token for the bot mapped to guild ${GUILD_ID}`);
     const client = new Client({
         intents: [
             GatewayIntentBits.Guilds,

@@ -8,7 +8,7 @@
 import enc from '../utils/encryption.js';
 import pool from '../utils/db.js';
 
-const BOT_ID = '1498486251576229958';
+const BOT_ID = '1498486251576229958';  // bot-id-ok: this script rotates THIS application's token; there is no guild to resolve from
 const newToken = process.env.NEW_TOKEN;
 
 if (!newToken || newToken.length < 50) {

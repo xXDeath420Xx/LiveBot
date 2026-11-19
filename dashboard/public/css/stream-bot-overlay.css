@@ -1,0 +1,126 @@
+/*
+ * CertiFried overlays in OBS (/stream/bot/overlay/<type>/<key>, views/stream-bot/overlay.ejs). Stream-facing, so a fixed look on
+ * a transparent 1920×1080 page (theme: fixed, like the music player): it must read over any scene, not follow the site theme.
+ * Colours, font and size come from the overlay's own settings as custom properties set by /js/stream-bot-overlay.js.
+ * Windows fonts only; nothing is loaded from another site.
+ */
+html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; }
+body.sbo {
+    --sbo-font: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+    --sbo-text: #ffffff;
+    --sbo-accent: #b4e04f;
+    --sbo-size: 44px;
+    --sbo-margin: 48px;
+    --sbo-plate: transparent;
+    --sbo-shadow: 0 2px 14px rgba(0, 0, 0, 0.55), 0 1px 2px rgba(0, 0, 0, 0.7);
+    font-family: var(--sbo-font); color: var(--sbo-text); -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+}
+.sbo-stage { position: fixed; inset: 0; pointer-events: none; }
+.sbo-gone { margin: 24px; padding: 12px 14px; max-width: 520px; border-radius: 10px; background: rgba(17, 18, 22, 0.88); color: #f4f4f5; font: 15px/1.45 "Segoe UI", system-ui, sans-serif; }
+
+/* Plates: none (text shadow only), soft and solid dark panels */
+.sbo-plate--soft { --sbo-plate: rgba(14, 15, 18, 0.62); }
+.sbo-plate--solid { --sbo-plate: rgba(14, 15, 18, 0.92); }
+.sbo-plate--none { --sbo-plate: transparent; }
+.sbo-panel { background: var(--sbo-plate); border-radius: 14px; }
+.sbo-plate--none .sbo-panel { text-shadow: var(--sbo-shadow); }
+.sbo-plate--soft .sbo-panel, .sbo-plate--solid .sbo-panel { box-shadow: 0 10px 30px rgba(0, 0, 0, 0.28); border: 1px solid rgba(255, 255, 255, 0.06); }
+
+/* The nine positions (widgets and pop-ups) */
+.sbo-at { position: absolute; }
+.sbo-at--top-left { top: var(--sbo-margin); left: var(--sbo-margin); }
+.sbo-at--top { top: var(--sbo-margin); left: 50%; transform: translateX(-50%); }
+.sbo-at--top-right { top: var(--sbo-margin); right: var(--sbo-margin); }
+.sbo-at--left { top: 50%; left: var(--sbo-margin); transform: translateY(-50%); }
+.sbo-at--center { top: 50%; left: 50%; transform: translate(-50%, -50%); }
+.sbo-at--right { top: 50%; right: var(--sbo-margin); transform: translateY(-50%); }
+.sbo-at--bottom-left { bottom: var(--sbo-margin); left: var(--sbo-margin); }
+.sbo-at--bottom { bottom: var(--sbo-margin); left: 50%; transform: translateX(-50%); }
+.sbo-at--bottom-right { bottom: var(--sbo-margin); right: var(--sbo-margin); }
+
+/* Motion: short, eased, nothing bouncy. The wrapper keeps the position transform; the inner element moves. */
+@keyframes sbo-rise { from { opacity: 0; transform: translateY(28px); } to { opacity: 1; transform: none; } }
+@keyframes sbo-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes sbo-pop { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: none; } }
+@keyframes sbo-slide { from { opacity: 0; transform: translateX(-48px); } to { opacity: 1; transform: none; } }
+@keyframes sbo-out { from { opacity: 1; } to { opacity: 0; transform: translateY(-10px); } }
+.sbo-in--rise { animation: sbo-rise 520ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.sbo-in--fade { animation: sbo-fade 420ms ease-out both; }
+.sbo-in--pop { animation: sbo-pop 460ms cubic-bezier(0.2, 0.9, 0.25, 1) both; }
+.sbo-in--slide { animation: sbo-slide 520ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.sbo-in--none { animation: none; }
+.sbo-out { animation: sbo-out 360ms ease-in both; }
+@media (prefers-reduced-motion: reduce) { .sbo-in--rise, .sbo-in--pop, .sbo-in--slide { animation: sbo-fade 300ms ease-out both; } }
+
+/* ── Alert box ── */
+.sbo-alert-slot { position: absolute; left: 0; right: 0; display: flex; justify-content: center; padding: 0 var(--sbo-margin); }
+.sbo-alert-slot--top { top: var(--sbo-margin); }
+.sbo-alert-slot--center { top: 50%; transform: translateY(-50%); }
+.sbo-alert-slot--bottom { bottom: var(--sbo-margin); }
+.sbo-alert { display: flex; flex-direction: column; align-items: center; gap: 18px; max-width: 1200px; text-align: center; }
+.sbo-alert .sbo-panel { padding: 18px 30px 20px; }
+.sbo-plate--none .sbo-alert .sbo-panel { padding: 0; }
+.sbo-alert-media { display: flex; justify-content: center; }
+.sbo-alert-media > img, .sbo-alert-media > video { display: block; max-width: 520px; max-height: 420px; object-fit: contain; }
+.sbo-alert-title { margin: 0; font-size: var(--sbo-size); font-weight: 700; line-height: 1.15; letter-spacing: -0.012em; overflow-wrap: anywhere; }
+.sbo-alert-title .sbo-name { color: var(--sbo-accent); }
+.sbo-alert-detail { margin: 6px 0 0; font-size: calc(var(--sbo-size) * 0.56); font-weight: 600; line-height: 1.3; opacity: 0.92; overflow-wrap: anywhere; }
+.sbo-alert-message {
+    margin: 12px auto 0; max-width: 900px; padding: 2px 0 2px 14px; border-left: 3px solid var(--sbo-accent); text-align: left;
+    font-size: calc(var(--sbo-size) * 0.5); font-weight: 500; line-height: 1.4; overflow-wrap: anywhere;
+}
+.sbo-alert--side { flex-direction: row; text-align: left; gap: 26px; }
+.sbo-alert--side .sbo-alert-media > img, .sbo-alert--side .sbo-alert-media > video { max-width: 300px; max-height: 300px; }
+.sbo-alert--side .sbo-alert-message { margin-left: 0; }
+.sbo-alert--banner { flex-direction: row; align-items: center; gap: 22px; text-align: left; min-width: 760px; }
+.sbo-alert--banner .sbo-alert-media > img, .sbo-alert--banner .sbo-alert-media > video { max-width: 140px; max-height: 140px; }
+.sbo-alert--banner .sbo-panel { border-left: 5px solid var(--sbo-accent); border-radius: 10px; }
+.sbo-alert--banner .sbo-alert-message { margin-left: 0; }
+.sbo-alert--text .sbo-alert-media { display: none; }
+
+/* ── Show text / Show an image or video ── */
+.sbo-show-text { margin: 0; max-width: 1600px; font-weight: 700; line-height: 1.15; letter-spacing: -0.012em; text-align: center; overflow-wrap: anywhere; white-space: pre-line; }
+.sbo-show-text.sbo-panel { padding: 14px 26px; }
+.sbo-plate--none .sbo-show-text { padding: 0; }
+.sbo-show-media { display: block; object-fit: contain; max-height: 1000px; }
+
+/* ── Chat ── */
+.sbo-chat { display: flex; flex-direction: column; justify-content: flex-end; gap: 6px; max-height: calc(100vh - 2 * var(--sbo-margin)); overflow: hidden; }
+.sbo-at--top-left .sbo-chat, .sbo-at--top .sbo-chat, .sbo-at--top-right .sbo-chat { justify-content: flex-start; }
+.sbo-line { padding: 8px 12px; font-size: var(--sbo-size); line-height: 1.38; overflow-wrap: anywhere; animation: sbo-rise 320ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.sbo-plate--soft .sbo-line.sbo-panel, .sbo-plate--solid .sbo-line.sbo-panel { border-radius: 10px; box-shadow: none; }
+.sbo-plate--none .sbo-line { padding: 2px 0; }
+.sbo-line.is-gone { animation: sbo-out 320ms ease-in both; }
+.sbo-line-head { display: inline; white-space: nowrap; }
+.sbo-line-name { font-weight: 700; }
+.sbo-line-sep { margin-right: 0.35em; }
+.sbo-badge, .sbo-pmark { display: inline-block; width: 1.05em; height: 1.05em; margin-right: 0.28em; vertical-align: -0.16em; border-radius: 3px; }
+.sbo-badge img { display: block; width: 100%; height: 100%; }
+.sbo-emote { display: inline-block; height: 1.7em; width: auto; margin: -0.35em 0.06em; vertical-align: middle; }
+.sbo-line.is-highlight { box-shadow: inset 3px 0 0 var(--sbo-accent); }
+
+/* ── Recent events ── */
+.sbo-events { display: flex; flex-direction: column; gap: 8px; }
+.sbo-event { display: flex; align-items: center; gap: 12px; padding: 10px 16px; font-size: var(--sbo-size); line-height: 1.3; animation: sbo-slide 420ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.sbo-plate--none .sbo-event { padding: 2px 0; }
+.sbo-event-mark { flex: none; width: 0.42em; height: 0.42em; border-radius: 50%; background: var(--sbo-accent); }
+.sbo-event-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── Goal ── */
+.sbo-goal { padding: 16px 20px 18px; font-size: var(--sbo-size); }
+.sbo-plate--none .sbo-goal { padding: 0; }
+.sbo-goal-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 10px; }
+.sbo-goal-title { font-weight: 700; letter-spacing: -0.01em; }
+.sbo-goal-nums { font-weight: 600; font-variant-numeric: tabular-nums; opacity: 0.92; }
+.sbo-goal-track { height: 0.62em; min-height: 10px; border-radius: 999px; background: rgba(255, 255, 255, 0.16); overflow: hidden; }
+.sbo-goal-fill { height: 100%; width: 0; border-radius: inherit; background: var(--sbo-bar, var(--sbo-accent)); transition: width 900ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+
+/* ── Counter ── */
+.sbo-counter { display: inline-flex; align-items: baseline; gap: 0.4em; padding: 10px 18px; font-size: var(--sbo-size); line-height: 1.1; }
+.sbo-plate--none .sbo-counter { padding: 0; }
+.sbo-counter-label { font-weight: 600; opacity: 0.95; }
+.sbo-counter-value { font-weight: 800; color: var(--sbo-accent); font-variant-numeric: tabular-nums; }
+.sbo-counter-value.is-bump { animation: sbo-pop 380ms cubic-bezier(0.2, 0.9, 0.25, 1) both; }
+
+/* ── Now playing: the music player's card (stream-bot-music-overlay.css), placed by the widget ── */
+.sbo--nowplaying .sbo-widget .sbmo-card { position: static; left: auto; bottom: auto; }

@@ -1,0 +1,54 @@
+<%#
+  GET /stream/bot/automations. Locals: automations [{ id, name, enabled, trigger, triggerLabel, platforms[], match,
+  actionsCount, conditionsCount, lastRunAt, needs[] }], max. The switches post to /stream/bot/api/automations/:id/toggle
+  (/js/stream-bot.js).
+%>
+<%- include('_head', { pageTitle: 'Automations', active: 'automations' }) %>
+<% const _when = (iso) => iso ? new Date(iso).toISOString().slice(0, 16).replace('T', ' ') + ' UTC' : ''; %>
+<div class="cf-page-head">
+    <div>
+        <h1 class="cf-page-title">Automations</h1>
+        <p class="cf-page-sub">When an event comes in, every automation that is on and matches it runs: its conditions are checked, then its actions run in order.</p>
+    </div>
+    <div class="cf-page-actions">
+        <% if (automations.length < max) { %><a class="btn btn-primary btn-sm" href="/stream/bot/automations/new">New automation</a><% } %>
+    </div>
+</div>
+<%- include('_tabs', { active: 'automations' }) %>
+
+<section class="cf-section" aria-labelledby="sb-auto-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sb-auto-title">Your automations <span class="cf-count"><%= automations.length %> of <%= max %></span></h2></div>
+        <div class="cf-section-actions"><span class="cf-status-line" id="sb-auto-status" role="status" aria-live="polite"></span></div></header>
+    <div class="cf-rows">
+        <% if (!automations.length) { %>
+        <div class="cf-state">
+            <p class="cf-state-title">No automations yet.</p>
+            <p class="cf-state-text">For example: when someone follows, thank them in chat. Pick the trigger, add a chat message action, then use Test to see it work.</p>
+            <a class="btn btn-primary btn-sm" href="/stream/bot/automations/new">New automation</a>
+        </div>
+        <% } else { %>
+        <div class="cf-list">
+            <% automations.forEach((a) => { %>
+            <div class="cf-list-item cf-list-item--multi">
+                <div class="cf-list-main">
+                    <p class="cf-list-title"><a class="sb-name-link" href="/stream/bot/automations/<%= a.id %>"><%= a.name %></a>
+                        <% a.needs.forEach((n) => { %><span class="cf-pill is-warn"><%= n %></span><% }) %></p>
+                    <p class="cf-list-meta">
+                        <span>When: <%= a.triggerLabel %><% if (a.match) { %> “<%= a.match.text %>”<% } %><% if (a.platforms.length) { %> on <%= a.platforms.join(', ') %><% } %></span>
+                        <span><%= a.conditionsCount %> condition<%= a.conditionsCount === 1 ? '' : 's' %>, <%= a.actionsCount %> action<%= a.actionsCount === 1 ? '' : 's' %></span>
+                        <span><% if (a.lastRunAt) { %>Last run <time datetime="<%= a.lastRunAt %>"><%= _when(a.lastRunAt) %></time><% } else { %>Not run yet<% } %></span>
+                    </p>
+                </div>
+                <div class="cf-list-actions">
+                    <a class="btn btn-secondary btn-sm" href="/stream/bot/runs?automation=<%= a.id %>">Runs</a>
+                    <label class="sr-only" for="sb-auto-on-<%= a.id %>">On: <%= a.name %></label>
+                    <input type="checkbox" class="cf-switch" role="switch" id="sb-auto-on-<%= a.id %>" data-toggle-automation="<%= a.id %>"<% if (a.enabled) { %> checked<% } %>>
+                </div>
+            </div>
+            <% }) %>
+        </div>
+        <% } %>
+    </div>
+</section>
+
+<%- include('_foot') %>

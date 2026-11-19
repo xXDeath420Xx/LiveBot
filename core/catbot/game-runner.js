@@ -20,6 +20,7 @@ import {
   bakeryCost, bakeryRate, bakeryCollect, BAKERY_MAX_LEVEL,
 } from './minigames.js';
 
+import { themeColor } from '../guild-theme.js';
 export const COLOR = 0xF2A65A;
 export const MIN_BET = 10;
 export const MAX_BET = 100_000;
@@ -411,7 +412,7 @@ export async function handlePigButton(interaction, action) {
     }
     closeSession(interaction.message.id);
     const quests = await settle(session.guildId, session.userId, 'pig', { bet, payout: 0, won: false });
-    const embed = new EmbedBuilder().setColor(0xED4245).setTitle('🐷 Pig')
+    const embed = new EmbedBuilder().setColor(themeColor(interaction.guildId, 'danger')).setTitle('🐷 Pig')
       .setDescription(`🎲 You rolled a **1**. The pig eats it all.\n**${sign(-bet)}** 🪙${quests}`)
       .setFooter(await balanceFooter(session.guildId, session.userId));
     return interaction.editReply({ embeds: [embed], components: [pigRow(true)] });

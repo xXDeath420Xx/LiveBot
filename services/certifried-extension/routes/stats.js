@@ -129,55 +129,8 @@ router.get('/', async (req, res) => {
     }
 });
 
-/**
- * POST /stats/track
- * Internal endpoint to track a stat increment
- * Called by other routes when actions happen
- */
-router.post('/track', async (req, res) => {
-    try {
-        const playerId = req.player.id;
-        const { stat, value = 1 } = req.body;
-
-        const validStats = [
-            'total_harvests', 'total_plants_grown', 'total_cash_earned',
-            'total_cash_spent', 'total_xp_earned', 'total_trades_completed',
-            'total_breeding_attempts', 'total_breeding_successes',
-            'total_strains_discovered', 'total_prestige_resets',
-            'total_quests_completed', 'total_achievements_unlocked'
-        ];
-
-        if (!validStats.includes(stat)) {
-            return res.status(400).json({ error: 'Invalid stat', code: 'INVALID_STAT' });
-        }
-
-        // Special handling for highest_quality_grown (max, not increment)
-        if (stat === 'highest_quality_grown') {
-            await pool.execute(
-                `INSERT INTO cfx_player_stats (player_id, highest_quality_grown)
-                 VALUES (?, ?)
-                 ON DUPLICATE KEY UPDATE
-                 highest_quality_grown = GREATEST(highest_quality_grown, ?)`,
-                [playerId, value, value]
-            );
-        } else {
-            // Regular increment
-            await pool.execute(
-                `INSERT INTO cfx_player_stats (player_id, ${stat})
-                 VALUES (?, ?)
-                 ON DUPLICATE KEY UPDATE
-                 ${stat} = ${stat} + ?`,
-                [playerId, value, value]
-            );
-        }
-
-        res.json({ success: true });
-
-    } catch (error) {
-        logger.error('[Stats] Track failed', { error: error.message });
-        res.status(500).json({ error: 'Failed', code: 'ERROR' });
-    }
-});
+// POST /stats/track was removed (H-402): it was public and let a player add any amount to
+// their own stats, which achievements read. Server code uses trackStat() below.
 
 /**
  * Helper function to track stats from other routes

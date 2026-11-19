@@ -21,10 +21,10 @@
  */
 import 'dotenv/config';
 import mysql from 'mysql2/promise';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 
 const GUILD = '814321716872347648';
-const KABBOT = '1522493725526327386';
+// The acting bot comes from guild_bot_mapping — never pinned here.
 const APPLY = process.argv.includes('--apply');
 
 /**
@@ -51,15 +51,11 @@ const RENAMES = [
   { id: '1466949410595278872', was: 'She/Her (dupe)',       name: 'ACST', color: 0x3498DB, set: 'Timezone' },
   { id: '1466949412013080617', was: 'They/Them (dupe)',     name: 'NZST', color: 0x3498DB, set: 'Timezone' },
 
-  // ── Colours: 7 exist, no panel. Round it out to 15. ────────────────────────
-  { id: '1466949413120512217', was: 'Ask (dupe)',           name: 'Cyan',     color: 0x1ABC9C, set: 'Colour' },
-  { id: '1466949461216333907', was: 'He/Him (dupe)',        name: 'Teal',     color: 0x11806A, set: 'Colour' },
-  { id: '1466949462290202847', was: 'She/Her (dupe)',       name: 'Lime',     color: 0x2ECC71, set: 'Colour' },
-  { id: '1466949463124869233', was: 'They/Them (dupe)',     name: 'Magenta',  color: 0xE91E63, set: 'Colour' },
-  { id: '1466949464190357729', was: 'Ask (dupe)',           name: 'Gold',     color: 0xF1C40F, set: 'Colour' },
-  { id: '1466949546671210639', was: 'He/Him (dupe)',        name: 'Lavender', color: 0xB18FE0, set: 'Colour' },
-  { id: '1466949547568660510', was: 'She/Her (dupe)',       name: 'Crimson',  color: 0x992D22, set: 'Colour' },
-  { id: '1466949548508184597', was: 'They/Them (dupe)',     name: 'White',    color: 0xE6E7E8, set: 'Colour' },
+  // ── Colours: DELIBERATELY NOT RENAMED ──────────────────────────────────────
+  // Karabi approved the clean-up with "everything but colours!" (roles_ok note). Her seven existing
+  // colour roles stay exactly as they are — pickerless — and no abandoned dupe is minted into a new
+  // colour. The eight ids that used to live here (Cyan/Teal/Lime/Magenta/Gold/Lavender/Crimson/White)
+  // are left as dead dupes on purpose; that is the reversible direction. Do NOT re-add them.
 
   // ── Opt-in pings: one per thing we actually announce ───────────────────────
   { id: '1466950362702286918', was: 'Ask (dupe)',           name: '🔔 Stream Pings', color: 0x9146FF, set: 'Notify' },
@@ -68,17 +64,21 @@ const RENAMES = [
   { id: '1466950315210178714', was: 'She/Her (dupe)',       name: '🔔 Events',       color: 0x5865F2, set: 'Notify' },
   { id: '1466950315784802519', was: 'They/Them (dupe)',     name: '🔔 Question of the Day', color: 0xFEE75C, set: 'Notify' },
 
-  // ── The remaining 7 are intentionally unassigned. See the note above. ──────
+  // ── Spare interest roles: Karabi named these (spare_roles note) ─────────────
+  // "Fortnite, Streamer, Minecraft, Party Games, Among Us, 18-20, 21+". "Streamer" already exists as
+  // a live role, so it is NOT minted here — the spare-role picker reuses the existing one. The other
+  // six repurpose empty dupes, same empty-only safety rule as every rename above. One reserved dupe
+  // is left over (see RESERVED) because she named seven and one already existed.
+  { id: '1466950316917526763', was: 'Ask (dupe)',           name: 'Fortnite',    color: 0, set: 'Interest' },
+  { id: '1466950360190156933', was: 'He/Him (dupe)',        name: 'Minecraft',   color: 0, set: 'Interest' },
+  { id: '1466950361305710623', was: 'She/Her (dupe)',       name: 'Party Games', color: 0, set: 'Interest' },
+  { id: '1466950362043908237', was: 'They/Them (dupe)',     name: 'Among Us',    color: 0, set: 'Interest' },
+  { id: '1282556157969432576', was: 'new role',             name: '18-20',       color: 0, set: 'Interest' },
+  { id: '1282557235385471006', was: 'new role',             name: '21+',         color: 0, set: 'Interest' },
 ];
 
-/** Spare roles we are deliberately NOT renaming yet — Karabi picks what these become. */
+/** Spare roles left deliberately unassigned — one leftover dupe after Karabi's seven were named. */
 const RESERVED = [
-  '1466950316917526763', // Ask (dupe)
-  '1466950360190156933', // He/Him (dupe)
-  '1466950361305710623', // She/Her (dupe)
-  '1466950362043908237', // They/Them (dupe)
-  '1282556157969432576', // new role
-  '1282557235385471006', // new role
   '1525748284193509467', // new role
 ];
 
@@ -96,9 +96,9 @@ const db = await mysql.createConnection({
   host: process.env.DB_HOST, user: process.env.DB_USER,
   password: process.env.DB_PASSWORD, database: process.env.DB_NAME,
 });
-const [[bot]] = await db.execute('SELECT bot_token FROM custom_bots WHERE bot_id = ?', [KABBOT]);
+const bot = await resolveBotForGuild(GUILD, { db });
 await db.end();
-const token = encryption.decrypt(JSON.parse(bot.bot_token));
+const token = bot.token;
 
 const api = async (path, opts = {}) => {
   for (;;) {

@@ -1,0 +1,494 @@
+<%# Holiday countdowns: one list, nearest first. Each holiday's row has an Edit drawer that holds its
+     pinned message (plain form POSTs to /manage/:guildId/holidays/pin|unpin) and its per-server
+     settings (built by the script at the bottom from /api/guilds/:guildId/holidays,
+     dashboard/routes/api/features/holidays.js). Auto-reply channels are form POSTs too.
+     Expects locals: guild, channels, holidays and holidayAutoChannels (manage-sections.js). %>
+<%
+const textChannels = (locals.channels || []).filter(c => c.type === 0 || c.type === 5);
+const holidays = locals.holidays || [];
+const autoChannels = locals.holidayAutoChannels || [];
+const chName = (id) => (textChannels.find(c => c.id === id) || {}).name || null;
+const shareBase = 'https://certifriedmultitool.com/countdown/';
+const pinnedCount = holidays.filter(h => h.pin && h.pin.channel_id).length;
+const next = holidays[0] || null;
+const daysText = (h) => h.isToday ? 'Today' : (h.daysRemaining === 1 ? 'Tomorrow' : 'In ' + h.daysRemaining + ' days');
+%>
+<div class="page-section" id="holidaysPage" data-guild-id="<%= guild.id %>">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-calendar-day"></i>
+                <span>Holiday countdowns</span>
+            </div>
+            <div class="page-section-subtitle">Pin, rename or switch off each holiday, and post on the day.</div>
+        </div>
+    </div>
+
+    <% if (locals.flash) { %>
+        <div class="cf-notice is-<%= flash.type === 'success' ? 'ok' : (flash.type === 'danger' || flash.type === 'error' ? 'bad' : 'info') %>" role="status"><div class="cf-notice-body"><%= flash.text %></div></div>
+    <% } %>
+    <div class="cf-notice is-bad" id="hcError" role="alert" hidden><div class="cf-notice-body"></div></div>
+
+    <dl class="cf-kpis" aria-label="Holiday countdowns at a glance">
+        <div class="cf-kpi">
+            <dt>Next holiday</dt>
+            <dd class="cf-kpi-value is-small"><%= next ? next.label : 'None' %><% if (next) { %><span class="cf-kpi-sub"><%= daysText(next) %>, <%= next.nextDateFormatted %></span><% } %></dd>
+        </div>
+        <div class="cf-kpi"><dt>Pinned countdowns</dt><dd class="cf-kpi-value"><%= pinnedCount %></dd></div>
+        <div class="cf-kpi"><dt>Off in this server</dt><dd class="cf-kpi-value" id="hcOffCount">-</dd></div>
+        <div class="cf-kpi"><dt>Auto-reply channels</dt><dd class="cf-kpi-value"><%= autoChannels.length %></dd></div>
+    </dl>
+
+    <section class="cf-section" aria-labelledby="hc-list-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="hc-list-title">Holidays <span class="hc-count"><%= holidays.length %></span></h2>
+                <p class="cf-section-desc" id="hcTzNote">Nearest first. A pinned countdown edits itself every few hours.</p>
+            </div>
+            <% if (holidays.length) { %>
+            <div class="cf-section-actions">
+                <div class="cf-segmented" role="group" aria-label="Show" id="hcFilter">
+                    <button type="button" data-filter="all" aria-pressed="true">All</button>
+                    <button type="button" data-filter="pinned" aria-pressed="false">Pinned</button>
+                    <button type="button" data-filter="off" aria-pressed="false">Off</button>
+                </div>
+                <label class="cf-search">
+                    <i class="fas fa-search" aria-hidden="true"></i>
+                    <input type="search" class="form-control" id="hcSearch" placeholder="Search holidays" aria-label="Search holidays" autocomplete="off">
+                </label>
+            </div>
+            <% } %>
+        </header>
+
+        <div class="cf-rows" id="hcList">
+            <% if (!holidays.length) { %>
+                <div class="cf-state">
+                    <p class="cf-state-title">No holidays to show</p>
+                    <p class="cf-state-text">The holiday list could not be loaded. Refresh the page to try again.</p>
+                </div>
+            <% } %>
+            <% holidays.forEach(h => {
+                const pinned = !!(h.pin && h.pin.channel_id);
+                const pinName = pinned ? chName(h.pin.channel_id) : null;
+                const share = shareBase + encodeURIComponent(h.slug);
+                const drawerId = 'hc-drawer-' + h.slug;
+            %>
+            <div class="hc-item" data-slug="<%= h.slug %>" data-search="<%= (h.label + ' ' + h.slug).toLowerCase() %>" data-pinned="<%= pinned ? '1' : '0' %>">
+                <div class="cf-list-item cf-list-item--multi">
+                    <span class="cf-list-lead hc-emoji" aria-hidden="true"><%= h.emoji %></span>
+                    <div class="cf-list-main">
+                        <p class="cf-list-title">
+                            <span class="hc-name"><%= h.label %></span>
+                            <span class="cf-chips hc-chips">
+                                <% if (h.isToday) { %><span class="cf-chip is-ok">Today</span><% } %>
+                                <% if (pinned && h.pin.disabled_reason) { %><span class="cf-chip is-bad">Pin paused</span><% } %>
+                            </span>
+                        </p>
+                        <p class="cf-list-meta">
+                            <span><%= h.nextDateFormatted %></span>
+                            <span class="hc-days"><%= daysText(h) %></span>
+                            <% if (pinned) { %><span>Pinned in <a href="https://discord.com/channels/<%= guild.id %>/<%= h.pin.channel_id %>/<%= h.pin.message_id %>" target="_blank" rel="noopener">#<%= pinName || 'deleted channel' %></a></span><% } %>
+                        </p>
+                        <p class="cf-list-meta hc-state" hidden></p>
+                    </div>
+                    <div class="cf-list-actions">
+                        <button type="button" class="btn btn-sm btn-secondary hc-copy" data-url="<%= share %>">Copy link</button>
+                        <button type="button" class="btn btn-sm btn-secondary hc-edit" aria-expanded="false" aria-controls="<%= drawerId %>">Edit</button>
+                    </div>
+                </div>
+                <div class="cf-expand-body hc-drawer" id="<%= drawerId %>" hidden>
+                    <div class="cf-rows hc-drawer-rows">
+                        <div class="cf-row cf-row--wide hc-pin-row">
+                            <div class="cf-row-text">
+                                <span class="cf-row-label"><%= pinned ? 'Pinned countdown' : 'Pin a countdown' %></span>
+                                <% if (pinned) { %>
+                                    <p class="cf-row-desc">In #<%= pinName || 'a deleted channel' %>. It edits itself every few hours.<% if (h.pin.disabled_reason) { %> Paused: <%= h.pin.disabled_reason %>.<% } %></p>
+                                <% } else { %>
+                                    <p class="cf-row-desc">Posts a message in the channel and keeps the number of days in it up to date.</p>
+                                <% } %>
+                            </div>
+                            <div class="cf-row-control">
+                                <% if (pinned) { %>
+                                    <form action="/manage/<%= guild.id %>/holidays/unpin" method="POST" data-no-ajax="1" class="cf-input-group">
+                                        <input type="hidden" name="slug" value="<%= h.slug %>">
+                                        <a class="btn btn-sm btn-secondary" href="https://discord.com/channels/<%= guild.id %>/<%= h.pin.channel_id %>/<%= h.pin.message_id %>" target="_blank" rel="noopener">Open in Discord</a>
+                                        <button type="submit" class="btn btn-sm btn-secondary">Unpin</button>
+                                    </form>
+                                <% } else { %>
+                                    <form action="/manage/<%= guild.id %>/holidays/pin" method="POST" data-no-ajax="1" class="cf-input-group hc-pin-form">
+                                        <input type="hidden" name="slug" value="<%= h.slug %>">
+                                        <select name="channel_id" class="form-select" required aria-label="Channel to pin <%= h.label %> in">
+                                            <option value="">Choose a channel</option>
+                                            <% textChannels.forEach(c => { %><option value="<%= c.id %>" data-kind="text">#<%= c.name %></option><% }) %>
+                                        </select>
+                                        <button type="submit" class="btn btn-sm btn-primary">Pin</button>
+                                    </form>
+                                <% } %>
+                            </div>
+                        </div>
+                        <div class="cf-row cf-row--wide">
+                            <div class="cf-row-text">
+                                <span class="cf-row-label">Share link</span>
+                                <p class="cf-row-desc">Unfurls into a card with the days left in Discord, Slack and X. Add <code>.png</code> for the image or <code>.json</code> for the data.</p>
+                            </div>
+                            <div class="cf-row-control">
+                                <div class="cf-input-group">
+                                    <input type="text" class="form-control" value="<%= share %>" readonly aria-label="Share link for <%= h.label %>">
+                                    <a class="btn btn-sm btn-secondary" href="<%= share %>" target="_blank" rel="noopener">Open</a>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="cf-state cf-state--compact hc-settings-state" role="status"><span class="cf-spinner" aria-hidden="true"></span><p class="cf-state-text">Loading settings</p></div>
+                    </div>
+                </div>
+            </div>
+            <% }) %>
+            <div class="cf-state" id="hcNoMatch" hidden>
+                <p class="cf-state-title">No holidays match</p>
+                <p class="cf-state-text">Try another name, or show all holidays.</p>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="hc-auto-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="hc-auto-title">Auto-reply channels <span class="hc-count"><%= autoChannels.length %></span></h2>
+                <p class="cf-section-desc">When someone posts a countdown share link in one of these channels, the bot replies with a countdown that keeps itself up to date.</p>
+            </div>
+        </header>
+
+        <div class="cf-rows">
+            <% if (autoChannels.length === 0) { %>
+                <div class="cf-state cf-state--compact"><p class="cf-state-text">No channels yet. Add one below.</p></div>
+            <% } %>
+            <% autoChannels.forEach(ac => { const n = chName(ac.channel_id); %>
+                <div class="cf-list-item cf-list-item--multi">
+                    <div class="cf-list-main">
+                        <p class="cf-list-title">#<%= n || 'deleted channel' %><% if (!n) { %> <span class="cf-chip is-bad">Channel deleted</span><% } %></p>
+                        <p class="cf-list-meta"><%= (ac.enabled_slugs && ac.enabled_slugs.length) ? 'Only: ' + ac.enabled_slugs.join(', ') : 'Every holiday' %></p>
+                    </div>
+                    <div class="cf-list-actions">
+                        <form action="/manage/<%= guild.id %>/holidays/auto-channels/remove" method="POST" data-no-ajax="1">
+                            <input type="hidden" name="channel_id" value="<%= ac.channel_id %>">
+                            <button type="submit" class="btn btn-sm btn-secondary">Remove</button>
+                        </form>
+                    </div>
+                </div>
+            <% }) %>
+            <div class="cf-row cf-row--wide">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="hcAutoAdd">Add a channel</label>
+                    <p class="cf-row-desc">Replies are only sent for holidays that are on in this server.</p>
+                </div>
+                <div class="cf-row-control">
+                    <form action="/manage/<%= guild.id %>/holidays/auto-channels/add" method="POST" data-no-ajax="1" class="cf-input-group">
+                        <select name="channel_id" id="hcAutoAdd" class="form-select" required>
+                            <option value="">Choose a channel</option>
+                            <% textChannels.forEach(c => { if (!autoChannels.find(ac => ac.channel_id === c.id)) { %><option value="<%= c.id %>" data-kind="text">#<%= c.name %></option><% } }) %>
+                        </select>
+                        <button type="submit" class="btn btn-sm btn-primary">Add</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <p class="hc-foot">All countdowns as data: <a href="https://certifriedmultitool.com/countdown.json" target="_blank" rel="noopener">certifriedmultitool.com/countdown.json</a></p>
+</div>
+
+<style>
+  #holidaysPage .hc-count { margin-left: 4px; font-size: var(--cf-text-sm); font-weight: 500; color: var(--cf-text-3); font-variant-numeric: tabular-nums; }
+  #holidaysPage .hc-emoji { font-size: 20px; line-height: 1; min-width: 32px; }
+  #holidaysPage .hc-days { font-variant-numeric: tabular-nums; }
+  #holidaysPage .hc-item.is-off .hc-name, #holidaysPage .hc-item.is-off .hc-emoji { color: var(--cf-text-3); opacity: 0.7; }
+  #holidaysPage .hc-drawer { padding-top: var(--cf-1, 4px); }
+  #holidaysPage .hc-drawer .cf-input-group .form-select { min-width: 0; }
+  #holidaysPage .hc-emoji-input { max-width: 8rem; }
+  #holidaysPage .hc-preview {
+      padding: var(--cf-3) var(--cf-4); background: var(--cf-surface-2); border: 1px solid var(--cf-border);
+      border-radius: var(--cf-radius); font-size: var(--cf-text-sm); color: var(--cf-text); line-height: 1.5; overflow-wrap: anywhere;
+  }
+  #holidaysPage .hc-mention {
+      padding: 0 2px; border-radius: 3px; font-weight: 500;
+      color: var(--cf-accent-fg, var(--cf-accent)); background: color-mix(in srgb, var(--cf-accent) 18%, transparent);
+  }
+  #holidaysPage .hc-foot { margin: 0; font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+  #holidaysPage .hc-foot a { color: inherit; text-decoration: underline; }
+  @media (max-width: 640px) {
+    #holidaysPage .hc-item .cf-list-actions .btn { flex: 1 1 auto; justify-content: center; }
+    #holidaysPage .hc-item .cf-list-lead { align-self: flex-start; justify-content: flex-start; }
+  }
+</style>
+
+<script>
+(function () {
+    // Everything is built with createElement/textContent: names, emoji, channel and role names come
+    // from the server and from users.
+    var root = document.getElementById('holidaysPage');
+    if (!root) return;
+    var api = '/api/guilds/' + encodeURIComponent(root.getAttribute('data-guild-id')) + '/holidays';
+    var channels = [];
+    var roles = [];
+    var byslug = {};
+
+    function el(tag, props) {
+        var node = document.createElement(tag);
+        Object.keys(props || {}).forEach(function (k) {
+            if (k === 'text') node.textContent = props[k];
+            else if (k === 'className') node.className = props[k];
+            else if (k === 'hidden' || k === 'checked' || k === 'disabled') node[k] = !!props[k];
+            else if (k === 'value') node.value = props[k];
+            else node.setAttribute(k, props[k]);
+        });
+        for (var i = 2; i < arguments.length; i++) {
+            var kid = arguments[i];
+            if (kid == null || kid === false) continue;
+            node.appendChild(typeof kid === 'string' ? document.createTextNode(kid) : kid);
+        }
+        return node;
+    }
+    function clear(node) { while (node.firstChild) node.removeChild(node.firstChild); }
+    function nameIn(items, id) { var hit = items.filter(function (x) { return x.id === id; })[0]; return hit ? hit.name : null; }
+    function itemOf(slug) { return root.querySelector('.hc-item[data-slug="' + slug + '"]'); }
+
+    // ── errors passed back by the pin / auto-reply form routes (?err=...) ──────────────────────
+    (function showRouteError() {
+        var msg = null;
+        try { msg = new URLSearchParams(window.location.search).get('err'); } catch (e) { /* old browser */ }
+        var box = document.getElementById('hcError');
+        if (!msg || !box) return;
+        box.querySelector('.cf-notice-body').textContent = 'That did not work: ' + msg;
+        box.hidden = false;
+    })();
+
+    // ── list: drawers, copy, search and filter ────────────────────────────────────────────────
+    root.addEventListener('click', function (e) {
+        var edit = e.target.closest('.hc-edit');
+        if (edit) {
+            var drawer = document.getElementById(edit.getAttribute('aria-controls'));
+            var open = edit.getAttribute('aria-expanded') !== 'true';
+            edit.setAttribute('aria-expanded', String(open));
+            edit.textContent = open ? 'Close' : 'Edit';
+            if (drawer) drawer.hidden = !open;
+            return;
+        }
+        var copy = e.target.closest('.hc-copy');
+        if (copy) {
+            var url = copy.getAttribute('data-url');
+            var done = function (ok) {
+                copy.textContent = ok ? 'Copied' : 'Copy failed';
+                setTimeout(function () { copy.textContent = 'Copy link'; }, 1800);
+            };
+            if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(url).then(function () { done(true); }, function () { done(false); });
+            else done(false);
+        }
+    });
+
+    var search = document.getElementById('hcSearch');
+    var filterBox = document.getElementById('hcFilter');
+    var filter = 'all';
+    function applyFilter() {
+        var q = search ? search.value.trim().toLowerCase() : '';
+        var shown = 0;
+        Array.prototype.forEach.call(root.querySelectorAll('.hc-item'), function (item) {
+            var h = byslug[item.getAttribute('data-slug')];
+            var ok = !q || item.getAttribute('data-search').indexOf(q) !== -1 || (h && h.label.toLowerCase().indexOf(q) !== -1);
+            if (ok && filter === 'pinned') ok = item.getAttribute('data-pinned') === '1';
+            if (ok && filter === 'off') ok = !!(h && !h.enabled);
+            item.hidden = !ok;
+            if (ok) shown++;
+        });
+        var none = document.getElementById('hcNoMatch');
+        if (none) none.hidden = shown > 0;
+    }
+    if (search) search.addEventListener('input', applyFilter);
+    if (filterBox) filterBox.addEventListener('click', function (e) {
+        var b = e.target.closest('button[data-filter]');
+        if (!b) return;
+        filter = b.getAttribute('data-filter');
+        Array.prototype.forEach.call(filterBox.querySelectorAll('button'), function (x) { x.setAttribute('aria-pressed', String(x === b)); });
+        applyFilter();
+    });
+
+    // ── per-holiday settings, inside each drawer ──────────────────────────────────────────────
+    function chips(h) {
+        var box = document.createDocumentFragment();
+        if (h.daysRemaining === 0) box.appendChild(el('span', { className: 'cf-chip is-ok', text: 'Today' }));
+        if (!h.enabled) box.appendChild(el('span', { className: 'cf-chip is-warn', text: 'Off' }));
+        if (h.pinned && h.pinned.paused) box.appendChild(el('span', { className: 'cf-chip is-bad', text: 'Pin paused' }));
+        if (h.enabled && h.announceOnDay && h.announceChannelId) {
+            var ch = nameIn(channels, h.announceChannelId);
+            box.appendChild(el('span', { className: 'cf-chip is-info', text: 'Posts on the day in ' + (ch ? '#' + ch : 'a deleted channel') }));
+        }
+        if (h.labelOverride || h.emojiOverride) box.appendChild(el('span', { className: 'cf-chip', text: 'Renamed' }));
+        return box;
+    }
+
+    // Mirror the saved settings into the holiday's row.
+    function paintRow(h) {
+        var item = itemOf(h.slug);
+        if (!item) return;
+        item.querySelector('.hc-name').textContent = h.label;
+        item.querySelector('.hc-emoji').textContent = h.emoji;
+        item.setAttribute('data-search', (h.label + ' ' + h.defaultLabel + ' ' + h.slug).toLowerCase());
+        item.classList.toggle('is-off', !h.enabled);
+        var box = item.querySelector('.hc-chips');
+        clear(box);
+        box.appendChild(chips(h));
+        var state = item.querySelector('.hc-state');
+        state.hidden = h.enabled;
+        state.textContent = h.enabled ? '' : (h.pinned ? 'Off in this server. The pinned countdown is no longer updated.' : 'Off in this server.');
+        var pinForm = item.querySelector('.hc-pin-form');
+        if (pinForm) Array.prototype.forEach.call(pinForm.querySelectorAll('select, button'), function (n) { n.disabled = !h.enabled; });
+    }
+
+    function countOff() {
+        var n = Object.keys(byslug).filter(function (k) { return !byslug[k].enabled; }).length;
+        var kpi = document.getElementById('hcOffCount');
+        if (kpi) kpi.textContent = String(n);
+    }
+
+    function row(id, label, control, desc, extra) {
+        return el('div', { className: 'cf-row' + (extra || '') },
+            el('div', { className: 'cf-row-text' },
+                el('label', { className: 'cf-row-label', 'for': id, text: label }),
+                desc ? el('p', { className: 'cf-row-desc', id: id + '-desc', text: desc }) : null),
+            el('div', { className: 'cf-row-control' }, control));
+    }
+    function switchInput(id, on) {
+        return el('input', { type: 'checkbox', className: 'cf-switch', role: 'switch', id: id, checked: on, 'aria-describedby': id + '-desc' });
+    }
+    function picker(id, items, chosen, empty, prefix, kind) {
+        var s = el('select', { className: 'form-select', id: id }, el('option', { value: '', text: empty }));
+        items.forEach(function (x) {
+            var o = el('option', { value: x.id, text: prefix + x.name, 'data-kind': kind });
+            if (x.id === chosen) o.selected = true;
+            s.appendChild(o);
+        });
+        // Keep a saved channel/role selectable even if the bot can no longer see it.
+        if (chosen && !nameIn(items, chosen)) {
+            var gone = el('option', { value: chosen, text: prefix + 'deleted (' + chosen + ')' });
+            gone.selected = true;
+            s.appendChild(gone);
+        }
+        return s;
+    }
+
+    function settings(h, rowsBox) {
+        var p = 'hc-' + h.slug + '-';
+        var enabled = switchInput(p + 'enabled', h.enabled);
+        var label = el('input', { type: 'text', className: 'form-control', id: p + 'label', maxlength: '80', placeholder: h.defaultLabel, value: h.labelOverride || '', 'aria-describedby': p + 'label-desc' });
+        var emoji = el('input', { type: 'text', className: 'form-control hc-emoji-input', id: p + 'emoji', maxlength: '24', placeholder: h.defaultEmoji, value: h.emojiOverride || '', 'aria-describedby': p + 'emoji-desc' });
+        var day = switchInput(p + 'day', !!(h.announceOnDay && h.announceChannelId));
+        var channel = picker(p + 'channel', channels, h.announceChannelId, 'Choose a channel', '#', 'text');
+        var role = picker(p + 'role', roles, h.mentionRoleId, 'No ping', '@', 'role');
+        var channelRow = row(p + 'channel', 'Channel', channel, null, ' cf-row--sub');
+        var roleRow = row(p + 'role', 'Ping a role', role, 'Optional. Only this role is pinged.', ' cf-row--sub');
+
+        // What the post on the day looks like: "[@role] <emoji> **Today is <name>!**".
+        var preview = el('div', { className: 'hc-preview', 'aria-live': 'polite' });
+        var previewRow = el('div', { className: 'cf-row cf-row--sub cf-row--stack' },
+            el('div', { className: 'cf-row-text' }, el('span', { className: 'cf-row-label', text: 'Preview' })),
+            el('div', { className: 'cf-row-control' }, preview));
+        function paintPreview() {
+            clear(preview);
+            var rn = role.value ? nameIn(roles, role.value) : null;
+            if (rn) { preview.appendChild(el('span', { className: 'hc-mention', text: '@' + rn })); preview.appendChild(document.createTextNode(' ')); }
+            preview.appendChild(document.createTextNode((emoji.value.trim() || h.defaultEmoji) + ' '));
+            preview.appendChild(el('strong', { text: 'Today is ' + (label.value.trim() || h.defaultLabel) + '!' }));
+        }
+        function showDayRows() { channelRow.hidden = roleRow.hidden = previewRow.hidden = !day.checked; }
+        day.addEventListener('change', showDayRows);
+        [label, emoji].forEach(function (n) { n.addEventListener('input', paintPreview); });
+        role.addEventListener('change', paintPreview);
+        showDayRows();
+        paintPreview();
+
+        var status = el('span', { className: 'cf-status-line', role: 'status', 'aria-live': 'polite' });
+        var save = el('button', { type: 'button', className: 'btn btn-primary btn-sm', text: 'Save' });
+        save.addEventListener('click', async function () {
+            if (day.checked && !channel.value) {
+                status.className = 'cf-status-line is-bad';
+                status.textContent = 'Choose a channel for the post on the day.';
+                channel.focus();
+                return;
+            }
+            save.disabled = true;
+            status.className = 'cf-status-line is-busy';
+            status.textContent = 'Saving';
+            try {
+                var res = await fetch(api + '/' + encodeURIComponent(h.slug), {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    credentials: 'same-origin',
+                    body: JSON.stringify({
+                        enabled: enabled.checked,
+                        label: label.value,
+                        emoji: emoji.value,
+                        announceOnDay: day.checked,
+                        // Switching the post off keeps the channel, so switching it back on restores it.
+                        announceChannelId: day.checked ? channel.value : (h.announceChannelId || ''),
+                        mentionRoleId: day.checked ? role.value : (h.mentionRoleId || '')
+                    })
+                });
+                var data = await res.json().catch(function () { return {}; });
+                if (!res.ok || !data.success) throw new Error(data.error || ('HTTP ' + res.status));
+                Object.keys(data.holiday).forEach(function (k) { h[k] = data.holiday[k]; });
+                paintRow(h);
+                countOff();
+                var warn = (data.warnings || []).join(' ');
+                status.className = 'cf-status-line ' + (warn ? 'is-warn' : 'is-ok');
+                status.textContent = warn ? 'Saved. ' + warn : 'Saved';
+            } catch (err) {
+                status.className = 'cf-status-line is-bad';
+                status.textContent = err.message || 'Could not save';
+            }
+            save.disabled = false;
+        });
+
+        rowsBox.appendChild(row(p + 'enabled', 'On in this server', enabled, 'Off stops the pinned countdown, its updates and auto-replies for this holiday here.', ' cf-row--switch'));
+        rowsBox.appendChild(row(p + 'label', 'Name', label, 'Leave empty for "' + h.defaultLabel + '". Used in everything the bot posts here; the public share page keeps the standard name.'));
+        rowsBox.appendChild(row(p + 'emoji', 'Emoji', emoji, 'A standard emoji (server emoji do not show in embed titles). Leave empty for ' + h.defaultEmoji + '.'));
+        rowsBox.appendChild(row(p + 'day', 'Post on the day', day, 'Posts once on the date, from ' + announceHour + ':00 in the server’s timezone.', ' cf-row--switch'));
+        rowsBox.appendChild(channelRow);
+        rowsBox.appendChild(roleRow);
+        rowsBox.appendChild(previewRow);
+        rowsBox.appendChild(el('div', { className: 'cf-section-foot' }, status, save));
+    }
+
+    var announceHour = 9;
+    async function load() {
+        try {
+            var res = await fetch(api, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' });
+            var data = await res.json();
+            if (!res.ok || !data.success) throw new Error(data.error || ('HTTP ' + res.status));
+            channels = data.channels || [];
+            roles = data.roles || [];
+            if (data.announceHour != null) announceHour = data.announceHour;
+            var tz = document.getElementById('hcTzNote');
+            if (tz) tz.textContent = 'Nearest first. A pinned countdown edits itself every few hours. Posts on the day go out at '
+                + announceHour + ':00 in the server’s timezone (' + (data.timezone || 'UTC') + ').';
+            data.holidays.forEach(function (h) {
+                byslug[h.slug] = h;
+                var item = itemOf(h.slug);
+                if (!item) return;
+                var rowsBox = item.querySelector('.hc-drawer-rows');
+                var loading = rowsBox.querySelector('.hc-settings-state');
+                if (loading) loading.remove();
+                settings(h, rowsBox);
+                paintRow(h);
+            });
+            countOff();
+            applyFilter();
+        } catch (err) {
+            Array.prototype.forEach.call(root.querySelectorAll('.hc-settings-state'), function (s) {
+                s.classList.add('cf-state--error');
+                clear(s);
+                s.appendChild(el('p', { className: 'cf-state-text', text: 'Could not load this holiday’s settings: ' + (err.message || 'unknown error') + '. Refresh to try again.' }));
+            });
+        }
+    }
+    load();
+})();
+</script>

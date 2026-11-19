@@ -9,8 +9,9 @@
 
 import 'dotenv/config';
 import pool from '../utils/db.js';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 
+const GUILD_ID = '1469931133981687873';          // Forsaken Warriors — the guild that owns CHANNEL_ID
 const CHANNEL_ID = '1470675898662654002';        // ℭ𝔬𝔪𝔪𝔞𝔫𝔡𝔰 (Forsaken Warriors)
 const POST = process.argv.includes('--post');
 const CLEAN = process.argv.includes('--clean');
@@ -76,10 +77,9 @@ function splitBlock(block) {
 }
 
 async function main() {
-    // Resolve Kitsune token (owns the channel).
-    const [[row]] = [await pool.execute("SELECT bot_id, bot_token FROM custom_bots WHERE bot_id = '1498486251576229958'")];
-    const bot = row[0];
-    const token = encryption.decrypt(JSON.parse(bot.bot_token));
+    // Resolve the token of whichever bot currently owns this guild (and so the channel).
+    const bot = await resolveBotForGuild(GUILD_ID, { db: pool });
+    const token = bot.token;
     const me = await rest(token, 'GET', 'https://discord.com/api/v10/users/@me');
     const ch = await rest(token, 'GET', `https://discord.com/api/v10/channels/${CHANNEL_ID}`);
     const guildId = ch.guild_id;

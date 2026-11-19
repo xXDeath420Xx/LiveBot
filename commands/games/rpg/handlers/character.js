@@ -5,6 +5,7 @@ import { EmbedBuilder } from 'discord.js';
 import logger from '../../../../utils/logger.js';
 import { parseCharacterFromURL, convertToRPGCharacter } from '../../../../utils/pdf-character-parser.js';
 import { createProgressBar, formatAbilityScore } from '../utils.js';
+import { themeColor } from '../../../../core/guild-theme.js';
 
 export async function handleCharacter(interaction, subcommand, characterManager) {
     if (subcommand === 'create') {
@@ -40,12 +41,12 @@ async function handleCreate(interaction, characterManager) {
     const speciesDisplay = species.charAt(0).toUpperCase() + species.slice(1).replace('-', ' ');
     let description = `*Level 1 ${speciesDisplay} ${classDisplay}*`;
     if (background) {
-        const bgDisplay = background.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase());
+        const bgDisplay = background.replace(/[_-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
         description += `\n**Background:** ${bgDisplay}`;
     }
 
     const embed = new EmbedBuilder()
-        .setColor('#00FF00')
+        .setColor(themeColor(interaction.guildId, 'success'))
         .setTitle(`${name}`)
         .setDescription(description)
         .addFields(
@@ -100,7 +101,7 @@ async function handleView(interaction, characterManager) {
     const expBar = createProgressBar(character.experience, expNeeded);
 
     const embed = new EmbedBuilder()
-        .setColor('#FFD700')
+        .setColor(themeColor(interaction.guildId, 'warning'))
         .setTitle(`${character.character_name} - Level ${character.level} ${character.class}`)
         .setDescription(`Owner: <@${targetUser.id}>`)
         .addFields(
@@ -139,7 +140,7 @@ async function handleStats(interaction, characterManager) {
     const equipped = await characterManager.getEquippedItems(character.character_id);
 
     const embed = new EmbedBuilder()
-        .setColor('#9B59B6')
+        .setColor(themeColor(interaction.guildId, 'accent'))
         .setTitle(`${character.character_name} - Combat Stats`)
         .addFields(
             { name: 'Attack Damage', value: damage.toString(), inline: true },
@@ -227,7 +228,7 @@ async function handleImport(interaction, characterManager) {
         const subclassDisplay = rpgCharacter.subclass ? ` (${rpgCharacter.subclass})` : '';
 
         const embed = new EmbedBuilder()
-            .setColor('#7289DA')
+            .setColor(themeColor(interaction.guildId, 'accent'))
             .setTitle(`${rpgCharacter.character_name}`)
             .setDescription(`*Level ${rpgCharacter.level} ${classDisplay}${subclassDisplay}*\n${rpgCharacter.species ? `**Species:** ${rpgCharacter.species}` : ''} ${rpgCharacter.background ? `• **Background:** ${rpgCharacter.background}` : ''}`)
             .addFields(

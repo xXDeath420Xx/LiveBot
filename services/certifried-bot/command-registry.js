@@ -18,10 +18,12 @@ import { tokesHelpCommand } from './commands/help.js';
 import { embersCommand } from './commands/embers.js';
 import { cfxCommand, cfxDailyCommand, cfxMarketCommand, cfxLeaderboardCommand, cfxSellCommand } from './commands/cfx.js';
 import { shoutoutCommand } from './commands/shoutout.js';
+import { sourceCommand } from './commands/source.js';
 
 // Map command keys to their handler functions
 const commandHandlers = {
     'so': shoutoutCommand,
+    'source': sourceCommand, // AGPL-3.0 section 13 source offer (row: migrations/460_channel_bot_source_command.js)
     'lit': litCommand,
     'spark': sparkCommand,
     'fireboard': fireboardCommand,

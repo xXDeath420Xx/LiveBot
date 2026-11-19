@@ -1,223 +1,337 @@
-<%- include('_head', { pageTitle: 'Connected Accounts', csrfToken, kickUser: user }) %>
+<%- include('_head', { pageTitle: 'Connected accounts', csrfToken, kickUser: user }) %>
+<% var expiredCount = accounts.filter(function (a) { return a.tokenExpired; }).length; %>
 
   <div class="pagehead">
     <div>
-      <h1>🐻 Connected Accounts</h1>
-      <div class="sub">Everyone connected to the network, their channels, permissions and token health.</div>
+      <div class="kick-eyebrow">Kick Defender</div>
+      <h1>Connected accounts</h1>
+      <p class="sub">Who is connected, their channels, permissions and token health.</p>
     </div>
-    <nav class="subnav">
-      <a href="/kick">Channels</a>
-      <a href="/kick/managers">Manager console</a>
-      <a href="/kick/admin" class="active">Connected accounts</a>
-    </nav>
   </div>
+  <%- include('_tabs', { active: 'admin', isManager: true, isAdmin: true }) %>
 
-  <!-- ── Overview stats ─────────────────────────────────────── -->
-  <div class="statgrid">
-    <div class="stat"><b><%= totals.accounts %></b><span>Connected accounts</span></div>
-    <div class="stat kick"><b><%= totals.kick %></b><span>Kick accounts</span></div>
-    <div class="stat"><b><%= totals.channels %></b><span>Channels</span></div>
-    <div class="stat"><b><%= totals.enrolled %></b><span>Defender-enrolled</span></div>
-  </div>
+  <dl class="cf-kpis">
+    <div class="cf-kpi"><dt>Connected accounts</dt><dd><%= totals.accounts %></dd></div>
+    <div class="cf-kpi"><dt>Kick accounts</dt><dd><%= totals.kick %></dd></div>
+    <div class="cf-kpi"><dt>Channels</dt><dd><%= totals.channels %></dd></div>
+    <div class="cf-kpi"><dt>Defender on</dt><dd><%= totals.enrolled %></dd></div>
+  </dl>
 
-  <!-- ── Token-health callout (computed in-view) ─────────────── -->
-  <% var expiredCount = accounts.filter(function(a){ return a.tokenExpired; }).length; %>
   <% if (expiredCount > 0) { %>
-    <div class="banner">
-      ⚠ <%= expiredCount %> account<%= expiredCount === 1 ? '' : 's' %> ha<%= expiredCount === 1 ? 's' : 've' %> expired tokens — those users must re-authorize with Kick to keep protection active.
+    <div class="cf-notice is-warn">
+      <div class="cf-notice-body"><%= expiredCount %> account<%= expiredCount === 1 ? ' has an' : 's have' %> expired Kick token<%= expiredCount === 1 ? '' : 's' %>. They need to sign in with Kick again to keep protection running.</div>
     </div>
   <% } %>
 
-  <!-- ── Manager roster ─────────────────────────────────────── -->
-  <div class="card">
-    <h2 style="margin:0 0 .8rem">Network managers</h2>
-    <div style="display:flex;gap:.5rem;flex-wrap:wrap;margin-bottom:.9rem">
-      <input id="mgr-add-user" class="search" placeholder="Kick username or user id" style="flex:1;min-width:200px" />
-      <button id="mgr-add-btn">Add manager</button>
+  <!-- Managers -->
+  <section class="cf-section">
+    <header class="cf-section-head">
+      <div>
+        <h2 class="cf-section-title">Network managers</h2>
+        <p class="cf-section-desc">Managers can change the shared banlist, sublist, whitelist and manual sites.</p>
+      </div>
+    </header>
+    <div class="cf-rows">
+      <div class="cf-row">
+        <div class="cf-row-text"><label class="cf-row-label" for="mgr-add-user">Add a manager</label><p class="cf-row-desc">Kick username or user id. They must have signed in once.</p></div>
+        <div class="cf-row-control">
+          <div class="kick-inline"><input id="mgr-add-user" maxlength="100" autocomplete="off"><button type="button" id="mgr-add-btn" class="btn btn-primary btn-sm">Add manager</button></div>
+          <span id="mgr-msg" class="kick-status" role="status" aria-live="polite"></span>
+        </div>
+      </div>
+      <div class="cf-list" id="mgr-list"><div class="cf-list-item"><span class="muted">Loading…</span></div></div>
     </div>
-    <ul class="clean" id="mgr-list"><li class="muted">Loading…</li></ul>
-  </div>
+  </section>
 
-  <!-- ── Network activity feed ──────────────────────────────── -->
-  <div class="card">
-    <div class="row" style="margin-bottom:.8rem">
-      <h2 style="margin:0">Recent network activity</h2>
-      <button id="net-refresh">Refresh</button>
-    </div>
-    <div id="net-feed" class="log-out">Loading…</div>
-  </div>
-
-  <input id="search" class="search" placeholder="Filter by username…" style="width:100%;margin:1.1rem 0" />
-
-  <% if (!accounts.length) { %>
-    <div class="card">
-      <div class="empty">No connected accounts yet.</div>
-    </div>
-  <% } %>
-
-  <% accounts.forEach(function(a){ %>
-    <div class="card acct" data-name="<%= (a.platformName || a.primaryName || '').toLowerCase() %>">
-      <div class="row">
-        <div style="display:flex;align-items:center;gap:.8rem">
-          <img src="<%= a.avatar || '/images/CertiFried.png' %>" alt="" onerror="this.src='/images/CertiFried.png'" style="width:42px;height:42px;border-radius:50%;object-fit:cover;background:#14121d" />
-          <div>
-            <div style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:1.1rem"><%= a.platformName || a.primaryName || 'Unknown' %></div>
-            <div class="muted" style="margin-top:.2rem">
-              user #<%= a.userId %><% if (a.lastSeen) { %> · last seen <%= new Date(a.lastSeen).toISOString().slice(0,16).replace('T',' ') %> UTC<% } %>
+  <!-- Site bans (sign-in to these pages) -->
+  <section class="cf-section">
+    <header class="cf-section-head">
+      <div>
+        <h2 class="cf-section-title">Site bans</h2>
+        <p class="cf-section-desc">A banned account can't sign in to these pages until the ban ends or you lift it. This is separate from the Kick chat banlist.</p>
+      </div>
+    </header>
+    <div class="cf-rows">
+      <form id="ban-form" novalidate>
+        <div class="cf-row cf-row--stack">
+          <div class="cf-fields">
+            <div class="cf-field"><label for="ban-user">Account</label><input id="ban-user" placeholder="Kick username or user id" maxlength="100" autocomplete="off" required></div>
+            <div class="cf-field"><label for="ban-reason">Reason</label><input id="ban-reason" placeholder="Kept with the ban" maxlength="500" autocomplete="off" required></div>
+            <div class="cf-field">
+              <label for="ban-hours">Length</label>
+              <select id="ban-hours">
+                <option value="1">1 hour</option>
+                <option value="24">1 day</option>
+                <option value="72">3 days</option>
+                <option value="168" selected>7 days</option>
+                <option value="720">30 days</option>
+                <option value="2160">90 days</option>
+                <option value="">Until lifted</option>
+              </select>
             </div>
           </div>
         </div>
-        <div style="display:flex;gap:.4rem;flex-wrap:wrap;align-items:center">
-          <span class="pill off"><%= a.platform %></span>
-          <% if (a.isAdmin) { %><span class="pill ok">admin</span><% } %>
-          <% if (a.isManager && !a.isAdmin) { %><span class="pill warn">manager</span><% } %>
-          <% if (a.isBotAccount) { %><span class="pill off">bot account</span><% } %>
-          <% if (a.isBanned) { %><span class="pill bad">banned</span><% } %>
-          <% if (a.platform === 'kick') { %>
-            <span class="pill <%= a.hasBanScope ? 'ok' : 'warn' %>"><%= a.hasBanScope ? 'can ban' : 'no ban scope' %></span>
-          <% } %>
-          <% if (a.tokenExpired) { %><span class="pill bad">token expired</span><% } %>
+        <div class="cf-section-foot">
+          <span class="kick-status cf-foot-note" id="ban-status" role="status" aria-live="polite"></span>
+          <button type="submit" class="btn btn-danger btn-sm" id="ban-btn">Ban</button>
         </div>
+      </form>
+      <div class="cf-list" id="ban-list"><div class="cf-list-item"><span class="muted">Loading…</span></div></div>
+      <details class="kick-cmd-more">
+        <summary>Recent bans and unbans</summary>
+        <div class="cf-list" id="ban-history"><div class="cf-list-item"><span class="muted">Loading…</span></div></div>
+      </details>
+    </div>
+  </section>
+
+  <!-- Pending thoughts -->
+  <section class="cf-section">
+    <header class="cf-section-head">
+      <div>
+        <h2 class="cf-section-title">Pending thoughts <span class="muted" id="thought-count">(<%= pendingThoughts.length %>)</span></h2>
+        <p class="cf-section-desc">Sent from chat with <code>!elevated submit</code>. Approved ones join the <code>!elevated</code> rotation; rejected ones are deleted.</p>
       </div>
-
-      <% if (a.tokenExpired) { %>
-        <div class="banner">⚠ This account's Kick token has expired — protection is paused until they re-authorize.</div>
-      <% } %>
-
-      <% if (!a.channels.length) { %>
-        <div class="muted" style="margin-top:.8rem">No channels registered.</div>
-      <% } else { %>
-        <ul class="clean" style="margin-top:.8rem">
-          <% a.channels.forEach(function(ch){ %>
-            <li>
-              <span style="font-weight:600"><%= ch.channelName %></span>
-              <span style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap">
-                <% if (ch.stats) { %><span class="muted">banned <%= ch.stats.banned %> · deleted <%= ch.stats.deleted %> · dormant <%= ch.stats.dormant %></span><% } %>
-                <span class="pill <%= ch.defenderEnabled ? 'ok' : 'off' %>"><%= ch.defenderEnabled ? 'defender ON' : 'defender off' %></span>
-                <% if (!ch.enabled) { %><span class="pill off">disabled</span><% } %>
-              </span>
-            </li>
-          <% }) %>
-        </ul>
-      <% } %>
-
-      <div class="muted" style="margin-top:.6rem;font-size:.72rem;word-break:break-word">
-        scopes: <%= a.scopes && a.scopes.length ? a.scopes.join('  ') : '(none granted)' %>
+    </header>
+    <div class="cf-rows">
+      <div class="cf-list" id="thought-list">
+        <% if (!pendingThoughts.length) { %>
+          <div class="cf-list-item" id="thought-empty"><span class="muted">Nothing waiting for review.</span></div>
+        <% } %>
+        <% pendingThoughts.forEach(function (t) { %>
+          <div class="cf-list-item" data-id="<%= t.id %>">
+            <div class="cf-list-main">
+              <div><%= t.thought %></div>
+              <div class="muted"><%= t.submitted_by || 'anonymous' %><%= t.created_at ? ', ' + new Date(t.created_at).toISOString().slice(0, 16).replace('T', ' ') + ' UTC' : '' %></div>
+            </div>
+            <div class="cf-list-actions">
+              <button type="button" class="btn btn-primary btn-sm thought-review" data-action="approve">Approve</button>
+              <button type="button" class="btn btn-danger btn-sm thought-review" data-action="reject">Reject</button>
+            </div>
+          </div>
+        <% }) %>
       </div>
     </div>
-  <% }) %>
+  </section>
 
-<% var pageJs = `
+  <!-- Network activity -->
+  <section class="cf-section">
+    <header class="cf-section-head">
+      <div>
+        <h2 class="cf-section-title">Recent network activity</h2>
+        <p class="cf-section-desc">The latest defender actions across every connected channel.</p>
+      </div>
+      <div class="cf-section-actions"><button type="button" id="net-refresh" class="btn btn-secondary btn-sm">Refresh</button></div>
+    </header>
+    <div class="cf-rows"><div class="cf-row cf-row--stack"><div id="net-feed"><p class="muted">Loading…</p></div></div></div>
+  </section>
+
+  <!-- Accounts -->
+  <section class="cf-section">
+    <header class="cf-section-head">
+      <div>
+        <h2 class="cf-section-title">Accounts <span class="muted">(<%= accounts.length %>)</span></h2>
+        <p class="cf-section-desc">Kick connections, their channels and what the bot is allowed to do in them.</p>
+      </div>
+      <div class="cf-section-actions"><input id="search" type="search" class="kick-search" placeholder="Filter by name" aria-label="Filter accounts"></div>
+    </header>
+    <% if (!accounts.length) { %>
+      <div class="cf-rows"><div class="cf-state cf-state--compact"><p class="cf-state-text">No connected accounts yet.</p></div></div>
+    <% } %>
+    <div class="kick-panel-stack">
+    <% accounts.forEach(function (a) { %>
+      <div class="cf-rows acct" data-name="<%= (a.platformName || a.primaryName || '').toLowerCase() %>">
+        <div class="cf-list-item">
+          <div class="cf-list-main kick-acct-head">
+            <img src="<%= a.avatar || '/images/CertiFried.png' %>" alt="" onerror="this.src='/images/CertiFried.png'">
+            <div>
+              <div class="cf-em"><%= a.platformName || a.primaryName || 'Unknown' %></div>
+              <div class="muted">User #<%= a.userId %><% if (a.lastSeen) { %> · last seen <%= new Date(a.lastSeen).toISOString().slice(0, 16).replace('T', ' ') %> UTC<% } %></div>
+            </div>
+          </div>
+          <div class="cf-list-actions">
+            <span class="pill off"><%= a.platform %></span>
+            <% if (a.isAdmin) { %><span class="pill ok">Owner</span><% } %>
+            <% if (a.isManager && !a.isAdmin) { %><span class="pill warn">Manager</span><% } %>
+            <% if (a.isBotAccount) { %><span class="pill off">Bot account</span><% } %>
+            <% if (a.isBanned) { %><span class="pill bad">Site ban</span><% } %>
+            <% if (a.platform === 'kick') { %><span class="pill <%= a.hasBanScope ? 'ok' : 'warn' %>"><%= a.hasBanScope ? 'Can ban' : 'No ban permission' %></span><% } %>
+            <% if (a.tokenExpired) { %><span class="pill bad">Token expired</span><% } %>
+          </div>
+        </div>
+        <% if (a.tokenExpired) { %>
+          <div class="cf-notice is-warn"><div class="cf-notice-body">This account's Kick token has expired. Protection is paused until they sign in with Kick again.</div></div>
+        <% } %>
+        <% if (!a.channels.length) { %>
+          <div class="cf-list-item"><span class="muted">No channels registered.</span></div>
+        <% } %>
+        <% a.channels.forEach(function (ch) { %>
+          <div class="cf-list-item">
+            <div class="cf-list-main">
+              <span class="cf-em"><%= ch.channelName %></span>
+              <% if (ch.stats) { %><div class="muted">Banned <%= ch.stats.banned %> · removed <%= ch.stats.deleted %> · detected <%= ch.stats.dormant %></div><% } %>
+            </div>
+            <div class="cf-list-actions">
+              <span class="pill <%= ch.defenderEnabled ? 'ok' : 'off' %>"><%= ch.defenderEnabled ? 'Defender on' : 'Defender off' %></span>
+              <% if (!ch.enabled) { %><span class="pill off">Channel disabled</span><% } %>
+            </div>
+          </div>
+        <% }) %>
+        <div class="cf-list-item"><span class="muted kick-scopes">Permissions: <%= a.scopes && a.scopes.length ? a.scopes.join(', ') : 'none granted' %></span></div>
+      </div>
+    <% }) %>
+    </div>
+    <p class="muted" id="acct-nomatch" hidden>No account matches that filter.</p>
+  </section>
+
   <script>
-    // Client-side filter — no requests, purely cosmetic.
-    var search = document.getElementById('search');
-    if (search) {
-      search.addEventListener('input', function () {
-        var q = search.value.trim().toLowerCase();
-        document.querySelectorAll('.acct').forEach(function (el) {
-          el.style.display = !q || (el.dataset.name || '').includes(q) ? '' : 'none';
-        });
-      });
-    }
-
-    var esc = function (s) {
-      return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
-        return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c];
-      });
+  (function () {
+    var K = window.KickDash;
+    var $ = function (id) { return document.getElementById(id); };
+    var mk = function (tag, text, cls) { return K.el(tag, cls || null, text); };
+    var rowWith = function (main, actions) {
+      var li = mk('div', null, 'cf-list-item');
+      var m = mk('div', null, 'cf-list-main'); main.forEach(function (n) { m.appendChild(n); });
+      li.appendChild(m);
+      if (actions && actions.length) { var a = mk('div', null, 'cf-list-actions'); actions.forEach(function (n) { a.appendChild(n); }); li.appendChild(a); }
+      return li;
     };
+    var note = function (text) { return rowWith([mk('span', text, 'muted')]); };
 
-    var fmtTime = function (v) {
-      if (!v) return '';
-      var d = new Date(v);
-      if (isNaN(d.getTime())) return esc(v);
-      return d.toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
-    };
+    // Account filter (no requests).
+    var search = $('search');
+    if (search) search.addEventListener('input', function () {
+      var q = search.value.trim().toLowerCase(), shown = 0;
+      document.querySelectorAll('.acct').forEach(function (el) {
+        var hit = !q || (el.dataset.name || '').indexOf(q) !== -1;
+        el.hidden = !hit; if (hit) shown++;
+      });
+      $('acct-nomatch').hidden = shown > 0 || !document.querySelectorAll('.acct').length;
+    });
 
+    // Managers.
     async function loadManagers() {
-      var list = document.getElementById('mgr-list');
-      if (!list) return;
+      var list = $('mgr-list');
       try {
-        var res = await fetch('/kick/api/managers', { headers: { 'Accept': 'application/json' } });
-        var data = await res.json();
+        var data = await K.get('/kick/api/managers');
         var mgrs = (data && data.managers) || [];
-        if (!mgrs.length) {
-          list.innerHTML = '<li class="muted">No managers yet.</li>';
-          return;
-        }
-        list.innerHTML = mgrs.map(function (m) {
-          var added = m.addedAt ? ' <span class="muted">added ' + fmtTime(m.addedAt) + '</span>' : '';
-          return '<li><span style="display:flex;align-items:center;gap:.5rem;flex-wrap:wrap;justify-content:space-between">' +
-            '<span><b>' + esc(m.name || m.userId) + '</b>' + added + '</span>' +
-            '<button class="danger mgr-remove" data-user="' + esc(m.userId) + '">Remove</button>' +
-            '</span></li>';
-        }).join('');
-        list.querySelectorAll('.mgr-remove').forEach(function (btn) {
+        list.replaceChildren();
+        if (!mgrs.length) { list.appendChild(note('No managers yet.')); return; }
+        mgrs.forEach(function (m) {
+          var btn = mk('button', 'Remove', 'btn btn-danger btn-sm'); btn.type = 'button';
           btn.addEventListener('click', async function () {
-            try {
-              await KickDash.post('/kick/api/managers', { user: btn.dataset.user, action: 'remove' });
-              loadManagers();
-            } catch (e) { alert('Failed to remove manager.'); }
+            if (!confirm('Remove ' + (m.name || m.userId) + ' as a manager?')) return;
+            btn.disabled = true;
+            try { await K.post('/kick/api/managers', { user: String(m.userId), action: 'remove' }); loadManagers(); }
+            catch (e) { K.status($('mgr-msg'), e.message || 'Failed to remove the manager.', 'bad'); btn.disabled = false; }
           });
+          var main = [mk('span', m.name || ('User #' + m.userId), 'cf-em')];
+          if (m.addedAt) main.push(mk('div', 'Added ' + K.fmtTime(m.addedAt), 'muted'));
+          list.appendChild(rowWith(main, [btn]));
         });
-      } catch (e) {
-        list.innerHTML = '<li class="muted">Failed to load managers.</li>';
-      }
+      } catch (e) { list.replaceChildren(note(e.message || 'Failed to load managers.')); }
     }
-
-    async function loadNetFeed() {
-      var feed = document.getElementById('net-feed');
-      if (!feed) return;
-      feed.textContent = 'Loading…';
+    $('mgr-add-btn').addEventListener('click', async function () {
+      var inp = $('mgr-add-user'), val = inp.value.trim(), btn = $('mgr-add-btn');
+      if (!val) { K.status($('mgr-msg'), 'Enter a username or id.', 'bad'); return; }
+      btn.disabled = true; K.status($('mgr-msg'), 'Adding…');
       try {
-        var res = await fetch('/kick/api/network-activity?limit=40', { headers: { 'Accept': 'application/json' } });
-        var data = await res.json();
-        var events = (data && data.events) || [];
-        if (!events.length) {
-          feed.innerHTML = '<div class="muted">No actions recorded yet.</div>';
-          return;
-        }
-        var rows = events.map(function (ev) {
-          var ok = ev.success ? 'ok' : 'bad';
-          return '<tr>' +
-            '<td class="muted" style="white-space:nowrap">' + fmtTime(ev.created_at) + '</td>' +
-            '<td>' + esc(ev.channel_name || ev.channel_id) + '</td>' +
-            '<td><span class="pill ' + ok + '">' + esc(ev.action) + '</span></td>' +
-            '<td>' + esc(ev.target_username) + '</td>' +
-            '<td class="muted">' + esc(ev.reason) + '</td>' +
-            '</tr>';
-        }).join('');
-        feed.innerHTML = '<table style="width:100%;border-collapse:collapse;font-size:.82rem">' +
-          '<thead><tr style="text-align:left">' +
-          '<th>time</th><th>channel</th><th>action</th><th>user</th><th>reason</th>' +
-          '</tr></thead><tbody>' + rows + '</tbody></table>';
-      } catch (e) {
-        feed.innerHTML = '<div class="muted">Failed to load activity.</div>';
-      }
-    }
+        var r = await K.post('/kick/api/managers', { user: val, action: 'add' });
+        inp.value = '';
+        K.status($('mgr-msg'), 'Added ' + ((r && r.user) || val) + '.', 'ok');
+        loadManagers();
+      } catch (e) { K.status($('mgr-msg'), e.message || 'Failed to add the manager.', 'bad'); }
+      finally { btn.disabled = false; }
+    });
 
-    var mgrAddBtn = document.getElementById('mgr-add-btn');
-    if (mgrAddBtn) {
-      mgrAddBtn.addEventListener('click', async function () {
-        var inp = document.getElementById('mgr-add-user');
-        var val = inp ? inp.value.trim() : '';
-        if (!val) return;
-        mgrAddBtn.disabled = true;
+    // Network activity.
+    async function loadNetFeed() {
+      var host = $('net-feed');
+      try {
+        var data = await K.get('/kick/api/network-activity?limit=40');
+        K.table(host, ['Time', 'Channel', 'Action', 'User', 'Reason'], (data.events || []).map(function (ev) {
+          var pill = mk('span', ev.action || '', 'pill ' + (ev.success ? 'ok' : 'bad'));
+          return [{ text: K.fmtTime(ev.created_at), cls: 'nowrap' }, ev.channel_name || ev.channel_id || '', pill, ev.target_username || '', { text: ev.reason || '', cls: 'muted' }];
+        }), 'No actions recorded yet.');
+      } catch (e) { host.replaceChildren(mk('p', 'Failed to load activity.', 'muted')); }
+    }
+    $('net-refresh').addEventListener('click', loadNetFeed);
+
+    // Thought review: the list is server-rendered, so a click only posts and removes its row.
+    document.querySelectorAll('.thought-review').forEach(function (btn) {
+      btn.addEventListener('click', async function () {
+        var item = btn.closest('.cf-list-item');
+        var buttons = item.querySelectorAll('button');
+        buttons.forEach(function (b) { b.disabled = true; });
         try {
-          await KickDash.post('/kick/api/managers', { user: val, action: 'add' });
-          if (inp) inp.value = '';
-          loadManagers();
+          await K.post('/kick/api/thoughts/review', { id: Number(item.dataset.id), action: btn.dataset.action });
+          item.remove();
+          var left = document.querySelectorAll('#thought-list .cf-list-item[data-id]').length;
+          $('thought-count').textContent = '(' + left + ')';
+          if (!left) $('thought-list').appendChild(note('Nothing waiting for review.'));
         } catch (e) {
-          alert('Failed to add manager.');
-        } finally {
-          mgrAddBtn.disabled = false;
+          alert(e.message || 'Failed to review the thought.');
+          buttons.forEach(function (b) { b.disabled = false; });
         }
       });
+    });
+
+    // Site bans: built with createElement/textContent (names and reasons are user text).
+    var banStatus = $('ban-status');
+    async function loadBans() {
+      var list = $('ban-list'), hist = $('ban-history');
+      try {
+        var data = await K.get('/kick/api/site-bans');
+        list.replaceChildren();
+        if (!data.active.length) list.appendChild(note('Nobody is banned.'));
+        data.active.forEach(function (b) {
+          var name = b.primary_name || ('user #' + b.user_id);
+          var main = [mk('span', name, 'cf-em')];
+          if (b.accounts) main.push(mk('span', ' ' + b.accounts, 'muted'));
+          main.push(mk('div', 'Reason: ' + (b.reason || b.ban_reason || 'none given') +
+            ' · ' + (b.expires_at ? 'ends ' + K.fmtTime(b.expires_at) : 'until lifted') +
+            (b.issued_at ? ' · banned ' + K.fmtTime(b.issued_at) : '') +
+            (b.issued_by_name ? ' by ' + b.issued_by_name : ''), 'muted'));
+          var btn = mk('button', 'Unban', 'btn btn-secondary btn-sm'); btn.type = 'button';
+          btn.addEventListener('click', async function () {
+            if (!confirm('Lift the ban on ' + name + '?')) return;
+            btn.disabled = true;
+            try { await K.post('/kick/api/site-bans/unban', { user_id: b.user_id }); K.status(banStatus, 'Ban lifted.', 'ok'); loadBans(); }
+            catch (e) { K.status(banStatus, e.message || 'Failed to lift the ban.', 'bad'); btn.disabled = false; }
+          });
+          list.appendChild(rowWith(main, [btn]));
+        });
+        hist.replaceChildren();
+        if (!data.history.length) hist.appendChild(note('No bans recorded yet.'));
+        data.history.forEach(function (h) {
+          var text = (h.action_type === 'ban' ? 'Banned ' : 'Unbanned ') + (h.primary_name || ('user #' + h.user_id)) +
+            (h.action_type === 'ban' ? (h.expires_at ? ' until ' + K.fmtTime(h.expires_at) : ' until lifted') : '') +
+            (h.reason ? ': ' + h.reason : '');
+          hist.appendChild(rowWith([mk('div', text), mk('div', K.fmtTime(h.issued_at) + (h.issued_by_name ? ' · ' + h.issued_by_name : ''), 'muted')]));
+        });
+      } catch (e) {
+        list.replaceChildren(note(e.message || 'Failed to load bans.'));
+      }
     }
+    $('ban-form').addEventListener('submit', async function (ev) {
+      ev.preventDefault();
+      var user = $('ban-user').value.trim();
+      var reason = $('ban-reason').value.trim();
+      var hours = $('ban-hours').value;
+      if (!user || !reason) { K.status(banStatus, 'Enter the account and a reason.', 'bad'); return; }
+      var btn = $('ban-btn');
+      btn.disabled = true; K.status(banStatus, 'Banning…');
+      try {
+        var out = await K.post('/kick/api/site-bans', { user: user, reason: reason, hours: hours === '' ? null : Number(hours) });
+        K.status(banStatus, 'Banned ' + (out.name || user) + '.', 'ok');
+        $('ban-user').value = ''; $('ban-reason').value = '';
+        loadBans();
+      } catch (e) { K.status(banStatus, e.message || 'Failed to ban.', 'bad'); }
+      finally { btn.disabled = false; }
+    });
 
-    var netRefresh = document.getElementById('net-refresh');
-    if (netRefresh) netRefresh.addEventListener('click', loadNetFeed);
-
-    try { loadManagers(); } catch (e) {}
-    try { loadNetFeed(); } catch (e) {}
-  </script>`; %>
-<%- include('_foot', { extraJs: pageJs }) %>
+    loadManagers();
+    loadNetFeed();
+    loadBans();
+  })();
+  </script>
+<%- include('_foot') %>

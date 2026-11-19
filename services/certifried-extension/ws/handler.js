@@ -108,6 +108,8 @@ export function setupWebSocket(wss) {
 
             ws.on('close', () => {
                 logger.debug('[WS] Client disconnected', { playerId });
+                // A socket that was replaced by a newer one must not tear down the newer one's state (H-403)
+                if (clients.get(playerId) !== ws) return;
                 clients.delete(playerId);
                 heartbeats.delete(playerId);
                 unsubscribe(playerId);

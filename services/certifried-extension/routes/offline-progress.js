@@ -135,8 +135,10 @@ export async function recordOfflineProgress(playerId, lastOnline) {
             [playerId]
         );
 
-        // Get worker earnings from BOTH legacy worker logs and enhanced worker action logs
-        const [[legacyWorkerStats]] = await pool.execute(
+        // Worker activity while away. The workers tick logs every automated action to
+        // cfx_worker_logs (trimmer = auto_harvest, propagation_tech = auto_plant,
+        // sales_rep = auto_sell with cash_earned).
+        const [[workerStats]] = await pool.execute(
             `SELECT
                 SUM(cash_earned) as total_cash,
                 SUM(CASE WHEN worker_type = 'trimmer' THEN items_processed ELSE 0 END) as harvested,
@@ -146,23 +148,12 @@ export async function recordOfflineProgress(playerId, lastOnline) {
             [playerId, lastOnlineTime]
         );
 
-        const [[enhancedWorkerStats]] = await pool.execute(
-            `SELECT
-                SUM(cash_earned) as total_cash,
-                SUM(CASE WHEN action_type = 'auto_harvest' THEN items_processed ELSE 0 END) as harvested,
-                SUM(CASE WHEN action_type = 'auto_plant' THEN items_processed ELSE 0 END) as planted
-             FROM cfx_worker_action_log
-             WHERE player_id = ? AND performed_at >= ?`,
-            [playerId, lastOnlineTime]
-        );
-
-        // Combine both worker systems
-        const cashEarned = (parseFloat(legacyWorkerStats?.total_cash) || 0) +
-                          (parseFloat(enhancedWorkerStats?.total_cash) || 0);
-        const harvested = (legacyWorkerStats?.harvested || 0) + (enhancedWorkerStats?.harvested || 0);
-        const planted = (legacyWorkerStats?.planted || 0) + (enhancedWorkerStats?.planted || 0);
-        const ready = plantStatus?.ready_count || 0;
-        const withered = plantStatus?.withered_count || 0;
+        // SUM() comes back as a DECIMAL string from mysql2
+        const cashEarned = parseFloat(workerStats?.total_cash) || 0;
+        const harvested = parseInt(workerStats?.harvested, 10) || 0;
+        const planted = parseInt(workerStats?.planted, 10) || 0;
+        const ready = parseInt(plantStatus?.ready_count, 10) || 0;
+        const withered = parseInt(plantStatus?.withered_count, 10) || 0;
 
         // Only create record if something happened
         if (cashEarned > 0 || harvested > 0 || planted > 0 || ready > 0 || withered > 0) {

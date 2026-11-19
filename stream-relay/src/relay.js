@@ -3,7 +3,8 @@ const NodeMediaServer = require('node-media-server');
 const { config } = require('./config');
 const { validateStreamKey } = require('./keys');
 const { createSession, endSession } = require('./sessions');
-const { resolveViaDashboard } = require('./resolver-client');
+const { resolveWithFailures } = require('./resolver-client');
+const { createTargetTracker, redactError, uniqueNames } = require('./targets');
 
 // db: { query }, registry: StatusRegistry, makeMultistreamer: (onState) => Multistreamer
 function createRelay({ db, registry, makeMultistreamer }) {
@@ -54,33 +55,51 @@ function createRelay({ db, registry, makeMultistreamer }) {
     const keyId = result.key.id;
 
     let destinations = [];
+    // Destinations the dashboard could not resolve at go-live (e.g. a linked account that lost access):
+    // they never start, but they are part of this session's results.
+    let failed = [];
     try {
       // Primary path: dashboard resolver (handles dynamic OAuth platforms).
-      destinations = await resolveViaDashboard(streamKey);
-      console.log(`[relay] resolver returned ${destinations.length} destination(s)`);
+      ({ destinations, failed } = await resolveWithFailures(streamKey));
+      console.log(`[relay] resolver returned ${destinations.length} destination(s), ${failed.length} unresolved`);
     } catch (err) {
       console.error('[relay] resolver unavailable, falling back to static rows:', err.message);
       try {
         const rows = await db.query(
-          "SELECT name, platform, rtmp_url, dest_stream_key FROM stream_destinations WHERE stream_key_id = ? AND enabled = 1 AND resolution = 'static' ORDER BY priority ASC",
+          "SELECT id, name, platform, rtmp_url, dest_stream_key FROM stream_destinations WHERE stream_key_id = ? AND enabled = 1 AND resolution = 'static' ORDER BY priority ASC",
           [keyId]
         );
         destinations = rows;
       } catch (e) { console.error('[relay] static fallback failed:', e.message); return; }
     }
-    destinations = destinations.slice(0, config.maxDestinationsPerKey);
-    if (destinations.length === 0) { console.log('[relay] no destinations enabled'); return; }
+    destinations = uniqueNames(destinations.slice(0, config.maxDestinationsPerKey));
+    if (destinations.length === 0 && failed.length === 0) { console.log('[relay] no destinations enabled'); return; }
 
     await db.query('UPDATE stream_keys SET last_used_at = NOW() WHERE id = ?', [keyId]);
 
     let sessionId = null;
-    try { sessionId = await createSession(db, keyId, destinations.length); } catch {}
-    sessions.set(id, { sessionId, keyId });
+    try { sessionId = await createSession(db, keyId, destinations.length + failed.length); } catch {}
+
+    // Per-destination results (stream_session_targets), shown on the dashboard's /stream page.
+    const targets = createTargetTracker(db, sessionId);
+    for (const f of failed) await targets.add(f, 'failed', f.error || 'Could not get a stream key for this destination');
+    for (const d of destinations) await targets.add(d, 'connecting');
+
+    if (destinations.length === 0) {
+      console.log('[relay] no destination could be resolved');
+      if (sessionId) { try { await endSession(db, sessionId, 'error', 'No destination could start'); } catch {} }
+      return;
+    }
+    sessions.set(id, { sessionId, keyId, targets });
 
     registry.startStream(id, { keyId, startedAt: Date.now() });
     const inputUrl = `rtmp://127.0.0.1:${config.rtmpPort}${StreamPath}`;
 
-    const ms = makeMultistreamer((name, patch) => registry.setDestination(id, name, patch));
+    const ms = makeMultistreamer((name, patch) => {
+      const clean = patch.lastError ? { ...patch, lastError: redactError(patch.lastError) } : patch;
+      registry.setDestination(id, name, clean);
+      targets.update(name, clean);
+    });
     streamers.set(id, ms);
     ms.start(id, inputUrl, destinations);
     console.log(`[relay] fan-out started: ${destinations.length} destinations (key ${keyId})`);
@@ -90,6 +109,7 @@ function createRelay({ db, registry, makeMultistreamer }) {
     const ms = streamers.get(id); if (ms) ms.stop(id); streamers.delete(id);
     registry.endStream(id);
     const meta = sessions.get(id);
+    if (meta && meta.targets) await meta.targets.endAll();
     if (meta && meta.sessionId) { try { await endSession(db, meta.sessionId, 'ended'); } catch {} }
     sessions.delete(id);
     console.log(`[relay] stream ${id} ended`);

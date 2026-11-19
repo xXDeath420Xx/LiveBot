@@ -12,9 +12,9 @@ import fs from 'fs';
 import mysql from 'mysql2/promise';
 
 const GUILD    = '1216126780767731722';
-const OLD_BOT  = '1409904443125665875';
-const NEW_BOT  = '1496406792417185802';
-const DRY      = process.argv.includes('--dry');
+const OLD_BOT  = '1409904443125665875';  // bot-id-ok: previous author of the messages being re-posted, not a credential
+// The receiving bot comes from guild_bot_mapping — never pinned here.
+const DRY     = process.argv.includes('--dry');
 const SKIP_DEL = process.argv.includes('--skip-delete');
 const MAP_PATH = '/home/death/CertiFriedUtility/scripts/lair/transfer-map.json';
 
@@ -23,9 +23,9 @@ const pool = mysql.createPool({
     password: process.env.DB_PASSWORD, database: process.env.DB_NAME,
 });
 
-const enc = (await import('/home/death/CertiFriedUtility/utils/encryption.js')).default;
-const [tokRow] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id = ?', [NEW_BOT]);
-const newToken = enc.decrypt(JSON.parse(tokRow[0].bot_token));
+const { resolveBotForGuild } = await import('../utils/bot-resolver.js');
+const newBot = await resolveBotForGuild(GUILD, { db: pool });
+const newToken = newBot.token;
 const oldToken = process.env.DISCORD_TOKEN;
 const OLD_H = { Authorization: 'Bot ' + oldToken, 'Content-Type': 'application/json' };
 const NEW_H = { Authorization: 'Bot ' + newToken, 'Content-Type': 'application/json' };

@@ -84,15 +84,39 @@ async function getChannelFeatures(pool, broadcasterId) {
  * @param {string} eventType  Kick-Event-Type header (e.g. 'channel.followed')
  * @param {object} event      parsed event payload
  */
-export function makeHandleKickEvent({ pool, send = sendChannelMessage, allow = allowThankYou }) {
+export function makeHandleKickEvent({ pool, send = sendChannelMessage, allow = allowThankYou, onEvent = null }) {
     return async function handleKickEvent(eventType, event) {
         const broadcasterId = event?.broadcaster?.user_id ?? event?.broadcaster_user_id;
         if (broadcasterId == null) return 'ignored:no-broadcaster';
+        // Stream bot (core/stream-bot): every event, chat included; fire-and-forget, never blocks the chat path.
+        if (onEvent) { try { onEvent(eventType, event); } catch { /* the stream bot never breaks the receiver */ } }
+
+        // Chat arrives here since 2026-11-18. Kick retired the Pusher app key the chat socket used
+        // (kick-client.js); the official webhook is the supported path. Not stored in
+        // tokes_kick_events (chat volume would drown the follow/sub feed).
+        if (eventType === 'chat.message.sent') {
+            const sender = event.sender || {};
+            const badges = (sender.identity?.badges || []).map(b => String(b?.type || '').toLowerCase());
+            const { handleMessage } = await import('./command-handler.js');
+            await handleMessage({
+                platform: 'kick',
+                channelId: String(broadcasterId),
+                channelName: event.broadcaster?.channel_slug || event.broadcaster?.username || String(broadcasterId),
+                userId: sender.user_id != null ? String(sender.user_id) : undefined,
+                username: sender.username || sender.channel_slug,
+                message: String(event.content || '').trim(),
+                messageId: event.message_id,
+                isBroadcaster: sender.user_id != null && String(sender.user_id) === String(broadcasterId),
+                isMod: badges.includes('moderator') || badges.includes('broadcaster') || badges.includes('staff'),
+                reply: (text) => send(String(broadcasterId), text),
+            });
+            return 'chat_handled';
+        }
         const bid = String(broadcasterId);
 
         // Actor (follower/subscriber/gifter) username, shape varies per event.
         const actor = event?.follower?.username || event?.subscriber?.username
-            || event?.gifter?.username || event?.user?.username || null;
+            || event?.gifter?.username || event?.banned_user?.username || event?.user?.username || null;
 
         // Store every event (best-effort).
         try {
@@ -118,4 +142,8 @@ export function makeHandleKickEvent({ pool, send = sendChannelMessage, allow = a
     };
 }
 
-export const handleKickEvent = makeHandleKickEvent({ pool: realPool });
+const streamBotHook = (eventType, event) => {
+    import('../../core/stream-bot/index.js').then(({ onKick }) => onKick(eventType, event)).catch(() => {});
+};
+
+export const handleKickEvent = makeHandleKickEvent({ pool: realPool, onEvent: streamBotHook });

@@ -2,6 +2,37 @@ import { PermissionsBitField } from 'discord.js';
 import pool from '../../utils/db.js';
 import logger from '../../utils/logger.js';
 import { isSuperAdmin } from '../../utils/constants.js';
+import { liveConfigAccess } from '../../core/protection-exempt.js';
+import { pendingReason, sendReconnecting } from '../services/bot-readiness.js';
+
+/** The bot's Guild for this id, from whichever bot is in it. */
+function botGuild(req, guildId) {
+    if (global.botManager) {
+        const botClient = global.botManager.getClientForGuild(guildId);
+        return botClient?.guilds.cache.get(guildId) ?? null;
+    }
+    return req.app.locals.client?.guilds.cache.get(guildId) ?? null;
+}
+
+/** Bots still logging in after a restart (services/bot-readiness.js): 'starting' | 'reconnecting' | null. */
+function botPending(req) {
+    return pendingReason(req.params.guildId, { fallbackClient: req.app.locals.client });
+}
+
+/**
+ * No Manage Server in the login-time OAuth bitfield: a bot-manager role (core/protection-exempt.js)
+ * still lets them in. Checked LIVE against the member of THIS guild only. Resolves true when it set
+ * req.guildObject.
+ */
+export async function managerAccess(req, guildId) {
+    const guildObject = botGuild(req, guildId);
+    if (!guildObject) return false;
+    const access = await liveConfigAccess(guildObject, req.user.id);
+    if (!access.ok) return false;
+    req.guildObject = guildObject;
+    req.isBotManager = access.viaManager;
+    return true;
+}
 
 /**
  * Check if user is authenticated
@@ -83,8 +114,10 @@ export function checkGuildAdmin(req, res, next) {
             }
 
             if (!guildObject) {
+                const pending = botPending(req);
+                if (pending) return sendReconnecting(req, res, pending, 'The bot is not in this server.');
                 const botClientId = process.env.DASHBOARD_CLIENT_ID || process.env.DISCORD_CLIENT_ID;
-                return res.redirect(`https://discord.com/oauth2/authorize?client_id=${botClientId}&permissions=8&scope=bot+applications.commands&guild_id=${req.params.guildId}&disable_guild_select=true`);
+                return res.redirect(`https://discord.com/oauth2/authorize?client_id=${botClientId}&permissions=1643797540086&scope=bot+applications.commands&guild_id=${req.params.guildId}&disable_guild_select=true`);
             }
 
             req.guildObject = guildObject;
@@ -96,9 +129,17 @@ export function checkGuildAdmin(req, res, next) {
         // Regular user permission check
         const guild = req.user.guilds.find(g => g.id === req.params.guildId);
         if (!guild || !new PermissionsBitField(BigInt(guild.permissions)).has(PermissionsBitField.Flags.ManageGuild)) {
-            return res.status(403).render('error', {
-                user: req.user,
-                error: 'You do not have permissions for this server.'
+            const deny = () => {
+                const pending = !botGuild(req, req.params.guildId) && botPending(req);
+                if (pending) return sendReconnecting(req, res, pending, 'You do not have permissions for this server.');
+                return res.status(403).render('error', {
+                    user: req.user,
+                    error: 'You do not have permissions for this server.'
+                });
+            };
+            return managerAccess(req, req.params.guildId).then(ok => (ok ? next() : deny())).catch(e => {
+                logger.error('[checkGuildAdmin manager check Error]', e);
+                res.status(500).render('error', { user: req.user, error: 'An unexpected error occurred while checking permissions.' });
             });
         }
 
@@ -112,8 +153,10 @@ export function checkGuildAdmin(req, res, next) {
         }
 
         if (!guildObject) {
+            const pending = botPending(req);
+            if (pending) return sendReconnecting(req, res, pending, 'The bot is not in this server.');
             const botClientId = process.env.DASHBOARD_CLIENT_ID || process.env.DISCORD_CLIENT_ID;
-            return res.redirect(`https://discord.com/oauth2/authorize?client_id=${botClientId}&permissions=8&scope=bot+applications.commands&guild_id=${req.params.guildId}&disable_guild_select=true`);
+            return res.redirect(`https://discord.com/oauth2/authorize?client_id=${botClientId}&permissions=1643797540086&scope=bot+applications.commands&guild_id=${req.params.guildId}&disable_guild_select=true`);
         }
 
         req.guildObject = guildObject;
@@ -204,6 +247,8 @@ export function apiCheckGuildAdmin(req, res, next) {
             }
 
             if (!guildObject) {
+                const pending = botPending(req);
+                if (pending) return sendReconnecting(req, res, pending, 'Bot is not in this server');
                 return res.status(403).json({ error: 'Bot is not in this server' });
             }
 
@@ -215,7 +260,17 @@ export function apiCheckGuildAdmin(req, res, next) {
         // Regular user check
         const guild = req.user.guilds.find(g => g.id === req.params.guildId);
         if (!guild || !new PermissionsBitField(BigInt(guild.permissions)).has(PermissionsBitField.Flags.ManageGuild)) {
-            return res.status(403).json({ error: 'Insufficient permissions' });
+            return managerAccess(req, req.params.guildId)
+                .then(ok => {
+                    if (ok) return next();
+                    const pending = !botGuild(req, req.params.guildId) && botPending(req);
+                    if (pending) return sendReconnecting(req, res, pending, 'Insufficient permissions');
+                    return res.status(403).json({ error: 'Insufficient permissions' });
+                })
+                .catch(e => {
+                    logger.error('[apiCheckGuildAdmin manager check Error]', e);
+                    res.status(500).json({ error: 'Permission check failed' });
+                });
         }
 
         let guildObject = null;
@@ -227,6 +282,8 @@ export function apiCheckGuildAdmin(req, res, next) {
         }
 
         if (!guildObject) {
+            const pending = botPending(req);
+            if (pending) return sendReconnecting(req, res, pending, 'Bot is not in this server');
             return res.status(403).json({ error: 'Bot is not in this server' });
         }
 

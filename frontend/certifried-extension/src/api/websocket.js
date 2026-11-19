@@ -8,6 +8,11 @@ import { store } from '../state/store.js';
 const HEARTBEAT_INTERVAL = 25000;  // 25 seconds
 const RECONNECT_DELAYS = [1000, 2000, 5000, 10000, 30000];
 const MAX_RECONNECT_ATTEMPTS = 10;
+// A socket the server never speaks on (the front server accepted the handshake but relays nothing).
+const HELLO_TIMEOUT_MS = 6000;
+// Silent attempts before falling back to refresh mode, and how often to try live updates again after that.
+const SILENT_ATTEMPTS_BEFORE_FALLBACK = 4;
+const FALLBACK_RETRY_MS = 5 * 60 * 1000;
 
 class WebSocketClient extends EventTarget {
     constructor() {
@@ -28,6 +33,7 @@ class WebSocketClient extends EventTarget {
      * @param {string} url - WebSocket URL
      */
     connect(url) {
+        if (store.get('ui.frozen')) return; // frozen (H-636): no live updates
         if (this.ws?.readyState === WebSocket.OPEN) {
             console.log('[WS] Already connected');
             return;
@@ -58,20 +64,24 @@ class WebSocketClient extends EventTarget {
 
     _setupEventHandlers() {
         this.ws.onopen = () => {
-            console.log('[WS] Connected');
-            this.reconnectAttempt = 0;
-            store.set('ui.isConnected', true);
-            store.set('ui.connectionError', null);
-
-            this._startHeartbeat();
-            this._resubscribeChannels();
-            this._flushMessageQueue();
-
-            this.dispatchEvent(new CustomEvent('connected'));
+            // Not live yet: the server greets every accepted socket with a 'connected' message. A front
+            // server that answers the handshake without relaying would otherwise look connected (H-629).
+            this.isLive = false;
+            clearTimeout(this.helloTimer);
+            const sock = this.ws;
+            this.helloTimer = setTimeout(() => {
+                if (!this.isLive && this.ws === sock) {
+                    console.warn('[WS] No reply from the server; closing');
+                    try { sock.close(4900, 'No server hello'); } catch { /* already closed */ }
+                }
+            }, HELLO_TIMEOUT_MS);
         };
 
         this.ws.onclose = (event) => {
             console.log('[WS] Disconnected:', event.code, event.reason);
+            clearTimeout(this.helloTimer);
+            if (!this.isLive) this.silentAttempts = (this.silentAttempts || 0) + 1;
+            this.isLive = false;
             store.set('ui.isConnected', false);
 
             this._stopHeartbeat();
@@ -86,11 +96,13 @@ class WebSocketClient extends EventTarget {
         };
 
         this.ws.onerror = (error) => {
-            console.error('[WS] Error:', error);
-            store.set('ui.connectionError', 'Connection error');
+            console.warn('[WS] Error:', error);
+            // Only worth telling the player when live updates were working and then broke.
+            if (this.wasLive && store.get('ui.liveMode') !== 'polling') store.set('ui.connectionError', 'Connection error');
         };
 
         this.ws.onmessage = (event) => {
+            if (!this.isLive) this._markLive();
             try {
                 const message = JSON.parse(event.data);
                 this._handleMessage(message);
@@ -124,11 +136,11 @@ class WebSocketClient extends EventTarget {
                 break;
 
             case 'subscribed':
-                console.log('[WS] Subscribed to:', data.channel);
+                console.log('[WS] Subscribed to:', channel ?? data?.channel);
                 break;
 
             case 'unsubscribed':
-                console.log('[WS] Unsubscribed from:', data.channel);
+                console.log('[WS] Unsubscribed from:', channel ?? data?.channel);
                 break;
 
             case 'error':
@@ -366,8 +378,38 @@ class WebSocketClient extends EventTarget {
         }
     }
 
+    /** The server spoke on this socket: live updates are working. */
+    _markLive() {
+        clearTimeout(this.helloTimer);
+        this.isLive = true;
+        this.wasLive = true;
+        this.reconnectAttempt = 0;
+        this.silentAttempts = 0;
+        console.log('[WS] Connected');
+        store.set('ui.isConnected', true);
+        store.set('ui.liveMode', 'live');
+        store.set('ui.connectionError', null);
+        this._startHeartbeat();
+        this._resubscribeChannels();
+        this._flushMessageQueue();
+        this.dispatchEvent(new CustomEvent('connected'));
+    }
+
     _scheduleReconnect() {
         if (this.reconnectTimer) return;
+        if (store.get('ui.frozen')) return; // frozen (H-636): never reconnect
+        // Live updates never got through: refresh mode, and a quiet retry every few minutes (H-629).
+        if ((this.silentAttempts || 0) >= SILENT_ATTEMPTS_BEFORE_FALLBACK) {
+            if (store.get('ui.liveMode') !== 'polling') console.warn('[WS] Live updates unavailable; refreshing on a timer instead');
+            store.set('ui.liveMode', 'polling');
+            store.set('ui.connectionError', null);
+            this.reconnectTimer = setTimeout(() => {
+                this.reconnectTimer = null;
+                this.silentAttempts = SILENT_ATTEMPTS_BEFORE_FALLBACK - 1; // one more try, then wait again
+                this.connect(this.url);
+            }, FALLBACK_RETRY_MS);
+            return;
+        }
         if (this.reconnectAttempt >= MAX_RECONNECT_ATTEMPTS) {
             console.error('[WS] Max reconnect attempts reached');
             store.set('ui.connectionError', 'Unable to connect. Please refresh the page.');

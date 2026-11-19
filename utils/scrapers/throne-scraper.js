@@ -1,11 +1,6 @@
 import axios from 'axios';
-import net from 'net';
-import puppeteer from 'puppeteer-extra';
-import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 import logger from '../logger.js';
 import { enforceSizeLimit, cleanupExpiredEntries } from '../cacheUtils.js';
-
-puppeteer.use(StealthPlugin());
 
 const LOG_TAG = '[ThroneScraper]';
 
@@ -36,331 +31,235 @@ export class ThroneParseError extends ThroneError {
     }
 }
 
+// ─── Normalisation ───────────────────────────────────────────────
+
+/**
+ * Normalise user input (URL, @handle, bare slug) into the Throne username. Returns null
+ * when the input is unusable (empty, control characters only, obviously not a Throne URL).
+ */
+export function normalizeThroneUsername(input) {
+    if (!input) return null;
+    let s = String(input).trim();
+    if (!s) return null;
+
+    // Users sometimes paste the slash-command option as `key:value` into the username field
+    // (e.g. `creator:death420`). Strip a recognised option-name prefix so the colon doesn't
+    // get silently dropped by the sanitiser below, which previously turned `creator:death420`
+    // into `creatordeath420` → tracked a nonexistent Throne user → silent failure.
+    const kvMatch = s.match(/^\s*(?:creator|user|username|handle|name)\s*:\s*(.+)$/i);
+    if (kvMatch) s = kvMatch[1].trim();
+
+    // throne.com/<user>, throne.me/<user>, with or without protocol
+    const urlMatch = s.match(/throne\.(?:com|me)\/([^\/?#\s]+)/i);
+    if (urlMatch) s = urlMatch[1];
+
+    s = s.replace(/^@+/, '').trim();
+    // allow a–z, 0–9, dot, dash, underscore (Throne's own slug rule)
+    s = s.replace(/[^A-Za-z0-9._-]/g, '');
+    return s ? s.toLowerCase() : null;
+}
+
 // ─── Cache ───────────────────────────────────────────────────────
-const cache = new Map();
-const MAX_CACHE_SIZE = 500;
+
 const CACHE_TTL = {
-    profile: 2 * 60 * 1000,       // 2 minutes (matches scheduler interval)
+    profile: 2 * 60 * 1000,
     wishlist: 2 * 60 * 1000,
-    collections: 5 * 60 * 1000,   // 5 minutes
-    gifts: 5 * 60 * 1000,         // 5 minutes
-    leaderboard: 5 * 60 * 1000,
+    collections: 5 * 60 * 1000,
+    gifts: 60 * 1000, // 1 min — scheduler is 2 min, cache was effectively doubling our cadence
+    leaderboard_allTime: 5 * 60 * 1000,
+    leaderboard_lastMonth: 5 * 60 * 1000,
+    leaderboard_lastWeek: 5 * 60 * 1000,
+    recentGifters: 5 * 60 * 1000,
 };
 
-// Per-username request cooldown (2s between requests to same page)
-const requestCooldowns = new Map();
-const REQUEST_COOLDOWN_MS = 2000;
-
-
-// Periodic cache cleanup
-setInterval(() => {
-    cleanupExpiredEntries(cache, Math.max(...Object.values(CACHE_TTL)), 'timestamp', 'throne-cache');
-}, 60 * 1000);
+const cache = new Map();
+const MAX_CACHE_ENTRIES = 500;
+let lastCacheSweep = 0;
+const CACHE_SWEEP_INTERVAL = 60 * 1000;
 
 function getCacheKey(username, type) {
-    return `throne:${username.toLowerCase()}:${type}`;
+    return `${type}:${username}`;
 }
 
 function getCached(username, type) {
+    maybeSweepCache();
     const key = getCacheKey(username, type);
-    const entry = cache.get(key);
-    if (!entry) return null;
-    if (Date.now() - entry.timestamp > (CACHE_TTL[type] || CACHE_TTL.profile)) {
+    const hit = cache.get(key);
+    if (!hit) return null;
+    if (Date.now() - hit.at > (CACHE_TTL[type] || 60000)) {
         cache.delete(key);
         return null;
     }
-    return entry.data;
+    return hit.value;
 }
 
-function setCache(username, type, data) {
-    const key = getCacheKey(username, type);
-    cache.set(key, { data, timestamp: Date.now() });
-    enforceSizeLimit(cache, MAX_CACHE_SIZE, 'throne-cache');
+function setCache(username, type, value) {
+    cache.set(getCacheKey(username, type), { at: Date.now(), value });
+    maybeSweepCache();
 }
 
-// ─── HTTP / Puppeteer Fetching ───────────────────────────────────
-import { SocksProxyAgent } from 'socks-proxy-agent';
-
-const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-const torAgent = new SocksProxyAgent('socks5h://127.0.0.1:9050');
-
-// Vercel challenge cookies — Puppeteer solves once, axios reuses
-let vercelCookies = null;
-let cookiesExpireAt = 0;
-
-function buildAxiosConfig() {
-    const config = {
-        timeout: 10000,
-        maxContentLength: 5 * 1024 * 1024,
-        httpAgent: torAgent,
-        httpsAgent: torAgent,
-        headers: {
-            'User-Agent': USER_AGENT,
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5',
-        },
-    };
-
-    if (vercelCookies && Date.now() < cookiesExpireAt) {
-        config.headers['Cookie'] = vercelCookies;
-    }
-
-    return config;
+function maybeSweepCache() {
+    if (Date.now() - lastCacheSweep < CACHE_SWEEP_INTERVAL) return;
+    lastCacheSweep = Date.now();
+    cleanupExpiredEntries(cache, (v, _k) => Date.now() - v.at > 10 * 60 * 1000);
+    enforceSizeLimit(cache, MAX_CACHE_ENTRIES);
 }
+
+// ─── Cooldown (per-user, keeps us from hammering Firestore on repeat lookups) ──
+const COOLDOWN_MS = 500;
+const lastRequestAt = new Map();
 
 async function waitForCooldown(username) {
-    const key = username.toLowerCase();
-    const last = requestCooldowns.get(key);
-    if (last) {
-        const elapsed = Date.now() - last;
-        if (elapsed < REQUEST_COOLDOWN_MS) {
-            await new Promise(resolve => setTimeout(resolve, REQUEST_COOLDOWN_MS - elapsed));
-        }
-    }
-    requestCooldowns.set(key, Date.now());
+    const last = lastRequestAt.get(username) || 0;
+    const wait = COOLDOWN_MS - (Date.now() - last);
+    if (wait > 0) await new Promise(r => setTimeout(r, wait));
+    lastRequestAt.set(username, Date.now());
 }
 
-function extractNextData(html, url) {
-    const startMarker = '<script id="__NEXT_DATA__" type="application/json">';
-    const startIndex = html.indexOf(startMarker);
-    if (startIndex === -1) {
-        throw new ThroneParseError(`__NEXT_DATA__ not found on ${url}`);
-    }
-    const jsonStart = startIndex + startMarker.length;
-    const endIndex = html.indexOf('</script>', jsonStart);
-    if (endIndex === -1) {
-        throw new ThroneParseError(`Closing </script> not found on ${url}`);
-    }
-    try {
-        return JSON.parse(html.substring(jsonStart, endIndex));
-    } catch (e) {
-        throw new ThroneParseError(`Failed to parse __NEXT_DATA__ JSON on ${url}: ${e.message}`);
-    }
-}
+// ─── Transport ───────────────────────────────────────────────────
 
-// ─── Puppeteer Browser Pool ���─────────────────────────────────────
-let browserInstance = null;
-let browserLaunchPromise = null;
-let lastBrowserUse = 0;
-const BROWSER_IDLE_TIMEOUT = 5 * 60 * 1000;
+const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+const FIRESTORE_PROJECT = 'onlywish-9d17b';
+const FIRESTORE_BASE = `https://firestore.googleapis.com/v1/projects/${FIRESTORE_PROJECT}/databases/(default)/documents`;
+const THRONE_API_BASE = `https://us-central1-${FIRESTORE_PROJECT}.cloudfunctions.net`;
 
-async function getBrowser() {
-    if (browserInstance?.connected) {
-        lastBrowserUse = Date.now();
-        return browserInstance;
-    }
+const AXIOS_DEFAULTS = Object.freeze({
+    timeout: 12000,
+    maxContentLength: 10 * 1024 * 1024,
+    headers: {
+        'Origin': 'https://throne.com',
+        'Referer': 'https://throne.com/',
+        'User-Agent': USER_AGENT,
+    },
+});
 
-    if (browserLaunchPromise) return browserLaunchPromise;
-
-    browserLaunchPromise = (async () => {
-        try {
-            logger.info(`${LOG_TAG} Launching headless browser`);
-            browserInstance = await puppeteer.launch({
-                headless: 'new',
-                args: [
-                    '--no-sandbox',
-                    '--disable-setuid-sandbox',
-                    '--disable-dev-shm-usage',
-                    '--disable-gpu',
-                    '--no-first-run',
-                    '--disable-extensions',
-                    '--proxy-server=socks5://127.0.0.1:9050',
-                ],
-                executablePath: '/usr/bin/google-chrome',
-            });
-            lastBrowserUse = Date.now();
-
-            browserInstance.on('disconnected', () => {
-                browserInstance = null;
-                logger.info(`${LOG_TAG} Browser disconnected`);
-            });
-
-            return browserInstance;
-        } finally {
-            browserLaunchPromise = null;
-        }
-    })();
-
-    return browserLaunchPromise;
-}
-
-// Close idle browser
-setInterval(() => {
-    if (browserInstance?.connected && Date.now() - lastBrowserUse > BROWSER_IDLE_TIMEOUT) {
-        logger.info(`${LOG_TAG} Closing idle browser`);
-        browserInstance.close().catch(() => {});
-        browserInstance = null;
-    }
-}, 60 * 1000);
-
-async function fetchWithPuppeteer(url) {
-    const browser = await getBrowser();
-    const page = await browser.newPage();
-
-    try {
-        await page.setViewport({ width: 1280, height: 720 });
-
-        // Navigate with networkidle2 — this waits for the challenge JS to resolve
-        // via Tor, which routes through residential exit nodes
-        // Tor adds ~20-30s latency, so we use a generous timeout
-        try {
-            await page.goto(url, { waitUntil: 'networkidle2', timeout: 45000 });
-        } catch (navError) {
-            // Timeout during navigation — Throne or Tor may be slow
-            throw new ThroneUnavailableError('Throne request timed out. Try again in a moment.');
-        }
-
-        // Check final state
-        const pageTitle = await page.title().catch(() => '');
-        if (pageTitle.includes('404') || pageTitle.includes('Not Found')) {
-            throw new ThroneUserNotFoundError(url);
-        }
-        if (pageTitle.includes('Security Checkpoint') || pageTitle.includes('Just a moment')) {
-            // Challenge didn't resolve — try waiting for one more navigation
-            try {
-                await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 });
-            } catch {
-                throw new ThroneUnavailableError('Throne is temporarily blocking requests. Try again in a few minutes.');
-            }
-        }
-
-        // Extract and store Vercel challenge cookies for reuse with axios
-        try {
-            const cookies = await page.cookies();
-            if (cookies.length > 0) {
-                vercelCookies = cookies.map(c => `${c.name}=${c.value}`).join('; ');
-                // Find the longest-lived cookie expiry, default to 1 hour
-                const maxExpiry = Math.max(...cookies.filter(c => c.expires > 0).map(c => c.expires * 1000));
-                cookiesExpireAt = maxExpiry > Date.now() ? maxExpiry : Date.now() + 60 * 60 * 1000;
-                logger.info(`${LOG_TAG} Captured ${cookies.length} Vercel cookies (valid for ${Math.round((cookiesExpireAt - Date.now()) / 60000)}min)`);
-            }
-        } catch { /* cookie extraction is best-effort */ }
-
-        return await page.content();
-    } finally {
-        await page.close().catch(() => {});
-    }
-}
-
-// ─── Tor Circuit Renewal ─────────────────────────────────────────
-async function renewTorCircuit() {
-    return new Promise((resolve) => {
-        const client = net.createConnection({ host: '127.0.0.1', port: 9051 }, () => {
-            client.write('AUTHENTICATE ""\r\n');
-            client.write('SIGNAL NEWNYM\r\n');
-            client.write('QUIT\r\n');
-        });
-
-        client.on('data', () => {}); // drain
-        client.on('end', () => {
-            logger.info(`${LOG_TAG} Tor circuit renewed via control port`);
-            // Wait for new circuit to establish
-            setTimeout(resolve, 5000);
-        });
-        client.on('error', (err) => {
-            logger.warn(`${LOG_TAG} Could not renew Tor circuit: ${err.message}`);
-            resolve();
-        });
-
-        // Timeout safety
-        setTimeout(() => { client.destroy(); resolve(); }, 8000);
-    });
-}
-
-// ─── Main Page Fetcher ───────────────────────────────────────────
-async function fetchThronePage(username, path = '') {
-    const url = `https://throne.com/${username.toLowerCase()}${path}`;
-    await waitForCooldown(username);
-
-    // Fast path: axios via Tor with cached Vercel cookies
-    if (vercelCookies && Date.now() < cookiesExpireAt) {
-        try {
-            const response = await axios.get(url, buildAxiosConfig());
-            const data = extractNextData(response.data, url);
-            if (!data.isFallback) {
-                logger.debug(`${LOG_TAG} Fast fetch (axios+cookies) for ${url}`);
-                return data;
-            }
-        } catch (error) {
-            if (error.response?.status === 404) throw new ThroneUserNotFoundError(username);
-            // Cookies expired or rejected — fall through to Puppeteer
-            if (error.response?.status === 429 || error.response?.status === 403) {
-                logger.info(`${LOG_TAG} Cookies expired, re-solving challenge...`);
-                vercelCookies = null;
-                cookiesExpireAt = 0;
-            }
-        }
-    }
-
-    // Medium path: axios via Tor without cookies (might work if Tor exit isn't blocked)
-    if (!vercelCookies) {
-        try {
-            const response = await axios.get(url, buildAxiosConfig());
-            const data = extractNextData(response.data, url);
-            if (!data.isFallback) return data;
-        } catch (error) {
-            if (error instanceof ThroneError) throw error;
-            if (error.response?.status === 404) throw new ThroneUserNotFoundError(username);
-            // 429/403 = need Puppeteer to solve challenge
-        }
-    }
-
-    // Slow path: Puppeteer via Tor (solves challenge, captures cookies for future fast-path)
-    for (let attempt = 1; attempt <= 2; attempt++) {
-        try {
-            const html = await fetchWithPuppeteer(url);
-            const data = extractNextData(html, url);
-            if (data.isFallback) {
-                throw new ThroneUserNotFoundError(username);
-            }
-            return data;
-        } catch (error) {
-            if (error instanceof ThroneUserNotFoundError) throw error;
-            if (error instanceof ThroneParseError) throw error;
-
-            if (attempt === 1) {
-                // First failure — close browser and request new Tor circuit
-                logger.warn(`${LOG_TAG} Attempt ${attempt} failed, renewing Tor circuit...`);
-                if (browserInstance?.connected) {
-                    await browserInstance.close().catch(() => {});
-                    browserInstance = null;
-                }
-                await renewTorCircuit();
-                continue;
-            }
-
-            if (error instanceof ThroneError) throw error;
-            logger.error(`${LOG_TAG} Puppeteer fetch failed after ${attempt} attempts`, { url, error: error.message });
-            throw new ThroneUnavailableError(`Failed to fetch Throne page: ${error.message}`);
-        }
-    }
-}
-
-// ─── Data Extraction Helpers ─────────────────────────────────────
-
-/** Find a value in the fallback object, checking both $sub$ prefixed and unprefixed keys */
-function findFallbackKey(fallback, pattern) {
-    if (!fallback) return null;
-    for (const key of Object.keys(fallback)) {
-        if (key.includes(pattern)) return fallback[key];
-    }
+/**
+ * Unwrap a single Firestore typed value into a plain JS value.
+ */
+function fsVal(v) {
+    if (v == null) return null;
+    if ('stringValue' in v) return v.stringValue;
+    if ('integerValue' in v) return parseInt(v.integerValue, 10);
+    if ('doubleValue' in v) return v.doubleValue;
+    if ('booleanValue' in v) return v.booleanValue;
+    if ('timestampValue' in v) return v.timestampValue;
+    if ('nullValue' in v) return null;
+    if ('mapValue' in v) return fsFields(v.mapValue.fields || {});
+    if ('arrayValue' in v) return (v.arrayValue.values || []).map(fsVal);
     return null;
 }
 
-function extractUserInfo(pageData) {
-    const fallback = pageData?.props?.pageProps?.fallback;
-    if (!fallback) throw new ThroneParseError('No fallback data in pageProps');
-
-    const userInfo = findFallbackKey(fallback, 'useCreatorByUsername/');
-    if (!userInfo || !userInfo._id) {
-        throw new ThroneUserNotFoundError('unknown');
-    }
-    return userInfo;
+function fsFields(fields) {
+    const out = {};
+    for (const k of Object.keys(fields || {})) out[k] = fsVal(fields[k]);
+    return out;
 }
 
+/**
+ * Resolve a Throne username to its Firestore creator document.
+ *
+ * The `creators` collection is public-queryable via Firestore `runQuery` with a username
+ * filter. The returned document carries every field we used to parse out of Vercel's SSR
+ * fallback — identity, permission flags, customization, platform, social links, interests,
+ * timestamps — and does so from a datacenter IP with no proxy, Tor, or Puppeteer.
+ *
+ * Fields a creator has NOT set are absent from the doc (not null); callers coalesce.
+ */
+async function fetchCreatorByUsername(username) {
+    const url = `${FIRESTORE_BASE}:runQuery`;
+    try {
+        const res = await axios.post(url, {
+            structuredQuery: {
+                from: [{ collectionId: 'creators' }],
+                where: {
+                    fieldFilter: {
+                        field: { fieldPath: 'username' },
+                        op: 'EQUAL',
+                        value: { stringValue: username },
+                    },
+                },
+                limit: 1,
+            },
+        }, AXIOS_DEFAULTS);
+        const rows = Array.isArray(res.data) ? res.data : [];
+        const doc = rows.find(r => r.document)?.document;
+        if (!doc) throw new ThroneUserNotFoundError(username);
+        const creatorId = doc.name.split('/').pop();
+        const fields = fsFields(doc.fields || {});
+        return { creatorId, fields };
+    } catch (error) {
+        if (error instanceof ThroneUserNotFoundError) throw error;
+        if (error.response?.status === 403) {
+            // Firestore rules changed. Treat as transient — a config change on their end rather
+            // than a per-user issue; retry on the next cycle without poisoning the cache.
+            throw new ThroneUnavailableError(`Firestore refused creator query (403) — rules may have changed: ${error.message}`);
+        }
+        throw new ThroneUnavailableError(`Firestore creator query failed for ${username}: ${error.message}`);
+    }
+}
+
+/**
+ * Query a Firestore subcollection under `creators/<creatorId>` via runQuery.
+ */
+async function fetchCreatorSubcollection(creatorId, collectionId) {
+    // creatorId carries a colon (e.g. "twitch:412729734"); Firestore accepts it raw in the path,
+    // and resolves the trailing ":runQuery" as the method (verified against the live API).
+    const url = `${FIRESTORE_BASE}/creators/${creatorId}:runQuery`;
+    try {
+        const res = await axios.post(
+            url,
+            { structuredQuery: { from: [{ collectionId }] } },
+            AXIOS_DEFAULTS,
+        );
+        const rows = Array.isArray(res.data) ? res.data : [];
+        return rows
+            .filter(r => r.document)
+            .map(r => ({ _docId: r.document.name.split('/').pop(), ...fsFields(r.document.fields) }));
+    } catch (error) {
+        if (error.response?.status === 404) return [];
+        throw new ThroneUnavailableError(`Firestore query failed for ${creatorId}/${collectionId}: ${error.message}`);
+    }
+}
+
+/**
+ * Fetch public gift orders for a creator from Throne's Cloud Functions API.
+ */
+async function fetchPublicOrders(creatorId) {
+    const url = `${THRONE_API_BASE}/api-order/v1/order/public/received/wishlist/${encodeURIComponent(creatorId)}`;
+    try {
+        const res = await axios.get(url, AXIOS_DEFAULTS);
+        return Array.isArray(res.data) ? res.data : [];
+    } catch (error) {
+        if (error.response?.status === 404) return [];
+        throw new ThroneUnavailableError(`Throne order API failed for ${creatorId}: ${error.message}`);
+    }
+}
+
+/**
+ * Fetch leaderboard + recent-gifters data for a creator from Throne's Cloud Functions API.
+ * Returns `{ leaderboardAllTime, leaderboardLastWeek, leaderboardLastMonth, lastTwentyGifters }`.
+ * Replaces the old `fetchGiftersPageOrNull` + fallback-key digging — this is the same payload
+ * Throne's own Vercel SSR calls to populate the gifters page.
+ */
+async function fetchLeaderboardDirect(creatorId) {
+    const url = `${THRONE_API_BASE}/api-leaderboard/v1/leaderboard/${encodeURIComponent(creatorId)}`;
+    try {
+        const res = await axios.get(url, AXIOS_DEFAULTS);
+        if (!res.data || typeof res.data !== 'object') return null;
+        return res.data;
+    } catch (error) {
+        if (error.response?.status === 404) return null;
+        // A creator who hides their leaderboard still returns 200 with empty arrays; a 403 /
+        // 500 is a real failure, not a hidden-leaderboard case.
+        throw new ThroneUnavailableError(`Throne leaderboard API failed for ${creatorId}: ${error.message}`);
+    }
+}
+
+// ─── Formatting helpers ──────────────────────────────────────────
+
 function centsToDollars(cents) {
-    if (cents == null) return 0;
-    return Math.round(cents) / 100;
+    const n = Number(cents) || 0;
+    return n / 100;
 }
 
 function formatPrice(cents, currency = 'USD') {
@@ -372,51 +271,90 @@ function formatPrice(cents, currency = 'USD') {
     }
 }
 
-// ─── Public API ��─────────────────────────────────────────────────
+// ─── Public API ──────────────────────────────────────────────────
 
 /**
- * Fetch a Throne user's profile information
+ * Fetch a Throne creator's profile.
+ *
+ * Shape matches the previous SSR-based implementation plus new permission flags surfaced
+ * by Wave 11-track-A: callers (`cacheProfileAndWishlist`, embed builders, notification
+ * posters) can read any new flag by name without changing the function's contract on the
+ * fields they already consumed.
  */
 export async function fetchThroneProfile(username, { force = false } = {}) {
+    const handle = normalizeThroneUsername(username);
+    if (!handle) throw new ThroneUserNotFoundError(String(username));
+
     if (!force) {
-        const cached = getCached(username, 'profile');
+        const cached = getCached(handle, 'profile');
         if (cached) return cached;
     }
 
-    // Gifters page has user info + leaderboard + gift history
-    const pageData = await fetchThronePage(username, '/gifters');
-    const userInfo = extractUserInfo(pageData);
+    await waitForCooldown(handle);
+    const { creatorId, fields } = await fetchCreatorByUsername(handle);
 
-    // Count items/collections from wishlist page if available, otherwise use 0
-    // (we don't fetch wishlist page here to avoid extra request)
+    // Platform is sometimes absent but is encoded in the creatorId prefix ("twitch:…" etc.).
+    const platformFromId = (creatorId.split(':', 1)[0] || '').toLowerCase();
+    const mainContentPlatform = fields.mainContentPlatform
+        || (platformFromId && platformFromId !== 'u' ? platformFromId.replace(/^./, c => c.toUpperCase()) : null);
 
     const profile = {
-        id: userInfo._id,
-        username: userInfo.username,
-        displayName: userInfo.displayName || userInfo.username,
-        bio: userInfo.bio || null,
-        birthday: userInfo.birthday ? `${userInfo.birthday.month}/${userInfo.birthday.day}` : null,
-        pictureUrl: userInfo.pictureUrl || null,
-        backgroundPictureUrl: userInfo.backgroundPictureUrl || null,
-        mainContentPlatform: userInfo.mainContentPlatform || null,
-        socialLinks: (userInfo.socialLinks || []).map(link => ({
-            type: link.type,
-            name: link.name,
-            url: link.url,
-        })),
-        interests: userInfo.interests || [],
-        showLeaderboard: userInfo.showLeaderboard ?? true,
-        showPreviousGifts: userInfo.showPreviousGifts ?? true,
-        createdAt: userInfo.createdAt ? new Date(userInfo.createdAt) : null,
-        profileUrl: `https://throne.com/${username.toLowerCase()}`,
+        id: creatorId,
+        username: fields.username || handle,
+        displayName: fields.displayName || fields.username || handle,
+        bio: fields.bio || null,
+        // Firestore's public `creators` doc does not carry `birthday` (it is on a private
+        // sub-document). We no longer surface birthday from the live fetch; the field is kept
+        // for backward compatibility with the old DB column.
+        birthday: null,
+        pictureUrl: fields.pictureUrl || null,
+        backgroundPictureUrl: fields.backgroundPictureUrl || null,
+        mainContentPlatform,
+        socialLinks: Array.isArray(fields.socialLinks) ? fields.socialLinks.map(link => ({
+            type: link?.type || null,
+            name: link?.name || null,
+            url: link?.url || null,
+        })) : [],
+        interests: Array.isArray(fields.interests) ? fields.interests : [],
+        createdAt: fields.createdAt ? new Date(fields.createdAt) : null,
+        updatedAt: fields.updatedAt ? new Date(fields.updatedAt) : null,
+        wishlistEnabledAt: fields.wishlistEnabledAt ? new Date(fields.wishlistEnabledAt) : null,
+        profileUrl: `https://throne.com/${handle}`,
+
+        // Permission flags — honoured by notification posters and the public dashboard. All
+        // default-true to match Throne's own default: "if the creator hasn't opted out, show".
+        showLeaderboard: fields.showLeaderboard ?? true,
+        showLeaderboardAmounts: fields.showLeaderboardAmounts ?? true,
+        showPreviousGifts: fields.showPreviousGifts ?? true,
+        showRecentGifters: fields.showRecentGifters ?? true,
+        showWishlist: fields.showWishlist ?? true,
+        showStorefront: fields.showStorefront ?? false,
+        allowGifterName: fields.allowGifterName ?? true,
+        allowGiftMessages: fields.allowGiftMessages ?? true,
+        allowSuggestionMessages: fields.allowSuggestionMessages ?? true,
+        allowSuggestions: fields.allowSuggestions ?? true,
+        allowPreviousGiftProductLinks: fields.allowPreviousGiftProductLinks ?? true,
+        hideGifterMessages: fields.hideGifterMessages ?? false,
+        hideOwnPurchases: fields.hideOwnPurchases ?? false,
+        isNSFW: fields.isNSFW ?? false,
+        blurNSFWProducts: fields.blurNSFWProducts ?? false,
+
+        // Lifecycle flags.
+        isOffWaitlist: fields.isOffWaitlist ?? false,
+        needsVerification: fields.needsVerification ?? false,
+
+        // Customization — mapValue; shape is `{ colorScheme: 'candy' | ... }` today but will
+        // grow. Stored verbatim so the dashboard can render whatever Throne adds without
+        // another schema change.
+        creatorPageCustomization: fields.creatorPageCustomization || null,
     };
 
-    setCache(username, 'profile', profile);
+    setCache(handle, 'profile', profile);
     return profile;
 }
 
 /**
- * Fetch a Throne user's wishlist items
+ * Fetch a Throne creator's wishlist items from the Firestore subcollection.
  */
 export async function fetchThroneWishlist(username, { force = false } = {}) {
     if (!force) {
@@ -424,76 +362,62 @@ export async function fetchThroneWishlist(username, { force = false } = {}) {
         if (cached) return cached;
     }
 
-    const pageData = await fetchThronePage(username);
-    const pp = pageData?.props?.pageProps || {};
-
-    // Items are in ssrWishlistItems (new format) or fallback (old format)
-    let rawItems = pp.ssrWishlistItems;
-    if (!rawItems || !Array.isArray(rawItems)) {
-        const profile = await fetchThroneProfile(username);
-        const fallback = pp.fallback || {};
-        rawItems = findFallbackKey(fallback, `useWishlistItems/${profile.id}`) || [];
-    }
+    const profile = await fetchThroneProfile(username, { force });
+    const rawItems = await fetchCreatorSubcollection(profile.id, 'wishlistItems');
 
     const items = rawItems.map(item => ({
-        id: item.id || item.itemId,
+        id: item.id || item._docId,
         name: item.name,
         price: centsToDollars(item.price),
-        priceRaw: item.price,
+        priceRaw: item.price || 0,
         currency: item.currency || 'USD',
         priceFormatted: formatPrice(item.price, item.currency),
         shipping: centsToDollars(item.shipping),
         totalContribution: centsToDollars(item.totalContributionPrice),
-        totalContributionFormatted: item.totalContributionPrice ? formatPrice(item.totalContributionPrice, item.currency) : null,
+        totalContributionFormatted: item.totalContributionPrice
+            ? formatPrice(item.totalContributionPrice, item.currency || 'USD')
+            : null,
         quantity: item.quantity || 1,
-        isDigital: !!item.isDigitalGood,
+        isDigital: item.itemType === 'digital' || !!item.isDigitalGood,
         isAvailable: item.isAvailable !== false && !item.notInStock,
         notInStock: !!item.notInStock,
         isFeatured: !!item.isFeatured,
-        isHidden: !!item.isHidden,
-        isCrowdfunded: item.paymentConfiguration?.type === 'crowdfunding',
-        fundingPercentage: item.fundingPercentage || 0,
-        collectionIds: item.collectionIds || [],
-        imageUrl: item.imgLink || null,
-        link: item.link || null,
+        isCrowdfunded: !!item.isCrowdfunded,
+        fundingPercentage: item.totalContributionPrice && item.price
+            ? Math.min(100, Math.round(((item.totalContributionPrice || 0) / item.price) * 100))
+            : 0,
+        imageUrl: item.imgLink || item.image || item.imageSrc || null,
+        link: item.link || item.productLink || null,
+        collectionIds: Array.isArray(item.collectionIds) ? item.collectionIds : [],
         createdAt: item.createdAt ? new Date(item.createdAt) : null,
-    })).filter(item => !item.isHidden); // Don't show hidden items
+    }));
 
     setCache(username, 'wishlist', items);
     return items;
 }
 
 /**
- * Fetch a Throne user's collections
+ * Fetch a Throne creator's wishlist collections.
  */
 export async function fetchThroneCollections(username) {
     const cached = getCached(username, 'collections');
     if (cached) return cached;
 
-    const pageData = await fetchThronePage(username);
-    const pp = pageData?.props?.pageProps || {};
-
-    // Collections are in ssrWishlistCollections (new format) or fallback (old format)
-    let rawCollections = pp.ssrWishlistCollections;
-    if (!rawCollections || !Array.isArray(rawCollections)) {
-        const profile = await fetchThroneProfile(username);
-        const fallback = pp.fallback || {};
-        rawCollections = findFallbackKey(fallback, `useWishlistCollections/${profile.id}`) || [];
-    }
-
-    // Get items for per-collection stats
+    const profile = await fetchThroneProfile(username);
+    const rawCollections = await fetchCreatorSubcollection(profile.id, 'wishlistCollections');
     const items = await fetchThroneWishlist(username);
 
     const collections = rawCollections.map(col => {
-        const collectionItems = items.filter(item => item.collectionIds.includes(col.id));
-        const totalPrice = collectionItems.reduce((sum, item) => sum + item.priceRaw, 0);
+        col.id = col.id || col._docId;
+        const collectionItems = items.filter(item => (item.collectionIds || []).includes(col.id));
+        const totalPrice = collectionItems.reduce((sum, item) => sum + (item.priceRaw || 0), 0);
         const currency = collectionItems[0]?.currency || 'USD';
 
         return {
             id: col.id,
-            title: col.title,
+            title: col.title || col.name,
             description: col.description || null,
-            imageUrl: col.imageSrc || null,
+            imageUrl: col.imageSrc || col.imgLink || col.imageLink || null,
             itemCount: collectionItems.length,
             totalPrice: centsToDollars(totalPrice),
             totalPriceFormatted: formatPrice(totalPrice, currency),
@@ -507,49 +431,87 @@ export async function fetchThroneCollections(username) {
 }
 
 /**
- * Fetch a Throne user's gift history
+ * Fetch a Throne creator's gift history.
  */
 export async function fetchThroneGiftHistory(username) {
     const cached = getCached(username, 'gifts');
     if (cached) return cached;
 
     const profile = await fetchThroneProfile(username);
-    const pageData = await fetchThronePage(username, '/gifters');
-    const fallback = pageData?.props?.pageProps?.fallback || {};
+    const rawGifts = await fetchPublicOrders(profile.id);
 
-    const rawGifts = findFallbackKey(fallback, `usePreviousGifts/${profile.id}`) || [];
+    if (rawGifts.length === 0) {
+        logger.info(`${LOG_TAG} No public orders for "${username}" (creator ${profile.id})`);
+        setCache(username, 'gifts', []);
+        return [];
+    }
 
+    // Gift object shape MUST match what core/throne-manager.js consumes end-to-end:
+    //   id, name, purchasedAt (Date|null), status ('Crowdfunded'|'Purchased'),
+    //   isComplete, isDigital, isCrowdfunded, imageUrl, link, totalFormatted (string|null),
+    //   currency, totalCents, gifters[].{username, imageUrl, message, amountCents,
+    //   amountFormatted (null when amount is not public)}, contributorCount.
+    //
+    // The INSERT in checkForNewGiftsAndContributions binds (gift.id, gift.name, gift.status,
+    // gift.isCrowdfunded, gift.contributorCount) — if any of these resolves to undefined
+    // mysql2 strict-mode rejects the whole statement. The `.filter(g => g.id)` guard at the
+    // end drops gifts without an id for the same reason (anonymous crowdfund aggregates
+    // occasionally return without one from Throne's Cloud Function). Webhook events share
+    // this shape via the dispatcher in dashboard/routes/webhooks/throne.js — do not change
+    // field names without updating both.
     const gifts = rawGifts.map(gift => {
         const customers = gift.customizations?.customers || [];
-        const totalUsd = gift.totalUsd || gift.total || {};
+        const contributedCents = customers.reduce(
+            (sum, c) => sum + (Number(c.contributionUsd) || 0), 0);
+        const hasContributions = contributedCents > 0;
+        const listedPrice = Number(gift.price) || 0;
+        const totalCents = hasContributions ? Math.round(contributedCents)
+            : (listedPrice > 0 ? listedPrice : null);
+        const currency = gift.currency || 'USD';
+        // Throne's Cloud Function returns the gift timestamp as `purchasedAt` (ms epoch).
+        // Legacy fallback to `createdAt` kept for safety in case the payload ever drifts back.
+        const ts = Number(gift.purchasedAt ?? gift.createdAt);
 
+        const isCrowdfunded = !!gift.isCrowdfunded;
         return {
-            id: gift.id,
-            name: gift.name,
-            purchasedAt: gift.purchasedAt ? new Date(gift.purchasedAt) : null,
-            status: gift.status || 'unknown',
-            isComplete: !!gift.isComplete,
-            isDigital: !!gift.isDigitalGood,
-            isCrowdfunded: !!gift.isCrowdfunded,
-            imageUrl: gift.imageSrc || null,
-            totalFormatted: formatPrice(totalUsd.total || totalUsd.price, totalUsd.currency || 'USD'),
-            currency: totalUsd.currency || 'USD',
-            totalCents: totalUsd.total || totalUsd.price || 0,
+            id: gift.itemId || gift.id || gift._id || gift.orderId || null,
+            name: gift.name || 'Unknown item',
+            purchasedAt: Number.isFinite(ts) && ts > 0 ? new Date(ts) : null,
+            status: isCrowdfunded ? 'Crowdfunded' : 'Purchased',
+            isComplete: null,
+            isDigital: null,
+            isCrowdfunded,
+            imageUrl: gift.imageSrc || gift.imgLink || gift.image || null,
+            link: gift.link || gift.productLink || null,
+            totalFormatted: totalCents == null ? null : formatPrice(totalCents, currency),
+            currency,
+            totalCents,
             gifters: customers.map(c => ({
-                username: c.customerUsername || 'Anonymous',
-                imageUrl: c.customerImage || null,
+                username: c.customerUsername || c.gifterUsername || c.name || 'Anonymous',
+                imageUrl: c.customerImage || c.gifterImage || null,
+                message: c.customerMessage || c.message || null,
+                amountCents: Number(c.contributionUsd) || null,
+                amountFormatted: Number(c.contributionUsd) > 0
+                    ? formatPrice(Number(c.contributionUsd), 'USD') : null,
             })),
             contributorCount: customers.length,
         };
+    }).filter(g => {
+        // No id → cannot de-duplicate against throne_seen_gifts → would reintroduce the
+        // "Bind parameters must not contain undefined" crash downstream. Drop + warn.
+        if (g.id) return true;
+        logger.warn(`${LOG_TAG} Skipping gift with no id for "${username}": ${g.name}`);
+        return false;
     });
+
+    logger.info(`${LOG_TAG} Fetched ${gifts.length} gift(s) for "${username}"`);
 
     setCache(username, 'gifts', gifts);
     return gifts;
 }
 
 /**
- * Fetch a Throne user's gifter leaderboard
- * @param {string} period - 'allTime' | 'lastMonth' | 'lastWeek'
+ * Fetch a Throne creator's leaderboard for a given period.
  */
 export async function fetchThroneLeaderboard(username, period = 'allTime') {
     const cacheKey = `leaderboard_${period}`;
@@ -557,10 +519,8 @@ export async function fetchThroneLeaderboard(username, period = 'allTime') {
     if (cached) return cached;
 
     const profile = await fetchThroneProfile(username);
-    const pageData = await fetchThronePage(username, '/gifters');
-    const fallback = pageData?.props?.pageProps?.fallback || {};
-
-    const leaderboardData = findFallbackKey(fallback, `leaderboard/${profile.id}`) || {};
+    const data = await fetchLeaderboardDirect(profile.id);
+    if (!data) { setCache(username, cacheKey, []); return []; }
 
     const periodKeyMap = {
         allTime: 'leaderboardAllTime',
@@ -569,7 +529,7 @@ export async function fetchThroneLeaderboard(username, period = 'allTime') {
     };
 
     const periodKey = periodKeyMap[period] || 'leaderboardAllTime';
-    const rawEntries = leaderboardData[periodKey] || [];
+    const rawEntries = Array.isArray(data[periodKey]) ? data[periodKey] : [];
 
     const entries = rawEntries.map((entry, index) => ({
         rank: index + 1,
@@ -585,28 +545,27 @@ export async function fetchThroneLeaderboard(username, period = 'allTime') {
 }
 
 /**
- * Fetch the last 20 recent gifters (chronological, not ranked)
+ * Fetch the last 20 recent gifters (chronological, not ranked) for a creator.
  */
 export async function fetchRecentGifters(username) {
     const cached = getCached(username, 'recentGifters');
     if (cached) return cached;
 
     const profile = await fetchThroneProfile(username);
-    const pageData = await fetchThronePage(username, '/gifters');
-    const fallback = pageData?.props?.pageProps?.fallback || {};
+    const data = await fetchLeaderboardDirect(profile.id);
+    if (!data) { setCache(username, 'recentGifters', []); return []; }
 
-    const leaderboardData = findFallbackKey(fallback, `leaderboard/${profile.id}`) || {};
-    const rawGifters = leaderboardData.lastTwentyGifters || [];
-
+    const rawGifters = Array.isArray(data.lastTwentyGifters) ? data.lastTwentyGifters : [];
     const gifters = rawGifters.map(g => ({
         username: g.gifterUsername || 'Anonymous',
         imageUrl: g.gifterImage || null,
-        purchasedAt: g.purchasedAt ? new Date(g.purchasedAt) : null,
+        giftCount: g.totalPaymentNumber || 0,
+        totalSpentCents: g.totalAmountSpentUSD || 0,
+        totalSpentFormatted: formatPrice(g.totalAmountSpentUSD, 'USD'),
     }));
 
     setCache(username, 'recentGifters', gifters);
     return gifters;
 }
 
-// Export helpers for use by throne-manager
 export { formatPrice, centsToDollars };

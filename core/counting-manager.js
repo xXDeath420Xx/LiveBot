@@ -1,6 +1,8 @@
 import { EmbedBuilder, MessageFlags } from 'discord.js';
 import pool from '../utils/db.js';
 import logger from '../utils/logger.js';
+import { displayNameFor } from '../utils/display-name.js';
+import { themeColor } from './guild-theme.js';
 
 export async function handleSetup(interaction) {
     const channel = interaction.options.getChannel('channel');
@@ -40,7 +42,7 @@ export async function handleSetup(interaction) {
 
     const cfg = await getChannelConfig(interaction.guild.id, channel.id);
     const embed = new EmbedBuilder()
-        .setColor('#00FF00')
+        .setColor(themeColor(interaction.guildId, 'success'))
         .setTitle('✅ Counting Channel Setup')
         .setDescription(`${channel} has been set up as a counting channel!`)
         .addFields(
@@ -58,7 +60,7 @@ export function describeMode(cfg) {
         cfg.fail_mode === 'delete'
             ? '• Wrong number → **deleted**, count never resets'
             : '• Wrong number → **count resets to 0**',
-        cfg.allow_same_user ? '• Same person may count twice in a row' : '• No counting twice in a row',
+        '• No counting twice in a row',
     ];
     if (cfg.fail_mode === 'delete' && cfg.delete_chatter) lines.push('• Non-numeric chatter is deleted');
     if (cfg.react_on_valid) lines.push('• Reacts ✅ on a valid count');
@@ -75,7 +77,7 @@ export async function getChannelConfig(guildId, channelId) {
 
 /** Change the ruleset. `fields` keys are validated against a fixed allow-list. */
 export async function setMode(guildId, channelId, fields) {
-    const ALLOWED = new Set(['fail_mode', 'allow_same_user', 'react_on_valid', 'announce_milestones', 'delete_chatter']);
+    const ALLOWED = new Set(['fail_mode', 'react_on_valid', 'announce_milestones', 'delete_chatter']);
     const keys = Object.keys(fields).filter(k => ALLOWED.has(k));
     if (!keys.length) return false;
     const sql = keys.map(k => `${k} = ?`).join(', ');
@@ -149,7 +151,7 @@ export async function handleReset(interaction) {
     );
 
     const embed = new EmbedBuilder()
-        .setColor('#FFA500')
+        .setColor(themeColor(interaction.guildId, 'warning'))
         .setTitle('🔄 Count Reset')
         .setDescription(`The count in ${channel} has been manually reset by ${interaction.user}!`)
         .addFields(
@@ -189,7 +191,7 @@ export async function handleStats(interaction) {
     );
 
     const embed = new EmbedBuilder()
-        .setColor('#3498db')
+        .setColor(themeColor(interaction.guildId, 'primary'))
         .setTitle(`🔢 Counting Statistics - ${channel.name}`)
         .addFields(
             { name: '📊 Current Count', value: `${stats.current_count}`, inline: true },
@@ -206,7 +208,7 @@ export async function handleStats(interaction) {
         let contributorsText = '';
         for (let i = 0; i < contributors.length; i++) {
             const user = await interaction.client.users.fetch(contributors[i].user_id).catch(() => null);
-            const username = user ? user.username : 'Unknown User';
+            const username = displayNameFor(user, interaction.guild);
             const accuracy = contributors[i].valid_counts + contributors[i].invalid_counts > 0
                 ? Math.round((contributors[i].valid_counts / (contributors[i].valid_counts + contributors[i].invalid_counts)) * 100)
                 : 0;
@@ -256,14 +258,14 @@ export async function handleLeaderboard(interaction) {
     }
 
     const embed = new EmbedBuilder()
-        .setColor('#FFD700')
+        .setColor(themeColor(interaction.guildId, 'warning'))
         .setTitle(`🏆 Counting Leaderboard - ${channel.name}`)
         .setDescription('Top 10 counters in this channel');
 
     let description = '';
     for (let i = 0; i < topCounters.length; i++) {
         const user = await interaction.client.users.fetch(topCounters[i].user_id).catch(() => null);
-        const username = user ? user.username : 'Unknown User';
+        const username = displayNameFor(user, interaction.guild);
         const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`;
         const accuracy = topCounters[i].valid_counts + topCounters[i].invalid_counts > 0
             ? Math.round((topCounters[i].valid_counts / (topCounters[i].valid_counts + topCounters[i].invalid_counts)) * 100)
@@ -305,10 +307,14 @@ export async function handleMessage(message) {
 
     const number = parseInt(numberMatch[1], 10);
     const expectedNumber = Number(channel.current_count) + 1;
-    const sameUser = !channel.allow_same_user && channel.last_user_id === message.author.id;
+    const sameUser = channel.last_user_id === message.author.id;
     const wrong = number !== expectedNumber;
 
     if (wrong || sameUser) {
+        // Targeted anti-sabotage: a named griefer posting a named number OUT OF TURN (wrong number,
+        // not merely a double-post of the right one) is removed from the channel, and the count is
+        // PROTECTED (not reset) rather than rewarding the sabotage.
+        if (wrong && await enforceSabotageGuard(message, channel, number)) return true;
         return handleBadCount(message, channel, { number, expectedNumber, sameUser, deleteMode });
     }
 
@@ -318,9 +324,9 @@ export async function handleMessage(message) {
         `UPDATE counting_channels
             SET current_count = ?, highest_count = GREATEST(highest_count, ?), last_user_id = ?
           WHERE guild_id = ? AND channel_id = ? AND current_count = ?
-            AND (last_user_id IS NULL OR last_user_id <> ? OR ? = 1)`,
+            AND (last_user_id IS NULL OR last_user_id <> ?)`,
         [number, number, message.author.id, message.guild.id, message.channel.id,
-         channel.current_count, message.author.id, channel.allow_same_user ? 1 : 0]
+         channel.current_count, message.author.id]
     );
     if (adv.affectedRows !== 1) {
         // Someone beat us to this number by microseconds — treat it as a bad count.
@@ -338,7 +344,7 @@ export async function handleMessage(message) {
 
     if (channel.announce_milestones && isMilestone(number)) {
         const milestoneEmbed = new EmbedBuilder()
-            .setColor('#FFD700')
+            .setColor(themeColor(message.guild?.id, 'warning'))
             .setTitle('🎉 Milestone Reached!')
             .setDescription(`Congratulations! You've reached **${number}**!`)
             .setTimestamp();
@@ -357,7 +363,7 @@ export async function handleMessage(message) {
 
         if (number > Number(channel.highest_count)) {
             const recordEmbed = new EmbedBuilder()
-                .setColor('#00FF00')
+                .setColor(themeColor(message.guild?.id, 'success'))
                 .setTitle('🏆 NEW RECORD!')
                 .setDescription(`A new counting record has been set: **${number}**!`)
                 .setFooter({ text: `Previous record: ${channel.highest_count}` })
@@ -365,6 +371,58 @@ export async function handleMessage(message) {
             await message.channel.send({ embeds: [recordEmbed] }).catch(() => {});
         }
     }
+    return true;
+}
+
+/**
+ * Targeted anti-sabotage. A moderator has named (guild, channel, user, numbers) in
+ * counting_sabotage_guards because that user deliberately posts those numbers out of turn to reset
+ * the count for everyone. When it happens we DON'T reset (that is exactly what they want): we delete
+ * the message and permanently revoke their access to the channel.
+ *
+ * Only fires for the named user, the named channel, and a named number that is genuinely out of turn
+ * (the caller only reaches here on a wrong/double count) — so posting `6` when 6 is actually next is
+ * never punished. Returns true when it handled (and blocked); false to fall through to normal handling.
+ */
+async function enforceSabotageGuard(message, channel, number) {
+    let guard;
+    try {
+        const [[row]] = await pool.execute(
+            'SELECT numbers FROM counting_sabotage_guards WHERE guild_id = ? AND channel_id = ? AND user_id = ? AND enabled = 1',
+            [message.guild.id, message.channel.id, message.author.id]);
+        guard = row;
+    } catch {
+        return false; // table not present in this deployment — behave as before
+    }
+    if (!guard) return false;
+
+    const blocked = new Set(String(guard.numbers).split(',').map(s => s.trim()).filter(Boolean));
+    if (!blocked.has(String(number))) return false;
+
+    const reason = `Counting sabotage: posted ${number} out of turn`;
+    await message.delete().catch(() => {});
+
+    try {
+        await message.channel.permissionOverwrites.edit(message.author.id, {
+            ViewChannel: false, SendMessages: false, AddReactions: false,
+            SendMessagesInThreads: false, CreatePublicThreads: false, CreatePrivateThreads: false,
+        }, { reason });
+    } catch (e) {
+        logger.error(`[counting] could not revoke ${message.author.id}'s access to ${message.channel.id}: ${e.message}`,
+            { category: 'counting', guildId: message.guild.id });
+    }
+
+    await pool.execute(
+        `UPDATE counting_sabotage_guards SET triggered_count = triggered_count + 1, last_triggered_at = CURRENT_TIMESTAMP
+          WHERE guild_id = ? AND channel_id = ? AND user_id = ?`,
+        [message.guild.id, message.channel.id, message.author.id]).catch(() => {});
+
+    await message.channel.send(
+        `🚫 <@${message.author.id}> has been **permanently removed from this channel** for deliberately sabotaging ` +
+        `the count — posting **${number}** out of turn. That's enough of that.`).catch(() => {});
+
+    logger.warn(`[counting] sabotage block — ${message.author.id} posted ${number} out of turn in ${message.channel.id}; access revoked`,
+        { category: 'counting', guildId: message.guild.id, userId: message.author.id, number });
     return true;
 }
 
@@ -389,7 +447,7 @@ async function handleBadCount(message, channel, { number, expectedNumber, sameUs
     );
 
     const resetEmbed = new EmbedBuilder()
-        .setColor('#FF0000')
+        .setColor(themeColor(message.guild?.id, 'danger'))
         .setTitle('🔄 Count Reset!')
         .setDescription(sameUser
             ? `${message.author} counted twice in a row! Count reset to **0**.`

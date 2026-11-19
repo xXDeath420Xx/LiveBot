@@ -7,16 +7,16 @@
 // REST-only — safe alongside live PM2.
 
 import pool from '../utils/db.js';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 
 const GUILD_ID = '1216126780767731722';
-const BOT_ID   = '1496406792417185802';
+// The acting bot comes from guild_bot_mapping — never pinned here.
 const SHOUTOUT_ELIGIBLE_ROLE = '1496409523328516137';
 const REWARD_ROW_ID = 39;
 const TARGET_LEVEL  = 2;
 
-const [tokenRow] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id=?', [BOT_ID]);
-const token = encryption.decrypt(JSON.parse(tokenRow[0].bot_token));
+const bot = await resolveBotForGuild(GUILD_ID, { db: pool });
+const token = bot.token;
 
 async function api(method, path, body) {
   const r = await fetch(`https://discord.com/api/v10${path}`, {

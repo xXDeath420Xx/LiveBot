@@ -1,0 +1,168 @@
+{
+  "theme": "rankings",
+  "label": "Rankings & Tier Lists",
+  "questions": [
+    {
+      "slug": "rank-three-films",
+      "text": "Top three films of all time. No ties, no 'it depends', commit publicly."
+    },
+    {
+      "slug": "rank-condiments",
+      "text": "Rank the top five condiments. Expect to be challenged on at least two."
+    },
+    {
+      "slug": "rank-days-of-week",
+      "text": "Rank the days of the week, best to worst. Defend your number one."
+    },
+    {
+      "slug": "rank-breakfast-foods",
+      "text": "Rank the top four breakfast foods. Is anything disqualified for being dessert?"
+    },
+    {
+      "slug": "rank-seasons",
+      "text": "Rank the four seasons and justify last place.",
+      "group": "season-preference"
+    },
+    {
+      "slug": "rank-chores",
+      "text": "Rank household chores from most tolerable to genuinely unbearable."
+    },
+    {
+      "slug": "rank-childhood-snacks",
+      "text": "Rank the top three snacks from your childhood. Are any still available?"
+    },
+    {
+      "slug": "rank-social-platforms",
+      "text": "Rank the social platforms you use from most to least regretted."
+    },
+    {
+      "slug": "rank-holidays",
+      "text": "Rank the holidays you celebrate, and be honest about the one you'd skip."
+    },
+    {
+      "slug": "rank-fast-food-items",
+      "text": "Build the perfect fast food meal using items from three different chains."
+    },
+    {
+      "slug": "rank-pizza-styles",
+      "text": "Rank pizza styles. Thin, thick, deep dish, whatever your region does. Fight.",
+      "group": "pizza-topping-debate"
+    },
+    {
+      "slug": "rank-video-game-genres",
+      "text": "Rank the game genres from most to least played by you. Any surprises in there?"
+    },
+    {
+      "slug": "rank-modes-transport",
+      "text": "Rank ways of getting around, factoring in cost, comfort, and dignity."
+    },
+    {
+      "slug": "rank-superpowers",
+      "text": "Rank flight, invisibility, super strength, teleportation, and mind reading from best to worst."
+    },
+    {
+      "slug": "rank-decades",
+      "text": "Rank the last five decades to have been alive in, using anything but your own age as a reason."
+    },
+    {
+      "slug": "rank-emotions-music",
+      "text": "Rank the moods that music fixes best for you."
+    },
+    {
+      "slug": "rank-cheese",
+      "text": "Top three cheeses. And name one that is deeply overrated."
+    },
+    {
+      "slug": "rank-desserts",
+      "text": "Rank desserts. Cake, ice cream, pie, chocolate, something regional we've never heard of."
+    },
+    {
+      "slug": "rank-things-in-bag",
+      "text": "Rank the contents of your bag or pockets by how badly you'd miss them."
+    },
+    {
+      "slug": "rank-times-of-day",
+      "text": "Rank the hours of the day by how much you like being awake for them."
+    },
+    {
+      "slug": "rank-weather",
+      "text": "Rank weather types. Where does rain actually fall on your list, honestly?"
+    },
+    {
+      "slug": "rank-sandwich-tier",
+      "text": "Build a tier list of sandwich fillings. S tier and F tier only if you're short on time."
+    },
+    {
+      "slug": "rank-board-games",
+      "text": "Rank the board or card games you'd actually agree to play tonight."
+    },
+    {
+      "slug": "rank-fictional-teams",
+      "text": "Assemble a five-person team from any fiction to survive a crisis. Justify each pick."
+    },
+    {
+      "slug": "rank-apps-phone",
+      "text": "Rank your five most-used apps and tell us which one embarrasses you."
+    },
+    {
+      "slug": "rank-comfort-things",
+      "text": "Rank your comfort things: a food, a show, a place, a person, a sound."
+    },
+    {
+      "slug": "rank-crisps-flavour",
+      "text": "Rank crisp or chip flavours. This will not be a peaceful thread."
+    },
+    {
+      "slug": "rank-life-stages",
+      "text": "Rank the life stages you've reached so far, best to worst."
+    },
+    {
+      "slug": "rank-noises",
+      "text": "Rank the most satisfying sounds in the world. Top three only."
+    },
+    {
+      "slug": "rank-pets",
+      "text": "Rank pets by how much work they are versus how much they give back."
+    },
+    {
+      "slug": "rank-drinks",
+      "text": "Rank drinks by time of day. What's the correct 3pm drink?"
+    },
+    {
+      "slug": "rank-mythical-creatures",
+      "text": "Rank mythical creatures by which you'd least want to meet in the dark."
+    },
+    {
+      "slug": "rank-shop-sections",
+      "text": "Rank the sections of a supermarket by how long you linger in them."
+    },
+    {
+      "slug": "rank-movie-genres",
+      "text": "Rank film genres by how often you'd actually pick them on a random evening."
+    },
+    {
+      "slug": "rank-hobbies-cost",
+      "text": "Rank your hobbies by cost per hour of enjoyment. Which one wins?"
+    },
+    {
+      "slug": "rank-vehicles-owned",
+      "text": "Rank every vehicle you've owned, from best to most cursed."
+    },
+    {
+      "slug": "rank-communication",
+      "text": "Rank ways of reaching you: text, call, voice note, email, showing up unannounced."
+    },
+    {
+      "slug": "rank-fruits",
+      "text": "Rank the fruits. There is a correct answer and most people get it wrong."
+    },
+    {
+      "slug": "rank-worst-months",
+      "text": "Rank the months of the year. What's the worst one and what would fix it?"
+    },
+    {
+      "slug": "rank-luxuries",
+      "text": "Rank small luxuries by how much they improve a normal day for the money."
+    }
+  ]
+}

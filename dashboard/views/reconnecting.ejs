@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>" lang="en">
+<head>
+    <script>/* Anti-flash: the saved theme (signed in) or the footer switch's choice (signed out) before first paint. */(function () { try { var d = document.documentElement, t = localStorage.getItem('ui-theme'); if (<%= locals.userPrefs ? 'true' : 'false' %>) localStorage.setItem('ui-theme', d.getAttribute('data-theme') || 'dark'); else if (t && /^[a-z]{3,12}$/.test(t)) d.setAttribute('data-theme', t); } catch (e) {} })();</script>
+    <!-- Auto theme (core/user-preferences.js AUTO_THEME_SCRIPT): follow the OS light/dark setting. Dark Reader: the site has its own themes. -->
+    <script>(function(){var d=document.documentElement,m=window.matchMedia?matchMedia('(prefers-color-scheme: light)'):null;function a(){if(d.getAttribute('data-theme')==='auto'||d.getAttribute('data-theme-mode')==='auto'){d.setAttribute('data-theme-mode','auto');d.setAttribute('data-theme',m&&m.matches?'light':'dark');}}a();if(m&&m.addEventListener)m.addEventListener('change',a);})();</script>
+    <meta name="darkreader-lock">
+    <%# Shown while the bots log back in after a restart (services/bot-readiness.js). Re-checks the
+        same URL every retrySeconds; after maxRetries attempts in a row it shows realError instead. %>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex">
+    <title>Reconnecting to Discord · CertiFried</title>
+    <noscript><meta http-equiv="refresh" content="<%= retrySeconds %>"></noscript>
+    <link rel="icon" type="image/png" href="/images/CertiFried.png">
+    <link rel="stylesheet" href="/css/themes.css">
+    <link rel="stylesheet" href="/css/cf-ui.css">
+    <style>
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 16px;
+            box-sizing: border-box;
+            font-family: var(--cf-font, system-ui, sans-serif);
+            background: var(--cf-bg, #0b0f11);
+            color: var(--cf-text, #f2f4f5);
+        }
+        .rc-card {
+            width: 100%;
+            max-width: 440px;
+            padding: 32px 28px;
+            border-radius: 14px;
+            text-align: center;
+            background: var(--cf-surface, #151a1d);
+            border: 1px solid var(--cf-border, rgba(255, 255, 255, 0.08));
+            box-shadow: var(--cf-shadow, none);
+        }
+        .rc-card h1 { margin: 16px 0 8px; font-size: 1.25rem; font-weight: 700; }
+        .rc-card p { margin: 0; line-height: 1.5; color: var(--cf-text-2, rgba(255, 255, 255, 0.72)); }
+        .rc-status { margin-top: 16px !important; font-size: 0.85rem; color: var(--cf-text-3, rgba(255, 255, 255, 0.5)) !important; }
+        .rc-spinner {
+            width: 36px;
+            height: 36px;
+            margin: 0 auto;
+            border-radius: 50%;
+            border: 3px solid var(--cf-border, rgba(255, 255, 255, 0.12));
+            border-top-color: var(--cf-accent);
+            animation: rc-spin 0.9s linear infinite;
+        }
+        @keyframes rc-spin { to { transform: rotate(360deg); } }
+        @media (prefers-reduced-motion: reduce) { .rc-spinner { animation: none; } }
+        .rc-actions { margin-top: 20px; display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+        .rc-actions a {
+            display: inline-flex;
+            align-items: center;
+            min-height: 40px;
+            padding: 0 16px;
+            border-radius: 8px;
+            font-weight: 600;
+            text-decoration: none;
+            color: var(--cf-on-accent, #fff);
+            background: var(--cf-accent);
+        }
+        .rc-actions a.rc-secondary { color: var(--cf-text, #f2f4f5); background: var(--cf-surface-2, rgba(255, 255, 255, 0.06)); }
+        .rc-actions a:focus-visible { outline: 2px solid var(--cf-accent); outline-offset: 2px; }
+        [hidden] { display: none !important; }
+    </style>
+</head>
+<body>
+    <main class="rc-card" id="main-content" role="main" aria-live="polite">
+        <div id="rcWaiting">
+            <div class="rc-spinner" aria-hidden="true"></div>
+            <h1>Reconnecting to Discord&hellip;</h1>
+            <p><%= reason === 'starting' ? 'The bot was just restarted and is logging back in to Discord.' : 'The bot for this server lost its connection to Discord and is reconnecting.' %> This page refreshes automatically.</p>
+            <p class="rc-status" id="rcStatus">Checking again in <%= retrySeconds %> seconds.</p>
+        </div>
+        <div id="rcGaveUp" hidden>
+            <h1>Still not available</h1>
+            <p><%= realError %></p>
+            <div class="rc-actions">
+                <a href="" id="rcRetry">Try again</a>
+                <a href="/dashboard" class="rc-secondary">Your servers</a>
+            </div>
+        </div>
+    </main>
+    <script>
+    (function () {
+        var RETRY = <%= Number(retrySeconds) || 5 %>, MAX = <%= Number(maxRetries) || 24 %>;
+        var key = 'cf-reconnect:' + location.pathname + location.search;
+        var state = { n: 0, t: 0 };
+        try { state = JSON.parse(sessionStorage.getItem(key)) || state; } catch (e) { /* storage off */ }
+        // A gap longer than a few retries means an earlier, finished episode: start counting again.
+        if (!state.t || Date.now() - state.t > RETRY * 3000) state.n = 0;
+        state.n += 1;
+        state.t = Date.now();
+        try { sessionStorage.setItem(key, JSON.stringify(state)); } catch (e) { /* storage off */ }
+
+        if (state.n > MAX) {
+            document.getElementById('rcWaiting').hidden = true;
+            document.getElementById('rcGaveUp').hidden = false;
+            document.getElementById('rcRetry').addEventListener('click', function (e) {
+                e.preventDefault();
+                try { sessionStorage.removeItem(key); } catch (err) { /* storage off */ }
+                location.reload();
+            });
+            return;
+        }
+        var left = RETRY, status = document.getElementById('rcStatus');
+        var tick = setInterval(function () {
+            left -= 1;
+            if (left > 0) { status.textContent = 'Checking again in ' + left + (left === 1 ? ' second.' : ' seconds.'); return; }
+            clearInterval(tick);
+            status.textContent = 'Checking now…';
+            location.reload();
+        }, 1000);
+    })();
+    </script>
+</body>
+</html>

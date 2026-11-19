@@ -1,11 +1,15 @@
 import { EmbedBuilder } from 'discord.js';
+import { QueueRepeatMode } from 'discord-player';
 import { checkMusicPermissions, useMainPlayer, getLeaveOptions } from '../../utils/music_helpers.js';
+import { voiceToolHolding } from '../../core/music-leave-policy.js';
 import db from '../../utils/db.js';
 import {
-  getSessionForUser, acquire, release, streamTrack, uriFromUrl, isOwnerUser,
+  getSessionForUser, acquire, release, streamTrack, uriFromUrl, isOwnerUser, isLinked,
 } from '../../core/spotify-connect-manager.js';
 import logger from '../../utils/logger.js';
+import { notePlayback } from '../../core/music-play-log.js';
 import { searchSpotifyTrack } from '../../core/spotify-resolver.js';
+import { takeExtractionFailure } from '../../core/ytdlp-extractor.js';
 
 /**
  * discord-player onBeforeCreateStream hook: for a Spotify TRACK, play it through
@@ -13,7 +17,70 @@ import { searchSpotifyTrack } from '../../core/spotify-resolver.js';
  * to use it, or null to fall through to the normal YouTube/SoundCloud extraction —
  * so non-Spotify tracks, and Spotify tracks when every account is busy, still play.
  */
+/**
+ * The audio path must NEVER block on Spotify.
+ *
+ * getSessionForUser() can spawn a per-user go-librespot process, and its readiness loop is
+ * `24 × (sleep 500ms + isAlive())` where isAlive has its own 10s timeout — up to ~4 MINUTES of
+ * blocking. Because discord-player awaits this hook before it can build a stream, a slow or dead
+ * go-librespot meant the track sat queued, the bot sat in the voice channel, and NOTHING ever
+ * played, with no error emitted anywhere. Since a plain `/music play` search is rewritten to a
+ * Spotify track upstream, that stalled every search.
+ *
+ * So: race the whole hook. If Spotify cannot hand us a stream promptly, return null and let
+ * discord-player bridge to YouTube/SoundCloud exactly as it does for non-Spotify tracks.
+ */
+// Must comfortably exceed streamTrack's own stream-start check (5s) so that check can finish and
+// fall back on its own; this is the outer backstop for the paths it cannot cover (above all
+// spawnUserSession, whose readiness loop can block for minutes for a non-owner user).
+const SPOTIFY_HOOK_TIMEOUT_MS = Number(process.env.SPOTIFY_HOOK_TIMEOUT_MS) || 15000;
+
 async function spotifyConnectStream(track, _queryType, queue) {
+  let timer;
+  try {
+    return await Promise.race([
+      spotifyConnectStreamInner(track, _queryType, queue),
+      new Promise((resolve) => {
+        timer = setTimeout(() => {
+          logger.warn(`[SpotifyConnect] no stream from go-librespot within ${SPOTIFY_HOOK_TIMEOUT_MS}ms for `
+            + `"${track.title}" — bridging to YouTube/SoundCloud instead`);
+          resolve(null);
+        }, SPOTIFY_HOOK_TIMEOUT_MS);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// One "Spotify is busy" notice per guild per 30 min — the hook runs for EVERY track, and a
+// notice per song would bury the channel.
+const BUSY_NOTICE_COOLDOWN_MS = 30 * 60 * 1000;
+const lastBusyNotice = new Map(); // guildId -> timestamp
+
+async function noticeSpotifyBusy(queue, userId) {
+  const now = Date.now();
+  if (now - (lastBusyNotice.get(queue.guild.id) || 0) < BUSY_NOTICE_COOLDOWN_MS) return;
+  lastBusyNotice.set(queue.guild.id, now);
+  try {
+    const ch = queue.guild.channels.cache.get(queue.metadata?.channelId);
+    if (!ch?.isTextBased?.()) return;
+    const ownAccount = userId && await isLinked(userId);
+    const content = ownAccount
+      ? `🎧 Your linked Spotify account is streaming in another server right now, so this is playing from **YouTube** instead. Stop it there (\`/spotify stop\` or \`/music stop\`) to get Spotify audio here.`
+      : `🎧 The shared Spotify account is in use in another server, so songs here are playing from **YouTube** for now.\n`
+        + `**Want real Spotify audio?** Link your own Premium account — it only takes a minute:\n`
+        + `1️⃣ Run \`/spotify link\` and open the link it gives you\n`
+        + `2️⃣ Click **Agree** — your browser lands on a \`127.0.0.1\` page that won't load (that's expected)\n`
+        + `3️⃣ Copy that page's full address and run \`/spotify finish\` with it\n`
+        + `After that, songs **you** queue play through your own account. \`/spotify unlink\` removes it anytime.`;
+    await ch.send({ content, allowedMentions: { parse: [] } });
+  } catch (e) {
+    logger.debug(`[SpotifyConnect] busy notice failed in ${queue.guild.id}: ${e.message}`);
+  }
+}
+
+async function spotifyConnectStreamInner(track, _queryType, queue) {
   try {
     const uri = track.metadata?.spotifyUri || uriFromUrl(track.url);
     if (!uri || !uri.startsWith('spotify:track:')) return null; // only single tracks
@@ -28,9 +95,23 @@ async function spotifyConnectStream(track, _queryType, queue) {
       } catch {}
       try { queue.delete(); } catch {}
     };
-    if (!acquire(session, queue.guild.id, { owner, stopHolder })) return null;
+    if (!acquire(session, queue.guild.id, { owner, stopHolder })) {
+      logger.info(`[SpotifyConnect] account busy in guild ${session.busyGuildId} — "${track.title}" bridges to YouTube in ${queue.guild.id}`);
+      noticeSpotifyBusy(queue, track.requestedBy?.id).catch(() => {});
+      return null;
+    }
     logger.info(`[SpotifyConnect] /music routing "${track.title}" through go-librespot (${uri})${owner ? ' [owner]' : ''}`);
-    return await streamTrack(session, uri);
+    const stream = await streamTrack(session, uri);
+    if (!stream) {
+      // go-librespot accepted the request but never produced audio. Hand the session back, then
+      // return null so discord-player bridges this track to YouTube/SoundCloud — otherwise the
+      // queue would sit on a silent stream forever.
+      try { release(session, queue.guild.id); } catch { /* best effort */ }
+      logger.warn(`[SpotifyConnect] falling back to the YouTube/SoundCloud bridge for "${track.title}"`);
+      return null;
+    }
+    notePlayback(track, { path: 'spotify', account: session.id === 'owner' ? 'shared' : 'linked' }); // play log
+    return stream;
   } catch (e) {
     logger.error(`[SpotifyConnect] onBeforeCreateStream failed: ${e.message}`);
     return null; // fall back to YouTube bridge
@@ -361,6 +442,13 @@ export async function handlePlay(interaction) {
                     content: `Could not fetch the ${source.displayName}. Make sure the link is public and that the Spotify API keys are valid, then try again.`
                 });
             }
+            // An empty result is not the same thing as "nothing matched". A YouTube block, an expired
+            // cookie jar and a genuinely empty search all reach here identically, and reporting all
+            // three as "no results" hides the real cause — so say it when the extractor knows it.
+            const why = takeExtractionFailure(query);
+            if (why) {
+                return interaction.editReply({ content: `Couldn't play that — ${why}` });
+            }
             return interaction.editReply({ content: `No results found for: ${query}` });
         }
 
@@ -372,6 +460,9 @@ export async function handlePlay(interaction) {
             }
             return t;
         });
+        // player.play() only queues tracks[0] of a non-playlist result. Trim to match, so the
+        // reply doesn't claim N tracks and dedup can't silently swap in search result #2.
+        if (!searchResult.playlist) validTracks = validTracks.slice(0, 1);
 
         if (validTracks.length === 0) {
             if (searchResult.playlist) {
@@ -415,6 +506,19 @@ export async function handlePlay(interaction) {
             searchResult.playlist.tracks.push(...uniqueTracks);
         }
 
+        // nodes.create() returns an EXISTING queue (voice camp, voice tools) as-is and ignores
+        // the nodeOptions below — so the Spotify hook and the reply channel never applied.
+        if (existingQueue) {
+            existingQueue.onBeforeCreateStream = spotifyConnectStream;
+            existingQueue.setMetadata({
+                ...(existingQueue.metadata || {}),
+                channelId: interaction.channel.id,
+                voiceChannelId: interaction.member.voice.channel.id,
+                playedTracks: existingQueue.metadata?.playedTracks || [],
+                source
+            });
+        }
+
         const { track } = await player.play(interaction.member.voice.channel, searchResult, {
             nodeOptions: {
                 metadata: {
@@ -456,6 +560,10 @@ export async function handlePlay(interaction) {
             // Single track
             const sourceInfo = source.platform !== 'search' ? ` (from ${source.displayName})` : '';
             replyMessage = `Added **${track.title}** by ${track.author || 'Unknown'}${sourceInfo} to the queue.`;
+            // SoundCloud only serves some tracks with DRM or as a 30-second preview; those play from YouTube (H-666).
+            if (track.raw?.scBridge) {
+                replyMessage += `\n*SoundCloud only offers ${track.raw.scBridge === 'drm' ? 'a DRM-protected version' : 'a 30-second preview'} of this track, so the same song plays from YouTube.*`;
+            }
             if (isMixUrl) {
                 replyMessage += `\n*(Could not load full YouTube Mix — playing the single video instead. Mix playlists are personalized and may require authentication.)*`;
             }
@@ -464,7 +572,10 @@ export async function handlePlay(interaction) {
         return interaction.editReply({ content: replyMessage });
     } catch (e) {
         if (e.message.includes("No results found")) {
-            return interaction.editReply({ content: `No results found for: ${query}` });
+            const why = takeExtractionFailure(query);
+            return interaction.editReply({
+                content: why ? `Couldn't play that — ${why}` : `No results found for: ${query}`,
+            });
         }
         console.error("[Play Command Error]", e.message);
         return interaction.editReply({ content: `An error occurred: ${e.message}` });
@@ -549,10 +660,10 @@ export async function handleSkip(interaction) {
     }
 
     // If DJ mode, fire off banter generation in background (non-blocking)
-    if (queue.metadata?.djMode && interaction.client.djManager) {
+    if (queue.metadata?.djMode && (interaction.client.djManager || global.djManager)) {
         if (isLastTrack) {
             setTimeout(() => {
-                interaction.client.djManager.onQueueEnd(queue)
+                (interaction.client.djManager || global.djManager).onQueueEnd(queue)
                     .catch(err => console.error('[DJ] onQueueEnd error:', err.message));
             }, 500);
         }
@@ -571,17 +682,42 @@ export async function handleStop(interaction) {
         return interaction.reply({ content: permissionCheck.message, ephemeral: true });
     }
 
+    // Any queue counts, playing or not: after a queue ends the bot may still be connected, and /music stop
+    // is how people get it out of the channel.
     const queue = interaction.client.player.nodes.get(interaction.guildId);
-    if (!queue || !queue.isPlaying()) {
-        return interaction.reply({ content: "There is nothing playing right now!", ephemeral: true });
+    if (!queue) {
+        return interaction.reply({ content: "Nothing is playing and I'm not in a voice channel.", ephemeral: true });
     }
 
     try {
+        const tool = await voiceToolHolding(interaction.guildId);
+        if (tool) {
+            // A transcription, the chat reader or a recording still needs the connection: end the music
+            // only. No DJ refill, no repeat/autoplay restarting it — node.stop() clears tracks and history.
+            if (queue.metadata?.djMode) queue.setMetadata({ ...queue.metadata, djMode: false, favoritesSeed: false });
+            queue.setRepeatMode(QueueRepeatMode.OFF);
+            queue.node.stop();
+            return interaction.reply({ content: `Music stopped and the queue cleared. I'm staying in the voice channel because ${describeVoiceTool(tool)}.` });
+        }
         queue.delete();
-        await interaction.reply({ content: "Music stopped and queue cleared." });
+        return interaction.reply({ content: "Stopped and left the voice channel." });
     } catch (e) {
-        await interaction.reply({ content: `Error: ${e.message}` });
+        logger.error(`[Music] /music stop failed in guild ${interaction.guildId}: ${e.message}`);
+        return interaction.reply({ content: `Error: ${e.message}` });
     }
+}
+
+/** music-leave-policy's reason ("held by recording", "transcription running", …) as a sentence. */
+function describeVoiceTool(reason) {
+    const text = String(reason || '');
+    if (text.startsWith('held by ')) {
+        const keys = text.slice(8).split(', ');
+        if (keys.includes('recording')) return 'a voice recording is in progress (`/music record action:Stop` ends it)';
+        return `it is still in use (${keys.join(', ')})`;
+    }
+    if (text === 'transcription running') return 'live transcription is running in this server';
+    if (text === 'chat reader active') return 'the chat reader is active';
+    return `it is still in use (${text})`;
 }
 
 /**
@@ -634,4 +770,4 @@ export async function handleNowPlaying(interaction) {
 }
 
 // Export deduplication helpers for use by music panel modal handler
-export { filterDuplicates, getQueuedTracks };
+export { filterDuplicates, getQueuedTracks, spotifyConnectStream };

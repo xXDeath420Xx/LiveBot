@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>">
+<head>
+<%- include('partials/site-head', { title: 'Compare Discord bots · CertiFried', description: 'How CertiFried compares with MEE6, Dyno, Carl-bot, Wick, Hashbot, Streamcord, Sapphire, YAGPDB, TicketsBot and others, feature by feature.', path: '/compare' }) %>
+    <style>
+        .fm-legend { display: flex; flex-wrap: wrap; gap: var(--cf-2) var(--cf-5); margin: 0 0 var(--cf-6); font-size: var(--cf-text-sm); color: var(--cf-text-2); }
+        .fm-legend span { display: inline-flex; align-items: center; gap: 6px; }
+        .fm-wrap { position: relative; overflow-x: auto; margin: 0 0 var(--cf-8); border: 1px solid var(--cf-border); border-radius: var(--cf-radius-lg); background: var(--cf-surface); }
+        .fm { width: 100%; border-collapse: collapse; font-size: var(--cf-text-sm); }
+        .fm th, .fm td { padding: 9px 12px; text-align: center; border-bottom: 1px solid var(--cf-border); white-space: nowrap; }
+        .fm thead th { font-size: var(--cf-text-xs); font-weight: 500; color: var(--cf-text-3); background: var(--cf-surface); }
+        .fm tbody tr:last-child td, .fm tbody tr:last-child th { border-bottom: 0; }
+        .fm tbody th { text-align: left; font-weight: 400; color: var(--cf-text); white-space: normal; min-width: 220px; }
+        .fm th:first-child, .fm td:first-child { position: sticky; left: 0; z-index: 1; background: var(--cf-surface); }
+        .fm .us { background: var(--cf-accent-soft); color: var(--cf-text); font-weight: 600; }
+        .fm thead .us { color: var(--cf-text); }
+        .m-yes { color: var(--cf-success); font-weight: 600; }
+        .m-pay { color: var(--cf-warning); font-weight: 600; }
+        .m-no { color: var(--cf-text-3); }
+        .fm-note { margin-top: var(--cf-8); font-size: var(--cf-text-sm); color: var(--cf-text-3); max-width: 75ch; }
+    </style>
+</head>
+<body class="cfs-body">
+<%- include('partials/site-header', { active: '', user: locals.user || null, returnTo: '/compare' }) %>
+<%
+    // y = ships it, p = only on that bot's paid tier, n = does not ship it.
+    // CertiFried rows were rechecked against the code on 2026-11-19; the other bots come from
+    // their public documentation and dashboard audits on 2026-10-13/14.
+    const tables = [
+        { title: 'Moderation and anti-raid', cols: ['Hashbot', 'Wick', 'MEE6', 'Dyno', 'Carl-bot', 'Sapphire'], rows: [
+            ['Check for accounts Discord flags as spammers', 'y', 'n', 'n', 'n', 'n', 'n'],
+            ['One allow list and bot-manager roles for every protection', 'y', 'p', 'n', 'n', 'n', 'n'],
+            ['Fuzzy name filters with templates', 'y', 'p', 'n', 'y', 'y', 'y'],
+            ['Join lockdown and multi-join raid detection', 'y', 'p', 'n', 'n', 'n', 'n'],
+            ['Impersonation and scam avatar detection', 'y', 'p', 'n', 'n', 'n', 'n'],
+            ['Hidden-link and QR code scam detection', 'y', 'p', 'n', 'n', 'n', 'n'],
+            ['NSFW avatar and image scanning', 'p', 'n', 'n', 'n', 'n', 'n'],
+            ['CAPTCHA verification with auto-prune', 'y', 'p', 'p', 'y', 'n', 'n'],
+            ['Cross-server ban list', 'y', 'n', 'n', 'n', 'n', 'n'],
+            ['AI second opinion on moderation decisions', 'n', 'n', 'n', 'n', 'n', 'y'],
+            ['Pause member DMs and invites during a raid', 'y', 'n', 'n', 'n', 'n', 'n'],
+            ['Invite with minimum permissions', 'n', 'n', 'n', 'n', 'n', 'n'],
+        ]},
+        { title: 'Streamers and creators', cols: ['Streamcord', 'Hashbot', 'MEE6', 'Dyno', 'Carl-bot', 'Sapphire'], rows: [
+            ['Twitch go-live posts (EventSub)', 'y', 'n', 'n', 'y', 'n', 'n'],
+            ['Kick, YouTube, Rumble and TikTok go-live posts', 'p', 'n', 'n', 'n', 'n', 'n'],
+            ['Twitch stream analytics (view bots, raids, harassment)', 'n', 'n', 'n', 'n', 'n', 'n'],
+            ['Twitch Linked Roles', 'p', 'n', 'n', 'n', 'n', 'y'],
+            ['Throne wishlist and gift alerts', 'n', 'n', 'n', 'n', 'n', 'n'],
+            ['Fourthwall shop alerts', 'n', 'n', 'n', 'n', 'n', 'n'],
+        ]},
+        { title: 'Tickets and community', cols: ['TicketsBot', 'Sapphire', 'FlaviBot', 'MEE6', 'Dyno', 'Carl-bot'], rows: [
+            ['Ticket panels and forms', 'y', 'y', 'n', 'p', 'y', 'n'],
+            ['Reply to tickets and modmail from the dashboard', 'p', 'n', 'n', 'n', 'n', 'n'],
+            ['"Waiting for a reply" ticket state', 'p', 'n', 'n', 'n', 'n', 'n'],
+            ['Encrypted ticket transcripts, kept for a year after the ticket closes', 'p', 'n', 'n', 'n', 'n', 'n'],
+            ['Highlighted messages feed for moderators', 'n', 'n', 'n', 'n', 'y', 'n'],
+            ["Edit the bot's posted messages from the dashboard", 'n', 'y', 'n', 'n', 'n', 'n'],
+            ['Weekly server recap', 'n', 'n', 'y', 'n', 'n', 'n'],
+        ]},
+        { title: 'Analytics and logging', cols: ['Statbot', 'Sapphire', 'Dyno', 'Carl-bot', 'MEE6'], rows: [
+            ['Activity charts in Discord and CSV export', 'y', 'n', 'n', 'n', 'n'],
+            ['Log history length not tied to a paid tier', 'p', 'p', 'p', 'p', 'p'],
+            ['Action log with 18+ event categories', 'n', 'y', 'y', 'y', 'y'],
+            ['History of the Discord flags seen on each member', 'n', 'n', 'n', 'n', 'n'],
+            ['Public scam domain lookup and API', 'n', 'n', 'n', 'n', 'n'],
+            ['Public status page and changelog', 'n', 'n', 'n', 'n', 'n'],
+        ]},
+        { title: 'Custom commands and setup', cols: ['YAGPDB', 'Carl-bot', 'MEE6', 'Dyno', 'Hashbot'], rows: [
+            ['Custom commands with a template language', 'y', 'y', 'p', 'y', 'n'],
+            ['Per-user storage for custom commands', 'y', 'n', 'n', 'n', 'n'],
+            ['Search across every dashboard setting', 'n', 'n', 'n', 'n', 'n'],
+            ['Your own branded bot per server', 'n', 'n', 'p', 'n', 'n'],
+        ]},
+    ];
+    const cell = (v) => v === 'y' ? '<span class="m-yes" title="Ships it">&#10003;</span><span class="visually-hidden"> yes</span>'
+        : v === 'p' ? '<span class="m-pay" title="Paid tier only">$</span><span class="visually-hidden"> paid tier only</span>'
+        : '<span class="m-no" title="Does not ship it">&mdash;</span><span class="visually-hidden"> no</span>';
+    const beyond = [
+        'Music from YouTube that keeps working when YouTube blocks data-centre servers',
+        'Jellyfin library sharing and synced movie nights',
+        'Dungeons & Dragons 5e game with an AI Dungeon Master and world memory',
+        'Fortnite sprite tracker, with a public API for other developers',
+        'Shared ban list for Kick channels',
+    ];
+%>
+    <main id="main-content" tabindex="-1" class="cfs-main">
+        <div class="cfs-pagehead">
+            <h1>CertiFried compared with other bots</h1>
+            <p class="cfs-lede">How CertiFried compares with the most used Discord bots in each area. Everything CertiFried does is free for every server; the other bots' paid tiers are marked.</p>
+        </div>
+
+        <div class="fm-legend" aria-hidden="true">
+            <span><span class="m-yes">&#10003;</span> Ships it</span>
+            <span><span class="m-pay">$</span> Only on that bot's paid tier</span>
+            <span><span class="m-no">&mdash;</span> Does not ship it</span>
+        </div>
+
+        <% tables.forEach(function (t) { %>
+        <section aria-label="<%= t.title %>">
+            <h2 class="cfs-h2"><%= t.title %></h2>
+            <div class="fm-wrap">
+                <table class="fm">
+                    <thead><tr><th scope="col">Feature</th><th scope="col" class="us">CertiFried</th><% t.cols.forEach(function (c) { %><th scope="col"><%= c %></th><% }) %></tr></thead>
+                    <tbody>
+                        <% t.rows.forEach(function (r) { %>
+                        <tr><th scope="row"><%= r[0] %></th><td class="us"><%- cell('y') %></td><% t.cols.forEach(function (c, i) { %><td><%- cell(r[i + 1]) %></td><% }) %></tr>
+                        <% }) %>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+        <% }) %>
+
+        <section aria-labelledby="fm-beyond">
+            <h2 class="cfs-h2" id="fm-beyond">Not found in the other bots</h2>
+            <div class="cfs-rows">
+                <% beyond.forEach(function (b) { %><div class="cfs-row"><span class="m-yes" aria-hidden="true">&#10003;</span><div class="cfs-row-main"><%= b %></div></div><% }) %>
+            </div>
+        </section>
+
+        <p class="fm-note">The other bots were checked against their public documentation and their dashboards on 13 and 14 October 2026; they may have changed since. CertiFried's rows were checked against the bot on 19 November 2026. Spotted a mistake? <a href="/discord" rel="noopener">Tell us in the support server</a>.</p>
+    </main>
+<%- include('partials/site-footer') %>
+</body>
+</html>

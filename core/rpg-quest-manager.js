@@ -1,5 +1,6 @@
 import pool from '../utils/db.js';
 import logger from '../utils/logger.js';
+import RPGLeaderboardManager from './rpg-leaderboard-manager.js';
 
 /**
  * RPG Quest Manager - Handles quest system
@@ -234,6 +235,9 @@ class RPGQuestManager {
 
             logger.info(`[RPGQuestManager] Character ${characterId} completed quest ${questId}`);
 
+            // Quest-count achievements (counted from dnd_character_quests; fire-and-forget)
+            RPGLeaderboardManager.trackAchievements(characterId);
+
             return {
                 quest,
                 rewards
@@ -415,34 +419,6 @@ class RPGQuestManager {
         }
     }
 
-    /**
-     * Auto-progress quest based on activity (e.g., battles, items collected)
-     */
-    async autoProgressQuest(characterId, questType, amount = 1) {
-        try {
-            // Get active quests that match the type
-            const [quests] = await pool.execute(
-                `SELECT cq.*, q.quest_type, q.requirement_count
-                 FROM dnd_character_quests cq
-                 JOIN dnd_quests q ON cq.quest_id = q.quest_id
-                 WHERE cq.character_id = ? AND cq.status = 'active' AND q.quest_type = ?`,
-                [characterId, questType]
-            );
-
-            for (const quest of quests) {
-                const progressIncrement = (amount / quest.requirement_count) * 100;
-                const newProgress = Math.min(100, quest.progress + progressIncrement);
-
-                await this.updateQuestProgress(characterId, quest.quest_id, newProgress);
-            }
-
-            return true;
-
-        } catch (error) {
-            logger.error(`[RPGQuestManager] Error auto-progressing quest: ${error.message}`);
-            return false;
-        }
-    }
 }
 
 export default RPGQuestManager;

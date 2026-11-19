@@ -33,9 +33,10 @@ import {
 } from 'discord.js';
 import pool from '../utils/db.js';
 import logger from '../utils/logger.js';
+import { resolveBotIdForGuild } from '../utils/bot-resolver.js';
 
 const GUILD_ID = '927416865112870923';
-const CHIBI_BOT_ID = '1493873873098375358';
+// The acting bot comes from guild_bot_mapping — never pinned here.
 const GAME_PANEL_ID = 49;
 const STEAM_APP_ID = '3041230';
 const ROLE_NAME = '🌹 Windrose';
@@ -367,7 +368,8 @@ export async function runWindroseSetup() {
             return;
         }
 
-        const chibiClient = botManager.clients.get(CHIBI_BOT_ID);
+        const chibiBotId = await resolveBotIdForGuild(GUILD_ID, { db: pool });
+        const chibiClient = botManager.clients.get(chibiBotId);
         if (!chibiClient || !chibiClient.isReady?.()) {
             logger.warn(`${LOG} Chibi Bot not ready, aborting (will retry next restart)`);
             return;

@@ -1,7 +1,25 @@
-<%- include('partials/modern-header', {
-    pageTitle: event.name + ' - My Schedules',
-    additionalCSS: []
-}) %>
+<!DOCTYPE html>
+<html data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>" lang="en">
+<head>
+    <%# Older page styles (Bootstrap and the pre-design-system sheets) first; partials/site-head.ejs
+        loads the design system after them so its tokens and the site frame win. %>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/modern-framework.css">
+    <link rel="stylesheet" href="/css/unified-dark-theme.css">
+    <link rel="stylesheet" href="/css/unified-components.css">
+    <link rel="stylesheet" href="/css/text-readability.css">
+    <link rel="stylesheet" href="/css/dropdown-fix.css">
+    <link rel="stylesheet" href="/css/output.css">
+    <link rel="stylesheet" href="/css/dropdowns.css">
+<%- include('partials/site-head', { title: event.name + ' - My Schedules | CertiFried MultiTool', description: 'CertiFried MultiTool - Professional Discord bot with live streaming notifications, moderation, and more' }) %>
+    <script src="/js/csrf.js"></script>
+</head>
+<body class="dark-theme">
+<%- include('partials/site-header', {}) %>
 
 <style>
 .editor-page {
@@ -40,7 +58,8 @@
 
 /* Event Header */
 .event-header {
-    background: var(--gradient-primary);
+    background: var(--cf-surface);
+    border: 1px solid var(--cf-border);
     padding: var(--spacing-6);
     border-radius: var(--radius-lg);
     margin-bottom: var(--spacing-6);
@@ -182,7 +201,7 @@
 }
 
 .runs-table tr.status-running {
-    background: rgba(67, 181, 129, 0.1);
+    background: color-mix(in srgb, var(--cf-success) 10%, transparent);
 }
 
 .runs-table tr.status-completed {
@@ -209,7 +228,7 @@
     font-size: var(--font-size-xs);
 }
 
-.btn-primary { background: var(--color-primary-500); color: white; }
+.btn-primary { background: var(--color-primary-500); color: var(--cf-on-accent); }
 .btn-primary:hover { background: var(--color-primary-600); }
 .btn-secondary { background: var(--color-dark-500); color: var(--color-text-secondary); }
 .btn-secondary:hover { background: var(--color-dark-400); color: var(--color-text-primary); }
@@ -230,10 +249,11 @@
     text-transform: uppercase;
 }
 
-.status-pending { background: var(--color-dark-500); color: var(--color-text-muted); }
-.status-running { background: var(--color-success); color: white; }
-.status-completed { background: var(--color-primary-500); color: white; }
-.status-skipped { background: var(--color-warning); color: black; }
+/* Pill colours only: the runs table rows carry the same status-* class (tr.status-running) and have their own rules above. */
+.status-badge.status-pending { background: var(--color-dark-500); color: var(--color-text-muted); }
+.status-badge.status-running { background: var(--color-success); color: white; }
+.status-badge.status-completed { background: var(--color-primary-500); color: var(--cf-on-accent); }
+.status-badge.status-skipped { background: var(--color-warning); color: var(--cf-on-accent); }
 
 /* Empty State */
 .empty-state {
@@ -428,8 +448,8 @@
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label class="form-label">Name</label>
-                        <input type="text" class="form-control" name="name" required placeholder="Main Schedule">
+                        <label class="form-label" for="f-my-schedules-event-name">Name</label>
+                        <input id="f-my-schedules-event-name" type="text" class="form-control" name="name" required placeholder="Main Schedule">
                     </div>
                     <div class="form-group">
                         <label class="form-label">Slug</label>
@@ -440,8 +460,8 @@
                     </div>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Website</label>
-                    <input type="url" class="form-control" name="website" placeholder="https://yoursite.com">
+                    <label class="form-label" for="f-my-schedules-event-website">Website</label>
+                    <input id="f-my-schedules-event-website" type="url" class="form-control" name="website" placeholder="https://yoursite.com">
                     <div class="form-help">Leave empty to use event's website<% if (event.website_url) { %> (<%= event.website_url %>)<% } %></div>
                 </div>
                 <div class="form-row">
@@ -454,7 +474,7 @@
                         <div class="form-help">Leave empty to use event's stream</div>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Twitter Account</label>
+                        <label class="form-label">X account</label>
                         <div style="display: flex; align-items: center;">
                             <span style="background: var(--color-dark-500); padding: var(--spacing-3); border-radius: var(--radius-md) 0 0 var(--radius-md); border: 1px solid var(--color-dark-400); border-right: none; color: var(--color-text-muted);">@</span>
                             <input type="text" class="form-control" name="twitter" placeholder="username" style="border-radius: 0 var(--radius-md) var(--radius-md) 0;">
@@ -464,7 +484,7 @@
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label class="form-label">Timezone</label>
+                        <label class="form-label" for="scheduleTimezone">Timezone</label>
                         <select class="form-control" name="timezone" id="scheduleTimezone">
                             <option value="UTC">UTC</option>
                             <option value="America/New_York">Eastern Time (ET)</option>
@@ -479,36 +499,15 @@
                         </select>
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Start</label>
-                        <input type="datetime-local" class="form-control" name="startTime">
+                        <label class="form-label" for="f-my-schedules-event-starttime">Start</label>
+                        <input id="f-my-schedules-event-starttime" type="datetime-local" class="form-control" name="startTime">
                     </div>
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label class="form-label">Setup Time</label>
-                        <input type="text" class="form-control" name="setupTime" placeholder="5m" pattern="[0-9]+[hms]?(\s*[0-9]+[hms]?)*">
-                        <div class="form-help">Added between all items. E.g. "5min" or "5m 30s"</div>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Theme</label>
-                        <select class="form-control" name="theme">
-                            <option value="default">Default</option>
-                            <option value="dark">Dark</option>
-                            <option value="light">Light</option>
-                            <option value="gdq">GDQ Style</option>
-                            <option value="esa">ESA Style</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="form-row">
-                    <div class="form-group">
-                        <label class="form-label">Secret</label>
-                        <input type="text" class="form-control" name="secret" placeholder="Optional edit key">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Hidden Column Secret</label>
-                        <input type="text" class="form-control" name="hiddenSecret" placeholder="Optional view key">
-                        <div class="form-help">Required to view hidden columns</div>
+                        <label class="form-label" for="f-my-schedules-event-setuptime">Setup Time</label>
+                        <input id="f-my-schedules-event-setuptime" type="text" class="form-control" name="setupTime" placeholder="5m" pattern="[0-9]+[hms]?(\s*[0-9]+[hms]?)*">
+                        <div class="form-help">Added between runs, e.g. "5m" or "5m 30s".</div>
                     </div>
                 </div>
             </div>
@@ -532,31 +531,31 @@
             <div class="modal-body">
                 <div class="form-row">
                     <div class="form-group">
-                        <label class="form-label">Game Name</label>
-                        <input type="text" class="form-control" name="gameName" required placeholder="Super Mario 64">
+                        <label class="form-label" for="f-my-schedules-event-gamename">Game Name</label>
+                        <input id="f-my-schedules-event-gamename" type="text" class="form-control" name="gameName" required placeholder="Super Mario 64">
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Category</label>
-                        <input type="text" class="form-control" name="category" placeholder="120 Star">
+                        <label class="form-label" for="f-my-schedules-event-category">Category</label>
+                        <input id="f-my-schedules-event-category" type="text" class="form-control" name="category" placeholder="120 Star">
                     </div>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Runner(s)</label>
-                    <input type="text" class="form-control" name="runners" placeholder="Runner1, Runner2">
+                    <label class="form-label" for="f-my-schedules-event-runners">Runner(s)</label>
+                    <input id="f-my-schedules-event-runners" type="text" class="form-control" name="runners" placeholder="Runner1, Runner2">
                 </div>
                 <div class="form-row">
                     <div class="form-group">
-                        <label class="form-label">Estimate (H:MM:SS)</label>
-                        <input type="text" class="form-control" name="estimate" placeholder="1:45:00" pattern="[0-9]+:[0-5][0-9]:[0-5][0-9]">
+                        <label class="form-label" for="f-my-schedules-event-estimate">Estimate (H:MM:SS)</label>
+                        <input id="f-my-schedules-event-estimate" type="text" class="form-control" name="estimate" placeholder="1:45:00" pattern="[0-9]+:[0-5][0-9]:[0-5][0-9]">
                     </div>
                     <div class="form-group">
-                        <label class="form-label">Setup Time (H:MM:SS)</label>
-                        <input type="text" class="form-control" name="setup" placeholder="0:10:00" pattern="[0-9]+:[0-5][0-9]:[0-5][0-9]">
+                        <label class="form-label" for="f-my-schedules-event-setup">Setup Time (H:MM:SS)</label>
+                        <input id="f-my-schedules-event-setup" type="text" class="form-control" name="setup" placeholder="0:10:00" pattern="[0-9]+:[0-5][0-9]:[0-5][0-9]">
                     </div>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Notes</label>
-                    <textarea class="form-control" name="notes" rows="2"></textarea>
+                    <label class="form-label" for="f-my-schedules-event-notes">Notes</label>
+                    <textarea id="f-my-schedules-event-notes" class="form-control" name="notes" rows="2"></textarea>
                 </div>
             </div>
             <div class="modal-footer">
@@ -567,7 +566,10 @@
     </div>
 </div>
 
-<%- include('partials/modern-footer') %>
+<%- include('partials/site-footer') %>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/js/modal-fix.js"></script>
 
 <script>
 const eventId = <%= event.id %>;
@@ -663,6 +665,22 @@ async function loadRuns(scheduleId) {
     }
 }
 
+// "2026-11-20T18:00" in tz -> "2026-11-20 23:00:00" (UTC), the format the database stores.
+function zonedToUtc(value, tz) {
+    if (!value) return null;
+    const m = String(value).match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+    if (!m) return null;
+    const wall = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
+    const offsetAt = (ms) => {
+        const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: tz, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+            .formatToParts(new Date(ms)).map(x => [x.type, x.value]));
+        return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute, +p.second) - ms;
+    };
+    let utc = wall - offsetAt(wall);
+    utc = wall - offsetAt(utc); // second pass settles DST edges
+    return new Date(utc).toISOString().slice(0, 19).replace('T', ' ');
+}
+
 function handleAddSchedule(e) {
     if (e) e.preventDefault();
     const form = document.getElementById('addScheduleForm');
@@ -675,11 +693,10 @@ function handleAddSchedule(e) {
         twitchChannel: formData.get('twitchChannel') || null,
         twitter: formData.get('twitter') || null,
         timezone: formData.get('timezone') || 'UTC',
-        startTime: formData.get('startTime') || null,
-        setupTime: formData.get('setupTime') || null,
-        theme: formData.get('theme') || 'default',
-        secret: formData.get('secret') || null,
-        hiddenSecret: formData.get('hiddenSecret') || null
+        // The start is typed as wall-clock time in the chosen time zone; it used to be
+        // stored as if it were UTC, so every non-UTC schedule showed the wrong times.
+        startTime: zonedToUtc(formData.get('startTime'), formData.get('timezone') || 'UTC'),
+        setupTime: formData.get('setupTime') || null
     };
 
     fetch(`/api/my-schedules/events/${eventId}/schedules`, {

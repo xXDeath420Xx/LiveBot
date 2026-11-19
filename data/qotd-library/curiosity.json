@@ -1,0 +1,151 @@
+{
+  "theme": "curiosity",
+  "label": "Curiosity",
+  "questions": [
+    {
+      "slug": "cur-explain-simply",
+      "text": "What could you explain properly to a ten-year-old that most adults get wrong?"
+    },
+    {
+      "slug": "cur-fact-carry",
+      "text": "What's a fact you've carried around for years and worked into far too many conversations?"
+    },
+    {
+      "slug": "cur-unsolved-mystery",
+      "text": "Which unsolved mystery do you actually have a theory about?"
+    },
+    {
+      "slug": "cur-learn-lecture",
+      "text": "You must give an hour-long talk tomorrow with no preparation. What's your topic?"
+    },
+    {
+      "slug": "cur-history-witness",
+      "text": "Which historical event would you want to have watched from a safe distance?"
+    },
+    {
+      "slug": "cur-space-or-ocean",
+      "text": "Deep space or deep ocean — which unexplored frontier is more interesting to you?"
+    },
+    {
+      "slug": "cur-invention-appreciate",
+      "text": "What everyday invention do you think is genuinely underappreciated?"
+    },
+    {
+      "slug": "cur-question-unanswered",
+      "text": "What's a question you've wondered about for years and never looked up?"
+    },
+    {
+      "slug": "cur-changed-mind-fact",
+      "text": "What have you believed your whole life that turned out to be wrong?"
+    },
+    {
+      "slug": "cur-book-changed",
+      "text": "What book, article, or video genuinely rearranged how you think?"
+    },
+    {
+      "slug": "cur-science-field",
+      "text": "Which field of science would you study if you started over tomorrow?"
+    },
+    {
+      "slug": "cur-language-learn",
+      "text": "Which language would you learn, and what would you want to read or watch in it?"
+    },
+    {
+      "slug": "cur-ancient-tech",
+      "text": "What did people figure out long before they should have been able to?"
+    },
+    {
+      "slug": "cur-future-prediction",
+      "text": "What do you think will be completely normal in thirty years that sounds absurd today?",
+      "group": "future-absurdity"
+    },
+    {
+      "slug": "cur-skill-humanity",
+      "text": "If all human knowledge was lost except one field, which should survive?"
+    },
+    {
+      "slug": "cur-lost-history",
+      "text": "What piece of lost history would you most want recovered?"
+    },
+    {
+      "slug": "cur-documentary-topic",
+      "text": "What subject would you happily watch a six-hour documentary about?"
+    },
+    {
+      "slug": "cur-museum-favourite",
+      "text": "What's the best thing you've ever seen in a museum, and did it live up to the hype?"
+    },
+    {
+      "slug": "cur-word-favourite",
+      "text": "What's your favourite word, in any language, and what does it do that others don't?"
+    },
+    {
+      "slug": "cur-map-fact",
+      "text": "What geographical fact still surprises people when you tell them?"
+    },
+    {
+      "slug": "cur-body-fact",
+      "text": "What's the strangest thing you know about how the human body works?"
+    },
+    {
+      "slug": "cur-childhood-question",
+      "text": "What did you constantly ask about as a kid that drove adults mad?"
+    },
+    {
+      "slug": "cur-conspiracy-plausible",
+      "text": "What's the most plausible thing that people dismiss as a conspiracy theory?"
+    },
+    {
+      "slug": "cur-time-capsule",
+      "text": "You're filling a time capsule to be opened in 200 years. What three objects explain us?"
+    },
+    {
+      "slug": "cur-hardest-concept",
+      "text": "What idea have you tried repeatedly to understand and still can't quite hold in your head?"
+    },
+    {
+      "slug": "cur-experiment-run",
+      "text": "If you had a lab and unlimited funding, what would you actually test?"
+    },
+    {
+      "slug": "cur-teach-history",
+      "text": "What part of history do you wish had been taught to you properly?"
+    },
+    {
+      "slug": "cur-nature-phenomenon",
+      "text": "What natural phenomenon would you travel to see in person?"
+    },
+    {
+      "slug": "cur-numbers-scale",
+      "text": "What comparison finally made a huge number make sense to you?"
+    },
+    {
+      "slug": "cur-tech-magic",
+      "text": "What piece of modern technology would be indistinguishable from magic to someone 200 years ago?"
+    },
+    {
+      "slug": "cur-animal-intelligence",
+      "text": "Which animal do you think is smarter than we give it credit for?"
+    },
+    {
+      "slug": "cur-solved-problem",
+      "text": "What problem do you think humanity will actually solve in your lifetime?"
+    },
+    {
+      "slug": "cur-simple-pleasure-science",
+      "text": "What everyday thing becomes far more interesting once you know how it works?"
+    },
+    {
+      "slug": "cur-misconception",
+      "text": "What misconception in your area of knowledge do you find yourself correcting constantly?"
+    },
+    {
+      "slug": "cur-old-book",
+      "text": "What's the oldest thing you own, and do you know its history?"
+    },
+    {
+      "slug": "cur-encyclopedia-hole",
+      "text": "What topic do you know an absurd amount about for no practical reason?"
+    }
+  ]
+}

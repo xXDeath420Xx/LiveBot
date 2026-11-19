@@ -1,0 +1,1586 @@
+<%# Verification — I agree / CAPTCHA gate, setup wizard (preview, apply, undo), stats, the CAPTCHA clock, auto-prune settings + queue, the inactivity prune (settings, preview, run now), and ONE live activity log for all of them (GET /log; rules in core/verification-log-logic.js) (core/verification.js, core/auto-prune.js, core/inactivity-prune.js). API-driven (dashboard/routes/api/features/verification.js); needs `guild` in locals. Laid out with the settings-row kit (cf-settings.css); every id the script below uses is unchanged. %>
+<div class="page-section" id="verificationPage" data-guild-id="<%= guild.id %>">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-user-lock"></i>
+                <span>Verification</span>
+            </div>
+            <div class="page-section-subtitle">The gate new members pass before they see the server, and the prunes that clear out accounts that never take part.</div>
+        </div>
+    </div>
+
+    <div id="vfError" class="alert alert-danger" role="alert" hidden></div>
+    <div id="vfNotice" class="alert alert-info" role="status" hidden></div>
+
+    <!-- Status + stats -->
+    <section class="cf-section" aria-labelledby="vf-overview-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="vf-overview-title">Last 30 days</h2>
+                <p class="cf-section-desc">Green: verified. Red: failed or ran out of time. Amber: auto-pruned. The rate is verified divided by verified, failed and timed out together.</p>
+            </div>
+            <div class="cf-section-actions">
+                <span id="vfRateBadge" class="cf-pill vf-badge">...</span>
+                <a class="vl-jump" href="#vlCard">Activity log <i class="fas fa-arrow-down" aria-hidden="true"></i></a>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--stack">
+                <div class="vf-stats" id="vfStats"><div class="vf-muted">Loading...</div></div>
+                <div id="vfChart" class="vf-chart" aria-hidden="true"></div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Settings -->
+    <section class="cf-section" aria-labelledby="vf-settings-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="vf-settings-title">Verification gate</h2>
+                <p class="cf-section-desc">
+                    Members verify with an "I agree" button, or a CAPTCHA: a picture of a fresh six-digit code answered on a keypad, with
+                    a number of tries and a time limit. Allowlisted members and staff
+                    (<a href="/manage/<%= guild.id %>?page=protection-settings">Protection settings</a>) are never kicked, banned or timed out by it.
+                </p>
+            </div>
+            <div class="cf-section-actions"><span id="vfOnBadge" class="cf-pill vf-badge">...</span></div>
+        </header>
+        <div class="cf-rows">
+            <div id="vfNoConfig" class="cf-notice is-warn" hidden>Verification is not set up yet. Use the setup wizard below, or pick a verified role here and save.</div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="vfEnabled">Verification on</label>
+                    <p class="cf-row-desc">New members must verify before they can see the server.</p>
+                </div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="vfEnabled" data-feature-switch></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="vfMode">How members verify</label>
+                    <p class="cf-row-desc">A CAPTCHA stops bots; the button only asks people to agree to the rules.</p>
+                </div>
+                <div class="cf-row-control">
+                    <select id="vfMode" class="form-select"><option value="button">I agree button</option><option value="captcha">CAPTCHA (image code and keypad)</option></select>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="vfChannel">Verification channel</label>
+                    <p class="cf-row-desc">Where the verification panel is posted.</p>
+                </div>
+                <div class="cf-row-control"><select id="vfChannel" class="form-select"></select></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="vfVerified">Verified role</label>
+                    <p class="cf-row-desc">Given when someone verifies.</p>
+                </div>
+                <div class="cf-row-control"><select id="vfVerified" class="form-select"></select></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="vfUnverified">Unverified role</label>
+                    <p class="cf-row-desc">Optional. Held from joining until they verify.</p>
+                </div>
+                <div class="cf-row-control"><select id="vfUnverified" class="form-select"></select></div>
+            </div>
+
+            <div id="vfCaptchaBox">
+                <div class="cf-rows-head" id="vf-captcha-head">CAPTCHA rules</div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="vfAttempts">Wrong codes allowed</label>
+                        <p class="cf-row-desc">A wrong answer brings a new picture. From 1 to 10.</p>
+                    </div>
+                    <div class="cf-row-control"><input id="vfAttempts" type="number" min="1" max="10" class="form-control"></div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="vfWindow">Time limit</label>
+                        <p class="cf-row-desc">Minutes from joining to finish; 0 means no limit, at most 20160 (14 days). <span id="vfWindowFmt" class="vf-muted"></span></p>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="cf-input-unit"><input id="vfWindow" type="number" min="0" max="20160" class="form-control"><span class="cf-unit">minutes</span></div>
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="vfFail">When someone fails</label>
+                        <p class="cf-row-desc">Failing means running out of tries or time. Log only records it and posts to the server log without touching anyone.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <select id="vfFail" class="form-select"><option value="none">Log only</option><option value="timeout">Timeout</option><option value="kick">Kick</option><option value="ban">Ban</option></select>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--sub">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="vfTimeout">Timeout length</label>
+                        <p class="cf-row-desc">Used when the action is Timeout.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="cf-input-unit"><input id="vfTimeout" type="number" min="1" max="40320" class="form-control"><span class="cf-unit">minutes</span></div>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="vfDm">Tell them why by DM</label>
+                        <p class="cf-row-desc">When they are kicked, banned or timed out.</p>
+                    </div>
+                    <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="vfDm"></div>
+                </div>
+            </div>
+
+            <div class="cf-rows-head" id="vf-panel-head">Panel and clean-up</div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="vfTitle">Panel title</label>
+                    <p class="cf-row-desc">Optional. The heading on the verification panel.</p>
+                </div>
+                <div class="cf-row-control"><input id="vfTitle" class="form-control" maxlength="100"></div>
+            </div>
+            <div class="cf-row cf-row--stack">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="vfText">Panel text</label>
+                    <p class="cf-row-desc">Optional. Explain what members are agreeing to or what to expect.</p>
+                </div>
+                <div class="cf-row-control"><textarea id="vfText" class="form-control" rows="3" maxlength="1000"></textarea></div>
+            </div>
+            <div class="cf-row cf-row--stack">
+                <div class="cf-row-text">
+                    <span class="cf-row-label" id="vf-pv-title">Panel preview</span>
+                    <p class="cf-row-desc" id="vf-pv-desc">What new members see in the verification channel. Changes reach Discord when you save and post the panel again.</p>
+                </div>
+                <div class="cf-dc-frame" data-vf-preview aria-live="polite" aria-labelledby="vf-pv-title"></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="vfKickDays">Remove members still unverified after</label>
+                    <p class="cf-row-desc">0 means never.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-unit"><input id="vfKickDays" type="number" min="0" max="365" class="form-control"><span class="cf-unit">days</span></div>
+                </div>
+            </div>
+            <div id="vfPermWarn" class="cf-notice is-warn" hidden></div>
+            <div class="cf-section-foot">
+                <span id="vfPanelWhere" class="cf-foot-note"></span>
+                <button type="button" class="btn btn-secondary" id="vfPanel">Post the panel again</button>
+                <button type="button" class="btn btn-primary" id="vfSave">Save</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Setup wizard -->
+    <section class="cf-section" aria-labelledby="wz-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="wz-title">Setup wizard</h2>
+                <p class="cf-section-desc">Creates whatever is missing, saves the settings, can hide your public channels until people verify, and posts the panel. You see every change before anything happens, and every permission change is recorded so it can be undone.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="wzChannel">Verification channel</label>
+                    <p class="cf-row-desc">An existing channel, or a new one with the name below.</p>
+                </div>
+                <div class="cf-row-control">
+                    <select id="wzChannel" class="form-select"></select>
+                    <input id="wzChannelName" class="form-control" maxlength="90" value="verify" placeholder="Name for the new channel" aria-label="Name for the new channel">
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="wzVerified">Verified role</label>
+                </div>
+                <div class="cf-row-control">
+                    <select id="wzVerified" class="form-select"></select>
+                    <input id="wzVerifiedName" class="form-control" maxlength="100" value="Verified" placeholder="Name for the new role" aria-label="Name for the new verified role">
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="wzUnverified">Unverified role</label>
+                </div>
+                <div class="cf-row-control">
+                    <select id="wzUnverified" class="form-select"></select>
+                    <input id="wzUnverifiedName" class="form-control" maxlength="100" value="Unverified" placeholder="Name for the new role" aria-label="Name for the new unverified role">
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text"><label class="cf-row-label" for="wzMode">How members verify</label></div>
+                <div class="cf-row-control">
+                    <select id="wzMode" class="form-select"><option value="captcha">CAPTCHA (image code and keypad)</option><option value="button">I agree button</option></select>
+                </div>
+            </div>
+            <div class="cf-row cf-row--stack">
+                <div class="cf-row-text">
+                    <span class="cf-row-label" id="wz-strategy-head">Hide public channels until people verify</span>
+                </div>
+                <div class="cf-choices" role="radiogroup" aria-labelledby="wz-strategy-head">
+                    <label class="cf-choice"><input type="radio" name="wzStrategy" value="unverified" checked> <span><strong>The Unverified role cannot see them</strong> (recommended)<span class="cf-choice-desc">New members get the Unverified role on joining and lose it when they verify. Members already here are not affected.</span></span></label>
+                    <label class="cf-choice"><input type="radio" name="wzStrategy" value="verified"> <span><strong>Only the Verified role can see them</strong><span class="cf-choice-desc">@everyone loses access and the Verified role gets it. Everyone already here is given the Verified role first.</span></span></label>
+                    <label class="cf-choice"><input type="radio" name="wzStrategy" value="none"> <span><strong>Do not hide anything</strong><span class="cf-choice-desc">Just the roles, the channel and the panel.</span></span></label>
+                </div>
+            </div>
+            <div class="cf-row cf-row--stack">
+                <div class="cf-choices">
+                    <label class="cf-choice"><input type="checkbox" id="wzHideGate" checked> <span>Hide the verification channel from verified members</span></label>
+                    <label class="cf-choice"><input type="checkbox" id="wzGrant" checked> <span>Give the Verified role to members already here (only-Verified mode)</span></label>
+                    <label class="cf-choice"><input type="checkbox" id="wzPanel" checked> <span>Post the panel</span></label>
+                </div>
+            </div>
+            <div class="cf-row cf-row--stack vf-out-row">
+                <div id="wzPreviewOut"></div>
+                <div id="wzProgress" hidden>
+                    <div class="vf-muted" id="wzPhase"></div>
+                    <div class="vf-progress"><div class="vf-progress-bar" id="wzBar"></div></div>
+                </div>
+                <div id="wzResult"></div>
+            </div>
+            <div class="cf-section-foot">
+                <button type="button" class="btn btn-secondary" id="wzPreview">Preview</button>
+                <button type="button" class="btn btn-danger" id="wzApply" disabled>Apply</button>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section cf-section--danger" aria-labelledby="wz-undo-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="wz-undo-title">Undo the setup wizard</h2>
+                <p class="cf-section-desc">Reverts every permission change the wizard recorded. Roles it gave to members are not taken back.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--stack">
+                <div id="wzRecord" class="vf-muted">No setup recorded.</div>
+                <label class="cf-choice"><input type="checkbox" id="wzDeleteCreated"> <span>Also delete the channel and roles the wizard created</span></label>
+            </div>
+            <div class="cf-section-foot">
+                <button type="button" class="btn btn-danger" id="wzUndo" disabled>Undo the permission changes</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- CAPTCHA clock -->
+    <section class="cf-section" aria-labelledby="vf-clock-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="vf-clock-title">Waiting to verify</h2>
+                <p class="cf-section-desc">Members on the CAPTCHA time limit. At their deadline the fail action applies unless they have verified. "Stop the clock" lets one person take their time.</p>
+            </div>
+            <div class="cf-section-actions"><span id="vfClockCount" class="cf-pill vf-badge"></span></div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--stack"><div id="vfClock" class="vf-list"></div></div>
+        </div>
+    </section>
+
+    <!-- Auto-prune -->
+    <section class="cf-section" aria-labelledby="ap-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="ap-title">Auto-prune</h2>
+                <p class="cf-section-desc">
+                    Kicks members who still have no real role a set time after joining: idle accounts and bots that join and sit there.
+                    Only joins after you switch it on are tracked, and switching it off clears the queue. A real role is any role except the
+                    bypass roles below and the roles this bot gives out automatically. Boosters and other app-managed roles count as real.
+                </p>
+            </div>
+            <div class="cf-section-actions"><span id="apOnBadge2" class="cf-pill vf-badge">...</span></div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="prEnabled">Auto-prune on</label>
+                    <p class="cf-row-desc">Start tracking new members who never get a real role.</p>
+                </div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="prEnabled"></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="prMinutes">Time limit</label>
+                    <p class="cf-row-desc">Minutes after joining, from 10 minutes to 14 days. <span id="prMinutesFmt" class="vf-muted"></span></p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-unit"><input id="prMinutes" type="number" min="10" max="20160" class="form-control"><span class="cf-unit">minutes</span></div>
+                    <div class="vf-quick" role="group" aria-label="Quick choices">
+                        <button type="button" class="btn btn-sm btn-secondary" data-prmin="30">30 min</button>
+                        <button type="button" class="btn btn-sm btn-secondary" data-prmin="60">1 h</button>
+                        <button type="button" class="btn btn-sm btn-secondary" data-prmin="240">4 h</button>
+                        <button type="button" class="btn btn-sm btn-secondary" data-prmin="720">12 h</button>
+                        <button type="button" class="btn btn-sm btn-secondary" data-prmin="1440">24 h</button>
+                        <button type="button" class="btn btn-sm btn-secondary" data-prmin="4320">3 d</button>
+                        <button type="button" class="btn btn-sm btn-secondary" data-prmin="10080">7 d</button>
+                        <button type="button" class="btn btn-sm btn-secondary" data-prmin="20160">14 d</button>
+                    </div>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="prAction">At the limit</label>
+                    <p class="cf-row-desc">Log only lists them without removing anyone.</p>
+                </div>
+                <div class="cf-row-control">
+                    <select id="prAction" class="form-select"><option value="kick">Kick</option><option value="log">Log only (remove nobody)</option></select>
+                </div>
+            </div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text"><label class="cf-row-label" for="prDm">DM them before the kick</label></div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="prDm"></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <span class="cf-row-label">Bypass roles</span>
+                    <p class="cf-row-desc">Roles that do not count as a real role. <span id="prSystem"></span></p>
+                </div>
+                <div class="cf-row-control">
+                    <div id="prBypass" class="cf-chips"></div>
+                    <div class="cf-inline">
+                        <select id="prBypassPick" class="form-select vf-pick" aria-label="Role to add"></select>
+                        <button type="button" class="btn btn-sm btn-secondary" id="prBypassAdd">Add</button>
+                    </div>
+                </div>
+            </div>
+            <div class="cf-section-foot">
+                <button type="button" class="btn btn-primary" id="prSave">Save</button>
+            </div>
+            <div class="cf-rows-head vf-head-row" id="pr-queue-head">Queue <span id="prQueueCount" class="cf-pill vf-badge"></span></div>
+            <div class="cf-row cf-row--stack"><div id="prQueue" class="vf-list"></div></div>
+        </div>
+    </section>
+
+    <!-- Inactivity prune -->
+    <section class="cf-section" id="inCard" aria-labelledby="inCard-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="inCard-title">Inactivity prune</h2>
+                <p class="cf-section-desc">
+                    Removes, or just lists, members who got through the gate but never show up: no message in any channel and no voice
+                    join. Two rules, each off, log only or kick. Activity is counted from when this bot started tracking it here
+                    (<span id="inSince">...</span>), so nobody is judged on time before that. Members in voice right now, members still
+                    verifying or on the auto-prune queue, and members newer than the minimum below are never judged. Every kick respects the
+                    allowlist and the pause on <a href="/manage/<%= guild.id %>?page=protection-settings">Protection settings</a>.
+                    For a one-off look back over message history, see the <a href="/manage/<%= guild.id %>?page=activity-audit">Activity audit</a>.
+                </p>
+            </div>
+            <div class="cf-section-actions"><span id="inBadge" class="cf-pill vf-badge">...</span></div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-rows-head" id="in-rules-head">Rules</div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="inNever">Never active</label>
+                    <p class="cf-row-desc">No message or voice join within a number of days of joining.</p>
+                </div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="inNever"></div>
+            </div>
+            <div class="cf-row cf-row--sub">
+                <div class="cf-row-text"><label class="cf-row-label" for="inNeverDays">Days after joining</label><p class="cf-row-desc">From 7 to 180.</p></div>
+                <div class="cf-row-control"><div class="cf-input-unit"><input id="inNeverDays" type="number" min="7" max="180" class="form-control"><span class="cf-unit">days</span></div></div>
+            </div>
+            <div class="cf-row cf-row--sub">
+                <div class="cf-row-text"><label class="cf-row-label" for="inNeverAction">Then</label></div>
+                <div class="cf-row-control"><select id="inNeverAction" class="form-select"><option value="log">Log only (remove nobody)</option><option value="kick">Kick</option></select></div>
+            </div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="inQuiet">Gone quiet</label>
+                    <p class="cf-row-desc">Last message or voice join older than a number of days.</p>
+                </div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="inQuiet"></div>
+            </div>
+            <div class="cf-row cf-row--sub">
+                <div class="cf-row-text"><label class="cf-row-label" for="inQuietDays">Days without activity</label><p class="cf-row-desc">From 30 to 365.</p></div>
+                <div class="cf-row-control"><div class="cf-input-unit"><input id="inQuietDays" type="number" min="30" max="365" class="form-control"><span class="cf-unit">days</span></div></div>
+            </div>
+            <div class="cf-row cf-row--sub">
+                <div class="cf-row-text"><label class="cf-row-label" for="inQuietAction">Then</label></div>
+                <div class="cf-row-control"><select id="inQuietAction" class="form-select"><option value="log">Log only (remove nobody)</option><option value="kick">Kick</option></select></div>
+            </div>
+
+            <div class="cf-rows-head" id="in-safety-head">Safety limits</div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="inWarn">Warn by DM before a kick</label>
+                    <p class="cf-row-desc">Days of warning; 0 means none. The DM names the server and says how to stay: post anything or join voice. Any activity after it cancels it.</p>
+                </div>
+                <div class="cf-row-control"><div class="cf-input-unit"><input id="inWarn" type="number" min="0" max="30" class="form-control"><span class="cf-unit">days</span></div></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text"><label class="cf-row-label" for="inMinDays">Never judge members newer than</label></div>
+                <div class="cf-row-control"><div class="cf-input-unit"><input id="inMinDays" type="number" min="0" max="365" class="form-control"><span class="cf-unit">days</span></div></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text"><label class="cf-row-label" for="inPerSweep">Most kicks per sweep</label><p class="cf-row-desc">From 1 to 100.</p></div>
+                <div class="cf-row-control"><input id="inPerSweep" type="number" min="1" max="100" class="form-control"></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text"><label class="cf-row-label" for="inPerDay">Most kicks per day</label><p class="cf-row-desc">From 1 to 1000.</p></div>
+                <div class="cf-row-control"><input id="inPerDay" type="number" min="1" max="1000" class="form-control"></div>
+            </div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text"><label class="cf-row-label" for="inStaff">Never judge staff</label><p class="cf-row-desc">Anyone with a moderation permission.</p></div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="inStaff"></div>
+            </div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text"><label class="cf-row-label" for="inBoosters">Never judge server boosters</label></div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="inBoosters"></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <span class="cf-row-label">Exempt roles</span>
+                    <p class="cf-row-desc">Members with any of these roles are never judged.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div id="inExempt" class="cf-chips"></div>
+                    <div class="cf-inline">
+                        <select id="inExemptPick" class="form-select vf-pick" aria-label="Role to exempt"></select>
+                        <button type="button" class="btn btn-sm btn-secondary" id="inExemptAdd">Add</button>
+                        <button type="button" class="btn btn-sm btn-secondary" id="inExemptStaff">Add the staff roles</button>
+                    </div>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <span class="cf-row-label">Exempt members</span>
+                    <p class="cf-row-desc">Specific users who will never be removed by the inactivity sweep (separate from the server-wide <a href="#" id="inProtLink">Protection allowlist</a> — that one exempts them from every protection; this one is inactivity only).</p>
+                </div>
+                <div class="cf-row-control">
+                    <div id="inExemptUsers" class="cf-chips"></div>
+                    <div class="cf-inline">
+                        <input type="search" id="inExemptUserQuery" class="form-control vf-pick" placeholder="Name, @mention or user ID" autocomplete="off">
+                        <button type="button" class="btn btn-sm btn-secondary" id="inExemptUserSearch">Search</button>
+                    </div>
+                    <div id="inExemptUserResults" class="vf-search-results" style="margin-top:6px;"></div>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <span class="cf-row-label">Resolved exemptions</span>
+                    <p class="cf-row-desc">Who's safe from the next sweep based on these settings.</p>
+                </div>
+                <div class="cf-row-control"><div id="inResolvedExempt" class="vf-stats"></div></div>
+            </div>
+            <div class="cf-section-foot">
+                <button type="button" class="btn btn-secondary" id="inPreviewForm">Preview these settings</button>
+                <button type="button" class="btn btn-warning" id="inRun">Run now</button>
+                <button type="button" class="btn btn-primary" id="inSave">Save</button>
+            </div>
+            <div class="cf-row cf-row--stack"><div id="inStatus" class="vf-stats"></div></div>
+
+            <div class="cf-rows-head vf-head-row" id="in-preview-head">Preview: who would be warned or removed <span id="inPrevBadge" class="cf-pill vf-badge"></span></div>
+            <div class="cf-row cf-row--stack">
+                <div class="cf-inline">
+                    <button type="button" class="btn btn-sm btn-secondary" id="inPreview">Preview saved settings</button>
+                    <button type="button" class="btn btn-sm btn-secondary" id="inPreviewFresh">Refresh member list</button>
+                    <span id="inPrevNote" class="vf-muted"></span>
+                </div>
+                <div id="inPrevSummary" class="vf-stats"></div>
+                <div id="inPrevList"></div>
+                <div class="cf-inline" id="inPager" hidden>
+                    <button type="button" class="btn btn-sm btn-secondary" id="inPrev" aria-label="Previous page"><i class="fas fa-chevron-left" aria-hidden="true"></i></button>
+                    <span id="inPageText" class="vf-muted"></span>
+                    <button type="button" class="btn btn-sm btn-secondary" id="inNext" aria-label="Next page"><i class="fas fa-chevron-right" aria-hidden="true"></i></button>
+                </div>
+                <div class="vf-muted">Warnings, removals and anything held or logged are in the <a href="#vlCard" data-vl-type="inactivity">activity log</a> below.</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Activity log: every event the systems above record, one place (GET /log) -->
+    <section class="vl" id="vlCard" aria-labelledby="vlTitle">
+        <div class="vl-head">
+            <div class="vl-head-text">
+                <h3 class="vl-title" id="vlTitle">Activity log</h3>
+                <p class="vl-sub">Verification results, auto-prune and inactivity actions, and staff changes to the queues. Newest first.</p>
+            </div>
+            <div class="vl-head-actions">
+                <button type="button" class="vl-live" id="vlLive" aria-pressed="true" title="Check for new events every 20 seconds while this tab is open">
+                    <span class="vl-dot" aria-hidden="true"></span><span id="vlLiveText">Live</span>
+                </button>
+                <button type="button" class="btn btn-sm btn-secondary" id="vlExport"><i class="fas fa-download" aria-hidden="true"></i> <span>Export CSV</span></button>
+            </div>
+        </div>
+        <div class="vl-toolbar">
+            <div class="cf-segmented vl-chips" role="group" aria-label="Show">
+                <button type="button" class="cf-segment vl-chip" data-type="all" aria-pressed="true">All <span class="vl-count" data-count="all"></span></button>
+                <button type="button" class="cf-segment vl-chip" data-type="verification" aria-pressed="false">Verification <span class="vl-count" data-count="verification"></span></button>
+                <button type="button" class="cf-segment vl-chip" data-type="prune" aria-pressed="false">Auto-prune <span class="vl-count" data-count="prune"></span></button>
+                <button type="button" class="cf-segment vl-chip" data-type="inactivity" aria-pressed="false">Inactivity <span class="vl-count" data-count="inactivity"></span></button>
+                <button type="button" class="cf-segment vl-chip" data-type="failures" aria-pressed="false">Failures <span class="vl-count" data-count="failures"></span></button>
+            </div>
+            <div class="vl-filters">
+                <div class="cf-search vl-search">
+                    <i class="fas fa-search" aria-hidden="true"></i>
+                    <label class="visually-hidden" for="vlSearch">Search by member name or ID</label>
+                    <input type="search" id="vlSearch" class="form-control form-control-sm" placeholder="Member name or ID" maxlength="100" autocomplete="off" spellcheck="false">
+                </div>
+                <label class="visually-hidden" for="vlRange">Time range</label>
+                <select id="vlRange" class="form-select form-select-sm">
+                    <option value="24h">Last 24 hours</option>
+                    <option value="7d">Last 7 days</option>
+                    <option value="30d">Last 30 days</option>
+                    <option value="all" selected>All time</option>
+                </select>
+            </div>
+        </div>
+        <div class="vl-status" id="vlStatus" role="status" aria-live="polite"></div>
+        <button type="button" class="vl-new" id="vlNew" hidden></button>
+        <div class="vl-scroll" id="vlScroll">
+            <table class="vl-table" aria-describedby="vlShown">
+                <thead><tr><th scope="col" class="vl-c-when">When</th><th scope="col">Member</th><th scope="col">Event</th><th scope="col">Detail</th><th scope="col" class="vl-c-dm">DM</th></tr></thead>
+                <tbody id="vlBody"></tbody>
+            </table>
+            <div id="vlEmpty" class="vl-empty" hidden></div>
+        </div>
+        <div class="vl-foot">
+            <span id="vlShown" class="vl-meta"></span>
+            <button type="button" class="btn btn-sm btn-secondary" id="vlMore" hidden>Load more</button>
+        </div>
+    </section>
+</div>
+
+<style>
+  /* Pieces the script draws (stat tiles, badges, chips, lists, the wizard preview), on the kit's tokens. */
+  #verificationPage .vf-stats { display:grid; grid-template-columns:repeat(auto-fill,minmax(9.5rem,1fr)); gap:var(--cf-2); }
+  #verificationPage .vf-stats:empty { display:none; }
+  #verificationPage .vf-stat { background:var(--cf-surface-2); border:1px solid var(--cf-border); border-radius:var(--cf-radius); padding:var(--cf-2) var(--cf-3); font-size:var(--cf-text-xs); color:var(--cf-text-3); }
+  #verificationPage .vf-stat b { display:block; font-size:var(--cf-text-lg); font-weight:600; color:var(--cf-text); font-variant-numeric:tabular-nums; }
+  #verificationPage .vf-stat b.vf-ok { color:var(--cf-success); }
+  #verificationPage .vf-stat b.vf-bad { color:var(--cf-danger); }
+  #verificationPage .vf-stat b.vf-mid { color:var(--cf-warning); }
+  #verificationPage .vf-chart { display:flex; align-items:flex-end; gap:3px; height:4.5rem; padding:var(--cf-1) 0 0; }
+  #verificationPage .vf-day { flex:1; display:flex; flex-direction:column-reverse; min-width:3px; height:100%; }
+  #verificationPage .vf-day span { display:block; width:100%; }
+  #verificationPage .vf-day .p { background:var(--cf-success); } #verificationPage .vf-day .f { background:var(--cf-danger); } #verificationPage .vf-day .r { background:var(--cf-warning); }
+  #verificationPage .vf-muted { color:var(--cf-text-3); font-size:var(--cf-text-sm); }
+  #verificationPage .vf-sub { font-weight:600; font-size:var(--cf-text-sm); margin-bottom:var(--cf-1); color:var(--cf-text); }
+  #verificationPage .vf-mt { margin-top:var(--cf-2); }
+  #verificationPage .vf-warn { padding:var(--cf-3) var(--cf-5); font-size:var(--cf-text-sm); color:var(--cf-text); background:color-mix(in srgb, var(--cf-warning) 10%, var(--cf-surface)); }
+  #verificationPage .cf-row .vf-warn { padding:0; background:none; color:var(--cf-warning); margin:var(--cf-1) 0; }
+  #verificationPage .cf-row:has(> .vf-stats:empty:only-child) { display:none; }
+  #verificationPage .vf-badge:empty { display:none; }
+  #verificationPage .vf-badge:empty { display:none; }
+  #verificationPage .vf-head-row { display:flex; align-items:center; gap:var(--cf-2); }
+  #verificationPage .vf-quick { display:flex; flex-wrap:wrap; gap:4px; }
+  #verificationPage .vf-quick .btn { min-height:26px; padding:2px 8px; }
+  #verificationPage .vf-pick { flex:1 1 12rem; min-width:0; max-width:20rem; }
+  #verificationPage .vf-list { display:grid; gap:2px; max-height:28rem; overflow-y:auto; }
+  #verificationPage .vf-list > .vf-muted:only-child { padding:var(--cf-1) 0; }
+  #verificationPage .vf-item { display:flex; align-items:center; flex-wrap:wrap; gap:var(--cf-2) var(--cf-3); font-size:var(--cf-text-sm); padding:6px; border-radius:var(--cf-radius); }
+  #verificationPage .vf-item:hover { background:var(--cf-surface-2); }
+  #verificationPage .vf-item img, #verificationPage .vf-item .vf-av { width:28px; height:28px; border-radius:50%; flex:none; object-fit:cover; background:var(--cf-surface-3); display:inline-flex; align-items:center; justify-content:center; color:var(--cf-text-3); font-size:12px; }
+  #verificationPage .vf-grow { flex:1 1 12rem; min-width:0; overflow:hidden; text-overflow:ellipsis; }
+  #verificationPage .vf-progress { height:6px; background:var(--cf-surface-3); border-radius:999px; overflow:hidden; margin:var(--cf-2) 0; }
+  #verificationPage .vf-progress-bar { height:100%; width:0; background:var(--cf-accent); transition:width .4s; }
+  #verificationPage .vf-table { width:100%; font-size:var(--cf-text-sm); border-collapse:collapse; }
+  #verificationPage .vf-table td, #verificationPage .vf-table th { padding:6px 8px !important; border-bottom:1px solid var(--cf-border) !important; text-align:left; vertical-align:top; }
+  #verificationPage .vf-table th { font-size:var(--cf-text-xs) !important; font-weight:500 !important; color:var(--cf-text-3) !important; }
+  #verificationPage .vf-scroll { max-height:20rem; overflow:auto; margin:var(--cf-2) 0; border:1px solid var(--cf-border); border-radius:var(--cf-radius); }
+  #verificationPage .vf-ok { color:var(--cf-success); } #verificationPage .vf-bad { color:var(--cf-danger); } #verificationPage .vf-mid { color:var(--cf-warning); }
+  #verificationPage details summary { cursor:pointer; color:var(--cf-text-2); font-size:var(--cf-text-sm); }
+  #verificationPage .vf-out-row:has(#wzPreviewOut:empty):has(#wzResult:empty):has(#wzProgress[hidden]) { display:none; }
+  #verificationPage #vfCaptchaBox { transition: opacity var(--cf-fast) var(--cf-ease); }
+  #verificationPage .cf-row-control > input + .cf-input-unit, #verificationPage .cf-row-control > select + input { margin-top: 0; }
+
+  /* Activity log: one panel of its own (--cf-* tokens, so it follows every theme). */
+  #verificationPage .vl-jump { font-size:var(--cf-text-xs); font-weight:500; color:var(--cf-text-2); text-decoration:none; white-space:nowrap; }
+  #verificationPage .vl-jump:hover { color:var(--cf-text); text-decoration:underline; }
+  #verificationPage .vl { background:var(--cf-surface); border:1px solid var(--cf-border); border-radius:var(--cf-radius-lg); padding:0; margin:0 0 var(--cf-8); overflow:hidden; min-width:0; scroll-margin-top:calc(var(--cf-header-h, 56px) + 16px); }
+  #verificationPage .vl-head { display:flex; justify-content:space-between; align-items:flex-start; gap:var(--cf-4); padding:var(--cf-4) var(--cf-5) var(--cf-3); flex-wrap:wrap; }
+  #verificationPage .vl-title { margin:0; font-size:var(--cf-text-lg); font-weight:600; color:var(--cf-text); letter-spacing:-0.01em; }
+  #verificationPage .vl-sub { margin:2px 0 0; font-size:var(--cf-text-sm); color:var(--cf-text-3); }
+  #verificationPage .vl-head-actions { display:flex; gap:var(--cf-2); align-items:center; }
+  #verificationPage .vl-live { display:inline-flex; align-items:center; gap:var(--cf-2); height:32px; padding:0 var(--cf-3); border-radius:var(--cf-radius); border:1px solid var(--cf-border); background:var(--cf-surface-2); color:var(--cf-text-2); font-size:var(--cf-text-sm); font-weight:500; cursor:pointer; }
+  #verificationPage .vl-live:hover { color:var(--cf-text); border-color:var(--cf-border-strong); }
+  #verificationPage .vl-dot { width:8px; height:8px; border-radius:50%; background:var(--cf-text-3); flex:none; }
+  #verificationPage .vl-live[aria-pressed="true"] { color:var(--cf-text); }
+  #verificationPage .vl-live[aria-pressed="true"] .vl-dot { background:var(--cf-success); box-shadow:0 0 0 3px color-mix(in srgb, var(--cf-success) 22%, transparent); }
+  #verificationPage .vl-live.is-error .vl-dot { background:var(--cf-warning); box-shadow:none; }
+  #verificationPage .vl-toolbar { display:flex; justify-content:space-between; align-items:center; gap:var(--cf-3); flex-wrap:wrap; padding:0 var(--cf-5) var(--cf-3); border-bottom:1px solid var(--cf-border); }
+  #verificationPage .vl-count { font-size:var(--cf-text-xs); color:var(--cf-text-3); font-variant-numeric:tabular-nums; }
+  #verificationPage .vl-count:empty { display:none; }
+  #verificationPage .vl-filters { display:flex; gap:var(--cf-2); align-items:center; }
+  #verificationPage .vl-filters select { width:auto; }
+  #verificationPage .vl-status { padding:0 var(--cf-5); font-size:var(--cf-text-sm); color:var(--cf-text-2); }
+  #verificationPage .vl-status:not(:empty) { padding-top:var(--cf-2); padding-bottom:var(--cf-2); border-bottom:1px solid var(--cf-border); }
+  #verificationPage .vl-status button { margin-left:var(--cf-2); }
+  #verificationPage .vl-new { display:block; width:100%; padding:var(--cf-2); border:0; border-bottom:1px solid var(--cf-border); background:var(--cf-accent-soft); color:var(--cf-accent-fg); font-size:var(--cf-text-sm); font-weight:500; cursor:pointer; }
+  #verificationPage .vl-new:hover { background:color-mix(in srgb, var(--cf-accent) 18%, transparent); }
+  #verificationPage .vl-scroll { max-height:min(70vh, 44rem); overflow-y:auto; overscroll-behavior:contain; }
+  #verificationPage .vl-table { width:100%; border-collapse:collapse; font-size:var(--cf-text-sm); }
+  #verificationPage .vl-table thead th { position:sticky; top:0; z-index:1; background:var(--cf-surface); padding:var(--cf-2) var(--cf-3); border-bottom:1px solid var(--cf-border); color:var(--cf-text-3); font-size:var(--cf-text-xs); font-weight:500; text-align:left; white-space:nowrap; }
+  #verificationPage .vl-table thead th:first-child { padding-left:var(--cf-5); }
+  #verificationPage .vl-table td { padding:10px var(--cf-3); border-bottom:1px solid var(--cf-border); vertical-align:middle; color:var(--cf-text); }
+  #verificationPage .vl-table td:first-child { padding-left:var(--cf-5); }
+  #verificationPage .vl-table td:last-child, #verificationPage .vl-table th:last-child { padding-right:var(--cf-5); }
+  #verificationPage .vl-table tbody tr:hover td { background:var(--cf-surface-2); }
+  #verificationPage .vl-table tbody tr:last-child td { border-bottom:0; }
+  #verificationPage .vl-c-when { width:7.5rem; }
+  #verificationPage .vl-c-dm { width:6.5rem; }
+  #verificationPage .vl-when { color:var(--cf-text-2); white-space:nowrap; font-variant-numeric:tabular-nums; }
+  #verificationPage .vl-member { display:flex; align-items:center; gap:10px; min-width:0; }
+  #verificationPage .vl-av { width:28px; height:28px; border-radius:50%; flex:none; object-fit:cover; background:var(--cf-surface-3); display:inline-flex; align-items:center; justify-content:center; font-size:var(--cf-text-xs); font-weight:600; color:var(--cf-text-2); }
+  #verificationPage .vl-names { min-width:0; display:flex; flex-direction:column; line-height:1.25; }
+  #verificationPage .vl-name { font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:16rem; }
+  #verificationPage .vl-handle { font-size:var(--cf-text-xs); color:var(--cf-text-3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:16rem; }
+  #verificationPage .vl-copy { flex:none; width:26px; height:26px; display:inline-flex; align-items:center; justify-content:center; border:0; border-radius:var(--cf-radius-sm); background:none; color:var(--cf-text-3); cursor:pointer; opacity:0; transition:opacity var(--cf-fast) var(--cf-ease); }
+  #verificationPage .vl-table tr:hover .vl-copy, #verificationPage .vl-copy:focus-visible, #verificationPage .vl-copy.is-done { opacity:1; }
+  #verificationPage .vl-copy:hover { color:var(--cf-text); background:var(--cf-surface-3); }
+  #verificationPage .vl-copy.is-done { color:var(--cf-success); }
+  #verificationPage .vl-event { display:flex; align-items:center; gap:var(--cf-2); white-space:nowrap; }
+  #verificationPage .vl-cat { font-size:var(--cf-text-xs); color:var(--cf-text-3); min-width:5.5rem; }
+  #verificationPage .vl-detail { color:var(--cf-text-2); overflow-wrap:anywhere; }
+  #verificationPage .vl-answer { margin-top:4px; font-size:var(--cf-text-sm); }
+  #verificationPage .vl-answer a { color:var(--cf-success); text-decoration:none; }
+  #verificationPage .vl-answer a:hover { text-decoration:underline; }
+  #verificationPage .vl-dm { font-size:var(--cf-text-xs); white-space:nowrap; color:var(--cf-text-3); }
+  #verificationPage .vl-dm.is-yes { color:var(--cf-success); }
+  #verificationPage .vl-dm i { margin-right:4px; }
+  #verificationPage .vl-foot { display:flex; justify-content:space-between; align-items:center; gap:var(--cf-3); padding:var(--cf-3) var(--cf-5); border-top:1px solid var(--cf-border); min-height:52px; }
+  #verificationPage .vl-meta { font-size:var(--cf-text-xs); color:var(--cf-text-3); font-variant-numeric:tabular-nums; }
+  #verificationPage .vl-empty { padding:var(--cf-10) var(--cf-5); text-align:center; color:var(--cf-text-2); font-size:var(--cf-text-sm); }
+  #verificationPage .vl-empty strong { display:block; color:var(--cf-text); font-weight:600; margin-bottom:4px; }
+  #verificationPage .vl-empty .btn { margin-top:var(--cf-3); }
+  #verificationPage .vl-skel td { padding-top:14px; padding-bottom:14px; }
+  #verificationPage .vl-bar { display:block; height:10px; border-radius:4px; background:var(--cf-surface-3); }
+  #verificationPage tr.is-new td { animation:vlFlash 2.4s var(--cf-ease); }
+  @keyframes vlFlash { from { background:var(--cf-accent-soft); } to { background:transparent; } }
+  @media (prefers-reduced-motion: reduce) { #verificationPage tr.is-new td { animation:none; } #verificationPage .vl-copy { transition:none; } }
+  @media (hover: none) { #verificationPage .vl-copy { opacity:1; } }
+  @media (max-width: 760px) {
+    #verificationPage .vl-head, #verificationPage .vl-toolbar, #verificationPage .vl-foot, #verificationPage .vl-status { padding-left:var(--cf-4); padding-right:var(--cf-4); }
+    #verificationPage .vl-filters { width:100%; flex-wrap:wrap; }
+    #verificationPage .vl-search, #verificationPage .vl-filters select { flex:1 1 100%; width:100%; }
+    #verificationPage .vl-scroll { max-height:none; }
+    #verificationPage .vl-table thead { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); }
+    #verificationPage .vl-table tbody tr { display:grid; grid-template-columns:minmax(0,1fr) auto; grid-template-areas:"member when" "event dm" "detail detail"; gap:6px var(--cf-3); padding:var(--cf-3) var(--cf-4); border-bottom:1px solid var(--cf-border); }
+    #verificationPage .vl-table tbody td { display:block; padding:0 !important; border:0 !important; background:none !important; }
+    #verificationPage .vl-table td.vl-td-when { grid-area:when; text-align:right; }
+    #verificationPage .vl-table td.vl-td-member { grid-area:member; }
+    #verificationPage .vl-table td.vl-td-event { grid-area:event; }
+    #verificationPage .vl-table td.vl-td-dm { grid-area:dm; text-align:right; }
+    #verificationPage .vl-table td.vl-td-detail { grid-area:detail; }
+    #verificationPage .vl-table td.vl-td-detail:empty, #verificationPage .vl-table td.vl-td-dm:empty { display:none; }
+    #verificationPage .vl-name, #verificationPage .vl-handle { max-width:12rem; }
+    #verificationPage .vl-skel { display:block !important; }
+  }
+  @media (max-width: 640px) {
+    #verificationPage .vf-quick .btn { min-height:44px; padding:6px 12px; }
+    #verificationPage .vf-pick { max-width:none; flex-basis:100%; }
+    #verificationPage .vl-live { min-height:44px; }
+  }
+</style>
+
+<script src="/js/cf-msgpreview.js"></script>
+<script>
+(function () {
+  const root = document.getElementById('verificationPage');
+  if (!root) return;
+  const guildId = root.dataset.guildId;
+  const api = (p) => `/api/guilds/${guildId}/verification${p}`;
+  const $ = (id) => document.getElementById(id);
+  let state = null;
+  let bypass = [];
+  let lastPreviewBody = null;
+  let pollTimer = null;
+  let exempt = [];
+  let exemptUsers = [];   // members the inactivity prune never judges: { id, username, displayName, avatar, inServer }
+  let inPreviewState = { page: 1, settings: null };
+  // "4 h", "1 h 30 min", "7 d" — matches core/auto-prune-logic.js formatMinutes.
+  const fmtMin = (minutes) => {
+    const m = Math.max(0, Math.round(Number(minutes) || 0));
+    if (m >= 2880) { const d = Math.floor(m / 1440); const h = Math.round((m % 1440) / 60); return h ? `${d} d ${h} h` : `${d} d`; }
+    const h = Math.floor(m / 60); const r = m % 60;
+    return !h ? `${r} min` : r ? `${h} h ${r} min` : `${h} h`;
+  };
+  const day = (t) => (t ? new Date(t).toLocaleDateString() : '');
+
+  // DOM builder: every server value goes in through textContent / attributes, never markup.
+  function el(tag, attrs = {}, ...kids) {
+    const n = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (v == null || v === false) continue;
+      if (k === 'class') n.className = v;
+      else if (k === 'text') n.textContent = v;
+      else if (k.startsWith('on')) n.addEventListener(k.slice(2), v);
+      else n.setAttribute(k, v === true ? '' : v);
+    }
+    for (const kid of kids.flat()) if (kid != null && kid !== false) n.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
+    return n;
+  }
+  const icon = (cls) => el('i', { class: cls });
+  const when = (t) => (t ? new Date(t).toLocaleString() : '');
+  const rel = (ms) => {
+    if (ms == null) return 'no deadline';
+    const s = Math.round((ms - Date.now()) / 1000);
+    const a = Math.abs(s);
+    const txt = a < 60 ? `${a}s` : a < 3600 ? `${Math.round(a / 60)} min` : `${Math.floor(a / 3600)} h ${Math.round((a % 3600) / 60)} min`;
+    return s >= 0 ? `in ${txt}` : `${txt} ago`;
+  };
+  const can = () => state && state.actor.canConfigure;
+
+  async function req(url, options = {}) {
+    const res = await fetch(url, { credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, ...options });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
+    return body;
+  }
+  const post = (p, body, method = 'POST') => req(api(p), { method, body: JSON.stringify(body || {}) });
+  const showError = (m) => { const e = $('vfError'); e.hidden = !m; e.textContent = m || ''; if (m) e.scrollIntoView({ block: 'nearest' }); };
+  const notice = (m) => { const e = $('vfNotice'); e.hidden = !m; e.textContent = m || ''; };
+  async function act(fn, done, reload = true) {
+    showError('');
+    try { const out = await fn(); if (done) notice(typeof done === 'function' ? done(out) : done); if (reload) await load(); return out; } catch (err) { showError(err.message); return null; }
+  }
+  // Options carry data-kind / data-color for the chip picker; a role the bot cannot give is
+  // disabled unless it is the one already saved (so a save never drops it silently).
+  function options(select, list, placeholder, value, extra = []) {
+    const opt = (o) => {
+      const n = el('option', { value: o.id, text: o.label });
+      if (o.kind) n.dataset.kind = o.kind;
+      if (o.color) n.dataset.color = o.color;
+      if (o.disabled && String(o.id) !== String(value ?? '')) n.disabled = true;
+      return n;
+    };
+    select.replaceChildren(...extra.map(([v, t]) => el('option', { value: v, text: t })),
+      ...(placeholder != null ? [el('option', { value: '', text: placeholder })] : []),
+      ...list.map(opt));
+    select.value = value ?? '';
+  }
+  const roleList = () => state.guildRoles.map(r => {
+    const above = r.position >= state.botPerms.topRolePosition;
+    return { id: r.id, label: `@${r.name} (${r.members})` + (above ? ' (above the bot)' : ''), kind: 'role', color: r.color || null, disabled: above };
+  });
+  const channelList = () => state.textChannels.map(c => ({ id: c.id, label: `#${c.name}`, kind: 'text' }));
+
+  // Panel preview: the embed and button core/verification.js buildPanel() posts.
+  const VF_SERVER = <%- JSON.stringify(String((guild && guild.name) || 'your server')).replace(/</g, '\\u003c') %>;
+  function renderPanelPreview() {
+    const box = document.querySelector('[data-vf-preview]');
+    if (!box || !window.CFPreview) return;
+    const captcha = $('vfMode').value === 'captcha';
+    const tries = Math.max(1, Number($('vfAttempts').value) || 3);
+    const win = Number($('vfWindow').value) || 0;
+    const text = $('vfText').value.trim() || (captcha
+      ? 'Press **Verify me** and type the code from the picture on the keypad to unlock the server.\nYou have **' + tries + '** ' + (tries === 1 ? 'try' : 'tries') + (win > 0 ? ' within **' + fmtMin(win) + '** of joining' : '') + '.'
+      : 'Read the rules, then press **I agree** to unlock the rest of the server.');
+    CFPreview.render(box, {
+      embed: { colour: captcha ? '#5865F2' : '#2ECC71', title: $('vfTitle').value.trim() || 'Welcome to ' + VF_SERVER, text, foot: 'This keeps raids and spam bots out of the community.' },
+      buttons: [{ label: captcha ? '🔐 Verify me' : '✅ I agree', style: 'success' }],
+    });
+  }
+  ['vfTitle', 'vfText', 'vfMode', 'vfAttempts', 'vfWindow'].forEach((id) => { const n = $(id); if (n) { n.addEventListener('input', renderPanelPreview); n.addEventListener('change', renderPanelPreview); } });
+
+  function userCell(u, fallbackName) {
+    const name = u?.displayName || u?.username || fallbackName || u?.id || 'unknown';
+    return [u?.avatar ? el('img', { src: u.avatar, alt: '' }) : el('span', { class: 'vf-av' }, icon('fas fa-user')),
+      el('span', { class: 'vf-grow' }, el('strong', { text: name }), ' ', el('span', { class: 'vf-muted', text: u?.username ? `@${u.username}` : (u?.id || '') }),
+        u && u.inServer === false ? el('span', { class: 'vf-muted', text: ' · not in the server' }) : null)];
+  }
+
+  // ── render ─────────────────────────────────────────────────────────────────
+  function renderStats() {
+    const s = state.stats;
+    const cfg = state.config;
+    const tile = (label, value, cls) => el('div', { class: 'vf-stat' }, el('b', { class: cls || '', text: String(value) }), label);
+    const rate = s.rate == null ? '—' : `${Math.round(s.rate * 100)}%`;
+    $('vfStats').replaceChildren(
+      tile('Verification', state.describe, cfg && cfg.enabled ? 'vf-ok' : ''),
+      tile('Verified (30 d)', s.verified, 'vf-ok'),
+      tile('Failed (30 d)', s.failed, s.failed ? 'vf-bad' : ''),
+      tile('Timed out (30 d)', s.timedOut, s.timedOut ? 'vf-bad' : ''),
+      tile('Wrong codes (30 d)', s.wrong),
+      tile('Kicked / banned', `${s.kicked} / ${s.banned}`),
+      tile('Held (exempt / paused)', s.held + s.pruneHeld),
+      tile('Verification rate', rate, s.rate == null ? '' : s.rate >= 0.8 ? 'vf-ok' : s.rate >= 0.5 ? 'vf-mid' : 'vf-bad'),
+      tile('Waiting to verify', s.pendingVerify),
+      tile('Auto-pruned (30 d)', s.pruned),
+      tile('Auto-prune queue', s.pendingPrune),
+    );
+    const badge = $('vfRateBadge');
+    badge.textContent = `rate ${rate}`;
+    badge.className = 'cf-pill vf-badge' + (s.rate == null ? '' : s.rate >= 0.8 ? ' is-ok' : s.rate >= 0.5 ? ' is-warn' : ' is-bad');
+    const days = new Map(s.daily.map(d => [d.day, d]));
+    const list = [];
+    for (let i = s.days - 1; i >= 0; i--) {
+      const d = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10);
+      list.push(days.get(d) || { day: d, passed: 0, failed: 0, pruned: 0 });
+    }
+    const max = Math.max(1, ...list.map(d => d.passed + d.failed + d.pruned));
+    $('vfChart').replaceChildren(...list.map(d => {
+      const h = (n) => `${(n / max) * 100}%`;
+      const col = el('div', { class: 'vf-day', title: `${d.day}: ${d.passed} verified, ${d.failed} failed, ${d.pruned} auto-pruned` });
+      if (d.passed) col.append(el('span', { class: 'p', style: `height:${h(d.passed)}` }));
+      if (d.failed) col.append(el('span', { class: 'f', style: `height:${h(d.failed)}` }));
+      if (d.pruned) col.append(el('span', { class: 'r', style: `height:${h(d.pruned)}` }));
+      return col;
+    }));
+  }
+
+  function renderSettings() {
+    const c = state.config || {};
+    const has = !!state.config;
+    $('vfNoConfig').hidden = has;
+    const on = $('vfOnBadge');
+    on.textContent = state.describe;
+    on.className = 'cf-pill vf-badge' + (c.enabled ? ' is-ok' : '');
+    $('vfEnabled').checked = !!c.enabled;
+    $('vfEnabled').dispatchEvent(new Event('change'));   // the header switch (cf-pagehead.js) follows it
+    $('vfMode').value = c.mode || 'button';
+    options($('vfChannel'), channelList(), 'No channel', c.channelId);
+    options($('vfVerified'), roleList(), 'Pick a role', c.verifiedRoleId);
+    options($('vfUnverified'), roleList(), 'None', c.unverifiedRoleId);
+    $('vfAttempts').value = c.attempts ?? state.defaults.attempts;
+    $('vfWindow').value = c.windowMinutes ?? state.defaults.windowMinutes;
+    $('vfWindowFmt').textContent = Number($('vfWindow').value) ? `= ${fmtMin($('vfWindow').value)}` : '';
+    $('vfFail').value = c.failAction || state.defaults.failAction;
+    $('vfTimeout').value = c.timeoutMinutes ?? state.defaults.timeoutMinutes;
+    $('vfDm').checked = c.failDm ?? true;
+    $('vfTitle').value = c.panelTitle || '';
+    $('vfText').value = c.panelText || '';
+    renderPanelPreview();
+    $('vfKickDays').value = c.unverifiedKickDays ?? 0;
+    syncCaptchaBox();
+    $('vfPanelWhere').textContent = state.channel ? (state.channel.deleted ? 'The saved channel was deleted.' : `Posts in #${state.channel.name}${c.messageId ? ' (replaces the old panel)' : ''}`) : '';
+    const warn = [];
+    if (!state.botPerms.manageRoles) warn.push('The bot lacks Manage Roles, so it cannot give the Verified role.');
+    if (c.mode === 'captcha' && c.failAction !== 'none' && !state.botPerms[c.failAction === 'timeout' ? 'timeout' : c.failAction]) warn.push(`The bot lacks the permission to ${c.failAction} members.`);
+    if (state.roles && state.roles.verified && state.roles.verified.deleted) warn.push('The saved verified role was deleted — pick another.');
+    $('vfPermWarn').hidden = !warn.length;
+    $('vfPermWarn').textContent = warn.join(' ');
+    for (const id of ['vfSave', 'vfPanel']) $(id).disabled = !can();
+  }
+  function syncCaptchaBox() { $('vfCaptchaBox').style.opacity = $('vfMode').value === 'captcha' ? '1' : '.55'; }
+
+  function renderWizardInputs() {
+    const c = state.config || {};
+    options($('wzChannel'), channelList(), null, c.channelId || 'create', [['create', 'Create a new channel']]);
+    options($('wzVerified'), roleList(), null, c.verifiedRoleId || 'create', [['create', 'Create a new role']]);
+    options($('wzUnverified'), roleList(), null, c.unverifiedRoleId || 'create', [['create', 'Create a new role'], ['none', 'None']]);
+    syncWizardNames();
+    renderRecord();
+  }
+  function syncWizardNames() {
+    $('wzChannelName').hidden = $('wzChannel').value !== 'create';
+    $('wzVerifiedName').hidden = $('wzVerified').value !== 'create';
+    $('wzUnverifiedName').hidden = $('wzUnverified').value !== 'create';
+  }
+  function renderRecord() {
+    const w = state.wizard;
+    if (!w) { $('wzRecord').textContent = 'No setup recorded.'; $('wzUndo').disabled = true; return; }
+    const lines = [
+      `${w.status === 'undone' ? 'Undone' : w.status === 'applying' ? 'Interrupted while applying' : 'Applied'} ${when(w.undoneAt || w.at)}${(w.undoneBy || w.by) ? ` by ${w.undoneBy || w.by}` : ''}`,
+      `${w.editCount} permission change(s) recorded on ${w.channels.length} channel(s)${w.runs > 1 ? ` across ${w.runs} runs` : ''}; strategy: ${w.strategy}.`,
+      w.created && (w.created.channelId || w.created.roles.length) ? `Created: ${[w.created.channelId ? 'the channel' : null, w.created.roles.length ? `${w.created.roles.length} role(s)` : null].filter(Boolean).join(' and ')}.` : null,
+      w.granted ? `Gave the Verified role to ${w.granted.count} member(s) (not taken back by undo).` : null,
+      w.failures && w.failures.length ? `Could not change: ${w.failures.map(f => '#' + f.name).join(', ')}` : null,
+    ].filter(Boolean);
+    $('wzRecord').replaceChildren(...lines.map(l => el('div', { text: l })),
+      w.channels.length ? el('details', {}, el('summary', { text: 'Channels changed' }), el('div', { class: 'vf-muted', text: w.channels.map(n => '#' + n).join(', ') })) : null);
+    $('wzUndo').disabled = !can() || w.status === 'undone' || !state.actor.perms.roles || !state.actor.perms.channels;
+  }
+
+  function renderPrune() {
+    const p = state.prune;
+    const b = $('apOnBadge2');
+    b.textContent = p.enabled ? `On · ${p.action === 'log' ? 'log only' : 'kick'} after ${fmtMin(p.minutes)}` : 'Off';
+    b.className = 'cf-pill vf-badge' + (p.enabled ? ' is-ok' : '');
+    $('prEnabled').checked = p.enabled;
+    $('prMinutes').value = p.minutes;
+    $('prMinutesFmt').textContent = `= ${fmtMin(p.minutes)}`;
+    $('prAction').value = p.action;
+    $('prDm').checked = p.dm;
+    bypass = p.bypassRoleIds.slice();
+    renderBypass();
+    $('prSystem').textContent = state.systemRoles.length
+      ? `Always ignored (given automatically by this bot): ${state.systemRoles.map(r => r.name ? '@' + r.name : r.id).join(', ')}`
+      : 'No roles are given out automatically by this bot here.';
+    $('prSave').disabled = !can();
+  }
+  function renderBypass() {
+    const byId = new Map(state.guildRoles.map(r => [r.id, r]));
+    $('prBypass').replaceChildren(...(bypass.length ? bypass.map(id => el('span', { class: 'cf-chip' }, byId.get(id) ? '@' + byId.get(id).name : id,
+      el('button', { type: 'button', class: 'cf-chip-remove', title: 'Remove', 'aria-label': 'Remove', onclick: () => { bypass = bypass.filter(x => x !== id); renderBypass(); } }, icon('fas fa-times'))))
+      : [el('span', { class: 'vf-muted', text: 'None — every role counts as real.' })]));
+    options($('prBypassPick'), roleList().filter(r => !bypass.includes(r.id)), 'Add a bypass role…', '');
+  }
+
+  // ── inactivity prune ──────────────────────────────────────────────────────
+  const RULE = { never: 'never active', quiet: 'gone quiet' };
+  function renderInactivity() {
+    const c = state.inactivity;
+    const b = $('inBadge');
+    b.textContent = c.enabled ? (c.kicks ? 'On · kicks' : 'On · log only') : 'Off';
+    b.className = 'cf-pill vf-badge' + (c.enabled ? (c.kicks ? ' is-warn' : ' is-ok') : '');
+    $('inSince').textContent = c.judgedFromMs ? day(c.judgedFromMs) : 'now';
+    $('inNever').checked = c.never.enabled;
+    $('inNeverDays').value = c.never.days;
+    $('inNeverAction').value = c.never.action;
+    $('inQuiet').checked = c.quiet.enabled;
+    $('inQuietDays').value = c.quiet.days;
+    $('inQuietAction').value = c.quiet.action;
+    $('inWarn').value = c.warnDays;
+    $('inMinDays').value = c.minMemberDays;
+    $('inPerSweep').value = c.maxPerSweep;
+    $('inPerDay').value = c.dailyCap;
+    $('inStaff').checked = c.exemptStaff;
+    $('inBoosters').checked = c.exemptBoosters;
+    exempt = c.exemptRoleIds.slice();
+    renderExempt();
+    exemptUsers = (c.exemptUsers || []).slice();
+    renderExemptUsers();
+    renderResolvedExempt();
+    const r = c.lastResult;
+    const tile = (label, value, cls) => el('div', { class: 'vf-stat' }, el('b', { class: cls || '', text: String(value) }), label);
+    $('inStatus').replaceChildren(
+      tile('Last sweep', c.running ? 'running…' : r ? rel(r.at) : 'never'),
+      tile('Next sweep', c.enabled ? (c.nextSweepAt && c.nextSweepAt > Date.now() ? rel(c.nextSweepAt) : 'within 15 min') : 'off'),
+      tile('Removed today', `${c.kickedToday} / ${c.dailyCap}`, c.kickedToday ? 'vf-bad' : ''),
+      tile('Last sweep: removed', r ? r.kicked : '—', r && r.kicked ? 'vf-bad' : ''),
+      tile('Last sweep: warned', r ? r.warned : '—', r && r.warned ? 'vf-mid' : ''),
+      tile('Last sweep: logged', r ? r.logged : '—'),
+      tile('Waiting (caps)', r ? r.deferredKicks : '—', r && r.deferredKicks ? 'vf-mid' : ''),
+    );
+    for (const id of ['inSave', 'inRun', 'inExemptAdd', 'inExemptStaff']) $(id).disabled = !can();
+    $('inRun').disabled = !can() || !c.enabled || c.running;
+  }
+  function renderExemptUsers() {
+    const box = $('inExemptUsers');
+    if (!box) return;
+    box.replaceChildren(...(exemptUsers.length ? exemptUsers.map(u => el('span', { class: 'cf-chip' },
+      (u.displayName || u.username || u.id) + (u.inServer === false ? ' (not in server)' : ''),
+      el('button', { type: 'button', class: 'cf-chip-remove', title: 'Remove', 'aria-label': 'Remove', onclick: () => { exemptUsers = exemptUsers.filter(x => x.id !== u.id); renderExemptUsers(); renderResolvedExempt(); } }, icon('fas fa-times'))))
+      : [el('span', { class: 'vf-muted', text: 'None.' })]));
+  }
+  // Who the next sweep leaves alone with the settings as they are on the page (called from the
+  // load, the staff/booster switches and the role and member lists).
+  function renderResolvedExempt() {
+    const box = $('inResolvedExempt');
+    if (!box) return;
+    const tile = (label, value) => el('div', { class: 'vf-stat' }, el('b', { text: String(value) }), label);
+    box.replaceChildren(
+      tile('Staff', $('inStaff').checked ? 'Exempt' : 'Judged'),
+      tile('Server boosters', $('inBoosters').checked ? 'Exempt' : 'Judged'),
+      tile('Exempt roles', exempt.length),
+      tile('Exempt members', exemptUsers.length),
+    );
+  }
+  function renderExempt() {
+    const byId = new Map(state.guildRoles.map(r => [r.id, r]));
+    $('inExempt').replaceChildren(...(exempt.length ? exempt.map(id => el('span', { class: 'cf-chip' }, byId.get(id) ? '@' + byId.get(id).name : id,
+      el('button', { type: 'button', class: 'cf-chip-remove', title: 'Remove', 'aria-label': 'Remove', onclick: () => { exempt = exempt.filter(x => x !== id); renderExempt(); } }, icon('fas fa-times'))))
+      : [el('span', { class: 'vf-muted', text: 'None.' })]));
+    options($('inExemptPick'), roleList().filter(r => !exempt.includes(r.id)), 'Exempt a role…', '');
+    renderResolvedExempt();
+  }
+  function inactivityBody() {
+    return {
+      neverEnabled: $('inNever').checked, neverDays: Number($('inNeverDays').value), neverAction: $('inNeverAction').value,
+      quietEnabled: $('inQuiet').checked, quietDays: Number($('inQuietDays').value), quietAction: $('inQuietAction').value,
+      warnDays: Number($('inWarn').value), minMemberDays: Number($('inMinDays').value),
+      maxPerSweep: Number($('inPerSweep').value), dailyCap: Number($('inPerDay').value),
+      exemptStaff: $('inStaff').checked, exemptBoosters: $('inBoosters').checked, exemptRoleIds: exempt, exemptUserIds: exemptUsers.map(u => u.id),
+    };
+  }
+  const STATUS_TEXT = (r) => r.status === 'due'
+    ? (r.action === 'kick' ? ['vf-bad', 'removed at the next sweep'] : ['vf-mid', 'flagged (log only)'])
+    : r.status === 'waiting' ? ['vf-mid', `warned · removed ${rel(r.kickAt)}`]
+      : r.status === 'warn' ? ['vf-mid', `warned at the next sweep${r.action === 'kick' ? `, removed ${day(r.kickAt)} at the earliest` : ''}`]
+        : ['vf-muted', `due ${rel(r.dueAt)}${r.action === 'kick' ? '' : ' (log only)'}`];
+  async function loadInactivityPreview({ page = 1, fresh = false, settings = inPreviewState.settings } = {}) {
+    showError('');
+    $('inPrevNote').textContent = 'Checking every member…';
+    try {
+      const p = await post('/inactivity/preview', { page, fresh, settings });
+      inPreviewState = { page: p.page, settings };
+      const s = p.summary;
+      const tile = (label, value, cls) => el('div', { class: 'vf-stat' }, el('b', { class: cls || '', text: String(value) }), label);
+      $('inPrevSummary').replaceChildren(
+        tile('Due now: kick', s.dueKick, s.dueKick ? 'vf-bad' : ''),
+        tile('Due now: log only', s.dueLog, s.dueLog ? 'vf-mid' : ''),
+        tile('Warning next sweep', s.warn, s.warn ? 'vf-mid' : ''),
+        tile('Warned, waiting', s.waiting),
+        tile('Due within 7 days', s.soon),
+        tile('Never active / gone quiet', `${s.never} / ${s.quiet}`),
+        tile('Exempt', s.exempt),
+        tile('Still at the gate', s.gate),
+      );
+      $('inPrevBadge').textContent = `${p.total} listed of ${p.memberCount}`;
+      $('inPrevNote').textContent = `${settings ? 'Unsaved settings. ' : ''}${p.asIfOn ? 'Both rules are off, so they are shown as if on. ' : ''}${p.describe} Checked ${new Date(p.at).toLocaleTimeString()}.`;
+      $('inPrevList').replaceChildren(p.rows.length ? el('div', { class: 'vf-scroll' }, el('table', { class: 'vf-table' },
+        el('thead', {}, el('tr', {}, el('th', { text: 'Member' }), el('th', { text: 'Rule' }), el('th', { text: 'Last active' }), el('th', { text: 'Joined' }), el('th', { text: 'What happens' }))),
+        el('tbody', {}, ...p.rows.map(r => {
+          const [cls, txt] = STATUS_TEXT(r);
+          return el('tr', {},
+            el('td', {}, r.user.displayName || r.user.username || r.user.id, ' ', el('span', { class: 'vf-muted', text: r.user.username ? `@${r.user.username}` : r.user.id })),
+            el('td', { text: RULE[r.rule] || '' }),
+            el('td', { text: r.lastActiveAt ? `${day(r.lastActiveAt)} (${r.inactiveDays} d ago)` : `never (${r.inactiveDays} d counted)` }),
+            el('td', { text: day(r.joinedAt) }),
+            el('td', { class: cls, text: txt }));
+        }))))
+        : el('div', { class: 'vf-muted', text: 'Nobody — every member is active, exempt, or not due yet.' }));
+      $('inPager').hidden = p.pages <= 1;
+      $('inPageText').textContent = `Page ${p.page} of ${p.pages}`;
+      $('inPrev').disabled = p.page <= 1;
+      $('inNext').disabled = p.page >= p.pages;
+    } catch (err) { $('inPrevNote').textContent = ''; showError(err.message); }
+  }
+  async function loadQueues() {
+    try {
+      const q = await req(api('/queue'));
+      $('prQueueCount').textContent = String(q.prune.length);
+      $('prQueue').replaceChildren(...(q.prune.length ? q.prune.map(r => el('div', { class: 'vf-item' }, ...userCell(r.user),
+        el('span', { class: 'vf-muted', text: `joined ${when(r.joinedAt)} · removed ${rel(r.deadline)}` }),
+        can() ? el('button', { type: 'button', class: 'btn btn-sm btn-secondary', onclick: () => {
+          if (!confirm(`Take ${r.user.displayName || r.userId} off the auto-prune queue? They will not be removed.`)) return;
+          act(() => req(api(`/prune/queue/${r.userId}`), { method: 'DELETE' }), 'Taken off the queue.');
+        } }, 'Remove from queue') : null))
+        : [el('div', { class: 'vf-muted', text: state.prune.enabled ? 'Nobody is waiting.' : 'Auto-prune is off.' })]));
+      $('vfClockCount').textContent = String(q.verify.length);
+      $('vfClock').replaceChildren(...(q.verify.length ? q.verify.map(r => el('div', { class: 'vf-item' }, ...userCell(r.user),
+        el('span', { class: 'vf-muted', text: `${r.attempts} wrong · deadline ${rel(r.deadline)}` }),
+        can() ? el('button', { type: 'button', class: 'btn btn-sm btn-secondary', onclick: () => {
+          if (!confirm(`Stop the clock for ${r.user.displayName || r.userId}? Nothing will happen to them at the deadline.`)) return;
+          act(() => req(api(`/queue/verify/${r.userId}`), { method: 'DELETE' }), 'Clock stopped.');
+        } }, 'Stop the clock') : null))
+        : [el('div', { class: 'vf-muted', text: 'Nobody is on the clock.' })]));
+    } catch (err) { showError(err.message); }
+  }
+
+  // ── wizard ─────────────────────────────────────────────────────────────────
+  function wizardBody() {
+    return {
+      channelId: $('wzChannel').value, channelName: $('wzChannelName').value,
+      verifiedRoleId: $('wzVerified').value, verifiedRoleName: $('wzVerifiedName').value,
+      unverifiedRoleId: $('wzUnverified').value, unverifiedRoleName: $('wzUnverifiedName').value,
+      mode: $('wzMode').value,
+      strategy: (root.querySelector('input[name="wzStrategy"]:checked') || {}).value || 'unverified',
+      hideGate: $('wzHideGate').checked, grantExisting: $('wzGrant').checked, postPanel: $('wzPanel').checked,
+    };
+  }
+  function renderPreview(p) {
+    const creates = [p.creates.channel && `channel ${p.creates.channel}`, p.creates.verifiedRole && `role @${p.creates.verifiedRole}`,
+      p.creates.unverifiedRole && `role @${p.creates.unverifiedRole}`].filter(Boolean);
+    const why = { gate: 'no permission', community: 'community rules/updates channel (must stay visible)', 'no-permission': 'the bot cannot manage it', 'already-locked': 'already hidden' };
+    const out = [
+      el('div', { class: 'vf-sub vf-mt', text: 'Preview' }),
+      el('div', { text: creates.length ? `Creates: ${creates.join(', ')}.` : 'Creates nothing (uses what you picked).' }),
+      el('div', { text: `Hides ${p.lockedCount} channel(s) — ${p.edits.length} permission change(s). ${p.privateCount} channel(s) are already private.` }),
+      p.grantEstimate ? el('div', { text: `Gives the Verified role to about ${p.grantEstimate} member(s) already here first.` }) : null,
+      ...p.warnings.map(w => el('div', { class: 'vf-warn', text: w })),
+    ];
+    if (p.edits.length) {
+      out.push(el('div', { class: 'vf-scroll' }, el('table', { class: 'vf-table' },
+        el('thead', {}, el('tr', {}, el('th', { text: 'Channel' }), el('th', { text: 'For' }), el('th', { text: 'Change' }))),
+        el('tbody', {}, ...p.edits.map(e => el('tr', {}, el('td', { text: '#' + e.name }), el('td', { text: e.target }),
+          el('td', { class: e.change === 'hide' ? 'vf-bad' : 'vf-ok', text: (e.change === 'hide' ? 'cannot see' : 'can see') + (e.reason === 'gate' ? ' (verification channel)' : '') })))))));
+    }
+    if (p.skipped.length) {
+      out.push(el('details', {}, el('summary', { text: `${p.skipped.length} channel(s) left alone` }),
+        el('div', { class: 'vf-muted', text: p.skipped.map(s => `#${s.name} (${why[s.why] || s.why})`).join(', ') })));
+    }
+    $('wzPreviewOut').replaceChildren(...out);
+  }
+  function pollProgress() {
+    clearTimeout(pollTimer);
+    req(api('/wizard/progress')).then(({ job }) => {
+      if (!job) return;
+      $('wzProgress').hidden = false;
+      const phase = { starting: 'Starting', roles: 'Creating roles', channel: 'Creating the channel', granting: 'Giving the Verified role to current members',
+        locking: 'Changing channel permissions', panel: 'Posting the panel', restoring: 'Reverting permission changes', deleting: 'Deleting what the wizard created', done: 'Done' }[job.phase] || job.phase;
+      $('wzPhase').textContent = `${job.kind === 'undo' ? 'Undo' : 'Setup'}: ${phase}${job.total ? ` (${job.done}/${job.total})` : ''}`;
+      $('wzBar').style.width = job.total ? `${Math.round((job.done / job.total) * 100)}%` : (job.running ? '15%' : '100%');
+      if (job.running) { pollTimer = setTimeout(pollProgress, 1500); return; }
+      const r = job.result || {};
+      const lines = job.error ? [el('div', { class: 'vf-bad', text: job.error })] : job.kind === 'undo'
+        ? [el('div', { class: 'vf-ok', text: `Undone: ${r.restored || 0} permission change(s) reverted.` }), r.removed && r.removed.length ? el('div', { text: `Deleted: ${r.removed.join(', ')}` }) : null]
+        : [el('div', { class: 'vf-ok', text: `Done: ${r.locked || 0} channel(s) hidden.` }), r.granted ? el('div', { text: `Verified role given to ${r.granted.count} of ${r.granted.of} member(s).` }) : null];
+      if (r.failures && r.failures.length) lines.push(el('div', { class: 'vf-warn', text: `Could not change: ${r.failures.map(f => f.name).join(', ')}` }));
+      for (const w of job.warnings || []) lines.push(el('div', { class: 'vf-warn', text: w }));
+      $('wzResult').replaceChildren(...lines);
+      load();
+    }).catch(err => showError(err.message));
+  }
+
+  // ── load ───────────────────────────────────────────────────────────────────
+  async function load() {
+    try {
+      state = await req(api('/'));
+      renderStats();
+      renderSettings();
+      if (!$('wzChannel').options.length) renderWizardInputs(); else renderRecord();
+      renderPrune();
+      renderInactivity();
+      activityLog.refresh();
+      $('wzPreview').disabled = !can();
+      loadQueues();
+      if (state.wizardJob && state.wizardJob.running && !pollTimer) pollProgress();
+    } catch (err) { showError(err.message); }
+  }
+
+  // ── events ─────────────────────────────────────────────────────────────────
+  $('vfMode').addEventListener('change', syncCaptchaBox);
+  $('vfSave').addEventListener('click', () => {
+    const body = {
+      enabled: $('vfEnabled').checked, mode: $('vfMode').value,
+      attempts: Number($('vfAttempts').value), windowMinutes: Number($('vfWindow').value),
+      failAction: $('vfFail').value, timeoutMinutes: Number($('vfTimeout').value), failDm: $('vfDm').checked,
+      channelId: $('vfChannel').value || null, unverifiedRoleId: $('vfUnverified').value || null,
+      panelTitle: $('vfTitle').value, panelText: $('vfText').value, unverifiedKickDays: Number($('vfKickDays').value),
+    };
+    if ($('vfVerified').value) body.verifiedRoleId = $('vfVerified').value;
+    const c = state.config || {};
+    if (body.mode === 'captcha' && body.failAction !== 'none' && (c.mode !== 'captcha' || c.failAction !== body.failAction)) {
+      const limit = body.windowMinutes ? ` or do not finish within ${fmtMin(body.windowMinutes)} of joining` : '';
+      const verb = { timeout: 'timed out', kick: 'kicked', ban: 'banned' }[body.failAction];
+      if (!confirm(`Members who get ${body.attempts} codes wrong${limit} will be ${verb}. Continue?`)) return;
+    }
+    act(() => post('/settings', body), (o) => `Saved. Verification: ${o.describe}.` + (c.messageId && c.mode !== body.mode ? ' Post the panel again so its wording matches.' : ''));
+  });
+  $('vfPanel').addEventListener('click', () => {
+    const channelId = $('vfChannel').value || null;
+    act(() => post('/panel', { channelId }), (o) => `Panel posted: ${o.url}`);
+  });
+  for (const id of ['wzChannel', 'wzVerified', 'wzUnverified']) $(id).addEventListener('change', () => { syncWizardNames(); $('wzApply').disabled = true; });
+  root.querySelectorAll('#wzMode, input[name="wzStrategy"], #wzHideGate, #wzGrant, #wzPanel, #wzChannelName, #wzVerifiedName, #wzUnverifiedName')
+    .forEach(n => n.addEventListener('change', () => { $('wzApply').disabled = true; }));
+  $('wzPreview').addEventListener('click', async () => {
+    showError('');
+    try {
+      lastPreviewBody = wizardBody();
+      const p = await post('/wizard/preview', lastPreviewBody);
+      renderPreview(p);
+      $('wzApply').disabled = !can() || !state.actor.perms.roles || !state.actor.perms.channels;
+      if (!state.actor.perms.roles || !state.actor.perms.channels) showError('Applying needs Manage Roles and Manage Channels in this server.');
+    } catch (err) { showError(err.message); $('wzPreviewOut').replaceChildren(); }
+  });
+  $('wzApply').addEventListener('click', async () => {
+    if (!lastPreviewBody) return;
+    if (!confirm('Apply this setup now? Every permission change is recorded and can be undone.')) return;
+    $('wzApply').disabled = true;
+    $('wzResult').replaceChildren();
+    const out = await act(() => post('/wizard/apply', { ...lastPreviewBody, confirm: true }), 'Setup started.', false);
+    if (out) pollProgress();
+  });
+  $('wzUndo').addEventListener('click', async () => {
+    const del = $('wzDeleteCreated').checked;
+    if (!confirm(`Revert every recorded permission change${del ? ' AND delete the channel and roles the wizard created' : ''}?`)) return;
+    $('wzResult').replaceChildren();
+    const out = await act(() => post('/wizard/undo', { deleteCreated: del, confirm: true }), 'Undo started.', false);
+    if (out) pollProgress();
+  });
+  root.querySelectorAll('[data-prmin]').forEach(b => b.addEventListener('click', () => { $('prMinutes').value = b.dataset.prmin; $('prMinutesFmt').textContent = `= ${fmtMin(b.dataset.prmin)}`; }));
+  $('prMinutes').addEventListener('input', () => { $('prMinutesFmt').textContent = `= ${fmtMin($('prMinutes').value)}`; });
+  $('vfWindow').addEventListener('input', () => { $('vfWindowFmt').textContent = Number($('vfWindow').value) ? `= ${fmtMin($('vfWindow').value)}` : ''; });
+  $('inExemptAdd').addEventListener('click', () => {
+    const id = $('inExemptPick').value;
+    if (!id || exempt.includes(id)) return;
+    if (exempt.length >= state.limits.maxExempt) return showError(`Up to ${state.limits.maxExempt} exempt roles.`);
+    exempt.push(id);
+    renderExempt();
+  });
+  $('inExemptStaff').addEventListener('click', () => {
+    const add = (state.staffRoleIds || []).filter(id => !exempt.includes(id));
+    if (!add.length) return notice('Every role with a moderation permission is already exempt (or there are none).');
+    exempt = exempt.concat(add).slice(0, state.limits.maxExempt);
+    renderExempt();
+    notice(`Added ${add.length} staff role(s). Save to keep them.`);
+  });
+  async function searchExemptUsers() {
+    const q = $('inExemptUserQuery').value.trim();
+    const results = $('inExemptUserResults');
+    results.replaceChildren();
+    if (!q) return;
+    try {
+      const r = await (await fetch(`/api/guilds/${state.guildId}/verification/inactivity/user-search?q=` + encodeURIComponent(q), { credentials: 'same-origin' })).json();
+      if (r.error) { results.appendChild(el('div', { class: 'vf-muted', text: r.error })); return; }
+      const members = r.members || [];
+      if (!members.length) { results.appendChild(el('div', { class: 'vf-muted', text: 'No matches.' })); return; }
+      for (const m of members) {
+        results.appendChild(el('button', { type: 'button', class: 'btn btn-sm btn-secondary', style: 'margin: 2px;',
+          onclick: () => {
+            if (exemptUsers.some(x => x.id === m.id)) return;
+            if (exemptUsers.length >= (state.limits.maxExemptUsers || 50)) return showError(`Up to ${state.limits.maxExemptUsers || 50} exempt members.`);
+            exemptUsers.push({ id: m.id, username: m.username, displayName: m.displayName || m.username, avatar: m.avatar, inServer: m.inServer });
+            renderExemptUsers();
+            renderResolvedExempt();
+            $('inExemptUserQuery').value = '';
+            results.replaceChildren();
+          },
+        }, (m.displayName || m.username || m.id) + (m.inServer ? '' : ' (not in server)')));
+      }
+    } catch (e) {
+      results.appendChild(el('div', { class: 'vf-muted', text: 'Search failed: ' + e.message }));
+    }
+  }
+  $('inExemptUserSearch')?.addEventListener('click', searchExemptUsers);
+  $('inExemptUserQuery')?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); searchExemptUsers(); } });
+  $('inStaff')?.addEventListener('change', renderResolvedExempt);
+  $('inBoosters')?.addEventListener('change', renderResolvedExempt);
+  $('inProtLink')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    const nav = document.querySelector('[data-tab="protection"], [data-nav="protection-settings"], a[href*="protection-settings"]');
+    if (nav) nav.click();
+    else window.location.hash = '#protection-settings';
+  });
+  $('inSave').addEventListener('click', () => {
+    const body = inactivityBody();
+    const c = state.inactivity;
+    const kicksNow = (body.neverEnabled && body.neverAction === 'kick') || (body.quietEnabled && body.quietAction === 'kick');
+    if (kicksNow && !c.kicks) {
+      const rules = [body.neverEnabled && body.neverAction === 'kick' ? `no activity within ${body.neverDays} days of joining` : null,
+        body.quietEnabled && body.quietAction === 'kick' ? `no activity for ${body.quietDays} days` : null].filter(Boolean).join(' or ');
+      const warn = body.warnDays ? `They are warned by DM ${body.warnDays} day(s) first.` : 'There is NO warning DM.';
+      if (!confirm(`Kick members with ${rules}? ${warn} Up to ${body.maxPerSweep} per sweep and ${body.dailyCap} per day. Preview first if you have not.`)) return;
+    }
+    act(() => post('/inactivity', body), 'Inactivity prune saved.');
+  });
+  $('inPreviewForm').addEventListener('click', () => loadInactivityPreview({ page: 1, settings: inactivityBody() }));
+  $('inPreview').addEventListener('click', () => loadInactivityPreview({ page: 1, settings: null }));
+  $('inPreviewFresh').addEventListener('click', () => loadInactivityPreview({ page: 1, fresh: true }));
+  $('inPrev').addEventListener('click', () => loadInactivityPreview({ page: inPreviewState.page - 1 }));
+  $('inNext').addEventListener('click', () => loadInactivityPreview({ page: inPreviewState.page + 1 }));
+  $('inRun').addEventListener('click', async () => {
+    const c = state.inactivity;
+    if (!confirm(c.kicks
+      ? `Run the inactivity prune now? Members who are due will be warned or kicked (up to ${c.maxPerSweep} kicks, ${Math.max(0, c.dailyCap - c.kickedToday)} left today).`
+      : 'Run the inactivity prune now? It is log only: nobody is removed.')) return;
+    const out = await act(() => post('/inactivity/run', { confirm: true }), 'Sweep started — the results appear here in a moment.', false);
+    if (out) setTimeout(() => { load(); }, 8000);
+  });
+  $('prBypassAdd').addEventListener('click', () => {
+    const id = $('prBypassPick').value;
+    if (!id || bypass.includes(id)) return;
+    if (bypass.length >= state.limits.maxBypass) return showError(`Up to ${state.limits.maxBypass} bypass roles.`);
+    bypass.push(id);
+    renderBypass();
+  });
+  $('prSave').addEventListener('click', () => {
+    const body = { enabled: $('prEnabled').checked, minutes: Number($('prMinutes').value), action: $('prAction').value, dm: $('prDm').checked, bypassRoleIds: bypass };
+    if (body.enabled && !state.prune.enabled && body.action === 'kick'
+      && !confirm(`Switch auto-prune on? Anyone who joins from now on and has no real role after ${fmtMin(body.minutes)} will be kicked.`)) return;
+    if (!body.enabled && state.prune.enabled && !confirm('Switch auto-prune off? The queue is cleared.')) return;
+    act(() => post('/prune', body), (o) => `Auto-prune saved.${o.cleared ? ` ${o.cleared} member(s) cleared from the queue.` : ''}`);
+  });
+
+  // ── activity log ───────────────────────────────────────────────────────────
+  // One page at a time from GET /log (keyset cursors), "Load more" for older rows, and while Live is on
+  // and the tab is visible a poll every 20 s for rows newer than the newest one shown. New rows slide in
+  // at the top unless the reader has scrolled or paged away; then a "N new events" button holds them.
+  const activityLog = (function () {
+    const POLL_MS = 20000;
+    const MAX_FAILS = 4;
+    const LIVE_KEY = 'cf.verification.activity.live';
+    const TYPES = ['all', 'verification', 'prune', 'inactivity', 'failures'];
+    const s = { type: 'all', range: 'all', q: '', rows: [], keys: new Set(), next: null, hasMore: false, latest: null, pages: 0,
+      counts: null, pending: [], timer: null, fails: 0, live: true, seq: 0, started: false, loaded: false, error: null };
+    try { const v = localStorage.getItem(LIVE_KEY); if (v === '0') s.live = false; } catch (_) { /* storage blocked: default on */ }
+
+    const body = $('vlBody');
+    const scroller = $('vlScroll');
+    const nf = new Intl.NumberFormat();
+    const relTime = (ms) => {
+      const d = Math.max(0, Math.round((Date.now() - ms) / 1000));
+      if (d < 45) return 'just now';
+      if (d < 3600) return `${Math.max(1, Math.round(d / 60))} min ago`;
+      if (d < 86400) return `${Math.round(d / 3600)} h ago`;
+      if (d < 7 * 86400) return `${Math.round(d / 86400)} d ago`;
+      return new Date(ms).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: new Date(ms).getFullYear() === new Date().getFullYear() ? undefined : 'numeric' });
+    };
+    const query = (extra = {}) => {
+      const p = new URLSearchParams({ type: s.type, range: s.range });
+      if (s.q) p.set('q', s.q);
+      for (const [k, v] of Object.entries(extra)) if (v != null) p.set(k, v);
+      return p.toString();
+    };
+    const filtered = () => s.type !== 'all' || s.range !== 'all' || !!s.q;
+    const away = () => s.pages > 1 || scroller.scrollTop > 40 || scroller.getBoundingClientRect().top < -40;
+
+    function avatar(r) {
+      const u = r.user || {};
+      if (u.avatar) return el('img', { class: 'vl-av', src: u.avatar, alt: '', loading: 'lazy', referrerpolicy: 'no-referrer' });
+      const name = u.displayName || u.username || r.username || '';
+      return el('span', { class: 'vl-av', 'aria-hidden': 'true', text: name ? name.trim().charAt(0).toUpperCase() : '?' });
+    }
+    function copyButton(id) {
+      const b = el('button', { type: 'button', class: 'vl-copy', title: 'Copy user ID', 'aria-label': `Copy user ID ${id}` }, icon('far fa-copy'));
+      b.addEventListener('click', async () => {
+        let ok = false;
+        try { await navigator.clipboard.writeText(id); ok = true; } catch (_) {
+          const t = el('textarea', { class: 'visually-hidden', 'aria-hidden': 'true' }); t.value = id; document.body.append(t); t.select();
+          try { ok = document.execCommand('copy'); } catch (__) { ok = false; } t.remove();
+        }
+        b.classList.toggle('is-done', ok);
+        b.replaceChildren(icon(ok ? 'fas fa-check' : 'far fa-copy'));
+        $('vlStatus').textContent = ok ? `Copied ${id}.` : 'Could not copy — select the ID instead.';
+        setTimeout(() => { b.classList.remove('is-done'); b.replaceChildren(icon('far fa-copy')); if ($('vlStatus').textContent.startsWith('Copied')) $('vlStatus').textContent = ''; }, 1600);
+      });
+      return b;
+    }
+    function rowEl(r) {
+      const u = r.user || {};
+      const name = u.displayName || u.username || r.username || r.userId;
+      const handle = u.username || r.username;
+      const exact = r.at ? new Date(r.at).toLocaleString() : '';
+      const dm = r.dm === true ? el('span', { class: 'vl-dm is-yes' }, icon('fas fa-check'), 'Delivered')
+        : r.dm === false ? el('span', { class: 'vl-dm', title: 'No DM reached them (DMs off, closed, or not sent)', text: 'Not sent' }) : null;
+      return el('tr', { 'data-key': r.cursor },
+        el('td', { class: 'vl-td-when' }, el('time', { class: 'vl-when', datetime: r.at ? new Date(r.at).toISOString() : '', title: exact, 'data-at': String(r.at || '') , text: r.at ? relTime(r.at) : '' })),
+        el('td', { class: 'vl-td-member' }, el('div', { class: 'vl-member' }, avatar(r),
+          el('div', { class: 'vl-names' },
+            el('span', { class: 'vl-name', title: name, text: name }),
+            el('span', { class: 'vl-handle', text: handle && handle !== name ? `@${handle}` : (u.inServer === false ? `${r.userId} · left` : r.userId) })),
+          copyButton(r.userId))),
+        el('td', { class: 'vl-td-event' }, el('div', { class: 'vl-event' },
+          el('span', { class: 'vl-cat', text: r.categoryLabel || '' }),
+          el('span', { class: `cf-pill${['ok', 'warn', 'bad', 'info'].includes(r.tone) ? ` is-${r.tone}` : ''}`, title: r.label, text: r.pill }))),
+        el('td', { class: 'vl-td-detail' }, r.detail ? el('span', { class: 'vl-detail', text: r.detail }) : null, answerLink(r)),
+        el('td', { class: 'vl-td-dm' }, dm));
+    }
+
+    // Where a warned member came back: a link to the message, or the voice channel they joined.
+    function answerLink(r) {
+      const a = r.answer;
+      if (!a || !a.channelId) return null;
+      const gid = root.closest('[data-guild-id]')?.dataset.guildId || (location.pathname.match(/manage\/(\d+)/) || [])[1];
+      if (!gid) return null;
+      const where = a.channelName ? (a.kind === 'voice' ? a.channelName : `#${a.channelName}`) : (a.kind === 'voice' ? 'voice channel' : 'channel');
+      const url = a.kind === 'message' && a.messageId
+        ? `https://discord.com/channels/${gid}/${a.channelId}/${a.messageId}`
+        : `https://discord.com/channels/${gid}/${a.channelId}`;
+      const text = a.kind === 'message' ? (a.messageId ? `View their message in ${where}` : `Posted in ${where}`) : `Joined voice: ${where}`;
+      return el('div', { class: 'vl-answer' }, el('a', { href: url, target: '_blank', rel: 'noopener', text }));
+    }
+
+    function renderCounts() {
+      for (const t of TYPES) {
+        const n = s.counts ? s.counts[t] : null;
+        root.querySelector(`[data-count="${t}"]`).textContent = n == null ? '' : nf.format(n);
+      }
+    }
+    function renderFoot() {
+      const total = s.counts ? s.counts[s.type] : null;
+      $('vlShown').textContent = !s.rows.length ? '' : total != null && total >= s.rows.length
+        ? `Showing ${nf.format(s.rows.length)} of ${nf.format(total)}` : `Showing ${nf.format(s.rows.length)}`;
+      $('vlMore').hidden = !s.hasMore;
+    }
+    function renderEmpty() {
+      const box = $('vlEmpty');
+      box.hidden = s.rows.length > 0 || !s.loaded;
+      if (box.hidden) return;
+      if (s.error) {
+        box.replaceChildren(el('strong', { text: 'Could not load the activity log' }), el('div', { text: s.error }),
+          el('button', { type: 'button', class: 'btn btn-sm btn-secondary', onclick: () => load() }, 'Try again'));
+      } else if (filtered()) {
+        box.replaceChildren(el('strong', { text: 'Nothing matches these filters' }), el('div', { text: 'Try another type, a wider time range, or a different name.' }),
+          el('button', { type: 'button', class: 'btn btn-sm btn-secondary', onclick: clearFilters }, 'Clear filters'));
+      } else {
+        box.replaceChildren(el('strong', { text: 'No activity yet' }),
+          el('div', { text: 'Verification results, auto-prune and inactivity actions appear here as they happen.' }));
+      }
+    }
+    function skeleton() {
+      const w = ['60%', '80%', '45%', '70%'];
+      body.replaceChildren(...[0, 1, 2, 3, 4].map(i => el('tr', { class: 'vl-skel', 'aria-hidden': 'true' },
+        el('td', {}, el('span', { class: 'vl-bar', style: 'width:4rem' })),
+        el('td', {}, el('span', { class: 'vl-bar', style: `width:${w[i % 4]}` })),
+        el('td', {}, el('span', { class: 'vl-bar', style: 'width:6rem' })),
+        el('td', {}, el('span', { class: 'vl-bar', style: `width:${w[(i + 2) % 4]}` })),
+        el('td', {}))));
+    }
+    function setPending() {
+      const b = $('vlNew');
+      b.hidden = !s.pending.length;
+      b.textContent = s.pending.length === 1 ? '1 new event — show' : `${nf.format(s.pending.length)} new events — show`;
+    }
+    function renderLive() {
+      const b = $('vlLive');
+      b.setAttribute('aria-pressed', s.live ? 'true' : 'false');
+      b.classList.toggle('is-error', s.live && s.fails >= MAX_FAILS);
+      $('vlLiveText').textContent = !s.live ? 'Paused' : s.fails >= MAX_FAILS ? 'Live (stopped)' : 'Live';
+    }
+    function setStatus(text, retry) {
+      const st = $('vlStatus');
+      st.replaceChildren(...(text ? [text] : []), ...(retry ? [el('button', { type: 'button', class: 'btn btn-sm btn-secondary', onclick: retry }, 'Retry')] : []));
+    }
+
+    /** Insert rows (newest first) at the top, skipping any already shown. */
+    function prepend(rows, highlight) {
+      const fresh = rows.filter(r => !s.keys.has(r.cursor));
+      if (!fresh.length) return 0;
+      for (const r of fresh) s.keys.add(r.cursor);
+      s.rows = fresh.concat(s.rows);
+      const nodes = fresh.map(rowEl);
+      if (highlight) for (const n of nodes) n.classList.add('is-new');
+      body.prepend(...nodes);
+      return fresh.length;
+    }
+    function bump(rows) {
+      if (!s.counts) return;
+      for (const r of rows) {
+        s.counts.all += 1;
+        if (r.category && s.counts[r.category] != null) s.counts[r.category] += 1;
+        if (r.failure) s.counts.failures += 1;
+      }
+      renderCounts();
+    }
+    function showPending() {
+      const rows = s.pending;
+      s.pending = [];
+      setPending();
+      prepend(rows, true);
+      renderEmpty();
+      renderFoot();
+      scroller.scrollTop = 0;
+      const top = $('vlCard').getBoundingClientRect().top;
+      if (top < 0) $('vlCard').scrollIntoView({ block: 'start' });
+    }
+
+    /** (Re)load the first page. `silent`: no skeleton or hidden empty state (a poll while the log is empty). */
+    async function load({ silent = false } = {}) {
+      const my = ++s.seq;
+      clearTimeout(s.timer);
+      s.pending = []; setPending();
+      if (!silent) {
+        if (!s.rows.length) skeleton();
+        $('vlEmpty').hidden = true;
+      }
+      $('vlMore').disabled = true;
+      try {
+        const out = await req(api(`/log?${query()}`));
+        if (my !== s.seq) return;
+        s.rows = []; s.keys = new Set(); body.replaceChildren();
+        prepend(out.rows, false);
+        s.next = out.nextCursor; s.hasMore = out.hasMore; s.counts = out.counts; s.pages = 1;
+        s.latest = out.rows.length ? out.rows[0].cursor : null;
+        s.error = null; s.fails = 0;
+        setStatus('');
+        scroller.scrollTop = 0;
+      } catch (err) {
+        if (my !== s.seq) return;
+        s.rows = []; s.keys = new Set(); body.replaceChildren(); s.hasMore = false;
+        s.error = err.message;
+      }
+      s.loaded = true;
+      $('vlMore').disabled = false;
+      renderCounts(); renderFoot(); renderEmpty(); renderLive();
+      schedule();
+    }
+    async function more() {
+      if (!s.next) return;
+      const my = s.seq;
+      const btn = $('vlMore');
+      btn.disabled = true; btn.textContent = 'Loading…';
+      try {
+        const out = await req(api(`/log?${query({ before: s.next })}`));
+        if (my !== s.seq) return;
+        const fresh = out.rows.filter(r => !s.keys.has(r.cursor));
+        for (const r of fresh) s.keys.add(r.cursor);
+        s.rows = s.rows.concat(fresh);
+        body.append(...fresh.map(rowEl));
+        s.next = out.nextCursor; s.hasMore = out.hasMore; s.pages += 1;
+        setStatus('');
+      } catch (err) {
+        setStatus(`Could not load more: ${err.message}`, () => more());
+      } finally {
+        btn.disabled = false; btn.textContent = 'Load more';
+        renderFoot();
+      }
+    }
+    /** One poll. `force` runs it even with Live off (after the reader changed something on this page). */
+    async function poll(force = false) {
+      clearTimeout(s.timer);
+      if (!force && (!s.live || document.visibilityState !== 'visible' || s.fails >= MAX_FAILS)) return;
+      if (!s.loaded) return;
+      if (!s.latest) return load({ silent: true });
+      const my = s.seq;
+      try {
+        const out = await req(api(`/log?${query({ since: s.latest })}`));
+        if (my !== s.seq) return;
+        s.fails = 0;
+        if (out.truncated) { await load(); setStatus('Many new events arrived — the log was reloaded.'); return; }
+        if (out.latestCursor) s.latest = out.latestCursor;
+        const rows = out.rows.filter(r => !s.keys.has(r.cursor) && !s.pending.some(p => p.cursor === r.cursor));
+        if (rows.length) {
+          bump(rows);
+          if (away()) { s.pending = rows.concat(s.pending); setPending(); } else { prepend(rows, true); }
+          renderEmpty();
+          renderFoot();
+        }
+        if (s.error) { s.error = null; setStatus(''); }
+      } catch (err) {
+        if (my !== s.seq) return;
+        s.fails += 1;
+        if (s.fails >= MAX_FAILS) setStatus('Live updates stopped: the server did not answer.', () => { s.fails = 0; renderLive(); setStatus(''); poll(true); });
+      }
+      renderLive();
+      schedule();
+    }
+    function schedule() {
+      clearTimeout(s.timer);
+      if (!s.live || document.visibilityState !== 'visible' || s.fails >= MAX_FAILS) return;
+      s.timer = setTimeout(() => poll(), POLL_MS * Math.pow(2, s.fails));
+    }
+    function refreshTimes() {
+      if (document.visibilityState !== 'visible') return;
+      body.querySelectorAll('time[data-at]').forEach(t => { const at = Number(t.dataset.at); if (at) t.textContent = relTime(at); });
+    }
+    function setType(type) {
+      s.type = type;
+      root.querySelectorAll('.vl-chip').forEach(c => c.setAttribute('aria-pressed', c.dataset.type === type ? 'true' : 'false'));
+      load();
+    }
+    function clearFilters() {
+      s.q = ''; $('vlSearch').value = '';
+      s.range = 'all'; $('vlRange').value = 'all';
+      setType('all');
+    }
+    function exportCsv() {
+      const a = el('a', { href: api(`/log/export?${query()}`), download: '' });
+      document.body.append(a); a.click(); a.remove();
+    }
+
+    function start() {
+      if (s.started) return;
+      s.started = true;
+      renderLive();
+      root.querySelectorAll('.vl-chip').forEach(c => c.addEventListener('click', () => { if (c.dataset.type !== s.type) setType(c.dataset.type); }));
+      $('vlRange').addEventListener('change', () => { s.range = $('vlRange').value; load(); });
+      let debounce = null;
+      $('vlSearch').addEventListener('input', () => {
+        clearTimeout(debounce);
+        debounce = setTimeout(() => { const v = $('vlSearch').value.trim(); if (v !== s.q) { s.q = v; load(); } }, 350);
+      });
+      $('vlSearch').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { clearTimeout(debounce); const v = $('vlSearch').value.trim(); if (v !== s.q) { s.q = v; load(); } }
+        if (e.key === 'Escape' && $('vlSearch').value) { $('vlSearch').value = ''; clearTimeout(debounce); if (s.q) { s.q = ''; load(); } }
+      });
+      $('vlMore').addEventListener('click', more);
+      $('vlNew').addEventListener('click', showPending);
+      $('vlExport').addEventListener('click', exportCsv);
+      $('vlLive').addEventListener('click', () => {
+        s.live = !s.live;
+        s.fails = 0;
+        try { localStorage.setItem(LIVE_KEY, s.live ? '1' : '0'); } catch (_) { /* not remembered */ }
+        renderLive(); setStatus('');
+        if (s.live) poll(); else clearTimeout(s.timer);
+      });
+      scroller.addEventListener('scroll', () => { if (scroller.scrollTop <= 4 && s.pending.length && s.pages <= 1) showPending(); }, { passive: true });
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') { refreshTimes(); poll(); } else clearTimeout(s.timer);
+      });
+      root.querySelectorAll('[data-vl-type]').forEach(a => a.addEventListener('click', () => { if (s.type !== a.dataset.vlType) setType(a.dataset.vlType); }));
+      setInterval(refreshTimes, 30000);
+      load();
+    }
+    return { start, refresh: () => { if (s.loaded) poll(true); } };
+  })();
+
+  load();
+  activityLog.start();
+})();
+</script>

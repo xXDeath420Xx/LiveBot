@@ -1,4 +1,5 @@
 import { EmbedBuilder } from 'discord.js';
+import { themeColor } from '../../core/guild-theme.js';
 
 const ZODIAC_SIGNS = {
   'aries': { emoji: '♈', dates: 'Mar 21 - Apr 19', element: 'Fire' },
@@ -118,7 +119,7 @@ export async function handleTarot(interaction) {
     { name: 'The World', meaning: 'Completion, integration, accomplishment, travel', reversed: 'Seeking closure, delays' }
   ];
 
-  const embed = new EmbedBuilder().setColor('#9B59B6').setFooter({ text: 'Tarot guidance for reflection and insight' }).setTimestamp();
+  const embed = new EmbedBuilder().setColor(themeColor(interaction.guildId, 'accent')).setFooter({ text: 'Tarot guidance for reflection and insight' }).setTimestamp();
 
   if (spread === 'single') {
     const card = tarotCards[Math.floor(Math.random() * tarotCards.length)];

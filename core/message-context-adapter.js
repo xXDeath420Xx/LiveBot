@@ -59,6 +59,43 @@ export class MessageContextAdapter {
 
     isRepliable() { return true; }
 
+    /**
+     * Private replies from chat. A chat message cannot answer ephemerally, so a private reply is
+     * normally posted in the channel like any other. Paths that reply with something only the member
+     * should see (core/command-registration.js PRIVATE_TEXT_PATHS; the bridge sets meta.privateDm)
+     * send it by DM instead, with a one-line note in the channel. If the DM fails, the content is NOT
+     * posted publicly; the member is told to open their DMs.
+     * @returns {Promise<import('discord.js').Message|null|undefined>} undefined when not private
+     */
+    async _sendPrivate(options) {
+        if (!this._meta?.privateDm) return undefined;
+        const o = typeof options === 'string' ? { content: options } : (options || {});
+        const flags = Number(o.flags) || 0;
+        if (!(o.ephemeral === true || (flags & 64) === 64)) return undefined;
+        const payload = { ...o };
+        delete payload.ephemeral;
+        delete payload.flags;
+        try {
+            const dm = await this.user.send(payload);
+            if (!this._privateNoted) {
+                this._privateNoted = true;
+                this._replied = true;
+                this._replyMessage = await this.message.reply({ content: 'Sent you the result by DM.', allowedMentions: { repliedUser: false } }).catch(() => null);
+            }
+            return dm;
+        } catch {
+            this._replied = true;
+            if (!this._privateNoted) {
+                this._privateNoted = true;
+                this._replyMessage = await this.message.reply({
+                    content: 'That reply is private, but your DMs are closed. Allow DMs from server members and try again.',
+                    allowedMentions: { repliedUser: false },
+                }).catch(() => null);
+            }
+            return null;
+        }
+    }
+
     inGuild() { return !!this.guildId; }
     inCachedGuild() { return !!this.guild; }
 
@@ -75,14 +112,17 @@ export class MessageContextAdapter {
     isModalSubmit() { return false; }
     isAutocomplete() { return false; }
 
-    async deferReply({ ephemeral } = {}) {
+    async deferReply({ ephemeral, flags } = {}) {
         if (this._deferred || this._replied) return;
         this._deferred = true;
+        this._deferredPrivate = ephemeral === true || ((Number(flags) || 0) & 64) === 64;
         // Show typing indicator as the "deferred" equivalent
         await this.channel.sendTyping().catch(() => {});
     }
 
     async reply(options) {
+        const priv = await this._sendPrivate(options);
+        if (priv !== undefined) return priv;
         if (this._replied) return this.followUp(options);
         this._replied = true;
 
@@ -112,6 +152,14 @@ export class MessageContextAdapter {
     }
 
     async editReply(options) {
+        // A deferred private reply (deferReply({ ephemeral: true }) then editReply) is private too.
+        if (this._meta?.privateDm && this._deferredPrivate && typeof options === 'object' && !options.ephemeral && !options.flags) {
+            options = { ...options, ephemeral: true };
+        } else if (this._meta?.privateDm && this._deferredPrivate && typeof options === 'string') {
+            options = { content: options, ephemeral: true };
+        }
+        const priv = await this._sendPrivate(options);
+        if (priv !== undefined) return priv;
         const payload = typeof options === 'string' ? { content: options } : { ...options };
         delete payload.ephemeral;
         delete payload.flags;
@@ -132,6 +180,8 @@ export class MessageContextAdapter {
     }
 
     async followUp(options) {
+        const priv = await this._sendPrivate(options);
+        if (priv !== undefined) return priv;
         const payload = typeof options === 'string' ? { content: options } : { ...options };
         delete payload.ephemeral;
         delete payload.flags;
@@ -252,7 +302,12 @@ class PrefixOptionsResolver {
         return group;
     }
 
-    getAttachment(name) { return this._message.attachments.first() ?? null; }
+    // parseOptions (core/universal-commands.js) gives each file option its own attachment, in order.
+    getAttachment(name) {
+        const val = this._args[name];
+        if (val && typeof val === 'object') return val;
+        return this._message.attachments?.first?.() ?? null;
+    }
 }
 
 export default MessageContextAdapter;

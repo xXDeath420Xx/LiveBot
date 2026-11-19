@@ -1,208 +1,167 @@
-<div class="page-section">
+<%
+// Modmail page. Data from dashboard/services/modmail-section.js (LOADERS.modmail in
+// manage-sections.js); actions go to dashboard/routes/api/features/modmail.js
+// (/api/guilds/:guildId/modmail/...). The bot side is core/modmail-manager.js.
+const mmConfig = (typeof modmailConfig !== 'undefined' && modmailConfig) ? modmailConfig : {};
+const mmStats = (typeof modmailStats !== 'undefined' && modmailStats) ? modmailStats : {};
+const mmThreads = (typeof modmailThreads !== 'undefined' && Array.isArray(modmailThreads)) ? modmailThreads : [];
+const mmHistory = (typeof modmailHistory !== 'undefined' && Array.isArray(modmailHistory)) ? modmailHistory : [];
+const mmBlocked = (typeof modmailBlockedUsers !== 'undefined' && Array.isArray(modmailBlockedUsers)) ? modmailBlockedUsers : [];
+const mmCategories = (typeof categories !== 'undefined' && Array.isArray(categories)) ? categories : [];
+const mmChannels = (typeof channels !== 'undefined' && Array.isArray(channels)) ? channels : [];
+const mmRoles = (typeof roles !== 'undefined' && Array.isArray(roles)) ? roles : [];
+const mmEnabled = Number(mmConfig.enabled) === 1;
+const mmRole = mmRoles.find(r => r.id === mmConfig.staff_role_id);
+const mmCategory = mmCategories.find(c => c.id === mmConfig.category_id);
+const fmtDate = (v) => v ? new Date(v).toLocaleString('en-GB', { timeZone: 'UTC', dateStyle: 'medium', timeStyle: 'short' }) + ' UTC' : '—';
+%>
+<div class="page-section" id="modmail-page" data-guild-id="<%= guild.id %>">
     <div class="page-section-header">
         <div>
             <div class="page-section-title">
-                <i class="fas fa-envelope"></i>
-                <span>Modmail System</span>
+                <i class="fas fa-envelope-open-text"></i>
+                <span>Modmail</span>
             </div>
             <div class="page-section-subtitle">
-                Manage support tickets through direct messages with advanced modmail system
+                Members DM the bot to reach your staff privately; staff answer from a private channel
             </div>
         </div>
     </div>
 
-    <!-- Configuration Card -->
-    <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6); margin-bottom: var(--spacing-6);">
-        <div style="display: flex; align-items: center; gap: var(--spacing-3); margin-bottom: var(--spacing-4);">
-            <div style="width: 48px; height: 48px; background: linear-gradient(135deg, var(--color-primary-500), var(--color-primary-600)); border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                <i class="fas fa-cog" style="color: white; font-size: 1.25rem;"></i>
-            </div>
+    <!-- Configuration -->
+    <div class="mm-card">
+        <div class="mm-card-head">
+            <div class="mm-icon" style="background: var(--bg-card-hover);"><i class="fas fa-cog"></i></div>
             <div>
-                <h4 style="margin: 0; font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary);">Modmail Configuration</h4>
-                <p style="margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted);">Configure modmail settings, category, and staff team</p>
+                <h4 class="mm-title">Settings</h4>
+                <p class="mm-sub">Where conversations open, who answers them, and what members are told</p>
             </div>
         </div>
 
         <form id="modmail-config-form">
-            <div style="margin-bottom: var(--spacing-4);">
-                <label class="form-label" style="display: flex; align-items: center; gap: var(--spacing-2); cursor: pointer;">
-                    <input type="checkbox" id="modmailEnabled" name="enabled" <%= (data.modmailConfig && data.modmailConfig.enabled) ? 'checked' : '' %> style="width: 18px; height: 18px; cursor: pointer;">
-                    <span>Enable Modmail System</span>
-                </label>
-                <div class="form-help">When enabled, users can DM the bot to create modmail threads</div>
-            </div>
+            <label class="mm-switch-row">
+                <input type="checkbox" id="mmEnabled" <%= mmEnabled ? 'checked' : '' %>>
+                <span>
+                    <span class="mm-label">Enable modmail</span>
+                    <span class="mm-help">Members who DM the bot are asked whether to contact this server's staff. Off by default.</span>
+                </span>
+            </label>
 
-            <div class="grid grid-cols-2" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
+            <div class="mm-grid">
                 <div>
-                    <label class="form-label">Modmail Category</label>
-                    <select class="form-select" id="modmailCategory" name="category_id">
-                        <option value="">Select a category</option>
-                        <% categories.forEach(category => { %>
-                            <option value="<%= category.id %>" <%= (data.modmailConfig && data.modmailConfig.category_id === category.id) ? 'selected' : '' %>><%= category.name %></option>
+                    <label class="mm-label" for="mmCategory">Thread category</label>
+                    <select class="form-select" id="mmCategory">
+                        <option value="">— top of the channel list —</option>
+                        <% mmCategories.forEach(c => { %>
+                            <option value="<%= c.id %>" <%= mmConfig.category_id === c.id ? 'selected' : '' %>><%= c.name %></option>
                         <% }); %>
                     </select>
-                    <div class="form-help">Thread channels will be created in this category</div>
+                    <div class="mm-help">Each conversation gets a private channel here. Roles the category already lets in keep access.</div>
                 </div>
-
                 <div>
-                    <label class="form-label">Staff Role</label>
-                    <select class="form-select" id="modmailStaffRole" name="staff_role_id">
-                        <option value="">Select a role</option>
-                        <% roles.forEach(role => { %>
-                            <option value="<%= role.id %>" <%= (data.modmailConfig && data.modmailConfig.staff_role_id === role.id) ? 'selected' : '' %>><%= role.name %></option>
+                    <label class="mm-label" for="mmStaffRole">Staff role</label>
+                    <select class="form-select" id="mmStaffRole">
+                        <option value="">— administrators only —</option>
+                        <% mmRoles.forEach(r => { %>
+                            <option value="<%= r.id %>" <%= mmConfig.staff_role_id === r.id ? 'selected' : '' %>><%= r.name %></option>
                         <% }); %>
                     </select>
-                    <div class="form-help">Staff with this role can view and respond to threads</div>
+                    <div class="mm-help">Can see conversations and reply; pinged when one opens. Manage Server / Administrator always can.</div>
+                </div>
+                <div>
+                    <label class="mm-label" for="mmLogChannel">Log channel</label>
+                    <select class="form-select" id="mmLogChannel">
+                        <option value="">— none —</option>
+                        <% mmChannels.forEach(c => { %>
+                            <option value="<%= c.id %>" <%= mmConfig.log_channel_id === c.id ? 'selected' : '' %>>#<%= c.name %></option>
+                        <% }); %>
+                    </select>
+                    <div class="mm-help">Opens, closes and a .txt transcript of every closed conversation.</div>
+                </div>
+                <div>
+                    <label class="mm-switch-row" style="margin:0">
+                        <input type="checkbox" id="mmAnonymous" <%= Number(mmConfig.anonymous_replies) === 1 ? 'checked' : '' %>>
+                        <span>
+                            <span class="mm-label">Anonymous staff replies</span>
+                            <span class="mm-help">Members see "<%= guild.name %> Staff" instead of who answered. Transcripts still record the staff member.</span>
+                        </span>
+                    </label>
                 </div>
             </div>
 
             <div style="margin-bottom: var(--spacing-4);">
-                <label class="form-label">Auto-Response Message</label>
-                <textarea class="form-control" id="modmailAutoResponse" name="greeting_message" rows="3" placeholder="Thank you for contacting our staff team. Your message has been received and we'll respond shortly!"><%= (data.modmailConfig && data.modmailConfig.greeting_message) ? data.modmailConfig.greeting_message : '' %></textarea>
-                <div class="form-help">Automatic message sent to users when they open a new thread</div>
+                <label class="mm-label" for="mmGreeting">Greeting</label>
+                <textarea class="form-control" id="mmGreeting" rows="3" maxlength="2000" placeholder="Thank you for contacting the staff team. Please describe your issue."><%= mmConfig.greeting_message || '' %></textarea>
+                <div class="mm-help">Sent to the member when their conversation opens.</div>
             </div>
-
             <div style="margin-bottom: var(--spacing-4);">
-                <label class="form-label">Thread Close Message</label>
-                <textarea class="form-control" id="modmailCloseMessage" name="close_message" rows="2" placeholder="This modmail thread has been closed. Thank you for contacting us!"><%= (data.modmailConfig && data.modmailConfig.close_message) ? data.modmailConfig.close_message : '' %></textarea>
-                <div class="form-help">Message sent to users when their thread is closed</div>
+                <label class="mm-label" for="mmClose">Closing message</label>
+                <textarea class="form-control" id="mmClose" rows="2" maxlength="2000" placeholder="This modmail thread has been closed. Thank you for contacting us."><%= mmConfig.close_message || '' %></textarea>
+                <div class="mm-help">Sent to the member when a conversation is closed (with the reason, if staff give one).</div>
             </div>
 
-            <% if (data.modmailConfig && data.modmailConfig.enabled && data.modmailConfig.category_id && data.modmailConfig.staff_role_id) { %>
-                <div style="background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(34, 197, 94, 0.05)); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: var(--radius-md); padding: var(--spacing-4); margin-bottom: var(--spacing-4);">
-                    <div style="display: flex; align-items: center; gap: var(--spacing-2);">
-                        <i class="fas fa-check-circle" style="color: var(--color-success);"></i>
-                        <span style="font-size: var(--font-size-sm); color: var(--color-text-primary);">Modmail system is fully configured and active</span>
-                    </div>
+            <% if (mmEnabled) { %>
+                <div class="mm-note mm-note-ok">
+                    <i class="fas fa-check-circle"></i>
+                    Modmail is on. Conversations open in <strong><%= mmCategory ? mmCategory.name : 'the top of the channel list' %></strong>
+                    and are answered by <strong><%= mmRole ? '@' + mmRole.name : 'administrators' %></strong>.
+                    In each conversation channel, start a message with <code>//</code> to keep it as a staff-only note.
                 </div>
             <% } %>
 
-            <button type="submit" class="btn btn-primary">
+            <button type="submit" class="btn btn-primary" id="mmSave">
                 <i class="fas fa-save"></i>
-                <span>Save Configuration</span>
+                <span>Save settings</span>
             </button>
         </form>
     </div>
 
-    <!-- Analytics Card -->
+    <!-- Stats -->
     <div class="grid grid-cols-4" style="margin-bottom: var(--spacing-6); gap: var(--spacing-4);">
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Total Threads</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary);"><%= (data.modmailStats && data.modmailStats.total_threads) || 0 %></div>
-        </div>
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Active Threads</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-primary-400);"><%= (data.modmailStats && data.modmailStats.active_threads) || 0 %></div>
-        </div>
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Avg Response Time</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-accent-blue);"><%= (data.modmailStats && data.modmailStats.avg_response_time) || '0m' %></div>
-        </div>
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Avg Resolution Time</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-success);"><%= (data.modmailStats && data.modmailStats.avg_resolution_time) || '0h' %></div>
-        </div>
+        <div class="mm-stat"><div class="mm-stat-label">Total conversations</div><div class="mm-stat-value"><%= mmStats.total_threads || 0 %></div></div>
+        <div class="mm-stat"><div class="mm-stat-label">Open now</div><div class="mm-stat-value" style="color: var(--color-primary-400);"><%= mmStats.active_threads || 0 %></div></div>
+        <div class="mm-stat"><div class="mm-stat-label">Avg first reply</div><div class="mm-stat-value" style="color: var(--cf-info-ink);"><%= mmStats.avg_response_time || '—' %></div></div>
+        <div class="mm-stat"><div class="mm-stat-label">Avg time to close</div><div class="mm-stat-value" style="color: var(--color-success);"><%= mmStats.avg_resolution_time || '—' %></div></div>
     </div>
 
-    <!-- Active Threads Card -->
-    <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6); margin-bottom: var(--spacing-6);">
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--spacing-4);">
-            <div style="display: flex; align-items: center; gap: var(--spacing-3);">
-                <div style="width: 48px; height: 48px; background: linear-gradient(135deg, var(--color-accent-blue), var(--color-primary-500)); border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                    <i class="fas fa-inbox" style="color: white; font-size: 1.25rem;"></i>
-                </div>
-                <div>
-                    <h4 style="margin: 0; font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary);">Active Threads</h4>
-                    <p style="margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted);">Currently open modmail conversations</p>
-                </div>
+    <!-- Open conversations -->
+    <div class="mm-card">
+        <div class="mm-card-head">
+            <div class="mm-icon" style="background: var(--bg-card-hover);"><i class="fas fa-inbox"></i></div>
+            <div>
+                <h4 class="mm-title">Open conversations</h4>
+                <p class="mm-sub">Reply from the conversation's channel in Discord; close from there or here</p>
             </div>
         </div>
 
-        <!-- Search Bar -->
-        <div style="margin-bottom: var(--spacing-4);">
-            <div class="input-group">
-                <span class="input-group-icon">
-                    <i class="fas fa-search"></i>
-                </span>
-                <input type="text" id="threadSearch" class="form-control" placeholder="Search threads by user or ID...">
-            </div>
-        </div>
-
-        <% if (data.modmailThreads && data.modmailThreads.length > 0) { %>
+        <% if (mmThreads.length > 0) { %>
+            <input type="text" id="mmThreadSearch" class="form-control" placeholder="Filter by member or #number…" style="margin-bottom: var(--spacing-4);">
             <div class="table-container">
                 <table class="data-table">
                     <thead>
-                        <tr>
-                            <th>User</th>
-                            <th>Thread ID</th>
-                            <th>Status</th>
-                            <th>Created</th>
-                            <th>Last Activity</th>
-                            <th>Messages</th>
-                            <th class="text-end">Actions</th>
-                        </tr>
+                        <tr><th>Member</th><th>#</th><th>Channel</th><th>Opened</th><th>Last activity</th><th>Messages</th><th class="text-end">Actions</th></tr>
                     </thead>
-                    <tbody id="threadsTableBody">
-                        <% data.modmailThreads.forEach(thread => { %>
-                            <tr class="thread-row" data-user-tag="<%= thread.user_tag ? thread.user_tag.toLowerCase() : '' %>" data-thread-id="<%= thread.id %>">
+                    <tbody id="mmThreadsBody">
+                        <% mmThreads.forEach(t => { %>
+                            <tr class="mm-thread-row" data-search="<%= ((t.user_tag || '') + ' ' + t.user_id + ' #' + t.id).toLowerCase() %>">
                                 <td>
-                                    <div style="display: flex; align-items: center; gap: var(--spacing-3);">
-                                        <div style="width: 36px; height: 36px; border-radius: 50%; background: var(--color-dark-500); display: flex; align-items: center; justify-content: center; border: 2px solid var(--color-primary-500);">
-                                            <i class="fas fa-user" style="color: var(--color-primary-400); font-size: 0.875rem;"></i>
-                                        </div>
-                                        <div>
-                                            <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary);"><%= thread.user_tag || 'Unknown User' %></div>
-                                            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);"><%= thread.user_id %></div>
-                                        </div>
-                                    </div>
+                                    <div class="mm-who"><%- include('_user-cell', { cfUser: null, cfUserId: t.user_id, cfUserName: t.user_tag || null }) %></div>
                                 </td>
+                                <td><code class="mm-code">#<%= t.id %></code></td>
                                 <td>
-                                    <code style="background: var(--color-dark-500); padding: 4px 8px; border-radius: 4px; font-size: var(--font-size-xs); color: var(--color-accent-blue);">#<%= thread.id %></code>
-                                </td>
-                                <td>
-                                    <% if (thread.status === 'open') { %>
-                                        <span class="badge badge-success">
-                                            <i class="fas fa-circle" style="font-size: 6px; margin-right: 4px;"></i>
-                                            Open
-                                        </span>
+                                    <% if (t.channel_exists) { %>
+                                        <a href="https://discord.com/channels/<%= guild.id %>/<%= t.channel_id %>" target="_blank" rel="noopener">Open in Discord</a>
                                     <% } else { %>
-                                        <span class="badge badge-secondary">
-                                            <i class="fas fa-circle" style="font-size: 6px; margin-right: 4px;"></i>
-                                            <%= thread.status %>
-                                        </span>
+                                        <span class="badge badge-danger">channel missing</span>
                                     <% } %>
                                 </td>
-                                <td>
-                                    <div style="font-size: var(--font-size-sm); color: var(--color-text-primary);">
-                                        <%= new Date(thread.created_at).toLocaleDateString() %>
-                                    </div>
-                                    <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">
-                                        <%= new Date(thread.created_at).toLocaleTimeString() %>
-                                    </div>
-                                </td>
-                                <td>
-                                    <div style="font-size: var(--font-size-sm); color: var(--color-text-primary);">
-                                        <%= thread.last_activity ? new Date(thread.last_activity).toLocaleDateString() : 'N/A' %>
-                                    </div>
-                                    <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">
-                                        <%= thread.last_activity ? new Date(thread.last_activity).toLocaleTimeString() : '' %>
-                                    </div>
-                                </td>
-                                <td>
-                                    <span class="badge badge-primary"><%= thread.message_count || 0 %></span>
-                                </td>
+                                <td><%= fmtDate(t.created_at) %></td>
+                                <td><%= fmtDate(t.last_activity) %></td>
+                                <td><span class="badge badge-primary"><%= t.message_count %></span></td>
                                 <td class="text-end">
                                     <div style="display: flex; gap: var(--spacing-2); justify-content: flex-end;">
-                                        <button class="btn btn-sm btn-secondary view-thread-btn"
-                                                data-thread-id="<%= thread.id %>"
-                                                title="View Thread">
-                                            <i class="fas fa-eye"></i>
-                                        </button>
-                                        <button class="btn btn-sm btn-danger close-thread-btn"
-                                                data-thread-id="<%= thread.id %>"
-                                                title="Close Thread">
-                                            <i class="fas fa-times"></i>
-                                        </button>
+                                        <button type="button" class="btn btn-sm btn-secondary mm-view" data-thread-id="<%= t.id %>" title="View messages"><i class="fas fa-eye"></i></button>
+                                        <button type="button" class="btn btn-sm btn-danger mm-close" data-thread-id="<%= t.id %>" title="Close conversation"><i class="fas fa-times"></i></button>
                                     </div>
                                 </td>
                             </tr>
@@ -212,81 +171,39 @@
             </div>
         <% } else { %>
             <div class="empty-state">
-                <div class="empty-state-icon">
-                    <i class="fas fa-inbox"></i>
-                </div>
-                <div class="empty-state-title">No Active Threads</div>
-                <div class="empty-state-description">
-                    There are no open modmail threads at the moment
-                </div>
+                <div class="empty-state-icon"><i class="fas fa-inbox"></i></div>
+                <div class="empty-state-title">No open conversations</div>
+                <div class="empty-state-description"><%= mmEnabled ? 'Nobody is waiting on staff right now.' : 'Turn modmail on above to start receiving messages.' %></div>
             </div>
         <% } %>
     </div>
 
-    <!-- Blocked Users Card -->
-    <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6); margin-bottom: var(--spacing-6);">
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--spacing-4);">
-            <div style="display: flex; align-items: center; gap: var(--spacing-3);">
-                <div style="width: 48px; height: 48px; background: linear-gradient(135deg, var(--color-danger), #be123c); border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                    <i class="fas fa-ban" style="color: white; font-size: 1.25rem;"></i>
-                </div>
+    <!-- Blocked -->
+    <div class="mm-card">
+        <div class="mm-card-head" style="justify-content: space-between;">
+            <div style="display:flex; gap: var(--spacing-3); align-items:center;">
+                <div class="mm-icon" style="background: linear-gradient(135deg, var(--color-danger), #be123c);"><i class="fas fa-ban"></i></div>
                 <div>
-                    <h4 style="margin: 0; font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary);">Blocked Users</h4>
-                    <p style="margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted);">Users blocked from using modmail</p>
+                    <h4 class="mm-title">Blocked members</h4>
+                    <p class="mm-sub">They can't open conversations with this server's staff</p>
                 </div>
             </div>
-            <button class="btn btn-danger" id="blockUserBtn">
-                <i class="fas fa-user-slash"></i>
-                <span>Block User</span>
-            </button>
+            <button type="button" class="btn btn-danger" id="mmBlockBtn"><i class="fas fa-user-slash"></i> <span>Block a user</span></button>
         </div>
 
-        <% if (data.modmailBlockedUsers && data.modmailBlockedUsers.length > 0) { %>
+        <% if (mmBlocked.length > 0) { %>
             <div class="table-container">
                 <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>User</th>
-                            <th>Blocked By</th>
-                            <th>Reason</th>
-                            <th>Blocked At</th>
-                            <th class="text-end">Actions</th>
-                        </tr>
-                    </thead>
+                    <thead><tr><th>Member</th><th>Blocked by</th><th>Reason</th><th>When</th><th class="text-end">Actions</th></tr></thead>
                     <tbody>
-                        <% data.modmailBlockedUsers.forEach(blocked => { %>
+                        <% mmBlocked.forEach(b => { %>
                             <tr>
-                                <td>
-                                    <div style="display: flex; align-items: center; gap: var(--spacing-3);">
-                                        <div style="width: 36px; height: 36px; border-radius: 50%; background: var(--color-dark-500); display: flex; align-items: center; justify-content: center; border: 2px solid var(--color-danger);">
-                                            <i class="fas fa-user" style="color: var(--color-danger); font-size: 0.875rem;"></i>
-                                        </div>
-                                        <div>
-                                            <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary);"><%= blocked.user_tag || 'Unknown User' %></div>
-                                            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);"><%= blocked.user_id %></div>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td>
-                                    <div style="font-size: var(--font-size-sm); color: var(--color-text-primary);"><%= blocked.blocked_by_tag || 'Unknown' %></div>
-                                </td>
-                                <td>
-                                    <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary); max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                                        <%= blocked.reason || 'No reason provided' %>
-                                    </div>
-                                </td>
-                                <td>
-                                    <div style="font-size: var(--font-size-sm); color: var(--color-text-primary);">
-                                        <%= new Date(blocked.blocked_at).toLocaleDateString() %>
-                                    </div>
-                                </td>
+                                <td><div class="mm-who"><%- include('_user-cell', { cfUser: null, cfUserId: b.user_id, cfUserName: b.user_tag || null }) %></div></td>
+                                <td><%= b.blocked_by_tag || '—' %></td>
+                                <td><div class="mm-ellipsis"><%= b.reason || 'No reason given' %></div></td>
+                                <td><%= fmtDate(b.blocked_at) %></td>
                                 <td class="text-end">
-                                    <button class="btn btn-sm btn-success unblock-user-btn"
-                                            data-user-id="<%= blocked.user_id %>"
-                                            data-block-id="<%= blocked.id %>">
-                                        <i class="fas fa-unlock"></i>
-                                        <span>Unblock</span>
-                                    </button>
+                                    <button type="button" class="btn btn-sm btn-success mm-unblock" data-user-id="<%= b.user_id %>"><i class="fas fa-unlock"></i> <span>Unblock</span></button>
                                 </td>
                             </tr>
                         <% }); %>
@@ -295,80 +212,41 @@
             </div>
         <% } else { %>
             <div class="empty-state">
-                <div class="empty-state-icon">
-                    <i class="fas fa-user-check"></i>
-                </div>
-                <div class="empty-state-title">No Blocked Users</div>
-                <div class="empty-state-description">
-                    No users are currently blocked from using modmail
-                </div>
+                <div class="empty-state-icon"><i class="fas fa-user-check"></i></div>
+                <div class="empty-state-title">Nobody is blocked</div>
+                <div class="empty-state-description">Use "Block & close" in a conversation channel, or block a user ID here.</div>
             </div>
         <% } %>
     </div>
 
-    <!-- Thread History Card -->
-    <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6); margin-bottom: var(--spacing-6);">
-        <div style="display: flex; align-items: center; gap: var(--spacing-3); margin-bottom: var(--spacing-4);">
-            <div style="width: 48px; height: 48px; background: linear-gradient(135deg, var(--color-accent-purple), #7c3aed); border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                <i class="fas fa-history" style="color: white; font-size: 1.25rem;"></i>
-            </div>
+    <!-- History -->
+    <div class="mm-card">
+        <div class="mm-card-head">
+            <div class="mm-icon" style="background: var(--bg-card-hover);"><i class="fas fa-history"></i></div>
             <div>
-                <h4 style="margin: 0; font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary);">Thread History</h4>
-                <p style="margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted);">Recently closed modmail threads</p>
+                <h4 class="mm-title">Closed conversations</h4>
+                <p class="mm-sub">The 50 most recent, with full transcripts</p>
             </div>
         </div>
 
-        <% if (data.modmailHistory && data.modmailHistory.length > 0) { %>
+        <% if (mmHistory.length > 0) { %>
             <div class="table-container">
                 <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>User</th>
-                            <th>Thread ID</th>
-                            <th>Closed At</th>
-                            <th>Closed By</th>
-                            <th>Duration</th>
-                            <th class="text-end">Actions</th>
-                        </tr>
-                    </thead>
+                    <thead><tr><th>Member</th><th>#</th><th>Closed</th><th>Closed by</th><th>Reason</th><th>Open for</th><th class="text-end">Transcript</th></tr></thead>
                     <tbody>
-                        <% data.modmailHistory.forEach(thread => { %>
+                        <% mmHistory.forEach(t => { %>
                             <tr>
-                                <td>
-                                    <div style="display: flex; align-items: center; gap: var(--spacing-3);">
-                                        <div style="width: 36px; height: 36px; border-radius: 50%; background: var(--color-dark-500); display: flex; align-items: center; justify-content: center; border: 2px solid var(--color-dark-400);">
-                                            <i class="fas fa-user" style="color: var(--color-text-muted); font-size: 0.875rem;"></i>
-                                        </div>
-                                        <div>
-                                            <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary);"><%= thread.user_tag || 'Unknown User' %></div>
-                                            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);"><%= thread.user_id %></div>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td>
-                                    <code style="background: var(--color-dark-500); padding: 4px 8px; border-radius: 4px; font-size: var(--font-size-xs); color: var(--color-accent-purple);">#<%= thread.id %></code>
-                                </td>
-                                <td>
-                                    <div style="font-size: var(--font-size-sm); color: var(--color-text-primary);">
-                                        <%= new Date(thread.closed_at).toLocaleDateString() %>
-                                    </div>
-                                    <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">
-                                        <%= new Date(thread.closed_at).toLocaleTimeString() %>
-                                    </div>
-                                </td>
-                                <td>
-                                    <div style="font-size: var(--font-size-sm); color: var(--color-text-primary);"><%= thread.closed_by_tag || 'Unknown' %></div>
-                                </td>
-                                <td>
-                                    <span class="badge badge-secondary"><%= thread.duration || 'Unknown' %></span>
-                                </td>
+                                <td><div class="mm-who"><%- include('_user-cell', { cfUser: null, cfUserId: t.user_id, cfUserName: t.user_tag || null }) %></div></td>
+                                <td><code class="mm-code">#<%= t.id %></code></td>
+                                <td><%= fmtDate(t.closed_at) %></td>
+                                <td><%= t.closed_by_tag || '—' %></td>
+                                <td><div class="mm-ellipsis"><%= t.close_reason || '—' %></div></td>
+                                <td><span class="badge badge-secondary"><%= t.duration || '—' %></span></td>
                                 <td class="text-end">
-                                    <button class="btn btn-sm btn-secondary view-transcript-btn"
-                                            data-thread-id="<%= thread.id %>"
-                                            title="View Transcript">
-                                        <i class="fas fa-file-alt"></i>
-                                        <span>Transcript</span>
-                                    </button>
+                                    <div style="display: flex; gap: var(--spacing-2); justify-content: flex-end;">
+                                        <button type="button" class="btn btn-sm btn-secondary mm-view" data-thread-id="<%= t.id %>" title="View transcript"><i class="fas fa-file-alt"></i></button>
+                                        <a class="btn btn-sm btn-secondary" href="/api/guilds/<%= guild.id %>/modmail/threads/<%= t.id %>/transcript?format=txt" title="Download .txt"><i class="fas fa-download"></i></a>
+                                    </div>
                                 </td>
                             </tr>
                         <% }); %>
@@ -377,632 +255,304 @@
             </div>
         <% } else { %>
             <div class="empty-state">
-                <div class="empty-state-icon">
-                    <i class="fas fa-history"></i>
-                </div>
-                <div class="empty-state-title">No Thread History</div>
-                <div class="empty-state-description">
-                    No closed threads to display
-                </div>
+                <div class="empty-state-icon"><i class="fas fa-history"></i></div>
+                <div class="empty-state-title">No closed conversations yet</div>
+                <div class="empty-state-description">Closed conversations and their transcripts appear here.</div>
             </div>
         <% } %>
     </div>
 
-    <!-- How It Works Info -->
-    <div style="background: linear-gradient(135deg, rgba(167, 139, 250, 0.1), rgba(167, 139, 250, 0.05)); border: 1px solid rgba(167, 139, 250, 0.3); border-radius: var(--radius-lg); padding: var(--spacing-4);">
-        <div style="display: flex; gap: var(--spacing-3);">
-            <i class="fas fa-lightbulb" style="color: var(--color-primary-400); font-size: 1.25rem; margin-top: 2px;"></i>
-            <div>
-                <div style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-2);">
-                    How the modmail system works
-                </div>
-                <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary); line-height: 1.6;">
-                    <strong style="color: var(--color-text-primary);">1.</strong> Users send a direct message to the bot<br>
-                    <strong style="color: var(--color-text-primary);">2.</strong> Bot creates a private thread channel in the configured category<br>
-                    <strong style="color: var(--color-text-primary);">3.</strong> Staff members can view and respond through the thread channel<br>
-                    <strong style="color: var(--color-text-primary);">4.</strong> All messages are relayed between the user's DM and the thread channel<br>
-                    <strong style="color: var(--color-text-primary);">5.</strong> Staff can close threads when the issue is resolved
-                </div>
-            </div>
+    <div class="mm-note">
+        <i class="fas fa-lightbulb"></i>
+        <div>
+            <strong>How it works.</strong>
+            A member DMs the bot → the bot asks which server's staff it is for → a private channel opens here and your staff role is pinged.
+            Everything staff write in that channel goes to the member's DMs (except messages starting with <code>//</code>); the member's replies come back to the channel.
+            <strong>Close</strong> saves the transcript, tells the member and deletes the channel; <strong>Block &amp; close</strong> also stops them opening new ones.
+            One open conversation per member.
         </div>
     </div>
 </div>
 
-<!-- Block User Modal -->
-<div class="modal fade" id="blockUserModal" tabindex="-1" aria-labelledby="blockUserModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="blockUserModalLabel">
-                    <i class="fas fa-user-slash"></i>
-                    Block User from Modmail
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <form id="blockUserForm">
-                <div class="modal-body">
-                    <div style="margin-bottom: var(--spacing-4);">
-                        <label class="form-label">User ID</label>
-                        <input type="text" class="form-control" id="blockUserId" name="user_id" placeholder="Enter user ID (e.g., 123456789012345678)" required>
-                        <div class="form-help">The Discord user ID of the user to block</div>
-                    </div>
-                    <div style="margin-bottom: var(--spacing-4);">
-                        <label class="form-label">Reason</label>
-                        <textarea class="form-control" id="blockReason" name="reason" rows="3" placeholder="Reason for blocking this user..." required></textarea>
-                        <div class="form-help">This will be logged for moderation records</div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-danger">
-                        <i class="fas fa-ban"></i>
-                        Block User
-                    </button>
-                </div>
-            </form>
+<!-- Block modal -->
+<div class="modal fade" id="mmBlockModal" tabindex="-1" aria-labelledby="mmBlockModalLabel" aria-hidden="true">
+    <div class="modal-dialog"><div class="modal-content">
+        <div class="modal-header">
+            <h5 class="modal-title" id="mmBlockModalLabel"><i class="fas fa-user-slash"></i> Block a user from modmail</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
-    </div>
-</div>
-
-<!-- Close Thread Modal -->
-<div class="modal fade" id="closeThreadModal" tabindex="-1" aria-labelledby="closeThreadModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="closeThreadModalLabel">
-                    <i class="fas fa-times-circle"></i>
-                    Close Modmail Thread
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <form id="closeThreadForm">
-                <input type="hidden" id="closeThreadId" name="thread_id">
-                <div class="modal-body">
-                    <div style="margin-bottom: var(--spacing-4);">
-                        <label class="form-label">Reason for Closing</label>
-                        <textarea class="form-control" id="closeReason" name="reason" rows="3" placeholder="Reason for closing this thread..." required></textarea>
-                        <div class="form-help">This will be sent to the user</div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-danger">
-                        <i class="fas fa-times"></i>
-                        Close Thread
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
-
-<!-- View Thread Modal -->
-<div class="modal fade" id="viewThreadModal" tabindex="-1" aria-labelledby="viewThreadModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="viewThreadModalLabel">
-                    <i class="fas fa-eye"></i>
-                    Thread Messages
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body" id="threadMessagesContainer" style="max-height: 500px; overflow-y: auto;">
-                <div style="display: flex; align-items: center; justify-content: center; padding: var(--spacing-6);">
-                    <div class="spinner-border" role="status">
-                        <span class="visually-hidden">Loading...</span>
-                    </div>
-                </div>
+        <form id="mmBlockForm">
+            <div class="modal-body">
+                <label class="mm-label" for="mmBlockUserId">User ID</label>
+                <input type="text" class="form-control" id="mmBlockUserId" inputmode="numeric" pattern="\d{15,25}" placeholder="123456789012345678" required>
+                <div class="mm-help">Right-click the user in Discord → Copy User ID. Any conversation they have open is closed.</div>
+                <label class="mm-label" for="mmBlockReason" style="margin-top: var(--spacing-4);">Reason (staff only)</label>
+                <textarea class="form-control" id="mmBlockReason" rows="3" maxlength="1000"></textarea>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-danger"><i class="fas fa-ban"></i> Block</button>
             </div>
-        </div>
-    </div>
+        </form>
+    </div></div>
 </div>
 
-<!-- View Transcript Modal -->
-<div class="modal fade" id="viewTranscriptModal" tabindex="-1" aria-labelledby="viewTranscriptModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title" id="viewTranscriptModalLabel">
-                    <i class="fas fa-file-alt"></i>
-                    Thread Transcript
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-            </div>
-            <div class="modal-body" id="transcriptContainer" style="max-height: 500px; overflow-y: auto;">
-                <div style="display: flex; align-items: center; justify-content: center; padding: var(--spacing-6);">
-                    <div class="spinner-border" role="status">
-                        <span class="visually-hidden">Loading...</span>
-                    </div>
-                </div>
+<!-- Close modal -->
+<div class="modal fade" id="mmCloseModal" tabindex="-1" aria-labelledby="mmCloseModalLabel" aria-hidden="true">
+    <div class="modal-dialog"><div class="modal-content">
+        <div class="modal-header">
+            <h5 class="modal-title" id="mmCloseModalLabel"><i class="fas fa-times-circle"></i> Close conversation</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <form id="mmCloseForm">
+            <input type="hidden" id="mmCloseThreadId">
+            <div class="modal-body">
+                <label class="mm-label" for="mmCloseReason">Reason (optional)</label>
+                <textarea class="form-control" id="mmCloseReason" rows="3" maxlength="1000"></textarea>
+                <div class="mm-help">Sent to the member with the closing message. The channel is deleted after the transcript is saved.</div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="btn btn-primary" id="downloadTranscriptBtn">
-                    <i class="fas fa-download"></i>
-                    Download Transcript
-                </button>
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" class="btn btn-danger"><i class="fas fa-times"></i> Close</button>
             </div>
+        </form>
+    </div></div>
+</div>
+
+<!-- Messages / transcript modal -->
+<div class="modal fade" id="mmViewModal" tabindex="-1" aria-labelledby="mmViewModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg"><div class="modal-content">
+        <div class="modal-header">
+            <h5 class="modal-title" id="mmViewModalLabel"><i class="fas fa-comments"></i> <span id="mmViewTitle">Conversation</span></h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
-    </div>
+        <div class="modal-body" id="mmViewBody" style="max-height: 520px; overflow-y: auto;"></div>
+        <div class="modal-footer">
+            <a class="btn btn-primary" id="mmViewDownload" href="#"><i class="fas fa-download"></i> Download .txt</a>
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        </div>
+    </div></div>
 </div>
 
 <script>
-document.addEventListener('DOMContentLoaded', () => {
-    const guildId = '<%= guild.id %>';
+(function () {
+    var root = document.getElementById('modmail-page');
+    if (!root) return;
+    var guildId = root.getAttribute('data-guild-id');
+    var api = '/api/guilds/' + guildId + '/modmail';
 
-    // Toast notification function
-    function showToast(message, type = 'success') {
-        const toast = document.createElement('div');
-        toast.className = `toast-notification toast-${type}`;
-        toast.style.cssText = 'position: fixed; top: 20px; right: 20px; padding: 16px 24px; background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 9999; display: flex; align-items: center; gap: 12px; min-width: 300px;';
-
-        const icon = type === 'success' ? 'check-circle' : type === 'error' ? 'exclamation-circle' : 'info-circle';
-        const iconColor = type === 'success' ? 'var(--color-success)' : type === 'error' ? 'var(--color-danger)' : 'var(--color-primary-400)';
-
-        toast.innerHTML = `
-            <i class="fas fa-${icon}" style="color: ${iconColor}; font-size: 1.25rem;"></i>
-            <span style="color: var(--color-text-primary); flex: 1;">${message}</span>
-        `;
-
-        document.body.appendChild(toast);
-
-        setTimeout(() => {
-            toast.style.transition = 'opacity 0.3s, transform 0.3s';
-            toast.style.opacity = '0';
-            toast.style.transform = 'translateX(100%)';
-            setTimeout(() => toast.remove(), 300);
-        }, 3000);
+    function toast(msg, type) {
+        if (typeof window.showToast === 'function') return window.showToast(msg, type);
+        if (type === 'error') console.error(msg); else console.log(msg);
     }
 
-    // Configuration form submission
-    const configForm = document.getElementById('modmail-config-form');
-    if (configForm) {
-        configForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-
-            const formData = new FormData(configForm);
-            const data = {
-                enabled: document.getElementById('modmailEnabled').checked,
-                category_id: formData.get('category_id'),
-                staff_role_id: formData.get('staff_role_id'),
-                greeting_message: formData.get('greeting_message'),
-                close_message: formData.get('close_message')
-            };
-
-            try {
-                const response = await fetch(`/api/manage/${guildId}/modmail/config`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data)
-                });
-
-                const result = await response.json();
-
-                if (response.ok) {
-                    showToast('Modmail configuration saved successfully!', 'success');
-                    setTimeout(() => location.reload(), 1500);
-                } else {
-                    showToast(result.error || 'Failed to save configuration', 'error');
-                }
-            } catch (error) {
-                console.error('Error saving config:', error);
-                showToast('An error occurred while saving configuration', 'error');
-            }
+    // DOM builder — message text is user content and must never be parsed as markup.
+    function el(tag, props, children) {
+        var node = document.createElement(tag);
+        Object.keys(props || {}).forEach(function (k) {
+            if (k === 'text') node.textContent = props[k];
+            else if (k === 'style') node.style.cssText = props[k];
+            else if (k === 'className') node.className = props[k];
+            else node.setAttribute(k, props[k]);
         });
+        (children || []).forEach(function (c) { if (c) node.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
+        return node;
     }
 
-    // Thread search functionality
-    const threadSearch = document.getElementById('threadSearch');
-    const threadsTableBody = document.getElementById('threadsTableBody');
+    function modal(id) {
+        var node = document.getElementById(id);
+        return (node && typeof bootstrap !== 'undefined') ? bootstrap.Modal.getOrCreateInstance(node) : null;
+    }
 
-    if (threadSearch && threadsTableBody) {
-        threadSearch.addEventListener('input', (e) => {
-            const query = e.target.value.toLowerCase();
-            const rows = threadsTableBody.querySelectorAll('.thread-row');
+    async function send(method, url, body) {
+        var res = await fetch(url, {
+            method: method,
+            headers: body ? { 'Content-Type': 'application/json' } : {},
+            body: body ? JSON.stringify(body) : undefined
+        });
+        var data = {};
+        try { data = await res.json(); } catch (e) { /* non-JSON error page */ }
+        if (!res.ok) throw new Error(data.error || ('Request failed (' + res.status + ')'));
+        return data;
+    }
 
-            rows.forEach(row => {
-                const userTag = row.dataset.userTag || '';
-                const threadId = row.dataset.threadId || '';
-
-                if (userTag.includes(query) || threadId.includes(query)) {
-                    row.style.display = '';
-                } else {
-                    row.style.display = 'none';
-                }
+    // Settings
+    var form = document.getElementById('modmail-config-form');
+    if (form) form.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        var btn = document.getElementById('mmSave');
+        btn.disabled = true;
+        try {
+            var data = await send('PUT', api + '/config', {
+                enabled: document.getElementById('mmEnabled').checked,
+                category_id: document.getElementById('mmCategory').value,
+                staff_role_id: document.getElementById('mmStaffRole').value,
+                log_channel_id: document.getElementById('mmLogChannel').value,
+                anonymous_replies: document.getElementById('mmAnonymous').checked,
+                greeting_message: document.getElementById('mmGreeting').value,
+                close_message: document.getElementById('mmClose').value
             });
-        });
-    }
+            toast(data.message || 'Saved', 'success');
+            setTimeout(function () { location.reload(); }, 900);
+        } catch (err) {
+            toast(err.message, 'error');
+        }
+        btn.disabled = false;
+    });
 
-    // Close thread buttons
-    const closeThreadBtns = document.querySelectorAll('.close-thread-btn');
-    const closeThreadModal = new bootstrap.Modal(document.getElementById('closeThreadModal'));
-    const closeThreadForm = document.getElementById('closeThreadForm');
-
-    closeThreadBtns.forEach(btn => {
-        btn.addEventListener('click', () => {
-            const threadId = btn.dataset.threadId;
-            document.getElementById('closeThreadId').value = threadId;
-            closeThreadModal.show();
+    // Filter open conversations
+    var search = document.getElementById('mmThreadSearch');
+    if (search) search.addEventListener('input', function () {
+        var q = search.value.trim().toLowerCase();
+        document.querySelectorAll('#mmThreadsBody .mm-thread-row').forEach(function (row) {
+            row.style.display = !q || (row.getAttribute('data-search') || '').indexOf(q) !== -1 ? '' : 'none';
         });
     });
 
-    if (closeThreadForm) {
-        closeThreadForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-
-            const threadId = document.getElementById('closeThreadId').value;
-            const reason = document.getElementById('closeReason').value;
-
-            try {
-                const response = await fetch(`/api/manage/${guildId}/modmail/close-thread`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ thread_id: threadId, reason })
-                });
-
-                const result = await response.json();
-
-                if (response.ok) {
-                    showToast('Thread closed successfully!', 'success');
-                    closeThreadModal.hide();
-                    setTimeout(() => location.reload(), 1500);
-                } else {
-                    showToast(result.error || 'Failed to close thread', 'error');
-                }
-            } catch (error) {
-                console.error('Error closing thread:', error);
-                showToast('An error occurred while closing thread', 'error');
-            }
+    // View messages / transcript
+    function renderMessages(container, thread, messages) {
+        container.replaceChildren();
+        var opened = thread && thread.created_at ? new Date(thread.created_at).toLocaleString() : '';
+        var closed = thread && thread.closed_at ? new Date(thread.closed_at).toLocaleString() : null;
+        container.appendChild(el('div', { className: 'mm-meta' }, [
+            el('div', { text: 'Opened ' + opened + (closed ? ' · Closed ' + closed : ' · still open') }),
+            thread && thread.close_reason ? el('div', { text: 'Reason: ' + thread.close_reason }) : null
+        ]));
+        if (!messages.length) {
+            container.appendChild(el('div', { className: 'mm-help', text: 'No messages.' }));
+            return;
+        }
+        messages.forEach(function (m) {
+            var kind = m.author_type === 'user' ? 'member' : m.author_type === 'system' ? 'system' : (m.is_internal ? 'note' : 'staff');
+            var who = kind === 'member' ? 'Member' : kind === 'system' ? 'System' : kind === 'note' ? 'Staff note' : 'Staff';
+            if (m.author_name && kind !== 'system') who += ' · ' + m.author_name;
+            if (m.is_anonymous) who += ' (sent anonymously)';
+            var attachments = (m.attachments || []).map(function (a) {
+                return el('div', {}, [el('a', { href: a.url, target: '_blank', rel: 'noopener noreferrer', text: '📎 ' + a.name })]);
+            });
+            container.appendChild(el('div', { className: 'mm-msg mm-msg-' + kind }, [
+                el('div', { className: 'mm-msg-head' }, [
+                    el('span', { className: 'mm-msg-who', text: who }),
+                    el('span', { className: 'mm-help', style: 'margin:0', text: new Date(m.timestamp).toLocaleString() })
+                ]),
+                el('div', { className: 'mm-msg-body', text: m.message_content || '(no text)' })
+            ].concat(attachments)));
         });
     }
 
-    // View thread buttons
-    const viewThreadBtns = document.querySelectorAll('.view-thread-btn');
-    const viewThreadModal = new bootstrap.Modal(document.getElementById('viewThreadModal'));
-
-    viewThreadBtns.forEach(btn => {
-        btn.addEventListener('click', async () => {
-            const threadId = btn.dataset.threadId;
-            const container = document.getElementById('threadMessagesContainer');
-
-            viewThreadModal.show();
-            container.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; padding: var(--spacing-6);"><div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div></div>';
-
+    document.querySelectorAll('.mm-view').forEach(function (btn) {
+        btn.addEventListener('click', async function () {
+            var id = btn.getAttribute('data-thread-id');
+            var body = document.getElementById('mmViewBody');
+            document.getElementById('mmViewTitle').textContent = 'Conversation #' + id;
+            document.getElementById('mmViewDownload').setAttribute('href', api + '/threads/' + id + '/transcript?format=txt');
+            body.replaceChildren(el('div', { className: 'mm-help', text: 'Loading…' }));
+            var m = modal('mmViewModal'); if (m) m.show();
             try {
-                const response = await fetch(`/api/manage/${guildId}/modmail/thread/${threadId}/messages`);
-                const result = await response.json();
-
-                if (response.ok && result.messages) {
-                    if (result.messages.length === 0) {
-                        container.innerHTML = '<div style="text-align: center; padding: var(--spacing-6); color: var(--color-text-muted);">No messages in this thread</div>';
-                    } else {
-                        container.innerHTML = result.messages.map(msg => `
-                            <div style="margin-bottom: var(--spacing-4); padding: var(--spacing-3); background: var(--color-dark-500); border-radius: var(--radius-md); border-left: 3px solid ${msg.author_type === 'user' ? 'var(--color-primary-500)' : 'var(--color-success)'};">
-                                <div style="display: flex; justify-content: space-between; margin-bottom: var(--spacing-2);">
-                                    <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary);">
-                                        <i class="fas fa-${msg.author_type === 'user' ? 'user' : 'shield-alt'}" style="margin-right: 6px;"></i>
-                                        ${msg.author_type === 'user' ? 'User' : 'Staff'}
-                                    </div>
-                                    <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">
-                                        ${new Date(msg.timestamp).toLocaleString()}
-                                    </div>
-                                </div>
-                                <div style="color: var(--color-text-secondary);">${msg.message_content || '<em>No content</em>'}</div>
-                                ${msg.attachments ? `<div style="margin-top: var(--spacing-2); font-size: var(--font-size-xs); color: var(--color-accent-blue);">📎 ${JSON.parse(msg.attachments).length} attachment(s)</div>` : ''}
-                            </div>
-                        `).join('');
-                    }
-                } else {
-                    container.innerHTML = '<div style="text-align: center; padding: var(--spacing-6); color: var(--color-danger);">Failed to load messages</div>';
-                }
-            } catch (error) {
-                console.error('Error loading messages:', error);
-                container.innerHTML = '<div style="text-align: center; padding: var(--spacing-6); color: var(--color-danger);">An error occurred</div>';
+                var data = await send('GET', api + '/threads/' + id + '/messages');
+                renderMessages(body, data.thread, data.messages || []);
+            } catch (err) {
+                body.replaceChildren(el('div', { className: 'mm-help', style: 'color: var(--color-danger)', text: err.message }));
             }
         });
     });
 
-    // View transcript buttons
-    const viewTranscriptBtns = document.querySelectorAll('.view-transcript-btn');
-    const viewTranscriptModal = new bootstrap.Modal(document.getElementById('viewTranscriptModal'));
-    let currentTranscriptThreadId = null;
+    // Close
+    document.querySelectorAll('.mm-close').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            document.getElementById('mmCloseThreadId').value = btn.getAttribute('data-thread-id');
+            document.getElementById('mmCloseReason').value = '';
+            var m = modal('mmCloseModal'); if (m) m.show();
+        });
+    });
+    var closeForm = document.getElementById('mmCloseForm');
+    if (closeForm) closeForm.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        var id = document.getElementById('mmCloseThreadId').value;
+        try {
+            var data = await send('POST', api + '/threads/' + id + '/close', { reason: document.getElementById('mmCloseReason').value });
+            toast(data.message || 'Closed', 'success');
+            var m = modal('mmCloseModal'); if (m) m.hide();
+            setTimeout(function () { location.reload(); }, 900);
+        } catch (err) {
+            toast(err.message, 'error');
+        }
+    });
 
-    viewTranscriptBtns.forEach(btn => {
-        btn.addEventListener('click', async () => {
-            const threadId = btn.dataset.threadId;
-            currentTranscriptThreadId = threadId;
-            const container = document.getElementById('transcriptContainer');
-
-            viewTranscriptModal.show();
-            container.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; padding: var(--spacing-6);"><div class="spinner-border" role="status"><span class="visually-hidden">Loading...</span></div></div>';
-
+    // Block / unblock
+    var blockBtn = document.getElementById('mmBlockBtn');
+    if (blockBtn) blockBtn.addEventListener('click', function () {
+        var m = modal('mmBlockModal'); if (m) m.show();
+    });
+    var blockForm = document.getElementById('mmBlockForm');
+    if (blockForm) blockForm.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        try {
+            var data = await send('POST', api + '/blocked', {
+                user_id: document.getElementById('mmBlockUserId').value.trim(),
+                reason: document.getElementById('mmBlockReason').value
+            });
+            toast(data.message || 'Blocked', 'success');
+            var m = modal('mmBlockModal'); if (m) m.hide();
+            setTimeout(function () { location.reload(); }, 900);
+        } catch (err) {
+            toast(err.message, 'error');
+        }
+    });
+    document.querySelectorAll('.mm-unblock').forEach(function (btn) {
+        btn.addEventListener('click', async function () {
+            if (!confirm('Unblock this user? They will be able to open modmail conversations again.')) return;
             try {
-                const response = await fetch(`/api/manage/${guildId}/modmail/thread/${threadId}/transcript`);
-                const result = await response.json();
-
-                if (response.ok && result.messages) {
-                    if (result.messages.length === 0) {
-                        container.innerHTML = '<div style="text-align: center; padding: var(--spacing-6); color: var(--color-text-muted);">No messages in this thread</div>';
-                    } else {
-                        container.innerHTML = `
-                            <div style="background: var(--color-dark-500); padding: var(--spacing-4); border-radius: var(--radius-md); margin-bottom: var(--spacing-4);">
-                                <div style="font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-2);">Thread #${threadId}</div>
-                                <div style="font-size: var(--font-size-sm); color: var(--color-text-muted);">
-                                    Created: ${new Date(result.thread_info.created_at).toLocaleString()}<br>
-                                    Closed: ${new Date(result.thread_info.closed_at).toLocaleString()}
-                                </div>
-                            </div>
-                            ${result.messages.map(msg => `
-                                <div style="margin-bottom: var(--spacing-4); padding: var(--spacing-3); background: var(--color-dark-500); border-radius: var(--radius-md); border-left: 3px solid ${msg.author_type === 'user' ? 'var(--color-primary-500)' : 'var(--color-success)'};">
-                                    <div style="display: flex; justify-content: space-between; margin-bottom: var(--spacing-2);">
-                                        <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary);">
-                                            <i class="fas fa-${msg.author_type === 'user' ? 'user' : 'shield-alt'}" style="margin-right: 6px;"></i>
-                                            ${msg.author_type === 'user' ? 'User' : 'Staff'}
-                                        </div>
-                                        <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">
-                                            ${new Date(msg.timestamp).toLocaleString()}
-                                        </div>
-                                    </div>
-                                    <div style="color: var(--color-text-secondary);">${msg.message_content || '<em>No content</em>'}</div>
-                                    ${msg.attachments ? `<div style="margin-top: var(--spacing-2); font-size: var(--font-size-xs); color: var(--color-accent-blue);">📎 ${JSON.parse(msg.attachments).length} attachment(s)</div>` : ''}
-                                </div>
-                            `).join('')}
-                        `;
-                    }
-                } else {
-                    container.innerHTML = '<div style="text-align: center; padding: var(--spacing-6); color: var(--color-danger);">Failed to load transcript</div>';
-                }
-            } catch (error) {
-                console.error('Error loading transcript:', error);
-                container.innerHTML = '<div style="text-align: center; padding: var(--spacing-6); color: var(--color-danger);">An error occurred</div>';
+                var data = await send('DELETE', api + '/blocked/' + encodeURIComponent(btn.getAttribute('data-user-id')));
+                toast(data.message || 'Unblocked', 'success');
+                setTimeout(function () { location.reload(); }, 900);
+            } catch (err) {
+                toast(err.message, 'error');
             }
         });
     });
-
-    // Download transcript
-    const downloadTranscriptBtn = document.getElementById('downloadTranscriptBtn');
-    if (downloadTranscriptBtn) {
-        downloadTranscriptBtn.addEventListener('click', async () => {
-            if (!currentTranscriptThreadId) return;
-
-            try {
-                const response = await fetch(`/api/manage/${guildId}/modmail/thread/${currentTranscriptThreadId}/transcript?format=txt`);
-                const blob = await response.blob();
-
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `modmail-thread-${currentTranscriptThreadId}.txt`;
-                document.body.appendChild(a);
-                a.click();
-                window.URL.revokeObjectURL(url);
-                document.body.removeChild(a);
-
-                showToast('Transcript downloaded successfully!', 'success');
-            } catch (error) {
-                console.error('Error downloading transcript:', error);
-                showToast('Failed to download transcript', 'error');
-            }
-        });
-    }
-
-    // Block user modal
-    const blockUserBtn = document.getElementById('blockUserBtn');
-    const blockUserModal = new bootstrap.Modal(document.getElementById('blockUserModal'));
-    const blockUserForm = document.getElementById('blockUserForm');
-
-    if (blockUserBtn) {
-        blockUserBtn.addEventListener('click', () => {
-            blockUserModal.show();
-        });
-    }
-
-    if (blockUserForm) {
-        blockUserForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-
-            const userId = document.getElementById('blockUserId').value;
-            const reason = document.getElementById('blockReason').value;
-
-            try {
-                const response = await fetch(`/api/manage/${guildId}/modmail/block-user`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ user_id: userId, reason })
-                });
-
-                const result = await response.json();
-
-                if (response.ok) {
-                    showToast('User blocked successfully!', 'success');
-                    blockUserModal.hide();
-                    blockUserForm.reset();
-                    setTimeout(() => location.reload(), 1500);
-                } else {
-                    showToast(result.error || 'Failed to block user', 'error');
-                }
-            } catch (error) {
-                console.error('Error blocking user:', error);
-                showToast('An error occurred while blocking user', 'error');
-            }
-        });
-    }
-
-    // Unblock user buttons
-    const unblockUserBtns = document.querySelectorAll('.unblock-user-btn');
-
-    unblockUserBtns.forEach(btn => {
-        btn.addEventListener('click', async () => {
-            const userId = btn.dataset.userId;
-            const blockId = btn.dataset.blockId;
-
-            if (!confirm('Are you sure you want to unblock this user?')) return;
-
-            try {
-                const response = await fetch(`/api/manage/${guildId}/modmail/unblock-user`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ user_id: userId, block_id: blockId })
-                });
-
-                const result = await response.json();
-
-                if (response.ok) {
-                    showToast('User unblocked successfully!', 'success');
-                    setTimeout(() => location.reload(), 1500);
-                } else {
-                    showToast(result.error || 'Failed to unblock user', 'error');
-                }
-            } catch (error) {
-                console.error('Error unblocking user:', error);
-                showToast('An error occurred while unblocking user', 'error');
-            }
-        });
-    });
-});
+})();
 </script>
 
 <style>
-.form-label {
-    display: block;
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-primary);
-    margin-bottom: var(--spacing-2);
-}
-
-.form-help {
-    font-size: var(--font-size-xs);
-    color: var(--color-text-muted);
-    margin-top: var(--spacing-2);
-}
-
-.table-container {
-    overflow-x: auto;
-    border: 1px solid var(--color-dark-400);
-    border-radius: var(--radius-lg);
-}
-
-.data-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-.data-table thead {
-    background: var(--color-dark-600);
-    border-bottom: 2px solid var(--color-dark-400);
-}
-
-.data-table th {
-    padding: var(--spacing-4);
-    text-align: left;
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-
-.data-table th.text-end {
-    text-align: right;
-}
-
-.data-table td {
-    padding: var(--spacing-4);
-    border-bottom: 1px solid var(--color-dark-400);
-    color: var(--color-text-secondary);
-    font-size: var(--font-size-sm);
-}
-
-.data-table td.text-end {
-    text-align: right;
-}
-
-.data-table tbody tr:last-child td {
-    border-bottom: none;
-}
-
-.data-table tbody tr:hover {
-    background: rgba(255, 255, 255, 0.02);
-}
-
-.empty-state {
-    text-align: center;
-    padding: var(--spacing-12) var(--spacing-6);
-}
-
-.empty-state-icon {
-    font-size: 3rem;
-    color: var(--color-text-muted);
-    margin-bottom: var(--spacing-4);
-}
-
-.empty-state-title {
-    font-size: var(--font-size-xl);
-    font-weight: var(--font-weight-bold);
-    color: var(--color-text-primary);
-    margin-bottom: var(--spacing-2);
-}
-
-.empty-state-description {
-    font-size: var(--font-size-sm);
-    color: var(--color-text-muted);
-    margin-bottom: var(--spacing-6);
-}
-
-.badge {
-    display: inline-flex;
-    align-items: center;
-    padding: 4px 10px;
-    border-radius: 12px;
-    font-size: var(--font-size-xs);
-    font-weight: var(--font-weight-semibold);
-    white-space: nowrap;
-}
-
-.badge-primary {
-    background: rgba(167, 139, 250, 0.15);
-    color: var(--color-primary-400);
-    border: 1px solid rgba(167, 139, 250, 0.3);
-}
-
-.badge-success {
-    background: rgba(34, 197, 94, 0.15);
-    color: var(--color-success);
-    border: 1px solid rgba(34, 197, 94, 0.3);
-}
-
-.badge-danger {
-    background: rgba(239, 68, 68, 0.15);
-    color: var(--color-danger);
-    border: 1px solid rgba(239, 68, 68, 0.3);
-}
-
-.badge-secondary {
-    background: rgba(107, 114, 128, 0.15);
-    color: var(--color-text-muted);
-    border: 1px solid rgba(107, 114, 128, 0.3);
-}
-
-.input-group {
-    position: relative;
-    display: flex;
-    align-items: center;
-}
-
-.input-group-icon {
-    position: absolute;
-    left: 16px;
-    color: var(--color-text-muted);
-    pointer-events: none;
-    z-index: 1;
-}
-
-.input-group .form-control {
-    padding-left: 44px;
-}
+#modmail-page .mm-card { background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6); margin-bottom: var(--spacing-6); }
+#modmail-page .mm-card-head { display: flex; align-items: center; gap: var(--spacing-3); margin-bottom: var(--spacing-4); }
+#modmail-page .mm-icon { width: 48px; height: 48px; border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; flex-shrink: 0; color: var(--text-primary); font-size: 1.25rem; }
+#modmail-page .mm-title { margin: 0; font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); }
+#modmail-page .mm-sub { margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted); }
+#modmail-page .mm-label { display: block; font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-2); }
+#modmail-page .mm-help, #mmBlockModal .mm-help, #mmCloseModal .mm-help, #mmViewModal .mm-help { display: block; font-size: var(--font-size-xs); color: var(--color-text-muted); margin-top: var(--spacing-2); }
+#modmail-page .mm-switch-row { display: flex; gap: var(--spacing-3); align-items: flex-start; padding: var(--spacing-3) var(--spacing-4); background: var(--color-dark-700, var(--cf-inset)); border-radius: var(--radius-md); margin-bottom: var(--spacing-4); cursor: pointer; }
+#modmail-page .mm-switch-row input { width: 18px; height: 18px; margin-top: 3px; flex-shrink: 0; }
+#modmail-page .mm-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: var(--spacing-4); margin-bottom: var(--spacing-4); }
+#modmail-page .mm-note { display: flex; gap: var(--spacing-3); font-size: var(--font-size-sm); color: var(--color-text-secondary); line-height: 1.6; background: var(--bg-card-hover); border: 1px solid var(--border-color); border-radius: var(--radius-lg); padding: var(--spacing-4); margin-bottom: var(--spacing-4); }
+#modmail-page .mm-note-ok { background: color-mix(in srgb, var(--cf-success) 8%, transparent); border-color: color-mix(in srgb, var(--cf-success) 30%, transparent); }
+#modmail-page .mm-stat { background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400); }
+#modmail-page .mm-stat-label { font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1); }
+#modmail-page .mm-stat-value { font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary); }
+#modmail-page .mm-who { font-weight: var(--font-weight-semibold); color: var(--color-text-primary); }
+#modmail-page .mm-code { background: var(--color-dark-500); padding: 3px 8px; border-radius: 4px; font-size: var(--font-size-xs); color: var(--cf-info-ink); }
+#modmail-page .mm-ellipsis { max-width: 280px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#modmail-page .table-container { overflow-x: auto; border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); }
+#modmail-page .data-table { width: 100%; border-collapse: collapse; }
+#modmail-page .data-table th { padding: var(--spacing-3) var(--spacing-4); text-align: left; font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); color: var(--color-text-muted); text-transform: uppercase; letter-spacing: .05em; border-bottom: 2px solid var(--color-dark-400); }
+#modmail-page .data-table td { padding: var(--spacing-3) var(--spacing-4); border-bottom: 1px solid var(--color-dark-400); color: var(--color-text-secondary); font-size: var(--font-size-sm); vertical-align: middle; }
+#modmail-page .data-table .text-end { text-align: right; }
+#modmail-page .data-table tbody tr:last-child td { border-bottom: none; }
+#modmail-page .empty-state { text-align: center; padding: var(--spacing-8) var(--spacing-6); }
+#modmail-page .empty-state-icon { font-size: 2.5rem; color: var(--color-text-muted); margin-bottom: var(--spacing-3); }
+#modmail-page .empty-state-title { font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-2); }
+#modmail-page .empty-state-description { font-size: var(--font-size-sm); color: var(--color-text-muted); }
+#modmail-page .badge { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 12px; font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); white-space: nowrap; }
+#modmail-page .badge-primary { background: var(--bg-card-hover); color: var(--color-primary-400); border: 1px solid var(--border-color); }
+#modmail-page .badge-danger { background: color-mix(in srgb, var(--cf-danger) 15%, transparent); color: var(--cf-danger-ink); border: 1px solid color-mix(in srgb, var(--cf-danger) 30%, transparent); }
+#modmail-page .badge-secondary { background: var(--cf-veil-2); color: var(--color-text-muted); border: 1px solid var(--cf-border-strong); }
+#mmViewModal .mm-meta { font-size: var(--font-size-sm); color: var(--color-text-muted); margin-bottom: var(--spacing-4); }
+#mmViewModal .mm-msg { margin-bottom: var(--spacing-3); padding: var(--spacing-3); background: var(--color-dark-500, var(--bg-card-hover)); border-radius: var(--radius-md); border-left: 3px solid var(--color-success); }
+#mmViewModal .mm-msg-member { border-left-color: var(--color-primary-500); }
+#mmViewModal .mm-msg-note { border-left-color: var(--cf-warning); opacity: .9; }
+#mmViewModal .mm-msg-system { border-left-color: var(--color-text-muted); font-style: italic; }
+#mmViewModal .mm-msg-head { display: flex; justify-content: space-between; gap: var(--spacing-3); margin-bottom: var(--spacing-2); }
+#mmViewModal .mm-msg-who { font-weight: var(--font-weight-semibold); color: var(--color-text-primary); }
+#mmViewModal .mm-msg-body { color: var(--color-text-secondary); white-space: pre-wrap; word-break: break-word; }
 </style>

@@ -1,326 +1,123 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><%= title %></title>
-    <meta name="theme-color" content="#a78bfa">
-    <link rel="icon" type="image/png" href="/images/CertiFried.png">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/css/tokes-bot.css">
+<%
+    const _guild = (typeof guild !== 'undefined' && guild) ? guild : null;
+    const _users = (typeof users !== 'undefined' && Array.isArray(users)) ? users : [];
+    const _pg = (typeof pagination !== 'undefined' && pagination) ? pagination : null;
+    const _err = (typeof error !== 'undefined' && error) ? error : null;
+    const _title = _guild ? _guild.name + ' leaderboard · CertiFried' : 'Leaderboard not found · CertiFried';
+%>
+<%- include('partials/site-head', { title: _title, description: _guild ? 'Level and XP leaderboard for the ' + _guild.name + ' Discord server.' : 'Server level leaderboard.', path: _guild ? '/lb/' + _guild.id : null, noindex: !_guild }) %>
     <style>
-        .rank-badge {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            font-weight: 700;
-            font-size: 0.85rem;
-            flex-shrink: 0;
-        }
-        .rank-1 { background: linear-gradient(135deg, #FFD700, #FFA500); color: #000; }
-        .rank-2 { background: linear-gradient(135deg, #C0C0C0, #A0A0A0); color: #000; }
-        .rank-3 { background: linear-gradient(135deg, #CD7F32, #8B4513); color: #fff; }
-        .rank-default { background: var(--ember-bg-elevated); color: var(--ember-text-muted); }
-
-        .guild-header {
-            display: flex;
-            align-items: center;
-            gap: 1.25rem;
-            margin-bottom: 0.5rem;
-        }
-        .guild-icon {
-            width: 64px;
-            height: 64px;
-            border-radius: 16px;
-            object-fit: cover;
-        }
-        .guild-meta {
-            color: var(--ember-text-muted);
-            font-size: 0.9rem;
-        }
-
-        .user-cell {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-        }
-        .user-avatar {
-            width: 36px;
-            height: 36px;
-            border-radius: 50%;
-            object-fit: cover;
-            flex-shrink: 0;
-        }
-        .user-info {
-            display: flex;
-            flex-direction: column;
-            min-width: 0;
-        }
-        .user-display-name {
-            font-weight: 600;
-            color: var(--ember-text-primary);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        .user-username {
-            font-size: 0.75rem;
-            color: var(--ember-text-muted);
-        }
-
-        .xp-bar-container {
-            width: 100%;
-            max-width: 120px;
-            height: 8px;
-            background: var(--ember-bg-elevated);
-            border-radius: 4px;
-            overflow: hidden;
-            display: inline-block;
-            vertical-align: middle;
-        }
-        .xp-bar-fill {
-            height: 100%;
-            background: linear-gradient(90deg, var(--ember-primary), var(--ember-secondary, #8b5cf6));
-            border-radius: 4px;
-            transition: width 0.3s ease;
-        }
-        .xp-text {
-            font-size: 0.8rem;
-            color: var(--ember-text-muted);
-            margin-top: 2px;
-        }
-
-        .level-badge {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.25rem;
-            padding: 0.25rem 0.6rem;
-            background: var(--ember-bg-elevated);
-            border-radius: 6px;
-            font-weight: 700;
-            font-size: 0.9rem;
-            color: var(--ember-primary);
-        }
-
-        .total-xp {
-            font-weight: 600;
-            color: var(--ember-text-primary);
-        }
-
-        .pagination {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.5rem;
-            margin-top: 1.5rem;
-            flex-wrap: wrap;
-        }
-        .pagination a, .pagination span {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            min-width: 36px;
-            height: 36px;
-            padding: 0 0.5rem;
-            border-radius: 8px;
-            text-decoration: none;
-            font-weight: 500;
-            font-size: 0.875rem;
-            transition: all 0.2s;
-        }
-        .pagination a {
-            background: var(--ember-bg-card);
-            color: var(--ember-text-primary);
-            border: 1px solid var(--ember-border);
-        }
-        .pagination a:hover {
-            background: var(--ember-bg-elevated);
-            border-color: var(--ember-primary);
-        }
-        .pagination .current {
-            background: var(--ember-primary);
-            color: white;
-            border: 1px solid var(--ember-primary);
-        }
-        .pagination .disabled {
-            opacity: 0.4;
-            pointer-events: none;
-        }
-
-        .error-card {
-            text-align: center;
-            padding: 3rem 1.5rem;
-            color: var(--ember-text-muted);
-        }
-        .error-card h2 {
-            color: var(--ember-text-primary);
-            margin-bottom: 0.5rem;
-        }
-
-        /* Mobile responsive */
-        @media (max-width: 640px) {
-            .guild-icon { width: 48px; height: 48px; border-radius: 12px; }
-            .ember-dashboard-title { font-size: 1.25rem; }
-            .user-avatar { width: 28px; height: 28px; }
-            .xp-bar-container { max-width: 80px; }
-            .hide-mobile { display: none; }
-            .ember-table th, .ember-table td { padding: 0.5rem; font-size: 0.8rem; }
-            .rank-badge { width: 26px; height: 26px; font-size: 0.75rem; }
-        }
+        .lb-guild { display: flex; align-items: center; gap: var(--cf-4); }
+        .lb-guild h1 { margin: 0; }
+        .lb-guild .cfs-meta { margin-top: 4px; }
+        .lb-who { min-width: 0; }
+        .lb .lb-rank-col { width: 56px; }
+        .lb-guild img { width: 56px; height: 56px; border-radius: 14px; flex: none; background: var(--cf-surface-2); }
+        .lb-table-wrap { position: relative; overflow-x: auto; background: var(--cf-surface); border: 1px solid var(--cf-border); border-radius: var(--cf-radius-lg); }
+        .lb { width: 100%; border-collapse: collapse; font-size: var(--cf-text-sm); }
+        .lb th { padding: 9px 14px; font-size: var(--cf-text-xs); font-weight: 500; color: var(--cf-text-3); text-align: left; border-bottom: 1px solid var(--cf-border); white-space: nowrap; }
+        .lb td { padding: 10px 14px; border-bottom: 1px solid var(--cf-border); vertical-align: middle; }
+        .lb tbody tr:last-child td { border-bottom: 0; }
+        .lb .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .lb-rank { display: inline-flex; align-items: center; justify-content: center; min-width: 28px; height: 28px; padding: 0 6px; border-radius: 999px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--cf-text-2); background: var(--cf-surface-2); }
+        .lb-rank.top { color: var(--cf-on-accent); background: var(--cf-accent); }
+        .lb-member { display: flex; align-items: center; gap: var(--cf-3); min-width: 0; }
+        .lb-member img { width: 32px; height: 32px; border-radius: 50%; flex: none; }
+        .lb-name { display: block; font-weight: 500; color: var(--cf-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 28ch; }
+        .lb-handle { display: block; font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+        .lb-bar { width: 120px; height: 6px; margin-left: auto; border-radius: 999px; background: var(--cf-surface-3); overflow: hidden; }
+        .lb-bar span { display: block; height: 100%; background: var(--cf-accent); }
+        .lb-sub { font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+        .lb-pager { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px; margin-top: var(--cf-5); }
+        .lb-pager a, .lb-pager span { min-width: 40px; height: 40px; padding: 0 10px; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--cf-radius); font-size: var(--cf-text-sm); text-decoration: none; color: var(--cf-text-2); border: 1px solid var(--cf-border); background: var(--cf-surface); }
+        .lb-pager a:hover { color: var(--cf-text); border-color: var(--cf-border-strong); }
+        .lb-pager [aria-current="page"] { color: var(--cf-on-accent); background: var(--cf-accent); border-color: var(--cf-accent); font-weight: 600; }
+        .lb-pager .gap { border: 0; background: none; min-width: 0; padding: 0 4px; }
+        .lb-count { margin-top: var(--cf-3); text-align: center; font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+        @media (max-width: 640px) { .lb .hide-sm { display: none; } .lb-name { max-width: 16ch; } .lb td, .lb th { padding-left: 10px; padding-right: 10px; } }
     </style>
 </head>
-<body class="ember-page">
-    <!-- Navigation -->
-    <nav class="ember-nav">
-        <div class="ember-container ember-nav-inner">
-            <a href="/" class="ember-nav-brand">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
-                    <path d="M12 6v6l4 2"/>
-                </svg>
-                CertiFriedUtility
-            </a>
-        </div>
-    </nav>
-
-    <main class="ember-dashboard">
-        <div class="ember-container">
-            <% if (error && !guild) { %>
-                <!-- Full-page error -->
-                <div class="ember-card error-card">
-                    <h2>Leaderboard Not Found</h2>
-                    <p><%= error %></p>
+<body class="cfs-body">
+<%- include('partials/site-header', { active: '', user: locals.user || null, returnTo: _guild ? '/lb/' + _guild.id : '/' }) %>
+    <main id="main-content" tabindex="-1" class="cfs-main">
+        <% if (!_guild) { %>
+            <div class="cfs-rows"><div class="cfs-empty">
+                <h1 class="cfs-h2">Leaderboard not found</h1>
+                <p><%= _err || 'This server could not be found.' %></p>
+            </div></div>
+        <% } else { %>
+            <div class="cfs-pagehead">
+                <div class="lb-guild">
+                    <img src="<%= _guild.icon ? 'https://cdn.discordapp.com/icons/' + _guild.id + '/' + _guild.icon + '.png?size=128' : 'https://cdn.discordapp.com/embed/avatars/0.png' %>" alt="" width="56" height="56">
+                    <div>
+                        <span class="cfs-eyebrow">Level leaderboard</span>
+                        <h1><%= _guild.name %></h1>
+                        <p class="cfs-meta"><%= Number(_guild.memberCount || 0).toLocaleString('en-US') %> members</p>
+                    </div>
                 </div>
-            <% } else if (guild) { %>
-                <!-- Guild Header -->
-                <div class="ember-dashboard-header">
-                    <div class="guild-header">
-                        <img src="<%= guild.icon ? `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png?size=128` : 'https://cdn.discordapp.com/embed/avatars/0.png' %>"
-                             alt="<%= guild.name %>"
-                             class="guild-icon">
-                        <div>
-                            <h1 class="ember-dashboard-title"><%= guild.name %></h1>
-                            <p class="guild-meta"><%= guild.memberCount %> members</p>
-                        </div>
-                    </div>
-                    <p class="ember-dashboard-subtitle">Server Leaderboard</p>
+            </div>
+
+            <% if (_err) { %>
+                <div class="cfs-rows"><div class="cfs-empty"><p><%= _err %></p></div></div>
+            <% } else if (!_users.length) { %>
+                <div class="cfs-rows"><div class="cfs-empty"><h2>No one is ranked yet</h2><p>Members earn XP by chatting in the server.</p></div></div>
+            <% } else { %>
+                <div class="lb-table-wrap">
+                    <table class="lb">
+                        <thead>
+                            <tr>
+                                <th scope="col" class="lb-rank-col">Rank</th>
+                                <th scope="col">Member</th>
+                                <th scope="col" class="num">Level</th>
+                                <th scope="col" class="num hide-sm">Progress to next level</th>
+                                <th scope="col" class="num">Total XP</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <% _users.forEach(function (u) { %>
+                            <tr>
+                                <td><span class="lb-rank<%= u.rank <= 3 ? ' top' : '' %>"><%= u.rank %></span></td>
+                                <td>
+                                    <div class="lb-member">
+                                        <img src="<%= u.avatarURL %>" alt="" width="32" height="32" loading="lazy" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
+                                        <span class="lb-who">
+                                            <span class="lb-name"><%= u.displayName %></span>
+                                            <% if (u.username && u.username !== u.displayName) { %><span class="lb-handle">@<%= u.username %></span><% } %>
+                                        </span>
+                                    </div>
+                                </td>
+                                <td class="num"><%= u.level %></td>
+                                <td class="num hide-sm">
+                                    <div class="lb-bar" role="img" aria-label="<%= u.xpProgress %>% of the way to level <%= u.level + 1 %>"><span style="width: <%= Math.max(0, Math.min(100, Number(u.xpProgress) || 0)) %>%"></span></div>
+                                    <div class="lb-sub"><%= Number(u.xp).toLocaleString('en-US') %> / <%= Number(u.xpForNext).toLocaleString('en-US') %></div>
+                                </td>
+                                <td class="num"><%= Number(u.totalXP).toLocaleString('en-US') %></td>
+                            </tr>
+                            <% }) %>
+                        </tbody>
+                    </table>
                 </div>
 
-                <% if (error) { %>
-                    <!-- Leveling disabled message -->
-                    <div class="ember-card error-card">
-                        <p><%= error %></p>
-                    </div>
-                <% } else if (users.length === 0) { %>
-                    <!-- Empty state -->
-                    <div class="ember-card error-card">
-                        <h2>No Rankings Yet</h2>
-                        <p>Start chatting to earn XP and climb the leaderboard!</p>
-                    </div>
-                <% } else { %>
-                    <!-- Leaderboard Table -->
-                    <div class="ember-card">
-                        <table class="ember-table">
-                            <thead>
-                                <tr>
-                                    <th style="width: 50px;">Rank</th>
-                                    <th>Member</th>
-                                    <th style="text-align: center;">Level</th>
-                                    <th style="text-align: right;" class="hide-mobile">XP Progress</th>
-                                    <th style="text-align: right;">Total XP</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <% users.forEach(user => { %>
-                                    <tr>
-                                        <td>
-                                            <span class="rank-badge <%= user.rank <= 3 ? 'rank-' + user.rank : 'rank-default' %>">
-                                                <%= user.rank %>
-                                            </span>
-                                        </td>
-                                        <td>
-                                            <div class="user-cell">
-                                                <img src="<%= user.avatarURL %>"
-                                                     alt=""
-                                                     class="user-avatar"
-                                                     loading="lazy"
-                                                     onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
-                                                <div class="user-info">
-                                                    <span class="user-display-name"><%= user.displayName %></span>
-                                                    <% if (user.username && user.username !== user.displayName) { %>
-                                                        <span class="user-username">@<%= user.username %></span>
-                                                    <% } %>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td style="text-align: center;">
-                                            <span class="level-badge">
-                                                Lv. <%= user.level %>
-                                            </span>
-                                        </td>
-                                        <td style="text-align: right;" class="hide-mobile">
-                                            <div class="xp-bar-container">
-                                                <div class="xp-bar-fill" style="width: <%= user.xpProgress %>%"></div>
-                                            </div>
-                                            <div class="xp-text">
-                                                <%= user.xp.toLocaleString() %> / <%= user.xpForNext.toLocaleString() %>
-                                            </div>
-                                        </td>
-                                        <td style="text-align: right;">
-                                            <span class="total-xp"><%= user.totalXP.toLocaleString() %></span>
-                                        </td>
-                                    </tr>
-                                <% }) %>
-                            </tbody>
-                        </table>
-                    </div>
-
-                    <% if (pagination && pagination.totalPages > 1) { %>
-                        <!-- Pagination -->
-                        <div class="pagination">
-                            <a href="/lb/<%= guild.id %>?page=<%= pagination.page - 1 %>"
-                               class="<%= pagination.page <= 1 ? 'disabled' : '' %>">
-                                &laquo; Prev
-                            </a>
-
-                            <% for (let p = 1; p <= pagination.totalPages; p++) { %>
-                                <% if (p === pagination.page) { %>
-                                    <span class="current"><%= p %></span>
-                                <% } else if (Math.abs(p - pagination.page) <= 2 || p === 1 || p === pagination.totalPages) { %>
-                                    <a href="/lb/<%= guild.id %>?page=<%= p %>"><%= p %></a>
-                                <% } else if (Math.abs(p - pagination.page) === 3) { %>
-                                    <span style="color: var(--ember-text-muted);">...</span>
-                                <% } %>
-                            <% } %>
-
-                            <a href="/lb/<%= guild.id %>?page=<%= pagination.page + 1 %>"
-                               class="<%= pagination.page >= pagination.totalPages ? 'disabled' : '' %>">
-                                Next &raquo;
-                            </a>
-                        </div>
+                <% if (_pg && _pg.totalPages > 1) { const base = '/lb/' + _guild.id + '?page='; %>
+                <nav class="lb-pager" aria-label="Pages">
+                    <% if (_pg.page > 1) { %><a href="<%= base + (_pg.page - 1) %>" rel="prev">Previous</a><% } %>
+                    <% for (let p = 1; p <= _pg.totalPages; p++) { %>
+                        <% if (p === _pg.page) { %><span aria-current="page"><%= p %></span>
+                        <% } else if (Math.abs(p - _pg.page) <= 2 || p === 1 || p === _pg.totalPages) { %><a href="<%= base + p %>"><%= p %></a>
+                        <% } else if (Math.abs(p - _pg.page) === 3) { %><span class="gap" aria-hidden="true">&hellip;</span><% } %>
                     <% } %>
-
-                    <% if (pagination) { %>
-                        <p style="text-align: center; color: var(--ember-text-muted); margin-top: 0.75rem; font-size: 0.85rem;">
-                            Showing <%= (pagination.page - 1) * pagination.limit + 1 %>-<%= Math.min(pagination.page * pagination.limit, pagination.total) %> of <%= pagination.total %> ranked members
-                        </p>
-                    <% } %>
+                    <% if (_pg.page < _pg.totalPages) { %><a href="<%= base + (_pg.page + 1) %>" rel="next">Next</a><% } %>
+                </nav>
+                <% } %>
+                <% if (_pg) { %>
+                <p class="lb-count">Showing <%= (_pg.page - 1) * _pg.limit + 1 %>&ndash;<%= Math.min(_pg.page * _pg.limit, _pg.total) %> of <%= Number(_pg.total).toLocaleString('en-US') %> ranked members. Members who used <code class="cfs-code">/privacy opt-out</code> are not shown.</p>
                 <% } %>
             <% } %>
-        </div>
+        <% } %>
     </main>
-
-    <!-- Footer -->
-    <footer class="ember-footer">
-        <div class="ember-container ember-footer-inner">
-            <div class="ember-footer-copy">
-                Powered by <a href="/" style="color: var(--ember-primary); text-decoration: none;">CertiFriedUtility</a>
-            </div>
-        </div>
-    </footer>
+<%- include('partials/site-footer') %>
 </body>
 </html>

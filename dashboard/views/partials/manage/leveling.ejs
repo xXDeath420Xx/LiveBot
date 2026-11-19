@@ -1,549 +1,794 @@
+<%#
+  Leveling: one settings form (POST update-leveling, saved by core/leveling-settings.js) grouped
+  into folding sections: the level-up announcement (with a live preview and "Send a test", POST
+  /api/guilds/:id/leveling-admin/test-message), role rewards (the list posts to add-/remove-role-
+  reward through two small forms after the main one, so the reward list can sit with its rules),
+  XP rate, boosts, no-XP channels and roles, and the periodic reset. Below the form, two
+  script-driven panels on /api/guilds/:id/leveling-admin: XP events and member XP.
+  Built on the settings-row kit (cf-settings.css); field names and ids from before are unchanged.
+%>
+<%
+const lv = settings || {};
+const lc = lv.leveling_config || {};
+const lvParse = (v) => { if (Array.isArray(v)) return v; try { const p = JSON.parse(v || '[]'); return Array.isArray(p) ? p : []; } catch (e) { return []; } };
+const lvMode = ['dm', 'off'].includes(lc.level_up_mode) ? lc.level_up_mode : 'channel';
+const lvBoostRoles = lvParse(lc.xp_boost_roles);
+const lvBoostChannels = lvParse(lc.xp_boost_channels);
+const lvOn = (v, dflt) => (v === undefined || v === null ? dflt : (v === true || Number(v) === 1));
+const lvMessage = typeof lc.level_up_message === 'string' && lc.level_up_message.trim() ? lc.level_up_message : 'Congrats {user}! You reached **Level {level}**!';
+const lvWeekend = lc.xp_multiplier_weekends !== undefined && lc.xp_multiplier_weekends !== null ? Number(lc.xp_multiplier_weekends) : 1;
+const lvRoles = (typeof roles !== 'undefined' && Array.isArray(roles)) ? roles : [];
+const lvChannels = (typeof channels !== 'undefined' && Array.isArray(channels)) ? channels : [];
+// The bot's highest role: reward roles at or above it cannot be given.
+const lvBotTop = (() => { try { const p = guild.members.me.roles.highest.position; return Number.isFinite(p) ? p : null; } catch (e) { return null; } })();
+const lvRewards = (typeof rewards !== 'undefined' && Array.isArray(rewards)) ? rewards.slice().sort((a, b) => a.level - b.level) : [];
+const lvHex = (r) => { if (!r) return ''; if (typeof r.hexColor === 'string' && /^#[0-9a-f]{6}$/i.test(r.hexColor) && r.hexColor !== '#000000') return r.hexColor; const n = Number(r.color); return n > 0 ? '#' + n.toString(16).padStart(6, '0') : ''; };
+// Sample data for the preview: the server name, the reward levels and their role names.
+const lvSample = JSON.stringify({
+    server: (guild && guild.name) || 'Your server',
+    rewards: lvRewards.map((r) => { const role = lvRoles.find((x) => x.id === r.role_id); return { level: Number(r.level), role: role ? role.name : 'deleted role' }; }),
+    channels: lvChannels.map((c) => ({ id: String(c.id), name: c.name })),
+}).replace(/</g, '\\u003c');
+%>
 <style>
-/* Compact Leveling Page Styles */
-.leveling-section-card {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(167, 139, 250, 0.15);
-    border-radius: 12px;
-    overflow: hidden;
-    margin-bottom: 16px;
-}
-
-.leveling-section-header {
-    background: rgba(167, 139, 250, 0.08);
-    padding: 14px 18px;
-    border-bottom: 1px solid rgba(167, 139, 250, 0.15);
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.leveling-section-header i { font-size: 1rem; color: #a78bfa; }
-.leveling-section-header.rewards i { color: #fbbf24; }
-.leveling-section-header h3 { font-size: 0.95rem; font-weight: 600; color: #ffffff; margin: 0; }
-.leveling-section-header p { font-size: 0.75rem; color: rgba(255, 255, 255, 0.5); margin: 2px 0 0 0; }
-
-.leveling-section-body { padding: 18px; }
-
-/* Toggle Switch */
-.leveling-toggle-wrapper {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 12px 16px;
-    background: rgba(0, 0, 0, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 10px;
-    cursor: pointer;
-    transition: all 0.2s;
-    margin-bottom: 16px;
-}
-
-.leveling-toggle-wrapper:hover {
-    background: rgba(0, 0, 0, 0.3);
-    border-color: rgba(167, 139, 250, 0.3);
-}
-
-.leveling-toggle {
-    position: relative;
-    width: 44px;
-    height: 24px;
-    flex-shrink: 0;
-}
-
-.leveling-toggle input { opacity: 0; width: 0; height: 0; }
-
-.leveling-toggle-slider {
-    position: absolute;
-    cursor: pointer;
-    inset: 0;
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    transition: 0.2s;
-    border-radius: 24px;
-}
-
-.leveling-toggle-slider:before {
-    position: absolute;
-    content: "";
-    height: 18px;
-    width: 18px;
-    left: 2px;
-    bottom: 2px;
-    background-color: white;
-    transition: 0.2s;
-    border-radius: 50%;
-}
-
-.leveling-toggle input:checked + .leveling-toggle-slider {
-    background: linear-gradient(135deg, #7c3aed, #a78bfa);
-    border-color: #a78bfa;
-}
-
-.leveling-toggle input:checked + .leveling-toggle-slider:before {
-    transform: translateX(20px);
-}
-
-.leveling-toggle-label { font-weight: 600; color: #ffffff; font-size: 0.85rem; }
-.leveling-toggle-desc { font-size: 0.7rem; color: rgba(255, 255, 255, 0.5); margin-top: 2px; }
-
-/* Form Group */
-.leveling-form-group { margin-bottom: 16px; }
-
-.leveling-form-label {
-    display: block;
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: rgba(255, 255, 255, 0.9);
-    margin-bottom: 6px;
-}
-
-.leveling-form-label i { color: #a78bfa; margin-right: 6px; }
-
-.leveling-form-input,
-.leveling-form-select {
-    width: 100%;
-    padding: 10px 14px;
-    background: rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 8px;
-    color: #ffffff;
-    font-size: 0.85rem;
-    transition: all 0.2s;
-}
-
-.leveling-form-input:focus,
-.leveling-form-select:focus {
-    outline: none;
-    border-color: rgba(167, 139, 250, 0.5);
-    box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.1);
-}
-
-.leveling-form-select option { background: #1a1d21; color: #ffffff; }
-
-.leveling-form-hint {
-    display: block;
-    margin-top: 4px;
-    font-size: 0.7rem;
-    color: rgba(255, 255, 255, 0.45);
-}
-
-/* Form Grid */
-.leveling-form-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 14px;
-}
-
-/* Add Reward Form */
-.leveling-add-reward {
-    background: rgba(0, 0, 0, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 10px;
-    padding: 14px;
-    margin-bottom: 16px;
-}
-
-.leveling-add-reward-grid {
-    display: grid;
-    grid-template-columns: 1fr 2fr auto;
-    gap: 12px;
-    align-items: end;
-}
-
-/* Rewards Table */
-.leveling-rewards-table {
-    width: 100%;
-    border-collapse: separate;
-    border-spacing: 0;
-}
-
-.leveling-rewards-table thead { background: rgba(0, 0, 0, 0.3); }
-
-.leveling-rewards-table th {
-    padding: 10px 14px;
-    text-align: left;
-    font-size: 0.7rem;
-    font-weight: 600;
-    color: rgba(255, 255, 255, 0.5);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-}
-
-.leveling-rewards-table th:first-child { border-radius: 10px 0 0 0; }
-.leveling-rewards-table th:last-child { border-radius: 0 10px 0 0; text-align: right; }
-
-.leveling-rewards-table td {
-    padding: 12px 14px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.leveling-rewards-table tbody tr { transition: all 0.2s; }
-.leveling-rewards-table tbody tr:hover { background: rgba(167, 139, 250, 0.05); }
-.leveling-rewards-table tbody tr:last-child td { border-bottom: none; }
-.leveling-rewards-table tbody tr:last-child td:first-child { border-radius: 0 0 0 10px; }
-.leveling-rewards-table tbody tr:last-child td:last-child { border-radius: 0 0 10px 0; }
-
-/* Level Badge */
-.level-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 12px;
-    background: linear-gradient(135deg, rgba(167, 139, 250, 0.2), rgba(96, 165, 250, 0.2));
-    border: 1px solid rgba(167, 139, 250, 0.3);
-    border-radius: 6px;
-    color: #a78bfa;
-    font-weight: 600;
-    font-size: 0.8rem;
-}
-
-.level-badge i { font-size: 0.75rem; }
-
-/* Role Name */
-.reward-role-name {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-weight: 600;
-    color: #ffffff;
-    font-size: 0.85rem;
-}
-
-.reward-role-icon {
-    width: 28px;
-    height: 28px;
-    background: rgba(251, 191, 36, 0.15);
-    border: 1px solid rgba(251, 191, 36, 0.3);
-    border-radius: 6px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.reward-role-icon i { color: #fbbf24; font-size: 0.75rem; }
-
-/* Delete Button */
-.leveling-delete-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 12px;
-    background: rgba(248, 113, 113, 0.1);
-    border: 1px solid rgba(248, 113, 113, 0.3);
-    border-radius: 6px;
-    color: #f87171;
-    font-size: 0.75rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.leveling-delete-btn:hover {
-    background: rgba(248, 113, 113, 0.2);
-    border-color: rgba(248, 113, 113, 0.5);
-}
-
-/* Save Button */
-.leveling-save-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 20px;
-    background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%);
-    border: none;
-    border-radius: 8px;
-    color: #ffffff;
-    font-size: 0.85rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.leveling-save-btn:hover { box-shadow: 0 4px 16px rgba(124, 58, 237, 0.4); }
-
-.leveling-add-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 10px 16px;
-    background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%);
-    border: none;
-    border-radius: 8px;
-    color: #ffffff;
-    font-size: 0.8rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
-    white-space: nowrap;
-}
-
-.leveling-add-btn:hover { box-shadow: 0 4px 16px rgba(124, 58, 237, 0.4); }
-
-/* Empty State */
-.leveling-empty-state {
-    text-align: center;
-    padding: 32px 20px;
-    background: rgba(0, 0, 0, 0.2);
-    border: 1px dashed rgba(167, 139, 250, 0.2);
-    border-radius: 10px;
-}
-
-.leveling-empty-icon { font-size: 2rem; color: rgba(251, 191, 36, 0.4); margin-bottom: 12px; }
-.leveling-empty-text { color: rgba(255, 255, 255, 0.5); font-size: 0.85rem; }
-
-/* Table Wrapper */
-.leveling-table-wrapper {
-    background: rgba(0, 0, 0, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 10px;
-    overflow: hidden;
-}
-
-@media (max-width: 768px) {
-    .leveling-form-grid { grid-template-columns: 1fr; }
-    .leveling-add-reward-grid { grid-template-columns: 1fr; }
-    .leveling-add-btn { width: 100%; justify-content: center; }
-
-    /* Touch-friendly inputs */
-    .leveling-form-select,
-    .leveling-form-input,
-    .leveling-save-btn,
-    .leveling-add-btn,
-    .leveling-delete-btn { min-height: 44px; }
-
-    /* Reduce multi-select height on mobile */
-    .leveling-form-select[multiple] { min-height: 70px !important; height: auto; }
-
-    /* Save button full-width */
-    .leveling-save-btn { width: 100%; justify-content: center; }
-    .leveling-delete-btn { width: 100%; justify-content: center; }
-
-    /* Rewards table - smaller padding */
-    .leveling-rewards-table th,
-    .leveling-rewards-table td { padding: 8px 10px; }
-
-    .leveling-rewards-table { font-size: 0.85rem; }
-
-    /* Stack reward role info */
-    .reward-role-name { font-size: 0.8rem; }
-}
+    .lv-level { font-weight: 600; color: var(--cf-text); font-variant-numeric: tabular-nums; }
+    .lv-role { display: inline-flex; align-items: center; gap: 8px; color: var(--cf-text); }
+    .lv-role-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; background: var(--lv-dot, var(--cf-text-3)); }
+    .lv-boost-list { display: grid; gap: var(--cf-2); width: 100%; }
+    .lv-boost-list:empty { display: none; }
+    .lv-boost-row { display: grid; grid-template-columns: minmax(0, 1fr) 7rem auto; gap: var(--cf-2); align-items: center; }
+    .lv-boost-row > * { margin: 0; min-width: 0; }
+    .lv-num { font-variant-numeric: tabular-nums; }
+    .lv-message { width: 100%; min-height: 5.5rem; resize: vertical; }
+    .lv-reward-actions { display: flex; justify-content: flex-end; }
+    @media (max-width: 640px) { .lv-boost-row { grid-template-columns: minmax(0, 1fr) 6rem; } .lv-boost-row > .btn { grid-column: 1 / -1; } }
 </style>
 
 <div class="page-section">
     <div class="page-section-header">
         <div>
             <div class="page-section-title">
-                <i class="fas fa-chart-line"></i>
-                <span>Leveling System</span>
+                <i class="fas fa-trophy"></i>
+                <span>Leveling</span>
             </div>
-            <div class="page-section-subtitle">
-                Reward your members for their activity with XP and levels
-            </div>
+            <div class="page-section-subtitle">Announcements, role rewards and how fast XP comes in.</div>
         </div>
     </div>
 
-    <!-- Configuration Section -->
-    <div class="leveling-section-card">
-        <div class="leveling-section-header">
-            <i class="fas fa-cog"></i>
-            <div>
-                <h3>System Configuration</h3>
-                <p>Configure how XP is earned and distributed</p>
-            </div>
-        </div>
-        <div class="leveling-section-body">
-            <form action="/manage/<%= guild.id %>/update-leveling" method="POST">
-                <!-- Enable Toggle -->
-                <label class="leveling-toggle-wrapper">
-                    <div class="leveling-toggle">
-                        <input type="checkbox" id="leveling_enabled" name="leveling_enabled" <%= settings.leveling_enabled ? 'checked' : '' %>>
-                        <span class="leveling-toggle-slider"></span>
-                    </div>
-                    <div>
-                        <div class="leveling-toggle-label">Enable Leveling System</div>
-                        <div class="leveling-toggle-desc">Members will earn XP for messages</div>
-                    </div>
-                </label>
+    <form action="/manage/<%= guild.id %>/update-leveling" method="POST" id="cfk-lv-form">
+        <input type="hidden" name="leveling_form_v2" value="1">
 
-                <!-- XP Settings -->
-                <div class="leveling-form-grid">
-                    <div class="leveling-form-group">
-                        <label class="leveling-form-label">
-                            <i class="fas fa-star"></i>XP Rate (per message)
-                        </label>
-                        <input type="number" class="leveling-form-input" name="leveling_xp_rate" value="<%= settings.leveling_xp_rate || 15 %>" min="1" max="100">
-                        <span class="leveling-form-hint">XP earned per eligible message (1-100)</span>
+        <details class="cf-section cf-fold" open>
+            <summary class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="lv-announce-title">Level-up announcement</h2>
+                    <p class="cf-section-desc">Where level-ups are announced, what the message says and which levels get one.</p>
+                </div>
+            </summary>
+            <div class="cf-rows">
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="leveling_enabled">Leveling</label>
+                        <p class="cf-row-desc" id="leveling_enabled-desc">Members earn XP for their messages and level up over time.</p>
                     </div>
-
-                    <div class="leveling-form-group">
-                        <label class="leveling-form-label">
-                            <i class="fas fa-clock"></i>XP Cooldown (seconds)
-                        </label>
-                        <input type="number" class="leveling-form-input" name="leveling_xp_cooldown" value="<%= settings.leveling_xp_cooldown || 60 %>" min="10" max="300">
-                        <span class="leveling-form-hint">Time before earning XP again (10-300)</span>
+                    <div class="cf-row-control">
+                        <input type="checkbox" class="cf-switch" role="switch" id="leveling_enabled" name="leveling_enabled" data-feature-switch aria-describedby="leveling_enabled-desc" <%= lv.leveling_enabled ? 'checked' : '' %>>
                     </div>
                 </div>
-
-                <!-- Level-Up Channel -->
-                <div class="leveling-form-group">
-                    <label class="leveling-form-label">
-                        <i class="fas fa-hashtag"></i>Level-Up Announcement Channel
-                    </label>
-                    <select class="leveling-form-select" name="level_up_channel_id">
-                        <option value="">Same channel as message (default)</option>
-                        <% channels.forEach(channel => { %>
-                            <option value="<%= channel.id %>" <%= settings.level_up_channel_id === channel.id ? 'selected' : '' %>>#<%= channel.name %></option>
-                        <% }) %>
-                    </select>
-                    <span class="leveling-form-hint">Channel where level-up messages will be sent</span>
-                </div>
-
-                <!-- Ignored Channels -->
-                <div class="leveling-form-group">
-                    <label class="leveling-form-label">
-                        <i class="fas fa-ban"></i>Ignored Channels
-                    </label>
-                    <select class="leveling-form-select" name="leveling_ignored_channels" multiple size="4" style="min-height: 100px;">
-                        <% channels.forEach(channel => { %>
-                            <option value="<%= channel.id %>" <%= (settings.leveling_ignored_channels || []).includes(channel.id) ? 'selected' : '' %>>#<%= channel.name %></option>
-                        <% }) %>
-                    </select>
-                    <span class="leveling-form-hint">Messages in these channels won't earn XP (Ctrl+Click to select multiple)</span>
-                </div>
-
-                <!-- Ignored Roles -->
-                <div class="leveling-form-group">
-                    <label class="leveling-form-label">
-                        <i class="fas fa-user-slash"></i>Ignored Roles
-                    </label>
-                    <select class="leveling-form-select" name="leveling_ignored_roles" multiple size="4" style="min-height: 100px;">
-                        <% roles.forEach(role => { %>
-                            <option value="<%= role.id %>" <%= (settings.leveling_ignored_roles || []).includes(role.id) ? 'selected' : '' %>><%= role.name %></option>
-                        <% }) %>
-                    </select>
-                    <span class="leveling-form-hint">Users with these roles won't earn XP (Ctrl+Click to select multiple)</span>
-                </div>
-
-                <!-- Periodic Reset -->
-                <label class="leveling-toggle-wrapper" style="margin-top: 20px;">
-                    <div class="leveling-toggle">
-                        <input type="checkbox" id="monthly_reset_enabled" name="monthly_reset_enabled" <%= settings.monthly_reset_enabled ? 'checked' : '' %>>
-                        <span class="leveling-toggle-slider"></span>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-leveling-level_up_channel_id">Announce level-ups in</label>
+                        <p class="cf-row-desc" id="f-leveling-level_up_channel_id-desc">The channel the member was talking in, one channel for every level-up, the member's DMs, or nowhere. Members with DMs closed get nothing.</p>
                     </div>
-                    <div>
-                        <div class="leveling-toggle-label">Enable Periodic Level Reset</div>
-                        <div class="leveling-toggle-desc">Wipes XP, strips reward roles, and pauses sub-level-3 stream subs on the interval below</div>
-                    </div>
-                </label>
-
-                <div class="leveling-form-group" style="margin-bottom: 0;">
-                    <label class="leveling-form-label">
-                        <i class="fas fa-history"></i>Reset Interval (days)
-                    </label>
-                    <input type="number" class="leveling-form-input" name="reset_interval_days" value="<%= settings.reset_interval_days || 30 %>" min="7" max="365">
-                    <span class="leveling-form-hint">Minimum days between automatic resets (7–365). Only applies when "Periodic Level Reset" is enabled.</span>
-                    <% if (settings.last_reset_at) { %>
-                        <div style="margin-top: 6px; font-size: 12px; color: #9ca3af;">Last reset: <%= new Date(settings.last_reset_at).toUTCString() %></div>
-                    <% } %>
-                </div>
-
-                <div style="margin-top: 24px;">
-                    <button type="submit" class="leveling-save-btn">
-                        <i class="fas fa-save"></i>
-                        Save Configuration
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Role Rewards Section -->
-    <div class="leveling-section-card">
-        <div class="leveling-section-header rewards">
-            <i class="fas fa-trophy"></i>
-            <div>
-                <h3>Role Rewards</h3>
-                <p>Automatically assign roles when members reach certain levels</p>
-            </div>
-        </div>
-        <div class="leveling-section-body">
-            <!-- Add Role Reward Form -->
-            <form action="/manage/<%= guild.id %>/add-role-reward" method="POST" class="leveling-add-reward">
-                <div class="leveling-add-reward-grid">
-                    <div class="leveling-form-group" style="margin-bottom: 0;">
-                        <label class="leveling-form-label">Level Required</label>
-                        <input type="number" name="level" class="leveling-form-input" required min="1" max="1000" placeholder="10">
-                    </div>
-                    <div class="leveling-form-group" style="margin-bottom: 0;">
-                        <label class="leveling-form-label">Role to Award</label>
-                        <select name="role_id" class="leveling-form-select" required>
-                            <option value="">Select role...</option>
-                            <% roles.forEach(role => { %>
-                                <option value="<%= role.id %>"><%= role.name %></option>
-                            <% }); %>
+                    <div class="cf-row-control">
+                        <select id="f-leveling-level_up_channel_id" class="form-select" name="level_up_channel_id" aria-describedby="f-leveling-level_up_channel_id-desc">
+                            <option value=""<% if (lvMode === 'channel' && !lv.level_up_channel_id) { %> selected<% } %>>The channel they were talking in</option>
+                            <option value="dm"<% if (lvMode === 'dm') { %> selected<% } %>>A DM to the member</option>
+                            <option value="off"<% if (lvMode === 'off') { %> selected<% } %>>Do not announce</option>
+                            <optgroup label="One channel for every level-up">
+                                <%- include('../kit/_pick-options', { items: lvChannels, selected: lvMode === 'channel' ? (lv.level_up_channel_id || null) : null, kind: 'channel', only: 'text', empty: null }) %>
+                            </optgroup>
                         </select>
                     </div>
-                    <div>
-                        <button type="submit" class="leveling-add-btn">
-                            <i class="fas fa-plus"></i>
-                            Add Reward
-                        </button>
+                </div>
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-leveling-level_up_message">Message</label>
+                        <p class="cf-row-desc" id="f-leveling-level_up_message-desc">Up to 1500 characters. {user} mentions the member, {username} is their name, {level} is the new level and {server} is the server name. **Bold** works.</p>
+                    </div>
+                    <textarea id="f-leveling-level_up_message" class="form-control lv-message" name="level_up_message" maxlength="1500" rows="3" aria-describedby="f-leveling-level_up_message-desc"><%= lvMessage %></textarea>
+                </div>
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-row-text">
+                        <span class="cf-row-label" id="lv-pv-title">Preview</span>
+                        <p class="cf-row-desc" id="lv-pv-desc">With a sample member, New Member, reaching <span data-lv-pv-level>a level</span>.</p>
+                    </div>
+                    <div class="cf-dc-frame" data-lv-preview aria-live="polite" aria-labelledby="lv-pv-title"></div>
+                </div>
+
+                <div class="cf-rows-head" id="lv-which-head">Which levels are announced</div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-leveling-announce_every_n">Announce every</label>
+                        <p class="cf-row-desc" id="f-leveling-announce_every_n-desc">1 announces every level; 5 announces levels 5, 10, 15 and so on. Levels with a role reward are always announced.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="cf-input-unit">
+                            <input id="f-leveling-announce_every_n" type="number" class="form-control" name="announce_every_n" value="<%= lc.announce_every_n || 1 %>" min="1" max="100" aria-describedby="f-leveling-announce_every_n-desc">
+                            <span class="cf-unit">levels</span>
+                        </div>
                     </div>
                 </div>
-            </form>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-leveling-announce_min_level">Start announcing at</label>
+                        <p class="cf-row-desc" id="f-leveling-announce_min_level-desc">Level-ups below this level are not announced. 0 announces from the first level.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="cf-input-unit">
+                            <span class="cf-unit">level</span>
+                            <input id="f-leveling-announce_min_level" type="number" class="form-control" name="announce_min_level" value="<%= lc.announce_min_level || 0 %>" min="0" max="1000" aria-describedby="f-leveling-announce_min_level-desc">
+                        </div>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-leveling-announce_rewards_only">Only levels with a role reward</label>
+                        <p class="cf-row-desc" id="f-leveling-announce_rewards_only-desc">Announce a level-up only when it gives a role. Overrides "Announce every".</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="checkbox" class="cf-switch" role="switch" id="f-leveling-announce_rewards_only" name="announce_rewards_only" aria-describedby="f-leveling-announce_rewards_only-desc" <%= lvOn(lc.announce_rewards_only, false) ? 'checked' : '' %>>
+                    </div>
+                </div>
+                <div class="cf-section-foot" data-no-savebar>
+                    <span class="cf-status-line cf-foot-note" data-lv-test-result aria-live="polite"></span>
+                    <button type="button" class="btn btn-secondary" data-lv-test>Send a test</button>
+                </div>
+            </div>
+        </details>
 
-            <!-- Existing Role Rewards -->
-            <% if (rewards && rewards.length > 0) { %>
-                <div class="leveling-table-wrapper">
-                    <table class="leveling-rewards-table">
+        <details class="cf-section cf-fold" open>
+            <summary class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="lv-rewards-title">Role rewards<% if (lvRewards.length) { %> (<%= lvRewards.length %>)<% } %></h2>
+                    <p class="cf-section-desc">Roles given automatically when a member reaches a level. The bot can only give roles below its own highest role.</p>
+                </div>
+            </summary>
+            <div class="cf-rows">
+                <div class="cf-rows-head" id="lv-rules-title">How reward roles are given</div>
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" id="lv-reward-mode-head" for="f-leveling-reward_mode">Earlier rewards</label>
+                        <p class="cf-row-desc" id="f-leveling-reward_mode-desc">What happens to the roles from lower levels when a member earns a new one.</p>
+                    </div>
+                    <div class="cf-opts" role="radiogroup" aria-labelledby="lv-reward-mode-head" aria-describedby="f-leveling-reward_mode-desc">
+                        <label class="cf-opt">
+                            <input type="radio" id="f-leveling-reward_mode" name="reward_mode" value="stack"<% if (lc.reward_mode !== 'replace') { %> checked<% } %>>
+                            <span class="cf-opt-body"><span class="cf-opt-title">Keep every reward role</span><span class="cf-opt-desc">A member at level 20 keeps the roles from level 5 and 10 too.</span></span>
+                        </label>
+                        <label class="cf-opt">
+                            <input type="radio" name="reward_mode" value="replace"<% if (lc.reward_mode === 'replace') { %> checked<% } %>>
+                            <span class="cf-opt-body"><span class="cf-opt-title">Keep only the highest</span><span class="cf-opt-desc">The lower reward roles are taken away when a new one is earned.</span></span>
+                        </label>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-leveling-remove_reward_on_loss">Take rewards back when XP is removed</label>
+                        <p class="cf-row-desc" id="f-leveling-remove_reward_on_loss-desc">When an admin lowers a member's XP below a reward's level, that reward role is removed.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="checkbox" class="cf-switch" role="switch" id="f-leveling-remove_reward_on_loss" name="remove_reward_on_loss" aria-describedby="f-leveling-remove_reward_on_loss-desc" <%= lvOn(lc.remove_reward_on_loss, false) ? 'checked' : '' %>>
+                    </div>
+                </div>
+
+                <div class="cf-rows-head" id="lv-list-head">Rewards</div>
+                <% if (lvRewards.length > 0) { %>
+                <div class="cf-table-wrap">
+                    <table class="cf-table cf-table--stack">
                         <thead>
-                            <tr>
-                                <th>Level</th>
-                                <th>Role</th>
-                                <th>Actions</th>
-                            </tr>
+                            <tr><th scope="col">Level</th><th scope="col">Role</th><th scope="col"><span class="visually-hidden">Remove</span></th></tr>
                         </thead>
                         <tbody>
-                            <% rewards.sort((a, b) => a.level - b.level).forEach(reward => {
-                                const role = roles.find(r => r.id === reward.role_id);
+                            <% lvRewards.forEach(reward => {
+                                const role = lvRoles.find(r => r.id === reward.role_id);
+                                const colour = lvHex(role);
+                                const tooHigh = role && lvBotTop !== null && Number(role.position) >= lvBotTop;
                             %>
-                                <tr>
-                                    <td>
-                                        <div class="level-badge">
-                                            <i class="fas fa-level-up-alt"></i>
-                                            Level <%= reward.level %>
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <div class="reward-role-name">
-                                            <div class="reward-role-icon">
-                                                <i class="fas fa-crown"></i>
-                                            </div>
-                                            <%= role ? role.name : 'Unknown Role' %>
-                                        </div>
-                                    </td>
-                                    <td style="text-align: right;">
-                                        <form action="/manage/<%= guild.id %>/remove-role-reward" method="POST" style="display: inline;">
-                                            <input type="hidden" name="rewardId" value="<%= reward.id %>">
-                                            <button type="submit" class="leveling-delete-btn" onclick="return confirm('Remove this role reward?');">
-                                                <i class="fas fa-trash"></i>
-                                                Remove
-                                            </button>
-                                        </form>
-                                    </td>
-                                </tr>
+                            <tr>
+                                <td data-label="Level"><span class="lv-level">Level <%= reward.level %></span></td>
+                                <td data-label="Role">
+                                    <span class="lv-role"><span class="lv-role-dot"<% if (colour) { %> style="--lv-dot: <%= colour %>"<% } %> aria-hidden="true"></span><%= role ? role.name : 'Deleted role' %></span>
+                                    <% if (!role) { %><span class="cf-pill is-bad">Deleted</span><% } else if (tooHigh) { %><span class="cf-pill is-warn">Above the bot's role</span><% } %>
+                                </td>
+                                <td class="cf-cell-end">
+                                    <div class="lv-reward-actions">
+                                        <button type="button" class="btn btn-sm btn-danger" data-lv-remove-reward="<%= reward.id %>" aria-label="Remove the level <%= reward.level %> reward">Remove</button>
+                                    </div>
+                                </td>
+                            </tr>
                             <% }) %>
                         </tbody>
                     </table>
                 </div>
-            <% } else { %>
-                <div class="leveling-empty-state">
-                    <div class="leveling-empty-icon">
-                        <i class="fas fa-trophy"></i>
+                <% } else { %>
+                <%- include('../kit/_state', { kind: 'empty', title: 'No role rewards yet', text: 'Add one below to give a role when members reach a level.', id: null, boxed: false, compact: true }) %>
+                <% } %>
+                <div class="cf-rows-head" id="lv-add-head">Add a reward</div>
+                <div class="cf-row cf-row--stack" data-no-savebar>
+                    <div class="cf-fields">
+                        <div class="cf-field">
+                            <label for="f-leveling-level">Level</label>
+                            <input id="f-leveling-level" type="number" name="level" form="cfk-lv-add-reward" class="form-control" required min="1" max="1000" placeholder="10">
+                        </div>
+                        <div class="cf-field">
+                            <label for="f-leveling-role_id">Role to give</label>
+                            <select id="f-leveling-role_id" name="role_id" form="cfk-lv-add-reward" class="form-select" required>
+                                <%- include('../kit/_pick-options', { items: lvRoles, selected: null, kind: 'role', botTop: lvBotTop, empty: 'Choose a role' }) %>
+                            </select>
+                        </div>
                     </div>
-                    <div class="leveling-empty-text">No role rewards configured yet</div>
                 </div>
-            <% } %>
+                <div class="cf-section-foot" data-no-savebar>
+                    <span class="cf-foot-note">Saved straight away. Members already past the level do not get it from levelling up; changing their XP under Member XP below gives it.</span>
+                    <button type="button" class="btn btn-primary" data-lv-add-reward>Add reward</button>
+                </div>
+            </div>
+        </details>
+
+        <details class="cf-section cf-fold" open>
+            <summary class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="lv-xp-title">XP rate</h2>
+                    <p class="cf-section-desc">How quickly members earn XP from messages and voice.</p>
+                </div>
+            </summary>
+            <div class="cf-rows">
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-leveling-leveling_xp_rate">XP per message</label>
+                        <p class="cf-row-desc" id="f-leveling-leveling_xp_rate-desc">From 1 to 100; each message earns this plus a random 0 to 9 XP. 15 is the usual pace.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="cf-input-unit">
+                            <input id="f-leveling-leveling_xp_rate" type="number" class="form-control" name="leveling_xp_rate" value="<%= lv.leveling_xp_rate || 15 %>" min="1" max="100" aria-describedby="f-leveling-leveling_xp_rate-desc">
+                            <span class="cf-unit">XP</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-leveling-leveling_xp_cooldown">Cooldown</label>
+                        <p class="cf-row-desc" id="f-leveling-leveling_xp_cooldown-desc">How long before the same member can earn XP again, from 10 to 300 seconds. Stops spam from paying off.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="cf-input-unit">
+                            <input id="f-leveling-leveling_xp_cooldown" type="number" class="form-control" name="leveling_xp_cooldown" value="<%= lv.leveling_xp_cooldown || 60 %>" min="10" max="300" aria-describedby="f-leveling-leveling_xp_cooldown-desc">
+                            <span class="cf-unit">seconds</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-leveling-xp_multiplier_weekends">Weekend multiplier</label>
+                        <p class="cf-row-desc" id="f-leveling-xp_multiplier_weekends-desc">XP on Saturdays and Sundays (UTC) is multiplied by this, from 0.25 to 5. 1 means no change.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="cf-input-unit">
+                            <input id="f-leveling-xp_multiplier_weekends" type="number" class="form-control lv-num" name="xp_multiplier_weekends" value="<%= Number.isFinite(lvWeekend) ? lvWeekend : 1 %>" min="0.25" max="5" step="0.05" aria-describedby="f-leveling-xp_multiplier_weekends-desc">
+                            <span class="cf-unit">times</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-leveling-voice_xp_enabled">Voice XP</label>
+                        <p class="cf-row-desc" id="f-leveling-voice_xp_enabled-desc">Members also earn XP for time in voice channels, added when they leave or move to another channel. It is kept apart from message XP: it shows on /level rank and does not change their level.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="checkbox" class="cf-switch" role="switch" id="f-leveling-voice_xp_enabled" name="voice_xp_enabled" aria-describedby="f-leveling-voice_xp_enabled-desc" <%= lvOn(lc.voice_xp_enabled, true) ? 'checked' : '' %>>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--sub" data-lv-voice-rate>
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-leveling-xp_per_voice_minute">Voice XP per minute</label>
+                        <p class="cf-row-desc" id="f-leveling-xp_per_voice_minute-desc">From 1 to 50.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="cf-input-unit">
+                            <input id="f-leveling-xp_per_voice_minute" type="number" class="form-control" name="xp_per_voice_minute" value="<%= lc.xp_per_voice_minute || 5 %>" min="1" max="50" aria-describedby="f-leveling-xp_per_voice_minute-desc">
+                            <span class="cf-unit">XP</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </details>
+
+        <details class="cf-section cf-fold"<% if (lvBoostRoles.length || lvBoostChannels.length) { %> open<% } %>>
+            <summary class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="lv-boost-title">XP boosts<% if (lvBoostRoles.length || lvBoostChannels.length) { %> (<%= lvBoostRoles.length + lvBoostChannels.length %>)<% } %></h2>
+                    <p class="cf-section-desc">More (or less) XP for some roles and channels, from 0.25 to 5 times. A member with several boosted roles gets the biggest boost; a role boost and a channel boost multiply.</p>
+                </div>
+            </summary>
+            <div class="cf-rows">
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-row-text">
+                        <span class="cf-row-label" id="lv-boost-roles-head">Boosted roles</span>
+                        <p class="cf-row-desc">Server boosters or supporters, for example.</p>
+                    </div>
+                    <div class="lv-boost-list" data-lv-boosts="role" role="group" aria-labelledby="lv-boost-roles-head"><% lvBoostRoles.forEach(function (b) { %>
+                        <div class="lv-boost-row">
+                            <select class="form-select" name="xp_boost_role_id" aria-label="Boosted role">
+                                <%- include('../kit/_pick-options', { items: lvRoles, selected: b.id, kind: 'role', empty: 'Choose a role' }) %>
+                            </select>
+                            <div class="cf-input-unit"><input type="number" class="form-control lv-num" name="xp_boost_role_mult" value="<%= b.multiplier %>" min="0.25" max="5" step="0.05" aria-label="Boost for this role"><span class="cf-unit">x</span></div>
+                            <button type="button" class="btn btn-sm btn-secondary" data-lv-remove>Remove</button>
+                        </div><% }) %></div>
+                    <div><button type="button" class="btn btn-sm btn-secondary" data-lv-add="role">Add a boosted role</button></div>
+                </div>
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-row-text">
+                        <span class="cf-row-label" id="lv-boost-channels-head">Boosted channels</span>
+                        <p class="cf-row-desc">Threads follow their channel. Voice channels count for voice XP.</p>
+                    </div>
+                    <div class="lv-boost-list" data-lv-boosts="channel" role="group" aria-labelledby="lv-boost-channels-head"><% lvBoostChannels.forEach(function (b) { %>
+                        <div class="lv-boost-row">
+                            <select class="form-select" name="xp_boost_channel_id" aria-label="Boosted channel">
+                                <%- include('../kit/_pick-options', { items: lvChannels, selected: b.id, kind: 'channel', empty: 'Choose a channel' }) %>
+                            </select>
+                            <div class="cf-input-unit"><input type="number" class="form-control lv-num" name="xp_boost_channel_mult" value="<%= b.multiplier %>" min="0.25" max="5" step="0.05" aria-label="Boost for this channel"><span class="cf-unit">x</span></div>
+                            <button type="button" class="btn btn-sm btn-secondary" data-lv-remove>Remove</button>
+                        </div><% }) %></div>
+                    <div><button type="button" class="btn btn-sm btn-secondary" data-lv-add="channel">Add a boosted channel</button></div>
+                </div>
+            </div>
+            <template data-lv-tpl="role">
+                <div class="lv-boost-row">
+                    <select class="form-select" name="xp_boost_role_id" aria-label="Boosted role">
+                        <%- include('../kit/_pick-options', { items: lvRoles, selected: null, kind: 'role', empty: 'Choose a role' }) %>
+                    </select>
+                    <div class="cf-input-unit"><input type="number" class="form-control lv-num" name="xp_boost_role_mult" value="1.5" min="0.25" max="5" step="0.05" aria-label="Boost for this role"><span class="cf-unit">x</span></div>
+                    <button type="button" class="btn btn-sm btn-secondary" data-lv-remove>Remove</button>
+                </div>
+            </template>
+            <template data-lv-tpl="channel">
+                <div class="lv-boost-row">
+                    <select class="form-select" name="xp_boost_channel_id" aria-label="Boosted channel">
+                        <%- include('../kit/_pick-options', { items: lvChannels, selected: null, kind: 'channel', empty: 'Choose a channel' }) %>
+                    </select>
+                    <div class="cf-input-unit"><input type="number" class="form-control lv-num" name="xp_boost_channel_mult" value="1.5" min="0.25" max="5" step="0.05" aria-label="Boost for this channel"><span class="cf-unit">x</span></div>
+                    <button type="button" class="btn btn-sm btn-secondary" data-lv-remove>Remove</button>
+                </div>
+            </template>
+        </details>
+
+        <details class="cf-section cf-fold" open>
+            <summary class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="lv-noxp-title">No-XP channels and roles</h2>
+                    <p class="cf-section-desc">Places and people that never earn XP.</p>
+                </div>
+            </summary>
+            <div class="cf-rows">
+                <div class="cf-row cf-row--wide">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-leveling-leveling_ignored_channels">Channels with no XP</label>
+                        <p class="cf-row-desc" id="f-leveling-leveling_ignored_channels-desc">Messages and voice time here never earn XP, such as bot commands. Threads follow their channel.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <select id="f-leveling-leveling_ignored_channels" class="form-select" name="leveling_ignored_channels" multiple size="5" aria-describedby="f-leveling-leveling_ignored_channels-desc">
+                            <%- include('../kit/_pick-options', { items: lvChannels, selected: lv.leveling_ignored_channels || [], kind: 'channel', empty: null }) %>
+                        </select>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--wide">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-leveling-leveling_ignored_roles">Roles with no XP</label>
+                        <p class="cf-row-desc" id="f-leveling-leveling_ignored_roles-desc">Members with any of these roles never earn XP.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <select id="f-leveling-leveling_ignored_roles" class="form-select" name="leveling_ignored_roles" multiple size="5" aria-describedby="f-leveling-leveling_ignored_roles-desc">
+                            <%- include('../kit/_pick-options', { items: lvRoles, selected: lv.leveling_ignored_roles || [], kind: 'role', empty: null }) %>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </details>
+
+        <details class="cf-section cf-section--danger cf-fold"<% if (lv.monthly_reset_enabled) { %> open<% } %>>
+            <summary class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="lv-reset-title">Periodic reset<% if (lv.monthly_reset_enabled) { %> (on)<% } %></h2>
+                    <p class="cf-section-desc">Wipes XP, takes back level reward roles and pauses stream alerts for members below the stream sign-up level, on a schedule. It cannot be undone.</p>
+                </div>
+            </summary>
+            <div class="cf-rows">
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="monthly_reset_enabled">Reset levels on a schedule</label>
+                        <p class="cf-row-desc" id="monthly_reset_enabled-desc">Off unless you switch it on.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="checkbox" class="cf-switch" role="switch" id="monthly_reset_enabled" name="monthly_reset_enabled" aria-describedby="monthly_reset_enabled-desc" <%= lv.monthly_reset_enabled ? 'checked' : '' %>>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--sub">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-leveling-reset_interval_days">Reset every</label>
+                        <p class="cf-row-desc" id="f-leveling-reset_interval_days-desc">The least time between resets, from 7 to 365 days.<% if (lv.last_reset_at) { %> Last reset: <%= new Date(lv.last_reset_at).toUTCString() %>.<% } %></p>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="cf-input-unit">
+                            <input id="f-leveling-reset_interval_days" type="number" class="form-control" name="reset_interval_days" value="<%= lv.reset_interval_days || 30 %>" min="7" max="365" aria-describedby="f-leveling-reset_interval_days-desc">
+                            <span class="cf-unit">days</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--switch cf-row--sub">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="reset_exempt_staff">Leave staff out of the reset</label>
+                        <p class="cf-row-desc" id="reset_exempt_staff-desc">The owner and anyone with Administrator, Manage Server, Kick, Ban or Timeout permission keep their XP and level roles.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="checkbox" class="cf-switch" role="switch" id="reset_exempt_staff" name="reset_exempt_staff" aria-describedby="reset_exempt_staff-desc" <%= lv.reset_exempt_staff ? 'checked' : '' %>>
+                    </div>
+                </div>
+            </div>
+        </details>
+
+        <div class="cf-form-actions">
+            <button type="button" class="btn btn-secondary" onclick="location.reload()">Discard changes</button>
+            <button type="submit" class="btn btn-primary">Save</button>
         </div>
-    </div>
+    </form>
+    <%# The reward list's own saves: its fields above belong to these forms (form="..."), not to the settings form. %>
+    <form id="cfk-lv-add-reward" action="/manage/<%= guild.id %>/add-role-reward" method="POST" hidden></form>
+    <form id="cfk-lv-remove-reward" action="/manage/<%= guild.id %>/remove-role-reward" method="POST" hidden>
+        <input type="hidden" name="rewardId" id="cfk-lv-reward-id" value="">
+    </form>
+
+    <details class="cf-section cf-fold" open>
+        <summary class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="lv-event-title">XP events</h2>
+                <p class="cf-section-desc">Multiply all message and voice XP for a set time, such as double XP for a weekend. One event runs at a time. The same as /level xp-event.</p>
+            </div>
+        </summary>
+        <div class="cf-rows">
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <span class="cf-row-label" id="lv-event-now-head">Right now</span>
+                    <p class="cf-row-desc" id="lv-event-status" aria-live="polite">Loading...</p>
+                </div>
+                <div class="cf-row-control">
+                    <button type="button" class="btn btn-sm btn-danger" id="lv-event-stop" hidden>End the event</button>
+                </div>
+            </div>
+            <div class="cf-rows-head" id="lv-event-start-head">Start an event</div>
+            <div class="cf-row cf-row--stack">
+                <div class="cf-fields">
+                    <div class="cf-field">
+                        <label for="f-leveling-event_name">Name</label>
+                        <input id="f-leveling-event_name" type="text" class="form-control" maxlength="100" placeholder="Double XP weekend">
+                    </div>
+                    <div class="cf-field">
+                        <label for="f-leveling-event_multiplier">Multiplier</label>
+                        <div class="cf-input-unit"><input id="f-leveling-event_multiplier" type="number" class="form-control lv-num" value="2" min="1.1" max="9.99" step="0.1"><span class="cf-unit">times</span></div>
+                    </div>
+                    <div class="cf-field">
+                        <label for="f-leveling-event_length">Length</label>
+                        <div class="cf-input-group">
+                            <input id="f-leveling-event_length" type="number" class="form-control lv-num" value="24" min="1" max="720" aria-label="Length">
+                            <select id="f-leveling-event_unit" class="form-select" aria-label="Unit">
+                                <option value="60">hours</option>
+                                <option value="1">minutes</option>
+                                <option value="1440">days</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="cf-section-foot">
+                <span class="cf-status-line cf-foot-note" id="lv-event-result" aria-live="polite"></span>
+                <button type="button" class="btn btn-primary" id="lv-event-start">Start</button>
+            </div>
+        </div>
+    </details>
+
+    <details class="cf-section cf-fold" open>
+        <summary class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="lv-member-title">Member XP</h2>
+                <p class="cf-section-desc">Set, add or remove a member's XP, or put them on a level. Their reward roles are updated to match, and the change goes to the audit log and the leveling log.</p>
+            </div>
+        </summary>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--stack">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="f-leveling-member_search">Find a member</label>
+                </div>
+                <div class="cf-input-group">
+                    <input id="f-leveling-member_search" type="search" class="form-control" maxlength="100" placeholder="Name, ID or @mention" autocomplete="off">
+                    <button type="button" class="btn btn-secondary" id="lv-member-search">Search</button>
+                </div>
+            </div>
+            <div class="cf-rows-head" id="lv-member-list-head">Highest levels</div>
+            <div class="cf-table-wrap">
+                <table class="cf-table cf-table--stack">
+                    <thead>
+                        <tr><th scope="col">Member</th><th scope="col">Level</th><th scope="col">Total XP</th><th scope="col"><span class="visually-hidden">Edit</span></th></tr>
+                    </thead>
+                    <tbody id="lv-member-rows"></tbody>
+                </table>
+            </div>
+            <p class="cf-row-desc" id="lv-member-status" aria-live="polite"></p>
+            <div id="lv-member-edit" hidden>
+                <div class="cf-rows-head" id="lv-member-edit-head"></div>
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-fields">
+                        <div class="cf-field">
+                            <label for="f-leveling-member_action">Change</label>
+                            <select id="f-leveling-member_action" class="form-select">
+                                <option value="add">Add XP</option>
+                                <option value="remove">Remove XP</option>
+                                <option value="set">Set total XP to</option>
+                                <option value="set-level">Set level to</option>
+                            </select>
+                        </div>
+                        <div class="cf-field">
+                            <label for="f-leveling-member_amount">Amount</label>
+                            <input id="f-leveling-member_amount" type="number" class="form-control lv-num" min="0" max="2000000000" step="1" value="100">
+                        </div>
+                    </div>
+                </div>
+                <div class="cf-section-foot">
+                    <span class="cf-status-line cf-foot-note" id="lv-member-result" aria-live="polite"></span>
+                    <button type="button" class="btn btn-primary" id="lv-member-apply">Apply</button>
+                </div>
+            </div>
+        </div>
+    </details>
 </div>
+
+<script src="/js/cf-msgpreview.js"></script>
+<script>
+(function () {
+    const guildId = <%- JSON.stringify(String(guild.id)).replace(/</g, '\\u003c') %>;
+    const S = <%- lvSample %>;
+    const api = '/api/guilds/' + encodeURIComponent(guildId) + '/leveling-admin';
+    const $ = (id) => document.getElementById(id);
+    const el = (tag, props, ...kids) => {
+        const node = document.createElement(tag);
+        if (props) { const { label, ...rest } = props; Object.assign(node, rest); if (label) node.dataset.label = label; }
+        for (const k of kids) if (k != null) node.append(k);
+        return node;
+    };
+    const num = (n) => Number(n || 0).toLocaleString();
+    async function call(path, options) {
+        const res = await fetch(api + path, { credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, ...(options || {}) });
+        const out = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(out.error || ('Request failed (' + res.status + ')'));
+        return out;
+    }
+    const setLine = (node, text, tone) => { node.textContent = text; node.classList.remove('is-ok', 'is-bad', 'is-warn'); if (tone) node.classList.add(tone); };
+    const form = $('cfk-lv-form');
+
+    // A field the browser flags as invalid inside a folded section: open the section first.
+    if (form) form.addEventListener('invalid', (e) => { const d = e.target.closest && e.target.closest('details'); if (d) d.open = true; }, true);
+
+    // Voice XP per minute only matters while voice XP is on.
+    const voiceOn = $('f-leveling-voice_xp_enabled');
+    const voiceRate = document.querySelector('[data-lv-voice-rate]');
+    const syncVoice = () => { if (voiceRate) voiceRate.hidden = !voiceOn.checked; };
+    if (voiceOn) { voiceOn.addEventListener('change', syncVoice); syncVoice(); }
+
+    // ── Level-up preview ────────────────────────────────────────────────────────────────────
+    const dest = $('f-leveling-level_up_channel_id');
+    const msg = $('f-leveling-level_up_message');
+    const every = $('f-leveling-announce_every_n');
+    const minLevel = $('f-leveling-announce_min_level');
+    const rewardsOnly = $('f-leveling-announce_rewards_only');
+    const pvBox = document.querySelector('[data-lv-preview]');
+    const pvLevel = document.querySelector('[data-lv-pv-level]');
+    const testBtn = document.querySelector('[data-lv-test]');
+    const testLine = document.querySelector('[data-lv-test-result]');
+    const rewardAt = (lvl) => S.rewards.find((r) => r.level === lvl);
+    const channelName = (id) => { const c = S.channels.find((x) => x.id === id); return c ? c.name : 'channel'; };
+    function announcedLevels() {
+        const n = Math.max(1, Math.min(100, parseInt(every.value, 10) || 1));
+        const min = Math.max(0, parseInt(minLevel.value, 10) || 0);
+        const out = [];
+        for (let lvl = 1; lvl <= 1000 && out.length < 6; lvl++) {
+            if (lvl < min) continue;
+            const reward = !!rewardAt(lvl);
+            if (rewardsOnly.checked ? reward : (n === 1 || lvl % n === 0 || reward)) out.push(lvl);
+        }
+        return out;
+    }
+    function renderPreview() {
+        if (!pvBox || !window.CFPreview) return;
+        const mode = dest.value === 'dm' ? 'dm' : dest.value === 'off' ? 'off' : 'channel';
+        const levels = announcedLevels();
+        const level = levels.find((l) => rewardAt(l)) || levels[0] || 5;
+        if (pvLevel) pvLevel.textContent = 'level ' + level;
+        const text = CFPreview.fill(msg.value.trim() || 'Congrats {user}! You reached **Level {level}**!', {
+            user: CFPreview.mention('@New Member'), username: 'newmember', level: String(level), server: S.server,
+        });
+        const reward = rewardAt(level);
+        const fields = reward ? [{ name: 'Role Reward', value: 'You earned the ' + (mode === 'dm' ? '**' + reward.role + '**' : CFPreview.mention('@' + reward.role)) + ' role!', wide: true }] : [];
+        let note = '';
+        if (mode === 'off') note = 'Level-ups are not announced. Members still level up and get their reward roles.';
+        else if (!levels.length) note = 'With these settings no level is announced.';
+        else note = (mode === 'dm' ? 'Sent by DM' : dest.value ? 'Posted in #' + channelName(dest.value) : 'Posted in the channel they were talking in')
+            + ' at level ' + levels.join(', ') + (levels.length === 6 ? ' and so on.' : '.');
+        CFPreview.render(pvBox, {
+            embed: { colour: '#FFD700', title: 'Level Up!', text, thumb: true, fields, foot: mode === 'dm' ? 'Level ' + level + ' in ' + S.server : 'You are now level ' + level + '!' },
+            note,
+        });
+        if (testBtn) testBtn.textContent = mode === 'channel' && dest.value ? 'Send a test to #' + channelName(dest.value) : 'Send a test to my DMs';
+    }
+    [dest, msg, every, minLevel, rewardsOnly].forEach((n) => { if (n) { n.addEventListener('input', renderPreview); n.addEventListener('change', renderPreview); } });
+    renderPreview();
+    if (testBtn) testBtn.addEventListener('click', async () => {
+        const target = dest.value && dest.value !== 'off' ? dest.value : 'dm';
+        testBtn.disabled = true; setLine(testLine, 'Sending...');
+        try {
+            const out = await call('/test-message', { method: 'POST', body: JSON.stringify({ target, message: msg.value }) });
+            setLine(testLine, out.where ? 'Sent to ' + out.where + '.' : 'Sent.', 'is-ok');
+        } catch (e) { setLine(testLine, e.message, 'is-bad'); }
+        finally { testBtn.disabled = false; }
+    });
+
+    // ── Role rewards: their own small forms, so the settings form is not submitted with them ──
+    const addForm = $('cfk-lv-add-reward');
+    const addBtn = document.querySelector('[data-lv-add-reward]');
+    if (addBtn && addForm) {
+        const submitAdd = () => { if (addForm.reportValidity()) { addBtn.disabled = true; addForm.submit(); } };
+        addBtn.addEventListener('click', submitAdd);
+        const lvlInput = $('f-leveling-level');
+        if (lvlInput) lvlInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submitAdd(); } });
+    }
+    document.querySelectorAll('[data-lv-remove-reward]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            if (!confirm('Remove this role reward?')) return;
+            $('cfk-lv-reward-id').value = btn.getAttribute('data-lv-remove-reward');
+            btn.disabled = true;
+            $('cfk-lv-remove-reward').submit();
+        });
+    });
+
+    // Boost rows: add from the template, remove in place. The page's "Unsaved changes" bar watches
+    // the form's inputs, so a change event is sent after either.
+    document.querySelectorAll('[data-lv-add]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const kind = btn.getAttribute('data-lv-add');
+            const tpl = document.querySelector('template[data-lv-tpl="' + kind + '"]');
+            const list = document.querySelector('[data-lv-boosts="' + kind + '"]');
+            if (!tpl || !list) return;
+            if (list.children.length >= 25) { alert('Up to 25 boosted ' + kind + 's.'); return; }
+            const row = tpl.content.firstElementChild.cloneNode(true);
+            list.append(row);
+            const sel = row.querySelector('select');
+            if (sel) { sel.dispatchEvent(new Event('change', { bubbles: true })); sel.focus(); }
+            if (form) form.dispatchEvent(new CustomEvent('cf:dirty', { bubbles: true }));
+        });
+    });
+    document.addEventListener('click', (e) => {
+        const rm = e.target.closest('[data-lv-remove]');
+        if (!rm) return;
+        const row = rm.closest('.lv-boost-row');
+        const owner = rm.closest('form');
+        if (row) row.remove();
+        if (owner) owner.dispatchEvent(new CustomEvent('cf:dirty', { bubbles: true }));
+    });
+
+    // ── XP events ───────────────────────────────────────────────────────────────────────────
+    const evStatus = $('lv-event-status');
+    const evStop = $('lv-event-stop');
+    const evStart = $('lv-event-start');
+    const evResult = $('lv-event-result');
+    function showEvent(current) {
+        if (current && current.endsAt > Date.now()) {
+            const live = current.startsAt <= Date.now();
+            evStatus.textContent = (live ? 'Running: ' : 'Starting soon: ') + current.name + ', ' + current.multiplier + ' times XP, until ' + new Date(current.endsAt).toLocaleString() + '.';
+            evStop.hidden = false;
+        } else {
+            evStatus.textContent = 'No XP event is running.';
+            evStop.hidden = true;
+        }
+    }
+    async function loadEvent() {
+        try { showEvent((await call('/xp-event')).current); }
+        catch (e) { evStatus.textContent = 'Could not load XP events: ' + e.message; }
+    }
+    // An event lasts at most 30 days (leveling-admin.js EVENT_MAX_MINUTES), whichever unit is picked.
+    $('f-leveling-event_unit').addEventListener('change', () => {
+        $('f-leveling-event_length').max = String(Math.floor(43200 / Number($('f-leveling-event_unit').value)));
+    });
+    evStart.addEventListener('click', async () => {
+        const minutes = Math.round(Number($('f-leveling-event_length').value) * Number($('f-leveling-event_unit').value));
+        evStart.disabled = true; setLine(evResult, 'Starting...');
+        try {
+            const out = await call('/xp-event', { method: 'POST', body: JSON.stringify({ name: $('f-leveling-event_name').value, multiplier: Number($('f-leveling-event_multiplier').value), minutes }) });
+            showEvent(out.current); setLine(evResult, 'Started', 'is-ok');
+        } catch (e) { setLine(evResult, e.message, 'is-bad'); }
+        finally { evStart.disabled = false; }
+    });
+    evStop.addEventListener('click', async () => {
+        if (!confirm('End the XP event now?')) return;
+        evStop.disabled = true;
+        try { await call('/xp-event/stop', { method: 'POST' }); showEvent(null); setLine(evResult, 'Ended', 'is-ok'); }
+        catch (e) { setLine(evResult, e.message, 'is-bad'); }
+        finally { evStop.disabled = false; }
+    });
+    loadEvent();
+
+    // ── Member XP ───────────────────────────────────────────────────────────────────────────
+    const mRows = $('lv-member-rows');
+    const mStatus = $('lv-member-status');
+    const mListHead = $('lv-member-list-head');
+    const mEdit = $('lv-member-edit');
+    const mEditHead = $('lv-member-edit-head');
+    const mAction = $('f-leveling-member_action');
+    const mAmount = $('f-leveling-member_amount');
+    const mApply = $('lv-member-apply');
+    const mResult = $('lv-member-result');
+    const mSearch = $('f-leveling-member_search');
+    let chosen = null;
+    const nameOf = (u) => (window.CFUser && u && u.username ? CFUser.label(u) : (u && (u.displayName || u.username)) || (u && u.id) || 'Unknown');
+    function describe(m) { return nameOf(m.user) + ': level ' + m.level + ', ' + num(m.totalXP) + ' XP in total (' + num(m.xp) + ' of ' + num(m.xpForNextLevel) + ' towards the next level).'; }
+    function choose(m) {
+        chosen = m;
+        mEdit.hidden = false;
+        mEditHead.textContent = describe(m);
+        setLine(mResult, '');
+        mAmount.focus();
+    }
+    function renderMembers(list, top) {
+        mListHead.textContent = top ? 'Highest levels' : 'Search results';
+        mRows.replaceChildren(...list.map((m) => {
+            const who = window.CFUser ? CFUser.cell(m.user) : el('span', { textContent: nameOf(m.user) });
+            const btn = el('button', { type: 'button', className: 'btn btn-sm btn-secondary', textContent: 'Edit XP' });
+            btn.addEventListener('click', () => choose(m));
+            return el('tr', {},
+                el('td', { label: 'Member' }, who),
+                el('td', { label: 'Level' }, el('span', { className: 'lv-level', textContent: String(m.level) })),
+                el('td', { label: 'Total XP' }, el('span', { className: 'lv-num', textContent: num(m.totalXP) })),
+                el('td', { className: 'cf-cell-end' }, btn));
+        }));
+        mStatus.textContent = list.length ? '' : (top ? 'Nobody has earned XP here yet. Search for a member to give them some.' : 'No members match that search.');
+    }
+    async function searchMembers() {
+        mStatus.textContent = 'Searching...';
+        try {
+            const out = await call('/members?q=' + encodeURIComponent(mSearch.value.trim()));
+            renderMembers(out.members || [], !!out.top);
+        } catch (e) { mStatus.textContent = 'Could not search: ' + e.message; }
+    }
+    $('lv-member-search').addEventListener('click', searchMembers);
+    mSearch.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); searchMembers(); } });
+    mAction.addEventListener('change', () => { mAmount.max = mAction.value === 'set-level' ? '1000' : '2000000000'; });
+    mApply.addEventListener('click', async () => {
+        if (!chosen) return;
+        const amount = Number(mAmount.value);
+        if (!Number.isInteger(amount) || amount < 0) { setLine(mResult, 'Enter a whole number.', 'is-bad'); return; }
+        const verb = mAction.options[mAction.selectedIndex].textContent.toLowerCase();
+        if (!confirm(nameOf(chosen.user) + ': ' + verb + ' ' + num(amount) + '?')) return;
+        mApply.disabled = true; setLine(mResult, 'Saving...');
+        try {
+            const out = await call('/members/' + encodeURIComponent(chosen.user.id), { method: 'POST', body: JSON.stringify({ action: mAction.value, amount }) });
+            chosen = out.member;
+            mEditHead.textContent = describe(out.member);
+            const parts = ['Saved: level ' + out.before.level + ' to ' + out.after.level + '.'];
+            if (out.roles.added.length) parts.push('Given: ' + out.roles.added.map((r) => r.name).join(', ') + '.');
+            if (out.roles.removed.length) parts.push('Taken: ' + out.roles.removed.map((r) => r.name).join(', ') + '.');
+            if (out.roles.skipped) parts.push(out.roles.skipped + ' reward role(s) could not be changed (deleted, or above the bot\'s role).');
+            setLine(mResult, parts.join(' '), out.roles.skipped ? 'is-warn' : 'is-ok');
+            searchMembers();
+        } catch (e) { setLine(mResult, e.message, 'is-bad'); }
+        finally { mApply.disabled = false; }
+    });
+    searchMembers();
+})();
+</script>

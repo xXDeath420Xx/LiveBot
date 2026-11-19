@@ -1,5 +1,7 @@
 import { EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 import economyManager from '../../core/economy-manager.js';
+import { displayNameFor } from '../../utils/display-name.js';
+import { themeColor } from '../../core/guild-theme.js';
 
 export async function handleRob(interaction) {
     const target = interaction.options.getUser('user');
@@ -19,16 +21,16 @@ export async function handleRob(interaction) {
 
     if (result.success) {
         const embed = new EmbedBuilder()
-            .setColor('#00FF00')
+            .setColor(themeColor(interaction.guildId, 'success'))
             .setTitle('\ud83d\udcb0 Rob Successful!')
-            .setDescription(`You successfully robbed ${target.username} and stole ${economyManager.formatMoney(result.stolenAmount, config)}!`);
+            .setDescription(`You successfully robbed ${displayNameFor(target, interaction.guild)} and stole ${economyManager.formatMoney(result.stolenAmount, config)}!`);
 
         await interaction.reply({ embeds: [embed] });
     } else {
         const embed = new EmbedBuilder()
-            .setColor('#FF0000')
+            .setColor(themeColor(interaction.guildId, 'danger'))
             .setTitle('\ud83d\ude94 Rob Failed!')
-            .setDescription(`You got caught trying to rob ${target.username} and were fined ${economyManager.formatMoney(result.fine, config)}!`);
+            .setDescription(`You got caught trying to rob ${displayNameFor(target, interaction.guild)} and were fined ${economyManager.formatMoney(result.fine, config)}!`);
 
         await interaction.reply({ embeds: [embed] });
     }
@@ -46,13 +48,13 @@ export async function handleLeaderboard(interaction) {
     let description = '';
     for (let i = 0; i < rows.length; i++) {
         const user = await interaction.client.users.fetch(rows[i].user_id).catch(() => null);
-        const username = user ? user.username : 'Unknown User';
+        const username = displayNameFor(user, interaction.guild);
         const medal = i === 0 ? '\ud83e\udd47' : i === 1 ? '\ud83e\udd48' : i === 2 ? '\ud83e\udd49' : `${i + 1}.`;
         description += `${medal} **${username}** - ${economyManager.formatMoney(rows[i].net_worth, config)}\n`;
     }
 
     const embed = new EmbedBuilder()
-        .setColor('#FFD700')
+        .setColor(themeColor(interaction.guildId, 'warning'))
         .setTitle('\ud83d\udcb0 Richest Users')
         .setDescription(description)
         .setFooter({ text: `Currency: ${config.currency_name}` });
@@ -81,7 +83,9 @@ export async function handleTransactions(interaction) {
         'shop_sell': '\ud83d\udcb8',
         'transfer': '\ud83d\udcb8',
         'reward': '\ud83c\udf81',
-        'gamble': '\ud83c\udfb0'
+        'gamble': '\ud83c\udfb0',
+        'heist': '\ud83e\uddb9',
+        'trade': '\ud83e\udd1d'
     };
 
     let description = '';
@@ -122,9 +126,9 @@ export async function handleGive(interaction) {
     );
 
     const embed = new EmbedBuilder()
-        .setColor('#00FF00')
+        .setColor(themeColor(interaction.guildId, 'success'))
         .setTitle('\u2705 Currency Given')
-        .setDescription(`Gave ${economyManager.formatMoney(amount, config)} to ${target.username}!`);
+        .setDescription(`Gave ${economyManager.formatMoney(amount, config)} to ${displayNameFor(target, interaction.guild)}!`);
 
     await interaction.reply({ embeds: [embed] });
 }
@@ -150,9 +154,9 @@ export async function handleRemove(interaction) {
     );
 
     const embed = new EmbedBuilder()
-        .setColor('#FF0000')
+        .setColor(themeColor(interaction.guildId, 'danger'))
         .setTitle('\u2705 Currency Removed')
-        .setDescription(`Removed ${economyManager.formatMoney(amount, config)} from ${target.username}!`);
+        .setDescription(`Removed ${economyManager.formatMoney(amount, config)} from ${displayNameFor(target, interaction.guild)}!`);
 
     await interaction.reply({ embeds: [embed] });
 }

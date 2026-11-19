@@ -88,7 +88,7 @@ router.post('/start', breedCooldown, validate(schemas.breed), async (req, res) =
     try {
         const { parent1StrainId, parent2StrainId } = req.body;
 
-        logger.info('[Breeding] Start attempt', {
+        logger.debug('[Breeding] Start attempt', {
             playerId: req.player.id,
             parent1StrainId,
             parent2StrainId
@@ -210,7 +210,7 @@ router.post('/cancel', async (req, res) => {
             [opId]
         );
 
-        logger.info('[Breeding] Cancelled', {
+        logger.debug('[Breeding] Cancelled', {
             playerId: req.player.id,
             operationId: opId
         });

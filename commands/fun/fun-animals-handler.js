@@ -2,6 +2,7 @@ import { EmbedBuilder } from 'discord.js';
 import axios from 'axios';
 import pool from '../../utils/db.js';
 import logger from '../../utils/logger.js';
+import { themeColor } from '../../core/guild-theme.js';
 
 const GOOGLE_API_KEY = process.env.GOOGLE_API_KEY;
 const GOOGLE_CSE_ID = process.env.GOOGLE_CSE_ID;
@@ -188,7 +189,7 @@ export async function handleSearch(interaction) {
   const typeIcon = imageType === 'gif' ? '🎬' : '📷';
 
   const embed = new EmbedBuilder()
-    .setColor('#4CAF50')
+    .setColor(themeColor(interaction.guildId, 'success'))
     .setTitle(`${emoji} ${animalName.charAt(0).toUpperCase() + animalName.slice(1)}`)
     .setImage(selectedImage.url)
     .setFooter({ text: `${typeIcon} ${selectedImage.source} | Viewed ${seenImages.length}x${uniqueOnly ? ' | 🆕 New!' : ''}` });
@@ -203,7 +204,7 @@ export async function handleStats(interaction) {
     return interaction.editReply({ content: '📊 You haven\'t searched for any animals yet! Try `/fun animals search name:cat`' });
   }
   const embed = new EmbedBuilder()
-    .setColor('#4CAF50')
+    .setColor(themeColor(interaction.guildId, 'success'))
     .setTitle('🐾 Your Animal Search History')
     .setDescription(stats.map((s, i) => `**${i + 1}.** ${getAnimalEmoji(s.animal_name)} ${s.animal_name} - ${s.times_viewed} searches`).join('\n'))
     .setFooter({ text: `Total: ${stats.reduce((a, s) => a + s.times_viewed, 0)} animal searches` });
@@ -217,7 +218,7 @@ export async function handlePopular(interaction) {
     return interaction.editReply({ content: '📊 No animals have been searched in this server yet!' });
   }
   const embed = new EmbedBuilder()
-    .setColor('#4CAF50')
+    .setColor(themeColor(interaction.guildId, 'success'))
     .setTitle('🏆 Most Popular Animals')
     .setDescription(stats.map((s, i) => `**${i + 1}.** ${getAnimalEmoji(s.animal_name)} ${s.animal_name} - ${s.total_views} views (${s.unique_users} users)`).join('\n'));
   return interaction.editReply({ embeds: [embed] });

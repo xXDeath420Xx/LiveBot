@@ -1,0 +1,83 @@
+<%# Member risk insight (core/member-insight.js via /api/guilds/:id/insight/member/:userId).
+    Used by Roles > Members. Defines window.cfuRenderMemberRisk(container, guildId, userId)
+    once; builds DOM nodes only (names come from Discord users). Drawn as a settings-row kit
+    section (cf-settings.css): a heading with the level as a pill, then the facts and the reasons. %>
+<style>
+    .mr-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: var(--cf-3) var(--cf-5); margin: 0; }
+    .mr-facts > div { min-width: 0; }
+    .mr-facts dt { margin: 0 0 2px; font-size: var(--cf-text-xs); font-weight: 500; color: var(--cf-text-3); }
+    .mr-facts dd { margin: 0; font-size: var(--cf-text-sm); color: var(--cf-text); overflow-wrap: anywhere; }
+    .mr-reasons { margin: 4px 0 0; padding-left: 1.1rem; font-size: var(--cf-text-sm); color: var(--cf-text-2); line-height: 1.6; }
+    .mr-reasons-label { margin: 0; font-size: var(--cf-text-xs); font-weight: 600; color: var(--cf-text-3); }
+</style>
+<script>
+(function () {
+    if (window.cfuRenderMemberRisk) return;
+    const el = (tag, props, ...kids) => {
+        const node = document.createElement(tag);
+        if (props) Object.assign(node, props);
+        for (const k of kids) if (k != null) node.append(k);
+        return node;
+    };
+    const TONE = { low: 'is-ok', medium: 'is-warn', high: 'is-bad' };
+    const LEVEL = { low: 'Low', medium: 'Medium', high: 'High' };
+    const when = (t) => (t ? new Date(t).toLocaleString() : 'never');
+    // A kit state (partials/kit/_state.ejs) inside a panel: loading or error.
+    const state = (kind, title, text) => el('div', { className: 'cf-rows' },
+        el('div', { className: 'cf-state cf-state--compact cf-state--' + kind },
+            kind === 'loading' ? el('span', { className: 'cf-spinner' }) : null,
+            el('p', { className: 'cf-state-title', textContent: title }),
+            text ? el('p', { className: 'cf-state-text', textContent: text }) : null));
+
+    window.cfuRenderMemberRisk = async function (container, guildId, userId) {
+        if (!container) return;
+        container.replaceChildren(state('loading', 'Loading risk insight'));
+        let d;
+        try {
+            const res = await fetch('/api/guilds/' + guildId + '/insight/member/' + encodeURIComponent(userId), { credentials: 'same-origin' });
+            d = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(d.error || ('Request failed (' + res.status + ')'));
+        } catch (e) {
+            container.replaceChildren(state('error', 'Risk insight is unavailable', e.message));
+            return;
+        }
+        const r = d.risk || { level: 'low', score: 0, reasons: [] };
+        const head = el('header', { className: 'cf-section-head' },
+            el('div', {},
+                el('h2', { className: 'cf-section-title', textContent: 'Risk insight' }),
+                el('p', { className: 'cf-section-desc', textContent: d.inServer
+                    ? 'How likely this account is to cause trouble, from its age, avatar, history here and the ban network.'
+                    : 'Not in the server. How likely this account is to cause trouble if it joins.' })),
+            el('div', { className: 'cf-section-actions' },
+                el('span', { className: 'cf-pill ' + (TONE[r.level] || ''), textContent: (LEVEL[r.level] || r.level) + ' risk, score ' + r.score })));
+
+        const f = d.facts || {};
+        const facts = [
+            ['Account age', f.accountAgeDays == null ? 'unknown' : (f.accountAgeDays < 1 ? 'under a day' : f.accountAgeDays + ' days')
+                + (f.accountAgeDays != null && f.accountAgeDays < (d.settings ? d.settings.newAccountDays : 7) ? ' (new)' : '')],
+            ['Avatar', f.defaultAvatar ? 'Default avatar' : 'Custom'],
+            ['Discord spammer flag', f.spammer === true ? 'Flagged' : f.spammer === false ? 'No' : 'Unknown'],
+            ['Joins to this server', String(f.joins || 0)],
+            ['Earlier protection hits here', String(f.priorHits || 0)],
+            ['Badges', (f.badges || []).map(b => b.label).join(', ') || 'None'],
+        ];
+        const n = d.network;
+        if (n) {
+            facts.push(['Global ban network', (n.listed ? 'Listed: ' + String(n.severity) + ' (' + n.category + '), ' : 'Not listed, ')
+                + 'confidence ' + n.confidence + '/100, ' + n.independentServers + ' independent server(s)']);
+            if (n.reasons && n.reasons.length) facts.push(['Network reasons', n.reasons.join(', ')]);
+            if (n.decision) facts.push(['If they join here', n.decision.action + ' (' + n.decision.why + ')']);
+        }
+        const grid = el('dl', { className: 'mr-facts' },
+            ...facts.map(([k, v]) => el('div', {}, el('dt', { textContent: k }), el('dd', { textContent: v }))));
+
+        const reasons = el('ul', { className: 'mr-reasons' },
+            ...(r.reasons.length ? r.reasons : [{ label: 'Nothing notable', points: 0 }])
+                .map(x => el('li', { textContent: x.label + (x.points ? ' (' + (x.points > 0 ? '+' : '') + x.points + ')' : '') })));
+        container.replaceChildren(el('section', { className: 'cf-section' }, head,
+            el('div', { className: 'cf-rows' },
+                el('div', { className: 'cf-row cf-row--stack' }, grid),
+                el('div', { className: 'cf-row cf-row--stack' }, el('div', {}, el('p', { className: 'mr-reasons-label', textContent: 'Why this level' }), reasons)))));
+    };
+})();
+</script>

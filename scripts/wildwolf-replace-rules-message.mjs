@@ -12,10 +12,10 @@
 
 import 'dotenv/config';
 import pool from '../utils/db.js';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 
 const GUILD_ID = '1414753158999179286';
-const BOT_ID   = '1507873568095076425';
+// The acting bot comes from guild_bot_mapping — never pinned here.
 const RULES_CH = '1506860523474649239';
 const OLD_RULES_MSG = '1506860660980449320';
 const VERIFIED_ROLE = '1455255019627479071';
@@ -43,8 +43,9 @@ const RULES_EMBED = {
     color: 0x7179CA,
 };
 
-const [botRows] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id = ?', [BOT_ID]);
-const TOKEN = encryption.decrypt(JSON.parse(botRows[0].bot_token));
+const bot = await resolveBotForGuild(GUILD_ID, { db: pool });
+const BOT_ID = bot.botId;
+const TOKEN = bot.token;
 
 async function api(method, path, body) {
     await new Promise(r => setTimeout(r, 120));

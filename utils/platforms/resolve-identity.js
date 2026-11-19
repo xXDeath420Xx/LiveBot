@@ -54,9 +54,8 @@ export async function resolveStreamerIdentity(platform, usernameRaw) {
                     canonicalUsername: clean,
                     profileImageUrl: null,
                 };
-            case 'trovo':
             case 'facebook':
-                // These platforms don't expose a cheap username→id resolver in the current
+                // Facebook doesn't expose a cheap username→id resolver in the current
                 // utility set. Treat username as both id and display name. Not ideal for
                 // rename tracking, but no worse than previous behavior and still avoids the
                 // `temp_…` placeholder pattern.
@@ -65,6 +64,13 @@ export async function resolveStreamerIdentity(platform, usernameRaw) {
                     canonicalUsername: clean,
                     profileImageUrl: null,
                 };
+            case 'rumble': {
+                // No public id API: the channel grid's canonical name is the identity, exactly as
+                // /rumble stores it. null when the channel does not exist.
+                const { validateUser } = await import('./rumble.js');
+                const u = await validateUser(clean);
+                return u ? { ...u, profileImageUrl: null } : null;
+            }
             default:
                 return null;
         }

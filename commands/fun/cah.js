@@ -23,7 +23,9 @@ import {
     startDiscoveryAndImport, getDiscoveryStatus
 } from '../../core/cah-deck-importer.js';
 import { attachDiscordAdapter } from '../../core/cah-discord-adapter.js';
+import { displayNameFor } from '../../utils/display-name.js';
 import logger from '../../utils/logger.js';
+import { themeColor } from '../../core/guild-theme.js';
 
 const data = new SlashCommandBuilder()
     .setName('cah')
@@ -141,7 +143,7 @@ async function handleStart(interaction) {
         return interaction.editReply({ content: `❌ Couldn't create game: \`${result.reason}\`${extra}` });
     }
     const game = result.game;
-    game.addPlayer({ userId: interaction.user.id, platform: 'discord', displayName: interaction.user.displayName || interaction.user.username });
+    game.addPlayer({ userId: interaction.user.id, platform: 'discord', displayName: displayNameFor(interaction.user, interaction.guild) });
     attachDiscordAdapter(game, interaction.client);
 
     const embed = new EmbedBuilder()
@@ -173,7 +175,7 @@ async function handleJoin(interaction) {
     const game = getGameByChannel(interaction.channelId);
     if (!game) return interaction.reply({ content: '❌ No CAH game in this channel. Start one with `/cah start`.', ephemeral: true });
     if (game.state !== STATES.LOBBY) return interaction.reply({ content: '⚠️ Game already in progress.', ephemeral: true });
-    const result = game.addPlayer({ userId: interaction.user.id, platform: 'discord', displayName: interaction.user.displayName || interaction.user.username });
+    const result = game.addPlayer({ userId: interaction.user.id, platform: 'discord', displayName: displayNameFor(interaction.user, interaction.guild) });
     if (!result.ok) return interaction.reply({ content: `❌ \`${result.reason}\``, ephemeral: true });
     return interaction.reply({ content: `✅ Joined! ${game.players.size} players in lobby.`, ephemeral: true });
 }
@@ -291,7 +293,7 @@ async function handleConfigView(interaction) {
     if (!isAdmin) return interaction.reply({ content: '❌ Admin only.', ephemeral: true });
     const cfg = await getGuildConfig(interaction.guildId);
     const embed = new EmbedBuilder()
-        .setColor(0x5865F2).setTitle('🃏 CAH Guild Config')
+        .setColor(themeColor(interaction.guildId, 'primary')).setTitle('🃏 CAH Guild Config')
         .addFields(
             { name: 'NSFW allowed', value: cfg.nsfw_allowed ? 'yes' : 'no', inline: true },
             { name: 'Blank cards', value: cfg.blank_cards_allowed ? `yes (max ${cfg.max_blank_cards})` : 'no', inline: true },

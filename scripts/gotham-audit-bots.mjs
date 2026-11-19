@@ -84,7 +84,7 @@ const [autoTrack] = await pool.execute('SELECT role_id, announcement_channel_id,
 const [tickets] = await pool.execute('SELECT panel_id, panel_channel_id, ticket_category_id FROM ticket_panels WHERE guild_id=? AND is_active=1', [GUILD]);
 const [rrPanels] = await pool.execute('SELECT id, panel_name, channel_id FROM reaction_role_panels WHERE guild_id=?', [GUILD]);
 const [subs] = await pool.execute('SELECT COUNT(*) AS n FROM subscriptions WHERE guild_id=?', [GUILD]);
-const [secAR] = await pool.execute('SELECT is_enabled, alert_channel_id FROM anti_raid_config WHERE guild_id=?', [GUILD]);
+const [secAR] = await pool.execute('SELECT enabled AS is_enabled, alert_channel_id FROM raid_detection_config WHERE guild_id=?', [GUILD]);
 const [secAS] = await pool.execute('SELECT enabled FROM adaptive_spam_config WHERE guild_id=?', [GUILD]);
 const [secAN] = await pool.execute('SELECT enabled FROM anti_nuke_config WHERE guild_id=?', [GUILD]);
 const [secPh] = await pool.execute('SELECT enabled FROM phishing_config WHERE guild_id=?', [GUILD]);

@@ -3,6 +3,7 @@ import * as handlers from './grow-handlers.js';
 import * as reminderHandlers from './grow-reminder-handler.js';
 import * as statsHandlers from './grow-stats-handler.js';
 import * as journalHandlers from './grow-journal-handler.js';
+import { themeColor } from '../../core/guild-theme.js';
 
 // VPD Chart data (Temperature °F vs Humidity %)
 const VPD_CHART = {
@@ -50,6 +51,12 @@ const LIGHT_CYCLES = {
 };
 
 export default {
+    // Cannabis content is not eligible for the App Directory, which requires apps to be
+    // appropriate for 13+ audiences. This keeps the command out of the main bot's GLOBAL
+    // payload; scripts/deploy-guild-scoped-commands.js registers it per-guild instead.
+    // Custom bots deploy their own command set and are unaffected.
+    guildScoped: true,
+
     category: 'community',
     data: new SlashCommandBuilder()
         .setName('grow')
@@ -418,7 +425,7 @@ async function handleDeficiency(interaction) {
 async function handleFeedChart(interaction) {
     const brand = interaction.options.getString('brand');
     const chart = FEED_CHARTS[brand];
-    const embed = new EmbedBuilder().setColor(0x2ECC71).setTitle(`${chart.name} Feed Schedule`)
+    const embed = new EmbedBuilder().setColor(themeColor(interaction.guildId, 'success')).setTitle(`${chart.name} Feed Schedule`)
         .addFields(
             { name: 'Vegetative', value: chart.veg, inline: false },
             { name: 'Flowering', value: chart.flower, inline: false }
@@ -431,7 +438,7 @@ async function handleLightCycle(interaction) {
     const stage = interaction.options.getString('stage');
     const cycle = LIGHT_CYCLES[stage];
     const isAuto = stage.startsWith('auto_');
-    const embed = new EmbedBuilder().setColor(0xF1C40F).setTitle(`Light Schedule: ${stage.replace('auto_', 'Auto ').replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}`)
+    const embed = new EmbedBuilder().setColor(themeColor(interaction.guildId, 'warning')).setTitle(`Light Schedule: ${stage.replace('auto_', 'Auto ').replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}`)
         .addFields(
             { name: 'Light Cycle', value: cycle.hours, inline: true },
             { name: 'Target PPFD', value: `${cycle.ppfd} μmol/m²/s`, inline: true },
@@ -442,7 +449,7 @@ async function handleLightCycle(interaction) {
 }
 
 async function handleFlush(interaction) {
-    const embed = new EmbedBuilder().setColor(0x3498DB).setTitle('Pre-Harvest Flush Guide')
+    const embed = new EmbedBuilder().setColor(themeColor(interaction.guildId, 'primary')).setTitle('Pre-Harvest Flush Guide')
         .setDescription('Flushing removes excess nutrients for smoother smoke.')
         .addFields(
             { name: 'When to Flush', value: '• **Soil:** Last 1-2 weeks\n• **Coco:** Last 5-7 days\n• **Hydro:** Last 3-5 days', inline: false },

@@ -2,6 +2,21 @@ import db from '../utils/db.js';
 import logger from '../utils/logger.js';
 import { getOrCreateUserEconomy, getEconomyConfig, formatMoney, logTransaction } from './economy-manager.js';
 
+// Shop items a member owns live in `shop_inventory` (guild_id, user_id, item_id, quantity, use_count,
+// last_used, is_equipped; UNIQUE guild_id+user_id+item_id). `user_inventory` is the Pokémon wallet and
+// must never be touched from here.
+
+/**
+ * Record an economy_transactions row without letting a logging failure surface after money moved.
+ */
+async function safeLogTransaction(...args) {
+    try {
+        await logTransaction(...args);
+    } catch (error) {
+        logger.error('[Shop] Failed to log economy transaction', { error: error.message, guildId: args[0], userId: args[1], type: args[2], amount: args[3] });
+    }
+}
+
 // ============================================
 // SHOP ITEM OPERATIONS
 // ============================================
@@ -16,7 +31,7 @@ import { getOrCreateUserEconomy, getEconomyConfig, formatMoney, logTransaction }
 export async function getShopItems(guildId, category = 'all', limit = 25) {
     let query = `
         SELECT s.*,
-               COALESCE((SELECT SUM(quantity) FROM user_inventory WHERE item_id = s.id AND guild_id = ?), 0) as total_owned
+               COALESCE((SELECT SUM(quantity) FROM shop_inventory WHERE item_id = s.id AND guild_id = ?), 0) as total_owned
         FROM shop_items s
         WHERE (s.guild_id = ? OR s.guild_id IS NULL) AND s.is_active = TRUE
     `;
@@ -43,7 +58,7 @@ export async function getShopItems(guildId, category = 'all', limit = 25) {
 export async function getShopItem(itemId, guildId) {
     const [rows] = await db.execute(
         `SELECT s.*,
-                COALESCE((SELECT SUM(quantity) FROM user_inventory WHERE item_id = s.id AND guild_id = ?), 0) as total_owned
+                COALESCE((SELECT SUM(quantity) FROM shop_inventory WHERE item_id = s.id AND guild_id = ?), 0) as total_owned
          FROM shop_items s
          WHERE s.id = ? AND (s.guild_id = ? OR s.guild_id IS NULL)`,
         [guildId, itemId, guildId]
@@ -146,9 +161,9 @@ export async function deleteShopItem(itemId, guildId) {
 export async function getUserInventory(guildId, userId) {
     const [items] = await db.execute(
         `SELECT ui.*, si.item_name, si.item_description, si.item_emoji, si.item_type, si.sell_value, si.usable, si.tradeable, si.sellable
-         FROM user_inventory ui
+         FROM shop_inventory ui
          JOIN shop_items si ON ui.item_id = si.id
-         WHERE ui.guild_id = ? AND ui.user_id = ?
+         WHERE ui.guild_id = ? AND ui.user_id = ? AND ui.quantity > 0
          ORDER BY si.item_type, si.item_name`,
         [guildId, userId]
     );
@@ -165,11 +180,11 @@ export async function getUserInventory(guildId, userId) {
  */
 export async function getUserItemQuantity(guildId, userId, itemId) {
     const [rows] = await db.execute(
-        'SELECT quantity FROM user_inventory WHERE guild_id = ? AND user_id = ? AND item_id = ?',
+        'SELECT quantity FROM shop_inventory WHERE guild_id = ? AND user_id = ? AND item_id = ?',
         [guildId, userId, itemId]
     );
 
-    return rows && rows.length > 0 ? rows[0].quantity : 0;
+    return rows && rows.length > 0 ? Number(rows[0].quantity) || 0 : 0;
 }
 
 /**
@@ -181,22 +196,12 @@ export async function getUserItemQuantity(guildId, userId, itemId) {
  * @returns {Promise<boolean>} Success status
  */
 export async function addItemToInventory(guildId, userId, itemId, quantity = 1) {
-    const [existing] = await db.execute(
-        'SELECT * FROM user_inventory WHERE guild_id = ? AND user_id = ? AND item_id = ?',
-        [guildId, userId, itemId]
+    // UNIQUE (guild_id, user_id, item_id) makes this a single atomic upsert
+    await db.execute(
+        `INSERT INTO shop_inventory (guild_id, user_id, item_id, quantity) VALUES (?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE quantity = quantity + VALUES(quantity)`,
+        [guildId, userId, itemId, quantity]
     );
-
-    if (existing && existing.length > 0) {
-        await db.execute(
-            'UPDATE user_inventory SET quantity = quantity + ? WHERE guild_id = ? AND user_id = ? AND item_id = ?',
-            [quantity, guildId, userId, itemId]
-        );
-    } else {
-        await db.execute(
-            'INSERT INTO user_inventory (guild_id, user_id, item_id, quantity) VALUES (?, ?, ?, ?)',
-            [guildId, userId, itemId, quantity]
-        );
-    }
 
     return true;
 }
@@ -210,23 +215,20 @@ export async function addItemToInventory(guildId, userId, itemId, quantity = 1) 
  * @returns {Promise<boolean>} Success status
  */
 export async function removeItemFromInventory(guildId, userId, itemId, quantity = 1) {
-    const currentQuantity = await getUserItemQuantity(guildId, userId, itemId);
+    // Guarded decrement: two concurrent removals can't both succeed on the same last copy
+    const [result] = await db.execute(
+        'UPDATE shop_inventory SET quantity = quantity - ? WHERE guild_id = ? AND user_id = ? AND item_id = ? AND quantity >= ?',
+        [quantity, guildId, userId, itemId, quantity]
+    );
 
-    if (currentQuantity < quantity) {
+    if (!result || result.affectedRows === 0) {
         throw new Error('Insufficient item quantity');
     }
 
-    if (currentQuantity === quantity) {
-        await db.execute(
-            'DELETE FROM user_inventory WHERE guild_id = ? AND user_id = ? AND item_id = ?',
-            [guildId, userId, itemId]
-        );
-    } else {
-        await db.execute(
-            'UPDATE user_inventory SET quantity = quantity - ? WHERE guild_id = ? AND user_id = ? AND item_id = ?',
-            [quantity, guildId, userId, itemId]
-        );
-    }
+    await db.execute(
+        'DELETE FROM shop_inventory WHERE guild_id = ? AND user_id = ? AND item_id = ? AND quantity <= 0',
+        [guildId, userId, itemId]
+    );
 
     return true;
 }
@@ -247,7 +249,7 @@ export async function purchaseItem(guildId, userId, itemId, quantity = 1) {
     const config = await getEconomyConfig(guildId);
     const item = await getShopItem(itemId, guildId);
 
-    if (!item) {
+    if (!item || !item.is_active) {
         throw new Error('Item not found or is not available for purchase');
     }
 
@@ -295,8 +297,32 @@ export async function purchaseItem(guildId, userId, itemId, quantity = 1) {
     // Process purchase using transaction
     const connection = await db.getConnection();
 
+    let walletBefore;
+
     try {
         await connection.beginTransaction();
+
+        // Lock the wallet row so concurrent purchases can't spend the same money twice
+        const [walletRows] = await connection.execute(
+            'SELECT wallet FROM user_economy WHERE guild_id = ? AND user_id = ? FOR UPDATE',
+            [guildId, userId]
+        );
+        walletBefore = Number(walletRows[0]?.wallet ?? 0);
+
+        if (walletBefore < totalCost) {
+            throw new Error(`You don't have enough ${config.currency_name}! You need ${formatMoney(totalCost, config)} but only have ${formatMoney(walletBefore, config)}`);
+        }
+
+        // Update stock if not unlimited (guarded so the last copies can't be oversold)
+        if (item.stock !== -1) {
+            const [stockResult] = await connection.execute(
+                'UPDATE shop_items SET stock = stock - ? WHERE id = ? AND stock >= ?',
+                [quantity, itemId, quantity]
+            );
+            if (stockResult.affectedRows === 0) {
+                throw new Error('Not enough stock available — someone just bought the last ones');
+            }
+        }
 
         // Deduct money
         await connection.execute(
@@ -304,59 +330,40 @@ export async function purchaseItem(guildId, userId, itemId, quantity = 1) {
             [totalCost, totalCost, guildId, userId]
         );
 
-        // Add item to inventory
-        const [existingItem] = await connection.execute(
-            'SELECT * FROM user_inventory WHERE guild_id = ? AND user_id = ? AND item_id = ?',
-            [guildId, userId, itemId]
+        // Add item to inventory (UNIQUE guild_id+user_id+item_id → atomic upsert)
+        await connection.execute(
+            `INSERT INTO shop_inventory (guild_id, user_id, item_id, quantity) VALUES (?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE quantity = quantity + VALUES(quantity)`,
+            [guildId, userId, itemId, quantity]
         );
-
-        if (existingItem && existingItem.length > 0) {
-            await connection.execute(
-                'UPDATE user_inventory SET quantity = quantity + ? WHERE guild_id = ? AND user_id = ? AND item_id = ?',
-                [quantity, guildId, userId, itemId]
-            );
-        } else {
-            await connection.execute(
-                'INSERT INTO user_inventory (guild_id, user_id, item_id, quantity) VALUES (?, ?, ?, ?)',
-                [guildId, userId, itemId, quantity]
-            );
-        }
-
-        // Update stock if not unlimited
-        if (item.stock !== -1) {
-            await connection.execute(
-                'UPDATE shop_items SET stock = stock - ? WHERE id = ?',
-                [quantity, itemId]
-            );
-        }
 
         await connection.commit();
-
-        // Log transaction (outside of transaction)
-        await logTransaction(
-            guildId,
-            userId,
-            'shop_buy',
-            -totalCost,
-            userEconomy.wallet,
-            userEconomy.wallet - totalCost,
-            `Purchased ${quantity}x ${item.item_name}`,
-            null,
-            itemId
-        );
-
-        return {
-            item,
-            quantity,
-            totalCost,
-            newBalance: userEconomy.wallet - totalCost
-        };
     } catch (error) {
         await connection.rollback();
         throw error;
     } finally {
         connection.release();
     }
+
+    // Log transaction (after commit; a logging failure must not surface after the money moved)
+    await safeLogTransaction(
+        guildId,
+        userId,
+        'shop_buy',
+        -totalCost,
+        walletBefore,
+        walletBefore - totalCost,
+        `Purchased ${quantity}x ${item.item_name}`,
+        null,
+        itemId
+    );
+
+    return {
+        item,
+        quantity,
+        totalCost,
+        newBalance: walletBefore - totalCost
+    };
 }
 
 /**
@@ -390,34 +397,42 @@ export async function sellItem(guildId, userId, itemId, quantity = 1) {
         throw new Error(`You don't have enough of this item to sell. You own: ${currentQuantity}`);
     }
 
-    // Get user economy
-    const userEconomy = await getOrCreateUserEconomy(guildId, userId, config);
+    // Make sure the seller has a wallet row to be paid into
+    await getOrCreateUserEconomy(guildId, userId, config);
     const totalValue = item.sell_value * quantity;
 
     // Process sale using transaction
     const connection = await db.getConnection();
 
+    let walletBefore;
+
     try {
         await connection.beginTransaction();
+
+        // Remove item from inventory first (guarded: a double-click can't sell the same copy twice)
+        const [invResult] = await connection.execute(
+            'UPDATE shop_inventory SET quantity = quantity - ? WHERE guild_id = ? AND user_id = ? AND item_id = ? AND quantity >= ?',
+            [quantity, guildId, userId, itemId, quantity]
+        );
+        if (invResult.affectedRows === 0) {
+            throw new Error('You don\'t have enough of this item to sell anymore');
+        }
+        await connection.execute(
+            'DELETE FROM shop_inventory WHERE guild_id = ? AND user_id = ? AND item_id = ? AND quantity <= 0',
+            [guildId, userId, itemId]
+        );
+
+        const [walletRows] = await connection.execute(
+            'SELECT wallet FROM user_economy WHERE guild_id = ? AND user_id = ? FOR UPDATE',
+            [guildId, userId]
+        );
+        walletBefore = Number(walletRows[0]?.wallet ?? 0);
 
         // Add money
         await connection.execute(
             'UPDATE user_economy SET wallet = wallet + ?, total_earned = total_earned + ? WHERE guild_id = ? AND user_id = ?',
             [totalValue, totalValue, guildId, userId]
         );
-
-        // Remove item from inventory
-        if (currentQuantity === quantity) {
-            await connection.execute(
-                'DELETE FROM user_inventory WHERE guild_id = ? AND user_id = ? AND item_id = ?',
-                [guildId, userId, itemId]
-            );
-        } else {
-            await connection.execute(
-                'UPDATE user_inventory SET quantity = quantity - ? WHERE guild_id = ? AND user_id = ? AND item_id = ?',
-                [quantity, guildId, userId, itemId]
-            );
-        }
 
         // Restore stock if not unlimited
         if (item.stock !== -1) {
@@ -428,32 +443,32 @@ export async function sellItem(guildId, userId, itemId, quantity = 1) {
         }
 
         await connection.commit();
-
-        // Log transaction (outside of transaction)
-        await logTransaction(
-            guildId,
-            userId,
-            'shop_sell',
-            totalValue,
-            userEconomy.wallet,
-            userEconomy.wallet + totalValue,
-            `Sold ${quantity}x ${item.item_name}`,
-            null,
-            itemId
-        );
-
-        return {
-            item,
-            quantity,
-            totalValue,
-            newBalance: userEconomy.wallet + totalValue
-        };
     } catch (error) {
         await connection.rollback();
         throw error;
     } finally {
         connection.release();
     }
+
+    // Log transaction (after commit; a logging failure must not surface after the money moved)
+    await safeLogTransaction(
+        guildId,
+        userId,
+        'shop_sell',
+        totalValue,
+        walletBefore,
+        walletBefore + totalValue,
+        `Sold ${quantity}x ${item.item_name}`,
+        null,
+        itemId
+    );
+
+    return {
+        item,
+        quantity,
+        totalValue,
+        newBalance: walletBefore + totalValue
+    };
 }
 
 /**
@@ -480,13 +495,32 @@ export async function useItem(guildId, userId, itemId) {
         throw new Error('You don\'t own this item');
     }
 
-    // Remove one from inventory
-    await removeItemFromInventory(guildId, userId, itemId, 1);
+    // Consumables are used up one at a time; other usable items (tools, decorations…) stay in the
+    // inventory and only have the use recorded. Either way use_count/last_used track the usage.
+    const consumes = item.item_type === 'consumable';
+    const [result] = await db.execute(
+        `UPDATE shop_inventory
+         SET quantity = quantity - ?, use_count = COALESCE(use_count, 0) + 1, last_used = NOW()
+         WHERE guild_id = ? AND user_id = ? AND item_id = ? AND quantity >= 1`,
+        [consumes ? 1 : 0, guildId, userId, itemId]
+    );
+
+    if (!result || result.affectedRows === 0) {
+        throw new Error('You don\'t own this item');
+    }
+
+    if (consumes) {
+        await db.execute(
+            'DELETE FROM shop_inventory WHERE guild_id = ? AND user_id = ? AND item_id = ? AND quantity <= 0',
+            [guildId, userId, itemId]
+        );
+    }
 
     // Return the item for custom effects to be handled by the command
     return {
         item,
-        remainingQuantity: currentQuantity - 1
+        consumed: consumes,
+        remainingQuantity: await getUserItemQuantity(guildId, userId, itemId)
     };
 }
 

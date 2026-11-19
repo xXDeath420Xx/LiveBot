@@ -1,0 +1,151 @@
+{
+  "theme": "seasonal",
+  "label": "Seasons & Occasions",
+  "questions": [
+    {
+      "slug": "seas-favourite-season-why",
+      "text": "What's your favourite season, and give a reason that isn't the weather?",
+      "group": "season-preference"
+    },
+    {
+      "slug": "seas-winter-survival",
+      "text": "How do you get through the coldest, darkest part of the year?"
+    },
+    {
+      "slug": "seas-summer-plan",
+      "text": "What's the one thing you want to do this summer that you'd regret missing?"
+    },
+    {
+      "slug": "seas-first-warm-day",
+      "text": "What do you do on the first properly warm day of the year?"
+    },
+    {
+      "slug": "seas-holiday-tradition",
+      "text": "What's a holiday tradition in your household that nobody else seems to do?"
+    },
+    {
+      "slug": "seas-gift-giving",
+      "text": "Are you an early gift buyer or a day-before panic buyer? Any near misses?"
+    },
+    {
+      "slug": "seas-new-year-resolution",
+      "text": "What's a resolution you actually kept, and what made that one different?"
+    },
+    {
+      "slug": "seas-halloween-costume-adult",
+      "text": "What's the best costume you've worn as an adult, and how much effort went in?"
+    },
+    {
+      "slug": "seas-birthday-plan",
+      "text": "What's your ideal birthday — big event, quiet day, or completely ignored?"
+    },
+    {
+      "slug": "seas-decorations",
+      "text": "How seriously do you take decorating for anything? Where's your line?"
+    },
+    {
+      "slug": "seas-family-gathering",
+      "text": "What's the best and worst part of a big family gathering?"
+    },
+    {
+      "slug": "seas-autumn-ritual",
+      "text": "What's the first sign of autumn where you live, and how do you feel when you spot it?"
+    },
+    {
+      "slug": "seas-holiday-food",
+      "text": "What food only exists for you at one time of year, and do you ration it?"
+    },
+    {
+      "slug": "seas-time-change",
+      "text": "How badly does the clock change wreck you? Should we abolish it?"
+    },
+    {
+      "slug": "seas-long-weekend",
+      "text": "What's the best use of a three-day weekend?"
+    },
+    {
+      "slug": "seas-anniversary",
+      "text": "What date in the year matters to you that nobody else would know about?"
+    },
+    {
+      "slug": "seas-holiday-avoid",
+      "text": "Which occasion do you actively avoid, and what would you rather do instead?"
+    },
+    {
+      "slug": "seas-seasonal-drink",
+      "text": "What drink belongs to one specific season for you?"
+    },
+    {
+      "slug": "seas-snow-day",
+      "text": "What's your best snow, storm, or extreme-weather day memory?"
+    },
+    {
+      "slug": "seas-year-review",
+      "text": "What's the one thing from this year so far you'll actually remember in ten years?"
+    },
+    {
+      "slug": "seas-holiday-travel",
+      "text": "Do you travel for holidays or stay put? Which is the better deal?"
+    },
+    {
+      "slug": "seas-summer-job",
+      "text": "Did you ever have a seasonal job? What was it, and what did it do to you?"
+    },
+    {
+      "slug": "seas-outdoor-season",
+      "text": "Which season gets you outdoors the most, and what are you doing out there?"
+    },
+    {
+      "slug": "seas-holiday-music",
+      "text": "When is it acceptable to start playing seasonal music? Give a date, defend it."
+    },
+    {
+      "slug": "seas-hosting-holiday",
+      "text": "Have you ever hosted a big occasion? How did it go and would you do it again?"
+    },
+    {
+      "slug": "seas-childhood-holiday-magic",
+      "text": "What made a holiday feel magical as a kid, and can you still get any of that?"
+    },
+    {
+      "slug": "seas-gift-best-given",
+      "text": "What's the best gift you've ever given someone? Their reaction is the important part."
+    },
+    {
+      "slug": "seas-quiet-season",
+      "text": "Which time of year is quietest for you, and do you enjoy the quiet or dread it?"
+    },
+    {
+      "slug": "seas-weather-ruined",
+      "text": "What plan has the weather completely destroyed for you?"
+    },
+    {
+      "slug": "seas-spring-cleaning",
+      "text": "Do you do a proper reset at any point in the year? What does it involve?"
+    },
+    {
+      "slug": "seas-firework-event",
+      "text": "What's the best fireworks, festival, or public event you've been to?"
+    },
+    {
+      "slug": "seas-holiday-leftovers",
+      "text": "What's the best thing to do with the leftovers after a big meal?"
+    },
+    {
+      "slug": "seas-seasonal-smell",
+      "text": "What smell means a specific season to you?"
+    },
+    {
+      "slug": "seas-back-to-school",
+      "text": "Does the start of a school year still feel like something to you, even now?"
+    },
+    {
+      "slug": "seas-holiday-card",
+      "text": "Do you still send cards or messages to people at certain times of year? Who's on the list?"
+    },
+    {
+      "slug": "seas-half-year-check",
+      "text": "Halfway through the year: what's gone better than expected and what's gone sideways?"
+    }
+  ]
+}

@@ -2,23 +2,13 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>CertiFried - Cannabis Tycoon</title>
-    <meta name="description" content="Grow, breed, and trade cannabis strains in this idle tycoon game">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CertiFried Tycoon</title>
+    <meta name="description" content="Grow, breed and trade strains in an idle tycoon game. Play here or in the CertiFried Twitch panel.">
     <meta name="theme-color" content="#111827">
-
-    <link rel="stylesheet" href="/cfx-api/dist/main.css?v=1770075434">
-
-    <!-- PWA Meta -->
     <meta name="mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-
-    <!-- Favicon -->
-    <link rel="icon" type="image/x-icon" href="/cfx-api/dist/favicon.ico">
-    <link rel="apple-touch-icon" href="/cfx-api/dist/CertiFried.png">
-
     <style>
-        /* Critical CSS for initial render */
         html, body {
             margin: 0;
             padding: 0;
@@ -27,155 +17,75 @@
             color: #f9fafb;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         }
-
-        .cf-loading-screen {
+        .is-hidden { display: none !important; }
+        .cf-boot {
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            height: 100vh;
-            gap: 24px;
-        }
-
-        .cf-loading-screen__logo {
-            width: 80px;
-            height: 80px;
-            animation: pulse 2s ease-in-out infinite;
-        }
-
-        .cf-loading-screen__title {
-            font-size: 24px;
-            font-weight: 700;
-            color: #22c55e;
-        }
-
-        .cf-loading-screen__spinner {
-            width: 32px;
-            height: 32px;
-            border: 3px solid #374151;
-            border-top-color: #22c55e;
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-        }
-
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        /* Login screen */
-        .cf-login {
-            display: none;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            gap: 32px;
+            min-height: 100vh;
+            gap: 20px;
             padding: 24px;
+            box-sizing: border-box;
             text-align: center;
         }
-
-        .cf-login__logo {
-            width: 96px;
-            height: 96px;
+        .cf-boot__logo { width: 72px; height: 72px; border-radius: 16px; }
+        .cf-boot__title { font-size: 26px; font-weight: 700; color: #22c55e; margin: 0; }
+        .cf-boot__sub { color: #9ca3af; font-size: 14px; margin: 6px 0 0; max-width: 320px; line-height: 1.45; }
+        .cf-boot__spinner {
+            width: 28px; height: 28px;
+            border: 3px solid #374151; border-top-color: #22c55e; border-radius: 50%;
+            animation: cf-spin 0.8s linear infinite;
         }
-
-        .cf-login__title {
-            font-size: 28px;
-            font-weight: 700;
-            color: #22c55e;
-            margin-bottom: 8px;
+        @keyframes cf-spin { to { transform: rotate(360deg); } }
+        .cf-signin { display: flex; flex-direction: column; gap: 10px; width: 100%; max-width: 300px; }
+        .cf-signin__btn {
+            display: block; width: 100%; padding: 12px 16px; border-radius: 8px; border: 1px solid transparent;
+            font-size: 14px; font-weight: 600; cursor: pointer; font-family: inherit;
         }
-
-        .cf-login__subtitle {
-            color: #9ca3af;
-            font-size: 14px;
-        }
-
-        .cf-login__buttons {
-            display: flex;
-            flex-direction: column;
-            gap: 12px;
-            width: 100%;
-            max-width: 280px;
-        }
-
-        .cf-login__btn {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 12px;
-            padding: 14px 24px;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-        }
-
-        .cf-login__btn--twitch {
-            background: #9146ff;
-            color: white;
-        }
-
-        .cf-login__btn--twitch:hover {
-            background: #7c3aed;
-        }
-
-        .cf-login__btn--kick {
-            background: #53fc18;
-            color: black;
-        }
-
-        .cf-login__btn--kick:hover {
-            background: #4ae316;
-        }
-
-        .cf-login__btn svg {
-            width: 20px;
-            height: 20px;
-        }
+        .cf-signin__btn:focus-visible { outline: 2px solid #22c55e; outline-offset: 2px; }
+        .cf-signin__btn--discord { background: #5865f2; color: #fff; }
+        .cf-signin__btn--discord:hover { background: #4752c4; }
+        .cf-signin__btn--twitch { background: #9146ff; color: #fff; }
+        .cf-signin__btn--twitch:hover { background: #772ce8; }
+        .cf-signin__btn--kick { background: #1f2937; color: #e5e7eb; border-color: #374151; }
+        .cf-signin__btn--kick:hover { border-color: #53fc18; }
+        .cf-signin__note { color: #6b7280; font-size: 12px; margin: 4px 0 0; line-height: 1.45; }
+        .cf-signin__error { color: #f87171; font-size: 13px; min-height: 1em; margin: 0; }
     </style>
 </head>
 <body>
-    <!-- Loading screen -->
-    <div class="cf-loading-screen" id="loading-screen">
-        <img class="cf-loading-screen__logo" src="/cfx-api/dist/CertiFried.png" alt="CertiFried Logo">
-        <div class="cf-loading-screen__title">CertiFried</div>
-        <div class="cf-loading-screen__spinner"></div>
+    <div class="cf-boot" id="loading-screen">
+        <p class="cf-boot__title">CertiFried</p>
+        <div class="cf-boot__spinner" role="status" aria-label="Loading"></div>
     </div>
 
-    <!-- Login screen (standalone only) -->
-    <div class="cf-login" id="login-screen">
-        <img class="cf-login__logo" src="/cfx-api/dist/CertiFried.png" alt="CertiFried Logo">
+    <div class="cf-boot is-hidden" id="login-screen">
+        <img class="cf-boot__logo" id="login-logo" alt="">
         <div>
-            <h1 class="cf-login__title">CertiFried</h1>
-            <p class="cf-login__subtitle">Cannabis Tycoon Game</p>
+            <h1 class="cf-boot__title">CertiFried</h1>
+            <p class="cf-boot__sub">Grow, breed and sell strains, run your operation while you are away, and climb the season leaderboard.</p>
         </div>
-        <div class="cf-login__buttons">
-            <button class="cf-login__btn cf-login__btn--twitch" id="login-twitch">
-                <svg viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M11.571 4.714h1.715v5.143H11.57zm4.715 0H18v5.143h-1.714zM6 0L1.714 4.286v15.428h5.143V24l4.286-4.286h3.428L22.286 12V0zm14.571 11.143l-3.428 3.428h-3.429l-3 3v-3H6.857V1.714h13.714z"/>
-                </svg>
-                Continue with Twitch
-            </button>
-            <button class="cf-login__btn cf-login__btn--kick" id="login-kick">
-                <svg viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-                </svg>
-                Continue with Kick
-            </button>
+        <div class="cf-signin">
+            <button type="button" class="cf-signin__btn cf-signin__btn--discord" id="login-discord">Continue with Discord</button>
+            <button type="button" class="cf-signin__btn cf-signin__btn--twitch" id="login-twitch">Continue with Twitch</button>
+            <button type="button" class="cf-signin__btn cf-signin__btn--kick" id="login-kick">Continue with Kick</button>
+            <p class="cf-signin__note">Discord uses your CertiFried dashboard login and is the same account as the /arcade cfx commands. Twitch is the same account as the CertiFried Twitch panel.</p>
+            <p class="cf-signin__error" id="login-error" role="alert"></p>
         </div>
     </div>
 
-    <!-- App root -->
-    <div id="app" class="cf-app cf-app--standalone" style="display: none;">
+    <div class="cf-boot is-hidden" id="frozen-screen" role="status">
+        <div>
+            <h1 class="cf-boot__title">CertiFried Tycoon</h1>
+            <p class="cf-boot__sub" id="frozen-text">CertiFried Tycoon is being rebuilt. The new game is coming soon.</p>
+        </div>
+    </div>
+
+    <div id="app" class="cf-app cf-app--standalone is-hidden">
         <cf-header></cf-header>
         <cf-nav></cf-nav>
+        <cf-season-strip></cf-season-strip>
         <cf-app-container></cf-app-container>
         <cf-strain-selector></cf-strain-selector>
         <cf-toast-container></cf-toast-container>
@@ -183,99 +93,59 @@
         <cf-offline-progress></cf-offline-progress>
     </div>
 
-    <!-- App Bundle - Uses blob URL workaround for ES module loading -->
-    <script>
-        (async function() {
-            try {
-                // Fetch the module as text (bypasses ES module blocking)
-                const response = await fetch('/cfx-api/dist/app.js?v=' + Date.now());
-                if (!response.ok) throw new Error('Failed to fetch app: ' + response.status);
+    <script type="module">
+        // Assets come from the same path family the page was opened on: /game -> /cfx (dashboard
+        // proxy), /cfx-api/game -> /cfx-api (the older public address).
+        const base = location.pathname.startsWith('/cfx-api/') ? '/cfx-api' : '/cfx';
+        const css = document.createElement('link');
+        css.rel = 'stylesheet';
+        css.href = `${base}/dist/main.css`;
+        document.head.appendChild(css);
+        const icon = document.createElement('link');
+        icon.rel = 'icon';
+        icon.href = `${base}/dist/favicon.ico`;
+        document.head.appendChild(icon);
+        document.getElementById('login-logo').src = `${base}/dist/CertiFried.png`;
 
-                const code = await response.text();
-                const blob = new Blob([code], { type: 'application/javascript' });
-                const blobUrl = URL.createObjectURL(blob);
+        const $ = (id) => document.getElementById(id);
+        const show = (id) => {
+            for (const el of ['loading-screen', 'login-screen', 'frozen-screen', 'app']) $(el).classList.toggle('is-hidden', el !== id);
+        };
 
-                // Import from blob URL
-                const { app, store } = await import(blobUrl);
-                URL.revokeObjectURL(blobUrl);
+        try {
+            const { app, store } = await import(`${base}/dist/app.js`);
 
-                // Show appropriate screen based on auth state
-                function updateScreen() {
-                    const isAuthenticated = store.get('auth.isAuthenticated');
-                    const loading = document.getElementById('loading-screen');
-                    const login = document.getElementById('login-screen');
-                    const appEl = document.getElementById('app');
-
-                    loading.style.display = 'none';
-
-                    if (isAuthenticated) {
-                        login.style.display = 'none';
-                        appEl.style.display = 'flex';
-                    } else {
-                        login.style.display = 'flex';
-                        appEl.style.display = 'none';
-                    }
+            const update = () => {
+                // Frozen until v2 (H-636): the message replaces both the sign-in screen and the game
+                const frozen = store.get('ui.frozen');
+                if (frozen) {
+                    $('frozen-text').textContent = frozen;
+                    return show('frozen-screen');
                 }
+                $('login-error').textContent = store.get('auth.isAuthenticated') ? '' : (store.get('ui.connectionError') || '');
+                show(store.get('auth.isAuthenticated') ? 'app' : 'login-screen');
+            };
 
-                // OAuth button handlers
-                document.getElementById('login-twitch').addEventListener('click', () => {
-                    app.startOAuth('twitch');
-                });
+            $('login-discord').addEventListener('click', () => {
+                $('login-error').textContent = '';
+                app.startDiscordSignIn().catch(() => { $('login-error').textContent = 'Discord sign-in failed. Try again.'; });
+            });
+            $('login-twitch').addEventListener('click', () => app.startOAuth('twitch'));
+            $('login-kick').addEventListener('click', () => app.startOAuth('kick'));
 
-                document.getElementById('login-kick').addEventListener('click', () => {
-                    app.startOAuth('kick');
-                });
-
-                // Listen for auth changes
-                store.subscribe('auth.isAuthenticated', updateScreen);
-
-                // Check for OAuth token from popup (localStorage fallback)
-                async function checkOAuthToken() {
-                    const oauthToken = localStorage.getItem('cfx_oauth_token');
-                    if (oauthToken) {
-                        console.log('[CFX] Found OAuth token in localStorage');
-                        localStorage.removeItem('cfx_oauth_token');
-                        localStorage.setItem('cfx_token', oauthToken);
-
-                        // Set token but NOT isAuthenticated yet
-                        store.merge('auth', { token: oauthToken });
-
-                        try {
-                            await app._loadGameState();
-                            await app._connectWebSocket();
-                            // Only set authenticated AFTER game state loads
-                            store.set('auth.isAuthenticated', true);
-                        } catch (err) {
-                            console.error('[CFX] Post-auth error:', err);
-                            // Clear token on failure
-                            localStorage.removeItem('cfx_token');
-                            store.merge('auth', { token: null, isAuthenticated: false });
-                            alert('Failed to load game. Please try logging in again.');
-                        }
-                        updateScreen();
-                    }
-                }
-
-                // Check on window focus (when returning from popup)
-                window.addEventListener('focus', checkOAuthToken);
-
-                // Initial screen update once app is ready
-                document.addEventListener('cfx:ready', () => {
-                    checkOAuthToken();
-                    setTimeout(updateScreen, 100);
-                });
-
-                // Also update screen immediately in case cfx:ready already fired
-                setTimeout(updateScreen, 200);
-
-            } catch (err) {
-                console.error('[CFX] Failed to load app:', err);
-                const loading = document.getElementById('loading-screen');
-                loading.querySelector('.cf-loading-screen__spinner').style.display = 'none';
-                loading.querySelector('.cf-loading-screen__title').textContent = 'Failed to load';
-                loading.querySelector('.cf-loading-screen__title').style.color = '#ef4444';
-            }
-        })();
+            store.subscribe('auth.isAuthenticated', update);
+            store.subscribe('ui.connectionError', update);
+            store.subscribe('ui.frozen', update);
+            if (app.initialized) update();
+            else document.addEventListener('cfx:ready', update, { once: true });
+        } catch (err) {
+            console.error('[CFX] Failed to load the game:', err);
+            $('loading-screen').querySelector('.cf-boot__spinner').remove();
+            const msg = document.createElement('p');
+            msg.className = 'cf-boot__sub';
+            msg.textContent = 'The game could not load. Refresh the page in a minute.';
+            $('loading-screen').appendChild(msg);
+        }
     </script>
 </body>
 </html>

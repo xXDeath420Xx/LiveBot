@@ -1,5 +1,6 @@
 import logger from '../utils/logger.js';
 import pool from '../utils/db.js';
+import { updateChallengeProgress } from './daily-challenges-manager.js';
 
 /**
  * Voice Activity Manager - Tracks voice channel usage and statistics
@@ -50,6 +51,15 @@ class VoiceActivityManager {
 
         // Track voice achievements
         await this.trackVoiceAchievements(guildId, userId, duration);
+
+        // Daily challenges: minutes in voice count toward the voice and "be active" challenges
+        const minutes = Math.floor(duration / 60);
+        if (minutes > 0) {
+          for (const type of ['voice', 'activity']) {
+            updateChallengeProgress(guildId, userId, type, minutes)
+              .catch(err => logger.warn(`[DailyChallenges] ${type} progress failed`, { error: err.message }));
+          }
+        }
       }
     } catch (error) {
       logger.error(`[VoiceActivityManager] Voice leave error: ${error.message}`, { guildId, userId });

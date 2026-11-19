@@ -5,6 +5,19 @@
 
 import { pool } from '../utils/db.js';
 import logger from '../utils/logger.js';
+import RPGConditionManager from './rpg-condition-manager.js';
+import { normalizeClassName } from './rpg-spell-manager.js';
+
+// Resources that put the character under a named dnd_conditions entry when used.
+// Rage lasts 1 minute = 10 combat rounds.
+const RESOURCE_CONDITIONS = {
+    'rage': { condition: 'raging', durationRounds: 10 }
+};
+
+/** Stable per-resource key for dnd_class_resources.resource_type (unique per character). */
+function resourceTypeKey(name) {
+    return String(name || 'class').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 50) || 'class';
+}
 
 // Class resource definitions
 const CLASS_RESOURCES = {
@@ -145,26 +158,66 @@ class RPGClassResourceManager {
         // Clear existing resources
         await pool.execute('DELETE FROM dnd_class_resources WHERE character_id = ?', [characterId]);
 
-        const resources = this._getClassResources(className, level, stats);
+        const lvl = Math.min(20, Math.max(1, parseInt(level, 10) || 1));
+        const resources = this._getClassResources(normalizeClassName(className), lvl, stats || {});
 
         for (const resource of resources) {
+            // resource_type is part of the (character_id, resource_type) unique key, so each
+            // resource needs its own key (Fighter has Action Surge + Second Wind).
+            // ON DUPLICATE KEY keeps concurrent initialisations from colliding.
             await pool.execute(
                 `INSERT INTO dnd_class_resources
                  (character_id, resource_type, resource_name, max_value, current_value, recharge_on)
-                 VALUES (?, ?, ?, ?, ?, ?)`,
-                [characterId, resource.type || 'class', resource.name, resource.max, resource.max, this._normalizeRecharge(resource.restoreOn)]
+                 VALUES (?, ?, ?, ?, ?, ?)
+                 ON DUPLICATE KEY UPDATE resource_name = VALUES(resource_name), max_value = VALUES(max_value),
+                     current_value = VALUES(current_value), recharge_on = VALUES(recharge_on)`,
+                [characterId, resource.type || resourceTypeKey(resource.name), resource.name, resource.max, resource.max, this._normalizeRecharge(resource.restoreOn)]
             );
         }
 
-        logger.info('[ClassResources] Initialized resources', { characterId, className, resources });
+        logger.info('[ClassResources] Initialized resources', { characterId, className, resources: resources.map(r => r.name) });
         return resources;
+    }
+
+    /**
+     * Re-derive a character's class resources from their current class/level/stats
+     * (used on creation and level-up). Never throws.
+     * @param {number} characterId - Character ID
+     */
+    static async syncResourcesForCharacter(characterId) {
+        try {
+            const [rows] = await pool.execute(
+                'SELECT class, level, charisma, wisdom FROM dnd_characters WHERE character_id = ?',
+                [characterId]
+            );
+            if (rows.length === 0) return [];
+            const c = rows[0];
+            return await this.initializeResources(characterId, c.class, c.level, { charisma: c.charisma, wisdom: c.wisdom });
+        } catch (err) {
+            logger.error('[ClassResources] Failed to sync resources', { characterId, error: err.message });
+            return [];
+        }
+    }
+
+    /**
+     * Lazily create resource rows for characters that predate resource
+     * initialisation (no rows at all).
+     * @private
+     */
+    static async _ensureResources(characterId) {
+        const [existing] = await pool.execute(
+            'SELECT COUNT(*) AS n FROM dnd_class_resources WHERE character_id = ?',
+            [characterId]
+        );
+        if (Number(existing[0].n) > 0) return;
+        await this.syncResourcesForCharacter(characterId);
     }
 
     /**
      * Get class resources configuration
      * @private
      */
-    static _getClassResources(className, level, stats) {
+    static _getClassResources(className, level, stats = {}) {
         const resources = [];
         const classRes = CLASS_RESOURCES[className];
 
@@ -173,7 +226,7 @@ class RPGClassResourceManager {
         // Handle main resource
         if (classRes.levels !== 'always') {
             const max = this._calculateMaxUses(classRes, level, stats);
-            if (max > 0) {
+            if (max > 0 || max === -1) { // -1 = unlimited (e.g. level 20 Rage)
                 resources.push({
                     name: classRes.name,
                     max,
@@ -188,7 +241,7 @@ class RPGClassResourceManager {
         if (CLASS_RESOURCES[secondaryKey]) {
             const secondary = CLASS_RESOURCES[secondaryKey];
             const max = this._calculateMaxUses(secondary, level, stats);
-            if (max > 0) {
+            if (max > 0 || max === -1) { // -1 = unlimited (e.g. level 20 Rage)
                 resources.push({
                     name: secondary.name,
                     max,
@@ -215,8 +268,8 @@ class RPGClassResourceManager {
             return resource.levels[level] || 0;
         }
 
-        const chaMod = Math.floor((stats.charisma - 10) / 2);
-        const wisMod = Math.floor((stats.wisdom - 10) / 2);
+        const chaMod = Math.floor(((Number(stats?.charisma) || 10) - 10) / 2);
+        const wisMod = Math.floor(((Number(stats?.wisdom) || 10) - 10) / 2);
         const profBonus = Math.ceil(level / 4) + 1;
 
         switch (resource.levels) {
@@ -256,6 +309,8 @@ class RPGClassResourceManager {
      * @returns {array} Resources
      */
     static async getResources(characterId) {
+        await this._ensureResources(characterId);
+
         const [resources] = await pool.execute(
             'SELECT * FROM dnd_class_resources WHERE character_id = ?',
             [characterId]
@@ -291,41 +346,92 @@ class RPGClassResourceManager {
      * @returns {object} Result
      */
     static async useResource(characterId, resourceName, amount = 1) {
+        amount = parseInt(amount, 10);
+        if (!Number.isFinite(amount) || amount < 1) {
+            throw new Error('Amount must be at least 1');
+        }
+
+        await this._ensureResources(characterId);
+
         const [resources] = await pool.execute(
             'SELECT * FROM dnd_class_resources WHERE character_id = ? AND resource_name = ?',
             [characterId, resourceName]
         );
 
         if (resources.length === 0) {
-            throw new Error(`Resource not found: ${resourceName}`);
+            const [all] = await pool.execute(
+                'SELECT resource_name FROM dnd_class_resources WHERE character_id = ?',
+                [characterId]
+            );
+            const available = all.map(r => r.resource_name);
+            throw new Error(available.length
+                ? `Resource not found: ${resourceName}. Your resources: ${available.join(', ')}`
+                : `Resource not found: ${resourceName}. Your class has no trackable resources at this level.`);
         }
 
         const resource = resources[0];
+        const canonicalName = resource.resource_name;
 
         // Unlimited resources
         if (resource.max_value === -1) {
+            const condition = await this._applyResourceCondition(characterId, canonicalName);
             return {
                 used: amount,
                 remaining: 'unlimited',
-                resourceName
+                resourceName: canonicalName,
+                condition
             };
         }
 
         if (resource.current_value < amount) {
-            throw new Error(`Not enough ${resourceName}. Have ${resource.current_value}, need ${amount}`);
+            throw new Error(`Not enough ${canonicalName}. Have ${resource.current_value}, need ${amount}`);
         }
 
-        await pool.execute(
-            'UPDATE dnd_class_resources SET current_value = current_value - ? WHERE character_id = ? AND resource_name = ?',
-            [amount, characterId, resourceName]
+        // Guarded decrement so concurrent uses can't drive the pool negative
+        const [res] = await pool.execute(
+            `UPDATE dnd_class_resources SET current_value = current_value - ?
+             WHERE id = ? AND current_value >= ?`,
+            [amount, resource.id, amount]
         );
+        if (!res.affectedRows) {
+            throw new Error(`Not enough ${canonicalName} remaining`);
+        }
+
+        const condition = await this._applyResourceCondition(characterId, canonicalName);
 
         return {
             used: amount,
             remaining: resource.current_value - amount,
             max: resource.max_value,
-            resourceName
+            resourceName: canonicalName,
+            condition
         };
+    }
+
+    /**
+     * Apply the condition a resource puts the character under (e.g. Rage -> raging).
+     * Bound to the character's ongoing PvE battle when there is one so it is cleared
+     * when that battle ends. Never throws; returns the condition name or null.
+     * @private
+     */
+    static async _applyResourceCondition(characterId, resourceName) {
+        const mapping = RESOURCE_CONDITIONS[String(resourceName || '').toLowerCase()];
+        if (!mapping) return null;
+        try {
+            const [battles] = await pool.execute(
+                `SELECT battle_id FROM dnd_battles WHERE character_id = ? AND status = 'ongoing' LIMIT 1`,
+                [characterId]
+            );
+            await RPGConditionManager.applyToCharacter(characterId, mapping.condition, {
+                duration: mapping.durationRounds,
+                source: resourceName,
+                combatId: battles[0]?.battle_id || null
+            });
+            return mapping.condition;
+        } catch (err) {
+            logger.error('[ClassResources] Failed to apply resource condition', { characterId, resourceName, error: err.message });
+            return null;
+        }
     }
 
     /**
@@ -336,6 +442,8 @@ class RPGClassResourceManager {
      */
     static async restoreOnRest(characterId, restType) {
         const restored = [];
+
+        await this._ensureResources(characterId);
 
         if (restType === 'long') {
             // Long rest restores all resources
@@ -413,7 +521,7 @@ class RPGClassResourceManager {
      * @returns {object} Resource info
      */
     static getResourceInfo(className) {
-        return CLASS_RESOURCES[className] || null;
+        return CLASS_RESOURCES[normalizeClassName(className)] || null;
     }
 
     /**
@@ -424,6 +532,8 @@ class RPGClassResourceManager {
      * @returns {boolean} Can use
      */
     static async canUseResource(characterId, resourceName, amount = 1) {
+        await this._ensureResources(characterId);
+
         const [resources] = await pool.execute(
             'SELECT current_value, max_value FROM dnd_class_resources WHERE character_id = ? AND resource_name = ?',
             [characterId, resourceName]

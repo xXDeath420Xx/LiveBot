@@ -1,14 +1,18 @@
 import pool from '../utils/db.js';
 import * as twitchApi from '../utils/platforms/twitch.js';
 import * as kickApi from '../utils/platforms/kick.js';
-import * as facebookApi from '../utils/platforms/facebook.js';
 import * as youtubeApi from '../utils/platforms/youtube.js';
 import * as tiktokApi from '../utils/platforms/tiktok.js';
-import * as trovoApi from '../utils/platforms/trovo-api.js';
 import * as rumbleApi from '../utils/platforms/rumble.js';
 import logger from '../utils/logger.js';
 import { updateAnnouncement, deleteAnnouncement, editAnnouncementStreamEnded } from '../utils/announcer.js';
+import { reportRoleAssignmentFailure } from './role-hierarchy-notifier.js';
 import platformCache from '../utils/platformCache.js';
+import { resolveRoutedChannel } from './live-channel-routing.js';
+import { resolveStyle as resolveRenderStyle } from './stream-render-style.js';
+import { recordObservation, closeStaleSessions } from './stream-session-recorder.js';
+import { recordLiveRoleGrant, forgetLiveRoleGrant, cleanupLeftoverLiveRoles } from './live-role-grants.js';
+import { attachGoLiveFilters, goLivePasses } from './stream-alert-filters.js';
 
 
 // Platform backoff tracking for rate limit handling
@@ -118,10 +122,8 @@ const PER_STREAMER_TIMEOUT_MS = 90_000;
 const platformModules = {
     twitch: twitchApi,
     kick: kickApi,
-    facebook: facebookApi,
     youtube: youtubeApi,
     tiktok: tiktokApi,
-    trovo: trovoApi,
     rumble: rumbleApi,
 };
 
@@ -149,7 +151,10 @@ async function loadAnnouncementsFromDatabase() {
                 deleteOnEnd: row.delete_on_end || false,
                 editOnEnd: row.edit_on_end || false,
                 offlineCheckCount: row.offline_check_count || 0, // Load persisted counter from database
-                createdAt: row.created_at // Track creation time for age-based cleanup
+                createdAt: row.created_at, // Track creation time for age-based cleanup
+                lastTitle: row.last_title ?? null, // What the embed currently shows — see shouldRefreshEmbed()
+                lastGame: row.last_game ?? null,
+                renderStyle: row.render_style ?? null // Which look it was drawn with — see needsRestyle()
             });
         }
 
@@ -508,16 +513,20 @@ async function cleanupStaleAnnouncementsByAge(client) {
 }
 
 // Reserve announcement slot in database to prevent race conditions
-async function reserveAnnouncementSlot(guildId, platform, username, channelId, streamerId, discordUserId, deleteOnEnd = true, editOnEnd = false) {
+async function reserveAnnouncementSlot(guildId, platform, username, channelId, streamerId, discordUserId, deleteOnEnd = true, editOnEnd = false, activeChannelIds = [channelId]) {
     let connection;
     try {
         connection = await pool.getConnection();
 
-        // Clean up stale records for this streamer in a DIFFERENT channel (subscription channel changed)
+        // Clean up stale records for this streamer in a channel it no longer announces to
+        // (subscription channel changed). A streamer can legitimately announce in SEVERAL
+        // channels of one guild (e.g. two Twitch teams), so every channel targeted this
+        // cycle is live, not stale — otherwise each post deletes the other, every cycle.
+        const keep = [...new Set([channelId, ...activeChannelIds])];
         const [staleRows] = await connection.query(
             `SELECT id, channel_id, message_id, delete_on_end FROM live_announcements
-             WHERE guild_id = ? AND platform = ? AND username = ? AND channel_id != ?`,
-            [guildId, platform, username, channelId]
+             WHERE guild_id = ? AND platform = ? AND username = ? AND channel_id NOT IN (?)`,
+            [guildId, platform, username, keep]
         );
         if (staleRows.length > 0) {
             for (const stale of staleRows) {
@@ -619,6 +628,55 @@ async function saveAnnouncementToDatabase(guildId, platform, username, channelId
     }
 }
 
+/**
+ * Does the live embed actually need rewriting?
+ *
+ * The embed shows title, game and the streamer's avatar — nothing that ticks on its own.
+ * Going offline is handled separately (delete/edit-on-end), so only a title or category
+ * change is worth an edit. A null lastTitle means the row predates change tracking, so
+ * refresh once to record a baseline.
+ */
+function embedContentChanged(announcementData, streamData) {
+    if (!announcementData || announcementData.lastTitle == null) return true;
+    const title = streamData.title || null;
+    const game = streamData.game_name || null;
+    return announcementData.lastTitle !== title || announcementData.lastGame !== game;
+}
+
+/**
+ * The announcement is drawn in a different style than the one now configured.
+ *
+ * This is a correctness gap, not a routine refresh, so it bypasses the every-Nth-cycle embed
+ * gate: one cycle takes minutes (every bot is checked serially), so waiting for cycle N would
+ * leave announcements looking wrong for half an hour after someone changed the setting. It
+ * self-limits — once redrawn, the stored style matches and this stops firing.
+ */
+function styleMismatched(announcementData, resolvedStyle) {
+    return !!announcementData && announcementData.renderStyle !== resolvedStyle;
+}
+
+/**
+ * A platform preview is a live frame, so freezing it at go-live defeats the point of choosing
+ * it. Unlike a style mismatch this IS routine, so it stays behind the embed-update gate.
+ */
+function previewNeedsRefresh(resolvedStyle) {
+    return resolvedStyle === 'twitch';
+}
+
+// Remember what the embed now shows, so the next pass can tell whether anything moved
+async function updateAnnouncementContentState(guildId, platform, username, channelId, title, game, renderStyle = null) {
+    try {
+        await pool.execute(
+            'UPDATE live_announcements SET last_title = ?, last_game = ?, render_style = ? WHERE guild_id = ? AND platform = ? AND username = ? AND channel_id = ?',
+            [title ?? null, game ?? null, renderStyle, guildId, platform, username, channelId]
+        );
+    } catch (error) {
+        if (error.code !== 'ER_NO_SUCH_TABLE') {
+            logger.warn(`[Stream Manager] Failed to persist embed content state for ${username}: ${error.message}`, { category: 'streams' });
+        }
+    }
+}
+
 // Update offline check count in database
 async function updateOfflineCheckCount(guildId, platform, username, channelId, count) {
     let connection;
@@ -685,6 +743,8 @@ async function performCycleSetup(client, cycleOptions = {}) {
     if (isFirstPass) {
         await loadAnnouncementsFromDatabase();
         await cleanupOrphanedAnnouncements(client);
+        // Roles left on members whose subscription went away mid-stream (core/live-role-grants.js)
+        await cleanupLeftoverLiveRoles(client);
         // Deep scan on startup: scan full channel history to clear backlog of orphaned messages
         await cleanupUntrackedDiscordMessages(client, { deep: true });
         // Run age-based cleanup on startup to catch any stuck announcements immediately
@@ -697,9 +757,16 @@ async function performCycleSetup(client, cycleOptions = {}) {
         await cleanupStaleAnnouncementsByAge(client);
     }
 
+    // Stream history: close sessions nobody has seen live for hours (bot was down, streamer
+    // untracked mid-stream). Cheap single UPDATE on the open_key index.
+    if (isFirstPass || shouldRunStaleCleanup) {
+        await closeStaleSessions();
+    }
+
     if (shouldRunOrphanCleanup) {
         logger.info(`[Stream Manager] Running periodic orphaned announcement cleanup (cycle #${currentPass})`, { category: "streams" });
         await cleanupOrphanedAnnouncements(client);
+        await cleanupLeftoverLiveRoles(client);
     }
 
     if (shouldRunUntrackedCleanup) {
@@ -714,12 +781,17 @@ async function performCycleSetup(client, cycleOptions = {}) {
  * cycleOptions is provided by the scheduler and shared across all bot calls in a cycle.
  */
 async function checkStreamers(client, cycleOptions = {}) {
-    const { shouldUpdateEmbeds = false, currentPass = 0 } = cycleOptions;
+    const { shouldUpdateEmbeds = false, currentPass = 0, onlyStreamerIds = null, forceLiveIds = null } = cycleOptions;
+    // When onlyStreamerIds is a Set, this is an EventSub-triggered targeted check for one (or a few)
+    // streamers who just went live — process ONLY them, skipping the full 500-streamer sweep.
+    const scoped = onlyStreamerIds instanceof Set ? onlyStreamerIds : null;
+    // Streamers EventSub confirmed as live: trust that over Helix's laggy isLive check.
+    const forceLive = forceLiveIds instanceof Set ? forceLiveIds : null;
 
     if (shouldUpdateEmbeds) {
         logger.info(`[Stream Manager] Cycle #${currentPass}: Will update embeds for live streamers`, { category: "streams" });
     } else {
-        logger.info(`[Stream Manager] Cycle #${currentPass}: Normal check`, { category: "streams" });
+        logger.debug(`[Stream Manager] Cycle #${currentPass}: Normal check`, { category: "streams" });
     }
 
     let connection;
@@ -731,7 +803,7 @@ async function checkStreamers(client, cycleOptions = {}) {
         let guildFilter = '';
         const queryParams = [];
         const botIdentifier = client.botId || client.user?.id || 'unknown';
-        logger.info(`[Stream Manager] Bot check - botId: ${botIdentifier}, isDefaultBot: ${client.isDefaultBot}`, { category: "streams" });
+        logger.debug(`[Stream Manager] Bot check - botId: ${botIdentifier}, isDefaultBot: ${client.isDefaultBot}`, { category: "streams" });
 
         if (client.isDefaultBot) {
             // Default bot handles guilds NOT assigned to any custom bot
@@ -742,21 +814,40 @@ async function checkStreamers(client, cycleOptions = {}) {
             queryParams.push(client.botId);
         }
 
-        logger.info(`[Stream Manager] Using guild filter: ${guildFilter || 'NONE (all guilds)'}`, { category: "streams" });
+        logger.debug(`[Stream Manager] Using guild filter: ${guildFilter || 'NONE (all guilds)'}`, { category: "streams" });
+
+        /*
+         * `paused` has to be honoured HERE, and until now it was not.
+         *
+         * Two systems set subscriptions.paused — the monthly leveling reset (everyone below level
+         * 3) and, as of streamer-departure, members who have left the server. Neither did anything,
+         * because this query never looked at the column: a paused subscription was announced
+         * exactly like an active one, through both the poll cycle and the EventSub push (which
+         * funnels into checkStreamerNow -> checkStreamers -> this query).
+         *
+         * Written as an appended predicate rather than baked into `guildFilter` because that string
+         * is empty when neither bot branch matches, and a bare `AND` would be a syntax error.
+         */
+        const pausedFilter = guildFilter ? 'AND sub.paused = 0' : 'WHERE sub.paused = 0';
 
         // Load subscriptions, teams, and guild settings
         const [subscriptions] = await connection.query(
             `SELECT sub.subscription_id, sub.guild_id,
                     COALESCE(sub.announcement_channel_id, gc.announcement_channel_id) AS sub_channel_id,
-                    sub.live_role_id AS sub_role_id, sub.override_nickname, sub.override_avatar_url,
+                    sub.announcement_channel_id AS explicit_channel_id,
+                    sub.live_role_id AS sub_role_id, sub.override_nickname, sub.override_avatar_url, sub.post_as_streamer,
                     sub.team_subscription_id, sub.delete_on_end, sub.edit_on_end, sub.custom_message, sub.ping_role_id,
                     s.streamer_id, s.discord_user_id, s.username, s.platform, s.profile_image_url
              FROM subscriptions sub
              JOIN streamers s ON sub.streamer_id = s.streamer_id
              LEFT JOIN guild_config gc ON sub.guild_id COLLATE utf8mb4_unicode_ci = gc.guild_id COLLATE utf8mb4_unicode_ci
-             ${guildFilter}`,
+             ${guildFilter} ${pausedFilter}`,
             queryParams
         );
+
+        // Per-subscription go-live filters (category / title keywords), read separately so a database
+        // without those columns still announces as before. See core/stream-alert-filters.js.
+        await attachGoLiveFilters(connection, subscriptions);
 
         const [teams] = await connection.query(
             'SELECT id, announcement_channel_id AS team_channel_id, live_role_id AS team_role_id, webhook_name AS team_webhook_name, webhook_avatar_url AS team_webhook_avatar FROM twitch_teams'
@@ -768,11 +859,12 @@ async function checkStreamers(client, cycleOptions = {}) {
                 g.announcement_channel_id AS guild_channel_id,
                 g.live_role_id AS guild_role_id,
                 g.use_webhook_persona,
-                g.stream_ignored_roles
+                g.stream_ignored_roles,
+                g.announcement_message
             FROM guilds g
         `);
 
-        logger.info(`[Stream Manager] Loaded ${subscriptions.length} subscriptions, ${teams.length} teams, ${guildSettings.length} guilds`, { category: "streams" });
+        logger.debug(`[Stream Manager] Loaded ${subscriptions.length} subscriptions, ${teams.length} teams, ${guildSettings.length} guilds`, { category: "streams" });
 
         const teamsMap = new Map(teams.map(t => [t.id, t]));
         const guildsMap = new Map(guildSettings.map(g => {
@@ -801,7 +893,15 @@ async function checkStreamers(client, cycleOptions = {}) {
             streamersToCheck.get(key).subscriptions.push(sub);
         }
 
-        logger.info(`[Stream Manager] Checking ${streamersToCheck.size} unique streamers now...`, { category: "streams" });
+        // Targeted (EventSub-triggered) run: keep only the streamer(s) that just went live.
+        if (scoped) {
+            for (const [key, { streamerInfo }] of streamersToCheck) {
+                if (!scoped.has(String(streamerInfo.streamer_id))) streamersToCheck.delete(key);
+            }
+            logger.debug(`[Stream Manager] Targeted check for ${streamersToCheck.size} streamer(s) [${[...scoped].join(',')}]`, { category: "streams" });
+        }
+
+        logger.debug(`[Stream Manager] Checking ${streamersToCheck.size} unique streamers now...`, { category: "streams" });
 
         // Track role operations to batch them
         const roleOperationsByGuild = new Map();
@@ -809,7 +909,7 @@ async function checkStreamers(client, cycleOptions = {}) {
         let processedCount = 0;
         for (const { streamerInfo, subscriptions: subs } of streamersToCheck.values()) {
             processedCount++;
-            logger.info(`[Stream Manager] Processing streamer ${processedCount}/${streamersToCheck.size}: ${streamerInfo.username} (${streamerInfo.platform})`, {
+            logger.debug(`[Stream Manager] Processing streamer ${processedCount}/${streamersToCheck.size}: ${streamerInfo.username} (${streamerInfo.platform})`, {
                 category: "streams",
                 progress: `${processedCount}/${streamersToCheck.size}`,
                 streamer: streamerInfo.username,
@@ -819,8 +919,9 @@ async function checkStreamers(client, cycleOptions = {}) {
             // YouTube page.goto that never resolves) must NOT stall the whole cycle and
             // starve every streamer after it in the list. Abandon it and move on.
             try {
+                const eventsubLive = !!forceLive && forceLive.has(String(streamerInfo.streamer_id));
                 await Promise.race([
-                    processUniqueStreamer(client, streamerInfo, subs, guildsMap, teamsMap, roleOperationsByGuild, shouldUpdateEmbeds),
+                    processUniqueStreamer(client, streamerInfo, subs, guildsMap, teamsMap, roleOperationsByGuild, shouldUpdateEmbeds, eventsubLive),
                     new Promise((_, reject) => setTimeout(
                         () => reject(new Error('per-streamer timeout')),
                         PER_STREAMER_TIMEOUT_MS
@@ -833,18 +934,18 @@ async function checkStreamers(client, cycleOptions = {}) {
                     platform: streamerInfo.platform,
                 });
             }
-            logger.info(`[Stream Manager] Completed processing streamer ${processedCount}/${streamersToCheck.size}: ${streamerInfo.username}`, {
+            logger.debug(`[Stream Manager] Completed processing streamer ${processedCount}/${streamersToCheck.size}: ${streamerInfo.username}`, {
                 category: "streams",
                 progress: `${processedCount}/${streamersToCheck.size}`
             });
         }
 
-        logger.info(`[Stream Manager] Finished checking all ${processedCount} streamers`, { category: "streams" });
+        logger.debug(`[Stream Manager] Finished checking all ${processedCount} streamers`, { category: "streams" });
 
         // Apply role changes
-        logger.info(`[Stream Manager] Role operations map size: ${roleOperationsByGuild.size}`, { category: "streams" });
+        logger.debug(`[Stream Manager] Role operations map size: ${roleOperationsByGuild.size}`, { category: "streams" });
         for (const [guildId, userRoleMap] of roleOperationsByGuild.entries()) {
-            logger.info(`[Stream Manager] Processing role changes for guild ${guildId}, users: ${userRoleMap.size}`, { category: "streams", guildId });
+            logger.debug(`[Stream Manager] Processing role changes for guild ${guildId}, users: ${userRoleMap.size}`, { category: "streams", guildId });
             for (const [discordUserId, roleMap] of userRoleMap.entries()) {
                 for (const [roleId, { shouldHaveRole, member, streamerName }] of roleMap.entries()) {
                     try {
@@ -858,22 +959,39 @@ async function checkStreamers(client, cycleOptions = {}) {
                         const hasRole = member.roles.cache.has(roleId);
 
                         // Debug logging to understand why roles aren't being assigned
-                        logger.info(`[Role Check] User: ${member.user.tag}, Role: ${liveRole.name} (${roleId}), shouldHaveRole: ${shouldHaveRole}, hasRole: ${hasRole}, streamer: ${streamerName}`, {
+                        (shouldHaveRole === hasRole ? logger.debug : logger.info)(`[Role Check] User: ${member.user.tag}, Role: ${liveRole.name} (${roleId}), shouldHaveRole: ${shouldHaveRole}, hasRole: ${hasRole}, streamer: ${streamerName}`, {
                             category: "streams",
                             guildId: guild.id,
                             discordUserId
                         });
 
+                        // The .catch() used to swallow the rejection and let the "Added/Removed
+                        // live role" line log unconditionally underneath it — so a guild where
+                        // every write was denied still produced a log full of successes.
+                        // Branch on the outcome instead, and tell the owner: a 50013 here means
+                        // their streamers silently never get their live role, and the only
+                        // people who can fix it are in that server.
                         if (shouldHaveRole && !hasRole) {
-                            await member.roles.add(liveRole).catch(e =>
-                                logger.error(`Failed to add role:`, { error: e, guildId: guild.id, memberId: member.id, roleId: liveRole.id, category: "streams" })
-                            );
-                            logger.info(`Added live role '${liveRole.name}' to ${member.user.tag}`, { guildId: guild.id, userId: member.id, streamer: streamerName, category: "streams" });
+                            try {
+                                await member.roles.add(liveRole);
+                                logger.info(`Added live role '${liveRole.name}' to ${member.user.tag}`, { guildId: guild.id, userId: member.id, streamer: streamerName, category: "streams" });
+                                // Ledger of roles the bot gave, so one left behind can be taken back
+                                // (core/live-role-grants.js). A role staff gave is never recorded.
+                                recordLiveRoleGrant(guild.id, member.id, liveRole.id).catch(err =>
+                                    logger.warn(`[LiveRoles] could not record grant: ${err.message}`, { category: "streams" }));
+                            } catch (e) {
+                                logger.error(`Failed to add role:`, { error: e, guildId: guild.id, memberId: member.id, roleId: liveRole.id, category: "streams" });
+                                await reportRoleAssignmentFailure({ guild, role: liveRole, error: e, action: 'add' });
+                            }
                         } else if (!shouldHaveRole && hasRole) {
-                            await member.roles.remove(liveRole).catch(e =>
-                                logger.error(`Failed to remove role:`, { error: e, guildId: guild.id, memberId: member.id, roleId: liveRole.id, category: "streams" })
-                            );
-                            logger.info(`Removed live role '${liveRole.name}' from ${member.user.tag}`, { guildId: guild.id, userId: member.id, category: "streams" });
+                            try {
+                                await member.roles.remove(liveRole);
+                                logger.info(`Removed live role '${liveRole.name}' from ${member.user.tag}`, { guildId: guild.id, userId: member.id, category: "streams" });
+                                forgetLiveRoleGrant(guild.id, member.id, liveRole.id).catch(() => {});
+                            } catch (e) {
+                                logger.error(`Failed to remove role:`, { error: e, guildId: guild.id, memberId: member.id, roleId: liveRole.id, category: "streams" });
+                                await reportRoleAssignmentFailure({ guild, role: liveRole, error: e, action: 'remove' });
+                            }
                         }
                     } catch (error) {
                         logger.error(`Error applying role changes for user ${discordUserId}:`, { error, guildId, category: "streams" });
@@ -890,6 +1008,68 @@ async function checkStreamers(client, cycleOptions = {}) {
 }
 
 /**
+ * Poll Helix stream details a few times, waiting for it to catch up to an EventSub go-live.
+ * Bypasses platformCache (which may hold a stale null). Bounded so it never approaches the
+ * 90s per-streamer guard: 6 tries, 3s apart ≈ 15s worst case, and it returns the instant details
+ * appear. Returns null if Helix still hasn't caught up — the caller then skips this pass and the
+ * next poll cycle (or the offline/online reconcile) will announce.
+ */
+async function fetchDetailsWithRetry(api, streamer, tries = 6, gapMs = 3000) {
+    for (let i = 0; i < tries; i++) {
+        await new Promise(r => setTimeout(r, gapMs));
+        try {
+            const data = await api.getStreamDetails(streamer.username);
+            if (data) {
+                logger.info(`[processUniqueStreamer] Helix details caught up for ${streamer.username} after ${(i + 1) * gapMs / 1000}s`, { category: "streams" });
+                return data;
+            }
+        } catch { /* transient — keep trying */ }
+    }
+    return null;
+}
+
+/**
+ * Announce ONE streamer immediately, across every bot that serves their guilds.
+ *
+ * Called by the Twitch EventSub webhook the instant a `stream.online` arrives — instead of waiting
+ * for the minute cron to walk the whole list and reach this streamer. It reuses the exact same
+ * checkStreamers pipeline (announcer, multi-guild fan-out, dedup, slot reservation, live roles),
+ * just scoped to the one streamer_id, and runs it for the default bot plus every custom bot the way
+ * the scheduler does — so whichever bot owns the streamer's guild is the one that posts.
+ *
+ * @param {string|number} streamerId  streamers.streamer_id
+ * @param {{forceLive?: boolean}} [options]  forceLive: EventSub confirmed this streamer is ONLINE,
+ *   so trust it over Helix's laggy isLive check (used for stream.online; false for stream.offline).
+ */
+async function checkStreamerNow(streamerId, { forceLive = false } = {}) {
+    const id = String(streamerId);
+    const opts = {
+        onlyStreamerIds: new Set([id]),
+        forceLiveIds: forceLive ? new Set([id]) : null,
+        currentPass: 'eventsub',
+    };
+    // botManager.clients holds every bot INCLUDING the default one (keyed 'default'), so iterating
+    // it covers whichever bot owns the streamer's guild. checkStreamers already filters each bot to
+    // only its own guilds, so bots that don't serve this streamer's guild do nothing.
+    const clients = global.botManager?.clients
+        ? [...global.botManager.clients.values()]
+        : [];
+    if (!clients.length) {
+        logger.warn(`[Stream Manager] EventSub check for ${streamerId}: no bot clients available`, { category: 'streams' });
+        return;
+    }
+    for (const client of clients) {
+        try {
+            await checkStreamers(client, opts);
+        } catch (error) {
+            logger.error(`[Stream Manager] EventSub targeted check failed for streamer ${streamerId}`, {
+                error: error.message, botId: client.botId || 'default', category: 'streams',
+            });
+        }
+    }
+}
+
+/**
  * Process a unique streamer across all their subscriptions
  */
 async function processUniqueStreamer(
@@ -899,9 +1079,10 @@ async function processUniqueStreamer(
     guildsMap,
     teamsMap,
     roleOperationsByGuild,
-    shouldUpdateEmbeds = false
+    shouldUpdateEmbeds = false,
+    eventsubLive = false
 ) {
-    logger.info(`[processUniqueStreamer] ENTRY: Processing ${streamer.username} on ${streamer.platform}`, {
+    logger.debug(`[processUniqueStreamer] ENTRY: Processing ${streamer.username} on ${streamer.platform}`, {
         category: "streams",
         streamer: streamer.username,
         platform: streamer.platform,
@@ -923,7 +1104,7 @@ async function processUniqueStreamer(
         // this error every cycle for the life of the process.
         if (!_unsupportedPlatformsWarned.has(streamer.platform)) {
             _unsupportedPlatformsWarned.add(streamer.platform);
-            logger.error(`[processUniqueStreamer] No API module found for platform: ${streamer.platform} — suppressing further warnings this session`, {
+            logger.warn(`[processUniqueStreamer] Skipping streamers on "${streamer.platform}": no live checker for that platform (Instagram is not supported). Logged once per session.`, {
                 category: "streams",
                 platform: streamer.platform,
                 availablePlatforms: Object.keys(platformModules)
@@ -942,22 +1123,35 @@ async function processUniqueStreamer(
         // This was causing new streams to be missed until the 5th pass
         // All streamers are now checked every pass to ensure timely announcements
 
-        logger.info(`[processUniqueStreamer] Calling api.isStreamerLive for ${streamer.username}...`, {
+        logger.debug(`[processUniqueStreamer] Calling api.isStreamerLive for ${streamer.username}...`, {
             category: "streams",
             hasActiveAnnouncements,
             shouldUpdateEmbeds
         });
-        // Use platform cache to reduce API calls (30s TTL)
-        const isLive = await platformCache.get(
-            streamer.platform,
-            'isLive',
-            streamer.username,
-            () => api.isStreamerLive(streamer.username)
-        );
+        // EventSub is authoritative and FASTER than Helix here. Twitch's stream.online fires the
+        // moment the broadcast starts, but Helix GET /streams (what isStreamerLive polls) lags
+        // 10-60s behind — and our 30s cache can hold a stale "offline" from a poll that ran just
+        // before go-live. Re-gating the announcement on that laggy/cached signal is exactly why a
+        // stream could be live for a minute+ with no post. So when EventSub already told us the
+        // streamer is online, TRUST it: drop the stale cache and skip the Helix isLive gate.
+        let isLive;
+        if (eventsubLive) {
+            platformCache.invalidate(streamer.platform, streamer.username);
+            isLive = true;
+            logger.info(`[processUniqueStreamer] ${streamer.username} confirmed live via EventSub — skipping Helix isLive gate`, { category: "streams" });
+        } else {
+            // Use platform cache to reduce API calls (30s TTL)
+            isLive = await platformCache.get(
+                streamer.platform,
+                'isLive',
+                streamer.username,
+                () => api.isStreamerLive(streamer.username)
+            );
+        }
 
         // Record success for platform backoff tracking
         recordPlatformSuccess(streamer.platform);
-        logger.info(`[processUniqueStreamer] isStreamerLive returned: ${isLive} for ${streamer.username}`, {
+        logger.debug(`[processUniqueStreamer] isStreamerLive returned: ${isLive} for ${streamer.username}`, {
             category: "streams",
             isLive,
             streamer: streamer.username,
@@ -966,7 +1160,7 @@ async function processUniqueStreamer(
 
         let streamData = null;
         if (isLive) {
-            logger.info(`[processUniqueStreamer] Streamer ${streamer.username} is LIVE, fetching details...`, { category: "streams" });
+            logger.debug(`[processUniqueStreamer] Streamer ${streamer.username} is LIVE, fetching details...`, { category: "streams" });
             // Use platform cache for stream details (30s TTL)
             streamData = await platformCache.get(
                 streamer.platform,
@@ -974,7 +1168,14 @@ async function processUniqueStreamer(
                 streamer.username,
                 () => api.getStreamDetails(streamer.username)
             );
-            logger.info(`[processUniqueStreamer] getStreamDetails returned for ${streamer.username}:`, {
+            // Helix stream DETAILS lag behind stream.online just like isLive does (same endpoint),
+            // so an EventSub-triggered announce often finds details still empty for the first few
+            // seconds. Retry briefly (bypassing the cache, which may hold a stale null) so the embed
+            // gets the real title/game/thumbnail instead of "Untitled Stream / N/A".
+            if (!streamData && eventsubLive) {
+                streamData = await fetchDetailsWithRetry(api, streamer);
+            }
+            logger.debug(`[processUniqueStreamer] getStreamDetails returned for ${streamer.username}:`, {
                 category: "streams",
                 hasData: !!streamData,
                 title: streamData?.title,
@@ -984,19 +1185,31 @@ async function processUniqueStreamer(
                 logger.warn(`[Stream Manager] Streamer ${streamer.username} on ${streamer.platform} reported live but getStreamDetails returned null. Skipping announcement.`, { category: "streams" });
             }
         } else {
-            logger.info(`[processUniqueStreamer] Streamer ${streamer.username} is NOT live`, { category: "streams" });
+            logger.debug(`[processUniqueStreamer] Streamer ${streamer.username} is NOT live`, { category: "streams" });
         }
+
+        // Stream history (stream_uptime): one row per broadcast per channel, opened on a live
+        // sighting and closed after a sustained offline. Never throws; see stream-session-recorder.js.
+        await recordObservation(streamer, isLive, streamData);
 
         const guildOperations = new Map();
 
-        logger.info(`[processUniqueStreamer] Processing ${subscriptions.length} subscriptions for ${streamer.username}`, {
+        // Guilds where this streamer has a subscription hand-routed to a specific channel.
+        // There, a second subscription that would only fall back to its TEAM's channel (a
+        // streamer on two Twitch teams) still counts for tracking + live roles, but does not
+        // post again — the guild already chose where this streamer is announced.
+        const explicitlyRoutedGuilds = new Set(
+            subscriptions.filter(s => s.explicit_channel_id).map(s => s.guild_id)
+        );
+
+        logger.debug(`[processUniqueStreamer] Processing ${subscriptions.length} subscriptions for ${streamer.username}`, {
             category: "streams",
             subscriptionCount: subscriptions.length
         });
 
         for (const sub of subscriptions) {
             const guildDefault = guildsMap.get(sub.guild_id);
-            logger.info(`[processUniqueStreamer] Processing subscription for guild ${sub.guild_id}`, {
+            logger.debug(`[processUniqueStreamer] Processing subscription for guild ${sub.guild_id}`, {
                 category: "streams",
                 hasGuildDefault: !!guildDefault,
                 subChannelId: sub.sub_channel_id,
@@ -1048,9 +1261,38 @@ async function processUniqueStreamer(
             const team = sub.team_subscription_id ? teamsMap.get(sub.team_subscription_id) : null;
 
             const finalRoleId = sub.sub_role_id || team?.team_role_id || guildDefault.guild_role_id;
-            const finalChannelId = sub.sub_channel_id || team?.team_channel_id || guildDefault.guild_channel_id;
+            let finalChannelId = sub.sub_channel_id || team?.team_channel_id || guildDefault.guild_channel_id;
 
-            logger.info(`[processUniqueStreamer] Subscription channel resolution for ${streamer.username}`, {
+            // Role-based routing ladder (subscribers > team > normal). Evaluated fresh on
+            // every check against the member's live roles, so a lapsed sub falls back to
+            // the normal channel on its own — nothing is baked into the subscription row.
+            if (guildOp.member) {
+                const routed = await resolveRoutedChannel({
+                    guild: guildOp.guild,
+                    member: guildOp.member,
+                    currentChannelId: finalChannelId || null
+                });
+                if (routed) {
+                    logger.info(`[processUniqueStreamer] ${streamer.username} matched live routing rule "${routed.rule.label || routed.rule.ruleId}" — announcing in ${routed.channelId} instead of ${finalChannelId || '(no channel)'}`, {
+                        category: "streams",
+                        guildId: sub.guild_id,
+                        streamer: streamer.username,
+                        fromChannel: finalChannelId || null,
+                        toChannel: routed.channelId,
+                        ruleId: routed.rule.ruleId
+                    });
+                    finalChannelId = routed.channelId;
+                }
+            }
+
+            if (!sub.explicit_channel_id && sub.team_subscription_id && explicitlyRoutedGuilds.has(sub.guild_id)) {
+                logger.info(`[processUniqueStreamer] ${streamer.username} is hand-routed elsewhere in ${sub.guild_id} — team subscription ${sub.subscription_id} applies roles only, no second announcement`, {
+                    category: "streams", guildId: sub.guild_id, skippedChannel: finalChannelId || null
+                });
+                finalChannelId = null;
+            }
+
+            logger.debug(`[processUniqueStreamer] Subscription channel resolution for ${streamer.username}`, {
                 category: "streams",
                 finalChannelId,
                 finalRoleId,
@@ -1081,7 +1323,7 @@ async function processUniqueStreamer(
             }
         }
 
-        logger.info(`[processUniqueStreamer] Starting guild operations for ${streamer.username}`, {
+        logger.debug(`[processUniqueStreamer] Starting guild operations for ${streamer.username}`, {
             category: "streams",
             guildCount: guildOperations.size,
             streamer: streamer.username
@@ -1091,7 +1333,7 @@ async function processUniqueStreamer(
         for (const [guildId, guildOp] of guildOperations.entries()) {
             const { guild, member, roleIds, channelAnnouncements } = guildOp;
 
-            logger.info(`[processUniqueStreamer] Processing guild ${guildId} for ${streamer.username}`, {
+            logger.debug(`[processUniqueStreamer] Processing guild ${guildId} for ${streamer.username}`, {
                 category: "streams",
                 guildId,
                 channelAnnouncementCount: channelAnnouncements.size,
@@ -1101,7 +1343,7 @@ async function processUniqueStreamer(
 
             // Track role operations
             if (member && roleIds.size > 0 && streamer.discord_user_id) {
-                logger.info(`[Stream Manager] Tracking role operations for ${streamer.username} in guild ${guildId}`, {
+                logger.debug(`[Stream Manager] Tracking role operations for ${streamer.username} in guild ${guildId}`, {
                     category: "streams",
                     discord_user_id: streamer.discord_user_id,
                     roleIdsCount: roleIds.size,
@@ -1194,7 +1436,7 @@ async function processUniqueStreamer(
                     }
                 }
 
-                logger.info(`[processUniqueStreamer] Processing channel ${channelId} for ${streamer.username}`, {
+                logger.debug(`[processUniqueStreamer] Processing channel ${channelId} for ${streamer.username}`, {
                     category: "streams",
                     channelId,
                     isLive,
@@ -1204,8 +1446,34 @@ async function processUniqueStreamer(
                 });
 
                 if (isLive && streamData) {
-                    // Skip editing existing announcements on non-update passes to reduce API calls / flickering
-                    if (announcementData && !shouldUpdateEmbeds) {
+                    // Even on an update pass, an unchanged stream needs no edit. The embed no longer
+                    // carries a live preview frame — just title, game and the streamer's avatar — so
+                    // rewriting it every 5 minutes only burned Discord edits and made messages jump
+                    // in clients. Refresh when the streamer actually changes something.
+                    // …unless the look itself has to change. A style switch has to reach every
+                    // currently-live announcement instead of waiting for a retitle, and a platform
+                    // preview is a live frame that should keep moving.
+                    const resolvedRenderStyle = (await resolveRenderStyle({
+                        guildId: guild.id,
+                        channelId,
+                        streamerId: streamer.streamer_id,
+                    })).style;
+
+                    const restyleNeeded = styleMismatched(announcementData, resolvedRenderStyle);
+
+                    if (announcementData && shouldUpdateEmbeds
+                        && !embedContentChanged(announcementData, streamData)
+                        && !restyleNeeded
+                        && !previewNeedsRefresh(resolvedRenderStyle)) {
+                        liveAnnouncements.set(announcementKey, announcementData);
+                        continue;
+                    }
+
+                    // Skip editing existing announcements on non-update passes to reduce API calls /
+                    // flickering — but never skip an announcement drawn in the wrong style. A full
+                    // cycle takes minutes and the embed gate is every 5th cycle, so honouring the
+                    // gate here would leave a changed setting unapplied for half an hour.
+                    if (announcementData && !shouldUpdateEmbeds && !restyleNeeded) {
                         // Reset offline counter in memory AND database (prevents age-based cleanup
                         // from seeing stale DB counter after API blips)
                         if (announcementData.offlineCheckCount > 0) {
@@ -1230,7 +1498,6 @@ async function processUniqueStreamer(
                             kick: `https://kick.com/${streamer.username}`,
                             youtube: `https://youtube.com/channel/${streamer.username}`,
                             tiktok: `https://tiktok.com/@${streamer.username}`,
-                            trovo: `https://trovo.live/s/${streamer.username}`,
                             facebook: `https://facebook.com/gaming/${streamer.username}`,
                             instagram: `https://instagram.com/${streamer.username}`,
                         };
@@ -1246,6 +1513,7 @@ async function processUniqueStreamer(
                             ping_role_id: subscription.ping_role_id,
                             override_nickname: subscription.override_nickname,
                             override_avatar_url: subscription.override_avatar_url,
+                            post_as_streamer: subscription.post_as_streamer ?? null,
                             discord_user_id: streamer.discord_user_id
                         };
 
@@ -1256,7 +1524,10 @@ async function processUniqueStreamer(
                             platform: streamer.platform,
                             url: streamData.url || platformUrl,
                             username: streamer.username,
-                            profileImageUrl: streamer.profile_image_url || null
+                            profileImageUrl: streamer.profile_image_url || null,
+                            // Rendered onto the announcement card
+                            viewerCount: streamData.viewer_count ?? null,
+                            startedAt: streamData.started_at || null
                         };
 
                         // Debug: Log liveData for Kick
@@ -1274,6 +1545,16 @@ async function processUniqueStreamer(
                         // If no existing announcement, check re-announcement cooldown first
                         // Prevents duplicates when Twitch API briefly flickers "offline" then back to "live"
                         if (!existingAnnouncement) {
+                            // The subscription's category / title filter decides whether a NEW post is
+                            // made. Re-checked every cycle, so a stream that switches into a matching
+                            // category or title is announced then. Existing posts are not affected.
+                            const filterCheck = goLivePasses(subscription, streamData);
+                            if (!filterCheck.ok) {
+                                logger.debug(`[processUniqueStreamer] ${streamer.username} not announced in ${channelId}: ${filterCheck.reason}`, {
+                                    category: "streams", guildId: guild.id, subscriptionId: subscription.subscription_id
+                                });
+                                continue;
+                            }
                             const cooldownExpiry = reAnnounceCooldowns.get(announcementKey);
                             if (cooldownExpiry && (Date.now() - cooldownExpiry) < RE_ANNOUNCE_COOLDOWN_MS) {
                                 const remainingMs = RE_ANNOUNCE_COOLDOWN_MS - (Date.now() - cooldownExpiry);
@@ -1295,7 +1576,8 @@ async function processUniqueStreamer(
                                 streamer.streamer_id,
                                 streamer.discord_user_id,
                                 deleteOnEnd,
-                                editOnEnd
+                                editOnEnd,
+                                [...channelAnnouncements.keys()]
                             );
 
                             if (!reserved) {
@@ -1377,7 +1659,10 @@ async function processUniqueStreamer(
                                 discordUserId: streamer.discord_user_id,
                                 deleteOnEnd: deleteOnEnd,
                                 editOnEnd: editOnEnd,
-                                offlineCheckCount: 0 // Reset counter since stream is live
+                                offlineCheckCount: 0, // Reset counter since stream is live
+                                lastTitle: streamData.title || null,
+                                lastGame: streamData.game_name || null,
+                                renderStyle: resolvedRenderStyle
                             });
 
                             await saveAnnouncementToDatabase(
@@ -1392,6 +1677,19 @@ async function processUniqueStreamer(
                                 deleteOnEnd,
                                 editOnEnd,
                                 message.pingMessageId || null
+                            );
+
+                            // "Last notified" on the dashboard's streamer list: only a new post counts,
+                            // not an edit of the one already up. Tolerates the column not existing yet.
+                            if (!existingAnnouncement || existingAnnouncement.message_id !== message.id) {
+                                pool.execute('UPDATE subscriptions SET last_announced_at = NOW() WHERE subscription_id = ?', [subscription.subscription_id])
+                                    .catch((e) => { if (e.code !== 'ER_BAD_FIELD_ERROR') logger.warn(`[processUniqueStreamer] Could not record last_announced_at: ${e.message}`, { category: 'streams' }); });
+                            }
+
+                            await updateAnnouncementContentState(
+                                guild.id, streamer.platform, streamer.username, channelId,
+                                streamData.title || null, streamData.game_name || null,
+                                resolvedRenderStyle
                             );
 
                             logger.info(`[processUniqueStreamer] Announcement created/updated for ${streamer.username}`, {
@@ -1568,11 +1866,77 @@ function getLiveAnnouncements() {
     return liveAnnouncements;
 }
 
+
+/**
+ * Force a Twitch live-check for every tracked streamer in a guild. Used by the
+ * `/stream livecheck` admin command and the dashboard "Rescan live" button.
+ *
+ * Returns a summary: how many streamers were in scope, how many showed up live,
+ * and how many were newly announced (vs. already in live_announcements for this guild).
+ */
+async function rescanGuildStreamers(guildId, { forceLive = true } = {}) {
+    const connection = await pool.getConnection();
+    let subs;
+    try {
+        [subs] = await connection.query(
+            `SELECT DISTINCT s.streamer_id, s.username, s.platform
+             FROM subscriptions sub
+             JOIN streamers s ON s.streamer_id = sub.streamer_id
+             WHERE sub.guild_id = ? AND sub.paused = 0 AND sub.departed_at IS NULL`,
+            [guildId]);
+    } finally { connection.release(); }
+
+    if (!subs.length) {
+        return { scope: 0, scanned: 0, announced: 0, errors: 0, streamers: [] };
+    }
+
+    // Capture pre-scan announcement ids so we can tell what the rescan newly added
+    const [preRows] = await pool.query(
+        'SELECT streamer_id FROM live_announcements WHERE guild_id = ?', [guildId]);
+    const preAnnounced = new Set(preRows.map(r => String(r.streamer_id)));
+
+    const ids = new Set(subs.map(s => String(s.streamer_id)));
+    const forceSet = forceLive ? new Set(ids) : null;
+    const allClients = global.botManager?.clients ? [...global.botManager.clients.values()] : [];
+    // Only the client that owns this guild loads its subscriptions (see the guild filter in
+    // checkStreamers): the mapped custom bot, else the default bot. Running every client made a
+    // rescan take minutes, because each one re-checked these streamers for its own guilds too.
+    const [[mapping]] = await pool.query(
+        'SELECT bot_id FROM guild_bot_mapping WHERE guild_id = ? LIMIT 1', [guildId]);
+    const owner = mapping
+        ? allClients.find(c => !c.isDefaultBot && String(c.botId) === String(mapping.bot_id))
+        : allClients.find(c => c.isDefaultBot);
+    const clients = owner ? [owner] : allClients;
+    let errors = 0;
+    for (const client of clients) {
+        try { await checkStreamers(client, { onlyStreamerIds: ids, forceLiveIds: forceSet, currentPass: 'rescan' }); }
+        catch (e) { errors++; logger.warn(`[Stream Manager] rescanGuildStreamers error for ${guildId}: ${e.message}`); }
+    }
+
+    // Measure what the rescan surfaced
+    const [postRows] = await pool.query(
+        'SELECT streamer_id, username, channel_id FROM live_announcements WHERE guild_id = ?', [guildId]);
+    const nowLive = postRows.filter(r => !preAnnounced.has(String(r.streamer_id)));
+
+    return {
+        scope: subs.length,
+        scanned: subs.length,
+        announced: nowLive.length,
+        errors,
+        newlyLive: nowLive.map(r => ({ streamerId: String(r.streamer_id), username: r.username, channelId: r.channel_id })),
+    };
+}
+
 export {
     performCycleSetup,
     checkStreamers,
+    checkStreamerNow,
+    rescanGuildStreamers,
     getLiveAnnouncements,
     clearAllAnnouncements,
     updateOfflineCheckCount,
-    deleteAnnouncementFromDatabase
+    deleteAnnouncementFromDatabase,
+    saveAnnouncementToDatabase,
+    embedContentChanged,
+    updateAnnouncementContentState
 };

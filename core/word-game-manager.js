@@ -16,7 +16,10 @@ import logger from '../utils/logger.js';
 const sessionsByChannel = new Map(); // channelId -> { id, guildId, channelId, gameType, mode, status, hostUserId, state }
 const engines = new Map();           // gameType -> async (message, session) => boolean (consumed)
 
+const statsListeners = [];         // (guildId) => void, told after any stats change (core/word-game-results.js)
+
 export function registerEngine(gameType, handler) { engines.set(gameType, handler); }
+export function onStatsChanged(fn) { statsListeners.push(fn); }
 export function getSessionByChannel(channelId) { return sessionsByChannel.get(channelId) || null; }
 
 export async function createSession({ guildId, channelId, gameType, mode, hostUserId, state }) {
@@ -76,6 +79,9 @@ export async function bumpStats(guildId, userId, gameType, { words = 0, played =
        best_streak       = GREATEST(best_streak, VALUES(best_streak))`,
     [guildId, userId, gameType, words, played, wins, bestScore ?? 0, streak ?? 0, streak ?? 0]
   );
+  for (const fn of statsListeners) {
+    try { fn(guildId); } catch (err) { logger.warn('[WordGames] stats listener failed', { error: err.message }); }
+  }
 }
 
 export async function getStats(guildId, userId, gameType) {

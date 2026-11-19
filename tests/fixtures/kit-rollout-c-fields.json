@@ -1,0 +1,859 @@
+{
+  "_about": "Element ids, form field names, data-* attributes, form actions, inline handlers and script-looked-up classes of the wave 21c pages BEFORE the kit rebuild (tests/kit-rollout-c.test.js stubs). The rebuilt pages must keep every one.",
+  "pages": {
+    "custom-commands": {
+      "ids": [
+        "ccPage",
+        "ccxAliases",
+        "ccxApi",
+        "ccxApiCount",
+        "ccxApiTitle",
+        "ccxArgs",
+        "ccxCalls",
+        "ccxCancel",
+        "ccxCount",
+        "ccxEditor",
+        "ccxEditorSub",
+        "ccxEditorTitle",
+        "ccxEmpty",
+        "ccxEvil",
+        "ccxExamples",
+        "ccxLen",
+        "ccxLimits",
+        "ccxListTitle",
+        "ccxName",
+        "ccxNameHelp",
+        "ccxNoMatch",
+        "ccxPreview",
+        "ccxPreviewMeta",
+        "ccxPreviewOut",
+        "ccxResponse",
+        "ccxRoleNote",
+        "ccxRows",
+        "ccxSave",
+        "ccxSaveLabel",
+        "ccxSearch",
+        "ccxStatus",
+        "ccxStorage",
+        "ccxStorageTitle",
+        "ccxTableWrap",
+        "ccxTest",
+        "ccxVarList",
+        "ccxVars",
+        "ccxVarsTitle",
+        "ccxWarnings"
+      ],
+      "names": [],
+      "data": [
+        "data-action",
+        "data-action-content",
+        "data-channels",
+        "data-guild-id",
+        "data-id",
+        "data-insert",
+        "data-name",
+        "data-prefix",
+        "data-response",
+        "data-roles"
+      ],
+      "actions": [],
+      "handlers": [],
+      "hooks": [
+        "ccx-row"
+      ]
+    },
+    "autoresponders": {
+      "ids": [
+        "ar-create-form",
+        "ar-search",
+        "ar-stat-active",
+        "ar-stat-total",
+        "ar-stat-triggers",
+        "ar-table-body",
+        "f-autoresponders-allowed_channels",
+        "f-autoresponders-allowed_roles",
+        "f-autoresponders-blocked_channels",
+        "f-autoresponders-blocked_roles",
+        "f-autoresponders-cooldown_seconds",
+        "f-autoresponders-match_type",
+        "f-autoresponders-response_text",
+        "f-autoresponders-trigger_text"
+      ],
+      "names": [
+        "allowed_channels",
+        "allowed_roles",
+        "blocked_channels",
+        "blocked_roles",
+        "case_sensitive",
+        "cooldown_per_user",
+        "cooldown_seconds",
+        "delete_trigger",
+        "match_type",
+        "reply_to_user",
+        "response_text",
+        "trigger_text"
+      ],
+      "data": [],
+      "actions": [],
+      "handlers": [],
+      "hooks": []
+    },
+    "tags": {
+      "ids": [
+        "modal-tag-content",
+        "modal-tag-name",
+        "tagSearch",
+        "tagsTableBody",
+        "view-tag-modal"
+      ],
+      "names": [
+        "tagId"
+      ],
+      "data": [
+        "data-bs-dismiss",
+        "data-content",
+        "data-creator",
+        "data-tag-name"
+      ],
+      "actions": [
+        "/manage/222222222222222222/delete-tag"
+      ],
+      "handlers": [
+        "viewTagContent"
+      ],
+      "hooks": [
+        "tag-row"
+      ]
+    },
+    "announce": {
+      "ids": [
+        "annBody",
+        "annCancelEdit",
+        "annChannel",
+        "annClearImage",
+        "annColor",
+        "annColorPick",
+        "annCount",
+        "annDrop",
+        "annDropText",
+        "annEditLink",
+        "annEditing",
+        "annError",
+        "annFooter",
+        "annImage",
+        "annPing",
+        "annPosts",
+        "annRemoveImage",
+        "annRemoveWrap",
+        "annStatus",
+        "annSubmit",
+        "annTitle",
+        "announcePage",
+        "pvBody",
+        "pvCard",
+        "pvFooter",
+        "pvImage",
+        "pvPing",
+        "pvTitle"
+      ],
+      "names": [],
+      "data": [
+        "data-guild-id"
+      ],
+      "actions": [],
+      "handlers": [],
+      "hooks": []
+    },
+    "custom-embeds": {
+      "ids": [
+        "ce-error",
+        "f-custom-embeds-author_icon_url",
+        "f-custom-embeds-author_icon_url-2",
+        "f-custom-embeds-author_name",
+        "f-custom-embeds-author_name-2",
+        "f-custom-embeds-channel_id",
+        "f-custom-embeds-channel_id-2",
+        "f-custom-embeds-color",
+        "f-custom-embeds-color-2",
+        "f-custom-embeds-description",
+        "f-custom-embeds-description-2",
+        "f-custom-embeds-footer_text",
+        "f-custom-embeds-footer_text-2",
+        "f-custom-embeds-image_url",
+        "f-custom-embeds-image_url-2",
+        "f-custom-embeds-thumbnail_url",
+        "f-custom-embeds-thumbnail_url-2",
+        "f-custom-embeds-title",
+        "f-custom-embeds-title-2",
+        "f-custom-embeds-url",
+        "f-custom-embeds-url-2"
+      ],
+      "names": [
+        "action",
+        "author_icon_url",
+        "author_name",
+        "channel_id",
+        "color",
+        "description",
+        "embedId",
+        "footer_text",
+        "image_url",
+        "thumbnail_url",
+        "title",
+        "url"
+      ],
+      "data": [
+        "data-id"
+      ],
+      "actions": [
+        "/manage/222222222222222222/create-custom-embed",
+        "/manage/222222222222222222/delete-custom-embed",
+        "/manage/222222222222222222/edit-custom-embed"
+      ],
+      "handlers": [
+        "closest",
+        "stopPropagation"
+      ],
+      "hooks": [
+        "ce-post-btn"
+      ]
+    },
+    "schedule": {
+      "ids": [
+        "addRunForm",
+        "addRunModal",
+        "breadcrumb-event",
+        "breadcrumb-schedule",
+        "createEventForm",
+        "createEventModal",
+        "createScheduleForm",
+        "createScheduleModal",
+        "editCategory",
+        "editEstimate",
+        "editGameName",
+        "editItemId",
+        "editNotes",
+        "editRunForm",
+        "editRunModal",
+        "editRunners",
+        "editSetup",
+        "events-list",
+        "events-view",
+        "f-schedule-category",
+        "f-schedule-description",
+        "f-schedule-description-2",
+        "f-schedule-estimate",
+        "f-schedule-gamename",
+        "f-schedule-name",
+        "f-schedule-name-2",
+        "f-schedule-notes",
+        "f-schedule-runners",
+        "f-schedule-setup",
+        "f-schedule-slug",
+        "f-schedule-slug-2",
+        "f-schedule-starttime",
+        "f-schedule-twitchchannel",
+        "items-view",
+        "runScheduleId",
+        "schedule-breadcrumb",
+        "schedule-content",
+        "schedule-stats",
+        "scheduleEventId",
+        "schedules-view",
+        "stat-active",
+        "stat-events",
+        "stat-runs",
+        "stat-schedules"
+      ],
+      "names": [
+        "category",
+        "description",
+        "estimate",
+        "eventId",
+        "gameName",
+        "itemId",
+        "name",
+        "notes",
+        "runners",
+        "scheduleId",
+        "setup",
+        "slug",
+        "startTime",
+        "twitchChannel"
+      ],
+      "data": [
+        "data-bs-dismiss"
+      ],
+      "actions": [],
+      "handlers": [
+        "addRun",
+        "createEvent",
+        "createSchedule",
+        "loadEvents",
+        "showCreateEventModal",
+        "updateRun"
+      ],
+      "hooks": []
+    },
+    "reminders": {
+      "ids": [
+        "add-reminder-modal",
+        "f-reminders-channel_id",
+        "f-reminders-message",
+        "f-reminders-message-desc",
+        "f-reminders-repeat",
+        "f-reminders-repeat-desc",
+        "f-reminders-repeat_count",
+        "f-reminders-repeat_count-desc",
+        "reminder-form",
+        "reminder-preview",
+        "reminder-times-row",
+        "reminder-when",
+        "reminder-when-desc",
+        "rm-list-title",
+        "rm-modal-title"
+      ],
+      "names": [
+        "channel_id",
+        "message",
+        "reminderId",
+        "repeat",
+        "repeat_count",
+        "when"
+      ],
+      "data": [
+        "data-bs-dismiss",
+        "data-bs-target",
+        "data-bs-toggle",
+        "data-label",
+        "data-user-id",
+        "data-user-size"
+      ],
+      "actions": [
+        "/manage/222222222222222222/create-reminder",
+        "/manage/222222222222222222/delete-reminder"
+      ],
+      "handlers": [],
+      "hooks": []
+    },
+    "timecapsules": {
+      "ids": [
+        "capsules-stats",
+        "revealed-capsules",
+        "stat-revealed",
+        "stat-total",
+        "stat-upcoming",
+        "upcoming-capsules"
+      ],
+      "names": [],
+      "data": [],
+      "actions": [],
+      "handlers": [],
+      "hooks": []
+    },
+    "weather": {
+      "ids": [
+        "f-weather-checkinterval",
+        "weatherEnabled"
+      ],
+      "names": [
+        "checkInterval",
+        "enabled"
+      ],
+      "data": [],
+      "actions": [
+        "/manage/222222222222222222/weather/config"
+      ],
+      "handlers": [],
+      "hooks": []
+    },
+    "automemes": {
+      "ids": [
+        "automeme-config-form",
+        "automeme-enabled",
+        "automeme-stats-container",
+        "interval-value",
+        "meme-channel",
+        "post-interval",
+        "status-icon",
+        "status-value",
+        "subreddit-count",
+        "subreddits"
+      ],
+      "names": [
+        "channel_id",
+        "enabled",
+        "post_interval_hours",
+        "subreddits"
+      ],
+      "data": [],
+      "actions": [],
+      "handlers": [
+        "addSubreddit",
+        "saveAutoMemeConfig"
+      ],
+      "hooks": []
+    },
+    "sticky": {
+      "ids": [
+        "add-sticky-card",
+        "sticky-channel",
+        "sticky-content",
+        "sticky-form",
+        "sticky-list"
+      ],
+      "names": [
+        "channel_id",
+        "message_content"
+      ],
+      "data": [],
+      "actions": [],
+      "handlers": [
+        "createStickyMessage",
+        "hideAddStickyForm",
+        "showAddStickyForm"
+      ],
+      "hooks": []
+    },
+    "auto-purge": {
+      "ids": [
+        "f-auto-purge-channel_id",
+        "f-auto-purge-interval_hours",
+        "f-auto-purge-purge_time",
+        "interval-row",
+        "purge-mode",
+        "time-row"
+      ],
+      "names": [
+        "channel_id",
+        "enabled",
+        "interval_hours",
+        "mode",
+        "purgeId",
+        "purge_time"
+      ],
+      "data": [],
+      "actions": [
+        "/manage/222222222222222222/add-purge",
+        "/manage/222222222222222222/remove-purge",
+        "/manage/222222222222222222/toggle-purge"
+      ],
+      "handlers": [
+        "getElementById"
+      ],
+      "hooks": []
+    },
+    "smart-purge": {
+      "ids": [
+        "smart-purge-form",
+        "sp-channel",
+        "sp-exempt-roles",
+        "sp-exempt-users",
+        "sp-filter-roles",
+        "sp-filter-users",
+        "sp-log",
+        "sp-max",
+        "sp-min",
+        "sp-mode",
+        "sp-name",
+        "sp-phrases",
+        "sp-regex",
+        "sp-target",
+        "sp-ttl"
+      ],
+      "names": [
+        "channel_id",
+        "dry_run",
+        "enabled",
+        "exempt_bots",
+        "exempt_pinned",
+        "exempt_role_ids",
+        "exempt_user_ids",
+        "f_from_bots",
+        "f_from_humans",
+        "f_has_attachment",
+        "f_has_embed",
+        "f_has_file",
+        "f_has_image",
+        "f_has_link",
+        "f_has_mention",
+        "f_has_sticker",
+        "f_has_video",
+        "f_text_only",
+        "filter_role_ids",
+        "filter_user_ids",
+        "log_channel_id",
+        "match_mode",
+        "max_length",
+        "min_length",
+        "name",
+        "phrases",
+        "regex",
+        "ruleId",
+        "target",
+        "ttl_unit",
+        "ttl_value"
+      ],
+      "data": [
+        "data-filter",
+        "data-preset"
+      ],
+      "actions": [
+        "/manage/222222222222222222/purge-rule/add",
+        "/manage/222222222222222222/purge-rule/delete",
+        "/manage/222222222222222222/purge-rule/toggle"
+      ],
+      "handlers": [],
+      "hooks": [
+        "sp-preset"
+      ]
+    },
+    "utilities": {
+      "ids": [
+        "arBackfill-label",
+        "arBackfill-status",
+        "arBackfillStart",
+        "arBackfillStop",
+        "autoPublisherEnabled",
+        "autoroleBotRoles",
+        "autoroleDelay",
+        "autoroleIgnore",
+        "autoroleRequire",
+        "autoroleRole",
+        "autorolesEnabled",
+        "tempChannelCategory",
+        "tempChannelCreator",
+        "tempChannelName",
+        "tempChannelsEnabled",
+        "tempChannelsEnabled-desc"
+      ],
+      "names": [
+        "bot_roles",
+        "category_id",
+        "creator_channel_id",
+        "delay_minutes",
+        "enabled",
+        "enabled_sent",
+        "ignore_roles",
+        "is_enabled",
+        "naming_template",
+        "require_roles",
+        "roles_to_assign"
+      ],
+      "data": [],
+      "actions": [
+        "/manage/222222222222222222/update-autopublisher",
+        "/manage/222222222222222222/update-autoroles",
+        "/manage/222222222222222222/update-tempchannels"
+      ],
+      "handlers": [],
+      "hooks": []
+    },
+    "action-log": {
+      "ids": [
+        "al-body",
+        "al-next",
+        "al-page",
+        "al-page-info",
+        "al-prev",
+        "al-total",
+        "al-type-filter",
+        "al-types",
+        "al-user-filter"
+      ],
+      "names": [],
+      "data": [],
+      "actions": [],
+      "handlers": [
+        "loadAuditLogs"
+      ],
+      "hooks": []
+    },
+    "analytics": {
+      "ids": [
+        "engagementChart",
+        "memberChart",
+        "messageChart"
+      ],
+      "names": [],
+      "data": [],
+      "actions": [],
+      "handlers": [],
+      "hooks": []
+    },
+    "activity-audit": {
+      "ids": [
+        "aaActionRole",
+        "aaActionType",
+        "aaAdv",
+        "aaAdvLabel",
+        "aaApplyAdv",
+        "aaAuditPick",
+        "aaBody",
+        "aaClearAdv",
+        "aaConfirmInput",
+        "aaConfirmWord",
+        "aaConfirmWrap",
+        "aaCsv",
+        "aaDays",
+        "aaEmpty",
+        "aaError",
+        "aaGrace",
+        "aaHideBots",
+        "aaMethod",
+        "aaNotice",
+        "aaPlanBlocked",
+        "aaPlanBlockedN",
+        "aaPlanCancel",
+        "aaPlanCounts",
+        "aaPlanEligible",
+        "aaPlanEligibleN",
+        "aaPlanFilter",
+        "aaPlanGo",
+        "aaPlanModal",
+        "aaPlanTitle",
+        "aaPlanWarnings",
+        "aaPost",
+        "aaPostCancel",
+        "aaPostChannel",
+        "aaPostGo",
+        "aaPostModal",
+        "aaPreview",
+        "aaProgress",
+        "aaProgressFill",
+        "aaProgressText",
+        "aaReason",
+        "aaRoleWrap",
+        "aaRun",
+        "aaSearch",
+        "aaSegDesc",
+        "aaSegments",
+        "aaShown",
+        "aaStats",
+        "aaTable",
+        "activityAuditPage",
+        "fHasRoles",
+        "fLacksRoles",
+        "fMemMax",
+        "fMemMin",
+        "fMsgMax",
+        "fMsgMin",
+        "fQuietMax",
+        "fQuietMin",
+        "fSessMax",
+        "fSessMin",
+        "fVoiceMax",
+        "fVoiceMin"
+      ],
+      "names": [],
+      "data": [
+        "data-guild-id",
+        "data-sort"
+      ],
+      "actions": [],
+      "handlers": [],
+      "hooks": [
+        "aa-sortable"
+      ]
+    },
+    "serverstats": {
+      "ids": [
+        "activity-heatmap",
+        "channel-activity",
+        "emoji-stats",
+        "message-trend",
+        "period-select",
+        "stat-commands",
+        "stat-joined",
+        "stat-left",
+        "stat-members",
+        "stat-messages",
+        "stat-voice",
+        "stats-overview",
+        "top-messagers"
+      ],
+      "names": [],
+      "data": [],
+      "actions": [],
+      "handlers": [
+        "loadServerStats"
+      ],
+      "hooks": [
+        "ss-stat-value"
+      ]
+    },
+    "stat-displays": {
+      "ids": [
+        "sd-add-btn",
+        "sd-add-error",
+        "sd-channel",
+        "sd-edit-1",
+        "sd-edit-2",
+        "sd-edit-3",
+        "sd-preview",
+        "sd-role",
+        "sd-role-row",
+        "sd-template",
+        "sd-template-1",
+        "sd-template-2",
+        "sd-template-3",
+        "sd-twitch-row",
+        "sd-twitch-username",
+        "sd-type"
+      ],
+      "names": [],
+      "data": [
+        "data-id"
+      ],
+      "actions": [],
+      "handlers": [
+        "saveSd",
+        "toggleEditSd"
+      ],
+      "hooks": [
+        "sd-remove-btn"
+      ]
+    },
+    "emojistats": {
+      "ids": [
+        "emoji-period-select",
+        "emoji-trends",
+        "stat-active-users",
+        "stat-daily-avg",
+        "stat-total-uses",
+        "stat-unique-emojis",
+        "top-emoji-users",
+        "top-emojis"
+      ],
+      "names": [],
+      "data": [],
+      "actions": [],
+      "handlers": [
+        "loadEmojiStats"
+      ],
+      "hooks": []
+    },
+    "tickets": {
+      "ids": [
+        "alert_channel_id",
+        "button_emoji",
+        "button_text",
+        "embed_color",
+        "embed_description",
+        "embed_title",
+        "log_channel_id",
+        "panelForm",
+        "panelModal",
+        "panelModalTitle",
+        "panel_channel_id",
+        "panel_name",
+        "save_transcripts",
+        "support_role_id",
+        "ticketAlertChannel",
+        "ticketAlertChannel-desc",
+        "ticketCategory",
+        "ticketLogChannel",
+        "ticketPanelChannel",
+        "ticketSearchInput",
+        "ticketSupportRole",
+        "ticket_category_id",
+        "ticket_name_format"
+      ],
+      "names": [
+        "alert_channel_id",
+        "log_channel_id",
+        "panel_channel_id",
+        "support_role_id",
+        "ticket_category_id"
+      ],
+      "data": [
+        "data-panel-id"
+      ],
+      "actions": [
+        "/manage/222222222222222222/create-ticket-panel",
+        "/manage/222222222222222222/update-tickets"
+      ],
+      "handlers": [
+        "closePanelModal",
+        "deletePanel",
+        "deployPanel",
+        "editPanel",
+        "openCreatePanelModal",
+        "preventDefault",
+        "savePanelForm"
+      ],
+      "hooks": []
+    },
+    "forms": {
+      "ids": [
+        "fx-adopt",
+        "fx-adopt-btn",
+        "fx-auto-reply",
+        "fx-banner",
+        "fx-channel",
+        "fx-delete",
+        "fx-description",
+        "fx-dm-chips",
+        "fx-dm-me",
+        "fx-dm-on-submit",
+        "fx-dm-picker",
+        "fx-dm-result",
+        "fx-editor",
+        "fx-name",
+        "fx-new",
+        "fx-panel-result",
+        "fx-panels",
+        "fx-placeholder",
+        "fx-post",
+        "fx-post-channel",
+        "fx-preview-body",
+        "fx-q-count",
+        "fx-q-editor",
+        "fx-questions",
+        "fx-refresh-responses",
+        "fx-responses",
+        "fx-save-state",
+        "fx-show-questions",
+        "fx-template-editor",
+        "fx-templates",
+        "fx-test-dm",
+        "fx-ticket-panels"
+      ],
+      "names": [
+        "fx-dest"
+      ],
+      "data": [
+        "data-form-id"
+      ],
+      "actions": [],
+      "handlers": [],
+      "hooks": [
+        "dest-choice",
+        "dest-option",
+        "dm-self",
+        "fx-list-item"
+      ]
+    },
+    "todo": {
+      "ids": [
+        "todoChannel",
+        "todoCreateForm",
+        "todoListsContainer",
+        "todoTitle"
+      ],
+      "names": [],
+      "data": [],
+      "actions": [],
+      "handlers": [],
+      "hooks": []
+    }
+  },
+  "_changes": [
+    "2026-11-18 UI pass follow-up: utilities autoroles gained bot_roles, delay_minutes, ignore_roles, require_roles (options the autoroles API already honoured); tickets: the old details modal and table (11 ids) were replaced by the cfk-tk-* viewer on /api/guilds/:id/tickets (gap wave 1).",
+    "2026-11-18 kit-drift review: utilities gained the autoroles option ids (#autoroleBotRoles, #autoroleDelay, #autoroleIgnore, #autoroleRequire) and the member backfill controls (#arBackfillStart, #arBackfillStop, #arBackfill-status, #arBackfill-label; /api/guilds/:id/autoroles backfill); tickets lost the old details modal's inline handlers (assignTicketFromModal, closeTicketDetailsModal, closeTicketFromModal, submitTicketNote, transferTicketFromModal) with the modal itself (replaced by the cfk-tk-* viewer).",
+    "2026-11-19 custom-command storage (H-648): custom-commands gained the Storage reference card (#ccxStorage, #ccxStorageTitle) listing the {db:...}/{sdb:...} tokens.",
+    "2026-11-19 dashboard accuracy pass: tickets Default panel gained the Log channel select (#ticketLogChannel, field log_channel_id): the column /support ticket setup sets and closed-ticket logs fall back to; POST update-tickets now writes only the columns sent (dashboard/services/ticket-config-save.js).",
+    "2026-11-19 final-a (H-681): utilities temporary voice channels gained an on/off switch (#tempChannelsEnabled, field enabled, with #tempChannelsEnabled-desc) and the hidden enabled_sent marker; POST update-tempchannels turns them off when the switch is unticked (core/temp-channel-config.js, the same state /admin temp-channel disable changes).",
+    "2026-11-19 final-b (H-714): tickets gained the alert channel: the Default panel form posts alert_channel_id (#ticketAlertChannel, #ticketAlertChannel-desc; ticket_config.alert_channel_id, migration 452) and the panel dialog has #alert_channel_id (ticket_panels.alert_channel_id), so the New Ticket Opened post can be turned on."
+  ]
+}

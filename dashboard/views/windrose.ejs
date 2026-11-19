@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>" lang="en">
+<head>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg-primary: #0b0f11;
+            --bg-card: rgba(255, 255, 255, 0.03);
+            --bg-card-hover: rgba(255, 255, 255, 0.06);
+            --bg-inset: rgba(255, 255, 255, 0.04);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --border-strong: rgba(255, 255, 255, 0.14);
+            --text-primary: #ffffff;
+            --text-secondary: rgba(255, 255, 255, 0.7);
+            --text-muted: rgba(255, 255, 255, 0.5);
+            --accent-purple: var(--cf-accent);
+            --accent-blue: #60a5fa;
+            --accent-green: #34d399;
+            --accent-yellow: #fbbf24;
+            --accent-red: #f87171;
+            /* Windrose is an age-of-piracy game; the sea/brass accent keeps
+               this page recognisably part of the suite while still feeling
+               like its own thing. */
+            --accent-brass: #d4a04a;
+        }
+        /* Light and Sand: brass darkened to read on a light page, the dark wells and toasts as theme surfaces.
+           Dark keeps the values above. */
+        :root { --wr-shade: #000000; --wr-toast: #141a1d; }
+        :root:is([data-theme="light"], [data-theme="sand"]) { --accent-brass: color-mix(in srgb, #d4a04a 55%, var(--cf-text)); --bg-inset: var(--cf-veil-1); --wr-shade: color-mix(in srgb, var(--cf-text) 15%, transparent); --wr-toast: var(--cf-surface); }
+        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg-primary); color: var(--text-primary); min-height: 100vh; overflow-x: hidden; }
+        a { color: inherit; }
+        ::selection { background: rgba(212, 160, 74, 0.3); }
+
+        .bg-effects { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
+        .orb { position: absolute; border-radius: 50%; filter: blur(90px); opacity: 0.28; animation: float 24s ease-in-out infinite; }
+        .orb-1 { width: 520px; height: 520px; background: linear-gradient(135deg, #b4802a, #d4a04a); top: -18%; right: -8%; }
+        .orb-2 { width: 420px; height: 420px; background: linear-gradient(135deg, #1e6091, #34d399); bottom: -18%; left: -10%; animation-delay: -12s; }
+        @keyframes float { 0%, 100% { transform: translate(0,0) scale(1); } 50% { transform: translate(30px, 30px) scale(1.06); } }
+
+
+
+        main { position: relative; z-index: 1; padding: 2rem 1.5rem 4rem; max-width: 1100px; margin: 0 auto; }
+
+        .page-header { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.75rem; }
+        .page-icon { width: 58px; height: 58px; flex-shrink: 0; background: linear-gradient(135deg, rgba(180, 128, 42, 0.25), rgba(212, 160, 74, 0.15)); border: 1px solid rgba(212, 160, 74, 0.35); border-radius: 16px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 25px rgba(212, 160, 74, 0.2); }
+        .page-icon i { font-size: 1.6rem; color: var(--accent-brass); }
+        .page-title { font-size: clamp(1.6rem, 4vw, 2.1rem); font-weight: 800; line-height: 1.1; background: linear-gradient(135deg, var(--cf-text), var(--accent-brass)); -webkit-background-clip: text; background-clip: text;  }
+        .page-subtitle { color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.3rem; }
+
+        .banner { display: flex; align-items: center; gap: 0.75rem; padding: 0.85rem 1.1rem; border-radius: 12px; font-size: 0.875rem; margin-bottom: 1.5rem; }
+        .banner-warn { background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.25); color: var(--cf-warning-ink); }
+        .banner-err { background: rgba(248, 113, 113, 0.1); border: 1px solid rgba(248, 113, 113, 0.25); color: var(--cf-danger-ink); }
+
+        .card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; padding: 1.4rem; margin-bottom: 1.25rem; }
+        .card-title { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); font-weight: 700; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+
+        /* Join card — the reason most people open this page, so it leads. */
+        .join-card { background: linear-gradient(135deg, rgba(212, 160, 74, 0.12), rgba(30, 96, 145, 0.08)); border: 1px solid rgba(212, 160, 74, 0.3); }
+        .connect-row { display: flex; gap: 0.6rem; align-items: stretch; flex-wrap: wrap; }
+        .connect-value { flex: 1; min-width: 240px; font-family: 'JetBrains Mono', monospace; font-size: 1rem; padding: 0.8rem 1rem; background: color-mix(in srgb, var(--wr-shade) 35%, transparent); border: 1px solid var(--border-strong); border-radius: 10px; color: var(--accent-brass); user-select: all; overflow-x: auto; white-space: nowrap; }
+        .join-hint { color: var(--text-muted); font-size: 0.82rem; margin-top: 0.75rem; line-height: 1.5; }
+
+        .btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.8rem 1.1rem; border-radius: 10px; border: 1px solid var(--border-strong); background: var(--bg-card); color: var(--text-primary); font-family: inherit; font-size: 0.875rem; font-weight: 600; cursor: pointer; transition: all 0.18s; white-space: nowrap; }
+        .btn:hover:not(:disabled) { background: var(--bg-card-hover); border-color: var(--accent-brass); }
+        .btn:disabled { opacity: 0.45; cursor: not-allowed; }
+        .btn-primary { background: linear-gradient(135deg, #b4802a, #d4a04a); border-color: transparent; color: #1a1206; }
+        .btn-danger:hover:not(:disabled) { border-color: var(--accent-red); color: var(--cf-danger-ink); }
+        .btn-sm { padding: 0.5rem 0.8rem; font-size: 0.8rem; }
+
+        .status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 1rem; }
+        .stat { background: var(--bg-inset); border: 1px solid var(--border-color); border-radius: 12px; padding: 0.9rem 1rem; }
+        .stat-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); font-weight: 600; }
+        .stat-value { font-size: 1.35rem; font-weight: 700; margin-top: 0.25rem; font-variant-numeric: tabular-nums; }
+
+        .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; margin-right: 0.45rem; }
+        .dot-on { background: var(--accent-green); box-shadow: 0 0 9px var(--accent-green); }
+        .dot-off { background: var(--accent-red); box-shadow: 0 0 9px var(--accent-red); }
+        .dot-warn { background: var(--accent-yellow); box-shadow: 0 0 9px var(--accent-yellow); }
+
+        .player-list { display: flex; flex-direction: column; gap: 0.5rem; }
+        .player { display: flex; align-items: center; justify-content: space-between; padding: 0.65rem 0.9rem; background: var(--bg-inset); border: 1px solid var(--border-color); border-radius: 10px; font-size: 0.9rem; }
+        .empty { color: var(--text-muted); font-size: 0.875rem; font-style: italic; padding: 0.5rem 0; }
+
+        .feed { font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; line-height: 1.65; max-height: 260px; overflow-y: auto; background: color-mix(in srgb, var(--wr-shade) 30%, transparent); border: 1px solid var(--border-color); border-radius: 10px; padding: 0.85rem; }
+        .feed div { color: var(--text-secondary); white-space: pre-wrap; word-break: break-word; }
+
+        .console-row { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
+        .console-input { flex: 1; font-family: 'JetBrains Mono', monospace; font-size: 0.85rem; padding: 0.7rem 0.9rem; background: color-mix(in srgb, var(--wr-shade) 35%, transparent); border: 1px solid var(--border-strong); border-radius: 10px; color: var(--text-primary); }
+        .console-input:focus { outline: none; border-color: var(--accent-brass); }
+        .actions { display: flex; gap: 0.6rem; flex-wrap: wrap; }
+
+        .toast { position: fixed; bottom: 1.5rem; right: 1.5rem; z-index: 2000; display: flex; flex-direction: column; gap: 0.5rem; }
+        .toast-item { padding: 0.8rem 1.1rem; border-radius: 10px; font-size: 0.85rem; font-weight: 500; background: color-mix(in srgb, var(--wr-toast) 97%, transparent); border: 1px solid var(--border-strong); max-width: 380px; }
+        .toast-ok { border-color: rgba(52, 211, 153, 0.4); }
+        .toast-err { border-color: rgba(248, 113, 113, 0.4); }
+
+        @media (max-width: 640px) {
+            main { padding: 1.5rem 1rem 3rem; }
+        }
+    </style>
+<%- include('partials/site-head', { title: 'Windrose | CertiFried MultiTool', description: 'CertiFried Windrose — server status, live sea chart, and how to join.', noindex: true }) %>
+    <style>
+        /* After cf-ui.css: the design system draws the header, buttons and cards; the
+           brass accent stays only on Windrose-specific highlights (connect string, chips). */
+
+        .card { border-radius: var(--cf-radius-lg) !important; }
+        .page-icon { background: var(--cf-surface-2) !important; box-shadow: none !important; border-color: var(--cf-border) !important; border-radius: var(--cf-radius-lg) !important; }
+        .page-title { background: none !important; color: var(--cf-text) !important; font-weight: 600 !important; }
+        .join-card { background: var(--cf-surface) !important; border-color: color-mix(in srgb, var(--accent-brass) 40%, var(--cf-border)) !important; }
+
+    </style>
+</head>
+<body>
+<%- include('partials/site-header', { user }) %>
+<%- include('partials/section-tabs', { label: 'Windrose', active: 'panel', tabNote: role ? 'Your access: ' + role : '', tabs: [['panel', '/windrose', 'Friend panel']].concat(canOwn ? [['manager', '/wrmanager', 'Manager']] : []).concat([['multicast', '/stream', 'Multicast']]) }) %>
+
+<main id="main-content" tabindex="-1">
+    <div class="page-header">
+        <div class="page-icon"><i class="fas fa-compass"></i></div>
+        <div>
+            <h1 class="page-title">Windrose</h1>
+            <p class="page-subtitle">Our private Windrose server: how to join, who's on, and the server's state.</p>
+        </div>
+    </div>
+
+    <div id="offline-banner" class="banner banner-err" style="<%= agentOffline ? '' : 'display:none' %>">
+        <i class="fas fa-triangle-exclamation"></i>
+        <span>The Windrose agent isn't responding, so live status is unavailable. The game server may still be running.</span>
+    </div>
+
+    <!-- Join card leads: getting the connect string is why most people open this page. -->
+    <section class="card join-card">
+        <div class="card-title"><i class="fas fa-anchor"></i> How to join</div>
+        <!-- Exactly one of these is rendered. The two modes are mutually
+             exclusive, so showing both invites people to try the dead one. -->
+        <div id="direct-block" style="display:none">
+            <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);font-weight:700;margin-bottom:0.4rem">
+                Direct connection — two separate boxes in-game
+            </div>
+
+            <div style="font-size:0.7rem;color:var(--text-secondary);font-weight:600;margin-bottom:0.25rem">
+                Paste this into the box labelled <strong style="color:var(--accent-brass)">IP</strong>
+            </div>
+            <div class="connect-row">
+                <div class="connect-value" id="connect-host">–</div>
+                <button class="btn btn-primary" id="copy-host"><i class="fas fa-copy"></i> Copy</button>
+            </div>
+
+            <div style="font-size:0.7rem;color:var(--text-secondary);font-weight:600;margin:0.75rem 0 0.25rem">
+                And this into <strong style="color:var(--accent-brass)">Port</strong>
+            </div>
+            <div class="connect-row">
+                <div class="connect-value" id="connect-port" style="min-width:auto;flex:0 0 140px">–</div>
+                <button class="btn" id="copy-port"><i class="fas fa-copy"></i> Copy</button>
+            </div>
+        </div>
+
+        <div id="invite-block" style="display:none">
+            <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-muted);font-weight:700;margin-bottom:0.4rem">Join code</div>
+            <div class="connect-row">
+                <div class="connect-value" id="invite-code">–</div>
+                <button class="btn btn-primary" id="copy-invite"><i class="fas fa-copy"></i> Copy</button>
+            </div>
+        </div>
+
+        <p class="join-hint" id="join-hint">Loading connection details…</p>
+    </section>
+
+    <section class="card">
+        <div class="card-title"><i class="fas fa-signal"></i> Status</div>
+        <div class="status-grid">
+            <div class="stat">
+                <div class="stat-label">Server</div>
+                <div class="stat-value" id="stat-state"><span class="dot dot-warn"></span>…</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">Players</div>
+                <div class="stat-value" id="stat-players">–</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">World</div>
+                <div class="stat-value" id="stat-world" style="font-size:1rem">–</div>
+            </div>
+            <div class="stat">
+                <div class="stat-label">Windrose+</div>
+                <div class="stat-value" id="stat-version" style="font-size:1rem">–</div>
+            </div>
+        </div>
+
+        <% if (canAdmin) { %>
+        <div class="actions" style="margin-top:1.1rem">
+            <button class="btn btn-sm" data-life="start"><i class="fas fa-play"></i> Start</button>
+            <button class="btn btn-sm btn-danger" data-life="stop"><i class="fas fa-stop"></i> Stop</button>
+            <button class="btn btn-sm" data-life="restart"><i class="fas fa-rotate"></i> Restart (warns players)</button>
+            <button class="btn btn-sm" id="btn-backup"><i class="fas fa-download"></i> Snapshot</button>
+        </div>
+        <% } %>
+    </section>
+
+    <section class="card">
+        <div class="card-title"><i class="fas fa-users"></i> Crew aboard</div>
+        <div class="player-list" id="player-list"><div class="empty">Nobody's sailing right now.</div></div>
+    </section>
+
+    <section class="card">
+        <div class="card-title"><i class="fas fa-map-location-dot"></i> Sea chart</div>
+        <div id="map-wrap" style="position:relative;background: color-mix(in srgb, var(--wr-shade) 30%, transparent);border:1px solid var(--border-color);border-radius:10px;overflow:hidden">
+            <canvas id="sea-chart" width="900" height="520" style="width:100%;height:auto;display:block"></canvas>
+            <div id="map-empty" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--text-muted);font-size:0.85rem">Waiting for map data…</div>
+        </div>
+        <p class="join-hint">Live positions of crew and creatures, refreshed with the rest of the panel.</p>
+    </section>
+
+    <section class="card">
+        <div class="card-title"><i class="fas fa-scroll"></i> Ship's log</div>
+        <div class="feed" id="feed"><div>Loading…</div></div>
+    </section>
+
+    <% if (canAdmin) { %>
+    <section class="card">
+        <div class="card-title"><i class="fas fa-terminal"></i> Console</div>
+        <div class="feed" id="console-out" style="max-height:200px"><div>Ready. Commands take a few seconds — they round-trip through the game process.</div></div>
+        <div class="console-row">
+            <input class="console-input" id="console-input" list="command-list" placeholder="wp.status" autocomplete="off" spellcheck="false">
+            <datalist id="command-list"></datalist>
+            <button class="btn" id="console-send">Run</button>
+        </div>
+    </section>
+    <% } %>
+</main>
+<%- include('partials/site-footer') %>
+
+<div class="toast" id="toast"></div>
+
+<script>
+    window.WINDROSE = {
+        canAdmin: <%= canAdmin ? 'true' : 'false' %>,
+        csrf: document.querySelector('meta[name="csrf-token"]')?.content || ''
+    };
+</script>
+<script src="/js/windrose.js"></script>
+</body>
+</html>

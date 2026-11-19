@@ -13,10 +13,10 @@
 
 import 'dotenv/config';
 import pool from '../utils/db.js';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 
 const GUILD_ID = '1414753158999179286';
-const BOT_ID   = '1507873568095076425';
+// The acting bot comes from guild_bot_mapping — never pinned here.
 
 // Resolved identifiers from prior setup runs
 const VERIFIED_ROLE  = '1455255019627479071'; // PACK MEMBERS
@@ -58,9 +58,9 @@ const VIEW_PAIR = VIEW_CHANNEL | READ_MESSAGE_HISTORY;
 const STAFF_TEXT_ALLOW = VIEW_PAIR | SEND_MESSAGES | EMBED_LINKS | ATTACH_FILES | USE_EXTERNAL_EMOJIS | ADD_REACTIONS | MANAGE_MESSAGES;
 
 // Boot
-const [botRows] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id = ?', [BOT_ID]);
-if (!botRows.length) { console.error(`Bot row missing (bot_id=${BOT_ID})`); process.exit(1); }
-const TOKEN = encryption.decrypt(JSON.parse(botRows[0].bot_token));
+const bot = await resolveBotForGuild(GUILD_ID, { db: pool });
+const BOT_ID = bot.botId;
+const TOKEN = bot.token;
 
 async function api(method, path, body) {
     await new Promise(r => setTimeout(r, 120));
@@ -186,7 +186,7 @@ console.log('[4] Posting #stream-signup instructional embed…');
             `> Reach **Level 3** in the server, then drop your stream URL in this channel — the bot will auto-add you to the shoutout system and announce your streams in <#${WOLFIE_LIVE_CH}>.`,
             ``,
             `### Supported platforms`,
-            `**Twitch** · **Kick** · **YouTube** · **TikTok** · **Trovo** · **Facebook Gaming**`,
+            `**Twitch** · **Kick** · **YouTube** · **TikTok** · **Rumble** · **Facebook Gaming**`,
             ``,
             `### How it works`,
             `\`1.\` Hit **Level 3** from chatting / voice activity`,

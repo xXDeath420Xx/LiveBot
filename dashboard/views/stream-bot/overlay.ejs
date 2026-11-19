@@ -1,0 +1,31 @@
+<%#
+  GET /stream/bot/overlay/:type/:key (dashboard/routes/stream-bot-overlays.js): a CertiFried overlay for an OBS browser source,
+  1920×1080 on a transparent page. Locals: ok (false when the link is not valid), type, pageData (JSON: type, base, preview, sound).
+  A fixed look (theme: fixed, like the music player): it is seen by viewers over any scene, so it does not follow the site
+  theme. Everything is drawn by /js/stream-bot-overlay.js with createElement and textContent; nothing loads from another site.
+%>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>CertiFried overlay</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="/css/stream-bot-overlay.css">
+<% if (type === 'nowplaying') { %><link rel="stylesheet" href="/css/stream-bot-music-overlay.css"><% } %>
+</head>
+<body class="sbo sbo--<%= String(type).replace(/[^a-z]/g, '') %>">
+<% if (ok) { %>
+<div class="sbo-stage" id="sbo-stage">
+    <div class="sbo-widget" id="sbo-widget"></div>
+    <div class="sbo-layer" id="sbo-layer"></div>
+</div>
+<script type="application/json" id="sbo-data"><%- pageData %></script>
+<script src="/js/stream-bot-overlay.js" defer></script>
+<% } else { %>
+<p class="sbo-gone">This overlay link is not valid any more. Copy the current one from the Overlays tab on the CertiFried dashboard.</p>
+<% } %>
+</body>
+</html>

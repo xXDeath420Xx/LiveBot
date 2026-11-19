@@ -1,0 +1,250 @@
+<%#
+  GET /stream/bot/overlays/:id (dashboard/routes/stream-bot-overlays.js). Locals: overlay (overlayView), config (complete settings),
+  state, url (the browser-source address, or null), form (lists), media, sounds, voices, editData (page JSON), previewSrc (tests only).
+  Every setting carries data-cfg="<path>"; /js/stream-bot-overlays.js reads them into the config it saves (PUT), runs Test,
+  goal, copy and new-address buttons, and scales the live preview. Nothing here builds markup from viewer text.
+%>
+<%- include('_head', { pageTitle: overlay.name, active: 'overlays', sbPage: 'overlay-edit' }) %>
+<link rel="stylesheet" href="/css/stream-bot-overlays.css">
+<%
+  const _e = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const _opts = (list, value) => list.map((o) => `<option value="${_e(o.value)}"${String(o.value) === String(value) ? ' selected' : ''}>${_e(o.label)}</option>`).join('');
+  const _on = (v) => v ? ' checked' : '';
+  const _mediaOpts = (value) => `<option value="">None</option>` + media.map((m) => `<option value="${_e(m.id)}"${m.id === value ? ' selected' : ''}>${_e(m.name)} (${m.kind === 'video' ? 'video' : 'image'})</option>`).join('');
+  const _soundOpts = (value) => `<option value="">None</option>` + sounds.map((s) => `<option value="${_e(s.id)}"${s.id === value ? ' selected' : ''}>${_e(s.name)}</option>`).join('');
+  const _layoutOpts = (value, inherit) => (inherit ? '<option value="">Same as the alert</option>' : '') + _opts(form.layouts, value);
+  const t = overlay.type;
+  const c = config;
+%>
+<div class="cf-page-head">
+    <div>
+        <p class="sbo-back"><a href="/stream/bot/overlays">All overlays</a></p>
+        <h1 class="cf-page-title"><%= overlay.name %></h1>
+        <p class="cf-page-sub"><%= overlay.typeLabel %>. In OBS it is the browser source <strong><%= overlay.sourceName %></strong>, 1920 × 1080.</p>
+    </div>
+</div>
+<%- include('_tabs', { active: 'overlays' }) %>
+
+<div class="cf-notice" id="sbo-msg" role="status" aria-live="polite" hidden><div class="cf-notice-body" id="sbo-msg-text"></div></div>
+
+<section class="cf-section" aria-labelledby="sbo-url-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbo-url-title">Browser source address</h2>
+        <p class="cf-section-desc">Keep it private: anyone with it can see this overlay. A new address stops the old one at once; update OBS afterwards (Studio can add it again).</p></div>
+        <div class="cf-section-actions"><span class="cf-status-line" id="sbo-online" role="status" aria-live="polite"><%= overlay.online ? 'Open in OBS now' : 'Not open in OBS' %></span></div></header>
+    <div class="cf-rows">
+        <div class="cf-row">
+            <div class="cf-row-text"><label class="cf-row-label" for="sbo-url">Address</label><p class="cf-row-desc">Width 1920, height 1080.<% if (overlay.type === 'alerts' || overlay.type === 'canvas') { %> Tick Control audio via OBS for its sounds.<% } %></p></div>
+            <div class="cf-row-control"><input type="text" id="sbo-url" readonly value="<%= url || '' %>"> <button type="button" class="btn btn-secondary btn-sm" id="sbo-copy">Copy</button> <button type="button" class="btn btn-secondary btn-sm" id="sbo-rotate">New address</button></div>
+        </div>
+    </div>
+</section>
+
+<section class="cf-section" aria-labelledby="sbo-prev-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbo-prev-title">Preview</h2>
+        <p class="cf-section-desc">The real overlay, scaled down, over a checkerboard where OBS shows your scene. It updates when you save. Live events show here too.</p></div>
+        <div class="cf-section-actions"><label class="sb-check"><input type="checkbox" id="sbo-prev-sound"> Play sounds here</label></div></header>
+    <div class="cf-rows">
+        <div class="sbo-preview" id="sbo-preview"><iframe id="sbo-frame" title="Overlay preview" data-src="<%= locals.previewSrc || (url ? url + '?preview=1' : '') %>" loading="lazy" tabindex="-1"></iframe></div>
+    </div>
+</section>
+
+<% if (t === 'alerts') { %>
+<section class="cf-section" aria-labelledby="sbo-test-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbo-test-title">Test alerts</h2>
+        <p class="cf-section-desc">Shows an invented alert on this overlay wherever it is open (OBS and the preview). An amount tries a variation, for example 1000 Bits.</p></div>
+        <div class="cf-section-actions"><span class="cf-status-line" id="sbo-test-status" role="status" aria-live="polite"></span></div></header>
+    <div class="cf-rows">
+        <div class="cf-row">
+            <div class="cf-row-text"><label class="cf-row-label" for="sbo-test-amount">Amount (optional)</label></div>
+            <div class="cf-row-control"><input type="number" id="sbo-test-amount" min="0" step="any" inputmode="decimal"></div>
+        </div>
+        <div class="sbo-tests">
+            <% form.alertKinds.forEach((k) => { %><button type="button" class="btn btn-secondary btn-sm" data-test-alert="<%= k.key %>"><%= k.label %></button><% }) %>
+        </div>
+    </div>
+</section>
+<% } %>
+
+<% if (t === 'goal') { %>
+<section class="cf-section" aria-labelledby="sbo-goal-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbo-goal-title">Progress</h2>
+        <p class="cf-section-desc"><%= c.metric === 'manual' ? 'Set it here or with the Change a goal action.' : 'Counted from your events as they arrive; correct it here at any time. Test events do not count.' %></p></div>
+        <div class="cf-section-actions"><span class="cf-status-line" id="sbo-goal-status" role="status" aria-live="polite"></span></div></header>
+    <div class="cf-rows">
+        <div class="cf-row">
+            <div class="cf-row-text"><label class="cf-row-label" for="sbo-goal-value">Progress now</label><p class="cf-row-desc">Goal: <%= c.target %>.</p></div>
+            <div class="cf-row-control"><input type="number" id="sbo-goal-value" min="0" step="any" value="<%= Number(state.current) || 0 %>"> <button type="button" class="btn btn-secondary btn-sm" id="sbo-goal-set">Set</button> <button type="button" class="btn btn-secondary btn-sm" id="sbo-goal-reset">Start again at 0</button></div>
+        </div>
+    </div>
+</section>
+<% } %>
+
+<form id="sbo-form" novalidate>
+<section class="cf-section" aria-labelledby="sbo-look-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbo-look-title"><%= t === 'alerts' ? 'Look of every alert' : 'Settings' %></h2></div></header>
+    <div class="cf-rows">
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-name">Name</label></div>
+            <div class="cf-row-control"><input type="text" id="sbo-name" maxlength="80" value="<%= overlay.name %>" autocomplete="off"></div></div>
+        <% const g = t === 'alerts' ? c.general : c; const gp = t === 'alerts' ? 'general.' : ''; %>
+        <% if (t === 'counter') { %>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-key">Counter or value</label><p class="cf-row-desc">The name used in <code>{sdb:incr:deaths}</code> or an Add to a counter action. Imported Firebot counters keep their names.</p></div>
+            <div class="cf-row-control"><input type="text" id="sbo-key" data-cfg="key" maxlength="64" spellcheck="false" value="<%= c.key %>"></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-label">Label</label><p class="cf-row-desc">Shown before the number, such as Deaths. Empty shows the number only.</p></div>
+            <div class="cf-row-control"><input type="text" id="sbo-label" data-cfg="label" maxlength="60" value="<%= c.label %>"></div></div>
+        <% } %>
+        <% if (t === 'goal') { %>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-title">Title</label></div>
+            <div class="cf-row-control"><input type="text" id="sbo-title" data-cfg="title" maxlength="80" value="<%= c.title %>"></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-metric">Counts</label></div>
+            <div class="cf-row-control"><select id="sbo-metric" data-cfg="metric"><%- _opts(form.goalMetrics, c.metric) %></select></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-target">Goal</label></div>
+            <div class="cf-row-control"><input type="number" id="sbo-target" data-cfg="target" min="1" step="any" value="<%= c.target %>"></div></div>
+        <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="sbo-nums">Show the numbers</label></div>
+            <div class="cf-row-control"><input type="checkbox" id="sbo-nums" data-cfg="showNumbers"<%= _on(c.showNumbers) %>></div></div>
+        <% } %>
+        <% if (t === 'events') { %>
+        <fieldset class="cf-row"><div class="cf-row-text"><legend class="cf-row-label">Show</legend></div>
+            <div class="cf-row-control sb-checks"><% form.eventTypes.forEach((e) => { %><label class="sb-check"><input type="checkbox" data-cfg="types" data-multi value="<%= e.value %>"<%= _on(c.types.includes(e.value)) %>> <%= e.label %></label><% }) %></div></fieldset>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-max">How many</label></div>
+            <div class="cf-row-control"><input type="number" id="sbo-max" data-cfg="max" min="1" max="20" value="<%= c.max %>"></div></div>
+        <% } %>
+        <% if (t === 'chat') { %>
+        <fieldset class="cf-row"><div class="cf-row-text"><legend class="cf-row-label">Chat from</legend></div>
+            <div class="cf-row-control sb-checks"><label class="sb-check"><input type="checkbox" data-cfg="platforms" data-multi value="twitch"<%= _on(c.platforms.includes('twitch')) %>> Twitch</label><label class="sb-check"><input type="checkbox" data-cfg="platforms" data-multi value="kick"<%= _on(c.platforms.includes('kick')) %>> Kick</label></div></fieldset>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-lines">Lines on screen</label></div>
+            <div class="cf-row-control"><input type="number" id="sbo-lines" data-cfg="maxMessages" min="1" max="50" value="<%= c.maxMessages %>"></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-fade">Fade out after (seconds)</label><p class="cf-row-desc">0 keeps lines until newer ones push them out.</p></div>
+            <div class="cf-row-control"><input type="number" id="sbo-fade" data-cfg="fadeAfterSec" min="0" max="600" value="<%= c.fadeAfterSec %>"></div></div>
+        <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="sbo-badges">Badges</label></div>
+            <div class="cf-row-control"><input type="checkbox" id="sbo-badges" data-cfg="showBadges"<%= _on(c.showBadges) %>></div></div>
+        <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="sbo-pmark">Twitch or Kick mark</label></div>
+            <div class="cf-row-control"><input type="checkbox" id="sbo-pmark" data-cfg="showPlatform"<%= _on(c.showPlatform) %>></div></div>
+        <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="sbo-hidecmd">Hide commands</label><p class="cf-row-desc">Lines that start with !.</p></div>
+            <div class="cf-row-control"><input type="checkbox" id="sbo-hidecmd" data-cfg="hideCommands"<%= _on(c.hideCommands) %>></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-hideusers">Hide these names</label><p class="cf-row-desc">Bots, for example, separated by commas.</p></div>
+            <div class="cf-row-control"><input type="text" id="sbo-hideusers" data-cfg="hideUsers" maxlength="500" spellcheck="false" value="<%= c.hideUsers %>"></div></div>
+        <% } %>
+        <% if (t === 'nowplaying') { %>
+        <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="sbo-art">Cover art</label></div>
+            <div class="cf-row-control"><input type="checkbox" id="sbo-art" data-cfg="showArt"<%= _on(c.showArt) %>></div></div>
+        <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="sbo-req">Who requested it</label></div>
+            <div class="cf-row-control"><input type="checkbox" id="sbo-req" data-cfg="showRequester"<%= _on(c.showRequester) %>></div></div>
+        <% } %>
+        <% if (t !== 'nowplaying') { %>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-font">Font</label><p class="cf-row-desc">Fonts every Windows PC has, so OBS shows them without downloading anything.</p></div>
+            <div class="cf-row-control"><select id="sbo-font" data-cfg="<%= gp %>font"><%- _opts(form.fonts, g.font) %></select></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-size"><%= t === 'canvas' ? 'Default text size (px)' : 'Text size (px at 1080p)' %></label></div>
+            <div class="cf-row-control"><input type="number" id="sbo-size" data-cfg="<%= gp %>fontSize" min="16" max="120" value="<%= g.fontSize %>"></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-color">Text colour</label></div>
+            <div class="cf-row-control"><input type="color" id="sbo-color" data-cfg="<%= gp %>textColor" value="<%= g.textColor %>"></div></div>
+        <% if (g.accentColor) { %>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-accent">Accent colour</label><p class="cf-row-desc"><%= t === 'alerts' ? "The viewer's name and the message line." : 'Highlights.' %></p></div>
+            <div class="cf-row-control"><input type="color" id="sbo-accent" data-cfg="<%= gp %>accentColor" value="<%= g.accentColor %>"></div></div>
+        <% } %>
+        <% if (t === 'goal') { %>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-bar">Bar colour</label></div>
+            <div class="cf-row-control"><input type="color" id="sbo-bar" data-cfg="barColor" value="<%= c.barColor %>"></div></div>
+        <% } %>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-plate">Background</label><p class="cf-row-desc">A panel keeps text readable over a busy scene.</p></div>
+            <div class="cf-row-control"><select id="sbo-plate" data-cfg="<%= gp %>plate"><%- _opts(form.plates, g.plate) %></select></div></div>
+        <% } %>
+        <% if (t === 'alerts') { %>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-apos">Where alerts appear</label></div>
+            <div class="cf-row-control"><select id="sbo-apos" data-cfg="general.position"><%- _opts([{ value: 'top', label: 'Top' }, { value: 'center', label: 'Centre' }, { value: 'bottom', label: 'Bottom' }], c.general.position) %></select></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-gap">Pause between alerts (ms)</label></div>
+            <div class="cf-row-control"><input type="number" id="sbo-gap" data-cfg="general.gapMs" min="0" max="5000" step="100" value="<%= c.general.gapMs %>"></div></div>
+        <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="sbo-giftees">An alert for each gifted sub</label><p class="cf-row-desc">Off: a gift of five shows one Gift subs alert, not five Subscription alerts as well.</p></div>
+            <div class="cf-row-control"><input type="checkbox" id="sbo-giftees" data-cfg="general.showGiftedSubs"<%= _on(c.general.showGiftedSubs) %>></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-voice">Read-aloud voice</label><p class="cf-row-desc">For Bits and tip messages when Read the message aloud is on. Spoken by CertiFried's own voices and played inside this overlay, like the alert sound.</p></div>
+            <div class="cf-row-control"><select id="sbo-voice" data-cfg="general.ttsVoice"><option value="">Default (Ryan)</option><%- _opts(voices, c.general.ttsVoice) %></select></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-ttsvol">Read-aloud volume</label></div>
+            <div class="cf-row-control"><input type="number" id="sbo-ttsvol" data-cfg="general.ttsVolume" min="0" max="100" value="<%= c.general.ttsVolume %>"></div></div>
+        <% } %>
+        <% if (['chat', 'events', 'goal', 'counter', 'nowplaying'].includes(t)) { %>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-pos">Where on screen</label></div>
+            <div class="cf-row-control"><select id="sbo-pos" data-cfg="position"><%- _opts(form.positions, c.position) %></select></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-margin">Distance from the edge (px)</label></div>
+            <div class="cf-row-control"><input type="number" id="sbo-margin" data-cfg="margin" min="0" max="400" value="<%= c.margin %>"></div></div>
+        <% } %>
+        <% if (['chat', 'events', 'goal'].includes(t)) { %>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbo-width">Width (px)</label></div>
+            <div class="cf-row-control"><input type="number" id="sbo-width" data-cfg="width" min="160" max="1920" value="<%= c.width %>"></div></div>
+        <% } %>
+    </div>
+</section>
+
+<% if (t === 'alerts') { form.alertKinds.forEach((k) => { const a = c.alerts[k.key]; const id = 'sbo-a-' + k.key; const p = 'alerts.' + k.key + '.'; %>
+<section class="cf-section" aria-labelledby="<%= id %>-title">
+    <details class="cf-expand sbo-alert-set">
+        <summary><span id="<%= id %>-title"><%= k.label %></span> <span class="sbo-alert-state" data-state-for="<%= k.key %>"><%= a.enabled ? 'On' : 'Off' %><%= a.variations.length ? ', ' + a.variations.length + ' variation' + (a.variations.length === 1 ? '' : 's') : '' %></span></summary>
+        <div class="cf-expand-body cf-rows" data-alert="<%= k.key %>">
+            <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="<%= id %>-on">Show this alert</label></div>
+                <div class="cf-row-control"><input type="checkbox" id="<%= id %>-on" data-cfg="<%= p %>enabled"<%= _on(a.enabled) %>> <button type="button" class="btn btn-secondary btn-sm" data-test-alert="<%= k.key %>">Test</button></div></div>
+            <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="<%= id %>-msg">Text</label><p class="cf-row-desc">Variables such as {user.name}, {amount}, {months}, {count}, {viewers}, {reward} and {tier} work here. The name shows in the accent colour.</p></div>
+                <div class="cf-row-control"><input type="text" id="<%= id %>-msg" data-cfg="<%= p %>message" maxlength="300" value="<%= a.message %>"></div></div>
+            <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="<%= id %>-detail">Second line</label><p class="cf-row-desc">Optional, smaller.</p></div>
+                <div class="cf-row-control"><input type="text" id="<%= id %>-detail" data-cfg="<%= p %>detail" maxlength="300" value="<%= a.detail %>"></div></div>
+            <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="<%= id %>-showmsg">Show the viewer's message</label></div>
+                <div class="cf-row-control"><input type="checkbox" id="<%= id %>-showmsg" data-cfg="<%= p %>showMessage"<%= _on(a.showMessage) %>></div></div>
+            <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="<%= id %>-layout">Layout</label></div>
+                <div class="cf-row-control"><select id="<%= id %>-layout" data-cfg="<%= p %>layout"><%- _layoutOpts(a.layout) %></select></div></div>
+            <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="<%= id %>-anim">Animation</label></div>
+                <div class="cf-row-control"><select id="<%= id %>-anim" data-cfg="<%= p %>animation"><%- _opts(form.animations, a.animation) %></select></div></div>
+            <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="<%= id %>-media">Image or video</label><p class="cf-row-desc">From Images and videos on the Overlays tab.</p></div>
+                <div class="cf-row-control"><select id="<%= id %>-media" data-cfg="<%= p %>media"><%- _mediaOpts(a.media) %></select></div></div>
+            <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="<%= id %>-sound">Sound</label><p class="cf-row-desc">From your <a href="/stream/bot/sounds">Sounds</a>. It plays inside this overlay.</p></div>
+                <div class="cf-row-control"><select id="<%= id %>-sound" data-cfg="<%= p %>sound"><%- _soundOpts(a.sound) %></select></div></div>
+            <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="<%= id %>-vol">Sound volume</label></div>
+                <div class="cf-row-control"><input type="number" id="<%= id %>-vol" data-cfg="<%= p %>volume" min="0" max="100" value="<%= a.volume %>"></div></div>
+            <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="<%= id %>-dur">Show for (ms)</label><p class="cf-row-desc">2000 to 30000. A message read aloud keeps it up until it ends.</p></div>
+                <div class="cf-row-control"><input type="number" id="<%= id %>-dur" data-cfg="<%= p %>durationMs" min="2000" max="30000" step="500" value="<%= a.durationMs %>"></div></div>
+            <% if (k.ttsCapable) { %>
+            <div class="cf-row cf-row--switch"><div class="cf-row-text"><label class="cf-row-label" for="<%= id %>-tts">Read the message aloud</label><p class="cf-row-desc">Links are read as "a link"; at most 200 characters.</p></div>
+                <div class="cf-row-control"><input type="checkbox" id="<%= id %>-tts" data-cfg="<%= p %>tts"<%= _on(a.tts) %>></div></div>
+            <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="<%= id %>-ttsmin">Only from this amount</label></div>
+                <div class="cf-row-control"><input type="number" id="<%= id %>-ttsmin" data-cfg="<%= p %>ttsMin" min="0" step="any" value="<%= a.ttsMin %>"></div></div>
+            <% } %>
+            <% if (k.amountLabel) { %>
+            <div class="cf-row sbo-var-head"><div class="cf-row-text"><p class="cf-row-label">Variations</p><p class="cf-row-desc">A bigger <%= k.amountLabel.replace(/ at least.*$/, '').toLowerCase() %> can show something else. The highest one reached wins; empty fields keep the alert's own.</p></div>
+                <div class="cf-row-control"><button type="button" class="btn btn-secondary btn-sm" data-add-variation="<%= k.key %>">Add a variation</button></div></div>
+            <div class="sbo-vars" data-variations="<%= k.key %>" data-amount-label="<%= k.amountLabel %>">
+                <% a.variations.forEach((v, vi) => { const vid = id + '-v' + vi; %>
+                <fieldset class="sbo-var">
+                    <legend class="sbo-var-title">Variation <%= vi + 1 %></legend>
+                    <div class="sb-fields">
+                        <div class="sb-field"><label for="<%= vid %>-min"><%= k.amountLabel %></label><input type="number" id="<%= vid %>-min" data-var="min" min="0" step="any" value="<%= v.min %>"></div>
+                        <div class="sb-field is-wide"><label for="<%= vid %>-msg">Text</label><input type="text" id="<%= vid %>-msg" data-var="message" maxlength="300" value="<%= v.message %>"></div>
+                        <div class="sb-field is-wide"><label for="<%= vid %>-detail">Second line</label><input type="text" id="<%= vid %>-detail" data-var="detail" maxlength="300" value="<%= v.detail %>"></div>
+                        <div class="sb-field"><label for="<%= vid %>-media">Image or video</label><select id="<%= vid %>-media" data-var="media"><%- _mediaOpts(v.media).replace('>None<', '>Same as the alert<') %></select></div>
+                        <div class="sb-field"><label for="<%= vid %>-sound">Sound</label><select id="<%= vid %>-sound" data-var="sound"><%- _soundOpts(v.sound).replace('>None<', '>Same as the alert<') %></select></div>
+                        <div class="sb-field"><label for="<%= vid %>-layout">Layout</label><select id="<%= vid %>-layout" data-var="layout"><%- _layoutOpts(v.layout, true) %></select></div>
+                        <div class="sb-field"><label for="<%= vid %>-dur">Show for (ms)</label><input type="number" id="<%= vid %>-dur" data-var="durationMs" min="2000" max="30000" step="500" value="<%= v.durationMs %>"></div>
+                    </div>
+                    <div class="sbo-var-tools"><button type="button" class="btn btn-secondary btn-sm" data-remove-variation>Remove variation <%= vi + 1 %></button></div>
+                </fieldset>
+                <% }) %>
+            </div>
+            <% } %>
+        </div>
+    </details>
+</section>
+<% }) } %>
+
+<div class="cf-section-foot sbo-save">
+    <span class="cf-status-line" id="sbo-save-status" role="status" aria-live="polite"></span>
+    <button type="submit" class="btn btn-primary">Save</button>
+</div>
+</form>
+
+<section class="cf-section" aria-labelledby="sbo-del-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbo-del-title">Delete this overlay</h2>
+        <p class="cf-section-desc">Its address stops working at once. Remove the browser source from OBS yourself.</p></div>
+        <div class="cf-section-actions"><button type="button" class="btn btn-secondary btn-sm" id="sbo-delete" data-name="<%= overlay.name %>">Delete</button></div></header>
+</section>
+
+<script type="application/json" id="sbo-edit-data"><%- editData %></script>
+<template id="sbo-media-options"><%- _mediaOpts('').replace('>None<', '>Same as the alert<') %></template>
+<template id="sbo-sound-options"><%- _soundOpts('').replace('>None<', '>Same as the alert<') %></template>
+<template id="sbo-layout-options"><%- _layoutOpts('', true) %></template>
+<script src="/js/stream-bot-overlays.js" defer></script>
+<%- include('_foot') %>

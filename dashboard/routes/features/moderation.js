@@ -11,11 +11,9 @@ router.get('/:guildId/moderation/infractions', ensureAuth, ensureGuildPerms, asy
     const [infractions] = await pool.execute(`
       SELECT
         i.*,
-        u.username as userName,
-        m.username as moderatorName
+        NULL as userName,
+        NULL as moderatorName
       FROM infractions i
-      LEFT JOIN users u ON i.user_id = u.discord_id
-      LEFT JOIN users m ON i.moderator_id = m.discord_id
       WHERE i.guild_id = ?
       ORDER BY i.created_at DESC
       LIMIT 100

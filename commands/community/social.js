@@ -3,6 +3,8 @@ import * as twitterHandlers from './social-twitter-handler.js';
 import * as feedHandlers from './social-feed-handler.js';
 import * as tiktokHandlers from './social-tiktok-handler.js';
 import * as streamerHandlers from './social-streamer-handler.js';
+import * as streamerHistory from './social-history-handler.js';
+import { replyRetired } from '../../core/retired-commands.js';
 
 const { platformChoices } = streamerHandlers;
 
@@ -95,39 +97,16 @@ export default {
                 )
         )
 
-        // ── Feed group (Reddit + YouTube) ──
+        // ── Feed group (YouTube; the Reddit subcommands were removed, H-650) ──
         .addSubcommandGroup(group =>
             group
                 .setName('feed')
-                .setDescription('Reddit and YouTube feed subscriptions')
-                .addSubcommand(sub =>
-                    sub.setName('reddit-add')
-                        .setDescription('Subscribe to a subreddit')
-                        .addStringOption(opt =>
-                            opt.setName('subreddit').setDescription('Subreddit name (without r/)').setRequired(true)
-                        )
-                        .addChannelOption(opt =>
-                            opt.setName('channel').setDescription('Channel for posts')
-                                .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
-                                .setRequired(true)
-                        )
-                )
-                .addSubcommand(sub =>
-                    sub.setName('reddit-remove')
-                        .setDescription('Unsubscribe from a subreddit')
-                        .addStringOption(opt =>
-                            opt.setName('subreddit').setDescription('Subreddit name').setRequired(true)
-                        )
-                )
-                .addSubcommand(sub =>
-                    sub.setName('reddit-list')
-                        .setDescription('List all Reddit feed subscriptions')
-                )
+                .setDescription('YouTube feed subscriptions')
                 .addSubcommand(sub =>
                     sub.setName('youtube-add')
                         .setDescription('Subscribe to a YouTube channel')
                         .addStringOption(opt =>
-                            opt.setName('channel-id').setDescription('YouTube channel ID').setRequired(true)
+                            opt.setName('channel-id').setDescription('Channel link, @handle or channel ID (UC…)').setRequired(true)
                         )
                         .addChannelOption(opt =>
                             opt.setName('channel').setDescription('Discord channel for notifications')
@@ -139,7 +118,7 @@ export default {
                     sub.setName('youtube-remove')
                         .setDescription('Unsubscribe from a YouTube channel')
                         .addStringOption(opt =>
-                            opt.setName('channel-id').setDescription('YouTube channel ID').setRequired(true)
+                            opt.setName('channel-id').setDescription('Channel link, @handle or channel ID (UC…)').setRequired(true)
                         )
                 )
                 .addSubcommand(sub =>
@@ -277,6 +256,7 @@ export default {
                                 .addChoices(...platformChoices)
                         )
                 )
+                .addSubcommand(streamerHistory.historySubcommand(platformChoices))
         ),
 
     async execute(interaction) {
@@ -298,14 +278,12 @@ export default {
 
                 case 'feed':
                     switch (subcommand) {
-                        case 'reddit-add': return await feedHandlers.handleRedditAdd(interaction);
-                        case 'reddit-remove': return await feedHandlers.handleRedditRemove(interaction);
-                        case 'reddit-list': return await feedHandlers.handleRedditList(interaction);
                         case 'youtube-add': return await feedHandlers.handleYoutubeAdd(interaction);
                         case 'youtube-remove': return await feedHandlers.handleYoutubeRemove(interaction);
                         case 'youtube-list': return await feedHandlers.handleYoutubeList(interaction);
+                        // Removed Reddit subcommands, still shown by Discord until the next command deploy.
+                        default: return await replyRetired(interaction, `socials feed ${subcommand}`);
                     }
-                    break;
 
                 case 'tiktok':
                     switch (subcommand) {
@@ -326,6 +304,7 @@ export default {
                         case 'clear': return await streamerHandlers.handleClear(interaction);
                         case 'import': return await streamerHandlers.handleImport(interaction);
                         case 'export': return await streamerHandlers.handleExport(interaction);
+                        case 'history': return await streamerHistory.handleHistory(interaction);
                     }
                     break;
             }

@@ -1,491 +1,330 @@
-<%# Global Ban Database - Guild Management Partial %>
-
+<%#
+  Global bans: how this server enforces the shared ban network (PUT /api/guilds/:id/global-ban/config),
+  network numbers and recent additions, a privacy-safe user check, the global ban list and this
+  server's action log (all JSON, loaded by the script below). Built on the settings-row kit
+  (cf-settings.css, partials/kit/); ids and field names are unchanged.
+%>
+<%
+// A server that never saved arrives as {} (no row): treat it as unsaved so the actions, mode and
+// "Contribute this server's bans" show the column defaults the save would otherwise overwrite.
+const gbc = (locals.globalBanConfig && Object.keys(locals.globalBanConfig).length) ? locals.globalBanConfig : null;
+const gbs = locals.globalBanStats || null;
+const gbMode = (gbc && ['protect','alert','feed'].includes(gbc.mode)) ? gbc.mode : 'protect';
+const gbThreshold = (gbc && gbc.confidence_threshold != null) ? gbc.confidence_threshold : 75;
+const gbTextChannels = (locals.channels || []).filter(c => c.type === 0 || c.type === 5);
+const gbSel = (field, value, isDefault) => (gbc && gbc[field] === value) ? 'selected' : (!gbc && isDefault ? 'selected' : '');
+%>
 <style>
-.gb-card {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(167, 139, 250, 0.15);
-    border-radius: 12px;
-    overflow: hidden;
-    margin-bottom: 16px;
-}
-
-.gb-header {
-    background: rgba(248, 113, 113, 0.08);
-    padding: 14px 18px;
-    border-bottom: 1px solid rgba(248, 113, 113, 0.15);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-}
-
-.gb-header-left {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.gb-header-icon {
-    width: 32px;
-    height: 32px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(248, 113, 113, 0.15);
-    border-radius: 8px;
-}
-
-.gb-header-icon i { font-size: 1rem; color: #f87171; }
-.gb-header-icon.purple { background: rgba(167, 139, 250, 0.15); }
-.gb-header-icon.purple i { color: #a78bfa; }
-
-.gb-header h3 { font-size: 0.95rem; font-weight: 600; color: #ffffff; margin: 0; }
-.gb-header p { font-size: 0.75rem; color: rgba(255, 255, 255, 0.5); margin: 2px 0 0 0; }
-
-.gb-body { padding: 18px; }
-
-/* Stat cards */
-.gb-stats {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 12px;
-    margin-bottom: 16px;
-}
-
-@media (max-width: 768px) {
-    .gb-stats { grid-template-columns: repeat(2, 1fr); }
-}
-
-.gb-stat {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 10px;
-    padding: 14px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
-
-.gb-stat-icon {
-    width: 36px;
-    height: 36px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 8px;
-    flex-shrink: 0;
-}
-
-.gb-stat-icon.green { background: rgba(35, 245, 107, 0.1); }
-.gb-stat-icon.green i { color: #23f56b; }
-.gb-stat-icon.red { background: rgba(248, 113, 113, 0.1); }
-.gb-stat-icon.red i { color: #f87171; }
-.gb-stat-icon.yellow { background: rgba(251, 191, 36, 0.1); }
-.gb-stat-icon.yellow i { color: #fbbf24; }
-.gb-stat-icon.purple { background: rgba(167, 139, 250, 0.1); }
-.gb-stat-icon.purple i { color: #a78bfa; }
-
-.gb-stat-icon i { font-size: 1rem; }
-
-.gb-stat-label { font-size: 0.7rem; color: rgba(255, 255, 255, 0.5); }
-.gb-stat-value { font-size: 1.1rem; font-weight: 700; color: #ffffff; }
-
-/* Form grid */
-.gb-grid-4 {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 14px;
-}
-
-.gb-grid-3 {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 14px;
-}
-
-@media (max-width: 768px) {
-    .gb-grid-4 { grid-template-columns: repeat(2, 1fr); }
-    .gb-grid-3 { grid-template-columns: 1fr; }
-}
-
-.gb-form-group { margin-bottom: 14px; }
-
-.gb-form-label {
-    display: block;
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: rgba(255, 255, 255, 0.9);
-    margin-bottom: 6px;
-}
-
-.gb-form-select,
-.gb-form-input {
-    width: 100%;
-    padding: 10px 14px;
-    background: rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 8px;
-    color: #ffffff;
-    font-size: 0.85rem;
-    transition: all 0.2s;
-}
-
-.gb-form-select:focus,
-.gb-form-input:focus {
-    outline: none;
-    border-color: rgba(167, 139, 250, 0.5);
-    box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.1);
-}
-
-.gb-form-select option { background: #1a1d21; color: #ffffff; }
-
-.gb-form-hint {
-    display: block;
-    margin-top: 4px;
-    font-size: 0.7rem;
-    color: rgba(255, 255, 255, 0.45);
-}
-
-.gb-toggle-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 8px 0;
-}
-
-.gb-toggle-label { font-size: 0.8rem; color: rgba(255, 255, 255, 0.7); }
-.gb-toggle-hint { font-size: 0.7rem; color: rgba(255, 255, 255, 0.4); }
-
-.gb-actions {
-    display: flex;
-    justify-content: flex-end;
-    padding-top: 12px;
-}
-
-.gb-save-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 20px;
-    background: linear-gradient(135deg, #a78bfa, #7c3aed);
-    color: white;
-    border: none;
-    border-radius: 8px;
-    font-weight: 600;
-    font-size: 0.85rem;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.gb-save-btn:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 15px rgba(167, 139, 250, 0.3);
-}
-
-.gb-save-btn i { font-size: 0.85rem; }
-
-/* Tables */
-.gb-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-.gb-table thead th {
-    padding: 10px 14px;
-    font-size: 0.7rem;
-    font-weight: 600;
-    color: rgba(255, 255, 255, 0.5);
-    text-transform: uppercase;
-    text-align: left;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.gb-table tbody td {
-    padding: 10px 14px;
-    font-size: 0.8rem;
-    color: rgba(255, 255, 255, 0.7);
-    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-}
-
-.gb-table tbody tr:hover { background: rgba(255, 255, 255, 0.03); }
-
-.gb-table .mono { font-family: 'JetBrains Mono', monospace; color: #ffffff; }
-.gb-table .truncate { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-
-.gb-badge {
-    display: inline-block;
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-size: 0.7rem;
-    font-weight: 600;
-}
-
-.gb-badge.critical { background: rgba(248, 113, 113, 0.2); color: #f87171; }
-.gb-badge.high { background: rgba(251, 146, 60, 0.2); color: #fb923c; }
-.gb-badge.medium { background: rgba(251, 191, 36, 0.2); color: #fbbf24; }
-.gb-badge.low { background: rgba(96, 165, 250, 0.2); color: #60a5fa; }
-.gb-badge.action { background: rgba(167, 139, 250, 0.2); color: #a78bfa; }
-
-.gb-search-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.gb-search-row input,
-.gb-search-row select {
-    padding: 8px 12px;
-    background: rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 8px;
-    color: #ffffff;
-    font-size: 0.8rem;
-}
-
-.gb-pagination {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 12px 0;
-}
-
-.gb-pagination span { font-size: 0.8rem; color: rgba(255, 255, 255, 0.5); }
-
-.gb-pagination-btns {
-    display: flex;
-    gap: 8px;
-}
-
-.gb-pagination-btns button {
-    padding: 6px 14px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 6px;
-    color: rgba(255, 255, 255, 0.7);
-    font-size: 0.8rem;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.gb-pagination-btns button:hover:not(:disabled) { background: rgba(255, 255, 255, 0.1); }
-.gb-pagination-btns button:disabled { opacity: 0.4; cursor: not-allowed; }
+    .gb-mono { font-family: var(--cf-mono); font-size: var(--cf-text-xs); color: var(--cf-text); overflow-wrap: anywhere; }
+    .gb-muted { color: var(--cf-text-3); }
+    .gb-truncate { max-width: 16rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--cf-text-2); }
+    .gb-date { font-size: var(--cf-text-xs); color: var(--cf-text-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .gb-evidence { display: inline-flex; flex-wrap: wrap; gap: 4px 8px; font-size: var(--cf-text-xs); }
+    .gb-loading-cell { text-align: center; color: var(--cf-text-3); padding: var(--cf-6) var(--cf-5) !important; }
+    .gb-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); gap: var(--cf-4) var(--cf-5); }
+    .gb-facts .k { font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+    .gb-facts .v { margin-top: 2px; font-size: var(--cf-text-md); font-weight: 600; color: var(--cf-text); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+    .gb-recent { font-size: var(--cf-text-sm); color: var(--cf-text-2); }
+    .gb-recent .cf-list-main { display: flex; flex-wrap: wrap; align-items: center; gap: 4px var(--cf-3); }
+    .gb-filters > .cf-search { width: 14rem; }
+    .gb-filters > select { width: auto; }
+    .gb-check-form { max-width: 32rem; }
+    .gb-check-head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--cf-2) var(--cf-3); margin-bottom: var(--cf-4); }
+    .gb-check-head img { width: 28px; height: 28px; border-radius: 50%; }
+    .gb-check-score { margin-left: auto; }
+    .gb-check-decision { margin-top: var(--cf-4); font-size: var(--cf-text-sm); color: var(--cf-text-2); }
+    .gb-check-decision strong { color: var(--cf-text); }
+    .gb-error { color: var(--cf-danger); font-size: var(--cf-text-sm); }
+    .gb-facts > .cf-state { grid-column: 1 / -1; padding: 0; flex-wrap: wrap; }
+    .gb-page .cf-rows-head:has(+ #gbNetRecent:empty) { display: none; }
+    @media (max-width: 640px) {
+        .gb-truncate { max-width: none; white-space: normal; overflow-wrap: anywhere; }
+        .gb-filters > .cf-search, .gb-filters > select { flex: 1 1 100%; width: 100%; min-height: 44px; }
+        .gb-check-form { max-width: none; }
+        .gb-check-score { margin-left: 0; }
+        .gb-page .cf-rows table.cf-table--stack td.gb-loading-cell { padding: var(--cf-2) 0 !important; }
+    }
 </style>
 
-<!-- Stats Overview -->
-<div class="gb-stats">
-    <div class="gb-stat">
-        <div class="gb-stat-icon green"><i class="fas fa-globe"></i></div>
+<div class="page-section gb-page">
+    <div class="page-section-header">
         <div>
-            <div class="gb-stat-label">Protection</div>
-            <div class="gb-stat-value"><%= (locals.globalBanConfig && locals.globalBanConfig.enabled) ? 'Active' : 'Disabled' %></div>
-        </div>
-    </div>
-    <div class="gb-stat">
-        <div class="gb-stat-icon red"><i class="fas fa-ban"></i></div>
-        <div>
-            <div class="gb-stat-label">Active Bans</div>
-            <div class="gb-stat-value"><%= locals.globalBanStats ? locals.globalBanStats.activeEntries : 0 %></div>
-        </div>
-    </div>
-    <div class="gb-stat">
-        <div class="gb-stat-icon yellow"><i class="fas fa-clipboard-list"></i></div>
-        <div>
-            <div class="gb-stat-label">Pending Reports</div>
-            <div class="gb-stat-value"><%= locals.globalBanStats ? locals.globalBanStats.pendingReports : 0 %></div>
-        </div>
-    </div>
-    <div class="gb-stat">
-        <div class="gb-stat-icon purple"><i class="fas fa-shield-alt"></i></div>
-        <div>
-            <div class="gb-stat-label">Guilds Protected</div>
-            <div class="gb-stat-value"><%= locals.globalBanStats ? locals.globalBanStats.enabledGuilds : 0 %></div>
-        </div>
-    </div>
-</div>
-
-<!-- Guild Configuration -->
-<div class="gb-card">
-    <div class="gb-header">
-        <div class="gb-header-left">
-            <div class="gb-header-icon purple"><i class="fas fa-cog"></i></div>
-            <div>
-                <h3>Global Ban Protection</h3>
-                <p>Configure how this server enforces global bans</p>
+            <div class="page-section-title">
+                <i class="fas fa-globe"></i>
+                <span>Global bans</span>
             </div>
-        </div>
-        <div class="toggle-switch">
-            <input type="checkbox" id="globalban_enabled" name="globalban_enabled" <%= (locals.globalBanConfig && locals.globalBanConfig.enabled) ? 'checked' : '' %>>
-            <label class="toggle-slider" for="globalban_enabled"></label>
+            <div class="page-section-subtitle">How this server acts on network bans, and a lookup for any user.</div>
         </div>
     </div>
 
-    <div class="gb-body">
-        <form id="globalban-config-form">
-            <div class="gb-grid-4">
-                <div class="gb-form-group">
-                    <label class="gb-form-label">Critical Action</label>
-                    <select name="action_critical" class="gb-form-select">
-                        <option value="ban" <%= (locals.globalBanConfig && locals.globalBanConfig.action_critical === 'ban') ? 'selected' : (!locals.globalBanConfig ? 'selected' : '') %>>Ban</option>
-                        <option value="kick" <%= (locals.globalBanConfig && locals.globalBanConfig.action_critical === 'kick') ? 'selected' : '' %>>Kick</option>
-                        <option value="alert" <%= (locals.globalBanConfig && locals.globalBanConfig.action_critical === 'alert') ? 'selected' : '' %>>Alert Only</option>
-                        <option value="none" <%= (locals.globalBanConfig && locals.globalBanConfig.action_critical === 'none') ? 'selected' : '' %>>None</option>
-                    </select>
-                    <span class="gb-form-hint">Phishing, verified scams</span>
-                </div>
-                <div class="gb-form-group">
-                    <label class="gb-form-label">High Action</label>
-                    <select name="action_high" class="gb-form-select">
-                        <option value="ban" <%= (locals.globalBanConfig && locals.globalBanConfig.action_high === 'ban') ? 'selected' : (!locals.globalBanConfig ? 'selected' : '') %>>Ban</option>
-                        <option value="kick" <%= (locals.globalBanConfig && locals.globalBanConfig.action_high === 'kick') ? 'selected' : '' %>>Kick</option>
-                        <option value="alert" <%= (locals.globalBanConfig && locals.globalBanConfig.action_high === 'alert') ? 'selected' : '' %>>Alert Only</option>
-                        <option value="none" <%= (locals.globalBanConfig && locals.globalBanConfig.action_high === 'none') ? 'selected' : '' %>>None</option>
-                    </select>
-                    <span class="gb-form-hint">Raid organizers, repeat offenders</span>
-                </div>
-                <div class="gb-form-group">
-                    <label class="gb-form-label">Medium Action</label>
-                    <select name="action_medium" class="gb-form-select">
-                        <option value="ban" <%= (locals.globalBanConfig && locals.globalBanConfig.action_medium === 'ban') ? 'selected' : '' %>>Ban</option>
-                        <option value="kick" <%= (locals.globalBanConfig && locals.globalBanConfig.action_medium === 'kick') ? 'selected' : (!locals.globalBanConfig ? 'selected' : '') %>>Kick</option>
-                        <option value="alert" <%= (locals.globalBanConfig && locals.globalBanConfig.action_medium === 'alert') ? 'selected' : '' %>>Alert Only</option>
-                        <option value="none" <%= (locals.globalBanConfig && locals.globalBanConfig.action_medium === 'none') ? 'selected' : '' %>>None</option>
-                    </select>
-                    <span class="gb-form-hint">Spam accounts, nuisance</span>
-                </div>
-                <div class="gb-form-group">
-                    <label class="gb-form-label">Low Action</label>
-                    <select name="action_low" class="gb-form-select">
-                        <option value="ban" <%= (locals.globalBanConfig && locals.globalBanConfig.action_low === 'ban') ? 'selected' : '' %>>Ban</option>
-                        <option value="kick" <%= (locals.globalBanConfig && locals.globalBanConfig.action_low === 'kick') ? 'selected' : '' %>>Kick</option>
-                        <option value="alert" <%= (locals.globalBanConfig && locals.globalBanConfig.action_low === 'alert') ? 'selected' : (!locals.globalBanConfig ? 'selected' : '') %>>Alert Only</option>
-                        <option value="none" <%= (locals.globalBanConfig && locals.globalBanConfig.action_low === 'none') ? 'selected' : '' %>>None</option>
-                    </select>
-                    <span class="gb-form-hint">Single incident, unverified</span>
-                </div>
-            </div>
+    <%# Filled from GET /global-ban/network by loadNetwork() below (globalBanStats is not passed to this page). %>
+    <dl class="cf-kpis" id="cfk-gb-kpis" aria-label="Global bans at a glance">
+        <div class="cf-kpi"><dt>Listed users</dt><dd class="cf-kpi-value" id="cfk-gb-kpi-listed">-</dd></div>
+        <div class="cf-kpi"><dt>Participating servers</dt><dd class="cf-kpi-value" id="cfk-gb-kpi-servers">-</dd></div>
+        <div class="cf-kpi"><dt>Added this week</dt><dd class="cf-kpi-value" id="cfk-gb-kpi-week">-</dd></div>
+        <div class="cf-kpi"><dt>Removed here, 30 days</dt><dd class="cf-kpi-value" id="cfk-gb-kpi-mine">-</dd></div>
+    </dl>
 
-            <div class="gb-grid-3">
-                <div class="gb-form-group">
-                    <label class="gb-form-label">Alert Channel</label>
-                    <select name="alert_channel_id" class="gb-form-select">
-                        <option value="">None</option>
-                        <% if (locals.channels) { channels.forEach(ch => { %>
-                            <option value="<%= ch.id %>" <%= (locals.globalBanConfig && locals.globalBanConfig.alert_channel_id === ch.id) ? 'selected' : '' %>>#<%= ch.name %></option>
-                        <% }); } %>
-                    </select>
-                    <span class="gb-form-hint">Channel for ban alert notifications</span>
+    <form id="globalban-config-form">
+        <section class="cf-section" aria-labelledby="gb-protect-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="gb-protect-title">Protection</h2>
+                    <p class="cf-section-desc">Members are checked against the network when they join. Members on the <a href="/manage/<%= guild.id %>?page=protection-settings">Protection settings</a> allowlist are skipped, and the pause there stops every action.</p>
                 </div>
-                <div class="gb-form-group">
-                    <label class="gb-form-label">Options</label>
-                    <div class="gb-toggle-row">
-                        <div class="toggle-switch">
-                            <input type="checkbox" id="check_on_message" name="check_on_message" <%= (locals.globalBanConfig && locals.globalBanConfig.check_on_message) ? 'checked' : '' %>>
-                            <label class="toggle-slider" for="check_on_message"></label>
-                        </div>
-                        <div>
-                            <span class="gb-toggle-label">Check on Message</span><br>
-                            <span class="gb-toggle-hint">Also check when users send messages</span>
+            </header>
+            <div class="cf-rows">
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="globalban_enabled">Global ban protection</label>
+                        <p class="cf-row-desc" id="globalban_enabled-desc">Act on people the network has flagged, using the mode and actions below.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="checkbox" class="cf-switch" role="switch" id="globalban_enabled" name="globalban_enabled" data-feature-switch aria-describedby="globalban_enabled-desc" <%= (gbc && gbc.enabled) ? 'checked' : '' %>>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--stack" role="radiogroup" aria-labelledby="gb-mode-label">
+                    <div class="cf-row-text">
+                        <span class="cf-row-label" id="gb-mode-label">Mode</span>
+                    </div>
+                    <div class="cf-choices">
+                        <label class="cf-choice"><input type="radio" name="gb_mode" value="protect" <%= gbMode === 'protect' ? 'checked' : '' %>>
+                            <span>Protect<span class="cf-choice-desc">Act at or above the confidence below, using the action for the severity; alert under it.</span></span></label>
+                        <label class="cf-choice"><input type="radio" name="gb_mode" value="alert" <%= gbMode === 'alert' ? 'checked' : '' %>>
+                            <span>Alert only<span class="cf-choice-desc">Never remove anyone; post every network hit to the alert channel.</span></span></label>
+                        <label class="cf-choice"><input type="radio" name="gb_mode" value="feed" <%= gbMode === 'feed' ? 'checked' : '' %>>
+                            <span>Feed only<span class="cf-choice-desc">Contribute this server's bans to the network; never act or alert.</span></span></label>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--wide">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="gb_threshold">Confidence needed to act</label>
+                        <p class="cf-row-desc" id="gb_threshold-desc">Used in Protect mode. Confidence grows with the number of independent servers that banned someone, who banned them and why. One server alone never passes 50.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="cf-range">
+                            <input type="range" id="gb_threshold" min="0" max="100" step="5" value="<%= gbThreshold %>" aria-describedby="gb_threshold-desc">
+                            <span class="cf-range-value"><span id="gb_threshold_value"><%= gbThreshold %></span>/100</span>
                         </div>
                     </div>
                 </div>
-                <div class="gb-form-group">
-                    <label class="gb-form-label">&nbsp;</label>
-                    <div class="gb-toggle-row">
-                        <div class="toggle-switch">
-                            <input type="checkbox" id="auto_aggregate" name="auto_aggregate" <%= (locals.globalBanConfig ? locals.globalBanConfig.auto_aggregate_opt_in : true) ? 'checked' : '' %>>
-                            <label class="toggle-slider" for="auto_aggregate"></label>
-                        </div>
-                        <div>
-                            <span class="gb-toggle-label">Auto-Aggregate</span><br>
-                            <span class="gb-toggle-hint">Contribute bans to the shared database</span>
-                        </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-global-ban-alert_channel_id">Alert channel</label>
+                        <p class="cf-row-desc" id="f-global-ban-alert_channel_id-desc">Where network hits and actions are reported.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <select id="f-global-ban-alert_channel_id" name="alert_channel_id" class="form-select" aria-describedby="f-global-ban-alert_channel_id-desc">
+                            <option value="">No alerts</option>
+                            <% gbTextChannels.forEach(ch => { %>
+                                <option value="<%= ch.id %>" data-kind="text" <%= (gbc && gbc.alert_channel_id === ch.id) ? 'selected' : '' %>>#<%= ch.name %></option>
+                            <% }); %>
+                        </select>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="check_on_message">Check on message</label>
+                        <p class="cf-row-desc" id="check_on_message-desc">Also check members when they send a message, not only when they join.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="checkbox" class="cf-switch" role="switch" id="check_on_message" name="check_on_message" aria-describedby="check_on_message-desc" <%= (gbc && gbc.check_on_message) ? 'checked' : '' %>>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="auto_aggregate">Contribute this server's bans</label>
+                        <p class="cf-row-desc" id="auto_aggregate-desc">Add bans made here to the shared database.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="checkbox" class="cf-switch" role="switch" id="auto_aggregate" name="auto_aggregate" aria-describedby="auto_aggregate-desc" <%= (gbc ? gbc.auto_aggregate_opt_in : true) ? 'checked' : '' %>>
                     </div>
                 </div>
             </div>
+        </section>
 
-            <div class="gb-actions">
-                <button type="submit" class="gb-save-btn"><i class="fas fa-save"></i> Save Settings</button>
+        <section class="cf-section" aria-labelledby="gb-actions-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="gb-actions-title">Action by severity</h2>
+                    <p class="cf-section-desc">What happens to a flagged member, depending on how serious the listing is.</p>
+                </div>
+            </header>
+            <div class="cf-rows">
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-global-ban-action_critical">Critical</label>
+                        <p class="cf-row-desc" id="f-global-ban-action_critical-desc">Phishing and verified scams.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <select id="f-global-ban-action_critical" name="action_critical" class="form-select" aria-describedby="f-global-ban-action_critical-desc">
+                            <option value="ban" <%= gbSel('action_critical', 'ban', true) %>>Ban</option>
+                            <option value="kick" <%= gbSel('action_critical', 'kick', false) %>>Kick</option>
+                            <option value="alert" <%= gbSel('action_critical', 'alert', false) %>>Alert only</option>
+                            <option value="none" <%= gbSel('action_critical', 'none', false) %>>Nothing</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-global-ban-action_high">High</label>
+                        <p class="cf-row-desc" id="f-global-ban-action_high-desc">Raid organisers and repeat offenders.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <select id="f-global-ban-action_high" name="action_high" class="form-select" aria-describedby="f-global-ban-action_high-desc">
+                            <option value="ban" <%= gbSel('action_high', 'ban', true) %>>Ban</option>
+                            <option value="kick" <%= gbSel('action_high', 'kick', false) %>>Kick</option>
+                            <option value="alert" <%= gbSel('action_high', 'alert', false) %>>Alert only</option>
+                            <option value="none" <%= gbSel('action_high', 'none', false) %>>Nothing</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-global-ban-action_medium">Medium</label>
+                        <p class="cf-row-desc" id="f-global-ban-action_medium-desc">Spam accounts and nuisance.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <select id="f-global-ban-action_medium" name="action_medium" class="form-select" aria-describedby="f-global-ban-action_medium-desc">
+                            <option value="ban" <%= gbSel('action_medium', 'ban', false) %>>Ban</option>
+                            <option value="kick" <%= gbSel('action_medium', 'kick', true) %>>Kick</option>
+                            <option value="alert" <%= gbSel('action_medium', 'alert', false) %>>Alert only</option>
+                            <option value="none" <%= gbSel('action_medium', 'none', false) %>>Nothing</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-global-ban-action_low">Low</label>
+                        <p class="cf-row-desc" id="f-global-ban-action_low-desc">A single incident, unverified.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <select id="f-global-ban-action_low" name="action_low" class="form-select" aria-describedby="f-global-ban-action_low-desc">
+                            <option value="ban" <%= gbSel('action_low', 'ban', false) %>>Ban</option>
+                            <option value="kick" <%= gbSel('action_low', 'kick', false) %>>Kick</option>
+                            <option value="alert" <%= gbSel('action_low', 'alert', true) %>>Alert only</option>
+                            <option value="none" <%= gbSel('action_low', 'none', false) %>>Nothing</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="cf-section-foot">
+                    <button type="submit" class="btn btn-primary">Save</button>
+                </div>
             </div>
-        </form>
-    </div>
-</div>
+        </section>
+    </form>
 
-<!-- Ban List -->
-<div class="gb-card">
-    <div class="gb-header">
-        <div class="gb-header-left">
-            <div class="gb-header-icon"><i class="fas fa-ban"></i></div>
+    <section class="cf-section" aria-labelledby="gb-network-title">
+        <header class="cf-section-head">
             <div>
-                <h3>Global Ban List</h3>
-                <p>Users flagged across the CertiFried network</p>
+                <h2 class="cf-section-title" id="gb-network-title">Network</h2>
+                <p class="cf-section-desc">Bans from every participating server feed the network: the bot's protections, staff and other bots.</p>
             </div>
-        </div>
-        <div class="gb-search-row">
-            <input type="text" id="globalban-search" placeholder="Search User ID...">
-            <select id="globalban-severity-filter">
-                <option value="">All</option>
-                <option value="critical">Critical</option>
-                <option value="high">High</option>
-                <option value="medium">Medium</option>
-                <option value="low">Low</option>
-            </select>
-        </div>
-    </div>
-
-    <div class="gb-body" style="overflow-x: auto;">
-        <table class="gb-table">
-            <thead>
-                <tr>
-                    <th>User ID</th>
-                    <th>Severity</th>
-                    <th>Category</th>
-                    <th>Source</th>
-                    <th>Reason</th>
-                    <th>Evidence</th>
-                    <th>Date</th>
-                </tr>
-            </thead>
-            <tbody id="globalban-entries-body">
-                <tr><td colspan="7" style="text-align: center; padding: 24px; color: rgba(255,255,255,0.4);">Loading...</td></tr>
-            </tbody>
-        </table>
-
-        <div class="gb-pagination">
-            <span id="globalban-page-info"></span>
-            <div class="gb-pagination-btns">
-                <button id="globalban-prev" disabled>Previous</button>
-                <button id="globalban-next" disabled>Next</button>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--stack">
+                <div class="gb-facts" id="gbNetStats">
+                    <div class="cf-state cf-state--loading cf-state--compact" role="status" aria-live="polite"><span class="cf-spinner" aria-hidden="true"></span><p class="cf-state-title">Loading network numbers</p></div>
+                </div>
             </div>
+            <div class="cf-rows-head" id="gb-recent-head">Recent additions</div>
+            <div id="gbNetRecent" class="cf-list gb-recent"></div>
         </div>
-    </div>
-</div>
+    </section>
 
-<!-- Action Log -->
-<div class="gb-card">
-    <div class="gb-header">
-        <div class="gb-header-left">
-            <div class="gb-header-icon purple"><i class="fas fa-clipboard-list"></i></div>
+    <section class="cf-section" aria-labelledby="gb-check-title">
+        <header class="cf-section-head">
             <div>
-                <h3>Action Log</h3>
-                <p>Global ban actions taken in this server</p>
+                <h2 class="cf-section-title" id="gb-check-title">Check a user</h2>
+                <p class="cf-section-desc">Confidence, how many independent servers reported them and why, and what this server would do. Reporting servers and moderators are never shown.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--stack">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="gbCheckInput">User ID</label>
+                    <p class="cf-row-desc">The same check as <code>/globalban check</code>.</p>
+                </div>
+                <div class="cf-input-group gb-check-form">
+                    <input type="text" id="gbCheckInput" class="form-control" placeholder="User ID or mention" autocomplete="off">
+                    <button type="button" class="btn btn-secondary" id="gbCheckBtn">Check</button>
+                </div>
+            </div>
+            <div class="cf-row cf-row--stack" id="gbCheckResult" aria-live="polite"></div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="gb-list-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="gb-list-title">Global ban list</h2>
+                <p class="cf-section-desc">Users flagged across the CertiFried network.</p>
+            </div>
+            <div class="cf-section-actions gb-filters">
+                <label class="visually-hidden" for="globalban-search">Search by user ID</label>
+                <div class="cf-search"><i class="fas fa-search" aria-hidden="true"></i><input type="text" id="globalban-search" class="form-control form-control-sm" placeholder="Search by user ID"></div>
+                <label class="visually-hidden" for="globalban-severity-filter">Severity</label>
+                <select id="globalban-severity-filter" class="form-select form-select-sm">
+                    <option value="">Every severity</option>
+                    <option value="critical">Critical</option>
+                    <option value="high">High</option>
+                    <option value="medium">Medium</option>
+                    <option value="low">Low</option>
+                </select>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-table-wrap">
+                <table class="cf-table cf-table--stack">
+                    <thead>
+                        <tr>
+                            <th scope="col">User</th>
+                            <th scope="col">Severity</th>
+                            <th scope="col">Category</th>
+                            <th scope="col">Source</th>
+                            <th scope="col">Reason</th>
+                            <th scope="col">Evidence</th>
+                            <th scope="col">Date</th>
+                        </tr>
+                    </thead>
+                    <tbody id="globalban-entries-body">
+                        <tr><td colspan="7" class="gb-loading-cell">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="cf-section-foot">
+                <span class="cf-foot-note" id="globalban-page-info"></span>
+                <button type="button" class="btn btn-sm btn-secondary" id="globalban-prev" disabled>Previous</button>
+                <button type="button" class="btn btn-sm btn-secondary" id="globalban-next" disabled>Next</button>
             </div>
         </div>
-    </div>
+    </section>
 
-    <div class="gb-body" style="overflow-x: auto;">
-        <table class="gb-table">
-            <thead>
-                <tr>
-                    <th>Action</th>
-                    <th>User</th>
-                    <th>Details</th>
-                    <th>Date</th>
-                </tr>
-            </thead>
-            <tbody id="globalban-log-body">
-                <tr><td colspan="4" style="text-align: center; padding: 24px; color: rgba(255,255,255,0.4);">Loading...</td></tr>
-            </tbody>
-        </table>
-    </div>
+    <section class="cf-section" aria-labelledby="gb-log-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="gb-log-title">Action log</h2>
+                <p class="cf-section-desc">Global ban actions taken in this server.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-table-wrap">
+                <table class="cf-table cf-table--stack">
+                    <thead>
+                        <tr>
+                            <th scope="col">Action</th>
+                            <th scope="col">User</th>
+                            <th scope="col">Details</th>
+                            <th scope="col">Date</th>
+                        </tr>
+                    </thead>
+                    <tbody id="globalban-log-body">
+                        <tr><td colspan="4" class="gb-loading-cell">Loading...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
 </div>
 
 <script>
@@ -495,11 +334,29 @@
 
     let currentPage = 1;
     const pageSize = 15;
+    const sevTone = { critical: 'is-bad', high: 'is-warn', medium: 'is-info', low: '' };
+    const cap = function (s) { s = String(s || ''); return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; };
 
-    function escapeHtml(str) {
-        const div = document.createElement('div');
-        div.textContent = str;
-        return div.innerHTML;
+    function sevPill(sev) {
+        const pill = document.createElement('span');
+        pill.className = 'cf-pill ' + (sevTone[sev] || '');
+        pill.textContent = cap(sev);
+        return pill;
+    }
+    function cell(label, cls) {
+        const td = document.createElement('td');
+        if (label) td.dataset.label = label;
+        if (cls) td.className = cls;
+        return td;
+    }
+    function messageRow(tbody, cols, text, isError) {
+        const tr = document.createElement('tr');
+        const td = document.createElement('td');
+        td.colSpan = cols;
+        td.className = 'gb-loading-cell' + (isError ? ' gb-error' : '');
+        td.textContent = text;
+        tr.appendChild(td);
+        tbody.replaceChildren(tr);
     }
 
     async function loadEntries(page = 1) {
@@ -508,86 +365,79 @@
         let url = '/api/guilds/' + guildId + '/global-ban/entries?page=' + page + '&limit=' + pageSize;
         if (search) url += '&search=' + encodeURIComponent(search);
         if (severity) url += '&severity=' + severity;
+        const tbody = document.getElementById('globalban-entries-body');
 
         try {
             const res = await fetch(url);
             const data = await res.json();
             if (!data.success) throw new Error(data.error);
 
-            const tbody = document.getElementById('globalban-entries-body');
             while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
 
             if (data.entries.length === 0) {
-                const tr = document.createElement('tr');
-                const td = document.createElement('td');
-                td.colSpan = 7;
-                td.style.textAlign = 'center';
-                td.style.padding = '24px';
-                td.style.color = 'rgba(255,255,255,0.4)';
-                td.textContent = 'No entries found';
-                tr.appendChild(td);
-                tbody.appendChild(tr);
+                messageRow(tbody, 7, 'No entries found');
             } else {
                 data.entries.forEach(function(e) {
                     const tr = document.createElement('tr');
 
-                    const tdId = document.createElement('td');
-                    tdId.className = 'mono';
-                    tdId.textContent = e.user_id;
+                    const tdId = cell('User');
+                    if (window.CFUser) tdId.appendChild(CFUser.cell(e.user_id, { storedName: e.username || null }));
+                    else { tdId.className = 'gb-mono'; tdId.textContent = e.user_id; }
                     tr.appendChild(tdId);
 
-                    const tdSev = document.createElement('td');
-                    const badge = document.createElement('span');
-                    badge.className = 'gb-badge ' + e.severity;
-                    badge.textContent = e.severity.toUpperCase();
-                    tdSev.appendChild(badge);
+                    const tdSev = cell('Severity');
+                    tdSev.appendChild(sevPill(e.severity));
                     tr.appendChild(tdSev);
 
-                    const tdCat = document.createElement('td');
+                    const tdCat = cell('Category');
                     tdCat.textContent = e.category;
                     tr.appendChild(tdCat);
 
-                    const tdSrc = document.createElement('td');
-                    tdSrc.textContent = e.source.replace('_', ' ');
+                    const tdSrc = cell('Source');
+                    tdSrc.textContent = cap(String(e.source || '').replace(/_/g, ' '));
                     tr.appendChild(tdSrc);
 
-                    const tdReason = document.createElement('td');
-                    tdReason.className = 'truncate';
-                    tdReason.textContent = e.reason || '-';
+                    const tdReason = cell('Reason');
+                    const reason = document.createElement('div');
+                    reason.className = 'gb-truncate';
+                    reason.textContent = e.reason || '-';
+                    if (e.reason) reason.title = e.reason;
+                    tdReason.appendChild(reason);
                     tr.appendChild(tdReason);
 
-                    var tdEvidence = document.createElement('td');
+                    var tdEvidence = cell('Evidence');
+                    var noEvidence = function () { tdEvidence.textContent = '-'; tdEvidence.classList.add('gb-muted'); };
                     if (e.evidence) {
                         try {
                             var urls = typeof e.evidence === 'string' ? JSON.parse(e.evidence) : e.evidence;
                             if (Array.isArray(urls) && urls.length > 0) {
+                                var wrap = document.createElement('span');
+                                wrap.className = 'gb-evidence';
                                 urls.forEach(function(url, i) {
-                                    if (i > 0) tdEvidence.appendChild(document.createTextNode(' '));
                                     var a = document.createElement('a');
                                     a.href = url;
                                     a.target = '_blank';
-                                    a.style.cssText = 'color:#60a5fa;font-size:0.75rem;text-decoration:none;';
+                                    a.rel = 'noopener';
                                     if (url.match(/\.(png|jpg|jpeg|gif|webp)/i)) {
-                                        a.textContent = '[img ' + (i + 1) + ']';
+                                        a.textContent = 'Image ' + (i + 1);
                                     } else if (url.includes('discord.com/channels/')) {
-                                        a.textContent = '[msg ' + (i + 1) + ']';
+                                        a.textContent = 'Message ' + (i + 1);
                                     } else {
-                                        a.textContent = '[link ' + (i + 1) + ']';
+                                        a.textContent = 'Link ' + (i + 1);
                                     }
-                                    tdEvidence.appendChild(a);
+                                    wrap.appendChild(a);
                                 });
+                                tdEvidence.appendChild(wrap);
                             } else {
-                                tdEvidence.textContent = '-';
-                                tdEvidence.style.color = 'rgba(255,255,255,0.3)';
+                                noEvidence();
                             }
-                        } catch { tdEvidence.textContent = '-'; tdEvidence.style.color = 'rgba(255,255,255,0.3)'; }
+                        } catch { noEvidence(); }
                     } else {
-                        tdEvidence.textContent = '-';
-                        tdEvidence.style.color = 'rgba(255,255,255,0.3)';
+                        noEvidence();
                     }
                     tr.appendChild(tdEvidence);
 
-                    const tdDate = document.createElement('td');
+                    const tdDate = cell('Date', 'gb-date');
                     tdDate.textContent = new Date(e.created_at).toLocaleDateString();
                     tr.appendChild(tdDate);
 
@@ -601,50 +451,46 @@
             document.getElementById('globalban-next').disabled = data.pagination.page >= data.pagination.pages;
         } catch (err) {
             console.error('Failed to load entries:', err);
+            messageRow(tbody, 7, 'Could not load the ban list. Try again in a moment.', true);
         }
     }
 
     async function loadActionLog() {
+        const tbody = document.getElementById('globalban-log-body');
         try {
             const res = await fetch('/api/guilds/' + guildId + '/global-ban/action-log?limit=15');
             const data = await res.json();
-            if (!data.success) return;
+            if (!data.success) { messageRow(tbody, 4, 'Could not load the action log.', true); return; }
 
-            const tbody = document.getElementById('globalban-log-body');
             while (tbody.firstChild) tbody.removeChild(tbody.firstChild);
 
             if (data.logs.length === 0) {
-                const tr = document.createElement('tr');
-                const td = document.createElement('td');
-                td.colSpan = 4;
-                td.style.textAlign = 'center';
-                td.style.padding = '24px';
-                td.style.color = 'rgba(255,255,255,0.4)';
-                td.textContent = 'No actions recorded yet';
-                tr.appendChild(td);
-                tbody.appendChild(tr);
+                messageRow(tbody, 4, 'No actions recorded yet');
             } else {
                 data.logs.forEach(function(l) {
                     const tr = document.createElement('tr');
 
-                    const tdAction = document.createElement('td');
+                    const tdAction = cell('Action');
                     const badge = document.createElement('span');
-                    badge.className = 'gb-badge action';
-                    badge.textContent = l.action;
+                    badge.className = 'cf-pill is-accent';
+                    badge.textContent = cap(l.action);
                     tdAction.appendChild(badge);
                     tr.appendChild(tdAction);
 
-                    const tdUser = document.createElement('td');
-                    tdUser.className = 'mono';
-                    tdUser.textContent = l.user_id;
+                    const tdUser = cell('User');
+                    if (window.CFUser) tdUser.appendChild(CFUser.cell(l.user_id, { size: 'sm' }));
+                    else { tdUser.className = 'gb-mono'; tdUser.textContent = l.user_id; }
                     tr.appendChild(tdUser);
 
-                    const tdDetails = document.createElement('td');
-                    tdDetails.className = 'truncate';
-                    tdDetails.textContent = l.details || '-';
+                    const tdDetails = cell('Details');
+                    const details = document.createElement('div');
+                    details.className = 'gb-truncate';
+                    details.textContent = l.details || '-';
+                    if (l.details) details.title = l.details;
+                    tdDetails.appendChild(details);
                     tr.appendChild(tdDetails);
 
-                    const tdDate = document.createElement('td');
+                    const tdDate = cell('Date', 'gb-date');
                     tdDate.textContent = new Date(l.created_at).toLocaleString();
                     tr.appendChild(tdDate);
 
@@ -653,12 +499,13 @@
             }
         } catch (err) {
             console.error('Failed to load action log:', err);
+            messageRow(tbody, 4, 'Could not load the action log.', true);
         }
     }
 
-    document.getElementById('globalban-config-form').addEventListener('submit', async function(e) {
-        e.preventDefault();
-        var form = e.target;
+    var configForm = document.getElementById('globalban-config-form');
+    async function saveConfig() {
+        var form = configForm;
         var body = {
             enabled: document.getElementById('globalban_enabled').checked,
             action_critical: form.querySelector('[name="action_critical"]').value,
@@ -669,7 +516,9 @@
             check_on_join: true,
             check_on_message: document.getElementById('check_on_message').checked,
             auto_aggregate_opt_in: document.getElementById('auto_aggregate').checked,
-            exempt_roles: []
+            mode: (form.querySelector('[name="gb_mode"]:checked') || {}).value || 'protect',
+            confidence_threshold: Number(document.getElementById('gb_threshold').value)
+            // exempt_roles is left out on purpose: the save is partial, so it keeps the roles set elsewhere.
         };
 
         try {
@@ -678,15 +527,29 @@
                 headers: { 'Content-Type': 'application/json', 'x-csrf-token': csrfToken },
                 body: JSON.stringify(body)
             });
-            var data = await res.json();
-            if (data.success) {
+            var data = await res.json().catch(function () { return {}; });
+            if (res.ok && data.success) {
                 showToast('Global ban settings saved', 'success');
-            } else {
-                showToast(data.error || 'Failed to save', 'error');
+                return true;
             }
+            showToast(data.error || 'Could not save', 'error');
         } catch (err) {
-            showToast('Failed to save settings', 'error');
+            showToast('Could not save the settings', 'error');
         }
+        return false;
+    }
+    configForm.addEventListener('submit', function (e) { e.preventDefault(); saveConfig(); });
+
+    // The master switch sits in the page header (data-feature-switch) and saves straight away.
+    var enabledBox = document.getElementById('globalban_enabled');
+    var reverting = false;
+    enabledBox.addEventListener('change', async function () {
+        if (reverting) return;
+        if (await saveConfig()) return;
+        reverting = true;
+        enabledBox.checked = !enabledBox.checked;
+        enabledBox.dispatchEvent(new Event('change'));
+        reverting = false;
     });
 
     document.getElementById('globalban-search').addEventListener('input', debounce(function() { loadEntries(1); }, 500));
@@ -708,7 +571,94 @@
         alert(msg);
     }
 
+    // ── mode, network, check (built as DOM nodes) ──
+    var thr = document.getElementById('gb_threshold');
+    thr.addEventListener('input', function () { document.getElementById('gb_threshold_value').textContent = thr.value; });
+
+    function el(tag, props) {
+        var node = document.createElement(tag);
+        if (props) Object.keys(props).forEach(function (k) { if (k === 'style') node.style.cssText = props[k]; else node[k] = props[k]; });
+        for (var i = 2; i < arguments.length; i++) if (arguments[i] != null) node.append(arguments[i]);
+        return node;
+    }
+    function kv(k, v) { return el('div', {}, el('div', { className: 'k', textContent: k }), el('div', { className: 'v', textContent: String(v) })); }
+
+    async function loadNetwork() {
+        try {
+            var res = await fetch('/api/guilds/' + guildId + '/global-ban/network');
+            var data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed');
+            var s = data.stats;
+            var modes = Object.keys(s.enabledByMode || {}).map(function (m) { return cap(m) + ' ' + s.enabledByMode[m]; }).join(', ') || 'None';
+            document.getElementById('cfk-gb-kpi-listed').textContent = String(s.activeEntries || 0);
+            document.getElementById('cfk-gb-kpi-servers').textContent = String(s.participatingServers || 0);
+            document.getElementById('cfk-gb-kpi-week').textContent = String(s.addedThisWeek || 0);
+            document.getElementById('cfk-gb-kpi-mine').textContent = String(s.mine ? s.mine.actions30d : 0);
+            document.getElementById('gbNetStats').replaceChildren(
+                kv('Listed automatically', s.automaticEntries),
+                kv('Servers by mode', modes),
+                kv('Users with signals, 90 days', s.trackedUsers),
+                kv('Contributing servers, 90 days', s.contributingServers),
+                kv('Signals this week', s.signalsThisWeek),
+                kv('Alerts here, 30 days', s.mine ? s.mine.alerts30d : 0),
+                kv('Contributed from here, 90 days', s.mine ? s.mine.contributed90d : 0));
+            var list = document.getElementById('gbNetRecent');
+            if (!s.recent.length) {
+                list.replaceChildren(el('div', { className: 'cf-state cf-state--empty cf-state--compact' }, el('p', { className: 'cf-state-title', textContent: 'No recent additions' })));
+                return;
+            }
+            list.replaceChildren.apply(list, s.recent.map(function (e) {
+                return el('div', { className: 'cf-list-item' },
+                    el('div', { className: 'cf-list-main' },
+                        sevPill(e.severity),
+                        window.CFUser ? CFUser.cell(e.user_id, { size: 'sm', storedName: e.username || null }) : el('span', { className: 'gb-mono', textContent: e.user_id }),
+                        el('span', { textContent: e.category + ', ' + String(e.source || '').replace(/_/g, ' ') + ', confidence ' + e.confidence }),
+                        el('span', { className: 'gb-date', textContent: new Date(e.created_at).toLocaleString() })));
+            }));
+        } catch (err) {
+            document.getElementById('gbNetStats').replaceChildren(el('div', { className: 'cf-state cf-state--error cf-state--compact', role: 'alert' },
+                el('p', { className: 'cf-state-title', textContent: 'Could not load the network numbers' }),
+                el('p', { className: 'cf-state-text', textContent: err.message })));
+        }
+    }
+
+    async function runCheck() {
+        var id = document.getElementById('gbCheckInput').value.replace(/[<@!>\s]/g, '');
+        var out = document.getElementById('gbCheckResult');
+        if (!id) return;
+        out.replaceChildren(el('div', { className: 'cf-state cf-state--loading cf-state--compact', role: 'status' },
+            el('span', { className: 'cf-spinner' }), el('p', { className: 'cf-state-title', textContent: 'Checking' })));
+        try {
+            var res = await fetch('/api/guilds/' + guildId + '/global-ban/check/' + encodeURIComponent(id));
+            var data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed');
+            var c = data.check;
+            var what = { ban: 'Ban', kick: 'Kick', alert: 'Alert only', none: 'Nothing' };
+            var tone = c.confidence >= 75 ? 'is-bad' : c.confidence >= 40 ? 'is-warn' : 'is-ok';
+            out.replaceChildren(
+                el('div', { className: 'gb-check-head' },
+                    data.user.avatar ? el('img', { src: data.user.avatar, alt: '' }) : null,
+                    el('strong', { textContent: data.user.username || 'Unknown user' }),
+                    el('span', { className: 'gb-mono', textContent: data.user.id }),
+                    el('span', { className: 'cf-pill gb-check-score ' + tone, textContent: 'Confidence ' + c.confidence + '/100' })),
+                el('div', { className: 'gb-facts' },
+                    kv('Listed', c.listed ? (cap(c.severity) + ' (' + c.category + ')') : 'No'),
+                    kv('Independent servers', c.independentServers),
+                    kv('Reported by', c.reportedBy.join(', ') || 'Nobody'),
+                    kv('Reasons', c.reasons.join(', ') || 'None'),
+                    kv('Pending reports', c.pendingReports),
+                    kv('This server reported them', c.ownSignal ? 'Yes' : 'No')),
+                c.decision ? el('p', { className: 'gb-check-decision' }, el('strong', { textContent: 'If they join here: ' }),
+                    (what[c.decision.action] || c.decision.action) + ' (' + c.decision.mode + ' mode): ' + c.decision.why) : null);
+        } catch (err) {
+            out.replaceChildren(el('p', { className: 'gb-error', role: 'alert', textContent: err.message }));
+        }
+    }
+    document.getElementById('gbCheckBtn').addEventListener('click', runCheck);
+    document.getElementById('gbCheckInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') runCheck(); });
+
     loadEntries(1);
     loadActionLog();
+    loadNetwork();
 })();
 </script>

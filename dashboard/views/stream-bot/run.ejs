@@ -1,0 +1,100 @@
+<%#
+  GET /stream/bot/runs/:id. Locals: run (runView: checks [{ type, ok, detail }], steps [{ at, type, status, detail, ms, dispatchId?,
+  childRunId? }]), dispatches [dispatchView], automationExists, stepLabels { type: label }, conditionLabels { type: label }.
+%>
+<%- include('_head', { pageTitle: 'Run ' + run.id, active: 'runs', sbPage: 'run' }) %>
+<%
+  const _when = (iso) => iso ? new Date(iso).toISOString().slice(0, 19).replace('T', ' ') + ' UTC' : '';
+  const _status = { ok: ['is-ok', 'OK'], partial: ['is-warn', 'Partly failed'], failed: ['is-bad', 'Failed'], skipped: ['', 'Skipped'], running: ['is-info', 'Running'] };
+  const _step = { ok: ['is-ok', 'Done'], failed: ['is-bad', 'Failed'], skipped: ['', 'Skipped'], dry: ['is-info', 'Dry run'], sent: ['is-ok', 'Sent'], queued: ['is-warn', 'Waiting for a device'] };
+  const _disp = { queued: ['is-warn', 'Waiting'], sent: ['is-info', 'Sent, no answer yet'], acked: ['is-ok', 'Done'], failed: ['is-bad', 'Failed'], expired: ['is-bad', 'Expired'] };
+  const _source = { event: 'an event', test: 'a test', automation: 'another automation', studio: 'CertiFried Studio (a button or hotkey)', timer: 'a timer', dock: 'an OBS dock' };
+  const st = _status[run.status] || ['', run.status];
+%>
+<a class="cf-back" href="/stream/bot/runs">Back to run history</a>
+<div class="cf-page-head">
+    <div>
+        <h1 class="cf-page-title">Run <%= run.id %>: <%= run.automationName %></h1>
+        <p class="cf-page-sub">Started by <%= _source[run.source] || run.source %> at <time datetime="<%= run.startedAt %>"><%= _when(run.startedAt) %></time><% if (run.ms != null) { %>, took <%= run.ms < 1000 ? run.ms + ' ms' : (run.ms / 1000).toFixed(1) + ' s' %><% } %>.</p>
+    </div>
+    <div class="cf-page-actions">
+        <span class="cf-pill <%= st[0] %>"><%= st[1] %></span><% if (run.dryRun) { %><span class="cf-pill is-info">Dry run</span><% } %>
+        <% if (run.automationId && automationExists) { %><a class="btn btn-secondary btn-sm" href="/stream/bot/automations/<%= run.automationId %>">Open automation</a><% } %>
+    </div>
+</div>
+<%- include('_tabs', { active: 'runs' }) %>
+
+<% if (run.skipReason) { %><div class="cf-notice"><div class="cf-notice-body"><span class="cf-notice-title">Skipped</span><p><%= run.skipReason %></p></div></div><% } %>
+<% if (run.error) { %><div class="cf-notice is-bad"><div class="cf-notice-body"><span class="cf-notice-title">Error</span><p><%= run.error %></p></div></div><% } %>
+<% if (run.parentRunId) { %><p class="cf-muted">Run by <a href="/stream/bot/runs/<%= run.parentRunId %>">run <%= run.parentRunId %></a>.</p><% } %>
+
+<section class="cf-section" aria-labelledby="sb-run-ev">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sb-run-ev">Event</h2></div></header>
+    <div class="cf-rows">
+        <div class="cf-list"><div class="cf-list-item"><div class="cf-list-main">
+            <div class="cf-em"><%= run.eventText || 'No event' %></div>
+            <% if (run.eventPlatform) { %><div class="cf-muted">From <%= run.eventPlatform %><% if (run.eventTest) { %>, test event<% } %></div><% } %>
+        </div></div></div>
+    </div>
+</section>
+
+<section class="cf-section" aria-labelledby="sb-run-checks">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sb-run-checks">Conditions</h2></div></header>
+    <div class="cf-rows">
+        <% if (!run.checks.length) { %><div class="cf-state cf-state--compact"><p class="cf-state-title">No conditions: it always runs.</p></div><% } else { %>
+        <div class="cf-table-wrap"><table class="cf-table cf-table--stack">
+            <thead><tr><th scope="col">Condition</th><th scope="col">Result</th><th scope="col">Detail</th></tr></thead>
+            <tbody>
+                <% run.checks.forEach((c) => { %><tr><td><%= conditionLabels[c.type] || c.type %></td><td><span class="cf-pill <%= c.ok ? 'is-ok' : 'is-bad' %>"><%= c.ok ? 'Passed' : 'Did not pass' %></span></td><td class="sb-wrap"><%= c.detail %></td></tr><% }) %>
+            </tbody>
+        </table></div>
+        <% } %>
+    </div>
+</section>
+
+<section class="cf-section" aria-labelledby="sb-run-steps">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sb-run-steps">Actions</h2>
+        <p class="cf-section-desc">Numbered in order; 2.1.1 is the first action of choice 1 inside action 2.</p></div></header>
+    <div class="cf-rows">
+        <% if (!run.steps.length) { %><div class="cf-state cf-state--compact"><p class="cf-state-title"><%= run.status === 'skipped' ? 'Nothing ran.' : (run.status === 'running' ? 'Still running.' : 'No actions ran.') %></p></div><% } else { %>
+        <div class="cf-table-wrap"><table class="cf-table cf-table--stack">
+            <thead><tr><th scope="col">Step</th><th scope="col">Action</th><th scope="col">Result</th><th scope="col">Detail</th><th scope="col" class="cf-cell-end">Time</th></tr></thead>
+            <tbody>
+                <% run.steps.forEach((s) => { const ss = _step[s.status] || ['', s.status]; %>
+                <tr>
+                    <td class="cf-nowrap"><%= s.at %></td>
+                    <td><%= stepLabels[s.type] || s.type %></td>
+                    <td><span class="cf-pill <%= ss[0] %>"><%= ss[1] %></span></td>
+                    <td class="sb-wrap"><%= s.detail %><% if (s.childRunId) { %> <a href="/stream/bot/runs/<%= s.childRunId %>">Open run <%= s.childRunId %></a><% } %></td>
+                    <td class="cf-cell-end cf-nowrap"><%= s.ms != null ? s.ms + ' ms' : '' %></td>
+                </tr>
+                <% }) %>
+            </tbody>
+        </table></div>
+        <% } %>
+    </div>
+</section>
+
+<section class="cf-section" aria-labelledby="sb-run-disp">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sb-run-disp">Sent to devices</h2>
+        <p class="cf-section-desc">Actions for CertiFried Studio or an overlay. A device has 10 seconds to answer; each action is tried up to 3 times.</p></div></header>
+    <div class="cf-rows">
+        <% if (!dispatches.length) { %><div class="cf-state cf-state--compact"><p class="cf-state-title">Nothing was sent to a device in this run.</p></div><% } else { %>
+        <div class="cf-table-wrap"><table class="cf-table cf-table--stack">
+            <thead><tr><th scope="col">Action</th><th scope="col">Status</th><th scope="col">Tries</th><th scope="col">Detail</th></tr></thead>
+            <tbody>
+                <% dispatches.forEach((d) => { const ds = _disp[d.status] || ['', d.status]; %>
+                <tr>
+                    <td><%= d.label %></td>
+                    <td><span class="cf-pill <%= ds[0] %>"><%= ds[1] %></span></td>
+                    <td><%= d.attempts %></td>
+                    <td class="sb-wrap"><% if (d.error) { %><%= d.error %><% } else if (d.ackedAt) { %>Done at <time datetime="<%= d.ackedAt %>"><%= _when(d.ackedAt) %></time><% } else if (d.status === 'queued') { %>Waits until <time datetime="<%= d.expiresAt %>"><%= _when(d.expiresAt) %></time><% } %></td>
+                </tr>
+                <% }) %>
+            </tbody>
+        </table></div>
+        <% } %>
+    </div>
+</section>
+
+<%- include('_foot') %>

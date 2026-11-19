@@ -3,6 +3,7 @@ import {
     TextInputBuilder, TextInputStyle
 } from 'discord.js';
 
+import { themeColor } from '../../core/guild-theme.js';
 export async function handleCreate(interaction) {
     const modal = new ModalBuilder()
         .setCustomId(`embed_create_${interaction.options.getChannel('channel')?.id || interaction.channelId}`)
@@ -76,7 +77,7 @@ export async function handleQuick(interaction) {
         const hex = color.startsWith('#') ? color : `#${color}`;
         embed.setColor(parseInt(hex.replace('#', ''), 16));
     } else {
-        embed.setColor(0x5865F2);
+        embed.setColor(themeColor(interaction.guildId, 'primary'));
     }
     if (image) embed.setImage(image);
     if (thumbnail) embed.setThumbnail(thumbnail);

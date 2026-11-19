@@ -29,6 +29,7 @@ import { progressQuest } from './quests-service.js';
 import { getActive as getActiveGems, consumeForHunt as consumeGemsForHunt } from './gems-service.js';
 import { rollDailyDrop } from './daily-drop.js';
 import { getActivePgid } from './teams-service.js';
+import { settleMarriageDaily } from './marriage-service.js';
 
 // ── Config (per-guild tuning — migrations 087 + 088) ─────────────────
 
@@ -612,11 +613,30 @@ export const ANIMALS = new Proxy({}, {
     },
 });
 
+/**
+ * OwO daily, plus the marriage bonus (upstream economy/daily.js): when both partners have claimed
+ * today, each gets bonus cowoncy and a lootbox or crate. Checked on a successful claim AND on a
+ * claim that is still on cooldown — upstream's "double check", so the second partner's claim pays
+ * the couple even if the first claimed before they married. A bonus failure never costs the
+ * member their daily; it is logged and the daily result is returned without it.
+ *
+ * Result is claimDailyCowoncy's, with `marriage: {partnerId, amount, item, ring, dailies}` when paid.
+ */
+export async function claimDaily(guildId, userId) {
+    const result = await claimDailyCowoncy(guildId, userId);
+    try {
+        const marriage = await settleMarriageDaily(guildId, userId);
+        if (marriage) result.marriage = marriage;
+    } catch (e) {
+        logger.error('[OwO] marriage daily bonus failed', { guildId, userId, err: e.message });
+    }
+    return result;
+}
+
 // Re-exports so old command files that imported these names keep working.
 export {
     getCowoncy as getBalance,
     addCowoncy,
     removeCowoncy,
     transferCowoncy as transferCurrency,
-    claimDailyCowoncy as claimDaily,
 };

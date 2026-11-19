@@ -1,105 +1,118 @@
 <%
+// Logging: the default log channel, which events are logged (with a per-event channel and
+// embed colours), join risk insight (JSON API) and per-channel webhook overrides. Built on the
+// settings-row kit (cf-settings.css); field names and ids are unchanged.
 const currentSettings = settings || {};
 const enabledLogs = JSON.parse(currentSettings.enabled_logs || '[]');
 const categoryChannels = JSON.parse(currentSettings.log_categories || '{}');
-const eventColors = JSON.parse(currentSettings.event_colors || '{}');
-const defaultColorMap = {
-    messageDelete: '#ED4245', messageUpdate: '#ED4245',
-    memberJoin: '#57F287', memberUpdate: '#5865F2', memberLeave: '#ED4245', memberKick: '#ED4245',
-    voiceUpdate: '#FEE75C', voiceServerMute: '#ED4245', voiceServerDeaf: '#ED4245',
-    voiceSelfMute: '#5865F2', voiceStream: '#593695', voiceVideo: '#57F287',
-    inviteCreate: '#57F287', inviteDelete: '#ED4245',
-    channelCreate: '#57F287', channelDelete: '#ED4245', channelUpdate: '#5865F2',
-    threadCreate: '#57F287', threadDelete: '#ED4245', threadUpdate: '#5865F2',
-    guildUpdate: '#5865F2',
-    ban: '#ED4245', unban: '#57F287',
-    roleCreate: '#57F287', roleDelete: '#ED4245', roleUpdate: '#5865F2',
-    emojiCreate: '#57F287', emojiDelete: '#ED4245', emojiUpdate: '#5865F2',
-    stickerCreate: '#57F287', stickerDelete: '#ED4245', stickerUpdate: '#5865F2',
-    webhookUpdate: '#5865F2', integrationUpdate: '#5865F2',
-    moderation: '#ED4245', 'join-gate': '#FEE75C', system: '#5865F2',
-    xp: '#57F287', giveaway: '#FEE75C', poll: '#5865F2', starboard: '#FEE75C',
-    'sticky-roles': '#5865F2', 'temp-channels': '#5865F2',
-    'twitch-schedule': '#5865F2', 'auto-publisher': '#5865F2', autorole: '#5865F2',
-    tickets: '#5865F2', backup: '#5865F2', 'team-sync': '#5865F2', http: '#5865F2'
-};
+// Per action: { actions: [{ key, label, value, custom, fallback }] } or { notPosted: reason } (core/log-actions.js)
+const actionColorRows = currentSettings.action_color_rows || {};
 const auditLogsData = auditLogs || [];
 const logCategories = [
     // Core Message Events
-    { key: 'messageDelete', label: '💬 Message Deletions', category: 'Messages' },
-    { key: 'messageUpdate', label: '✏️ Message Edits', category: 'Messages' },
+    { key: 'messageDelete', label: 'Message deletions', category: 'Messages' },
+    { key: 'messageUpdate', label: 'Message edits', category: 'Messages' },
+    { key: 'channelPinsUpdate', label: 'Pins changed', category: 'Messages' },
+    { key: 'reactionAdd', label: 'Reaction added', category: 'Reactions' },
+    { key: 'reactionRemove', label: 'Reaction removed', category: 'Reactions' },
+    { key: 'reactionRemoveAll', label: 'All reactions cleared', category: 'Reactions' },
+    { key: 'reactionRemoveEmoji', label: 'One reaction emoji cleared', category: 'Reactions' },
+    { key: 'pollVoteAdd', label: 'Poll vote added (Discord polls)', category: 'Polls' },
+    { key: 'pollVoteRemove', label: 'Poll vote removed (Discord polls)', category: 'Polls' },
 
     // Member Events
-    { key: 'memberJoin', label: '📥 Member Join', category: 'Members' },
-    { key: 'memberUpdate', label: '👤 Member Updates (Roles, Nicknames)', category: 'Members' },
-    { key: 'memberLeave', label: '📤 Member Leave', category: 'Members' },
-    { key: 'memberKick', label: '🚪 Member Kicks', category: 'Members' },
+    { key: 'memberJoin', label: 'Member joined', category: 'Members' },
+    { key: 'memberUpdate', label: 'Member updated (roles, nickname)', category: 'Members' },
+    { key: 'memberLeave', label: 'Member left', category: 'Members' },
+    { key: 'memberKick', label: 'Member kicked', category: 'Members' },
+    { key: 'memberTimeout', label: 'Member timed out', category: 'Members' },
 
     // Voice Events
-    { key: 'voiceUpdate', label: '🔊 Voice Join / Leave / Move', category: 'Voice' },
-    { key: 'voiceServerMute', label: '🔇 Server Mute / Unmute', category: 'Voice' },
-    { key: 'voiceServerDeaf', label: '🔇 Server Deafen / Undeafen', category: 'Voice' },
-    { key: 'voiceSelfMute', label: '🎙️ Self Mute / Deafen', category: 'Voice' },
-    { key: 'voiceStream', label: '📡 Stream Start / Stop', category: 'Voice' },
-    { key: 'voiceVideo', label: '📹 Camera On / Off', category: 'Voice' },
+    { key: 'voiceUpdate', label: 'Voice join, leave and move', category: 'Voice' },
+    { key: 'voiceServerMute', label: 'Server mute and unmute', category: 'Voice' },
+    { key: 'voiceServerDeaf', label: 'Server deafen and undeafen', category: 'Voice' },
+    { key: 'voiceSelfMute', label: 'Self mute and deafen', category: 'Voice' },
+    { key: 'voiceStream', label: 'Stream started or stopped', category: 'Voice' },
+    { key: 'voiceVideo', label: 'Camera on or off', category: 'Voice' },
+    { key: 'voiceChannelEffect', label: 'Voice effects and soundboard plays', category: 'Voice' },
+    { key: 'stageInstanceCreate', label: 'Stage started', category: 'Voice' },
+    { key: 'stageInstanceUpdate', label: 'Stage updated', category: 'Voice' },
+    { key: 'stageInstanceDelete', label: 'Stage ended', category: 'Voice' },
 
-    // Channel Events (NEW)
-    { key: 'channelCreate', label: '➕ Channel Created', category: 'Channels' },
-    { key: 'channelDelete', label: '➖ Channel Deleted', category: 'Channels' },
-    { key: 'channelUpdate', label: '🔧 Channel Updated', category: 'Channels' },
+    // Channel Events
+    { key: 'channelCreate', label: 'Channel created', category: 'Channels' },
+    { key: 'channelDelete', label: 'Channel deleted', category: 'Channels' },
+    { key: 'channelUpdate', label: 'Channel updated', category: 'Channels' },
 
-    // Thread Events (NEW)
-    { key: 'threadCreate', label: '🧵 Thread Created', category: 'Threads' },
-    { key: 'threadDelete', label: '🗑️ Thread Deleted', category: 'Threads' },
-    { key: 'threadUpdate', label: '📝 Thread Updated', category: 'Threads' },
+    // Thread Events
+    { key: 'threadCreate', label: 'Thread created', category: 'Threads' },
+    { key: 'threadDelete', label: 'Thread deleted', category: 'Threads' },
+    { key: 'threadUpdate', label: 'Thread updated', category: 'Threads' },
+    { key: 'threadMembersUpdate', label: 'Thread members added or removed', category: 'Threads' },
 
-    // Guild/Server Events (NEW)
-    { key: 'guildUpdate', label: '🏛️ Server Settings Updated', category: 'Server' },
-    { key: 'ban', label: '🔨 Member Bans', category: 'Moderation' },
-    { key: 'unban', label: '🔓 Member Unbans', category: 'Moderation' },
+    // Guild/Server Events
+    { key: 'guildUpdate', label: 'Server settings updated', category: 'Server' },
+    { key: 'ban', label: 'Member banned', category: 'Moderation' },
+    { key: 'unban', label: 'Member unbanned', category: 'Moderation' },
+    { key: 'automod', label: 'Bot AutoMod actions', category: 'AutoMod' },
+    { key: 'automodAction', label: 'Discord AutoMod actions', category: 'AutoMod' },
+    { key: 'automodRuleCreate', label: 'Discord AutoMod rule created', category: 'AutoMod' },
+    { key: 'automodRuleUpdate', label: 'Discord AutoMod rule updated', category: 'AutoMod' },
+    { key: 'automodRuleDelete', label: 'Discord AutoMod rule deleted', category: 'AutoMod' },
 
-    // Role Events (NEW)
-    { key: 'roleCreate', label: '🎭 Role Created', category: 'Roles' },
-    { key: 'roleDelete', label: '❌ Role Deleted', category: 'Roles' },
-    { key: 'roleUpdate', label: '🎨 Role Updated', category: 'Roles' },
+    // Scheduled Events
+    { key: 'scheduledEventCreate', label: 'Event created', category: 'Server events' },
+    { key: 'scheduledEventUpdate', label: 'Event updated', category: 'Server events' },
+    { key: 'scheduledEventDelete', label: 'Event deleted', category: 'Server events' },
+    { key: 'scheduledEventUserAdd', label: 'Member marked interested', category: 'Server events' },
+    { key: 'scheduledEventUserRemove', label: 'Member no longer interested', category: 'Server events' },
+
+    // Role Events
+    { key: 'roleCreate', label: 'Role created', category: 'Roles' },
+    { key: 'roleDelete', label: 'Role deleted', category: 'Roles' },
+    { key: 'roleUpdate', label: 'Role updated', category: 'Roles' },
 
     // OwO events
-    { key: 'owoRareCatch', label: '🐾 OwO Rare+ Catch (Epic / Mythical / Legendary)', category: 'OwO' },
-    { key: 'owoAdminAction', label: '🛠️ OwO Admin Action (reset, grant, wipe)', category: 'OwO' },
+    { key: 'owoRareCatch', label: 'OwO rare catch (epic, mythical or legendary)', category: 'OwO' },
+    { key: 'owoAdminAction', label: 'OwO admin action (reset, grant, wipe)', category: 'OwO' },
 
-    // Emoji/Sticker Events (NEW)
-    { key: 'emojiCreate', label: '😀 Emoji Added', category: 'Emojis & Stickers' },
-    { key: 'emojiDelete', label: '😢 Emoji Removed', category: 'Emojis & Stickers' },
-    { key: 'emojiUpdate', label: '😎 Emoji Updated', category: 'Emojis & Stickers' },
-    { key: 'stickerCreate', label: '🏷️ Sticker Added', category: 'Emojis & Stickers' },
-    { key: 'stickerDelete', label: '🗑️ Sticker Removed', category: 'Emojis & Stickers' },
-    { key: 'stickerUpdate', label: '✨ Sticker Updated', category: 'Emojis & Stickers' },
+    // Emoji/Sticker Events
+    { key: 'emojiCreate', label: 'Emoji added', category: 'Emoji and stickers' },
+    { key: 'emojiDelete', label: 'Emoji removed', category: 'Emoji and stickers' },
+    { key: 'emojiUpdate', label: 'Emoji updated', category: 'Emoji and stickers' },
+    { key: 'stickerCreate', label: 'Sticker added', category: 'Emoji and stickers' },
+    { key: 'stickerDelete', label: 'Sticker removed', category: 'Emoji and stickers' },
+    { key: 'stickerUpdate', label: 'Sticker updated', category: 'Emoji and stickers' },
+    { key: 'soundboardSoundCreate', label: 'Soundboard sound added', category: 'Emoji and stickers' },
+    { key: 'soundboardSoundDelete', label: 'Soundboard sound removed', category: 'Emoji and stickers' },
+    { key: 'soundboardSoundUpdate', label: 'Soundboard sound updated', category: 'Emoji and stickers' },
 
     // Invite Events
-    { key: 'inviteCreate', label: '🔗 Invite Created', category: 'Invites' },
-    { key: 'inviteDelete', label: '🗑️ Invite Deleted / Expired', category: 'Invites' },
+    { key: 'inviteCreate', label: 'Invite created', category: 'Invites' },
+    { key: 'inviteDelete', label: 'Invite deleted or expired', category: 'Invites' },
 
     // Webhook/Integration Events
-    { key: 'webhookUpdate', label: '🔗 Webhook Modified', category: 'Integrations' },
-    { key: 'integrationUpdate', label: '🤖 Integration/Bot Added/Removed', category: 'Integrations' },
+    { key: 'webhookUpdate', label: 'Webhook changed', category: 'Integrations' },
+    { key: 'integrationUpdate', label: 'Integration or bot added or removed', category: 'Integrations' },
 
     // Bot Feature Events
-    { key: 'moderation', label: '⚖️ Moderation Actions', category: 'Bot Features' },
-    { key: 'join-gate', label: '🚧 Join Gate Actions', category: 'Bot Features' },
-    { key: 'system', label: '🤖 Bot System Messages', category: 'Bot Features' },
-    { key: 'xp', label: '⭐ Level Up/XP Events', category: 'Bot Features' },
-    { key: 'giveaway', label: '🎉 Giveaway Events', category: 'Bot Features' },
-    { key: 'poll', label: '📊 Poll Events', category: 'Bot Features' },
-    { key: 'starboard', label: '⭐ Starboard Posts', category: 'Bot Features' },
-    { key: 'sticky-roles', label: '📌 Sticky Role Updates', category: 'Bot Features' },
-    { key: 'temp-channels', label: '🔄 Temp Channel Events', category: 'Bot Features' },
-    { key: 'twitch-schedule', label: '📅 Twitch Schedule Sync', category: 'Bot Features' },
-    { key: 'auto-publisher', label: '📢 Auto-Publisher', category: 'Bot Features' },
-    { key: 'autorole', label: '🎭 Autorole Assignments', category: 'Bot Features' },
-    { key: 'tickets', label: '🎫 Ticket Events', category: 'Bot Features' },
-    { key: 'backup', label: '💾 Backup & Restore', category: 'Bot Features' },
-    { key: 'team-sync', label: '👥 Team Sync Events', category: 'Bot Features' },
-    { key: 'http', label: '🌐 Dashboard Actions', category: 'Bot Features' }
+    { key: 'moderation', label: 'Moderation actions', category: 'Bot features' },
+    { key: 'join-gate', label: 'Join gate actions', category: 'Bot features' },
+    { key: 'system', label: 'Bot system messages', category: 'Bot features' },
+    { key: 'xp', label: 'Level-ups and XP', category: 'Bot features' },
+    { key: 'giveaway', label: 'Giveaways', category: 'Bot features' },
+    { key: 'poll', label: 'Bot polls', category: 'Bot features' },
+    { key: 'starboard', label: 'Starboard posts', category: 'Bot features' },
+    { key: 'sticky-roles', label: 'Sticky role updates', category: 'Bot features' },
+    { key: 'temp-channels', label: 'Temporary voice channels', category: 'Bot features' },
+    { key: 'twitch-schedule', label: 'Twitch schedule sync', category: 'Bot features' },
+    { key: 'auto-publisher', label: 'Auto-publisher', category: 'Bot features' },
+    { key: 'autorole', label: 'Auto-role assignments', category: 'Bot features' },
+    { key: 'tickets', label: 'Tickets', category: 'Bot features' },
+    { key: 'backup', label: 'Backups and restores', category: 'Bot features' },
+    { key: 'team-sync', label: 'Stream team sync', category: 'Bot features' },
+    { key: 'http', label: 'Dashboard changes', category: 'Bot features' },
+    { key: 'commandUsage', label: 'Command usage', category: 'Bot features' }
 ];
 
 // Group categories for better organization
@@ -108,294 +121,417 @@ logCategories.forEach(cat => {
     if (!categoryGroups[cat.category]) categoryGroups[cat.category] = [];
     categoryGroups[cat.category].push(cat);
 });
+const defaultChannel = currentSettings.log_channel_id ? channels.find(c => c.id === currentSettings.log_channel_id) : null;
+const savedChannelIds = new Set([currentSettings.log_channel_id, ...Object.values(categoryChannels)].filter(Boolean).map(String));
+const logChannels = channels.filter(c => c.type === 0 || c.type === 5 || c.type === undefined || savedChannelIds.has(String(c.id)));
+const roleHex = (r) => (r && r.hexColor && r.hexColor !== '#000000') ? r.hexColor : '';
+const enabledCount = logCategories.filter(c => enabledLogs.includes(c.key)).length;
 %>
+<style>
+    .lg-events .cf-row.lg-row { grid-template-columns: minmax(0, 1fr) minmax(11rem, 15rem) auto; gap: var(--cf-2) var(--cf-4); padding-top: var(--cf-3); padding-bottom: var(--cf-3); min-height: 0; }
+    .lg-events .lg-switch { display: flex; justify-content: flex-end; }
+    .lg-events .lg-route select { width: 100%; }
+    .action-colors { display: flex; flex-wrap: wrap; gap: 6px var(--cf-3); margin-top: 6px; }
+    .action-color { display: inline-flex; align-items: center; gap: 6px; margin: 0; font-size: var(--cf-text-xs); color: var(--cf-text-3); cursor: pointer; }
+    .action-color input[type="color"] { width: 22px; height: 22px; min-height: 0 !important; padding: 0 !important; border: 1px solid var(--cf-border-strong) !important; border-radius: 5px !important; background: none !important; cursor: pointer; }
+    .action-color input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+    .action-color input[type="color"]::-webkit-color-swatch { border: 0; border-radius: 4px; }
+    .action-color-custom { font-size: 6px; vertical-align: middle; color: var(--cf-accent-fg); }
+    .action-color label { margin: 0; cursor: pointer; }
+    .action-color input.action-on { width: 14px; height: 14px; margin: 0; accent-color: var(--cf-accent, #5865F2); cursor: pointer; }
+    .action-color.is-off label, .action-color.is-off > span { text-decoration: line-through; color: var(--cf-text-4, var(--cf-text-3)); }
+    .action-color.is-off input[type="color"] { opacity: .35; }
+    .lg-row:has(.lg-switch input:not(:checked)) .action-colors { opacity: .5; }
+    .action-colors-none { display: block; margin-top: 2px; font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+    .lg-hook-row .cf-row-label { font-family: var(--cf-font); }
+    #joinInsightStatus { font-size: var(--cf-text-sm); }
+    .lg-events .lg-group-head { display: flex; align-items: center; justify-content: space-between; gap: var(--cf-3); }
+    .lg-group-actions { display: inline-flex; gap: 2px; }
+    .lg-group-btn { border: 0; background: transparent; padding: 2px 8px; border-radius: var(--cf-radius-sm); font: inherit; font-size: var(--cf-text-xs); font-weight: 500; color: var(--cf-text-3); cursor: pointer; }
+    .lg-group-btn:hover { color: var(--cf-text); background: var(--cf-surface-3); }
+    .lg-group-btn:focus-visible { outline: 2px solid var(--cf-accent); outline-offset: 1px; }
+    @media (max-width: 640px) {
+        .lg-events .cf-row.lg-row { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "text switch" "route route"; }
+        .lg-events .lg-row > .cf-row-text { grid-area: text; }
+        .lg-events .lg-row > .lg-switch { grid-area: switch; align-self: start; }
+        .lg-events .lg-row > .lg-route { grid-area: route; }
+        .action-color input[type="color"] { width: 32px; height: 32px; }
+        .action-color { min-height: 44px; }
+        .lg-group-btn { min-height: 36px; padding: 0 10px; }
+    }
+</style>
+
 <div class="page-section">
     <div class="page-section-header">
         <div>
             <div class="page-section-title">
                 <i class="fas fa-clipboard-list"></i>
-                <span>Event Logging</span>
+                <span>Logging</span>
             </div>
-            <div class="page-section-subtitle">
-                Track server events, moderation actions, and bot activities
-            </div>
+            <div class="page-section-subtitle">Which server events are recorded, and in which channels.</div>
         </div>
     </div>
 
-    <!-- Stats Overview -->
-    <div class="grid grid-cols-4" style="margin-bottom: var(--spacing-6);">
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Enabled Categories</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary);"><%= enabledLogs.length %></div>
-        </div>
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Recent Logs</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-primary-400);"><%= auditLogsData.length %></div>
-        </div>
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Channel Overrides</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-accent-purple);"><%= Object.keys(categoryChannels).filter(k => categoryChannels[k]).length %></div>
-        </div>
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Default Channel</div>
-            <div style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: var(--color-success);">
-                <%= currentSettings.log_channel_id ? channels.find(c => c.id === currentSettings.log_channel_id)?.name || 'Unknown' : 'Not Set' %>
+    <%- include('../kit/_kpis', { label: 'Logging at a glance', items: [
+        { label: 'Events logged', value: enabledCount },
+        { label: 'Events with their own channel', value: Object.keys(categoryChannels).filter(k => categoryChannels[k]).length },
+        { label: 'Default channel', value: currentSettings.log_channel_id ? '#' + (defaultChannel ? defaultChannel.name : 'deleted channel') : 'Not set', small: true },
+    ] }) %>
+
+    <form action="/manage/<%= guild.id %>/update-logging" method="POST">
+        <%# Tells the save handler this form carries the per-action switches (unticked boxes are not posted). %>
+        <input type="hidden" name="action_switches" value="1">
+        <section class="cf-section" aria-labelledby="lg-channel-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="lg-channel-title">Log channel</h2>
+                    <p class="cf-section-desc">Every event below is posted here unless you give it a channel of its own. To have the bot build the channels for you, run <code>/manage logs-setup apply</code>: it creates ten private log channels under a "CF Logs" category (moderation, members, messages, voice and so on) and routes every event to one of them. Events you unticked here stay off; <code>/manage logs-setup preview</code> shows the plan first.</p>
+                </div>
+            </header>
+            <div class="cf-rows">
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="log-channel-id">Default log channel</label>
+                        <p class="cf-row-desc" id="log-channel-id-desc">Choose a channel to switch logging on. Keep it staff-only: logs can include deleted messages.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <select class="form-select" id="log-channel-id" name="log_channel_id" aria-describedby="log-channel-id-desc">
+                            <%- include('../kit/_options', { items: logChannels, selected: currentSettings.log_channel_id || null, prefix: '#', empty: 'Off' }) %>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="cf-section lg-events" aria-labelledby="lg-events-title" data-cf-group="Logged events">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="lg-events-title">Events</h2>
+                    <p class="cf-section-desc"><span class="lg-on-count"><%= enabledCount %> of <%= logCategories.length %></span> events on. Untick a kind under an event to drop just that one (keep voice joins, drop voice leaves). Each event can have its own channel and embed colours.</p>
+                </div>
+                <div class="cf-section-actions lg-events-actions"></div>
+            </header>
+            <div class="cf-rows">
+                <% Object.keys(categoryGroups).forEach(group => { %>
+                <div class="cf-rows-head lg-group-head" data-group="<%= group %>"><%= group %></div>
+                <% categoryGroups[group].forEach(cat => { const colorRow = actionColorRows[cat.key]; %>
+                <div class="cf-row lg-row" data-group="<%= group %>" data-search="<%= (cat.label + ' ' + cat.key + ' ' + group).toLowerCase() %>">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="log-<%= cat.key %>"><%= cat.label %></label>
+                        <% if (colorRow && colorRow.actions) { %>
+                        <div class="action-colors">
+                            <% colorRow.actions.forEach(a => { const actId = 'act-' + a.key.replace(/[^A-Za-z0-9_-]/g, '_'); %>
+                            <span class="action-color<%= a.on ? '' : ' is-off' %>" title="<%= cat.label %>: <%= a.label %><%= a.custom ? ' (custom colour)' : '' %>">
+                                <% if (colorRow.switchable) { %>
+                                <input type="checkbox" class="action-on" name="actions_on" value="<%= a.key %>" id="<%= actId %>" <%= a.on ? 'checked' : '' %>>
+                                <% } %>
+                                <input type="color" name="action_colors[<%= a.key %>]" value="<%= a.value %>" data-default="<%= a.fallback %>" aria-label="Embed colour: <%= cat.label %>, <%= a.label %>">
+                                <% if (colorRow.switchable) { %>
+                                <label for="<%= actId %>"><span class="visually-hidden">Log <%= cat.label %>: </span><%= a.label %><% if (a.custom) { %> <i class="fas fa-circle action-color-custom" aria-label="custom colour"></i><% } %></label>
+                                <% } else { %>
+                                <span><%= a.label %><% if (a.custom) { %> <i class="fas fa-circle action-color-custom" aria-label="custom colour"></i><% } %></span>
+                                <% } %>
+                            </span>
+                            <% }) %>
+                        </div>
+                        <% } else if (colorRow && colorRow.notPosted) { %>
+                        <span class="action-colors-none"><%= colorRow.notPosted %></span>
+                        <% } %>
+                    </div>
+                    <div class="lg-route">
+                        <select class="form-select form-select-sm" name="log_categories[<%= cat.key %>]" aria-label="Channel for <%= cat.label %>">
+                            <%- include('../kit/_options', { items: logChannels, selected: categoryChannels[cat.key] || null, prefix: '#', empty: 'Default channel' }) %>
+                        </select>
+                    </div>
+                    <div class="lg-switch">
+                        <input type="checkbox" class="cf-switch" role="switch" name="enabled_logs" value="<%= cat.key %>" id="log-<%= cat.key %>" <%= enabledLogs.includes(cat.key) ? 'checked' : '' %>>
+                    </div>
+                </div>
+                <% }) %>
+                <% }) %>
+                <div class="cf-state cf-state--compact lg-no-match" hidden><p class="cf-state-title">No event matches that search.</p></div>
+                <div class="cf-section-foot">
+                    <button type="button" class="btn btn-secondary" id="reset-action-colors" title="Put every colour back to its default (saved when you press Save)">Reset colours</button>
+                    <button type="submit" class="btn btn-primary">Save</button>
+                </div>
+            </div>
+        </section>
+    </form>
+    <script>
+        document.getElementById('reset-action-colors')?.addEventListener('click', () => {
+            document.querySelectorAll('.action-color input[type="color"][data-default]').forEach(input => {
+                input.value = input.dataset.default;
+            });
+            document.querySelectorAll('.action-color-custom').forEach(dot => dot.remove());
+        });
+        document.querySelectorAll('.action-color input.action-on').forEach(box => {
+            box.addEventListener('change', () => box.closest('.action-color').classList.toggle('is-off', !box.checked));
+        });
+        (function () {
+            const section = document.querySelector('.lg-events');
+            if (!section) return;
+            const rows = Array.from(section.querySelectorAll('.lg-row'));
+            const switches = rows.map(r => r.querySelector('.lg-switch input'));
+            const count = section.querySelector('.lg-on-count');
+            const noMatch = section.querySelector('.lg-no-match');
+            const recount = () => { if (count) count.textContent = switches.filter(s => s && s.checked).length + ' of ' + switches.length; };
+            switches.forEach(s => s && s.addEventListener('change', recount));
+
+            // Search (75 events): filters rows and hides group headings with nothing left.
+            const search = document.createElement('input');
+            search.type = 'search';
+            search.className = 'form-control';
+            search.placeholder = 'Find an event';
+            search.setAttribute('aria-label', 'Find an event');
+            const wrap = document.createElement('span');
+            wrap.className = 'cf-search';
+            const icon = document.createElement('i');
+            icon.className = 'fas fa-search';
+            icon.setAttribute('aria-hidden', 'true');
+            wrap.append(icon, search);
+            section.querySelector('.lg-events-actions').appendChild(wrap);
+            search.addEventListener('input', () => {
+                const q = search.value.trim().toLowerCase();
+                let shown = 0;
+                rows.forEach(r => { const hit = !q || r.dataset.search.includes(q); r.hidden = !hit; if (hit) shown++; });
+                section.querySelectorAll('.lg-group-head').forEach(h => {
+                    h.hidden = !rows.some(r => r.dataset.group === h.dataset.group && !r.hidden);
+                });
+                if (noMatch) noMatch.hidden = shown > 0;
+            });
+
+            // "All on" / "All off" for each group (saved with the form's Save, like any other change).
+            section.querySelectorAll('.lg-group-head').forEach(h => {
+                const group = rows.filter(r => r.dataset.group === h.dataset.group);
+                if (group.length < 2) return;
+                const bar = document.createElement('span');
+                bar.className = 'lg-group-actions';
+                [['All on', true], ['All off', false]].forEach(([label, on]) => {
+                    const b = document.createElement('button');
+                    b.type = 'button';
+                    b.className = 'lg-group-btn';
+                    b.textContent = label;
+                    b.setAttribute('aria-label', label + ': ' + h.dataset.group);
+                    b.addEventListener('click', () => {
+                        group.forEach(r => {
+                            const sw = r.querySelector('.lg-switch input');
+                            if (sw && sw.checked !== on) { sw.checked = on; sw.dispatchEvent(new Event('change', { bubbles: true })); }
+                        });
+                        recount();
+                    });
+                    bar.appendChild(b);
+                });
+                h.appendChild(bar);
+            });
+        })();
+    </script>
+
+    <%# Join risk insight (core/member-insight.js): the Risk field on the Member Join log. %>
+    <section class="cf-section" id="joinInsightSection" aria-labelledby="joinInsightSection-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="joinInsightSection-title">Join risk insight</h2>
+                <p class="cf-section-desc">
+                    Adds a "Risk" field to every member-joined log: account age, default avatar, Discord's spammer flag, the global ban
+                    list, earlier joins and protection hits here, badges, and a low, medium or high verdict. Information only: nobody is
+                    removed because of it.
+                </p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="joinInsightOn">Show the risk field on join logs</label>
+                </div>
+                <div class="cf-row-control">
+                    <input type="checkbox" class="cf-switch" role="switch" id="joinInsightOn">
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="joinInsightDays">Highlight new accounts</label>
+                    <p class="cf-row-desc" id="joinInsightDays-desc">Accounts younger than this are marked, from 0 to 90 days.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-unit">
+                        <input class="form-control" type="number" id="joinInsightDays" min="0" max="90" aria-describedby="joinInsightDays-desc">
+                        <span class="cf-unit">days</span>
+                    </div>
+                </div>
+            </div>
+            <div class="cf-section-foot">
+                <span id="joinInsightStatus" class="cf-foot-note" role="status" aria-live="polite"></span>
+                <button type="button" class="btn btn-primary" id="joinInsightSave">Save</button>
             </div>
         </div>
-    </div>
+        <script>
+        (function () {
+            const url = '/api/guilds/<%= guild.id %>/insight/settings';
+            const on = document.getElementById('joinInsightOn');
+            const days = document.getElementById('joinInsightDays');
+            const status = document.getElementById('joinInsightStatus');
+            const say = (cls, text) => { status.className = 'cf-foot-note cf-status-line' + (cls ? ' ' + cls : ''); status.textContent = text; };
+            fetch(url, { credentials: 'same-origin' }).then(r => r.json()).then(d => {
+                on.checked = !!d.enabled; days.value = d.newAccountDays;
+            }).catch(() => { say('is-bad', 'Could not load the current setting.'); });
+            document.getElementById('joinInsightSave').addEventListener('click', async () => {
+                const n = Number(days.value);
+                if (!Number.isInteger(n) || n < 0 || n > 90) { say('is-bad', 'Enter a whole number of days from 0 to 90.'); days.focus(); return; }
+                say('is-busy', 'Saving');
+                try {
+                    const res = await fetch(url, { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ enabled: on.checked, newAccountDays: Number(days.value) }) });
+                    const d = await res.json().catch(() => ({}));
+                    if (!res.ok) throw new Error(d.error || ('Request failed (' + res.status + ')'));
+                    on.checked = d.enabled; days.value = d.newAccountDays;
+                    say('is-ok', 'Saved');
+                } catch (e) { say('is-bad', e.message); }
+            });
+        })();
+        </script>
+    </section>
 
-    <!-- Log Configuration Section -->
-    <div style="background: var(--color-dark-600); padding: var(--spacing-6); border-radius: var(--radius-lg); border: 1px solid var(--color-dark-400); margin-bottom: var(--spacing-6);">
-        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin: 0 0 var(--spacing-2) 0;">
-            <i class="fas fa-cog" style="color: var(--color-primary-400);"></i>
-            Log Configuration
-        </h3>
-        <p style="color: var(--color-text-secondary); margin-bottom: var(--spacing-5);">
-            Set a default log channel and enable specific event categories
-        </p>
-        <form action="/manage/<%= guild.id %>/update-logging" method="POST">
-            <div style="margin-bottom: var(--spacing-5);">
-                <label class="form-label">Default Log Channel</label>
-                <select class="form-select" id="log-channel-id" name="log_channel_id">
-                    <option value="">Disabled</option>
-                    <% channels.forEach(channel => { %>
-                        <option value="<%= channel.id %>" <%= currentSettings.log_channel_id === channel.id ? 'selected' : '' %>>#<%= channel.name %></option>
-                    <% }) %>
-                </select>
-                <div class="form-help">Logs for categories set to "Default" will be sent here</div>
+    <%# Ignore lists (logging_config, migration 420; GET/PUT /api/guilds/:id/logging/ignores), applied in
+        core/log-manager.js sendLogEmbed. They hide member activity only; moderation and server logs always post. %>
+    <section class="cf-section" id="logIgnoreSection" aria-labelledby="lg-ignore-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="lg-ignore-title">Ignored channels, roles and bots</h2>
+                <p class="cf-section-desc">Leave out message, reaction, poll, pin, voice, member update and command logs for these. Bans, kicks, timeouts, AutoMod and server changes are always logged.</p>
             </div>
-
-            <div style="border-top: 1px solid var(--color-dark-400); padding-top: var(--spacing-5); margin-bottom: var(--spacing-5);"></div>
-
-            <h4 style="font-size: var(--font-size-base); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-3);">
-                Event Categories
-            </h4>
-            <p style="color: var(--color-text-secondary); margin-bottom: var(--spacing-4);">
-                Enable specific event types and optionally route them to different channels
-            </p>
-
-            <div class="table-container">
-                <table class="data-table">
-                    <thead>
-                    <tr>
-                        <th style="width: 35%;">Log Category</th>
-                        <th style="width: 12%; text-align: center;">Enable</th>
-                        <th style="width: 10%; text-align: center;">Color</th>
-                        <th style="width: 43%;">Channel Override</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    <% logCategories.forEach(cat => { %>
-                        <tr>
-                            <td>
-                                <label for="log-<%= cat.key %>" style="display: flex; align-items: center; gap: var(--spacing-2); cursor: pointer;">
-                                    <span style="font-size: var(--font-size-base);"><%= cat.label %></span>
-                                    <span class="badge badge-secondary" style="font-size: var(--font-size-xs);"><%= cat.category %></span>
-                                </label>
-                            </td>
-                            <td style="text-align: center;">
-                                <label class="toggle-switch">
-                                    <input type="checkbox" name="enabled_logs" value="<%= cat.key %>" id="log-<%= cat.key %>" <%= enabledLogs.includes(cat.key) ? 'checked' : '' %>>
-                                    <span class="toggle-slider"></span>
-                                </label>
-                            </td>
-                            <td style="text-align: center;">
-                                <input type="color"
-                                    name="event_colors[<%= cat.key %>]"
-                                    value="<%= eventColors[cat.key] || defaultColorMap[cat.key] || '#5865F2' %>"
-                                    style="width: 32px; height: 32px; border: 1px solid var(--color-dark-400); border-radius: var(--radius-md); background: transparent; cursor: pointer; padding: 2px;"
-                                    title="Embed color for <%= cat.label %>">
-                            </td>
-                            <td>
-                                <select class="form-select" name="log_categories[<%= cat.key %>]" style="font-size: var(--font-size-sm);">
-                                    <option value="">Default Channel</option>
-                                    <% channels.forEach(channel => { %>
-                                        <option value="<%= channel.id %>" <%= categoryChannels[cat.key] === channel.id ? 'selected' : '' %>>#<%= channel.name %></option>
-                                    <% }) %>
-                                </select>
-                            </td>
-                        </tr>
-                    <% }); %>
-                    </tbody>
-                </table>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="lg-ign-channels">Ignored channels</label>
+                    <p class="cf-row-desc" id="lg-ign-channels-desc">Nothing that happens in these channels is logged. Picking a category covers every channel in it, and a channel covers its threads.</p>
+                </div>
+                <div class="cf-row-control">
+                    <select id="lg-ign-channels" class="form-select" name="ignored_channels" multiple size="6" aria-describedby="lg-ign-channels-desc">
+                        <% if ((locals.categories || []).length) { %><optgroup label="Categories"><% locals.categories.forEach(c => { %><option value="<%= c.id %>" data-kind="category"><%= c.name %></option><% }) %></optgroup><% } %>
+                        <optgroup label="Channels"><% channels.forEach(c => { const v = c.type === 2 || c.type === 13; %><option value="<%= c.id %>" data-kind="<%= v ? 'voice' : 'text' %>"><%= v ? '' : '#' %><%= c.name %></option><% }) %></optgroup>
+                    </select>
+                </div>
             </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="lg-ign-roles">Ignored roles</label>
+                    <p class="cf-row-desc" id="lg-ign-roles-desc">Members with any of these roles are left out, wherever they are.</p>
+                </div>
+                <div class="cf-row-control">
+                    <select id="lg-ign-roles" class="form-select" name="ignored_roles" multiple size="6" aria-describedby="lg-ign-roles-desc">
+                        <% (locals.roles || []).forEach(r => { %><option value="<%= r.id %>" data-kind="role"<% if (roleHex(r)) { %> data-color="<%= roleHex(r) %>"<% } %>><%= r.name %></option><% }) %>
+                    </select>
+                </div>
+            </div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="lg-ign-bots">Ignore bots</label>
+                    <p class="cf-row-desc" id="lg-ign-bots-desc">Leave out what bots do, such as their reactions, voice activity and role changes. Deleted and edited bot messages are never logged.</p>
+                </div>
+                <div class="cf-row-control">
+                    <input type="checkbox" class="cf-switch" role="switch" id="lg-ign-bots" name="ignore_bots" aria-describedby="lg-ign-bots-desc">
+                </div>
+            </div>
+            <div class="cf-section-foot">
+                <span id="lg-ign-status" class="cf-foot-note" role="status" aria-live="polite">Loading...</span>
+                <button type="button" class="btn btn-primary" id="lg-ign-save" disabled>Save</button>
+            </div>
+        </div>
+        <script>
+        (function () {
+            const url = '/api/guilds/' + <%- JSON.stringify(String(guild.id)).replace(/</g, '\\u003c') %> + '/logging/ignores';
+            const channelsEl = document.getElementById('lg-ign-channels');
+            const rolesEl = document.getElementById('lg-ign-roles');
+            const botsEl = document.getElementById('lg-ign-bots');
+            const status = document.getElementById('lg-ign-status');
+            const save = document.getElementById('lg-ign-save');
+            const select = (el, ids) => { const want = new Set(ids || []); for (const o of el.options) o.selected = want.has(o.value); };
+            const picked = (el) => Array.from(el.selectedOptions, o => o.value);
+            const show = (d) => {
+                select(channelsEl, d.channels); select(rolesEl, d.roles); botsEl.checked = !!d.ignoreBots;
+                // Tell the chip picker (cf-picker.js) the selection changed under it.
+                [channelsEl, rolesEl].forEach(el => el.dispatchEvent(new Event('change', { bubbles: true })));
+            };
+            const say = (cls, text) => { status.className = 'cf-foot-note cf-status-line' + (cls ? ' ' + cls : ''); status.textContent = text; };
+            fetch(url, { credentials: 'same-origin' })
+                .then(r => r.ok ? r.json() : Promise.reject(new Error('Request failed (' + r.status + ')')))
+                .then(d => { show(d); say('', ''); save.disabled = false; })
+                .catch(() => { say('is-bad', 'Could not load the current lists. Reload the page to try again.'); });
+            save.addEventListener('click', async () => {
+                save.disabled = true;
+                say('is-busy', 'Saving');
+                try {
+                    const res = await fetch(url, { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ channels: picked(channelsEl), roles: picked(rolesEl), ignoreBots: botsEl.checked }) });
+                    const d = await res.json().catch(() => ({}));
+                    if (!res.ok) throw new Error(d.error || ('Request failed (' + res.status + ')'));
+                    show(d);
+                    say('is-ok', 'Saved');
+                } catch (e) {
+                    say('is-bad', e.message);
+                } finally {
+                    save.disabled = false;
+                }
+            });
+        })();
+        </script>
+    </section>
 
-            <div style="display: flex; justify-content: flex-end; margin-top: var(--spacing-4);">
-                <button type="submit" class="btn btn-primary">
-                    <i class="fas fa-save"></i>
-                    <span>Save Log Configuration</span>
-                </button>
+    <section class="cf-section" aria-labelledby="lg-hooks-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="lg-hooks-title">Webhook overrides</h2>
+                <p class="cf-section-desc">Post to a channel through a webhook you created, instead of one the bot creates. Leave a channel empty to let the bot manage it.</p>
+            </div>
+            <div class="cf-section-actions lg-hooks-actions"></div>
+        </header>
+        <% const hookChannels = channels.filter(c => c.type === 0 || c.type === 5 || c.type === undefined || (channelSettingsMap.get(c.id) || {}).webhook_url); %>
+        <form class="cf-rows lg-hooks" action="/manage/<%= guild.id %>/update-channel-webhooks" method="POST">
+            <% if (hookChannels.length) { %>
+            <% hookChannels.forEach(channel => { const cs = channelSettingsMap.get(channel.id) || {}; %>
+            <div class="cf-row cf-row--wide lg-hook-row" data-search="<%= String(channel.name).toLowerCase() %>">
+                <div class="cf-row-text">
+                    <span class="cf-row-label">#<%= channel.name %></span>
+                </div>
+                <div class="cf-row-control">
+                    <input type="url" class="form-control" name="channel_webhooks[<%= channel.id %>]" value="<%= cs.webhook_url || '' %>" placeholder="https://discord.com/api/webhooks/..." pattern="https://(?:ptb\.|canary\.)?discord(?:app)?\.com/api/webhooks/.+" title="A Discord webhook URL" aria-label="Webhook URL for #<%= channel.name %>">
+                </div>
+            </div>
+            <% }) %>
+            <div class="cf-state cf-state--compact lg-hook-none" hidden><p class="cf-state-title">No channel matches that search.</p></div>
+            <% } else { %>
+            <%- include('../kit/_state', { kind: 'empty', title: 'No text channels', text: 'The bot cannot see any text channels in this server.', id: null, boxed: false, compact: false }) %>
+            <% } %>
+            <div class="cf-section-foot">
+                <button type="submit" class="btn btn-primary">Save</button>
             </div>
         </form>
-    </div>
-
-    <!-- Webhook Overrides Section -->
-    <div style="background: var(--color-dark-600); padding: var(--spacing-6); border-radius: var(--radius-lg); border: 1px solid var(--color-dark-400); margin-bottom: var(--spacing-6);">
-        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin: 0 0 var(--spacing-2) 0;">
-            <i class="fas fa-link" style="color: var(--color-primary-400);"></i>
-            Channel Webhook Overrides
-        </h3>
-        <p style="color: var(--color-text-secondary); margin-bottom: var(--spacing-5);">
-            Use custom webhooks for specific channels instead of bot-created ones
-        </p>
-        <form action="/manage/<%= guild.id %>/update-channel-webhooks" method="POST">
-            <div class="table-container">
-                <table class="data-table">
-                    <thead>
-                    <tr>
-                        <th style="width: 30%;">Channel</th>
-                        <th style="width: 70%;">Custom Webhook URL</th>
-                    </tr>
-                    </thead>
-                    <tbody>
-                    <% channels.forEach(channel => { %>
-                        <% const cs = channelSettingsMap.get(channel.id) || {}; %>
-                        <tr>
-                            <td>
-                                <div style="display: flex; align-items: center; gap: var(--spacing-2);">
-                                    <i class="fas fa-hashtag" style="color: var(--color-text-muted); font-size: var(--font-size-sm);"></i>
-                                    <span style="font-weight: var(--font-weight-medium);"><%= channel.name %></span>
-                                </div>
-                            </td>
-                            <td>
-                                <input type="url" class="form-control" name="channel_webhooks[<%= channel.id %>]" value="<%= cs.webhook_url || '' %>" placeholder="https://discord.com/api/webhooks/...">
-                            </td>
-                        </tr>
-                    <% }) %>
-                    </tbody>
-                </table>
-            </div>
-            <div style="display: flex; justify-content: flex-end; margin-top: var(--spacing-4);">
-                <button type="submit" class="btn btn-primary">
-                    <i class="fas fa-save"></i>
-                    <span>Save Webhook Overrides</span>
-                </button>
-            </div>
-        </form>
-    </div>
+        <script>
+        (function () {
+            const form = document.querySelector('.lg-hooks');
+            const rows = form ? Array.from(form.querySelectorAll('.lg-hook-row')) : [];
+            if (rows.length <= 15) return;
+            const search = document.createElement('input');
+            search.type = 'search';
+            search.className = 'form-control';
+            search.placeholder = 'Find a channel';
+            search.setAttribute('aria-label', 'Find a channel');
+            const wrap = document.createElement('span');
+            wrap.className = 'cf-search';
+            const icon = document.createElement('i');
+            icon.className = 'fas fa-search';
+            icon.setAttribute('aria-hidden', 'true');
+            wrap.append(icon, search);
+            document.querySelector('.lg-hooks-actions').appendChild(wrap);
+            const none = form.querySelector('.lg-hook-none');
+            search.addEventListener('input', () => {
+                const q = search.value.trim().toLowerCase().replace(/^#/, '');
+                let shown = 0;
+                rows.forEach(r => { const hit = !q || r.dataset.search.includes(q); r.hidden = !hit; if (hit) shown++; });
+                if (none) none.hidden = shown > 0;
+            });
+        })();
+        </script>
+    </section>
 </div>
-
-<style>
-.toggle-switch {
-    position: relative;
-    display: inline-block;
-    width: 44px;
-    height: 24px;
-}
-
-.toggle-switch input {
-    opacity: 0;
-    width: 0;
-    height: 0;
-}
-
-.toggle-slider {
-    position: absolute;
-    cursor: pointer;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background-color: var(--color-dark-400);
-    transition: var(--transition-base);
-    border-radius: 24px;
-}
-
-.toggle-slider:before {
-    position: absolute;
-    content: "";
-    height: 18px;
-    width: 18px;
-    left: 3px;
-    bottom: 3px;
-    background-color: white;
-    transition: var(--transition-base);
-    border-radius: 50%;
-}
-
-.toggle-switch input:checked + .toggle-slider {
-    background-color: var(--color-primary-500);
-}
-
-.toggle-switch input:checked + .toggle-slider:before {
-    transform: translateX(20px);
-}
-
-.table-container {
-    overflow-x: auto;
-    border: 1px solid var(--color-dark-400);
-    border-radius: var(--radius-lg);
-}
-
-.data-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-.data-table thead {
-    background: var(--color-dark-700);
-    border-bottom: 2px solid var(--color-dark-400);
-}
-
-.data-table th {
-    padding: var(--spacing-4);
-    text-align: left;
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-
-.data-table td {
-    padding: var(--spacing-4);
-    border-bottom: 1px solid var(--color-dark-400);
-}
-
-.data-table tbody tr {
-    transition: background var(--transition-base);
-}
-
-.data-table tbody tr:hover {
-    background: var(--color-dark-700);
-}
-
-.data-table tbody tr:last-child td {
-    border-bottom: none;
-}
-
-/* Mobile Responsiveness */
-@media (max-width: 768px) {
-    /* Hide category badge column on mobile */
-    .data-table .mobile-hide { display: none !important; }
-
-    /* Touch-friendly color inputs */
-    input[type="color"] {
-        width: 44px !important;
-        height: 44px !important;
-        min-height: 44px;
-    }
-
-    /* Touch-friendly selects and buttons */
-    select, button { min-height: 44px; }
-
-    /* Reduce table padding */
-    .data-table th,
-    .data-table td { padding: var(--spacing-2) var(--spacing-3) !important; }
-
-    /* Stack log category label */
-    .data-table td label {
-        flex-direction: column;
-        align-items: flex-start !important;
-        gap: var(--spacing-1) !important;
-    }
-
-    .data-table td label .badge { display: none; }
-
-    /* Full-width save button */
-    .btn-primary { width: 100%; justify-content: center; }
-
-    /* Table font size */
-    .data-table { font-size: 0.875rem; }
-}
-</style>

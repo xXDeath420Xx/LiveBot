@@ -6,12 +6,10 @@
  */
 /* eslint-disable no-unused-vars */
 
-import mysql from '../../../utils/mysql.js';
 import global from '../../../utils/global.js';
 import Logs from './util/logUtil.js';
 import Tags from './util/tags.js';
 // require-dir replaced with explicit registry imports at the bottom of this file.
-let weaponUtil;
 const ranks = [
 	[0.2, 'Common', '<:common:416520037713838081>'],
 	[0.2, 'Uncommon', '<:uncommon:416520056269176842>'],
@@ -580,16 +578,6 @@ export default class WeaponInterface {
 		this.currKills[battleAnimal.pid] = true;
 	}
 
-	saveTT() {
-		const currKills = Object.keys(this.currKills).length;
-		if (currKills) {
-			const sql = `UPDATE IGNORE user_weapon_kills
-					SET kills = kills + ${currKills}
-					WHERE uwid = ${this.ruwid};`;
-			return mysql.query(sql);
-		}
-	}
-
 	getEmoji(quality) {
 		/* If there are multiple quality, get avg */
 		if (typeof quality == 'string') {
@@ -790,75 +778,6 @@ export default class WeaponInterface {
 		return Math.round(res * 100) + '%';
 	}
 
-	/** Saves weapon to the db and return uwid **/
-	async save(id) {
-		let wear = this.wear?.id || 0;
-
-		const weaponSql = `INSERT INTO user_weapon (uid, wid, stat, avg, rrcount, rrattempt, wear)
-				VALUES (${await global.getUid(id)}, ${this.id},'${this.sqlStat}',${
-			this.avgQuality
-		}, 0, 0, ${wear});`;
-
-		let result = await mysql.query(weaponSql);
-		let uwid = result.insertId;
-		if (!uwid) throw 'Could not save weapon!';
-		this.uwid = uwid;
-
-		let queryUid = [];
-		let passiveSql = '';
-		if (this.passives.length) {
-			passiveSql = 'INSERT INTO user_weapon_passive (uwid,pcount,wpid,stat) VALUES ';
-			for (let i = 0; i < this.passives.length; i++) {
-				let tempPassive = this.passives[i];
-				passiveSql += `(?,${i},${tempPassive.id},'${tempPassive.sqlStat}'),`;
-				queryUid.push(uwid);
-			}
-			passiveSql = `${passiveSql.slice(0, -1)};`;
-		}
-		let trackSql = '';
-		if (this.hasTT) {
-			trackSql = `INSERT INTO user_weapon_kills (uwid) VALUES (?);`;
-			queryUid.push(uwid);
-		}
-		if (queryUid.length) {
-			await mysql.query(passiveSql + trackSql, queryUid);
-		}
-		return uwid;
-	}
-
-	/** Update weapon in db **/
-	async update() {
-		// update rr count/attempt/wear
-		let sql = `UPDATE user_weapon
-				SET
-					stat = '${this.sqlStat}',
-					avg = ${this.avgQuality},
-					wear = ${this.wear.id},
-					rrattempt = ${this.rrAttempt},
-					rrcount = ${this.rrCount}
-				WHERE uwid = ${this.ruwid};`;
-		for (let i in this.passives) {
-			let passive = this.passives[i];
-			let stat = passive.sqlStat;
-			let wpid = passive.id;
-
-			sql += `INSERT INTO user_weapon_passive (uwid,pcount,wpid,stat) VALUES (${this.ruwid}, ${i}, ${wpid}, '${stat}')
-					ON DUPLICATE KEY UPDATE uwid = VALUES(uwid), pcount = VALUES(pcount), wpid = VALUES(wpid), stat = VALUES(stat);`;
-		}
-
-		let result = await mysql.query(sql);
-		for (let i in result) {
-			if (result[i].affectedRows <= 0) {
-				return false;
-			}
-		}
-		return true;
-	}
-
-	get shortenUWID() {
-		return weaponUtil.shortenUWID(this.uwid);
-	}
-
 	static get allPassives() {
 		return passives;
 	}
@@ -960,10 +879,6 @@ export default class WeaponInterface {
 	setRandomTT() {
 		const rand = Math.random();
 		this.hasTT = rand <= ttChance;
-	}
-
-	static setWeaponUtil(util) {
-		weaponUtil = util;
 	}
 
 	getBonusXPPassive() {

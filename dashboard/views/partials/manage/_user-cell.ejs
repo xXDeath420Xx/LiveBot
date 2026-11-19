@@ -1,0 +1,16 @@
+<%#
+  One person in a server-rendered table or list: the markup of CFUser.cell (public/js/cf-user.js,
+  styles in public/css/cf-user.css).
+    include('_user-cell', { cfUser: bits })                    bits from core/user-display.js userBits()
+    include('_user-cell', { cfUser: null, cfUserId: id, cfUserName: storedName })
+                                                               an id (+ a name stored with the row):
+                                                               drawn now, named by cf-user.js on load
+  Optional: cfUserSize: 'sm'. (Prefixed names: an include also sees every render local.)
+%><%
+  const _b = (typeof cfUser !== 'undefined' && cfUser) ? cfUser : null;
+  const _id = String((_b && _b.id) || (typeof cfUserId !== 'undefined' && cfUserId) || '');
+  const _stored = (typeof cfUserName !== 'undefined' && cfUserName) ? String(cfUserName) : null;
+  const _name = (_b && (_b.displayName || _b.username)) || null;
+  const _handle = _b && _b.username && _b.username !== _name ? _b.username : null;
+  const _sm = typeof cfUserSize !== 'undefined' && cfUserSize === 'sm';
+%><% if (_name) { %><span class="cf-user<%= _sm ? ' cf-user--sm' : '' %><%= _b.inServer === false ? ' is-gone' : '' %>" data-user-id="<%= _id %>" data-user-cell="<%= _id %>" title="<%= _b.username ? '@' + _b.username + ' · ' : '' %><%= _id %>"><% if (_b.avatar) { %><img class="cf-user-av" src="<%= _b.avatar %>" alt="" width="24" height="24" loading="lazy" referrerpolicy="no-referrer"><% } else { %><span class="cf-user-av cf-user-av--blank" aria-hidden="true"><i class="fas fa-user"></i></span><% } %><span class="cf-user-text"><span class="cf-user-name"><%= _name %></span><% if (_handle) { %><span class="cf-user-handle">@<%= _handle %></span><% } %></span></span><% } else { %><span class="cf-user<%= _sm ? ' cf-user--sm' : '' %>" data-user-id="<%= _id %>"<% if (_stored) { %> data-user-name="<%= _stored %>"<% } %><% if (_sm) { %> data-user-size="sm"<% } %>><span class="cf-user-text"><% if (_stored) { %><span class="cf-user-name"><%= _stored %></span><% } else { %><span class="cf-user-id"><%= _id %></span><% } %></span></span><% } %>

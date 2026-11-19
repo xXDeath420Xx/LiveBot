@@ -1,12 +1,13 @@
 /*
  * /owo-profile — view + edit your OwO profile. CC-BY-NC-SA-4.0 derivative.
  * Split from /owo because /owo is at its 25-subcommand cap.
+ * The view (shared with chat `owo profile`) lives in core/owo/profile-view.js: luck, cookies,
+ * marriage, and the equipped wallpaper rendered as a profile card.
  */
-import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
+import { SlashCommandBuilder } from 'discord.js';
 import { isEnabled as owoEnabled } from '../../core/owo/manager.js';
-import { getProfile, setAbout, setTitle, setAccent, setPrivate } from '../../core/owo/profile-service.js';
-import { getStats } from '../../core/owo/manager.js';
-import { getCowoncy as getBalance } from '../../core/owo/cowoncy.js';
+import { setAbout, setTitle, setAccent, setPrivate } from '../../core/owo/profile-service.js';
+import { buildProfileMessage } from '../../core/owo/profile-view.js';
 
 const data = new SlashCommandBuilder()
     .setName('owo-profile')
@@ -44,27 +45,7 @@ async function execute(interaction) {
 async function handleView(interaction) {
     await interaction.deferReply();
     const target = interaction.options.getUser('user') || interaction.user;
-    const profile = await getProfile(interaction.guildId, target.id);
-    if (profile.private && target.id !== interaction.user.id) {
-        return interaction.editReply('🔒 That user\'s profile is private.');
-    }
-    const stats = await getStats(interaction.guildId, target.id);
-    const wallet = await getBalance(interaction.guildId, target.id);
-
-    const color = profile.accent ? parseInt(profile.accent.replace('#', ''), 16) : 0xF0A500;
-    const embed = new EmbedBuilder()
-        .setColor(color)
-        .setAuthor({ name: target.username, iconURL: target.displayAvatarURL() })
-        .setThumbnail(target.displayAvatarURL({ size: 256 }));
-    if (profile.title) embed.setTitle(profile.title);
-    if (profile.about) embed.setDescription(profile.about);
-    embed.addFields(
-        { name: 'Unique animals', value: stats.uniqueAnimals.toLocaleString(), inline: true },
-        { name: 'Total catches',  value: stats.totalCatches.toLocaleString(), inline: true },
-        { name: 'Wallet',         value: wallet.toLocaleString(), inline: true }
-    );
-    if (stats.rarest) embed.addFields({ name: 'Rarest find', value: `${stats.rarest.emoji} ${stats.rarest.name} (${stats.rarest.rank})` });
-    await interaction.editReply({ embeds: [embed] });
+    await interaction.editReply(await buildProfileMessage(interaction.guild, interaction.user.id, target));
 }
 
 async function handleAbout(interaction) {

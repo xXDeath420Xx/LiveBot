@@ -1,0 +1,135 @@
+{
+  "theme": "animals",
+  "label": "Animals",
+  "questions": [
+    {
+      "slug": "anim-pet-personality",
+      "text": "Describe your pet's personality in three words. If you don't have one, describe the pet you should have."
+    },
+    {
+      "slug": "anim-pet-worst-thing",
+      "text": "What's the worst thing a pet of yours has ever destroyed?"
+    },
+    {
+      "slug": "anim-pet-name-origin",
+      "text": "Where did your pet's name come from, and what do you actually call them day to day?"
+    },
+    {
+      "slug": "anim-animal-fear",
+      "text": "What animal are you unreasonably scared of, and have you ever been near one?"
+    },
+    {
+      "slug": "anim-favourite-obscure",
+      "text": "What's your favourite animal that isn't a common answer? Sell us on it."
+    },
+    {
+      "slug": "anim-wild-encounter",
+      "text": "What's the closest you've been to a genuinely wild animal?"
+    },
+    {
+      "slug": "anim-pet-first",
+      "text": "What was your first pet, and what happened to them?"
+    },
+    {
+      "slug": "anim-pet-would-get",
+      "text": "What animal would you keep if money, space, and legality weren't factors?",
+      "group": "dream-pet"
+    },
+    {
+      "slug": "anim-pet-vet-story",
+      "text": "What's your best or worst vet visit story?"
+    },
+    {
+      "slug": "anim-animal-job",
+      "text": "Which working animal has the best job — sled dogs, farm cats, search and rescue?"
+    },
+    {
+      "slug": "anim-talk-to-animal",
+      "text": "You get to speak to one species for an hour. Which one, and what's your first question?"
+    },
+    {
+      "slug": "anim-pet-habit-weird",
+      "text": "What's the strangest habit your pet has that you've stopped noticing?"
+    },
+    {
+      "slug": "anim-cat-dog-defended",
+      "text": "Beyond cats and dogs, what makes a genuinely good pet and why don't more people have one?"
+    },
+    {
+      "slug": "anim-rescue-story",
+      "text": "Have you ever rescued or rehomed an animal? How did that come about?"
+    },
+    {
+      "slug": "anim-animal-documentary",
+      "text": "What's the most astonishing animal fact you know?"
+    },
+    {
+      "slug": "anim-pet-photos",
+      "text": "Post your pet. That's it. That's the question. Bonus points for the worst photo you have of them."
+    },
+    {
+      "slug": "anim-birds-watching",
+      "text": "What wildlife shows up around where you live, and do you pay attention to it?"
+    },
+    {
+      "slug": "anim-pet-sleep-spot",
+      "text": "Where does your pet sleep versus where you intended them to sleep?"
+    },
+    {
+      "slug": "anim-animal-you-are",
+      "text": "What animal do people compare you to, and is it accurate?"
+    },
+    {
+      "slug": "anim-aquarium-zoo",
+      "text": "What's the best animal you've seen in person at a zoo, aquarium, or sanctuary?"
+    },
+    {
+      "slug": "anim-pet-expensive",
+      "text": "What's the most a pet has ever cost you in one go, and would you do it again?"
+    },
+    {
+      "slug": "anim-training-win",
+      "text": "What's the most impressive thing you've taught an animal to do?"
+    },
+    {
+      "slug": "anim-insect-opinion",
+      "text": "Which insect or bug deserves better PR, and which one is genuinely indefensible?"
+    },
+    {
+      "slug": "anim-pet-jealousy",
+      "text": "Whose pet do you envy, and what does it have that yours doesn't?"
+    },
+    {
+      "slug": "anim-farm-animals",
+      "text": "Have you spent time around farm animals? Which one surprised you most?"
+    },
+    {
+      "slug": "anim-extinct-back",
+      "text": "Which extinct animal would you bring back, knowing there might be consequences?"
+    },
+    {
+      "slug": "anim-pet-greeting",
+      "text": "How does your pet greet you when you come home? Describe it in full detail."
+    },
+    {
+      "slug": "anim-animal-ability",
+      "text": "Which animal ability would you most want — echolocation, flight, regeneration, hibernation?"
+    },
+    {
+      "slug": "anim-ocean-vs-land",
+      "text": "Ocean creatures or land creatures? Which world would you rather study?"
+    },
+    {
+      "slug": "anim-pet-loss",
+      "text": "What's the best memory you have of a pet you no longer have?"
+    },
+    {
+      "slug": "anim-animal-misunderstood",
+      "text": "Which animal do people misunderstand the most?"
+    },
+    {
+      "slug": "anim-nature-sound",
+      "text": "What natural animal sound do you love, and which one keeps you awake at night?"
+    }
+  ]
+}

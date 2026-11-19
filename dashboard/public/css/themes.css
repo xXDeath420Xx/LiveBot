@@ -1,0 +1,573 @@
+/*
+ * Dashboard themes.
+ *
+ * ## Why the previous theme switch did nothing
+ *
+ * Three separate breakages, and the third defeated every earlier attempt:
+ *
+ *   1. The settings page never saved. The compact-mode toggle's only handler was
+ *      `showToast('Setting updated')` — it said "updated" and updated nothing.
+ *      The theme picker wrote to localStorage and never told the server.
+ *
+ *   2. `unified-light-theme.css` was linked in ZERO views. It also defined a
+ *      different token vocabulary (`--color-bg-primary`) from the one the views
+ *      actually read (`--bg-primary`), so linking it would still have done
+ *      nothing.
+ *
+ *   3. THE REAL BLOCKER: every view redefines the tokens in its own inline
+ *      <style> block — `--bg-primary: #0b0f11` appears in 23 views, and inline
+ *      <style> beats a linked stylesheet on source order. Any theme file loaded
+ *      in <head> lost to all 75 views.
+ *
+ * ## How this wins
+ *
+ * `:root[data-theme="x"]` has specificity (0,1,1); a view's bare `:root` has
+ * (0,1,0). Specificity is resolved before source order, so an attribute-scoped
+ * block in this file beats an inline `:root` in the view. No !important needed
+ * anywhere, which is why this file has none.
+ *
+ * ## Dark is deliberately a no-op
+ *
+ * There is no `[data-theme="dark"]` block. Dark is what the views already define
+ * inline, so leaving it alone makes the default byte-identical to what ships
+ * today — a user who never touches settings sees no change whatsoever, and
+ * switching away and back restores exactly the original appearance because this
+ * file simply stops matching.
+ *
+ * ## Two token vocabularies
+ *
+ * The codebase grew two in parallel and both are live:
+ *   short  — --bg-primary, --text-muted, --border-color   (defined per-view)
+ *   long   — --color-dark-400, --color-text-primary        (modern-framework.css)
+ * Every theme sets BOTH, because a page using the long names would otherwise
+ * stay dark while the page next to it turned light.
+ */
+
+/* Default (dark) has no theme block by design — see the header. It still needs
+   --border-strong, which no view defines, so it is supplied here. Bare :root is
+   safe: every [data-theme] block outranks it on specificity. */
+:root {
+    --border-strong: rgba(255, 255, 255, 0.34);   /* 3.1:1 on #0b0f11 */
+}
+
+/* ==========================================================================
+   LIGHT
+   ========================================================================== */
+:root[data-theme="light"] {
+    color-scheme: light;
+
+    /* short vocabulary */
+    --bg-primary: #f7f8fa;
+    --bg-secondary: #ffffff;
+    --bg-tertiary: #eef0f4;
+    --bg-card: rgba(15, 18, 22, 0.03);
+    --bg-card-hover: rgba(15, 18, 22, 0.06);
+    --card-bg: #ffffff;
+    --text-primary: #14161a;
+    --text-secondary: rgba(20, 22, 26, 0.72);
+    --text-muted: rgba(20, 22, 26, 0.63);   /* 5.1:1 — 0.55 measured 3.9:1 and failed AA */
+    --text-dim: rgba(20, 22, 26, 0.42);
+    --text: #14161a;
+    --muted: rgba(20, 22, 26, 0.63);
+    --border-color: rgba(20, 22, 26, 0.14);
+    --border-strong: rgba(20, 22, 26, 0.50);   /* form-control borders — WCAG 3:1 for UI components */
+    --border: rgba(20, 22, 26, 0.14);
+    --accent-purple: #6d3fd4;
+    --accent-green: #0f8a4d;
+    --accent-red: #c62828;
+    --accent-yellow: #a86a00;
+    --card-accent: #6d3fd4;
+
+    /* long vocabulary */
+    --color-bg-primary: #f7f8fa;
+    --color-bg-secondary: #ffffff;
+    --color-bg-tertiary: #eef0f4;
+    --color-bg-elevated: #ffffff;
+    --color-dark-900: #ffffff;
+    --color-dark-800: #f7f8fa;
+    --color-dark-700: #eef0f4;
+    --color-dark-600: #e3e6ec;
+    --color-dark-500: #d5d9e1;
+    --color-dark-400: rgba(20, 22, 26, 0.14);
+    --color-text-primary: #14161a;
+    --color-text-secondary: rgba(20, 22, 26, 0.72);
+    --color-text-muted: rgba(20, 22, 26, 0.63);
+    --color-primary-400: #6d3fd4;
+    --color-success: #0f8a4d;
+}
+
+/* Dark-assuming utilities need inverting rather than re-colouring. */
+/* Sand is a light theme too: the same un-inverting applies. */
+:root:is([data-theme="light"], [data-theme="sand"]) body { background: var(--bg-primary); color: var(--text-primary); }
+:root:is([data-theme="light"], [data-theme="sand"]) .btn-close { filter: none !important; }
+:root:is([data-theme="light"], [data-theme="sand"]) img[src*="logo"] { filter: none; }
+
+/* ==========================================================================
+   MIDNIGHT — deeper and bluer than the default, lower glare
+   ========================================================================== */
+:root[data-theme="midnight"] {
+    color-scheme: dark;
+
+    --bg-primary: #070b14;
+    --bg-secondary: #0c1220;
+    --bg-tertiary: #131b2d;
+    --bg-card: rgba(120, 160, 255, 0.045);
+    --bg-card-hover: rgba(120, 160, 255, 0.09);
+    --card-bg: #0c1220;
+    --text-primary: #e8eefc;
+    --text-secondary: rgba(232, 238, 252, 0.72);
+    --text-muted: rgba(232, 238, 252, 0.5);
+    --text-dim: rgba(232, 238, 252, 0.35);
+    --text: #e8eefc;
+    --muted: rgba(232, 238, 252, 0.5);
+    --border-color: rgba(120, 160, 255, 0.14);
+    --border-strong: rgba(255, 255, 255, 0.34);   /* form-control borders — WCAG 3:1 for UI components */
+    --border: rgba(120, 160, 255, 0.14);
+    --accent-purple: #8ba6ff;
+    --accent-green: #4ade9b;
+    --accent-red: #ff7a85;
+    --accent-yellow: #ffc861;
+    --card-accent: #8ba6ff;
+
+    --color-bg-primary: #070b14;
+    --color-bg-secondary: #0c1220;
+    --color-bg-tertiary: #131b2d;
+    --color-bg-elevated: #0c1220;
+    --color-dark-900: #070b14;
+    --color-dark-800: #0c1220;
+    --color-dark-700: #131b2d;
+    --color-dark-600: #1a2338;
+    --color-dark-500: #232e47;
+    --color-dark-400: rgba(120, 160, 255, 0.16);
+    --color-text-primary: #e8eefc;
+    --color-text-secondary: rgba(232, 238, 252, 0.72);
+    --color-text-muted: rgba(232, 238, 252, 0.5);
+    --color-primary-400: #8ba6ff;
+    --color-success: #4ade9b;
+}
+
+/* ==========================================================================
+   AMOLED — true black. Real battery saving on OLED, and the lowest glare
+   option for anyone reading in the dark.
+   ========================================================================== */
+:root[data-theme="amoled"] {
+    color-scheme: dark;
+
+    --bg-primary: #000000;
+    --bg-secondary: #050505;
+    --bg-tertiary: #0d0d0d;
+    --bg-card: rgba(255, 255, 255, 0.04);
+    --bg-card-hover: rgba(255, 255, 255, 0.08);
+    --card-bg: #050505;
+    --text-primary: #f2f2f2;
+    --text-secondary: rgba(242, 242, 242, 0.72);
+    --text-muted: rgba(242, 242, 242, 0.52);
+    --text-dim: rgba(242, 242, 242, 0.36);
+    --text: #f2f2f2;
+    --muted: rgba(242, 242, 242, 0.52);
+    --border-color: rgba(255, 255, 255, 0.16);
+    --border-strong: rgba(255, 255, 255, 0.36);   /* form-control borders — WCAG 3:1 for UI components */
+    --border: rgba(255, 255, 255, 0.16);
+    --accent-purple: #b79dff;
+    --accent-green: #57f287;
+    --accent-red: #ff6b6b;
+    --accent-yellow: #ffd76b;
+    --card-accent: #b79dff;
+
+    --color-bg-primary: #000000;
+    --color-bg-secondary: #050505;
+    --color-bg-tertiary: #0d0d0d;
+    --color-bg-elevated: #050505;
+    --color-dark-900: #000000;
+    --color-dark-800: #050505;
+    --color-dark-700: #0d0d0d;
+    --color-dark-600: #151515;
+    --color-dark-500: #1f1f1f;
+    --color-dark-400: rgba(255, 255, 255, 0.16);
+    --color-text-primary: #f2f2f2;
+    --color-text-secondary: rgba(242, 242, 242, 0.72);
+    --color-text-muted: rgba(242, 242, 242, 0.52);
+    --color-primary-400: #b79dff;
+    --color-success: #57f287;
+}
+
+/* ==========================================================================
+   HIGH CONTRAST — an accessibility theme, not a style.
+   Pure black/white with saturated accents, every pair well past WCAG AAA (7:1).
+   Borders are opaque rather than translucent so structure survives for anyone
+   who cannot resolve a 6%-alpha edge.
+   ========================================================================== */
+:root[data-theme="contrast"] {
+    color-scheme: dark;
+
+    --bg-primary: #000000;
+    --bg-secondary: #0a0a0a;
+    --bg-tertiary: #141414;
+    --bg-card: #101010;
+    --bg-card-hover: #1c1c1c;
+    --card-bg: #101010;
+    --text-primary: #ffffff;
+    --text-secondary: #f0f0f0;
+    --text-muted: #cfcfcf;      /* 13.6:1 on #000 — still passes AAA */
+    --text-dim: #b8b8b8;
+    --text: #ffffff;
+    --muted: #cfcfcf;
+    --border-color: #ffffff;
+    --border-strong: #ffffff;   /* form-control borders — WCAG 3:1 for UI components */
+    --border: #ffffff;
+    --accent-purple: #c9b0ff;
+    --accent-green: #6bffa0;
+    --accent-red: #ff8f8f;
+    --accent-yellow: #ffe06b;
+    --card-accent: #c9b0ff;
+
+    --color-bg-primary: #000000;
+    --color-bg-secondary: #0a0a0a;
+    --color-bg-tertiary: #141414;
+    --color-bg-elevated: #101010;
+    --color-dark-900: #000000;
+    --color-dark-800: #0a0a0a;
+    --color-dark-700: #141414;
+    --color-dark-600: #1c1c1c;
+    --color-dark-500: #262626;
+    --color-dark-400: #ffffff;
+    --color-text-primary: #ffffff;
+    --color-text-secondary: #f0f0f0;
+    --color-text-muted: #cfcfcf;
+    --color-primary-400: #c9b0ff;
+    --color-success: #6bffa0;
+}
+
+/* Decoration that reduces legibility is removed outright in this theme —
+   translucency, blur and shadow are exactly what it exists to avoid. */
+:root[data-theme="contrast"] * {
+    text-shadow: none !important;
+    backdrop-filter: none !important;
+}
+:root[data-theme="contrast"] .card,
+:root[data-theme="contrast"] .module-card,
+:root[data-theme="contrast"] .panel {
+    border: 2px solid var(--border-color) !important;
+    box-shadow: none !important;
+}
+:root[data-theme="contrast"] a:focus-visible,
+:root[data-theme="contrast"] button:focus-visible,
+:root[data-theme="contrast"] select:focus-visible,
+:root[data-theme="contrast"] input:focus-visible {
+    outline: 3px solid #ffe06b !important;
+    outline-offset: 2px !important;
+}
+
+/* ==========================================================================
+   SLATE — cool neutral grey, the least opinionated dark
+   ========================================================================== */
+:root[data-theme="slate"] {
+    color-scheme: dark;
+
+    --bg-primary: #11151a;
+    --bg-secondary: #171d24;
+    --bg-tertiary: #1e262f;
+    --bg-card: rgba(255,255,255,0.035);
+    --bg-card-hover: rgba(255,255,255,0.07);
+    --card-bg: #171d24;
+    --text-primary: #e6ebf0;
+    --text-secondary: rgba(230,235,240,0.74);
+    --text-muted: rgba(230,235,240,0.56);
+    --text-dim: rgba(230,235,240,0.38);
+    --text: #e6ebf0;
+    --muted: rgba(230,235,240,0.56);
+    --border-color: rgba(255,255,255,0.11);
+    --border-strong: rgba(255, 255, 255, 0.34);   /* form-control borders — WCAG 3:1 for UI components */
+    --border: rgba(255,255,255,0.11);
+    --accent-purple: #7dd3fc;
+    --accent-green: #4ade80;
+    --accent-red: #fb7185;
+    --accent-yellow: #fbbf24;
+    --card-accent: #7dd3fc;
+
+    --color-bg-primary: #11151a;
+    --color-bg-secondary: #171d24;
+    --color-bg-tertiary: #1e262f;
+    --color-bg-elevated: #171d24;
+    --color-dark-900: #11151a;
+    --color-dark-800: #171d24;
+    --color-dark-700: #1e262f;
+    --color-dark-600: rgba(255,255,255,0.07);
+    --color-dark-500: rgba(255,255,255,0.11);
+    --color-dark-400: rgba(255,255,255,0.11);
+    --color-text-primary: #e6ebf0;
+    --color-text-secondary: rgba(230,235,240,0.74);
+    --color-text-muted: rgba(230,235,240,0.56);
+    --color-primary-400: #7dd3fc;
+    --color-success: #4ade80;
+}
+
+/* ==========================================================================
+   FOREST — green-tinted dark, restful over long sessions
+   ========================================================================== */
+:root[data-theme="forest"] {
+    color-scheme: dark;
+
+    --bg-primary: #0b1210;
+    --bg-secondary: #101a16;
+    --bg-tertiary: #16241f;
+    --bg-card: rgba(120,255,190,0.04);
+    --bg-card-hover: rgba(120,255,190,0.08);
+    --card-bg: #101a16;
+    --text-primary: #e4f2eb;
+    --text-secondary: rgba(228,242,235,0.74);
+    --text-muted: rgba(228,242,235,0.56);
+    --text-dim: rgba(228,242,235,0.38);
+    --text: #e4f2eb;
+    --muted: rgba(228,242,235,0.56);
+    --border-color: rgba(120,255,190,0.13);
+    --border-strong: rgba(255, 255, 255, 0.34);   /* form-control borders — WCAG 3:1 for UI components */
+    --border: rgba(120,255,190,0.13);
+    --accent-purple: #5eead4;
+    --accent-green: #4ade80;
+    --accent-red: #fb7185;
+    --accent-yellow: #fcd34d;
+    --card-accent: #5eead4;
+
+    --color-bg-primary: #0b1210;
+    --color-bg-secondary: #101a16;
+    --color-bg-tertiary: #16241f;
+    --color-bg-elevated: #101a16;
+    --color-dark-900: #0b1210;
+    --color-dark-800: #101a16;
+    --color-dark-700: #16241f;
+    --color-dark-600: rgba(120,255,190,0.08);
+    --color-dark-500: rgba(120,255,190,0.13);
+    --color-dark-400: rgba(120,255,190,0.13);
+    --color-text-primary: #e4f2eb;
+    --color-text-secondary: rgba(228,242,235,0.74);
+    --color-text-muted: rgba(228,242,235,0.56);
+    --color-primary-400: #5eead4;
+    --color-success: #4ade80;
+}
+
+/* ==========================================================================
+   EMBER — warm dark — less blue light for evening use
+   ========================================================================== */
+:root[data-theme="ember"] {
+    color-scheme: dark;
+
+    --bg-primary: #140f0c;
+    --bg-secondary: #1c1512;
+    --bg-tertiary: #261c17;
+    --bg-card: rgba(255,180,120,0.045);
+    --bg-card-hover: rgba(255,180,120,0.09);
+    --card-bg: #1c1512;
+    --text-primary: #f5e9e1;
+    --text-secondary: rgba(245,233,225,0.74);
+    --text-muted: rgba(245,233,225,0.57);
+    --text-dim: rgba(245,233,225,0.39);
+    --text: #f5e9e1;
+    --muted: rgba(245,233,225,0.57);
+    --border-color: rgba(255,180,120,0.14);
+    --border-strong: rgba(255, 255, 255, 0.34);   /* form-control borders — WCAG 3:1 for UI components */
+    --border: rgba(255,180,120,0.14);
+    --accent-purple: #ffab70;
+    --accent-green: #7ddba0;
+    --accent-red: #ff8080;
+    --accent-yellow: #ffd280;
+    --card-accent: #ffab70;
+
+    --color-bg-primary: #140f0c;
+    --color-bg-secondary: #1c1512;
+    --color-bg-tertiary: #261c17;
+    --color-bg-elevated: #1c1512;
+    --color-dark-900: #140f0c;
+    --color-dark-800: #1c1512;
+    --color-dark-700: #261c17;
+    --color-dark-600: rgba(255,180,120,0.09);
+    --color-dark-500: rgba(255,180,120,0.14);
+    --color-dark-400: rgba(255,180,120,0.14);
+    --color-text-primary: #f5e9e1;
+    --color-text-secondary: rgba(245,233,225,0.74);
+    --color-text-muted: rgba(245,233,225,0.57);
+    --color-primary-400: #ffab70;
+    --color-success: #7ddba0;
+}
+
+/* ==========================================================================
+   PLUM — deep purple, closest to the brand accent
+   ========================================================================== */
+:root[data-theme="plum"] {
+    color-scheme: dark;
+
+    --bg-primary: #120d18;
+    --bg-secondary: #1a1223;
+    --bg-tertiary: #231830;
+    --bg-card: rgba(190,150,255,0.05);
+    --bg-card-hover: rgba(190,150,255,0.1);
+    --card-bg: #1a1223;
+    --text-primary: #efe7f7;
+    --text-secondary: rgba(239,231,247,0.74);
+    --text-muted: rgba(239,231,247,0.56);
+    --text-dim: rgba(239,231,247,0.38);
+    --text: #efe7f7;
+    --muted: rgba(239,231,247,0.56);
+    --border-color: rgba(190,150,255,0.15);
+    --border-strong: rgba(255, 255, 255, 0.34);   /* form-control borders — WCAG 3:1 for UI components */
+    --border: rgba(190,150,255,0.15);
+    --accent-purple: #c4a5ff;
+    --accent-green: #6ee7a8;
+    --accent-red: #ff8fa3;
+    --accent-yellow: #ffd166;
+    --card-accent: #c4a5ff;
+
+    --color-bg-primary: #120d18;
+    --color-bg-secondary: #1a1223;
+    --color-bg-tertiary: #231830;
+    --color-bg-elevated: #1a1223;
+    --color-dark-900: #120d18;
+    --color-dark-800: #1a1223;
+    --color-dark-700: #231830;
+    --color-dark-600: rgba(190,150,255,0.1);
+    --color-dark-500: rgba(190,150,255,0.15);
+    --color-dark-400: rgba(190,150,255,0.15);
+    --color-text-primary: #efe7f7;
+    --color-text-secondary: rgba(239,231,247,0.74);
+    --color-text-muted: rgba(239,231,247,0.56);
+    --color-primary-400: #c4a5ff;
+    --color-success: #6ee7a8;
+}
+
+/* ==========================================================================
+   OCEAN — deep teal-blue, cool and calm
+   ========================================================================== */
+:root[data-theme="ocean"] {
+    color-scheme: dark;
+
+    --bg-primary: #06131a;
+    --bg-secondary: #0a1c26;
+    --bg-tertiary: #0f2733;
+    --bg-card: rgba(100,220,255,0.045);
+    --bg-card-hover: rgba(100,220,255,0.09);
+    --card-bg: #0a1c26;
+    --text-primary: #e2f2f8;
+    --text-secondary: rgba(226,242,248,0.74);
+    --text-muted: rgba(226,242,248,0.56);
+    --text-dim: rgba(226,242,248,0.38);
+    --text: #e2f2f8;
+    --muted: rgba(226,242,248,0.56);
+    --border-color: rgba(100,220,255,0.14);
+    --border-strong: rgba(255, 255, 255, 0.34);   /* form-control borders — WCAG 3:1 for UI components */
+    --border: rgba(100,220,255,0.14);
+    --accent-purple: #5ec8e8;
+    --accent-green: #4ade80;
+    --accent-red: #ff8095;
+    --accent-yellow: #ffd166;
+    --card-accent: #5ec8e8;
+
+    --color-bg-primary: #06131a;
+    --color-bg-secondary: #0a1c26;
+    --color-bg-tertiary: #0f2733;
+    --color-bg-elevated: #0a1c26;
+    --color-dark-900: #06131a;
+    --color-dark-800: #0a1c26;
+    --color-dark-700: #0f2733;
+    --color-dark-600: rgba(100,220,255,0.09);
+    --color-dark-500: rgba(100,220,255,0.14);
+    --color-dark-400: rgba(100,220,255,0.14);
+    --color-text-primary: #e2f2f8;
+    --color-text-secondary: rgba(226,242,248,0.74);
+    --color-text-muted: rgba(226,242,248,0.56);
+    --color-primary-400: #5ec8e8;
+    --color-success: #4ade80;
+}
+
+/* ==========================================================================
+   SAND — warm light — softer than pure white for long reading
+   ========================================================================== */
+:root[data-theme="sand"] {
+    color-scheme: light;
+
+    --bg-primary: #faf6ef;
+    --bg-secondary: #fffdf9;
+    --bg-tertiary: #f2ece1;
+    --bg-card: rgba(60,45,25,0.035);
+    --bg-card-hover: rgba(60,45,25,0.07);
+    --card-bg: #fffdf9;
+    --text-primary: #241d14;
+    --text-secondary: rgba(36,29,20,0.74);
+    --text-muted: rgba(36,29,20,0.63);
+    --text-dim: rgba(36,29,20,0.45);
+    --text: #241d14;
+    --muted: rgba(36,29,20,0.63);
+    --border-color: rgba(60,45,25,0.16);
+    --border-strong: rgba(36, 29, 20, 0.52);   /* form-control borders — WCAG 3:1 for UI components */
+    --border: rgba(60,45,25,0.16);
+    --accent-purple: #8a5a20;
+    --accent-green: #1f7a4d;
+    --accent-red: #b3261e;
+    --accent-yellow: #8a6a00;
+    --card-accent: #8a5a20;
+
+    --color-bg-primary: #faf6ef;
+    --color-bg-secondary: #fffdf9;
+    --color-bg-tertiary: #f2ece1;
+    --color-bg-elevated: #fffdf9;
+    --color-dark-900: #faf6ef;
+    --color-dark-800: #fffdf9;
+    --color-dark-700: #f2ece1;
+    --color-dark-600: rgba(60,45,25,0.07);
+    --color-dark-500: rgba(60,45,25,0.16);
+    --color-dark-400: rgba(60,45,25,0.16);
+    --color-text-primary: #241d14;
+    --color-text-secondary: rgba(36,29,20,0.74);
+    --color-text-muted: rgba(36,29,20,0.63);
+    --color-primary-400: #8a5a20;
+    --color-success: #1f7a4d;
+}
+
+/* ==========================================================================
+   DENSITY
+
+   Independent of theme. Scales the spacing scale rather than restyling
+   components, so it applies everywhere those tokens are used without touching
+   any component CSS. Comfortable is the default and sets nothing.
+   ========================================================================== */
+:root[data-density="compact"] {
+    --spacing-1: 0.2rem;
+    --spacing-2: 0.35rem;
+    --spacing-3: 0.55rem;
+    --spacing-4: 0.75rem;
+    --spacing-5: 0.95rem;
+    --spacing-6: 1.15rem;
+    --radius-md: 7px;
+    --radius-lg: 10px;
+}
+:root[data-density="compact"] .card,
+:root[data-density="compact"] .module-card,
+:root[data-density="compact"] .page-content { padding: 0.85rem !important; }
+:root[data-density="compact"] .page-section { margin-bottom: 1rem; }
+:root[data-density="compact"] table th,
+:root[data-density="compact"] table td { padding: 0.4rem 0.55rem !important; }
+
+:root[data-density="spacious"] {
+    --spacing-1: 0.35rem;
+    --spacing-2: 0.7rem;
+    --spacing-3: 1.05rem;
+    --spacing-4: 1.5rem;
+    --spacing-5: 1.9rem;
+    --spacing-6: 2.4rem;
+    --radius-md: 12px;
+    --radius-lg: 18px;
+}
+:root[data-density="spacious"] .card,
+:root[data-density="spacious"] .module-card,
+:root[data-density="spacious"] .page-content { padding: 1.75rem !important; }
+:root[data-density="spacious"] .page-section { margin-bottom: 2.5rem; }
+
+/* ==========================================================================
+   Reduced motion — theme switching should not animate for anyone who asked
+   their OS for less motion. a11y.css covers the general case; this covers the
+   colour transition specifically.
+   ========================================================================== */
+@media (prefers-reduced-motion: no-preference) {
+    :root[data-theme] body {
+        transition: background-color 0.18s ease, color 0.18s ease;
+    }
+}

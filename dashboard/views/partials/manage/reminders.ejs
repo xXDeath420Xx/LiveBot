@@ -1,281 +1,272 @@
-<%
-const activeReminders = (reminders || []).filter(r => r.is_active && !r.is_dm);
-const completedReminders = (reminders || []).filter(r => !r.is_active);
+<%#
+  Reminders: channel reminders that are still to fire (DM reminders stay with the member), delete
+  (POST delete-reminder) and create (modal, POST create-reminder; the page script adds remind_at).
+  A reminder can repeat (reminders.recurring_interval seconds, recurring_count sends in all, -1 =
+  until deleted); core/reminder-manager.js moves it to its next time after each send.
+  Built on the settings-row kit (cf-settings.css); field names and ids are unchanged.
 %>
+<%
+// A reminder row exists until its last send, so every row the server loader passes is still to come.
+const activeReminders = (reminders || []).filter(r => !r.is_dm && r.is_active !== 0);
+const repeatingReminders = activeReminders.filter(r => Number(r.recurring_interval) > 0);
+const rmRepeatLabel = (r) => {
+    const s = Number(r.recurring_interval) || 0;
+    if (!s) return 'Once';
+    const named = { 3600: 'Every hour', 86400: 'Every day', 604800: 'Every week', 1209600: 'Every 2 weeks', 2419200: 'Every 4 weeks' }[s];
+    const every = named || (s % 86400 === 0 ? `Every ${s / 86400} days` : s % 3600 === 0 ? `Every ${s / 3600} hours` : `Every ${Math.round(s / 60)} minutes`);
+    const total = r.recurring_count == null ? -1 : Number(r.recurring_count);
+    if (total < 0) return every;
+    const left = Math.max(total - (Number(r.occurrences_sent) || 0), 0);
+    return `${every}, ${left} more`;
+};
+const rmNow = new Date();
+const rmDueToday = activeReminders.filter(r => {
+    const d = new Date(r.remind_at);
+    return d.getFullYear() === rmNow.getFullYear() && d.getMonth() === rmNow.getMonth() && d.getDate() === rmNow.getDate();
+}).length;
+const rmWeek = activeReminders.filter(r => {
+    const d = new Date(r.remind_at);
+    return d <= new Date(rmNow.getTime() + 7 * 24 * 60 * 60 * 1000) && d >= rmNow;
+}).length;
+const rmRoles = typeof roles !== 'undefined' && roles ? roles : [];
+// Names for the preview's mentions; written into the page as JSON with '<' escaped.
+const rmNames = {
+    channels: Object.fromEntries((channels || []).map(c => [c.id, c.name])),
+    roles: Object.fromEntries(rmRoles.map(r => [r.id, { name: r.name, color: r.hexColor || (typeof r.color === 'number' && r.color ? '#' + r.color.toString(16).padStart(6, '0') : null) }])),
+};
+const rmFmt = (v) => {
+    const d = new Date(v);
+    return isNaN(d) ? '' : d.toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) + ' UTC';
+};
+%>
+<style>
+    .rm-message { color: var(--cf-text); font-weight: 500; overflow-wrap: anywhere; max-width: 32rem; }
+    .rm-when { color: var(--cf-text-2); font-variant-numeric: tabular-nums; }
+    .rm-channel { color: var(--cf-text-2); }
+    .rm-actions form { display: inline; margin: 0; }
+    .rm-preview { margin: 0; font-size: var(--cf-text-sm); color: var(--cf-text-2); }
+    .rm-preview.is-bad { color: var(--cf-danger); }
+    .rm-modal .cf-rows .cf-row { grid-template-columns: minmax(0, 1fr); }
+    .cf-rows .rm-row.is-filtered { display: none; }
+</style>
 
 <div class="page-section">
     <div class="page-section-header">
         <div>
             <div class="page-section-title">
                 <i class="fas fa-bell"></i>
-                <span>Server Reminders</span>
+                <span>Reminders</span>
             </div>
             <div class="page-section-subtitle">
-                Manage channel reminders for your server. Personal DM reminders are managed by users individually.
+                Channel reminders only. Reminders members get by direct message stay private.
             </div>
-        </div>
-        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#add-reminder-modal">
-            <i class="fas fa-plus"></i>
-            <span>Create Reminder</span>
-        </button>
-    </div>
-
-    <!-- Stats Overview -->
-    <div class="grid grid-cols-4" style="margin-bottom: var(--spacing-6);">
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Active Reminders</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary);"><%= activeReminders.length %></div>
-        </div>
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Completed</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-success);"><%= completedReminders.length %></div>
-        </div>
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Due Today</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-warning);"><%= activeReminders.filter(r => {
-                const now = new Date();
-                const reminderDate = new Date(r.remind_at);
-                return reminderDate.getFullYear() === now.getFullYear() &&
-                       reminderDate.getMonth() === now.getMonth() &&
-                       reminderDate.getDate() === now.getDate();
-            }).length %></div>
-        </div>
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Upcoming Week</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-primary-400);"><%= activeReminders.filter(r => {
-                const now = new Date();
-                const weekFromNow = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-                const reminderDate = new Date(r.remind_at);
-                return reminderDate <= weekFromNow && reminderDate >= now;
-            }).length %></div>
         </div>
     </div>
 
-    <!-- Active Reminders Table -->
-    <% if (activeReminders.length > 0) { %>
-        <div style="margin-bottom: var(--spacing-6);">
-            <div style="font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
-                <i class="fas fa-clock" style="color: var(--color-primary-400); margin-right: var(--spacing-2);"></i>
-                Active Reminders
+    <dl class="cf-kpis" aria-label="Reminders at a glance">
+        <div class="cf-kpi"><dt>Waiting</dt><dd class="cf-kpi-value"><%= activeReminders.length %></dd></div>
+        <div class="cf-kpi"><dt>Repeating</dt><dd class="cf-kpi-value"><%= repeatingReminders.length %></dd></div>
+        <div class="cf-kpi"><dt>Due today</dt><dd class="cf-kpi-value"><%= rmDueToday %></dd></div>
+        <div class="cf-kpi"><dt>Next 7 days</dt><dd class="cf-kpi-value"><%= rmWeek %></dd></div>
+    </dl>
+
+    <section class="cf-section" aria-labelledby="rm-list-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="rm-list-title">Upcoming reminders<% if (activeReminders.length) { %> (<%= activeReminders.length %>)<% } %></h2>
+                <p class="cf-section-desc">Times are shown in UTC. A repeating reminder moves to its next time after each post.</p>
             </div>
-            <div class="table-container">
-                <table class="data-table">
+            <div class="cf-section-actions">
+                <% if (activeReminders.length > 15) { %>
+                <label class="cf-search">
+                    <i class="fas fa-search" aria-hidden="true"></i>
+                    <input type="search" id="cfk-rm-search" class="form-control" placeholder="Search reminders" aria-label="Search reminders">
+                </label>
+                <% } %>
+                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#add-reminder-modal">New reminder</button>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <% if (activeReminders.length > 0) { %>
+            <div class="cf-table-wrap">
+                <table class="cf-table cf-table--stack">
                     <thead>
                         <tr>
-                            <th>Message</th>
-                            <th>Remind At</th>
-                            <th>Channel</th>
-                            <th>Created By</th>
-                            <th class="text-end">Actions</th>
+                            <th scope="col">Message</th>
+                            <th scope="col">When</th>
+                            <th scope="col">Repeats</th>
+                            <th scope="col">Channel</th>
+                            <th scope="col">Created by</th>
+                            <th scope="col"><span class="visually-hidden">Delete</span></th>
                         </tr>
                     </thead>
                     <tbody>
                         <% activeReminders.forEach(reminder => {
-                            const reminderTimestamp = Math.floor(new Date(reminder.remind_at).getTime() / 1000);
+                            const channel = channels.find(c => c.id === reminder.channel_id);
                         %>
-                            <tr>
-                                <td>
-                                    <div style="font-weight: var(--font-weight-medium); color: var(--color-text-primary); max-width: 400px; overflow: hidden; text-overflow: ellipsis;">
-                                        <%= reminder.message %>
-                                    </div>
-                                </td>
-                                <td>
-                                    <div style="display: flex; align-items: center; gap: var(--spacing-2);">
-                                        <i class="fas fa-calendar" style="color: var(--color-text-muted);"></i>
-                                        <span style="color: var(--color-text-secondary);">
-                                            <t:<%= reminderTimestamp %>:F>
-                                        </span>
-                                    </div>
-                                    <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-top: var(--spacing-1);">
-                                        <t:<%= reminderTimestamp %>:R>
-                                    </div>
-                                </td>
-                                <td>
-                                    <%
-                                    const channel = channels.find(c => c.id === reminder.channel_id);
-                                    if (channel) {
-                                    %>
-                                        <span style="color: var(--color-text-secondary);">
-                                            <i class="fas fa-hashtag" style="margin-right: var(--spacing-1);"></i>
-                                            <%= channel.name %>
-                                        </span>
-                                    <% } else { %>
-                                        <span class="badge badge-danger">Channel Deleted</span>
-                                    <% } %>
-                                </td>
-                                <td>
-                                    <span style="color: var(--color-text-muted); font-size: var(--font-size-sm);">
-                                        ID: <%= reminder.user_id.substring(0, 8) %>...
-                                    </span>
-                                </td>
-                                <td class="text-end">
-                                    <form action="/manage/<%= guild.id %>/delete-reminder" method="POST" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this reminder?')">
-                                        <input type="hidden" name="reminderId" value="<%= reminder.id %>">
-                                        <button type="submit" class="btn btn-sm btn-danger">
-                                            <i class="fas fa-trash"></i>
-                                            <span>Delete</span>
-                                        </button>
-                                    </form>
-                                </td>
-                            </tr>
+                        <tr class="rm-row">
+                            <td data-label="Message"><div class="rm-message"><%= reminder.message %></div></td>
+                            <td data-label="When"><span class="rm-when"><%= rmFmt(reminder.remind_at) %></span></td>
+                            <td data-label="Repeats"><%= rmRepeatLabel(reminder) %></td>
+                            <td data-label="Channel">
+                                <% if (channel) { %><span class="rm-channel">#<%= channel.name %></span><% } else { %><span class="cf-pill is-bad">Channel deleted</span><% } %>
+                            </td>
+                            <td data-label="Created by"><%- include('_user-cell', { cfUser: null, cfUserId: reminder.user_id, cfUserName: null, cfUserSize: 'sm' }) %></td>
+                            <td class="cf-cell-end rm-actions">
+                                <form action="/manage/<%= guild.id %>/delete-reminder" method="POST" onsubmit="return confirm('Delete this reminder?')">
+                                    <input type="hidden" name="reminderId" value="<%= reminder.id %>">
+                                    <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                                </form>
+                            </td>
+                        </tr>
                         <% }); %>
                     </tbody>
                 </table>
             </div>
-        </div>
-    <% } else { %>
-        <div class="empty-state">
-            <div class="empty-state-icon">
-                <i class="fas fa-bell-slash"></i>
+            <% if (activeReminders.length > 15) { %>
+            <div class="cf-state cf-state--compact" id="cfk-rm-search-empty" hidden><p class="cf-state-text">No reminders match the search.</p></div>
+            <% } %>
+            <% } else { %>
+            <div class="cf-state cf-state--empty">
+                <p class="cf-state-title">No upcoming reminders</p>
+                <p class="cf-state-text">Post a message in a channel at a set time, once or on repeat.</p>
+                <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#add-reminder-modal">New reminder</button>
             </div>
-            <div class="empty-state-title">No Active Reminders</div>
-            <div class="empty-state-description">
-                Create a channel reminder to notify your server members at a specific time
-            </div>
-            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#add-reminder-modal">
-                <i class="fas fa-plus"></i>
-                <span>Create First Reminder</span>
-            </button>
+            <% } %>
         </div>
-    <% } %>
+    </section>
 </div>
 
-<!-- Add Reminder Modal -->
-<div class="modal fade" id="add-reminder-modal" tabindex="-1">
+<div class="modal fade rm-modal" id="add-reminder-modal" tabindex="-1" aria-labelledby="rm-modal-title">
     <div class="modal-dialog">
-        <div class="modal-content" style="background: var(--color-dark-700); border: 1px solid var(--color-dark-400);">
-            <div class="modal-header" style="border-bottom: 1px solid var(--color-dark-400);">
-                <h5 class="modal-title">
-                    <i class="fas fa-bell" style="color: var(--color-primary-400); margin-right: var(--spacing-2);"></i>
-                    Create Channel Reminder
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="rm-modal-title">New channel reminder</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <form action="/manage/<%= guild.id %>/create-reminder" method="POST" id="reminder-form">
                 <div class="modal-body">
-                    <div style="margin-bottom: var(--spacing-4);">
-                        <label class="form-label">Reminder Message</label>
-                        <textarea class="form-control" name="message" rows="3" placeholder="Don't forget about the team meeting!" required></textarea>
-                        <div class="form-help">What should the reminder say?</div>
-                    </div>
-
-                    <div style="margin-bottom: var(--spacing-4);">
-                        <label class="form-label">When to Remind</label>
-                        <input type="text" class="form-control" name="when" id="reminder-when" placeholder="e.g., 30m, 2h, 1d, 1w" required>
-                        <div class="form-help">
-                            Use format: <code>30m</code> (minutes), <code>2h</code> (hours), <code>1d</code> (days), <code>1w</code> (weeks)
+                    <div class="cf-rows">
+                        <div class="cf-row">
+                            <div class="cf-row-text">
+                                <label class="cf-row-label" for="f-reminders-message">Message</label>
+                                <p class="cf-row-desc" id="f-reminders-message-desc">What the reminder says. It is posted as an embed that mentions you.</p>
+                            </div>
+                            <div class="cf-row-control">
+                                <textarea id="f-reminders-message" class="form-control" name="message" rows="3" maxlength="2000" placeholder="Team meeting in the voice channel" required aria-describedby="f-reminders-message-desc"></textarea>
+                            </div>
                         </div>
-                    </div>
-
-                    <div style="margin-bottom: var(--spacing-4);">
-                        <label class="form-label">Target Channel</label>
-                        <select class="form-select" name="channel_id" required>
-                            <option value="">Select a channel...</option>
-                            <% channels.filter(c => c.type === 0 || c.type === 5).forEach(channel => { %>
-                                <option value="<%= channel.id %>">#<%= channel.name %></option>
-                            <% }); %>
-                        </select>
-                        <div class="form-help">The channel where the reminder will be posted</div>
-                    </div>
-
-                    <div style="padding: var(--spacing-3); background: var(--color-dark-600); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-                        <div style="font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); color: var(--color-text-muted); margin-bottom: var(--spacing-2);">
-                            <i class="fas fa-info-circle"></i> Preview
+                        <div class="cf-row">
+                            <div class="cf-row-text">
+                                <label class="cf-row-label" for="reminder-when">When</label>
+                                <p class="cf-row-desc" id="reminder-when-desc">How long from now: <code>30m</code>, <code>2h</code>, <code>1d</code> or <code>1w</code>, up to a year.</p>
+                            </div>
+                            <div class="cf-row-control">
+                                <input type="text" class="form-control" name="when" id="reminder-when" placeholder="2h" required aria-describedby="reminder-when-desc">
+                                <p class="rm-preview" id="reminder-preview" aria-live="polite">Enter a time to see when the reminder will be sent.</p>
+                            </div>
                         </div>
-                        <div id="reminder-preview" style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">
-                            Enter a time to see when the reminder will trigger
+                        <div class="cf-row">
+                            <div class="cf-row-text">
+                                <label class="cf-row-label" for="f-reminders-repeat">Repeat</label>
+                                <p class="cf-row-desc" id="f-reminders-repeat-desc">After the first time, post it again on this schedule.</p>
+                            </div>
+                            <div class="cf-row-control">
+                                <select id="f-reminders-repeat" class="form-select" name="repeat" aria-describedby="f-reminders-repeat-desc">
+                                    <option value="">Do not repeat</option>
+                                    <option value="3600">Every hour</option>
+                                    <option value="86400">Every day</option>
+                                    <option value="604800">Every week</option>
+                                    <option value="1209600">Every 2 weeks</option>
+                                    <option value="2419200">Every 4 weeks</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="cf-row" id="reminder-times-row" hidden>
+                            <div class="cf-row-text">
+                                <label class="cf-row-label" for="f-reminders-repeat_count">Times</label>
+                                <p class="cf-row-desc" id="f-reminders-repeat_count-desc">How many times to post it in all, from 2 to 1000. Empty: until you delete it.</p>
+                            </div>
+                            <div class="cf-row-control">
+                                <input type="number" id="f-reminders-repeat_count" class="form-control" name="repeat_count" min="2" max="1000" placeholder="Until deleted" aria-describedby="f-reminders-repeat_count-desc">
+                            </div>
+                        </div>
+                        <div class="cf-row">
+                            <div class="cf-row-text">
+                                <label class="cf-row-label" for="f-reminders-channel_id">Channel</label>
+                                <p class="cf-row-desc">Where the reminder is posted.</p>
+                            </div>
+                            <div class="cf-row-control">
+                                <select id="f-reminders-channel_id" class="form-select" name="channel_id" required>
+                                    <option value="">Choose a channel</option>
+                                    <% channels.filter(c => c.type === 0 || c.type === 5).forEach(channel => { %>
+                                    <option value="<%= channel.id %>" data-kind="text">#<%= channel.name %></option>
+                                    <% }); %>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="cf-row">
+                            <div class="cf-row-text"><span class="cf-row-label" id="cfk-rm-preview-title">Preview</span></div>
+                            <div class="cf-row-control">
+                                <div id="cfk-rm-preview" aria-labelledby="cfk-rm-preview-title" aria-live="polite"></div>
+                            </div>
                         </div>
                     </div>
                 </div>
-                <div class="modal-footer" style="border-top: 1px solid var(--color-dark-400);">
+                <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-bell"></i>
-                        <span>Create Reminder</span>
-                    </button>
+                    <button type="submit" class="btn btn-primary">Create reminder</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
 
-<style>
-.table-container {
-    overflow-x: auto;
-    border: 1px solid var(--color-dark-400);
-    border-radius: var(--radius-lg);
-}
-
-.data-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-.data-table thead {
-    background: var(--color-dark-600);
-    border-bottom: 2px solid var(--color-dark-400);
-}
-
-.data-table th {
-    padding: var(--spacing-4);
-    text-align: left;
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-
-.data-table td {
-    padding: var(--spacing-4);
-    border-bottom: 1px solid var(--color-dark-400);
-}
-
-.data-table tbody tr {
-    transition: background var(--transition-base);
-}
-
-.data-table tbody tr:hover {
-    background: var(--color-dark-600);
-}
-
-.data-table tbody tr:last-child td {
-    border-bottom: none;
-}
-
-.empty-state {
-    text-align: center;
-    padding: var(--spacing-12) var(--spacing-8);
-}
-
-.empty-state-icon {
-    font-size: 4rem;
-    color: var(--color-text-muted);
-    margin-bottom: var(--spacing-4);
-}
-
-.empty-state-title {
-    font-size: var(--font-size-xl);
-    font-weight: var(--font-weight-bold);
-    color: var(--color-text-primary);
-    margin-bottom: var(--spacing-2);
-}
-
-.empty-state-description {
-    font-size: var(--font-size-base);
-    color: var(--color-text-secondary);
-    margin-bottom: var(--spacing-6);
-}
-</style>
-
+<script src="/js/cf-msgpreview.js"></script>
+<script type="application/json" id="cfk-rm-names"><%- JSON.stringify(rmNames).replace(/</g, '\\u003c') %></script>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
+    let rmNames = {};
+    try { rmNames = JSON.parse(document.getElementById('cfk-rm-names').textContent || '{}'); } catch (e) { rmNames = {}; }
+    const messageInput = document.getElementById('f-reminders-message');
+    const previewBox = document.getElementById('cfk-rm-preview');
+    // What core/reminder-manager.js posts: a mention of whoever set it, and an embed.
+    function renderPreview() {
+        if (!previewBox || !window.cfDiscordPreview) return;
+        window.cfDiscordPreview.render(previewBox, {
+            content: '@you',
+            embeds: messageInput.value.trim() ? [{
+                color: '#5865f2', title: '\u{1F514} Reminder!', description: messageInput.value,
+                footer: { text: 'Set ' + new Date().toLocaleString() }, timestamp: true,
+            }] : [],
+            names: rmNames,
+            emptyText: 'Write the message to see the reminder.',
+        });
+    }
+    if (messageInput) messageInput.addEventListener('input', renderPreview);
+    renderPreview();
+
+    const search = document.getElementById('cfk-rm-search');
+    if (search) {
+        search.addEventListener('input', () => {
+            const q = search.value.trim().toLowerCase();
+            let shown = 0;
+            document.querySelectorAll('.rm-row').forEach((tr) => {
+                const hit = !q || tr.textContent.toLowerCase().includes(q);
+                tr.classList.toggle('is-filtered', !hit);
+                if (hit) shown++;
+            });
+            document.getElementById('cfk-rm-search-empty').hidden = shown > 0;
+        });
+    }
+
     const whenInput = document.getElementById('reminder-when');
     const preview = document.getElementById('reminder-preview');
 
     // Parse time strings (e.g., "10m", "2h", "1d", "1w")
     function parseTimeInput(timeStr) {
-        const match = timeStr.match(/^(\d+)(s|m|h|d|w)$/);
+        // The same units and one-year limit as POST create-reminder (no seconds).
+        const match = String(timeStr || '').trim().toLowerCase().match(/^(\d+)\s*(m|h|d|w)$/);
         if (!match) return null;
 
         const value = parseInt(match[1]);
@@ -289,12 +280,14 @@ document.addEventListener('DOMContentLoaded', () => {
             case 'd': seconds = value * 24 * 60 * 60; break;
             case 'w': seconds = value * 7 * 24 * 60 * 60; break;
         }
+        if (!seconds || seconds > 365 * 24 * 60 * 60) return null;
         return new Date(Date.now() + seconds * 1000);
     }
 
     if (whenInput && preview) {
         whenInput.addEventListener('input', (e) => {
             const remindAt = parseTimeInput(e.target.value);
+            preview.classList.toggle('is-bad', !remindAt && !!e.target.value);
             if (remindAt) {
                 const options = {
                     weekday: 'long',
@@ -304,13 +297,21 @@ document.addEventListener('DOMContentLoaded', () => {
                     hour: '2-digit',
                     minute: '2-digit'
                 };
-                preview.innerHTML = `<i class="fas fa-check-circle" style="color: var(--color-success);"></i> Reminder will trigger on <strong>${remindAt.toLocaleDateString('en-US', options)}</strong>`;
+                const when = document.createElement('strong');
+                when.textContent = remindAt.toLocaleDateString('en-US', options);
+                preview.replaceChildren('Sent on ', when);
             } else if (e.target.value) {
-                preview.innerHTML = `<i class="fas fa-exclamation-triangle" style="color: var(--color-danger);"></i> Invalid format. Use: 30m, 2h, 1d, 1w`;
+                preview.textContent = 'Not a time this understands. Use 30m, 2h, 1d or 1w.';
             } else {
-                preview.textContent = 'Enter a time to see when the reminder will trigger';
+                preview.textContent = 'Enter a time to see when the reminder will be sent.';
             }
         });
+    }
+
+    const repeatSelect = document.getElementById('f-reminders-repeat');
+    const timesRow = document.getElementById('reminder-times-row');
+    if (repeatSelect && timesRow) {
+        repeatSelect.addEventListener('change', () => { timesRow.hidden = !repeatSelect.value; });
     }
 
     const reminderForm = document.getElementById('reminder-form');
@@ -319,7 +320,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const whenInput = reminderForm.querySelector('#reminder-when');
             const remindAt = parseTimeInput(whenInput.value);
             if (!remindAt) {
-                alert('Invalid time format. Please use formats like 30m, 2h, 1d, 1w.');
+                preview.classList.add('is-bad');
+                preview.textContent = 'Not a time this understands. Use 30m, 2h, 1d or 1w.';
+                whenInput.focus();
                 event.preventDefault();
                 return false;
             }

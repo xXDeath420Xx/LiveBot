@@ -1,0 +1,127 @@
+<%#
+  GET /stream/bot (dashboard/routes/stream-bot.js). Locals: channels [{ id, platform, platformLabel, login, displayName,
+  live (true|false|null), liveSince, ok (true|false|null) }], devicesOnline [{ deviceId, kind, name, connectedAt }],
+  counts [{ type, label, n, total }], events [eventView], automationCount, enabledCount, grant ({ login, status } | null).
+  The live feed (#sb-feed) is filled by /js/stream-bot.js from GET /stream/bot/api/feed.
+%>
+<%- include('_head', { pageTitle: 'Overview', active: 'overview' }) %>
+<%
+  const _when = (iso) => iso ? new Date(iso).toISOString().slice(0, 16).replace('T', ' ') + ' UTC' : '';
+  const _num = (n) => Number(n || 0).toLocaleString('en-US', { maximumFractionDigits: 2 });
+  const _kindLabel = { studio: 'CertiFried Studio', overlay: 'Overlay' };
+%>
+<div class="cf-page-head">
+    <div>
+        <h1 class="cf-page-title">Stream bot</h1>
+        <p class="cf-page-sub">Your Twitch and Kick events, the automations they run, and the devices that carry out the ones on your PC.</p>
+    </div>
+    <div class="cf-page-actions">
+        <a class="btn btn-primary btn-sm" href="/stream/bot/automations/new">New automation</a>
+    </div>
+</div>
+<%- include('_tabs', { active: 'overview' }) %>
+
+<% if (!channels.length) { %>
+<div class="cf-notice is-accent">
+    <div class="cf-notice-body">
+        <span class="cf-notice-title">Start by linking a channel</span>
+        <p>Connect Twitch or Kick on the Connections page. Events from your channels show up here as they happen, and automations run on them.</p>
+    </div>
+    <a class="btn btn-primary btn-sm" href="/stream/bot/connections">Open Connections</a>
+</div>
+<% } %>
+
+<dl class="cf-kpis" aria-label="At a glance">
+    <div class="cf-kpi"><dt>Linked channels</dt><dd class="cf-kpi-value"><%= channels.length %></dd></div>
+    <div class="cf-kpi"><dt>Automations on</dt><dd class="cf-kpi-value"><%= enabledCount %></dd><dd class="cf-kpi-sub">of <%= automationCount %></dd></div>
+    <div class="cf-kpi"><dt>Devices online</dt><dd class="cf-kpi-value"><%= devicesOnline.length %></dd></div>
+    <div class="cf-kpi"><dt>Events today</dt><dd class="cf-kpi-value"><%= counts.reduce((s, c) => s + Number(c.n || 0), 0) %></dd><dd class="cf-kpi-sub">since 00:00 UTC</dd></div>
+</dl>
+
+<div class="sb-grid">
+    <section class="cf-section" aria-labelledby="sb-ch-title">
+        <header class="cf-section-head"><div><h2 class="cf-section-title" id="sb-ch-title">Channels</h2>
+            <p class="cf-section-desc">Live state comes from the latest live or offline event the bot received.</p></div></header>
+        <div class="cf-rows">
+            <% if (!channels.length) { %>
+            <div class="cf-state cf-state--compact"><p class="cf-state-title">No channels linked yet.</p></div>
+            <% } else { %>
+            <div class="cf-list">
+                <% channels.forEach((c) => { %>
+                <div class="cf-list-item">
+                    <div class="cf-list-main">
+                        <div class="cf-em"><%= c.displayName || c.login %> <span class="cf-muted">on <%= c.platformLabel %></span></div>
+                        <div class="cf-muted">
+                            <% if (c.live === true) { %>Live since <time datetime="<%= c.liveSince %>"><%= _when(c.liveSince) %></time><% } else if (c.live === false) { %>Offline since <time datetime="<%= c.liveSince %>"><%= _when(c.liveSince) %></time><% } else { %>No live or offline event yet<% } %>
+                        </div>
+                    </div>
+                    <div class="cf-list-actions">
+                        <% if (c.live === true) { %><span class="cf-pill is-ok">Live</span><% } else { %><span class="cf-pill">Offline</span><% } %>
+                        <% if (c.ok === false) { %><a class="cf-pill is-warn" href="/stream/bot/connections">Check connection</a><% } %>
+                    </div>
+                </div>
+                <% }) %>
+            </div>
+            <% } %>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="sb-dev-title">
+        <header class="cf-section-head"><div><h2 class="cf-section-title" id="sb-dev-title">Devices online</h2>
+            <p class="cf-section-desc">CertiFried Studio and overlays connected right now.</p></div></header>
+        <div class="cf-rows">
+            <% if (!devicesOnline.length) { %>
+            <div class="cf-state cf-state--compact"><p class="cf-state-title">Nothing connected.</p><p class="cf-state-text"><a href="/stream/bot/devices">Devices</a></p></div>
+            <% } else { %>
+            <div class="cf-list">
+                <% devicesOnline.forEach((d) => { %>
+                <div class="cf-list-item">
+                    <div class="cf-list-main"><div class="cf-em"><%= d.name %></div><div class="cf-muted"><%= _kindLabel[d.kind] || d.kind %>, connected <time datetime="<%= d.connectedAt %>"><%= _when(d.connectedAt) %></time></div></div>
+                    <div class="cf-list-actions"><span class="cf-pill is-ok">Online</span></div>
+                </div>
+                <% }) %>
+            </div>
+            <% } %>
+        </div>
+    </section>
+</div>
+
+<section class="cf-section" aria-labelledby="sb-today-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sb-today-title">Today</h2>
+        <p class="cf-section-desc">Events received since 00:00 UTC, test events left out. Chat counts only when chat is kept in the log.</p></div></header>
+    <div class="cf-rows">
+        <% if (!counts.length) { %>
+        <div class="cf-state cf-state--compact"><p class="cf-state-title">No events today.</p></div>
+        <% } else { %>
+        <div class="cf-table-wrap">
+            <table class="cf-table">
+                <thead><tr><th scope="col">Event</th><th scope="col" class="cf-cell-end">Count</th><th scope="col" class="cf-cell-end">Total amount</th></tr></thead>
+                <tbody>
+                    <% counts.forEach((c) => { %><tr><td><%= c.label %></td><td class="cf-cell-end"><%= _num(c.n) %></td><td class="cf-cell-end"><%= c.total == null ? '' : _num(c.total) %></td></tr><% }) %>
+                </tbody>
+            </table>
+        </div>
+        <% } %>
+    </div>
+</section>
+
+<section class="cf-section" aria-labelledby="sb-feed-title">
+    <header class="cf-section-head">
+        <div><h2 class="cf-section-title" id="sb-feed-title">Live feed</h2>
+            <p class="cf-section-desc">New events appear at the top as they arrive. The latest 20 from the log are below them.</p></div>
+        <div class="cf-section-actions"><span class="cf-status-line" id="sb-feed-state" role="status">Connecting</span><a class="btn btn-secondary btn-sm" href="/stream/bot/events">Full event log</a></div>
+    </header>
+    <div class="cf-rows">
+        <ol class="sb-feed" id="sb-feed" aria-live="polite" aria-relevant="additions" aria-label="Events, newest first">
+            <% events.forEach((e) => { %>
+            <li class="sb-feed-item">
+                <span class="sb-feed-text"><%= e.text %></span>
+                <span class="sb-feed-meta"><%= e.typeLabel %> · <%= e.platformLabel %><% if (e.test) { %> · test<% } %> · <time datetime="<%= e.occurredAt %>"><%= _when(e.occurredAt) %></time></span>
+            </li>
+            <% }) %>
+        </ol>
+        <% if (!events.length) { %><div class="cf-state cf-state--compact" id="sb-feed-empty"><p class="cf-state-title">No events yet.</p><p class="cf-state-text">Use Test on an automation to see one here.</p></div><% } %>
+    </div>
+</section>
+
+<%- include('_foot') %>

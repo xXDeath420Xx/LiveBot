@@ -3,6 +3,7 @@ import pool from '../../utils/db.js';
 import logger from '../../utils/logger.js';
 import { getTwitchUser } from '../../utils/platforms/twitch-api.js';
 import { getTwitchScheduleManager } from '../../jobs/twitch-schedule-scheduler.js';
+import { logFeatureEvent, userLabel } from '../../core/feature-log.js';
 
 export default {
   category: 'admin',
@@ -283,6 +284,17 @@ export default {
       );
 
       logger.info(`[Integrations Twitch] Created sync for ${twitchUser.login} in guild ${interaction.guild.id}`);
+      void logFeatureEvent(() => (interaction.guild), 'twitch-schedule.added', () => ({
+        title: '➕ Schedule Sync Added',
+        description: `**${twitchUser.display_name || twitchUser.login}**'s Twitch schedule will be posted in <#${channel.id}>.`,
+        fields: [
+          ['Streamer', twitchUser.login],
+          ['Channel', `<#${channel.id}>`],
+          ['Mention', mentionRole ? `<@&${mentionRole.id}>` : null],
+          ['By', userLabel(interaction.user)],
+        ],
+        thumbnail: twitchUser.profile_image_url || undefined,
+      }));
 
       const successEmbed = new EmbedBuilder()
         .setColor('#9146FF')
@@ -334,6 +346,11 @@ export default {
       await pool.execute('DELETE FROM twitch_schedule_sync_config WHERE id = ?', [sync.id]);
 
       logger.info(`[Integrations Twitch Remove] Removed sync for ${sync.username} in guild ${interaction.guild.id}`);
+      void logFeatureEvent(() => (interaction.guild), 'twitch-schedule.removed', () => ({
+        title: '🗑️ Schedule Sync Removed',
+        description: `**${sync.username}**'s Twitch schedule will no longer be posted.`,
+        fields: [['Streamer', sync.username], ['By', userLabel(interaction.user)]],
+      }));
 
       await interaction.editReply({ content: `✅ Schedule sync for **${sync.username}** has been removed.` });
 

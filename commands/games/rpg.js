@@ -4,6 +4,7 @@
  */
 import { SlashCommandBuilder } from 'discord.js';
 import logger from '../../utils/logger.js';
+import RPGLeaderboardManager from '../../core/rpg-leaderboard-manager.js';
 
 // Import handlers
 import {
@@ -29,10 +30,11 @@ import {
     handleQuest,
     handleDungeon,
     handleParty,
-    handlePvP
+    handlePvP,
+    handleJournal
 } from './rpg/handlers/index.js';
 
-export default {
+const rpgCommand = {
     data: new SlashCommandBuilder()
         .setName('rpg')
         .setDescription('D&D RPG system commands')
@@ -385,6 +387,14 @@ export default {
                 .addSubcommand(sub => sub.setName('forfeit').setDescription('Forfeit your active live duel'))
                 .addSubcommand(sub => sub.setName('stats').setDescription('View your PvP stats'))
                 .addSubcommand(sub => sub.setName('leaderboard').setDescription('View the PvP leaderboard'))
+        )
+
+        // Journal — the AI DM's persisted world memory (places, quest log, NPCs)
+        .addSubcommandGroup(group =>
+            group.setName('journal').setDescription('Your adventure journal: map, quest log and people met')
+                .addSubcommand(sub => sub.setName('map').setDescription('Places you have discovered and where they lead'))
+                .addSubcommand(sub => sub.setName('quests').setDescription('Your campaign\'s quest log'))
+                .addSubcommand(sub => sub.setName('npcs').setDescription('NPCs your party has met'))
         ),
 
     async execute(interaction) {
@@ -466,6 +476,9 @@ export default {
                 case 'pvp':
                     await handlePvP(interaction, subcommand, characterManager);
                     break;
+                case 'journal':
+                    await handleJournal(interaction, subcommand, characterManager);
+                    break;
                 default:
                     await interaction.reply({ content: 'Unknown command group.', ephemeral: true });
             }
@@ -497,3 +510,12 @@ export default {
 
     category: 'games'
 };
+
+// Achievements earned while a /rpg command runs are announced to the player afterwards in one
+// ephemeral follow-up (RPGLeaderboardManager.withAchievementNotices).
+const runRpgCommand = rpgCommand.execute;
+rpgCommand.execute = function execute(interaction) {
+    return RPGLeaderboardManager.withAchievementNotices(interaction, () => runRpgCommand.call(rpgCommand, interaction));
+};
+
+export default rpgCommand;

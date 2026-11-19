@@ -1,6 +1,33 @@
 import pool from '../utils/db.js';
 import logger from '../utils/logger.js';
 import { EmbedBuilder } from 'discord.js';
+import { dueAnnouncements, formatDuration } from './schedule-announcement-logic.js';
+import { parseLocalDateTime, localToUtc, isValidTimeZone } from './recurrence-rule.js';
+
+/**
+ * A schedule's start time typed as "YYYY-MM-DD HH:MM" in a time zone (UTC when none is given), as
+ * the UTC instant that schedule_schedules.start_time holds.
+ * @returns {{ ok: true, date: Date, zone: string } | { ok: false, error: string }}
+ */
+export function parseScheduleStart(input, zone = 'UTC') {
+  const tz = zone || 'UTC';
+  if (!isValidTimeZone(tz)) return { ok: false, error: `Unknown time zone \`${tz}\`. Pick one from the list, e.g. \`America/New_York\`.` };
+  const p = parseLocalDateTime(input);
+  if (!p) return { ok: false, error: 'Write the start as `YYYY-MM-DD HH:MM` (24-hour), for example `2026-12-05 18:00`.' };
+  return { ok: true, date: new Date(localToUtc(p.year, p.month, p.day, p.hour, p.minute, tz)), zone: tz };
+}
+
+/**
+ * Event slugs are the public web address (/schedule/<slug>, looked up without a server), so one slug
+ * belongs to one event across every server and personal schedule. migrations/446_schedule_event_slug_unique.js adds the unique key.
+ */
+export async function isEventSlugTaken(slug, exceptEventId = null) {
+  const [rows] = await pool.execute(
+    'SELECT id FROM schedule_events WHERE slug = ? AND id <> ? LIMIT 1',
+    [slug, exceptEventId ?? 0]
+  );
+  return rows.length > 0;
+}
 
 class ScheduleManager {
   constructor(client) {
@@ -348,23 +375,165 @@ class ScheduleManager {
   async updateAllTickers() {
     try {
       const [linkedChannels] = await pool.execute(
-        `SELECT lc.*, e.name as event_name, e.slug as event_slug
+        `SELECT lc.*, e.name as event_name, e.slug as event_slug, e.twitch_channel as event_twitch
          FROM schedule_linked_channels lc
          JOIN schedule_events e ON lc.event_id = e.id
          WHERE e.is_active = TRUE`
       );
 
       for (const link of linkedChannels) {
-        await this.updateTicker(link).catch(err => {
-          logger.error('[ScheduleManager] Error updating ticker', {
-            channelId: link.channel_id,
-            error: err.message
+        // Every bot client runs this loop over every link. Only the client that owns the guild
+        // acts: a second bot "editing" a message it did not send fails, posts a fresh ticker, and
+        // the two then fight over message_id every minute.
+        if (!this.ownsGuild(link.guild_id)) continue;
+
+        const type = link.update_type || 'ticker';
+        if (type === 'ticker' || type === 'full') {
+          await this.updateTicker(link).catch(err => {
+            logger.error('[ScheduleManager] Error updating ticker', {
+              channelId: link.channel_id,
+              error: err.message
+            });
           });
-        });
+        }
+        if (type === 'announcements' || type === 'full') {
+          await this.processAnnouncements(link).catch(err => {
+            logger.error('[ScheduleManager] Error posting schedule announcements', {
+              channelId: link.channel_id,
+              linkId: link.id,
+              error: err.message
+            });
+          });
+        }
       }
     } catch (error) {
       logger.error('[ScheduleManager] Error in updateAllTickers', { error: error.message });
     }
+  }
+
+  /** True when this client is the one botManager routes the guild to (or there is no manager). */
+  ownsGuild(guildId) {
+    if (!this.client.guilds.cache.has(guildId)) return false;
+    const owner = globalThis.botManager?.getClientForGuild?.(guildId);
+    return !owner || owner === this.client;
+  }
+
+  // ==================== ANNOUNCEMENTS ====================
+
+  /**
+   * "Starting soon" / "Now playing" / "Completed" posts for an announcements link. Each
+   * (link, run, type) is claimed in schedule_announcements before sending, so it goes out once
+   * no matter how many clients or restarts see it due. See core/schedule-announcement-logic.js
+   * for the timing rules.
+   */
+  async processAnnouncements(link) {
+    const guild = this.client.guilds.cache.get(link.guild_id);
+    if (!guild) return;
+
+    const [schedules] = link.schedule_id
+      ? await pool.execute('SELECT * FROM schedule_schedules WHERE id = ? AND event_id = ?', [link.schedule_id, link.event_id])
+      : await pool.execute('SELECT * FROM schedule_schedules WHERE event_id = ? AND hidden = FALSE', [link.event_id]);
+    if (!schedules.length) return;
+
+    const [items] = await pool.query(
+      'SELECT * FROM schedule_items WHERE schedule_id IN (?) ORDER BY schedule_id, position',
+      [schedules.map(s => s.id)]
+    );
+    if (!items.length) return;
+
+    const due = dueAnnouncements({
+      schedules,
+      items,
+      announceBeforeMinutes: link.announce_before_minutes ?? 5,
+      nowMs: Date.now()
+    });
+    if (!due.length) return;
+
+    let channel = null;
+    for (const entry of due) {
+      const [claim] = await pool.execute(
+        'INSERT IGNORE INTO schedule_announcements (linked_channel_id, item_id, announcement_type) VALUES (?, ?, ?)',
+        [link.id, entry.item.id, entry.type]
+      );
+      if (!claim.affectedRows) continue; // already announced
+
+      if (!channel) {
+        channel = await guild.channels.fetch(link.channel_id).catch(() => null);
+        if (!channel?.isTextBased?.()) {
+          logger.warn('[ScheduleManager] Announcement channel missing', { guildId: link.guild_id, channelId: link.channel_id });
+          return; // claims stay: the channel is gone, retrying every minute would only spam the log
+        }
+      }
+
+      const scheduleName = schedules.length > 1
+        ? schedules.find(s => String(s.id) === String(entry.item.schedule_id))?.name
+        : null;
+      const payload = this.buildAnnouncement(link, entry, scheduleName);
+      try {
+        const msg = await channel.send(payload);
+        await pool.execute(
+          'UPDATE schedule_announcements SET message_id = ? WHERE linked_channel_id = ? AND item_id = ? AND announcement_type = ?',
+          [msg.id, link.id, entry.item.id, entry.type]
+        );
+        logger.info('[ScheduleManager] Schedule announcement posted', {
+          guildId: link.guild_id, channelId: link.channel_id, itemId: entry.item.id, type: entry.type
+        });
+      } catch (err) {
+        logger.error('[ScheduleManager] Schedule announcement failed', {
+          guildId: link.guild_id, channelId: link.channel_id, itemId: entry.item.id, type: entry.type,
+          error: err.message, code: err.code
+        });
+        // Transient failures release the claim so the next minute retries while the post is still
+        // timely; missing access / unknown channel keep it so a broken link stays quiet.
+        if (![10003, 50001, 50013].includes(err.code)) {
+          await pool.execute(
+            'DELETE FROM schedule_announcements WHERE linked_channel_id = ? AND item_id = ? AND announcement_type = ? AND message_id IS NULL',
+            [link.id, entry.item.id, entry.type]
+          );
+        } else {
+          return;
+        }
+      }
+    }
+  }
+
+  buildAnnouncement(link, { item, type, startMs }, scheduleName = null) {
+    const titles = {
+      starting_soon: 'Starting soon',
+      now_playing: 'Now playing',
+      completed: 'Run complete'
+    };
+    const colors = { starting_soon: 0xF1C40F, now_playing: 0x2ECC71, completed: 0x5865F2 };
+
+    const embed = new EmbedBuilder()
+      .setColor(colors[type])
+      .setAuthor({ name: `${link.event_name}${scheduleName ? ` — ${scheduleName}` : ''}`.slice(0, 256) })
+      .setTitle(`${titles[type]}: ${item.game_name}`.slice(0, 256))
+      .setTimestamp();
+
+    const lines = [];
+    if (item.category) lines.push(`**Category:** ${item.category}`);
+    if (item.runners) lines.push(`**Runner(s):** ${item.runners}`);
+    if (Number(item.estimate_seconds) > 0) lines.push(`**Estimate:** ${formatDuration(item.estimate_seconds)}`);
+    if (type === 'starting_soon' && startMs) {
+      lines.push(`**Starts:** <t:${Math.floor(startMs / 1000)}:R> (<t:${Math.floor(startMs / 1000)}:t>)`);
+    }
+    if (type === 'completed' && item.actual_start && item.actual_end) {
+      const took = (new Date(item.actual_end).getTime() - new Date(item.actual_start).getTime()) / 1000;
+      if (took > 0) lines.push(`**Time:** ${formatDuration(took)}`);
+    }
+    if (type !== 'completed' && link.event_twitch) {
+      lines.push(`**Watch:** https://twitch.tv/${String(link.event_twitch).replace(/^.*twitch\.tv\//i, '')}`);
+    }
+    if (lines.length) embed.setDescription(lines.join('\n').slice(0, 4000));
+
+    // Ping only for the two posts people act on; a "completed" ping is noise.
+    const ping = link.role_to_ping && type !== 'completed' ? link.role_to_ping : null;
+    return {
+      content: ping ? `<@&${ping}>` : undefined,
+      embeds: [embed],
+      allowedMentions: { roles: ping ? [ping] : [] }
+    };
   }
 
   async updateTicker(link) {

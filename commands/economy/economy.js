@@ -5,6 +5,13 @@ import * as socialHandlers from './economy-social-handler.js';
 import * as gambleHandlers from './economy-gamble-handler.js';
 import * as shopHandlers from './economy-shop-handler.js';
 import * as petHandlers from './economy-pet-handler.js';
+import * as heistHandlers from './economy-heist-handler.js';
+import * as tradeHandlers from './economy-trade-handler.js';
+import economyManager, { ECONOMY_DISABLED_MESSAGE } from '../../core/economy-manager.js';
+import { TARGETS, MIN_CREW, MAX_CREW, MAX_WINDOW_MINUTES } from '../../core/heist-odds.js';
+
+// Admin tools keep working while the economy is switched off, so it can be set up first.
+const ADMIN_SUBCOMMANDS = new Set(['shop:create', 'shop:delete', 'shop:edit', 'social:give', 'social:remove']);
 
 const { PET_TYPES } = petHandlers;
 
@@ -12,7 +19,7 @@ export default {
     category: 'economy',
     data: new SlashCommandBuilder()
         .setName('economy')
-        .setDescription('Economy system - earn, bank, gamble, shop, and pets')
+        .setDescription('Economy system - earn, bank, gamble, shop, pets, heists and trades')
 
         // ── Earn group ──
         .addSubcommandGroup(group =>
@@ -352,13 +359,124 @@ export default {
                     sub.setName('sleep')
                         .setDescription('Let your pet rest')
                 )
+        )
+
+        // ── Heist group ──
+        .addSubcommandGroup(group =>
+            group
+                .setName('heist')
+                .setDescription('Team up for a heist - stake coins, split the score or lose it all')
+                .addSubcommand(sub =>
+                    sub.setName('start')
+                        .setDescription('Plan a heist and put in your stake - others join before the crew leaves')
+                        .addStringOption(opt =>
+                            opt.setName('target').setDescription('What to hit (harder targets pay more but succeed less)').setRequired(true)
+                                .addChoices(...Object.values(TARGETS).map(t => ({
+                                    name: `${t.name} (${t.key}, pays x${t.multiplier})`,
+                                    value: t.key
+                                })))
+                        )
+                        .addIntegerOption(opt =>
+                            opt.setName('stake').setDescription('Your stake (taken from your wallet and held until the heist resolves)').setRequired(true).setMinValue(1)
+                        )
+                        .addIntegerOption(opt =>
+                            opt.setName('crew').setDescription(`Most members allowed (${MIN_CREW}-${MAX_CREW}, default 6)`).setMinValue(MIN_CREW).setMaxValue(MAX_CREW)
+                        )
+                        .addIntegerOption(opt =>
+                            opt.setName('minutes').setDescription(`Minutes before the crew leaves (1-${MAX_WINDOW_MINUTES}, default 3)`).setMinValue(1).setMaxValue(MAX_WINDOW_MINUTES)
+                        )
+                )
+                .addSubcommand(sub =>
+                    sub.setName('join')
+                        .setDescription('Join the heist being planned with a stake')
+                        .addIntegerOption(opt =>
+                            opt.setName('stake').setDescription('Your stake (taken from your wallet and held until the heist resolves)').setRequired(true).setMinValue(1)
+                        )
+                )
+                .addSubcommand(sub =>
+                    sub.setName('status')
+                        .setDescription('See the heist being planned, or the targets you can hit')
+                )
+                .addSubcommand(sub =>
+                    sub.setName('cancel')
+                        .setDescription('Call off the heist being planned and refund every stake (host or server manager)')
+                )
+                .addSubcommand(sub =>
+                    sub.setName('stats')
+                        .setDescription('Heist record for you or another member')
+                        .addUserOption(opt =>
+                            opt.setName('user').setDescription('Member to look up (leave empty for yourself)')
+                        )
+                )
+                .addSubcommand(sub =>
+                    sub.setName('leaderboard')
+                        .setDescription('Most profitable heisters on this server')
+                )
+        )
+
+        // ── Trade group ──
+        .addSubcommandGroup(group =>
+            group
+                .setName('trade')
+                .setDescription('Trade coins and shop items with other members')
+                .addSubcommand(sub =>
+                    sub.setName('offer')
+                        .setDescription('Offer a trade - they can accept, decline or counter')
+                        .addUserOption(opt =>
+                            opt.setName('user').setDescription('Who to trade with').setRequired(true)
+                        )
+                        .addIntegerOption(opt =>
+                            opt.setName('coins').setDescription('Coins you give').setMinValue(0)
+                        )
+                        .addIntegerOption(opt =>
+                            opt.setName('item').setDescription('A shop item you give (see /economy shop inventory)').setMinValue(1).setAutocomplete(true)
+                        )
+                        .addIntegerOption(opt =>
+                            opt.setName('quantity').setDescription('How many of that item (default 1)').setMinValue(1).setMaxValue(1000)
+                        )
+                        .addIntegerOption(opt =>
+                            opt.setName('want_coins').setDescription('Coins you want from them').setMinValue(0)
+                        )
+                        .addIntegerOption(opt =>
+                            opt.setName('want_item').setDescription('A shop item you want from them').setMinValue(1).setAutocomplete(true)
+                        )
+                        .addIntegerOption(opt =>
+                            opt.setName('want_quantity').setDescription('How many of that item (default 1)').setMinValue(1).setMaxValue(1000)
+                        )
+                )
+                .addSubcommand(sub =>
+                    sub.setName('list')
+                        .setDescription('Your open trade offers')
+                )
+                .addSubcommand(sub =>
+                    sub.setName('history')
+                        .setDescription('Your recent finished trades')
+                )
+                .addSubcommand(sub =>
+                    sub.setName('cancel')
+                        .setDescription('Withdraw or decline an open trade')
+                        .addIntegerOption(opt =>
+                            opt.setName('id').setDescription('Trade ID (see /economy trade list)').setRequired(true).setMinValue(1)
+                        )
+                )
         ),
+
+    async autocomplete(interaction) {
+        const group = interaction.options.getSubcommandGroup(false);
+        if (group === 'trade') return tradeHandlers.autocomplete(interaction);
+        return interaction.respond([]);
+    },
 
     async execute(interaction) {
         const group = interaction.options.getSubcommandGroup();
         const subcommand = interaction.options.getSubcommand();
 
         try {
+            if (!ADMIN_SUBCOMMANDS.has(`${group}:${subcommand}`)
+                && await economyManager.economyStatus(interaction.guildId) === 'disabled') {
+                return interaction.reply({ content: ECONOMY_DISABLED_MESSAGE, ephemeral: true });
+            }
+
             switch (group) {
                 case 'earn':
                     switch (subcommand) {
@@ -421,6 +539,26 @@ export default {
                         case 'feed': return await petHandlers.handleFeed(interaction);
                         case 'play': return await petHandlers.handlePlay(interaction);
                         case 'sleep': return await petHandlers.handleSleep(interaction);
+                    }
+                    break;
+
+                case 'heist':
+                    switch (subcommand) {
+                        case 'start': return await heistHandlers.handleStart(interaction);
+                        case 'join': return await heistHandlers.handleJoin(interaction);
+                        case 'status': return await heistHandlers.handleStatus(interaction);
+                        case 'cancel': return await heistHandlers.handleCancel(interaction);
+                        case 'stats': return await heistHandlers.handleStats(interaction);
+                        case 'leaderboard': return await heistHandlers.handleLeaderboard(interaction);
+                    }
+                    break;
+
+                case 'trade':
+                    switch (subcommand) {
+                        case 'offer': return await tradeHandlers.handleOffer(interaction);
+                        case 'list': return await tradeHandlers.handleList(interaction);
+                        case 'history': return await tradeHandlers.handleHistory(interaction);
+                        case 'cancel': return await tradeHandlers.handleCancel(interaction);
                     }
                     break;
             }

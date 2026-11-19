@@ -1,6 +1,7 @@
 import logger from '../utils/logger.js';
 import pool from '../utils/db.js';
 import { EmbedBuilder } from 'discord.js';
+import { getConfig } from '../core/feature-config.js';
 
 const REMINDER_TYPES = {
     water: { emoji: '', name: 'Water Your Plants', color: '#3498DB' },
@@ -29,8 +30,11 @@ async function checkGrowReminders(client) {
             params.push(client.botId);
         }
 
+        // message = custom text, frequency_hours = repeat interval (NULL = one-time),
+        // channel_id NULL = deliver by DM.
         const [reminders] = await pool.execute(
-            `SELECT gr.*, gj.title as journal_title, gj.strain_name
+            `SELECT gr.*, gr.message AS custom_message, gr.frequency_hours AS repeat_interval_hours,
+                    gj.title as journal_title, gj.strain_name
              FROM grow_reminders gr
              LEFT JOIN grow_journals gj ON gr.journal_id = gj.id
              WHERE gr.is_active = TRUE AND gr.next_reminder <= NOW() ${guildFilter}`,
@@ -104,29 +108,34 @@ async function sendGrowReminder(reminder, client) {
             const repeatText = reminder.repeat_interval_hours === 24 ? 'daily' :
                               reminder.repeat_interval_hours === 168 ? 'weekly' :
                               `every ${reminder.repeat_interval_hours} hours`;
-            embed.setFooter({ text: `Repeats ${repeatText} | Use /growreminder to manage` });
+            embed.setFooter({ text: `Repeats ${repeatText} | Use /grow reminder to manage` });
         } else {
-            embed.setFooter({ text: 'One-time reminder | Use /growreminder to set more' });
+            embed.setFooter({ text: 'One-time reminder | Use /grow reminder set to set more' });
         }
 
-        if (reminder.use_dm) {
-            await user.send({ embeds: [embed] });
-            logger.info(`[GrowReminder] Sent DM reminder to user ${user.id}`);
-        } else if (reminder.channel_id) {
+        if (reminder.channel_id) {
             const channel = await client.channels.fetch(reminder.channel_id).catch(() => null);
             if (channel && channel.isTextBased()) {
                 await channel.send({ content: `<@${reminder.user_id}>`, embeds: [embed] });
                 logger.info(`[GrowReminder] Sent channel reminder to ${channel.id}`);
             } else {
-                // Fallback to DM
-                await user.send({ embeds: [embed] });
-                logger.info(`[GrowReminder] Channel not found, sent DM to ${user.id}`);
+                // The channel is gone. Fall back to a DM only if the server allows reminder DMs
+                // (Grow Toolkit page, "Send reminders by DM").
+                const cfg = await getConfig('grow', reminder.guild_id);
+                const dmOk = cfg.reminder_dm === undefined || cfg.reminder_dm === null || cfg.reminder_dm === true || cfg.reminder_dm === 1 || cfg.reminder_dm === '1';
+                if (dmOk) {
+                    await user.send({ embeds: [embed] });
+                    logger.info(`[GrowReminder] Channel not found, sent DM to ${user.id}`);
+                } else {
+                    logger.warn(`[GrowReminder] Channel ${reminder.channel_id} not found and reminder DMs are off in ${reminder.guild_id}; reminder ${reminder.id} not delivered`);
+                }
             }
         } else {
             await user.send({ embeds: [embed] });
+            logger.info(`[GrowReminder] Sent DM reminder to user ${user.id}`);
         }
     } catch (error) {
-        logger.error(`[GrowReminder] Failed to send reminder: ${error.message}`);
+        logger.error(`[GrowReminder] Failed to send reminder ${reminder.id}: ${error.message}`);
     }
 }
 

@@ -65,7 +65,7 @@ export const QUESTIONS = Object.freeze([
     q: 'Your OwO progress',
     // Cowoncy WAS the one unrecoverable piece — a balance only exists in a channel if somebody runs
     // `owo balance`, and nobody had. Now they have, so it is recovered: 1,671,101, read from OwO's
-    // own reply and already imported. Do not tell her it is lost; it is not.
+    // own reply and already imported. Do not tell the owner it is lost; it is not.
     why: 'All of it carries over. Level 29, your 30,491 XP, your three team animals at level 26 — and '
        + 'your 1,671,101 cowoncy, which we read from OwO\'s own reply when you checked your balance. '
        + 'Everyone else starts with 15,000 cowoncy so nobody begins on nothing.',
@@ -94,7 +94,7 @@ export const QUESTIONS = Object.freeze([
     q: 'Link your Twitch, so your VIPs and mods get roles here',
     // VIPs and moderators only. SUBSCRIBER roles are Discord's own job — its native Twitch
     // integration grants them itself, more reliably than anything we could bolt on, and without
-    // handing us a token. Point her at that rather than building a worse copy of it.
+    // handing us a token. Point them at that rather than building a worse copy of it.
     why: 'If you connect your Twitch, anyone you make a VIP or a mod on stream automatically gets the '
        + 'matching role in Discord — and loses it if you take it away on Twitch. It keeps itself in step, '
        + 'so you never hand out those Discord roles by hand again. '
@@ -114,7 +114,7 @@ export const QUESTIONS = Object.freeze([
     section: 'Roles',
     // The other half of `twitch_roles`. Linking HER Twitch tells us who the VIPs and mods are; it
     // does not tell us which Discord account each of them is. Without a way for members to link
-    // themselves, she would connect her account and watch nothing happen — which reads as broken.
+    // themselves, the owner would connect their account and watch nothing happen — which reads as broken.
     q: 'Give your members a way to link their own Twitch',
     why: 'This is the other half of the last question, and it is the half that actually makes it work. '
        + 'Linking your Twitch tells us who your VIPs and mods are — it does not tell us which Discord '
@@ -216,19 +216,19 @@ export const QUESTIONS = Object.freeze([
 /**
  * Everything else the bot can do, offered as a menu.
  *
- * The questions above are about REPLACING what she already has. This is the opposite: things her
- * server has never had, that she can simply switch on. Nothing here is implied by the takeover and
- * nothing here happens unless she asks for it.
+ * The questions above are about REPLACING what the server already has. This is the opposite: things it
+ * has never had, that the owner can simply switch on. Nothing here is implied by the takeover and
+ * nothing here happens unless they ask for it.
  *
  * Three answers, and the third one matters most: 'explain' means "I don't know what this is". A menu
  * that only offers yes/no quietly punishes not knowing, and the honest answer to half of these — for
  * anyone who has not run them — is "what does that actually do in practice?".
  *
- * `have` marks the handful already covered by the takeover, so she can see them without being asked
- * to choose something she is already getting.
+ * `have` marks the handful already covered by the takeover, so the owner can see them without being
+ * asked to choose something they are already getting.
  */
 export const CATALOGUE = Object.freeze([
-  // ── Keeping the server safe. She currently has almost none of this. ──────────
+  // ── Keeping the server safe. Most servers arrive with almost none of this. ───
   { key: 'feat_antinuke',     group: 'Keeping the server safe', name: 'Anti-nuke',
     what: 'If someone with power goes rogue — mass-deleting channels, mass-banning — it stops them mid-way and strips their roles.' },
   { key: 'feat_antiraid',     group: 'Keeping the server safe', name: 'Raid protection',
@@ -336,6 +336,19 @@ export const CATALOGUE = Object.freeze([
 ]);
 
 /** The answers a catalogue row will accept. Anything else is a rejected write. */
+/**
+ * The three free-text catch-alls, on their own.
+ *
+ * `core/takeover-questionnaire.js` builds a per-guild question set from that guild's own scan and
+ * appends these to every one of them — a generated set only ever asks about what we already thought
+ * to look for, and the whole point of a free-text box is to catch what we did not.
+ *
+ * Derived from QUESTIONS rather than duplicated, so editing the wording above changes both the
+ * static set and every generated one. (This export was referenced by the generator before it
+ * existed, which took the entire takeover API router down with a link error on import.)
+ */
+export const QCC = Object.freeze(QUESTIONS.filter(q => q.key.startsWith('qcc_')));
+
 export const CATALOGUE_VALUES = Object.freeze(['yes', 'no', 'explain']);
 
 /** Fast lookups for the save endpoint. Built once; neither list changes at runtime. */
@@ -350,6 +363,37 @@ export const MAX_NOTE = 2000;
  * Returns a reason string when it is not. A key we did not author, or a value that is not one of the
  * options we offered, is rejected outright — the form is public, so the server must not trust it.
  */
+/**
+ * Validate an answer against ONE GUILD'S OWN generated question set.
+ *
+ * This is the security boundary for a public, unauthenticated form, and it has to be the same set
+ * the page was served. `validateAnswer` below checks against the STATIC list, which is a different
+ * set entirely — so a server whose questions were generated from its own scan could not save a
+ * single one of them, and the only keys it WOULD accept were questions that server was never asked.
+ *
+ * The set is authored server-side from the scan and persisted per guild, so it is never client
+ * input; see core/takeover-questionnaire.js.
+ *
+ * @param {{decisions:Array, catalogue:Array}} set  the guild's generated questionnaire
+ */
+export function validateAnswerFor(set, key, value, note) {
+  const q = (set?.decisions ?? []).find(x => x.key === key)
+    ?? (set?.catalogue ?? []).find(x => x.key === key);
+  if (!q) return 'unknown question';
+
+  // A catalogue row has no `options` — its answers are the fixed three.
+  const allowed = q.options?.length ? q.options.map(o => o.v) : CATALOGUE_VALUES;
+
+  if (value !== null && value !== undefined && value !== '') {
+    if (!allowed.includes(value)) return 'not one of the offered answers';
+  }
+  if (note != null && typeof note !== 'string') return 'note must be text';
+  if (typeof note === 'string' && note.length > MAX_NOTE) return `note is longer than ${MAX_NOTE} characters`;
+
+  return null;
+}
+
+/** The static fallback set, for a guild that has never been scanned. */
 export function validateAnswer(key, value, note) {
   const q = BY_KEY.get(key) ?? CAT_BY_KEY.get(key);
   if (!q) return 'unknown question';
@@ -360,7 +404,7 @@ export function validateAnswer(key, value, note) {
   if (value !== null && value !== undefined && value !== '') {
     if (!allowed.includes(value)) return 'not one of the offered answers';
   }
-  // A note is accepted on EVERY question, even ones that do not prompt for one. If she wants to
+  // A note is accepted on EVERY question, even ones that do not prompt for one. If the owner wants to
   // explain an answer we did not invite an explanation for, that explanation is the most valuable
   // thing on the page and refusing it on a technicality would be absurd.
   if (note != null && typeof note !== 'string') return 'note must be text';
@@ -369,4 +413,4 @@ export function validateAnswer(key, value, note) {
   return null;
 }
 
-export default { QUESTIONS, CATALOGUE, CATALOGUE_VALUES, validateAnswer, MAX_NOTE };
+export default { QUESTIONS, CATALOGUE, QCC, CATALOGUE_VALUES, validateAnswer, validateAnswerFor, MAX_NOTE };

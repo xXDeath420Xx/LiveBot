@@ -25,7 +25,7 @@ export async function researchTick() {
         `);
 
         if (readyResearch.length > 0) {
-            logger.info('[ResearchTick] Found completed research', { count: readyResearch.length });
+            logger.debug('[ResearchTick] Found completed research', { count: readyResearch.length });
 
             for (const research of readyResearch) {
                 try {
@@ -38,7 +38,7 @@ export async function researchTick() {
 
                     completedCount++;
 
-                    logger.info('[ResearchTick] Auto-completed research', {
+                    logger.debug('[ResearchTick] Auto-completed research', {
                         playerId: research.player_id,
                         researchName: research.research_name
                     });
@@ -66,7 +66,7 @@ export async function researchTick() {
         `);
 
         if (readyTraining.length > 0) {
-            logger.info('[ResearchTick] Found completed training', { count: readyTraining.length });
+            logger.debug('[ResearchTick] Found completed training', { count: readyTraining.length });
 
             for (const training of readyTraining) {
                 const conn = await pool.getConnection();
@@ -128,7 +128,7 @@ export async function researchTick() {
                     // Invalidate bonus cache so new worker bonuses apply immediately
                     invalidateBonusCache(training.player_id);
 
-                    logger.info('[ResearchTick] Auto-completed worker training', {
+                    logger.debug('[ResearchTick] Auto-completed worker training', {
                         playerId: training.player_id,
                         workerName: training.worker_name,
                         traitName: training.trait_name,
@@ -148,7 +148,7 @@ export async function researchTick() {
 
         const duration = Date.now() - startTime;
         if (completedCount > 0 || readyTraining.length > 0) {
-            logger.info('[ResearchTick] Completed', {
+            logger.debug('[ResearchTick] Completed', {
                 researchCompleted: completedCount,
                 trainingCompleted: readyTraining.length,
                 durationMs: duration

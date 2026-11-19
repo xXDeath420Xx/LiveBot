@@ -1,59 +1,68 @@
+<%#
+  Core settings: the server timezone and prefix commands (POST update-core-settings). Built on the
+  settings-row kit (cf-settings.css); field names and ids are unchanged. Controls that had no id
+  keep none and are named by aria-labelledby.
+%>
+<style>
+    #core-settings-form .core-prefix-input { font-family: var(--cf-mono); text-align: center; }
+</style>
+<%
+    const currentTz = (settings && settings.timezone) ? settings.timezone : 'UTC';
+    let currentTimeStr = '';
+    try {
+        // Try IANA timezone first (handles DST automatically)
+        const nowUtc = new Date();
+        const fmt = new Intl.DateTimeFormat('en-US', {
+            timeZone: currentTz,
+            weekday: 'long', month: 'short', day: 'numeric',
+            hour: 'numeric', minute: '2-digit', hour12: true
+        });
+        currentTimeStr = fmt.format(nowUtc);
+    } catch {
+        // Legacy UTC±N fallback
+        const tzMatch = currentTz.match(/UTC([+-])(\d+)(?::(\d+))?/);
+        const offsetSign = tzMatch ? (tzMatch[1] === '-' ? -1 : 1) : 1;
+        const offsetH = tzMatch ? parseInt(tzMatch[2], 10) : 0;
+        const offsetM = tzMatch && tzMatch[3] ? parseInt(tzMatch[3], 10) : 0;
+        const offsetMs = offsetSign * ((offsetH * 3600000) + (offsetM * 60000));
+        const nowUtc = new Date();
+        const localMs = nowUtc.getTime() + (nowUtc.getTimezoneOffset() * 60000) + offsetMs;
+        const localDate = new Date(localMs);
+        const hours = localDate.getHours();
+        const minutes = localDate.getMinutes().toString().padStart(2, '0');
+        const ampm = hours >= 12 ? 'PM' : 'AM';
+        const h12 = hours % 12 || 12;
+        const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        currentTimeStr = days[localDate.getDay()] + ', ' + months[localDate.getMonth()] + ' ' + localDate.getDate() + ' — ' + h12 + ':' + minutes + ' ' + ampm;
+    }
+%>
 <div class="page-section">
     <div class="page-section-header">
         <div>
             <div class="page-section-title">
-                <i class="fas fa-cog"></i>
-                <span>Core Settings</span>
-            </div>
-            <div class="page-section-subtitle">
-                Configure essential bot settings for this server
+                <i class="fas fa-cog" aria-hidden="true"></i>
+                <span>Core settings</span>
             </div>
         </div>
     </div>
 
     <form id="core-settings-form" action="/manage/<%= guild.id %>/update-core-settings" method="POST">
-        <div style="margin-bottom: var(--spacing-6);">
-            <div>
-                <label class="form-label">Timezone</label>
-                <%
-                    const currentTz = (settings && settings.timezone) ? settings.timezone : 'UTC';
-                    let currentTimeStr = '';
-                    try {
-                        // Try IANA timezone first (handles DST automatically)
-                        const nowUtc = new Date();
-                        const fmt = new Intl.DateTimeFormat('en-US', {
-                            timeZone: currentTz,
-                            weekday: 'long', month: 'short', day: 'numeric',
-                            hour: 'numeric', minute: '2-digit', hour12: true
-                        });
-                        currentTimeStr = fmt.format(nowUtc);
-                    } catch {
-                        // Legacy UTC±N fallback
-                        const tzMatch = currentTz.match(/UTC([+-])(\d+)(?::(\d+))?/);
-                        const offsetSign = tzMatch ? (tzMatch[1] === '-' ? -1 : 1) : 1;
-                        const offsetH = tzMatch ? parseInt(tzMatch[2], 10) : 0;
-                        const offsetM = tzMatch && tzMatch[3] ? parseInt(tzMatch[3], 10) : 0;
-                        const offsetMs = offsetSign * ((offsetH * 3600000) + (offsetM * 60000));
-                        const nowUtc = new Date();
-                        const localMs = nowUtc.getTime() + (nowUtc.getTimezoneOffset() * 60000) + offsetMs;
-                        const localDate = new Date(localMs);
-                        const hours = localDate.getHours();
-                        const minutes = localDate.getMinutes().toString().padStart(2, '0');
-                        const ampm = hours >= 12 ? 'PM' : 'AM';
-                        const h12 = hours % 12 || 12;
-                        const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-                        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-                        currentTimeStr = days[localDate.getDay()] + ', ' + months[localDate.getMonth()] + ' ' + localDate.getDate() + ' — ' + h12 + ':' + minutes + ' ' + ampm;
-                    }
-                %>
-                <div style="display: flex; align-items: center; gap: var(--spacing-3); padding: var(--spacing-3); background: var(--color-dark-700); border-radius: var(--radius-md); margin-bottom: var(--spacing-3);">
-                    <i class="fas fa-clock" style="color: var(--accent-purple); font-size: var(--font-size-lg);"></i>
-                    <div>
-                        <div style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: var(--color-text-primary);"><%= currentTimeStr %></div>
-                        <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">Current server time (<%= currentTz %>)</div>
-                    </div>
+        <section class="cf-section" aria-labelledby="core-time-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="core-time-title">Time</h2>
+                    <p class="cf-section-desc">Used for scheduled announcements, stat display clocks and other time-based features.</p>
                 </div>
-                <select class="form-select" name="timezone">
+            </header>
+            <div class="cf-rows">
+                <div class="cf-row cf-row--wide">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" id="core-timezone-label" for="cfk-core-timezone">Timezone</label>
+                        <p class="cf-row-desc" id="core-timezone-desc">Real timezone names, so Daylight Saving Time is handled automatically. Server time now: <span class="cf-em"><%= currentTimeStr %></span> (<%= currentTz %>).</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <select class="form-select" id="cfk-core-timezone" name="timezone" aria-describedby="core-timezone-desc">
                     <%
                     const tzGroups = {
                         'North America': [
@@ -121,6 +130,8 @@
                     };
                     %>
                     <option value="UTC" <%= !currentTz || currentTz === 'UTC' ? 'selected' : '' %>>UTC</option>
+                    <% const tzListed = currentTz === 'UTC' || Object.values(tzGroups).some(zones => zones.some(z => z.value === currentTz)); %>
+                    <% if (!tzListed) { %><option value="<%= currentTz %>" selected>Current: <%= currentTz %></option><% } %>
                     <% Object.entries(tzGroups).forEach(([group, zones]) => { %>
                     <optgroup label="<%= group %>">
                         <% zones.forEach(tz => { %>
@@ -128,122 +139,102 @@
                         <% }); %>
                     </optgroup>
                     <% }); %>
-                </select>
-                <div class="form-help">Select timezone for scheduled announcements, stat display clocks, and time-based features. Uses real timezone names so Daylight Saving Time is handled automatically.</div>
-            </div>
-        </div>
-
-        <!-- Prefix Commands Section -->
-        <div style="border-top: 1px solid var(--color-border); padding-top: var(--spacing-6); margin-top: var(--spacing-4); margin-bottom: var(--spacing-6);">
-            <div style="margin-bottom: var(--spacing-4);">
-                <h3 style="font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin: 0 0 var(--spacing-1) 0;">
-                    <i class="fas fa-exclamation" style="margin-right: var(--spacing-2); color: var(--color-brand);"></i>
-                    Prefix Commands
-                </h3>
-                <div class="form-help" style="margin-top: 0;">Allow users to run commands with a text prefix (e.g. !play, !ban) instead of slash commands</div>
-            </div>
-
-            <div class="grid grid-cols-2" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
-                <div>
-                    <label class="form-label">Command Prefix</label>
-                    <input type="text" class="form-input" name="prefix" value="<%= (typeof prefixConfig !== 'undefined' && prefixConfig.prefix) ? prefixConfig.prefix : '!' %>" maxlength="5" style="width: 80px; font-family: monospace; font-size: var(--font-size-lg); text-align: center;">
-                    <div class="form-help">1-5 characters (default: !)</div>
-                </div>
-
-                <div>
-                    <label class="form-label">Prefix Commands</label>
-                    <label class="toggle-switch">
-                        <input type="checkbox" name="prefix_enabled" value="1" <%= (typeof prefixConfig === 'undefined' || prefixConfig.enabled) ? 'checked' : '' %>>
-                        <span class="toggle-slider"></span>
-                    </label>
-                    <div class="form-help">Enable or disable prefix commands server-wide</div>
-                </div>
-            </div>
-
-            <div style="border-top: 1px solid var(--color-border); padding-top: var(--spacing-4); margin-top: var(--spacing-2);">
-                <div style="margin-bottom: var(--spacing-4);">
-                    <h4 style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin: 0 0 var(--spacing-1) 0;">
-                        <i class="fas fa-broom" style="margin-right: var(--spacing-2); color: var(--color-warning);"></i>
-                        Auto-Cleanup
-                    </h4>
-                    <div class="form-help" style="margin-top: 0;">Automatically clean up prefix command messages</div>
-                </div>
-
-                <div class="grid grid-cols-2" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
-                    <div>
-                        <label class="form-label">Delete Trigger Messages</label>
-                        <label class="toggle-switch">
-                            <input type="checkbox" name="delete_trigger" value="1" <%= (typeof prefixConfig !== 'undefined' && prefixConfig.delete_trigger) ? 'checked' : '' %>>
-                            <span class="toggle-slider"></span>
-                        </label>
-                        <div class="form-help">Delete the user's command message (e.g. "!ban @user") after executing</div>
+                        </select>
                     </div>
+                </div>
+            </div>
+        </section>
 
-                    <div>
-                        <label class="form-label">Self-Destruct Delay (seconds)</label>
-                        <input type="number" class="form-input" name="cleanup_delay" value="<%= (typeof prefixConfig !== 'undefined' && prefixConfig.cleanup_delay) ? prefixConfig.cleanup_delay : 0 %>" min="0" max="300" style="width: 100px;">
-                        <div class="form-help">Bot response auto-deletes after this many seconds in private categories (0 = off)</div>
+        <section class="cf-section" aria-labelledby="core-prefix-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="core-prefix-title">Prefix commands</h2>
+                    <p class="cf-section-desc">Let members run commands with a text prefix, such as <code>!play</code> or <code>!ban</code>, as well as slash commands.</p>
+                </div>
+            </header>
+            <div class="cf-rows">
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" id="core-prefix_enabled-label" for="cfk-core-prefix-enabled">Prefix commands</label>
+                        <p class="cf-row-desc" id="core-prefix_enabled-desc">Turn prefix commands on or off for the whole server. Commands typed with <code>/</code> as a message keep working either way, because some commands can only be used that way.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="checkbox" class="cf-switch" role="switch" id="cfk-core-prefix-enabled" name="prefix_enabled" value="1" aria-describedby="core-prefix_enabled-desc" <%= (typeof prefixConfig === 'undefined' || prefixConfig.enabled) ? 'checked' : '' %>>
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-core-prefix">Command prefix</label>
+                        <p class="cf-row-desc" id="f-core-prefix-desc">1 to 5 symbols, with no letters, digits or spaces. Members would type <code id="core-prefix-example">!help</code>. Extra prefixes and aliases are on the <a href="/manage/<%= guild.id %>?page=command-center">Prefixes and aliases</a> page.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input id="f-core-prefix" type="text" class="form-control core-prefix-input" name="prefix" value='<%= (typeof prefixConfig !== "undefined" && prefixConfig.prefix) ? prefixConfig.prefix : "!" %>' maxlength="5" pattern="[^\w\s]{1,5}" required spellcheck="false" autocomplete="off" aria-describedby="f-core-prefix-desc">
                     </div>
                 </div>
 
-                <div>
-                    <label class="form-label">Private Categories</label>
-                    <% const allCategories = ['music', 'moderation', 'economy', 'leveling', 'fun', 'games', 'cannabis', 'social', 'tools', 'info', 'utility']; %>
-                    <% const privateList = (typeof prefixConfig !== 'undefined' && prefixConfig.private_categories) ? JSON.parse(typeof prefixConfig.private_categories === 'string' ? prefixConfig.private_categories : '[]') : []; %>
-                    <div style="display: flex; flex-wrap: wrap; gap: var(--spacing-2);">
-                        <% allCategories.forEach(cat => { %>
-                            <label style="display: flex; align-items: center; gap: var(--spacing-1); padding: var(--spacing-1) var(--spacing-3); background: var(--color-bg-secondary); border-radius: var(--radius-md); cursor: pointer; font-size: var(--font-size-sm); border: 1px solid var(--color-border);">
+                <div class="cf-rows-head" id="core-cleanup-head">Clean-up</div>
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" id="core-delete_trigger-label" for="cfk-core-delete-trigger">Delete trigger messages</label>
+                        <p class="cf-row-desc" id="core-delete_trigger-desc">Delete the member's message after one of the built-in prefix commands (for example <code>!ban @user</code>) runs. Other commands typed as text are not deleted.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="checkbox" class="cf-switch" role="switch" id="cfk-core-delete-trigger" name="delete_trigger" value="1" aria-describedby="core-delete_trigger-desc" <%= (typeof prefixConfig !== 'undefined' && prefixConfig.delete_trigger) ? 'checked' : '' %>>
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-core-cleanup_delay">Self-destruct delay</label>
+                        <p class="cf-row-desc" id="f-core-cleanup_delay-desc">Replies in the private categories below delete themselves after this long. 0 turns it off.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="cf-input-unit">
+                            <input id="f-core-cleanup_delay" type="number" class="form-control" name="cleanup_delay" value="<%= (typeof prefixConfig !== 'undefined' && prefixConfig.cleanup_delay) ? prefixConfig.cleanup_delay : 0 %>" min="0" max="300" inputmode="numeric" aria-describedby="f-core-cleanup_delay-desc">
+                            <span class="cf-unit">seconds</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-row-text">
+                        <div class="cf-row-label" id="core-private-label">Private categories</div>
+                        <p class="cf-row-desc">Bot replies to the built-in prefix commands in these categories self-destruct after the delay above.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <%# The categories of core/prefix-command-registry.js. %>
+                        <% const allCategories = ['music', 'moderation', 'economy', 'leveling', 'fun', 'games', 'owo', 'cannabis', 'social', 'tools', 'info', 'utility']; %>
+                        <%
+                        let privateList = [];
+                        try {
+                            const raw = (typeof prefixConfig !== 'undefined' && prefixConfig) ? prefixConfig.private_categories : null;
+                            privateList = Array.isArray(raw) ? raw : (raw ? JSON.parse(raw) : []);
+                            if (!Array.isArray(privateList)) privateList = [];
+                        } catch (e) { privateList = []; }
+                        %>
+                        <div class="cf-choices cf-check-grid" role="group" aria-labelledby="core-private-label">
+                            <% allCategories.forEach(cat => { %>
+                            <label class="cf-choice">
                                 <input type="checkbox" name="private_categories" value="<%= cat %>" <%= privateList.includes(cat) ? 'checked' : '' %>>
-                                <span><%= cat.charAt(0).toUpperCase() + cat.slice(1) %></span>
+                                <span><%= cat === 'owo' ? 'OwO' : cat.charAt(0).toUpperCase() + cat.slice(1) %></span>
                             </label>
-                        <% }); %>
+                            <% }); %>
+                        </div>
                     </div>
-                    <div class="form-help">Bot responses in these categories will self-destruct after the delay above</div>
                 </div>
             </div>
-        </div>
+        </section>
 
-        <button type="submit" class="btn btn-primary">
-            <i class="fas fa-save"></i>
-            <span>Save Settings</span>
-        </button>
+        <div class="cf-form-actions">
+            <button type="submit" class="btn btn-primary">Save</button>
+        </div>
     </form>
 </div>
-
-<style>
-.form-label {
-    display: block;
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-primary);
-    margin-bottom: var(--spacing-2);
-}
-
-.form-help {
-    font-size: var(--font-size-xs);
-    color: var(--color-text-muted);
-    margin-top: var(--spacing-2);
-}
-
-.form-input {
-    display: block;
-    padding: var(--spacing-2) var(--spacing-3);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
-    background: rgba(255, 255, 255, 0.05);
-    color: var(--color-text-primary);
-    font-size: var(--font-size-sm);
-}
-
-.form-input:focus {
-    outline: none;
-    border-color: var(--accent-purple);
-    box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.25);
-}
-
-/* Override global toggle for better off-state contrast */
-#core-settings-form .toggle-switch { display: inline-block; }
-#core-settings-form .toggle-slider { background: rgba(255, 255, 255, 0.15); border: 1px solid rgba(255, 255, 255, 0.2); }
-#core-settings-form .toggle-switch input:checked + .toggle-slider { background: var(--accent-green); border-color: var(--accent-green); }
-#core-settings-form .toggle-switch input:checked + .toggle-slider::before { box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); }
-</style>
+<script>
+(function () {
+    var input = document.getElementById('f-core-prefix');
+    var example = document.getElementById('core-prefix-example');
+    if (!input || !example) return;
+    var paint = function () { example.textContent = (input.value.trim() || '!') + 'help'; };
+    input.addEventListener('input', paint);
+    paint();
+})();
+</script>

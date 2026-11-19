@@ -2,6 +2,7 @@ import { Events, EmbedBuilder } from 'discord.js';
 import logger from '../utils/logger.js';
 import { sendLogEmbed, saveAuditLog } from '../core/log-manager.js';
 import { shouldIgnoreGuild } from '../utils/custom-bot-check.js';
+import { themeColor } from '../core/guild-theme.js';
 
 export default {
     name: Events.VoiceChannelEffectSend,
@@ -20,7 +21,7 @@ export default {
             });
 
             const embed = new EmbedBuilder()
-                .setColor(0x9B59B6)
+                .setColor(themeColor(guild?.id, 'accent'))
                 .setTitle('✨ Voice Channel Effect')
                 .setDescription(`<@${voiceEffect.userId}> sent an effect`)
                 .addFields(

@@ -5,6 +5,40 @@
 
 import { EmbedBuilder } from 'discord.js';
 import pool from '../../utils/db.js';
+import { themeColor } from '../../core/guild-theme.js';
+import { getConfig } from '../../core/feature-config.js';
+
+/**
+ * The Grow Toolkit page's "Competition announcements" channel, when it is set, usable, and not
+ * the channel the command was run in (there the normal reply already is the announcement).
+ */
+async function competitionChannel(interaction) {
+    const cfg = await getConfig('grow', interaction.guild.id);
+    const id = cfg.competition_channel_id ? String(cfg.competition_channel_id) : null;
+    if (!id || id === interaction.channelId) return null;
+    const channel = interaction.guild.channels.cache.get(id) || await interaction.guild.channels.fetch(id).catch(() => null);
+    return channel?.isTextBased?.() ? channel : null;
+}
+
+/**
+ * Post a competition announcement in the announcements channel and tell the moderator where it
+ * went; without one (or if the bot cannot post there) it is the command's own reply.
+ * Returns the posted message.
+ */
+async function announceCompetition(interaction, payload, doneText) {
+    const channel = await competitionChannel(interaction);
+    if (channel) {
+        const sent = await channel.send(payload).catch(err => {
+            console.error('[Competition] Could not post in the announcements channel:', err.message);
+            return null;
+        });
+        if (sent) {
+            await interaction.editReply({ content: `${doneText} ${channel}.`, embeds: [] });
+            return sent;
+        }
+    }
+    return interaction.editReply(payload);
+}
 
 // ===== STRAIN HANDLERS =====
 export async function handleStrainAdd(interaction) {
@@ -32,7 +66,7 @@ export async function handleStrainAdd(interaction) {
         const typeDisplay = type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
 
         const embed = new EmbedBuilder()
-            .setColor(0x2ECC71)
+            .setColor(themeColor(interaction.guildId, 'success'))
             .setTitle(`Strain Added: ${name}`)
             .addFields(
                 { name: 'Breeder', value: breeder, inline: true },
@@ -75,7 +109,7 @@ export async function handleStrainSearch(interaction) {
         }
 
         const embed = new EmbedBuilder()
-            .setColor(0x3498DB)
+            .setColor(themeColor(interaction.guildId, 'primary'))
             .setTitle(`Strain Search: "${query}"`)
             .setDescription(strains.map(s => {
                 const diffStars = '⭐'.repeat(s.difficulty);
@@ -107,7 +141,7 @@ export async function handleStrainInfo(interaction) {
         const typeDisplay = s.type.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase());
 
         const embed = new EmbedBuilder()
-            .setColor(0x9B59B6)
+            .setColor(themeColor(interaction.guildId, 'accent'))
             .setTitle(`${s.name}`)
             .setDescription(`*by ${s.breeder}*`)
             .addFields(
@@ -183,7 +217,7 @@ export async function handleStrainTop(interaction) {
         }
 
         const embed = new EmbedBuilder()
-            .setColor(0xF1C40F)
+            .setColor(themeColor(interaction.guildId, 'warning'))
             .setTitle('Recently Added Strains')
             .setDescription(strains.map((s, i) => {
                 const diffStars = '⭐'.repeat(s.difficulty);
@@ -219,7 +253,7 @@ export async function handleSeedbankAdd(interaction) {
         const ratingStars = '⭐'.repeat(rating) + '☆'.repeat(5 - rating);
 
         const embed = new EmbedBuilder()
-            .setColor(0x2ECC71)
+            .setColor(themeColor(interaction.guildId, 'success'))
             .setTitle(`Seed Bank Added: ${name}`)
             .addFields(
                 { name: 'Website', value: website, inline: false },
@@ -255,7 +289,7 @@ export async function handleSeedbankList(interaction) {
         }
 
         const embed = new EmbedBuilder()
-            .setColor(0x3498DB)
+            .setColor(themeColor(interaction.guildId, 'primary'))
             .setTitle('Seed Bank Directory')
             .setDescription(banks.map((b, i) => {
                 const stars = '⭐'.repeat(Math.round(b.rating));
@@ -287,7 +321,7 @@ export async function handleSeedbankSearch(interaction) {
         }
 
         const embed = new EmbedBuilder()
-            .setColor(0x3498DB)
+            .setColor(themeColor(interaction.guildId, 'primary'))
             .setTitle(`Seed Bank Search: "${query}"`)
             .setDescription(banks.map(b => {
                 const stars = '⭐'.repeat(b.rating);
@@ -317,7 +351,7 @@ export async function handleSeedbankInfo(interaction) {
         const ratingStars = '⭐'.repeat(b.rating) + '☆'.repeat(5 - b.rating);
 
         const embed = new EmbedBuilder()
-            .setColor(0x9B59B6)
+            .setColor(themeColor(interaction.guildId, 'accent'))
             .setTitle(b.name)
             .addFields(
                 { name: 'Website', value: b.website, inline: false },
@@ -363,7 +397,7 @@ export async function handleTimerStart(interaction) {
         const stageEmojis = { seedling: '🌱', veg: '🌿', flower: '🌸' };
 
         const embed = new EmbedBuilder()
-            .setColor(0x2ECC71)
+            .setColor(themeColor(interaction.guildId, 'success'))
             .setTitle(`${stageEmojis[stage]} Grow Timer Started!`)
             .addFields(
                 { name: 'Strain', value: strain, inline: true },
@@ -450,7 +484,7 @@ export async function handleTimerStatus(interaction) {
         const stageEmojis = { seedling: '🌱', veg: '🌿', flower: '🌸', harvest: '✂️', complete: '🎉' };
 
         const embed = new EmbedBuilder()
-            .setColor(0x3498DB)
+            .setColor(themeColor(interaction.guildId, 'primary'))
             .setTitle('Your Active Grows')
             .setDescription(grows.map(g => {
                 const startDate = new Date(g.start_date);
@@ -553,7 +587,7 @@ export async function handleCalcTent(interaction) {
     else { budgetLow = '$1500-2500'; budgetMid = '$2500-4000'; budgetHigh = '$4000+'; }
 
     const embed = new EmbedBuilder()
-        .setColor(0x2ECC71)
+        .setColor(themeColor(interaction.guildId, 'success'))
         .setTitle(`${length}x${width} Tent Setup Guide`)
         .setDescription(`**${sqft} sq ft** grow area`)
         .addFields(
@@ -594,7 +628,7 @@ export async function handleCalcCfm(interaction) {
     else fanSize = '8"+';
 
     const embed = new EmbedBuilder()
-        .setColor(0x3498DB)
+        .setColor(themeColor(interaction.guildId, 'primary'))
         .setTitle('Exhaust Fan Calculator')
         .setDescription(`**${length}x${width}x${height}ft** = **${volume} cubic feet**`)
         .addFields(
@@ -627,7 +661,7 @@ export async function handleCalcLight(interaction) {
     const maxWatts = sqft * specs.max;
 
     const embed = new EmbedBuilder()
-        .setColor(0xF1C40F)
+        .setColor(themeColor(interaction.guildId, 'warning'))
         .setTitle(`${specs.name} Light Calculator`)
         .setDescription(`**${sqft} sq ft** grow area`)
         .addFields(
@@ -676,7 +710,7 @@ export async function handleCalcPot(interaction) {
     else transplantGuide = 'Solo cup → 1 gal → 3 gal → Final pot';
 
     const embed = new EmbedBuilder()
-        .setColor(0x9B59B6)
+        .setColor(themeColor(interaction.guildId, 'accent'))
         .setTitle('Pot Size Calculator')
         .setDescription(`**${mediumInfo.name}** + **${baseSize.name}** style\n${vegWeeks} weeks veg`)
         .addFields(
@@ -757,7 +791,7 @@ export async function handleMentorRegister(interaction) {
         );
 
         const embed = new EmbedBuilder()
-            .setColor(0x2ECC71)
+            .setColor(themeColor(interaction.guildId, 'success'))
             .setTitle('Mentor Registered!')
             .setDescription(`Thank you for volunteering to help fellow growers!`)
             .addFields(
@@ -793,7 +827,7 @@ export async function handleMentorList(interaction) {
         }));
 
         const embed = new EmbedBuilder()
-            .setColor(0x3498DB)
+            .setColor(themeColor(interaction.guildId, 'primary'))
             .setTitle('Available Mentors')
             .setDescription(mentorList.join('\n\n'))
             .setFooter({ text: 'DM a mentor or use /grow mentor find <topic>' });
@@ -841,7 +875,7 @@ export async function handleMentorFind(interaction) {
         }));
 
         const embed = new EmbedBuilder()
-            .setColor(0x9B59B6)
+            .setColor(themeColor(interaction.guildId, 'accent'))
             .setTitle(`Mentors for: ${topic}`)
             .setDescription(mentorList.filter(Boolean).join('\n'))
             .setFooter({ text: 'Send them a DM to start learning!' });
@@ -933,7 +967,7 @@ export async function handleCompetitionCreate(interaction) {
         );
 
         const embed = new EmbedBuilder()
-            .setColor(0xF1C40F)
+            .setColor(themeColor(interaction.guildId, 'warning'))
             .setTitle(title)
             .setDescription(description)
             .addFields(
@@ -944,9 +978,12 @@ export async function handleCompetitionCreate(interaction) {
             .setFooter({ text: 'Good luck everyone!' })
             .setTimestamp();
 
-        const message = await interaction.editReply({ embeds: [embed] });
+        const message = await announceCompetition(interaction, { embeds: [embed] }, 'Competition created and announced in');
 
-        await pool.execute('UPDATE grow_competitions SET message_id = ? WHERE id = ?', [message.id, result.insertId]);
+        await pool.execute(
+            'UPDATE grow_competitions SET message_id = ?, channel_id = ? WHERE id = ?',
+            [message.id, message.channelId || interaction.channel.id, result.insertId]
+        );
     } catch (error) {
         console.error('[Competition] Create error:', error);
         await interaction.editReply('Failed to create competition.');
@@ -994,7 +1031,7 @@ export async function handleCompetitionEnter(interaction) {
         );
 
         const embed = new EmbedBuilder()
-            .setColor(0x2ECC71)
+            .setColor(themeColor(interaction.guildId, 'success'))
             .setTitle('Entry Submitted!')
             .setDescription(`You've entered **${comp.title}**`)
             .setImage(photo.url)
@@ -1030,7 +1067,7 @@ export async function handleCompetitionView(interaction) {
         );
 
         const embed = new EmbedBuilder()
-            .setColor(0xF1C40F)
+            .setColor(themeColor(interaction.guildId, 'warning'))
             .setTitle(comp.title)
             .setDescription(comp.description)
             .addFields(
@@ -1078,7 +1115,7 @@ export async function handleCompetitionEntries(interaction) {
         }));
 
         const embed = new EmbedBuilder()
-            .setColor(0x9B59B6)
+            .setColor(themeColor(interaction.guildId, 'accent'))
             .setTitle(`Entries for: ${comp.title}`)
             .setDescription(entryList.join('\n'))
             .setFooter({ text: `${entries.length} total entries` });
@@ -1122,13 +1159,19 @@ export async function handleCompetitionEnd(interaction) {
         );
 
         if (entries.length === 0) {
-            return await interaction.editReply(`**${comp.title}** has ended with no entries!`);
+            return await announceCompetition(interaction, { content: `**${comp.title}** has ended with no entries!` }, 'Competition ended. The result was posted in');
         }
+
+        // entries holds the top three only; the total comes from its own count.
+        const [[{ total }]] = await pool.execute(
+            'SELECT COUNT(*) AS total FROM competition_entries WHERE competition_id = ?',
+            [comp.id]
+        );
 
         const winner = await interaction.guild.members.fetch(entries[0].user_id).catch(() => null);
 
         const embed = new EmbedBuilder()
-            .setColor(0xF1C40F)
+            .setColor(themeColor(interaction.guildId, 'warning'))
             .setTitle(`${comp.title} - Results!`)
             .setDescription(`Congratulations to our winner!`)
             .addFields({ name: 'Winner', value: winner ? `${winner}` : 'Unknown member', inline: false })
@@ -1144,9 +1187,9 @@ export async function handleCompetitionEnd(interaction) {
             embed.addFields({ name: 'Third Place', value: third?.displayName || 'Unknown', inline: true });
         }
 
-        embed.addFields({ name: 'Total Entries', value: `${entries.length}`, inline: false });
+        embed.addFields({ name: 'Total Entries', value: `${total}`, inline: false });
 
-        await interaction.editReply({ embeds: [embed] });
+        await announceCompetition(interaction, { embeds: [embed] }, 'Competition ended. The results were posted in');
     } catch (error) {
         console.error('[Competition] End error:', error);
         await interaction.editReply('Failed to end competition.');

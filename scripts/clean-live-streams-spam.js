@@ -6,14 +6,14 @@ import dotenv from 'dotenv';
 dotenv.config({ path: '/home/death/CertiFriedUtility/.env' });
 import { Client, GatewayIntentBits } from 'discord.js';
 import pool from '../utils/db.js';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 
 const GUILD_ID = '869577842088878130';
-const BOT_ID = '1481215496274579549';
+// The acting bot comes from guild_bot_mapping — never pinned here.
 const CHANNEL_ID = '1481232828732669985';
 
-const [bots] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id = ?', [BOT_ID]);
-const token = encryption.decrypt(JSON.parse(bots[0].bot_token));
+const bot = await resolveBotForGuild(GUILD_ID, { db: pool });
+const token = bot.token;
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages] });
 await client.login(token);
 await new Promise(r => client.once('ready', r));

@@ -1,5 +1,6 @@
 import { EmbedBuilder } from 'discord.js';
 import TMDbAPIService from '../../../utils/services/tmdb-api.js';
+import { themeColor } from '../../../core/guild-theme.js';
 
 const tmdbAPI = new TMDbAPIService();
 
@@ -22,7 +23,7 @@ export async function execute(interaction) {
           }
 
           const embed = new EmbedBuilder()
-            .setColor('#E74C3C')
+            .setColor(themeColor(interaction.guildId, 'danger'))
             .setTitle(`🎬 Movie Search Results for "${query}"`)
             .setDescription('Use `/media movie info <movie_id>` for detailed information')
             .setFooter({ text: 'Powered by TMDb' })
@@ -56,7 +57,7 @@ export async function execute(interaction) {
           const formatted = tmdbAPI.formatMovieData(movie);
 
           const embed = new EmbedBuilder()
-            .setColor('#E74C3C')
+            .setColor(themeColor(interaction.guildId, 'danger'))
             .setTitle(formatted.title)
             .setURL(formatted.tmdbUrl)
             .setDescription(formatted.overview.length > 4096 ? formatted.overview.substring(0, 4093) + '...' : formatted.overview)
@@ -105,7 +106,7 @@ export async function execute(interaction) {
           }
 
           const embed = new EmbedBuilder()
-            .setColor('#3498DB')
+            .setColor(themeColor(interaction.guildId, 'primary'))
             .setTitle(`📺 TV Show Search Results for "${query}"`)
             .setDescription('Use `/media movie tvinfo <tv_id>` for detailed information')
             .setFooter({ text: 'Powered by TMDb' })
@@ -139,7 +140,7 @@ export async function execute(interaction) {
           const formatted = tmdbAPI.formatTVData(tv);
 
           const embed = new EmbedBuilder()
-            .setColor('#3498DB')
+            .setColor(themeColor(interaction.guildId, 'primary'))
             .setTitle(formatted.title)
             .setURL(formatted.tmdbUrl)
             .setDescription(formatted.overview.length > 4096 ? formatted.overview.substring(0, 4093) + '...' : formatted.overview)
@@ -232,7 +233,7 @@ export async function execute(interaction) {
           }
 
           const embed = new EmbedBuilder()
-            .setColor('#9B59B6')
+            .setColor(themeColor(interaction.guildId, 'accent'))
             .setTitle('🎬 Movie Recommendations')
             .setDescription('Movies similar to your selection')
             .setFooter({ text: 'Powered by TMDb' })

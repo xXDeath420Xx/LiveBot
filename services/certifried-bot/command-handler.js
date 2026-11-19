@@ -16,10 +16,17 @@ import { resolveChannel } from './defender/channel-tokens.js';
 import { deleteMessage as kickDeleteMessage } from './defender/kick-moderation.js';
 import { enforcer } from './defender/index.js';
 import { resolveDefenderCommand, meetsMinRole, resolvePermissionContext } from './defender/commands/index.js';
+import { isGameSwitchedOff } from './game-switches.js';
 
-// Cooldown tracking: Map<channelId-commandKey-userId, timestamp>
+// Cooldown tracking (in memory; a restart clears them, which only ever lets a command through early).
+//   userCooldowns:    `${channelId}-${commandKey}-${userId}` -> last use  (each command's own cooldown)
+//   anyUserCooldowns: `${channelId}-${userId}`               -> last use  (channel "Per-user cooldown")
+//   globalCooldowns:  channelId                               -> last use  (channel "Global cooldown")
 const userCooldowns = new Map();
+const anyUserCooldowns = new Map();
 const globalCooldowns = new Map();
+const COOLDOWN_PRUNE_AT = 5000;
+const COOLDOWN_KEEP_MS = 10 * 60 * 1000; // longer than any cooldown the pages allow (300 s per user)
 
 /**
  * Get channel configuration from database
@@ -38,29 +45,56 @@ async function getChannelConfig(platform, channelId) {
     }
 }
 
-/**
- * Check if user is on cooldown for a specific command
- */
-function isOnCooldown(channelId, commandKey, userId, commandCooldown) {
-    const now = Date.now();
-    const cooldownMs = commandCooldown * 1000;
+/** Seconds from a tokes_channels cooldown column (NULL / junk = 0, i.e. off). */
+function cooldownSeconds(value) {
+    const n = Number(value);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+}
 
-    // Check user cooldown for this specific command
-    const userKey = `${channelId}-${commandKey}-${userId}`;
-    const lastUser = userCooldowns.get(userKey) || 0;
-    if (now - lastUser < cooldownMs) {
+/**
+ * Is this use blocked by a cooldown? Three apply, any one blocks:
+ *   - the command's own cooldown, per user (command / channel override / custom command);
+ *   - the channel's "Global cooldown": after anyone's command, no command runs in the channel for that long;
+ *   - the channel's "Per-user cooldown": after a viewer's command, that viewer waits that long before any command.
+ * The channel values come from the Kick/Twitch channel page (tokes_channels.cooldown_global / cooldown_user).
+ * Mods and the broadcaster are never checked (see the caller).
+ */
+function isOnCooldown(channelId, commandKey, userId, commandCooldown, channelCooldowns = {}, now = Date.now()) {
+    const cooldownMs = cooldownSeconds(commandCooldown) * 1000;
+    if (cooldownMs && now - (userCooldowns.get(`${channelId}-${commandKey}-${userId}`) || 0) < cooldownMs) {
+        return true;
+    }
+
+    const globalMs = cooldownSeconds(channelCooldowns.global) * 1000;
+    if (globalMs && now - (globalCooldowns.get(String(channelId)) || 0) < globalMs) {
+        return true;
+    }
+
+    const perUserMs = cooldownSeconds(channelCooldowns.user) * 1000;
+    if (perUserMs && now - (anyUserCooldowns.get(`${channelId}-${userId}`) || 0) < perUserMs) {
         return true;
     }
 
     return false;
 }
 
+function pruneCooldowns(map, now) {
+    if (map.size < COOLDOWN_PRUNE_AT) return;
+    for (const [key, at] of map) {
+        if (now - at > COOLDOWN_KEEP_MS) map.delete(key);
+    }
+}
+
 /**
  * Set cooldowns after command execution
  */
-function setCooldowns(channelId, commandKey, userId) {
-    const now = Date.now();
+function setCooldowns(channelId, commandKey, userId, now = Date.now()) {
     userCooldowns.set(`${channelId}-${commandKey}-${userId}`, now);
+    anyUserCooldowns.set(`${channelId}-${userId}`, now);
+    globalCooldowns.set(String(channelId), now);
+    pruneCooldowns(userCooldowns, now);
+    pruneCooldowns(anyUserCooldowns, now);
+    pruneCooldowns(globalCooldowns, now);
 }
 
 /**
@@ -291,6 +325,12 @@ export async function handleMessage(context) {
         return; // Command not found or disabled
     }
 
+    // Game switches on the channel page (Tokes, Daily spark, Smoke sessions, Trivia): a game switched
+    // off keeps all of its commands silent. Custom commands never belong to a game.
+    if (!command.isCustom && isGameSwitchedOff(channelFeats, command.key)) {
+        return;
+    }
+
     // Check permission requirements
     if (command.broadcasterOnly && !isBroadcaster) {
         return; // Broadcaster only command
@@ -301,7 +341,8 @@ export async function handleMessage(context) {
 
     // Check cooldowns (bypass for mods/broadcasters)
     if (!isBroadcaster && !isMod) {
-        if (isOnCooldown(channel.id, command.key, userId, command.cooldown)) {
+        if (isOnCooldown(channel.id, command.key, userId, command.cooldown,
+            { global: channel.cooldown_global, user: channel.cooldown_user })) {
             return; // Silently ignore cooldown
         }
     }
@@ -367,3 +408,5 @@ export async function handleMessage(context) {
 }
 
 export { getOrCreateProfile, getOrCreateChannelStats };
+// For tests (tests/kick/command-cooldowns.test.js).
+export { isOnCooldown as _isOnCooldown, setCooldowns as _setCooldowns };

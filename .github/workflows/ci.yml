@@ -1,0 +1,103 @@
+name: CI
+
+on:
+  push:
+    branches: [dev, main]
+  pull_request:
+    branches: [dev, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  secret-scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GITLEAKS_VERSION: 8.30.1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # Runs on the checkout only (no node_modules), so it sees exactly what is in git.
+      - name: CertiFried scanner (tokens, keys, private data)
+        run: node scripts/publish/secret-scan.mjs --root .
+      - name: gitleaks
+        run: |
+          set -euo pipefail
+          base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
+          curl -sSfL -o gitleaks.tgz "$base/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfL -o checksums.txt "$base/gitleaks_${GITLEAKS_VERSION}_checksums.txt"
+          grep " gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz$" checksums.txt | sed 's/ .*/  gitleaks.tgz/' | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/gitleaks" && tar -xzf gitleaks.tgz -C "$RUNNER_TEMP/gitleaks" gitleaks
+          rm gitleaks.tgz checksums.txt
+          "$RUNNER_TEMP/gitleaks/gitleaks" dir . --config .gitleaks.toml --redact=100 --no-banner --exit-code 1
+
+  app:
+    name: Bot and dashboard (Node 22)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      PUPPETEER_SKIP_DOWNLOAD: '1'
+      PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            dashboard/package-lock.json
+            stream-relay/package-lock.json
+            cinema/package-lock.json
+            windrose-agent/package-lock.json
+            cf-jellyfin/package-lock.json
+      - name: Install (npm ci against package-lock.json)
+        run: npm ci --no-audit --no-fund
+      - name: Lockfiles of the side services install cleanly
+        run: |
+          set -euo pipefail
+          for d in dashboard stream-relay cinema windrose-agent cf-jellyfin; do
+            echo "::group::npm ci in $d"
+            (cd "$d" && npm ci --ignore-scripts --no-audit --no-fund)
+            echo "::endgroup::"
+          done
+          rm -rf dashboard/node_modules stream-relay/node_modules cinema/node_modules windrose-agent/node_modules cf-jellyfin/node_modules
+      - name: Lint
+        run: npm run lint --if-present
+      - name: Syntax check (every .js / .mjs / .cjs file)
+        run: node --experimental-vm-modules --no-warnings scripts/publish/syntax-check.mjs .
+      # tests/ci-list.txt holds the tests that need no MySQL, Redis or Discord.
+      - name: Tests (DB-free subset)
+        run: node --test --test-force-exit --test-timeout=60000 $(grep -v '^#' tests/ci-list.txt)
+
+  studio:
+    name: CertiFried Studio (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: desktop/studio
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/studio/package-lock.json
+      - name: Install
+        run: npm ci --no-audit --no-fund
+      - name: Syntax check
+        run: node --experimental-vm-modules --no-warnings ../../scripts/publish/syntax-check.mjs .
+      # Includes two tests that launch the Electron app; windows-latest runners have a desktop
+      # session, so they run. The live-site check is skipped unless CF_STUDIO_LIVE_URLS=1.
+      - name: Unit tests
+        run: npm test

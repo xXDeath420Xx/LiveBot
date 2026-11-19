@@ -1,0 +1,515 @@
+<%# Role Manager — see and manage every role, who holds it, and each member's role history. API-driven; needs `guild` in locals. Laid out with the settings-row kit (cf-settings.css); every id and hook the script uses is unchanged. %>
+<style>
+    #roleManagerPage .rm-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr); gap: var(--cf-6); align-items: start; }
+    #roleManagerPage .rm-grid > .cf-section { margin: 0; }
+    @media (max-width: 1000px) { #roleManagerPage .rm-grid { grid-template-columns: minmax(0, 1fr); } }
+
+    #roleManagerPage .rm-muted { color: var(--cf-text-3); font-size: var(--cf-text-sm); }
+    /* A search box with its button, as one line of a panel (.cf-input-group). */
+    #roleManagerPage .rm-toolbar { padding: var(--cf-3) var(--cf-5); }
+    #roleManagerPage .rm-toolbar > .cf-search { width: 100%; }
+
+    #roleManagerPage .rm-rolelist { max-height: 70vh; overflow-y: auto; padding: var(--cf-2); }
+    #roleManagerPage .rm-role {
+        display: flex; align-items: center; gap: 10px; min-width: 0; padding: 7px 10px;
+        border-radius: var(--cf-radius-sm); cursor: pointer; font-size: var(--cf-text-sm); color: var(--cf-text);
+    }
+    #roleManagerPage .rm-role:hover { background: var(--cf-surface-2); }
+    #roleManagerPage .rm-role.selected { background: var(--cf-accent-soft); box-shadow: inset 2px 0 0 var(--cf-accent); }
+    #roleManagerPage .rm-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #roleManagerPage .rm-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; display: inline-block; background: var(--rm-dot, var(--cf-text-3)); }
+    #roleManagerPage .rm-num { font-variant-numeric: tabular-nums; color: var(--cf-text-3); font-size: var(--cf-text-xs); min-width: 2ch; text-align: right; }
+
+    #roleManagerPage .rm-head { padding: var(--cf-4) var(--cf-5); display: grid; gap: 4px; }
+    #roleManagerPage .rm-h { margin: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: var(--cf-text-md); font-weight: 600; color: var(--cf-text); }
+    #roleManagerPage .rm-h img { width: 28px; height: 28px; border-radius: 50%; }
+    #roleManagerPage .rm-head code, #roleManagerPage .cf-section-title code { font-family: var(--cf-mono); font-size: 0.9em; color: var(--cf-text-2); overflow-wrap: anywhere; }
+    #roleManagerPage .rm-color-row { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: var(--cf-2); align-items: center; }
+    #roleManagerPage .rm-color-row input[type=color] { width: 44px; height: 36px; padding: 2px; margin: 0; border: 1px solid var(--cf-border-strong); border-radius: var(--cf-radius-sm); background: var(--cf-surface-2); }
+    #roleManagerPage .rm-color-row input[type=text] { margin: 0; min-width: 0; }
+
+    #roleManagerPage .cf-expand > summary .rm-muted { font-weight: 400; }
+    #roleManagerPage .rm-permgroup { margin: var(--cf-4) 0 var(--cf-2); font-size: var(--cf-text-xs); font-weight: 600; color: var(--cf-text-3); }
+    #roleManagerPage .rm-permgroup:first-child { margin-top: 0; }
+    #roleManagerPage .rm-permlist { --cf-check-min: 12rem; }
+    #roleManagerPage .rm-permlist .rm-denied { opacity: .45; cursor: not-allowed; }
+    #roleManagerPage #rmStatus { margin-right: auto; }
+
+    #roleManagerPage .rm-members { max-height: 22rem; overflow-y: auto; }
+    #roleManagerPage .rm-member .cf-list-main { display: flex; align-items: center; gap: 10px; }
+    #roleManagerPage .rm-member img { width: 28px; height: 28px; border-radius: 50%; flex: none; background: var(--cf-surface-2); }
+    #roleManagerPage .rm-member .cf-list-actions { align-items: center; }
+    #roleManagerPage .rm-note { padding: var(--cf-3) var(--cf-5); }
+
+    /* Role chips are .cf-chip in the role's own colour; a role deleted since is struck through. */
+    #roleManagerPage .cf-chip.deleted { opacity: .6; text-decoration: line-through; }
+    #roleManagerPage .rm-history-item { display: grid; grid-template-columns: 11rem minmax(0, 1fr); gap: var(--cf-3); align-items: start; }
+    #roleManagerPage .rm-history-item time { color: var(--cf-text-3); font-size: var(--cf-text-xs); padding-top: 4px; font-variant-numeric: tabular-nums; }
+    #roleManagerPage .rm-history-what { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: var(--cf-text-sm); }
+    #roleManagerPage .rm-add { color: var(--cf-success); font-weight: 600; }
+    #roleManagerPage .rm-rem { color: var(--cf-danger); font-weight: 600; }
+    #roleManagerPage .rm-danger > summary { color: var(--cf-danger); }
+    #roleManagerPage .rm-danger p { margin: 0 0 var(--cf-2); font-size: var(--cf-text-sm); color: var(--cf-text-2); }
+    #roleManagerPage .rm-danger .rm-toolbar { padding: 0; }
+    #roleManagerPage #rmMemberDetail > :first-child { margin-top: var(--cf-6); }
+    #roleManagerPage .rm-botline { display: flex; align-items: center; gap: 8px; margin: 4px 10px; font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+    #roleManagerPage .rm-botline::before, #roleManagerPage .rm-botline::after { content: ''; flex: 1; height: 1px; background: var(--cf-border); }
+    @media (max-width: 640px) {
+        #roleManagerPage .rm-toolbar, #roleManagerPage .rm-head, #roleManagerPage .rm-note { padding-left: var(--cf-4); padding-right: var(--cf-4); }
+        #roleManagerPage .rm-history-item { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+        #roleManagerPage .rm-role { min-height: 44px; }
+        #roleManagerPage .cf-rows .rm-member { flex-direction: row; align-items: center; }
+    }
+</style>
+
+<div class="page-section" id="roleManagerPage" data-guild-id="<%= guild.id %>">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-user-tag"></i>
+                <span>Roles</span>
+            </div>
+            <div class="page-section-subtitle">
+                To create many roles at once, use <a href="/manage/<%= guild.id %>?page=bulk-roles">Bulk roles</a>.
+            </div>
+        </div>
+    </div>
+
+    <div id="rmError" class="cf-notice is-bad" role="alert" hidden></div>
+    <div id="rmWarn" class="cf-notice is-warn" hidden></div>
+
+    <div class="cf-tabs" role="group" aria-label="View">
+        <button type="button" class="cf-tab rm-tab active" data-tab="roles" aria-pressed="true">Roles</button>
+        <button type="button" class="cf-tab rm-tab" data-tab="members" aria-pressed="false">Members</button>
+    </div>
+
+    <!-- Roles tab -->
+    <div class="rm-pane" data-pane="roles">
+        <div class="rm-grid">
+            <section class="cf-section" aria-labelledby="rm-roles-title">
+                <header class="cf-section-head">
+                    <div>
+                        <h2 class="cf-section-title" id="rm-roles-title">All roles</h2>
+                        <p class="cf-section-desc">Highest first. Pick one to edit it.</p>
+                    </div>
+                    <div class="cf-section-actions"><span id="rmCount" class="cf-status-line"></span></div>
+                </header>
+                <div class="cf-rows">
+                    <div class="rm-toolbar">
+                        <span class="cf-search"><i class="fas fa-search" aria-hidden="true"></i><input type="search" id="rmFilter" class="form-control" placeholder="Filter roles" aria-label="Filter roles"></span>
+                    </div>
+                    <div id="rmRoleList" class="rm-rolelist">
+                        <%- include('../kit/_state', { kind: 'loading', title: 'Loading roles' }) %>
+                    </div>
+                </div>
+            </section>
+            <section class="cf-section" aria-labelledby="rm-detail-title">
+                <header class="cf-section-head">
+                    <div>
+                        <h2 class="cf-section-title" id="rm-detail-title">Role details</h2>
+                        <p class="cf-section-desc">Name, colour, permissions and members of the selected role.</p>
+                    </div>
+                </header>
+                <div class="cf-rows" id="rmDetail">
+                    <%- include('../kit/_state', { kind: 'empty', title: 'No role selected', text: 'Pick a role from the list.' }) %>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <!-- Members tab -->
+    <div class="rm-pane" data-pane="members" hidden>
+        <section class="cf-section" aria-labelledby="rm-lookup-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="rm-lookup-title">Look up a member</h2>
+                    <p class="cf-section-desc">See a member's roles, their role history, and what they had when they last left. A user ID works for people who have left.</p>
+                </div>
+            </header>
+            <div class="cf-rows">
+                <div class="rm-toolbar cf-input-group">
+                    <input type="search" id="rmMemberQuery" class="form-control" placeholder="Name, @mention or user ID" aria-label="Member">
+                    <button type="button" class="btn btn-secondary" id="rmMemberSearch">Find</button>
+                </div>
+                <div id="rmMemberResults" class="cf-list"></div>
+            </div>
+        </section>
+        <div id="rmMemberDetail"></div>
+    </div>
+</div>
+
+<script>
+(function () {
+  const root = document.getElementById('roleManagerPage');
+  if (!root) return;
+  const guildId = root.dataset.guildId;
+  const api = (p) => `/api/guilds/${guildId}/role-manager${p}`;
+  const $ = (id) => document.getElementById(id);
+  const when = (t) => t ? new Date(t).toLocaleString() : '';
+
+  let state = { roles: [], catalog: [], actor: {}, bot: {}, selected: null };
+
+  // DOM helper: every server value is set as text or a property, never parsed as HTML.
+  function h(tag, props, ...kids) {
+    const n = document.createElement(tag);
+    if (props) for (const [k, v] of Object.entries(props)) {
+      if (v === null || v === undefined || v === false) continue;
+      if (k === 'text') n.textContent = v;
+      else if (k === 'className') n.className = v;
+      else if (k === 'hidden') n.hidden = !!v;
+      else if (k === 'value') n.value = v;
+      else if (k === 'checked') n.checked = !!v;
+      else if (k === 'style') Object.entries(v).forEach(([p, val]) => n.style.setProperty(p, val));
+      else if (k.startsWith('on')) n.addEventListener(k.slice(2), v);
+      else n.setAttribute(k, v === true ? '' : v);
+    }
+    for (const kid of kids.flat(Infinity)) if (kid !== null && kid !== undefined && kid !== false) n.appendChild(typeof kid === 'string' || typeof kid === 'number' ? document.createTextNode(String(kid)) : kid);
+    return n;
+  }
+  const icon = (cls) => h('i', { className: 'fas ' + cls, 'aria-hidden': 'true' });
+
+  async function req(url, options = {}) {
+    const res = await fetch(url, { credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, ...options });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
+    return body;
+  }
+  const showError = (m) => { const el = $('rmError'); el.hidden = !m; el.textContent = m || ''; if (m) el.scrollIntoView({ block: 'nearest' }); };
+  const showWarn = (lines) => {
+    const el = $('rmWarn');
+    el.hidden = !lines.length;
+    el.replaceChildren(...(lines.length ? [h('div', { className: 'cf-notice-body' }, lines.map((l, i) => [i ? h('br') : null, ...l]))] : []));
+  };
+  // Kit empty / loading / error states (the same markup as partials/kit/_state.ejs).
+  const kitState = (kind, title, text) => h('div', { className: `cf-state cf-state--${kind}`, role: kind === 'loading' ? 'status' : null, 'aria-live': kind === 'loading' ? 'polite' : null },
+    kind === 'loading' ? h('span', { className: 'cf-spinner', 'aria-hidden': 'true' }) : null,
+    h('p', { className: 'cf-state-title', text: title }), text ? h('p', { className: 'cf-state-text', text }) : null);
+  const note = (text) => h('div', { className: 'rm-note rm-muted', text });
+  const dot = (c) => h('span', { className: 'rm-dot', style: c ? { '--rm-dot': c } : null });
+  // A role chip in the role's colour (.cf-chip with --cf-chip); `extra` is a remove button.
+  const chip = (r, extra) => h('span', { className: 'cf-chip' + (r.deleted ? ' deleted' : ''), style: r.color ? { '--cf-chip': r.color } : null },
+    h('span', { className: 'cf-chip-dot' }), h('span', { text: r.name ?? `deleted role ${r.id}` }), extra || null);
+  const memberRow = (m, actions) => h('div', { className: 'cf-list-item rm-member' },
+    h('div', { className: 'cf-list-main' }, h('img', { src: m.avatar || '', alt: '' }),
+      h('span', { className: 'rm-name' }, m.displayName, ' ', h('span', { className: 'rm-muted', text: '@' + m.username }))),
+    h('div', { className: 'cf-list-actions' }, actions));
+  const section = (title, desc, body) => h('section', { className: 'cf-section' },
+    h('header', { className: 'cf-section-head' }, h('div', null, h('h2', { className: 'cf-section-title' }, title), desc ? h('p', { className: 'cf-section-desc', text: desc }) : null)),
+    h('div', { className: 'cf-rows' }, body));
+  const btn = (cls, text, props) => h('button', Object.assign({ type: 'button', className: 'btn ' + cls }, props), text);
+
+  // ── tabs ─────────────────────────────────────────────────────────────────
+  function showTab(name) {
+    root.querySelectorAll('.rm-tab').forEach(b => { b.classList.toggle('active', b.dataset.tab === name); b.setAttribute('aria-pressed', String(b.dataset.tab === name)); });
+    root.querySelectorAll('.rm-pane').forEach(p => { p.hidden = p.dataset.pane !== name; });
+  }
+  root.querySelectorAll('.rm-tab').forEach(b => b.addEventListener('click', () => showTab(b.dataset.tab)));
+
+  // ── roles list ───────────────────────────────────────────────────────────
+  async function load(keepSelection = true) {
+    try {
+      const data = await req(api('/'));
+      state.roles = data.roles; state.catalog = data.permissionCatalog; state.actor = data.actor; state.bot = data.bot;
+      const warn = [];
+      if (!data.bot.canManageRoles) warn.push(["The bot doesn't have ", h('strong', { text: 'Manage Roles' }), ' here, so roles can be viewed but not changed.']);
+      if (!data.actor.canManageRoles) warn.push(["You don't have ", h('strong', { text: 'Manage Roles' }), ' in this server, so this page is view-only for you.']);
+      if (!data.memberCountsComplete) warn.push(["Member counts may be incomplete: Discord didn't return the full member list."]);
+      showWarn(warn);
+      $('rmCount').textContent = `${data.roles.length} of ${data.roleLimit} roles`;
+      renderList();
+      const still = keepSelection && state.selected && state.roles.find(r => r.id === state.selected);
+      if (still) renderDetail(still);
+      else { state.selected = null; $('rmDetail').replaceChildren(kitState('empty', 'No role selected', 'Pick a role from the list.')); }
+    } catch (err) {
+      showError(err.message);
+      if (!state.roles.length) $('rmRoleList').replaceChildren(kitState('error', 'Could not load the roles', err.message));
+    }
+  }
+
+  function badges(r) {
+    const b = [];
+    if (r.keyPermissions.includes('Administrator')) b.push(h('span', { className: 'cf-pill is-bad', text: 'Admin' }));
+    else if (r.keyPermissions.length) b.push(h('span', { className: 'cf-pill is-warn', title: r.keyPermissions.join(', '), text: 'Staff perms' }));
+    if (r.managed) b.push(h('span', { className: 'cf-pill', text: r.botRole ? 'Bot' : 'Managed' }));
+    if (!r.manage.ok && !r.isEveryone && !r.managed) b.push(h('span', { className: 'cf-pill', title: r.manage.reason }, icon('fa-lock'), h('span', { className: 'visually-hidden', text: 'Locked' })));
+    return b;
+  }
+
+  function renderList() {
+    const f = $('rmFilter').value.trim().toLowerCase();
+    const rows = state.roles.filter(r => !f || r.name.toLowerCase().includes(f));
+    const out = [];
+    const botTopId = state.bot.topRole && state.bot.topRole.id;
+    rows.forEach(r => {
+      out.push(h('div', { className: 'rm-role' + (r.id === state.selected ? ' selected' : ''), 'data-id': r.id, role: 'button', tabindex: '0', 'aria-pressed': String(r.id === state.selected) },
+        dot(r.color), h('span', { className: 'rm-name', text: r.name }), badges(r),
+        h('span', { className: 'rm-num', title: 'Members', text: String(Number(r.memberCount)) })));
+      // Everything under the bot's own role is what the bot can give and edit.
+      if (!f && r.id === botTopId) out.push(h('div', { className: 'rm-botline', text: 'The bot can manage the roles below' }));
+    });
+    $('rmRoleList').replaceChildren(...(out.length ? out : [kitState('empty', 'No roles match', 'Try a shorter filter.')]));
+  }
+
+  function selectRow(row) {
+    state.selected = row.dataset.id;
+    renderList();
+    renderDetail(state.roles.find(r => r.id === state.selected));
+  }
+  $('rmRoleList').addEventListener('click', (e) => { const row = e.target.closest('.rm-role'); if (row) selectRow(row); });
+  $('rmRoleList').addEventListener('keydown', (e) => {
+    const row = e.target.closest('.rm-role');
+    if (row && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); selectRow(row); }
+  });
+  $('rmFilter').addEventListener('input', renderList);
+
+  // ── role detail ──────────────────────────────────────────────────────────
+  function cfRow(cls, labelFor, label, desc, control) {
+    return h('div', { className: 'cf-row' + (cls ? ' ' + cls : '') },
+      h('div', { className: 'cf-row-text' }, h('label', { className: 'cf-row-label', for: labelFor, text: label }), desc ? h('p', { className: 'cf-row-desc', text: desc }) : null),
+      h('div', { className: 'cf-row-control' }, control));
+  }
+
+  function renderDetail(r) {
+    const can = r.manage.ok && state.actor.canManageRoles && state.bot.canManageRoles;
+    const has = new Set(r.permissions);
+    const parts = [];
+
+    parts.push(h('div', { className: 'rm-head' },
+      h('h3', { className: 'rm-h' }, dot(r.color), ' ', r.name, ' ', badges(r)),
+      h('div', { className: 'rm-muted' }, `${Number(r.memberCount)} member${r.memberCount === 1 ? '' : 's'} · position ${Number(r.position)} · ID `, h('code', { text: r.id })),
+      r.manage.ok ? null : h('div', { className: 'rm-muted' }, icon('fa-lock'), ' ', r.manage.reason)));
+
+    let nameIn, colorIn, colorText, colorClear, hoistIn, mentionIn;
+    if (!r.isEveryone) {
+      nameIn = h('input', { id: 'rmName', className: 'form-control', maxlength: '100', value: r.name, disabled: !can });
+      colorIn = h('input', { type: 'color', id: 'rmColor', value: r.color || '#99aab5', 'aria-label': 'Pick a colour', disabled: !can });
+      colorText = h('input', { type: 'text', id: 'rmColorText', className: 'form-control', value: r.color || '', placeholder: 'No colour', disabled: !can });
+      colorClear = btn('btn-secondary btn-sm', 'No colour', { id: 'rmColorClear', disabled: !can });
+      hoistIn = h('input', { type: 'checkbox', className: 'cf-switch', role: 'switch', id: 'rmHoist', checked: r.hoist, disabled: !can });
+      mentionIn = h('input', { type: 'checkbox', className: 'cf-switch', role: 'switch', id: 'rmMentionable', checked: r.mentionable, disabled: !can });
+      parts.push(
+        cfRow('', 'rmName', 'Name', null, nameIn),
+        cfRow('', 'rmColorText', 'Colour', 'A hex colour such as #5865f2. Leave empty for none.', h('div', { className: 'rm-color-row' }, colorIn, colorText, colorClear)),
+        cfRow('cf-row--switch', 'rmHoist', 'Display separately', 'Members with this role are listed in their own group.', hoistIn),
+        cfRow('cf-row--switch', 'rmMentionable', 'Allow anyone to @mention it', null, mentionIn));
+    }
+
+    parts.push(h('details', { className: 'cf-expand', open: r.isEveryone || null },
+      h('summary', null, 'Permissions ', h('span', { className: 'rm-muted', text: `(${r.permissions.length})` })),
+      h('div', { className: 'cf-expand-body' }, state.catalog.map(g => [
+        h('div', { className: 'rm-permgroup', text: g.group }),
+        h('div', { className: 'cf-check-grid rm-permlist' }, g.perms.map(p => {
+          const denied = can && !p.allowed && !has.has(p.key);
+          return h('label', { className: 'cf-choice' + (denied ? ' rm-denied' : ''), title: denied ? "You (or the bot) can't grant this" : null },
+            h('input', { type: 'checkbox', 'data-perm': p.key, checked: has.has(p.key), disabled: !can || denied }), ' ', h('span', { text: p.label }));
+        })),
+      ]))));
+
+    if (can) parts.push(h('div', { className: 'cf-section-foot' },
+      h('span', { className: 'cf-status-line', id: 'rmStatus', role: 'status' }),
+      btn('btn-secondary', icon('fa-arrow-up'), { id: 'rmUp', title: 'Move up one', 'aria-label': 'Move up one', onclick: () => moveRole(r, 'up') }),
+      btn('btn-secondary', icon('fa-arrow-down'), { id: 'rmDown', title: 'Move down one', 'aria-label': 'Move down one', onclick: () => moveRole(r, 'down') }),
+      btn('btn-primary', 'Save', { id: 'rmSave', onclick: () => saveRole(r) })));
+
+    if (!r.isEveryone) {
+      parts.push(h('div', { className: 'cf-rows-head', text: 'Members' }));
+      if (can) {
+        const q = h('input', { type: 'search', id: 'rmAddQuery', className: 'form-control', placeholder: 'Give this role to (name or ID)', 'aria-label': 'Give this role to',
+          onkeydown: (e) => { if (e.key === 'Enter') findToAdd(r); } });
+        parts.push(h('div', { className: 'rm-toolbar cf-input-group' }, q, btn('btn-secondary btn-sm', 'Find', { id: 'rmAddFind', onclick: () => findToAdd(r) })),
+          h('div', { id: 'rmAddResults', className: 'cf-list' }));
+      }
+      parts.push(h('div', { id: 'rmRoleMembers', className: 'cf-list rm-members' }, kitState('loading', 'Loading members')));
+    }
+
+    if (can && !r.isEveryone) {
+      const confirmIn = h('input', { id: 'rmDeleteName', className: 'form-control', autocomplete: 'off', 'aria-label': 'Role name' });
+      const del = btn('btn-danger', 'Delete role', { id: 'rmDelete', disabled: true, onclick: () => deleteRole(r) });
+      confirmIn.addEventListener('input', () => { del.disabled = confirmIn.value !== r.name; });
+      parts.push(h('details', { className: 'cf-expand rm-danger' }, h('summary', { text: 'Delete this role' }),
+        h('div', { className: 'cf-expand-body' },
+          h('p', null, "This can't be undone. Type ", h('strong', { text: r.name }), ' to confirm.'),
+          h('div', { className: 'rm-toolbar cf-input-group' }, confirmIn, del))));
+    }
+
+    $('rmDetail').replaceChildren(...parts);
+    if (!r.isEveryone) loadRoleMembers(r, can);
+    if (!can || r.isEveryone) return;
+    colorIn.addEventListener('input', () => { colorText.value = colorIn.value; });
+    colorText.addEventListener('input', () => { const v = colorText.value.trim(); if (/^#[0-9a-f]{6}$/i.test(v)) colorIn.value = v; });
+    colorClear.addEventListener('click', () => { colorText.value = ''; });
+  }
+
+  const status = (m, ok = true) => { const el = $('rmStatus'); if (el) { el.textContent = m; el.classList.toggle('is-ok', ok && !!m); el.classList.toggle('is-bad', !ok); } };
+
+  async function saveRole(r) {
+    showError('');
+    const body = { permissions: [...$('rmDetail').querySelectorAll('input[data-perm]:checked')].map(i => i.dataset.perm) };
+    if (!r.isEveryone) {
+      body.name = $('rmName').value;
+      body.color = $('rmColorText').value.trim() || null;
+      body.hoist = $('rmHoist').checked;
+      body.mentionable = $('rmMentionable').checked;
+    }
+    status('Saving…');
+    try {
+      const data = await req(api(`/roles/${r.id}`), { method: 'PATCH', body: JSON.stringify(body) });
+      await load();
+      status(data.refused?.length ? `Saved, but not granted (you can't give them): ${data.refused.join(', ')}` : 'Saved.', !data.refused?.length);
+    } catch (err) { status('', false); showError(err.message); }
+  }
+
+  async function moveRole(r, direction) {
+    showError('');
+    try { await req(api(`/roles/${r.id}/move`), { method: 'POST', body: JSON.stringify({ direction }) }); await load(); }
+    catch (err) { showError(err.message); }
+  }
+
+  async function deleteRole(r) {
+    showError('');
+    try {
+      await req(api(`/roles/${r.id}`), { method: 'DELETE', body: JSON.stringify({ confirmName: $('rmDeleteName').value }) });
+      await load(false);
+    } catch (err) { showError(err.message); }
+  }
+
+  async function loadRoleMembers(r, can) {
+    const box = $('rmRoleMembers');
+    try {
+      const data = await req(api(`/roles/${r.id}/members`));
+      if (state.selected !== r.id) return;
+      const rows = data.members.map(m => memberRow(m, [
+        btn('btn-secondary btn-sm', 'Roles', { title: 'Open in Members', onclick: () => openMember(m.id) }),
+        can ? btn('btn-secondary btn-sm', icon('fa-xmark'), { title: 'Remove this role', 'aria-label': `Remove this role from ${m.displayName}`,
+          onclick: async () => {
+            try { await req(api(`/members/${m.id}/roles/${r.id}`), { method: 'DELETE' }); await load(); }
+            catch (err) { showError(err.message); }
+          } }) : null,
+      ]));
+      box.replaceChildren(...(rows.length ? rows : [note('Nobody has this role.')]),
+        ...(data.truncated ? [note(`Showing ${data.members.length} of ${Number(data.total)}.`)] : []));
+    } catch (err) { box.replaceChildren(kitState('error', 'Could not load the members', err.message)); }
+  }
+
+  async function findToAdd(r) {
+    const q = $('rmAddQuery').value.trim(); if (!q) return;
+    const out = $('rmAddResults');
+    try {
+      const data = await req(api(`/members/search?q=${encodeURIComponent(q)}`));
+      const rows = data.members.map(m => memberRow(m, btn('btn-primary btn-sm', 'Give role', {
+        onclick: async () => {
+          try { await req(api(`/members/${m.id}/roles/${r.id}`), { method: 'PUT' }); out.replaceChildren(); $('rmAddQuery').value = ''; await load(); }
+          catch (err) { showError(err.message); }
+        } })));
+      out.replaceChildren(...(rows.length ? rows : [note('No members found.')]));
+    } catch (err) { showError(err.message); }
+  }
+
+  // ── members tab ──────────────────────────────────────────────────────────
+  async function searchMembers() {
+    const q = $('rmMemberQuery').value.trim(); if (!q) return;
+    showError('');
+    try {
+      const data = await req(api(`/members/search?q=${encodeURIComponent(q)}`));
+      if (data.userId && !data.members.length) return openMember(data.userId);
+      if (data.members.length === 1) return openMember(data.members[0].id);
+      const rows = data.members.map(m => memberRow(m, btn('btn-secondary btn-sm', 'Open', { onclick: () => openMember(m.id) })));
+      $('rmMemberResults').replaceChildren(...(rows.length ? rows : [note('No current members match. Paste a user ID to look up someone who left.')]));
+    } catch (err) { showError(err.message); }
+  }
+  $('rmMemberSearch').addEventListener('click', searchMembers);
+  $('rmMemberQuery').addEventListener('keydown', (e) => { if (e.key === 'Enter') searchMembers(); });
+
+  const HISTORY_LABEL = {
+    MEMBER_ROLES_ADDED: () => [h('span', { className: 'rm-add', text: 'Added' }), ' '],
+    MEMBER_ROLES_REMOVED: () => [h('span', { className: 'rm-rem', text: 'Removed' }), ' '],
+    GUILD_MEMBER_JOIN: () => [h('strong', { text: 'Joined the server' })],
+    GUILD_MEMBER_LEAVE: () => [h('strong', { text: 'Left the server' })],
+  };
+  const SKIPPED_LABEL = [
+    ['already', 'Already has'], ['missing', 'Deleted since'],
+    ['tooHigh', 'Above what you or the bot can give'], ['managed', 'Managed by an integration'],
+  ];
+
+  async function openMember(userId) {
+    showTab('members');
+    $('rmMemberResults').replaceChildren();
+    const box = $('rmMemberDetail');
+    box.replaceChildren(h('div', { className: 'cf-rows' }, kitState('loading', 'Loading member')));
+    showError('');
+    const reload = async () => { await load(); openMember(userId); };
+    const act = (fn) => async () => { try { await fn(); await reload(); } catch (err) { showError(err.message); } };
+    try {
+      const d = await req(api(`/members/${encodeURIComponent(userId)}`));
+      const canWrite = state.actor.canManageRoles && state.bot.canManageRoles && !!d.member;
+      const assignable = state.roles.filter(r => r.manage.ok && !r.isEveryone && !r.managed && !d.roles.some(x => x.id === r.id));
+      const ll = d.lastLeave;
+
+      const title = d.member
+        ? h('span', { className: 'rm-h' }, h('img', { src: d.member.avatar || '', alt: '' }), ' ', d.member.displayName, ' ', h('span', { className: 'rm-muted', text: '@' + d.member.username }))
+        : h('span', { className: 'rm-h' }, 'User ', h('code', { text: d.userId }), ' ', h('span', { className: 'cf-pill', text: 'Not in the server' }));
+
+      let current;
+      if (d.member) {
+        const chips = d.roles.map(r => chip(r, canWrite && r.manage.ok
+          ? h('button', { type: 'button', className: 'cf-chip-remove', title: 'Remove', 'aria-label': `Remove ${r.name}`,
+              onclick: act(() => req(api(`/members/${userId}/roles/${r.id}`), { method: 'DELETE' })) }, icon('fa-xmark'))
+          : null));
+        current = [h('div', { className: 'cf-row cf-row--stack' }, h('div', { className: 'cf-chips' }, chips.length ? chips : h('span', { className: 'rm-muted', text: 'No roles.' })))];
+        if (canWrite && assignable.length) {
+          const pick = h('select', { id: 'rmGiveRole', className: 'form-select', 'aria-label': 'Role to give' }, assignable.map(r => h('option', { value: r.id, text: r.name })));
+          current.push(h('div', { className: 'rm-toolbar cf-input-group' }, pick,
+            btn('btn-primary btn-sm', 'Give role', { id: 'rmGive', onclick: act(() => req(api(`/members/${userId}/roles/${pick.value}`), { method: 'PUT' })) })));
+        }
+      } else {
+        current = [note('They are not in the server, so they have no current roles.')];
+      }
+
+      let left;
+      if (ll) {
+        left = [h('div', { className: 'cf-row cf-row--stack' }, h('div', { className: 'cf-chips' },
+          ll.restorable.length ? ll.restorable.map(x => chip(x)) : h('span', { className: 'rm-muted', text: 'Nothing left to restore.' })))];
+        SKIPPED_LABEL.filter(([k]) => ll.skipped[k]?.length).forEach(([k, label]) => left.push(
+          h('div', { className: 'cf-row cf-row--stack' }, h('div', { className: 'cf-row-text' }, h('span', { className: 'cf-row-label', text: label })),
+            h('div', { className: 'cf-chips' }, ll.skipped[k].map(x => chip(x))))));
+        if (canWrite && ll.restorable.length) {
+          const restore = btn('btn-primary', `Restore ${ll.restorable.length} role${ll.restorable.length === 1 ? '' : 's'}`, { id: 'rmRestore' });
+          restore.addEventListener('click', async () => {
+            restore.disabled = true;
+            try { await req(api(`/members/${userId}/restore`), { method: 'POST' }); await reload(); }
+            catch (err) { showError(err.message); restore.disabled = false; }
+          });
+          left.push(h('div', { className: 'cf-section-foot' }, restore));
+        }
+      } else {
+        left = [note('No record of them leaving this server.')];
+      }
+
+      const history = d.history.length
+        ? h('div', { className: 'cf-list' }, d.history.map(e => h('div', { className: 'cf-list-item rm-history-item' },
+            h('time', { text: when(e.at) }),
+            h('div', { className: 'rm-history-what' }, HISTORY_LABEL[e.type] ? HISTORY_LABEL[e.type]() : e.type, e.roles.map(x => chip(x))))))
+        : note('No role changes recorded.');
+
+      box.replaceChildren(
+        section(title, '', current),
+        section('When they last left', ll ? `Left ${when(ll.leftAt)}, ${ll.source === 'sticky' ? 'saved by Sticky Roles' : 'rebuilt from the role history below'}.` : '', left),
+        section('Role history', d.historyStartsAt
+          ? `Recorded by the bot since ${when(d.historyStartsAt)}. Changes made while the bot was offline aren't included.`
+          : 'Nothing recorded for this member.', history));
+
+      // Risk insight (core/member-insight.js), built as DOM by the shared _member-risk partial.
+      if (window.cfuRenderMemberRisk) {
+        const riskBox = document.createElement('div');
+        box.prepend(riskBox);
+        window.cfuRenderMemberRisk(riskBox, guildId, userId);
+      }
+    } catch (err) { box.replaceChildren(); showError(err.message); }
+  }
+
+  load();
+})();
+</script>
+
+
+<%- include('_member-risk') %>

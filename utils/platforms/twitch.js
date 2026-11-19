@@ -3,11 +3,18 @@ import logger from '../logger.js';
 
 let accessToken = null;
 let tokenExpiresAt = 0;
+let tokenRequest = null; // callers arriving while a token is being fetched share that request
 
 async function getAccessToken() {
     if (accessToken && Date.now() < tokenExpiresAt) {
         return accessToken;
     }
+    if (tokenRequest) return tokenRequest;
+    tokenRequest = fetchAppToken().finally(() => { tokenRequest = null; });
+    return tokenRequest;
+}
+
+async function fetchAppToken() {
 
     try {
         const response = await axios.post(
@@ -95,7 +102,9 @@ async function getStreamDetails(twitchUsername) {
             game_name: stream.game_name,
             viewer_count: stream.viewer_count,
             thumbnail_url: thumbnailUrl,
-            started_at: stream.started_at
+            started_at: stream.started_at,
+            // Matched by the go-live title keyword filter (core/stream-alert-filters.js).
+            tags: Array.isArray(stream.tags) ? stream.tags : []
         };
     } catch (error) {
         const errorData = axios.isAxiosError(error) ? (error.response?.data || error.message) : 'Unknown error';

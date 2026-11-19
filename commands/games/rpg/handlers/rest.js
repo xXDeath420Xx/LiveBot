@@ -3,6 +3,15 @@
  * Absorbed from rpg-status.js (formerly /rpgstatus rest)
  */
 import { EmbedBuilder } from 'discord.js';
+import { themeColor } from '../../../../core/guild-theme.js';
+
+/** One embed field summarising class resources restored by the rest (or null). */
+function restoredResourcesField(result) {
+    const restored = Array.isArray(result.restoredResources) ? result.restoredResources : [];
+    if (restored.length === 0) return null;
+    const value = restored.map(r => `**${r.name}** → ${r.restored}`).join('\n');
+    return { name: '🔋 Class Resources', value: value.length > 1024 ? `${value.slice(0, 1021)}...` : value, inline: false };
+}
 
 /**
  * Handle rest subcommands (short, long)
@@ -28,7 +37,7 @@ export async function handleRest(interaction, subcommand, characterManager) {
 
         const embed = new EmbedBuilder()
             .setTitle('🏕️ Short Rest')
-            .setColor('#4CAF50')
+            .setColor(themeColor(interaction.guildId, 'success'))
             .setDescription(`**${character.character_name}** takes an hour to rest and recuperate.`)
             .addFields(
                 { name: '❤️ HP', value: `${result.previousHP} → ${result.newHP}/${character.max_health}`, inline: true },
@@ -42,6 +51,12 @@ export async function handleRest(interaction, subcommand, characterManager) {
             ).join('\n');
             embed.addFields({ name: '🩹 Healing Breakdown', value: rollDetails || 'None' });
         }
+
+        if (result.slotsRestored) {
+            embed.addFields({ name: '✨ Pact Slots', value: 'Restored', inline: true });
+        }
+        const resField = restoredResourcesField(result);
+        if (resField) embed.addFields(resField);
 
         embed.setFooter({ text: `Total Healing: ${result.totalHealing} HP` });
 
@@ -69,6 +84,9 @@ export async function handleRest(interaction, subcommand, characterManager) {
                 inline: true
             });
         }
+
+        const resField = restoredResourcesField(result);
+        if (resField) embed.addFields(resField);
 
         embed.setFooter({ text: 'You are fully rested and ready for adventure!' });
 

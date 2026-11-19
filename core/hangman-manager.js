@@ -1,9 +1,52 @@
 import { EmbedBuilder } from 'discord.js';
 import pool from '../utils/db.js';
 import logger from '../utils/logger.js';
+import { themeColor } from './guild-theme.js';
+import { randomCommonWords } from './word-bank.js';
+import { updateChallengeProgress } from './daily-challenges-manager.js';
 
 // Store active hangman games
 const activeHangmanGames = new Map();
+
+// Word lengths promised by the /arcade hangman difficulty choices.
+const DIFFICULTY_LENGTHS = { easy: [4, 5], medium: [6, 8], hard: [9, 20] };
+
+// Only A-Z are guessable; anything else in a server's custom word (space, hyphen, apostrophe,
+// accented letter) is shown from the start so the word can still be completed.
+const isGuessable = (ch) => ch >= 'A' && ch <= 'Z';
+
+/**
+ * Pick a word for a new game: the global bank plus this server's custom words (word_list,
+ * migration 260). 'random' and 'general' fall back to the bundled dictionary (core/word-bank.js)
+ * when the table has nothing for that difficulty, so those games can always start.
+ */
+async function pickWord(guildId, difficulty, category) {
+    let query = `SELECT word, category, definition FROM word_list
+                 WHERE difficulty = ? AND is_active = TRUE AND (guild_id IS NULL OR guild_id = ?)`;
+    const params = [difficulty, guildId];
+
+    if (category !== 'random') {
+        query += ' AND category = ?';
+        params.push(category);
+    }
+
+    query += ' ORDER BY RAND() LIMIT 1';
+
+    try {
+        const [[row]] = await pool.execute(query, params);
+        if (row) return row;
+    } catch (error) {
+        logger.error('[Hangman] word_list lookup failed', { error: error.message, guildId, difficulty, category });
+    }
+
+    if (category === 'random' || category === 'general') {
+        const [min, max] = DIFFICULTY_LENGTHS[difficulty] || DIFFICULTY_LENGTHS.medium;
+        const [fallback] = randomCommonWords(1, min, max);
+        if (fallback) return { word: fallback, category: 'general', definition: null };
+    }
+
+    return null;
+}
 
 const HANGMAN_STAGES = [
     "```\n  +---+\n  |   |\n      |\n      |\n      |\n      |\n=========```",
@@ -26,23 +69,12 @@ export async function handleStart(interaction) {
 
     if (existingGame) {
         return interaction.reply({
-            content: '❌ You already have an active hangman game! Use `/hangman guess` to continue or `/hangman give-up` to end it.',
+            content: '❌ You already have an active hangman game! Use `/arcade hangman guess` to continue or `/arcade hangman give-up` to end it.',
             ephemeral: true
         });
     }
 
-    // Get random word from database
-    let query = 'SELECT * FROM word_list WHERE difficulty = ? AND is_active = TRUE';
-    const params = [difficulty];
-
-    if (category !== 'random') {
-        query += ' AND category = ?';
-        params.push(category);
-    }
-
-    query += ' ORDER BY RAND() LIMIT 1';
-
-    const [[wordData]] = await pool.execute(query, params);
+    const wordData = await pickWord(interaction.guild.id, difficulty, category);
 
     if (!wordData) {
         return interaction.reply({
@@ -66,7 +98,7 @@ export async function handleStart(interaction) {
         maxWrongGuesses: 6,
         startTime: Date.now(),
         difficulty,
-        category: wordData.category,
+        category: wordData.category || 'general',
         definition: wordData.definition
     };
 
@@ -93,7 +125,7 @@ export async function handleGuess(interaction) {
 
     if (!game) {
         return interaction.reply({
-            content: "❌ You don't have an active hangman game! Use `/hangman start` to begin.",
+            content: "❌ You don't have an active hangman game! Use `/arcade hangman start` to begin.",
             ephemeral: true
         });
     }
@@ -131,7 +163,8 @@ export async function handleGuess(interaction) {
             }
             await displayGame(interaction, game, false);
         } else {
-            game.wrongGuesses += 2; // Wrong word guess counts as 2 mistakes
+            // Wrong word guess counts as 2 mistakes (capped so the gallows/lives never overflow)
+            game.wrongGuesses = Math.min(game.maxWrongGuesses, game.wrongGuesses + 2);
             await interaction.reply({
                 content: `❌ **${guess}** is not the word! (-2 lives)`,
                 ephemeral: false
@@ -169,7 +202,7 @@ export async function displayGame(interaction, game, forceEnd = false) {
     for (const letter of game.word) {
         if (letter === ' ') {
             displayWord += '  ';
-        } else if (game.guessedLetters.has(letter) || isGameOver) {
+        } else if (!isGuessable(letter) || game.guessedLetters.has(letter) || isGameOver) {
             displayWord += letter + ' ';
         } else {
             displayWord += '_ ';
@@ -217,10 +250,14 @@ export async function displayGame(interaction, game, forceEnd = false) {
         // Update stats
         await updateHangmanStats(game, won);
 
+        // Daily challenges (fire-and-forget: a failure there must never break the game)
+        updateChallengeProgress(game.guildId, game.userId, 'games', 1).catch(err =>
+            logger.warn('[Hangman] Daily challenge progress failed', { error: err.message, guildId: game.guildId, userId: game.userId }));
+
         // Remove game from active games
         activeHangmanGames.delete(game.gameId);
     } else {
-        embed.setFooter({ text: 'Use /hangman guess <letter> to guess | /hangman give-up to reveal' });
+        embed.setFooter({ text: 'Use /arcade hangman guess <letter> to guess | /arcade hangman give-up to reveal' });
     }
 
     const method = interaction.replied ? 'followUp' : interaction.deferred ? 'editReply' : 'reply';
@@ -238,7 +275,7 @@ export async function handleStats(interaction) {
     if (!stats) {
         return interaction.reply({
             content: targetUser.id === interaction.user.id
-                ? "❌ You haven't played any hangman games yet! Use `/hangman start` to begin."
+                ? "❌ You haven't played any hangman games yet! Use `/arcade hangman start` to begin."
                 : `❌ ${targetUser.username} hasn't played any hangman games yet.`,
             ephemeral: true
         });
@@ -248,7 +285,7 @@ export async function handleStats(interaction) {
     const avgScore = stats.games_played > 0 ? Math.round(stats.total_score / stats.games_played) : 0;
 
     const embed = new EmbedBuilder()
-        .setColor('#3498db')
+        .setColor(themeColor(interaction.guildId, 'primary'))
         .setTitle(`🎯 Hangman Statistics - ${targetUser.username}`)
         .setThumbnail(targetUser.displayAvatarURL())
         .addFields(
@@ -270,7 +307,7 @@ export async function handleStats(interaction) {
 
 export function isWordComplete(game) {
     for (const letter of game.word) {
-        if (letter !== ' ' && !game.guessedLetters.has(letter)) {
+        if (isGuessable(letter) && !game.guessedLetters.has(letter)) {
             return false;
         }
     }

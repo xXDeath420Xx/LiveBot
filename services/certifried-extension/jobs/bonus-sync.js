@@ -15,28 +15,37 @@ export async function bonusSync() {
     let synced = 0;
 
     try {
-        // Get all cfx_players with their platform IDs
+        // CFX players whose game account is a Twitch/Kick identity the Tokes chat bot also tracks
         const [players] = await pool.execute(
             `SELECT id, platform, platform_user_id FROM cfx_players
-             WHERE platform = 'twitch' AND is_banned = 0
+             WHERE platform IN ('twitch', 'kick') AND is_banned = 0
              AND last_online_at > DATE_SUB(NOW(), INTERVAL 24 HOUR)`
         );
 
         for (const player of players) {
-            // Look up tokes profile by Twitch user ID
-            const [[tokesProfile]] = await pool.execute(
-                `SELECT cbus.* FROM cf_bot_user_stats cbus
-                 WHERE cbus.platform = 'twitch' AND cbus.user_id = ?`,
-                [player.platform_user_id]
+            // Look up the Tokes bot profile for the same platform identity
+            const [[profile]] = await pool.execute(
+                `SELECT level, lifetime_tokes, current_streak, best_streak
+                 FROM tokes_profiles
+                 WHERE platform = ? AND platform_user_id = ?`,
+                [player.platform, player.platform_user_id]
             );
 
-            if (!tokesProfile) continue;
+            if (!profile) continue;
+
+            // Map tokes_profiles onto the bot-stats shape the bonus resolver expects
+            const tokesProfile = {
+                level: profile.level || 1,
+                total_tokes: profile.lifetime_tokes || 0,
+                daily_streak: profile.current_streak || 0,
+                longest_streak: profile.best_streak || 0
+            };
 
             // Calculate bonuses
             const bonuses = calculateBotBonuses({
-                level: tokesProfile.level || 1,
-                daily_streak: tokesProfile.daily_streak || 0,
-                total_tokes: tokesProfile.total_tokes || 0
+                level: tokesProfile.level,
+                daily_streak: tokesProfile.daily_streak,
+                total_tokes: tokesProfile.total_tokes
             });
 
             // Upsert into cfx_player_bot_bonuses
@@ -79,11 +88,7 @@ export async function bonusSync() {
         }
 
     } catch (error) {
-        // Table might not exist, log and continue
-        if (!error.message.includes('doesn\'t exist')) {
-            throw error;
-        }
-        logger.debug('[BonusSync] Tokes tables not available');
+        logger.error('[BonusSync] Sync failed', { synced, error: error.message });
     }
 }
 

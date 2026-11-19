@@ -1,520 +1,344 @@
+<%#
+  Suggestions: counts, settings (POST suggestions/config), tags (create / update / delete), the
+  filter (GET back to this page) and the suggestion list with its review actions (approve, reject,
+  implement, delete, add / remove a tag). Built on the settings-row kit (cf-settings.css); ids,
+  field names and routes unchanged.
+%>
+<%
+    // Tags + filters are loaded by the 'suggestions' page loader (dashboard/services/manage-sections.js);
+    // without it these fall back to empty so the page still renders.
+    const tagList = (typeof suggestionTags !== 'undefined' && Array.isArray(suggestionTags)) ? suggestionTags : [];
+    const filters = locals.suggestionFilters || {};
+    const curStatus = filters.status || '';
+    const curTag = filters.tagId ? String(filters.tagId) : '';
+    const curSort = filters.sort || 'newest';
+    const tagLabel = (t) => ((t.tag_emoji && t.tag_emoji !== '?️') ? t.tag_emoji + ' ' : '') + t.tag_name;
+    const safeColor = (c) => (/^#[0-9a-fA-F]{6}$/.test(c || '') ? c : '#3498db');
+    const sgStatus = {
+        pending: ['Pending', 'is-warn'], under_review: ['Under review', 'is-info'], approved: ['Approved', 'is-ok'],
+        implemented: ['Implemented', 'is-accent'], rejected: ['Rejected', 'is-bad'], duplicate: ['Duplicate', ''],
+    };
+%>
+<style>
+    .sg-inline { display: flex; align-items: center; gap: var(--cf-2); flex-wrap: wrap; margin: 0; }
+    .sg-inline .form-control, .sg-inline .form-select { width: auto; }
+    .sg-input-sm { width: 11rem !important; max-width: 100%; }
+    .sg-input-xs { width: 6.5rem !important; }
+    .sg-color { width: 38px; height: 34px; padding: 2px; border: 1px solid var(--cf-border-strong); border-radius: var(--cf-radius); background: transparent; cursor: pointer; flex: none; }
+    .sg-tag-row { display: flex; align-items: center; gap: var(--cf-3); flex-wrap: wrap; }
+    .sg-tag-row .sg-count { font-size: var(--cf-text-xs); color: var(--cf-text-3); min-width: 6rem; }
+    .sg-tags { margin-bottom: 4px; }
+    .sg-tags form { display: inline; margin: 0; }
+    .sg-text { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--cf-text); max-width: 32rem; }
+    .sg-reply { margin-top: 4px; font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+    .sg-votes { display: flex; gap: var(--cf-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .sg-votes .up { color: var(--cf-success); }
+    .sg-votes .down { color: var(--cf-danger); }
+    .sg-actions { display: flex; gap: var(--cf-2); justify-content: flex-end; flex-wrap: wrap; }
+    .sg-actions form { display: inline; margin: 0; }
+    .sg-filter-foot { display: flex; align-items: flex-end; }
+</style>
+
 <div class="page-section">
     <div class="page-section-header">
         <div>
             <div class="page-section-title">
                 <i class="fas fa-lightbulb"></i>
-                <span>Suggestions System</span>
+                <span>Suggestions</span>
             </div>
-            <div class="page-section-subtitle">
-                Manage user suggestions, voting, and suggestion settings
-            </div>
+<div class="page-section-subtitle">Settings, tags and the suggestion queue.</div>
         </div>
     </div>
 
-    <!-- Stats Cards -->
-    <div class="suggestions-stats-grid">
-        <div class="suggestions-stat-card">
-            <div class="suggestions-stat-icon warning"><i class="fas fa-clock"></i></div>
-            <div>
-                <div class="suggestions-stat-label">Pending</div>
-                <div class="suggestions-stat-value warning"><%= suggestionStats?.pending || 0 %></div>
-            </div>
-        </div>
-        <div class="suggestions-stat-card">
-            <div class="suggestions-stat-icon success"><i class="fas fa-check"></i></div>
-            <div>
-                <div class="suggestions-stat-label">Approved</div>
-                <div class="suggestions-stat-value success"><%= suggestionStats?.approved || 0 %></div>
-            </div>
-        </div>
-        <div class="suggestions-stat-card">
-            <div class="suggestions-stat-icon primary"><i class="fas fa-check-double"></i></div>
-            <div>
-                <div class="suggestions-stat-label">Implemented</div>
-                <div class="suggestions-stat-value primary"><%= suggestionStats?.implemented || 0 %></div>
-            </div>
-        </div>
-        <div class="suggestions-stat-card">
-            <div class="suggestions-stat-icon danger"><i class="fas fa-times"></i></div>
-            <div>
-                <div class="suggestions-stat-label">Rejected</div>
-                <div class="suggestions-stat-value danger"><%= suggestionStats?.rejected || 0 %></div>
-            </div>
-        </div>
-    </div>
+    <%- include('../kit/_kpis', { items: [
+        { label: 'Pending', value: suggestionStats?.pending || 0 },
+        { label: 'Approved', value: suggestionStats?.approved || 0 },
+        { label: 'Implemented', value: suggestionStats?.implemented || 0 },
+        { label: 'Rejected or duplicate', value: suggestionStats?.rejected || 0 },
+    ], label: 'Suggestions at a glance' }) %>
 
-    <!-- Configuration -->
-    <div class="suggestions-section-card">
-        <div class="suggestions-section-header">
-            <i class="fas fa-cog"></i>
+    <form action="/manage/<%= guild.id %>/suggestions/config" method="POST">
+        <input type="hidden" name="suggestions_form_v2" value="1">
+        <section class="cf-section" aria-labelledby="sg-config-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="sg-config-title">Settings</h2>
+                    <p class="cf-section-desc">Where suggestions are posted and who reviews them.</p>
+                </div>
+            </header>
+            <div class="cf-rows">
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="suggestionsEnabled">Suggestions</label>
+                        <p class="cf-row-desc" id="suggestionsEnabled-desc">Members can post suggestions with <code>/engage suggest submit</code>.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="checkbox" class="cf-switch" role="switch" id="suggestionsEnabled" name="enabled" data-feature-switch aria-describedby="suggestionsEnabled-desc" <%= suggestionConfig?.enabled ? 'checked' : '' %>>
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-suggestions-suggestion_channel_id">Suggestions channel</label>
+                        <p class="cf-row-desc">Where suggestions are posted for voting.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <select id="f-suggestions-suggestion_channel_id" class="form-select" name="suggestion_channel_id">
+                            <%- include('../kit/_pick-options', { items: channels, selected: (suggestionConfig && suggestionConfig.suggestions_channel_id) || null, kind: 'channel', only: 'text', empty: 'Choose a channel' }) %>
+                        </select>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="allowAnonymous">Anonymous suggestions</label>
+                        <p class="cf-row-desc" id="allowAnonymous-desc">Members can set <code>anonymous: True</code> on <code>/engage suggest submit</code> to leave their name off the suggestion.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="checkbox" class="cf-switch" role="switch" id="allowAnonymous" name="allow_anonymous" aria-describedby="allowAnonymous-desc" <%= suggestionConfig?.allow_anonymous ? 'checked' : '' %>>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="approvalRequired">Require staff approval</label>
+                        <p class="cf-row-desc" id="approvalRequired-desc">New suggestions wait for staff. Only approved ones are posted in the suggestions channel for voting.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="checkbox" class="cf-switch" role="switch" id="approvalRequired" name="approval_required" aria-describedby="approvalRequired-desc" <%= suggestionConfig?.require_approval ? 'checked' : '' %>>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--sub">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-suggestions-staff_review_channel_id">Staff review channel</label>
+                        <p class="cf-row-desc">Each new suggestion is posted here with Approve and Reject buttons. Without one, approve them below or with <code>/engage suggest approve</code>.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <select id="f-suggestions-staff_review_channel_id" class="form-select" name="staff_review_channel_id">
+                            <%- include('../kit/_pick-options', { items: channels, selected: (suggestionConfig && suggestionConfig.staff_review_channel_id) || null, kind: 'channel', only: 'text', empty: 'None' }) %>
+                        </select>
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-suggestions-staff_role_id">Staff role</label>
+                        <p class="cf-row-desc">Members with this role can approve, reject and tag suggestions and mark them implemented, as members with Manage Server can.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <select id="f-suggestions-staff_role_id" class="form-select" name="staff_role_id">
+                            <%- include('../kit/_pick-options', { items: roles, selected: (suggestionConfig && suggestionConfig.approved_role_id) || null, kind: 'role', empty: 'None' }) %>
+                        </select>
+                    </div>
+                </div>
+                <div class="cf-section-foot">
+                    <button type="submit" class="btn btn-primary">Save</button>
+                </div>
+            </div>
+        </section>
+    </form>
+
+    <section class="cf-section" aria-labelledby="sg-tags-title">
+        <header class="cf-section-head">
             <div>
-                <h3>Configuration</h3>
-                <p>Set up the suggestions system</p>
+                <h2 class="cf-section-title" id="sg-tags-title">Tags</h2>
+                <p class="cf-section-desc">Labels such as bug, feature or UI. Staff tag suggestions here or with <code>/engage suggest tag</code>; tags show on the suggestion's message and as matching forum tags. Up to 25 tags, and 5 on one suggestion.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <% if (tagList.length > 0) { %>
+            <div class="cf-list">
+                <% tagList.forEach(tag => { const color = safeColor(tag.tag_color); %>
+                <div class="cf-list-item">
+                    <div class="cf-list-main sg-tag-row">
+                        <span class="cf-chip" style="--cf-chip: <%= color %>"><%= tagLabel(tag) %></span>
+                        <span class="sg-count"><%= Number(tag.usage_count || 0) %> suggestion(s)</span>
+                    </div>
+                    <div class="cf-list-actions sg-inline">
+                        <form action="/manage/<%= guild.id %>/suggestions/tags/<%= tag.id %>/update" method="POST" class="sg-inline">
+                            <input type="text" name="tag_name" value="<%= tag.tag_name %>" maxlength="50" class="form-control form-control-sm sg-input-sm" aria-label="Tag name">
+                            <input type="color" name="tag_color" value="<%= color %>" class="sg-color" aria-label="Tag colour">
+                            <input type="text" name="tag_emoji" value="<%= (tag.tag_emoji && tag.tag_emoji !== '?️') ? tag.tag_emoji : '' %>" maxlength="64" placeholder="Emoji" class="form-control form-control-sm sg-input-xs" aria-label="Tag emoji">
+                            <button type="submit" class="btn btn-sm btn-secondary">Save</button>
+                        </form>
+                        <form action="/manage/<%= guild.id %>/suggestions/tags/<%= tag.id %>/delete" method="POST" class="sg-inline">
+                            <button type="submit" class="btn btn-sm btn-danger" title="Delete tag" onclick="return confirm('Delete this tag? It is removed from every suggestion that has it.')">Delete</button>
+                        </form>
+                    </div>
+                </div>
+                <% }); %>
+            </div>
+            <% } else { %>
+            <%- include('../kit/_state', { kind: 'empty', title: 'No tags yet', text: 'Add one below.', id: null, boxed: false, compact: true }) %>
+            <% } %>
+            <div class="cf-rows-head" id="sg-addtag-head">Add a tag</div>
+            <div class="cf-row cf-row--stack">
+                <form action="/manage/<%= guild.id %>/suggestions/tags/create" method="POST" class="sg-inline">
+                    <input type="text" name="tag_name" maxlength="50" required placeholder="Tag name" class="form-control sg-input-sm" aria-label="New tag name">
+                    <input type="color" name="tag_color" value="#3498db" class="sg-color" aria-label="New tag colour">
+                    <input type="text" name="tag_emoji" maxlength="64" placeholder="Emoji" class="form-control sg-input-xs" aria-label="New tag emoji">
+                    <button type="submit" class="btn btn-primary">Add tag</button>
+                </form>
             </div>
         </div>
-        <div class="suggestions-section-body">
-            <form action="/manage/<%= guild.id %>/suggestions/config" method="POST">
-                <div class="suggestions-form-grid">
-                    <div>
-                        <div class="suggestions-toggle-wrapper">
-                            <div class="suggestions-toggle">
-                                <input type="checkbox" id="suggestionsEnabled" name="enabled" <%= suggestionConfig?.enabled ? 'checked' : '' %>>
-                                <span class="suggestions-toggle-slider"></span>
-                            </div>
-                            <div>
-                                <div class="suggestions-toggle-label">Enable Suggestions</div>
-                            </div>
-                        </div>
-                        <div class="suggestions-form-group">
-                            <label class="suggestions-form-label"><i class="fas fa-hashtag"></i>Suggestions Channel</label>
-                            <select class="suggestions-form-select" name="suggestion_channel_id">
-                                <option value="">Select channel...</option>
-                                <% channels.filter(c => c.type === 0).forEach(channel => { %>
-                                    <option value="<%= channel.id %>" <%= suggestionConfig?.suggestions_channel_id === channel.id ? 'selected' : '' %>>#<%= channel.name %></option>
+    </section>
+
+    <section class="cf-section" aria-labelledby="sg-list-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="sg-list-title">Suggestions</h2>
+                <p class="cf-section-desc">Approve or reject pending suggestions, mark approved ones as implemented, and tag them.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <form method="GET" action="/manage/<%= guild.id %>">
+                <input type="hidden" name="page" value="suggestions">
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-fields">
+                        <div class="cf-field">
+                            <label for="f-suggestions-status">Status</label>
+                            <select id="f-suggestions-status" class="form-select" name="status">
+                                <% [['', 'All'], ['pending', 'Pending'], ['under_review', 'Under review'], ['approved', 'Approved'], ['implemented', 'Implemented'], ['rejected', 'Rejected'], ['duplicate', 'Duplicate']].forEach(([value, label]) => { %>
+                                    <option value="<%= value %>" <%= curStatus === value ? 'selected' : '' %>><%= label %></option>
                                 <% }); %>
                             </select>
                         </div>
-                    </div>
-                    <div>
-                        <div class="suggestions-toggle-wrapper">
-                            <div class="suggestions-toggle">
-                                <input type="checkbox" id="approvalRequired" name="approval_required" <%= suggestionConfig?.require_approval ? 'checked' : '' %>>
-                                <span class="suggestions-toggle-slider"></span>
-                            </div>
-                            <div>
-                                <div class="suggestions-toggle-label">Require Staff Approval</div>
-                            </div>
-                        </div>
-                        <div class="suggestions-form-group">
-                            <label class="suggestions-form-label"><i class="fas fa-hashtag"></i>Staff Review Channel</label>
-                            <select class="suggestions-form-select" name="staff_review_channel_id">
-                                <option value="">None</option>
-                                <% channels.filter(c => c.type === 0).forEach(channel => { %>
-                                    <option value="<%= channel.id %>" <%= suggestionConfig?.staff_review_channel_id === channel.id ? 'selected' : '' %>>#<%= channel.name %></option>
+                        <div class="cf-field">
+                            <label for="f-suggestions-tag">Tag</label>
+                            <select id="f-suggestions-tag" class="form-select" name="tag">
+                                <option value="">All</option>
+                                <% tagList.forEach(tag => { %>
+                                    <option value="<%= tag.id %>" <%= curTag === String(tag.id) ? 'selected' : '' %>><%= tagLabel(tag) %></option>
                                 <% }); %>
                             </select>
                         </div>
-                    </div>
-                </div>
-
-                <div class="suggestions-form-group" style="margin-bottom: 0;">
-                    <label class="suggestions-form-label"><i class="fas fa-user-shield"></i>Staff Role</label>
-                    <select class="suggestions-form-select" name="staff_role_id">
-                        <option value="">None</option>
-                        <% roles.forEach(role => { %>
-                            <option value="<%= role.id %>" <%= suggestionConfig?.approved_role_id === role.id ? 'selected' : '' %>><%= role.name %></option>
-                        <% }); %>
-                    </select>
-                    <span class="suggestions-form-hint">Role that can manage suggestions</span>
-                </div>
-
-                <div style="margin-top: 20px;">
-                    <button type="submit" class="suggestions-save-btn">
-                        <i class="fas fa-save"></i>
-                        Save Configuration
-                    </button>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Filter Suggestions -->
-    <div class="suggestions-section-card">
-        <div class="suggestions-section-header filter">
-            <i class="fas fa-filter"></i>
-            <div>
-                <h3>Filter Suggestions</h3>
-                <p>Search and filter the suggestions list</p>
-            </div>
-        </div>
-        <div class="suggestions-section-body">
-            <form method="GET">
-                <div class="suggestions-filter-grid">
-                    <div class="suggestions-form-group" style="margin-bottom: 0;">
-                        <label class="suggestions-form-label">Status</label>
-                        <select class="suggestions-form-select" name="status">
-                            <option value="">All</option>
-                            <option value="pending">Pending</option>
-                            <option value="approved">Approved</option>
-                            <option value="implemented">Implemented</option>
-                            <option value="rejected">Rejected</option>
-                            <option value="under_review">Under Review</option>
-                        </select>
-                    </div>
-                    <div class="suggestions-form-group" style="margin-bottom: 0;">
-                        <label class="suggestions-form-label">Tag</label>
-                        <select class="suggestions-form-select" name="tag">
-                            <option value="">All</option>
-                            <% (suggestionTags || []).forEach(tag => { %>
-                                <option value="<%= tag.tag_id %>"><%= tag.tag_name %></option>
-                            <% }); %>
-                        </select>
-                    </div>
-                    <div class="suggestions-form-group" style="margin-bottom: 0;">
-                        <label class="suggestions-form-label">Sort By</label>
-                        <select class="suggestions-form-select" name="sort">
-                            <option value="newest">Newest First</option>
-                            <option value="oldest">Oldest First</option>
-                            <option value="most_voted">Most Voted</option>
-                        </select>
-                    </div>
-                    <div class="suggestions-form-group" style="margin-bottom: 0; display: flex; align-items: flex-end;">
-                        <button type="submit" class="suggestions-filter-btn">
-                            <i class="fas fa-search"></i>
-                            Filter
-                        </button>
+                        <div class="cf-field">
+                            <label for="f-suggestions-sort">Sort by</label>
+                            <select id="f-suggestions-sort" class="form-select" name="sort">
+                                <% [['newest', 'Newest first'], ['oldest', 'Oldest first'], ['most_voted', 'Most votes']].forEach(([value, label]) => { %>
+                                    <option value="<%= value %>" <%= curSort === value ? 'selected' : '' %>><%= label %></option>
+                                <% }); %>
+                            </select>
+                        </div>
+                        <div class="cf-field sg-filter-foot">
+                            <button type="submit" class="btn btn-secondary">Filter</button>
+                        </div>
                     </div>
                 </div>
             </form>
-        </div>
-    </div>
 
-    <!-- Suggestions List -->
-    <% if (suggestions && suggestions.length > 0) { %>
-        <div class="table-container">
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th>ID</th>
-                        <th>Suggestion</th>
-                        <th>Author</th>
-                        <th>Status</th>
-                        <th>Votes</th>
-                        <th>Created</th>
-                        <th class="text-end">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <% suggestions.forEach(suggestion => {
-                        const upvotes = suggestion.upvotes || 0;
-                        const downvotes = suggestion.downvotes || 0;
-                        const netVotes = upvotes - downvotes;
-                    %>
+            <% if (suggestions && suggestions.length > 0) { %>
+            <div class="cf-table-wrap">
+                <table class="cf-table cf-table--stack">
+                    <thead>
                         <tr>
-                            <td>
-                                <code style="font-size: var(--font-size-sm); color: var(--color-primary-400);">#<%= suggestion.suggestion_id %></code>
-                            </td>
-                            <td style="max-width: 300px;">
-                                <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-1);">
-                                    <%= suggestion.title || 'No Title' %>
-                                </div>
-                                <div style="font-size: var(--font-size-sm); color: var(--color-text-muted);">
-                                    <%= (suggestion.content || '').substring(0, 80) %><%= (suggestion.content || '').length > 80 ? '...' : '' %>
-                                </div>
-                            </td>
-                            <td>
-                                <code style="font-size: var(--font-size-xs); color: var(--color-text-secondary);"><%= suggestion.author_id %></code>
-                            </td>
-                            <td>
-                                <% if (suggestion.status === 'pending') { %>
-                                    <span class="badge badge-warning">Pending</span>
-                                <% } else if (suggestion.status === 'approved') { %>
-                                    <span class="badge badge-success">Approved</span>
-                                <% } else if (suggestion.status === 'implemented') { %>
-                                    <span class="badge badge-primary">Implemented</span>
-                                <% } else if (suggestion.status === 'rejected') { %>
-                                    <span class="badge badge-danger">Rejected</span>
-                                <% } else if (suggestion.status === 'under_review') { %>
-                                    <span class="badge" style="background: var(--color-accent-purple);">Under Review</span>
+                            <th scope="col">ID</th>
+                            <th scope="col">Suggestion</th>
+                            <th scope="col">Author</th>
+                            <th scope="col">Status</th>
+                            <th scope="col">Tags</th>
+                            <th scope="col">Votes</th>
+                            <th scope="col">Posted</th>
+                            <th scope="col" class="cf-cell-end"><span class="visually-hidden">Actions</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% suggestions.forEach(suggestion => {
+                            const sid = suggestion.id ?? suggestion.suggestion_id;
+                            const text = suggestion.suggestion_text ?? suggestion.content ?? '';
+                            const upvotes = Number(suggestion.upvotes) || 0;
+                            const downvotes = Number(suggestion.downvotes) || 0;
+                            const rowTags = Array.isArray(suggestion.tags) ? suggestion.tags : [];
+                            const assignable = tagList.filter(t => !rowTags.some(rt => String(rt.id) === String(t.id)));
+                            const st = sgStatus[suggestion.status];
+                        %>
+                        <tr>
+                            <td data-label="ID" class="cf-cell-muted">#<%= sid %></td>
+                            <td data-label="Suggestion">
+                                <div class="sg-text"><%= text.substring(0, 160) %><%= text.length > 160 ? '…' : '' %></div>
+                                <% if (suggestion.staff_response) { %>
+                                    <div class="sg-reply">Staff reply: <%= String(suggestion.staff_response).substring(0, 120) %></div>
                                 <% } %>
                             </td>
-                            <td>
-                                <div style="display: flex; flex-direction: column; gap: var(--spacing-1);">
-                                    <span class="badge badge-success" style="font-size: var(--font-size-xs);">👍 <%= upvotes %></span>
-                                    <span class="badge badge-danger" style="font-size: var(--font-size-xs);">👎 <%= downvotes %></span>
-                                </div>
+                            <td data-label="Author">
+                                <% if (suggestion.is_anonymous) { %>
+                                    <span class="cf-cell-muted">Anonymous</span>
+                                <% } else if (suggestion.author_name) { %>
+                                    <%- include('_user-cell', { cfUser: null, cfUserId: suggestion.user_id, cfUserName: suggestion.author_name }) %>
+                                <% } else { %>
+                                    <%- include('_user-cell', { cfUser: null, cfUserId: suggestion.user_id ?? suggestion.author_id, cfUserName: null }) %>
+                                <% } %>
                             </td>
-                            <td>
-                                <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">
-                                    <%= new Date(suggestion.created_at).toLocaleDateString() %>
-                                </div>
-                            </td>
-                            <td class="text-end">
-                                <div style="display: flex; gap: var(--spacing-1); justify-content: flex-end; flex-wrap: wrap;">
-                                    <% if (suggestion.status === 'pending' || suggestion.status === 'under_review') { %>
-                                        <form action="/manage/<%= guild.id %>/suggestions/approve" method="POST" style="display: inline;">
-                                            <input type="hidden" name="suggestion_id" value="<%= suggestion.suggestion_id %>">
-                                            <button type="submit" class="btn btn-sm btn-success" title="Approve">
-                                                <i class="fas fa-check"></i>
-                                            </button>
+                            <td data-label="Status"><% if (st) { %><span class="cf-pill <%= st[1] %>"><%= st[0] %></span><% } %></td>
+                            <td data-label="Tags">
+                                <div>
+                                    <div class="cf-chips sg-tags">
+                                        <% rowTags.forEach(tag => { const color = safeColor(tag.tag_color); %>
+                                            <form action="/manage/<%= guild.id %>/suggestions/<%= sid %>/tags/<%= tag.id %>/remove" method="POST">
+                                                <button type="submit" class="cf-chip" style="--cf-chip: <%= color %>" title="Remove this tag" aria-label="Remove the tag <%= tagLabel(tag) %>">
+                                                    <%= tagLabel(tag) %> <i class="fas fa-times" aria-hidden="true"></i>
+                                                </button>
+                                            </form>
+                                        <% }); %>
+                                    </div>
+                                    <% if (assignable.length > 0 && rowTags.length < 5) { %>
+                                        <form action="/manage/<%= guild.id %>/suggestions/<%= sid %>/tags" method="POST" class="sg-inline">
+                                            <select name="tag_id" class="form-select form-select-sm sg-input-xs" aria-label="Add tag to suggestion <%= sid %>">
+                                                <% assignable.forEach(tag => { %>
+                                                    <option value="<%= tag.id %>"><%= tagLabel(tag) %></option>
+                                                <% }); %>
+                                            </select>
+                                            <button type="submit" class="btn btn-sm btn-secondary" title="Add tag">Add</button>
                                         </form>
-                                        <form action="/manage/<%= guild.id %>/suggestions/reject" method="POST" style="display: inline;">
-                                            <input type="hidden" name="suggestion_id" value="<%= suggestion.suggestion_id %>">
-                                            <button type="submit" class="btn btn-sm btn-danger" title="Reject">
-                                                <i class="fas fa-times"></i>
-                                            </button>
+                                    <% } %>
+                                </div>
+                            </td>
+                            <td data-label="Votes">
+                                <span class="sg-votes"><span class="up" title="Upvotes">+<%= upvotes %></span><span class="down" title="Downvotes">-<%= downvotes %></span></span>
+                            </td>
+                            <td data-label="Posted" class="cf-cell-muted"><%= suggestion.created_at ? new Date(suggestion.created_at).toLocaleDateString() : '' %></td>
+                            <td class="cf-cell-end">
+                                <div class="sg-actions">
+                                    <% if (suggestion.status === 'pending' || suggestion.status === 'under_review') { %>
+                                        <form action="/manage/<%= guild.id %>/suggestions/approve" method="POST">
+                                            <input type="hidden" name="suggestion_id" value="<%= sid %>">
+                                            <button type="submit" class="btn btn-sm btn-primary">Approve</button>
+                                        </form>
+                                        <form action="/manage/<%= guild.id %>/suggestions/reject" method="POST">
+                                            <input type="hidden" name="suggestion_id" value="<%= sid %>">
+                                            <button type="submit" class="btn btn-sm btn-danger">Reject</button>
                                         </form>
                                     <% } %>
                                     <% if (suggestion.status === 'approved') { %>
-                                        <form action="/manage/<%= guild.id %>/suggestions/implement" method="POST" style="display: inline;">
-                                            <input type="hidden" name="suggestion_id" value="<%= suggestion.suggestion_id %>">
-                                            <button type="submit" class="btn btn-sm btn-primary" title="Mark as Implemented">
-                                                <i class="fas fa-check-double"></i>
-                                            </button>
+                                        <form action="/manage/<%= guild.id %>/suggestions/implement" method="POST">
+                                            <input type="hidden" name="suggestion_id" value="<%= sid %>">
+                                            <button type="submit" class="btn btn-sm btn-primary">Mark implemented</button>
                                         </form>
                                     <% } %>
-                                    <form action="/manage/<%= guild.id %>/suggestions/delete" method="POST" style="display: inline;">
-                                        <input type="hidden" name="suggestion_id" value="<%= suggestion.suggestion_id %>">
-                                        <button type="submit" class="btn btn-sm btn-secondary" onclick="return confirm('Delete this suggestion?')" title="Delete">
-                                            <i class="fas fa-trash"></i>
-                                        </button>
+                                    <form action="/manage/<%= guild.id %>/suggestions/delete" method="POST">
+                                        <input type="hidden" name="suggestion_id" value="<%= sid %>">
+                                        <button type="submit" class="btn btn-sm btn-secondary" onclick="return confirm('Delete this suggestion?')">Delete</button>
                                     </form>
                                 </div>
                             </td>
                         </tr>
-                    <% }); %>
-                </tbody>
-            </table>
-        </div>
-    <% } else { %>
-        <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-8); text-align: center;">
-            <div style="font-size: var(--font-size-base); color: var(--color-text-muted);">
-                <i class="fas fa-lightbulb"></i>
-                No suggestions yet. Enable the system and set a suggestions channel to get started.
+                        <% }); %>
+                    </tbody>
+                </table>
             </div>
+            <% } else if (curStatus || curTag) { %>
+            <%- include('../kit/_state', { kind: 'empty', title: 'No suggestions match these filters', text: null, id: null, boxed: false, compact: false }) %>
+            <% } else { %>
+            <%- include('../kit/_state', { kind: 'empty', title: 'No suggestions yet', text: 'Switch suggestions on and choose a suggestions channel to start collecting them.', id: null, boxed: false, compact: false }) %>
+            <% } %>
         </div>
-    <% } %>
+    </section>
 </div>
-
-<style>
-/* Compact Suggestions Page Styles */
-.suggestions-stats-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 12px;
-    margin-bottom: 20px;
-}
-
-.suggestions-stat-card {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(167, 139, 250, 0.15);
-    border-radius: 10px;
-    padding: 14px 16px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    transition: all 0.2s;
-}
-
-.suggestions-stat-card:hover {
-    background: rgba(255, 255, 255, 0.06);
-    border-color: rgba(167, 139, 250, 0.3);
-}
-
-.suggestions-stat-icon {
-    width: 36px;
-    height: 36px;
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-}
-
-.suggestions-stat-icon i { font-size: 0.9rem; }
-.suggestions-stat-icon.warning { background: rgba(251, 191, 36, 0.15); }
-.suggestions-stat-icon.warning i { color: #fbbf24; }
-.suggestions-stat-icon.success { background: rgba(34, 197, 94, 0.15); }
-.suggestions-stat-icon.success i { color: #22c55e; }
-.suggestions-stat-icon.primary { background: rgba(167, 139, 250, 0.15); }
-.suggestions-stat-icon.primary i { color: #a78bfa; }
-.suggestions-stat-icon.danger { background: rgba(248, 113, 113, 0.15); }
-.suggestions-stat-icon.danger i { color: #f87171; }
-
-.suggestions-stat-label { font-size: 0.7rem; color: rgba(255, 255, 255, 0.5); text-transform: uppercase; letter-spacing: 0.04em; }
-.suggestions-stat-value { font-size: 1.25rem; font-weight: 700; }
-.suggestions-stat-value.warning { color: #fbbf24; }
-.suggestions-stat-value.success { color: #22c55e; }
-.suggestions-stat-value.primary { color: #a78bfa; }
-.suggestions-stat-value.danger { color: #f87171; }
-
-/* Section Cards */
-.suggestions-section-card {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(167, 139, 250, 0.15);
-    border-radius: 12px;
-    overflow: hidden;
-    margin-bottom: 16px;
-}
-
-.suggestions-section-header {
-    background: rgba(167, 139, 250, 0.08);
-    padding: 14px 18px;
-    border-bottom: 1px solid rgba(167, 139, 250, 0.15);
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.suggestions-section-header i { font-size: 1rem; color: #a78bfa; }
-.suggestions-section-header.filter i { color: #60a5fa; }
-.suggestions-section-header h3 { font-size: 0.95rem; font-weight: 600; color: #ffffff; margin: 0; }
-.suggestions-section-header p { font-size: 0.75rem; color: rgba(255, 255, 255, 0.5); margin: 2px 0 0 0; }
-
-.suggestions-section-body { padding: 18px; }
-
-/* Toggle Switch */
-.suggestions-toggle-wrapper {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 10px 14px;
-    background: rgba(0, 0, 0, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 8px;
-    cursor: pointer;
-    margin-bottom: 14px;
-}
-
-.suggestions-toggle {
-    position: relative;
-    width: 40px;
-    height: 22px;
-    flex-shrink: 0;
-}
-
-.suggestions-toggle input { opacity: 0; width: 0; height: 0; }
-
-.suggestions-toggle-slider {
-    position: absolute;
-    cursor: pointer;
-    inset: 0;
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    transition: 0.2s;
-    border-radius: 22px;
-}
-
-.suggestions-toggle-slider:before {
-    position: absolute;
-    content: "";
-    height: 16px;
-    width: 16px;
-    left: 2px;
-    bottom: 2px;
-    background-color: white;
-    transition: 0.2s;
-    border-radius: 50%;
-}
-
-.suggestions-toggle input:checked + .suggestions-toggle-slider {
-    background: linear-gradient(135deg, #7c3aed, #a78bfa);
-    border-color: #a78bfa;
-}
-
-.suggestions-toggle input:checked + .suggestions-toggle-slider:before {
-    transform: translateX(18px);
-}
-
-.suggestions-toggle-label { font-weight: 600; color: #ffffff; font-size: 0.8rem; }
-
-/* Form Styles */
-.suggestions-form-group { margin-bottom: 14px; }
-.suggestions-form-label { display: block; font-size: 0.8rem; font-weight: 600; color: rgba(255, 255, 255, 0.9); margin-bottom: 6px; }
-.suggestions-form-label i { color: #a78bfa; margin-right: 6px; }
-
-.suggestions-form-select {
-    width: 100%;
-    padding: 10px 14px;
-    background: rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 8px;
-    color: #ffffff;
-    font-size: 0.85rem;
-    transition: all 0.2s;
-}
-
-.suggestions-form-select:focus {
-    outline: none;
-    border-color: rgba(167, 139, 250, 0.5);
-    box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.1);
-}
-
-.suggestions-form-select option { background: #1a1d21; color: #ffffff; }
-.suggestions-form-hint { display: block; margin-top: 4px; font-size: 0.7rem; color: rgba(255, 255, 255, 0.45); }
-
-.suggestions-form-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin-bottom: 14px; }
-.suggestions-filter-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
-
-/* Buttons */
-.suggestions-save-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 20px;
-    background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%);
-    border: none;
-    border-radius: 8px;
-    color: #ffffff;
-    font-size: 0.85rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.suggestions-save-btn:hover { box-shadow: 0 4px 16px rgba(124, 58, 237, 0.4); }
-
-.suggestions-filter-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 10px 16px;
-    background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%);
-    border: none;
-    border-radius: 8px;
-    color: #ffffff;
-    font-size: 0.85rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
-    width: 100%;
-    justify-content: center;
-}
-
-.suggestions-filter-btn:hover { box-shadow: 0 4px 16px rgba(124, 58, 237, 0.4); }
-
-/* Table */
-.table-container {
-    overflow-x: auto;
-    border: 1px solid rgba(167, 139, 250, 0.15);
-    border-radius: 10px;
-}
-
-.data-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-.data-table thead { background: rgba(167, 139, 250, 0.08); }
-
-.data-table th {
-    padding: 10px 14px;
-    text-align: left;
-    font-size: 0.7rem;
-    font-weight: 600;
-    color: rgba(255, 255, 255, 0.6);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-}
-
-.data-table td {
-    padding: 12px 14px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-    font-size: 0.85rem;
-}
-
-.data-table tbody tr { transition: all 0.2s; }
-.data-table tbody tr:hover { background: rgba(167, 139, 250, 0.05); }
-.data-table tbody tr:last-child td { border-bottom: none; }
-
-@media (max-width: 1200px) {
-    .suggestions-stats-grid { grid-template-columns: repeat(2, 1fr); }
-    .suggestions-filter-grid { grid-template-columns: repeat(2, 1fr); }
-}
-
-@media (max-width: 768px) {
-    .suggestions-stats-grid { grid-template-columns: 1fr; }
-    .suggestions-form-grid { grid-template-columns: 1fr; }
-    .suggestions-filter-grid { grid-template-columns: 1fr; }
-}
-</style>
+<script>
+// The staff review channel only matters while approval is required.
+(function () {
+    const on = document.getElementById('approvalRequired');
+    const sel = document.getElementById('f-suggestions-staff_review_channel_id');
+    const row = sel && sel.closest('.cf-row');
+    if (!on || !row) return;
+    const sync = () => { row.hidden = !on.checked; };
+    on.addEventListener('change', sync);
+    sync();
+})();
+</script>

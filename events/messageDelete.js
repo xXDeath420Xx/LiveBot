@@ -7,6 +7,11 @@ export default {
   name: Events.MessageDelete,
   async execute(message) {
     try {
+      // A guild served by its own custom bot is logged by that bot — the same rule messageCreate
+      // applies. Without it both bots posted the delete log (and, with deleted-image evidence on,
+      // both re-uploaded the attachments).
+      if (message.guild && message.client.isDefaultBot && await shouldIgnoreGuild(message.guild.id)) return;
+
       await logMessageDelete(message);
 
       // Handle starboard message deletion

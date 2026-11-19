@@ -4,10 +4,10 @@
 import { REST, Routes, PermissionFlagsBits } from 'discord.js';
 import dotenv from 'dotenv';
 import pool from '../utils/db.js';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 dotenv.config();
 
-const BOT_ID = '1475353066243883111';
+// The acting bot comes from guild_bot_mapping — never pinned here.
 const GUILD  = '1475352754682597468';
 
 // purpose map for referenced roles (id -> human label)
@@ -24,15 +24,15 @@ const PURPOSE = {
 };
 
 const has = (perms, bit) => (BigInt(perms) & bit) === bit;
-const [[bot]] = [await pool.query('SELECT bot_token FROM custom_bots WHERE bot_id=?', [BOT_ID])];
-const token = encryption.decrypt(JSON.parse(bot[0].bot_token));
+const bot = await resolveBotForGuild(GUILD, { db: pool });
+const token = bot.token;
 const rest = new REST({ version: '10' }).setToken(token);
 
 const roles = await rest.get(Routes.guildRoles(GUILD));
 const byId = Object.fromEntries(roles.map(r => [r.id, r]));
 
 // bot hierarchy
-const me = await rest.get(Routes.guildMember(GUILD, BOT_ID));
+const me = await rest.get(Routes.guildMember(GUILD, bot.botId));
 const myRoles = me.roles.map(id => byId[id]).filter(Boolean);
 const myHighest = myRoles.reduce((m, r) => r.position > m.position ? r : m, { position: -1, name: '(none)' });
 let permBits = BigInt(byId[GUILD]?.permissions || 0);

@@ -1,81 +1,88 @@
 <!DOCTYPE html>
-<html lang="en">
+<html data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>" lang="en">
 <head>
-<title>My Decks — CertiFried CAH</title>
 <%- include('components/cah-shell-head') %>
 <style>
-    .hero { padding: 2.5rem 0 1.5rem; }
-    .hero h1 { font-size: 2.1rem; font-weight: 800; letter-spacing: -0.025em; }
-    .hero p { color: var(--text-secondary); margin-top: 0.4rem; }
+    .hero { padding: 24px 0 16px; }
+    .hero h1 { font-size: var(--cf-text-2xl); font-weight: 600; letter-spacing: -0.02em; }
+    .hero p { color: var(--cf-text-3); margin-top: 4px; font-size: var(--cf-text-md); max-width: 640px; }
 
-    .deck-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; padding-bottom: 3rem; }
-    .deck-tile { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 1.25rem; display: flex; flex-direction: column; gap: 0.5rem; transition: border-color 0.15s; }
-    .deck-tile:hover { border-color: var(--accent-purple); }
-    .deck-tile .name { font-weight: 700; font-size: 1.05rem; }
-    .deck-tile .desc { color: var(--text-muted); font-size: 0.85rem; min-height: 2.4em; }
-    .deck-tile .stats { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.3rem; }
-    .deck-tile .actions { display: flex; gap: 0.4rem; margin-top: auto; padding-top: 0.5rem; }
-    .deck-tile .code { font-family: ui-monospace, monospace; font-size: 0.75rem; color: var(--text-muted); }
+    .deck-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr)); gap: 12px; padding-bottom: 72px; }
+    .deck-tile { background: var(--cf-surface); border: 1px solid var(--cf-border); border-radius: var(--cf-radius-lg); padding: 16px; display: flex; flex-direction: column; gap: 8px; transition: border-color 0.15s; min-width: 0; }
+    .deck-tile:hover { border-color: var(--cf-border-strong); }
+    .deck-tile .name { font-weight: 600; font-size: var(--cf-text-md); overflow-wrap: anywhere; }
+    .deck-tile .desc { color: var(--cf-text-3); font-size: var(--cf-text-sm); min-height: 2.4em; overflow-wrap: anywhere; }
+    .deck-tile .stats { display: flex; gap: 6px; flex-wrap: wrap; }
+    .deck-tile .actions { display: flex; gap: 6px; margin-top: auto; padding-top: 8px; flex-wrap: wrap; }
+    .deck-tile .actions .push { margin-left: auto; }
+    .deck-tile .code { font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+    .deck-tile .code code { font-family: var(--cf-mono); color: var(--cf-text); background: var(--cf-surface-2); padding: 1px 5px; border-radius: var(--cf-radius-sm); }
 
-    .new-deck { background: var(--bg-secondary); border: 1px dashed var(--border-color); border-radius: 12px; padding: 1.5rem; display: flex; flex-direction: column; gap: 0.6rem; align-items: stretch; justify-content: center; min-height: 200px; }
-    .new-deck h3 { font-size: 1rem; margin-bottom: 0.5rem; }
-    .empty-state { padding: 3rem 2rem; text-align: center; color: var(--text-muted); background: var(--bg-card); border: 1px dashed var(--border-color); border-radius: 12px; grid-column: 1 / -1; }
+    .new-deck { background: var(--cf-surface); border: 1px dashed var(--cf-border-strong); border-radius: var(--cf-radius-lg); padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+    .new-deck h2 { font-size: var(--cf-text-md); font-weight: 600; }
+    .new-deck .form-check span { font-size: var(--cf-text-sm); }
+    .empty-state { padding: 32px 20px; text-align: center; color: var(--cf-text-3); background: var(--cf-surface); border: 1px dashed var(--cf-border); border-radius: var(--cf-radius-lg); display: flex; align-items: center; justify-content: center; font-size: var(--cf-text-sm); }
 </style>
+    <link rel="stylesheet" href="/css/dropdowns.css">
+<%- include('partials/site-head', { title: 'My Decks — CertiFried CAH', description: 'Cards Against Humanity on CertiFried MultiTool: play in the browser or in Discord, with community card packs and your own decks.' }) %>
 </head>
 <body>
 <%- include('components/cah-shell-nav', { user, page: 'my-decks' }) %>
-<%- include('components/cah-breadcrumbs', { crumbs: [{ href: '/cah', label: 'CAH' }, { label: 'My Decks' }] }) %>
+<%- include('components/cah-breadcrumbs', { crumbs: [{ href: '/cah', label: 'CAH' }, { label: 'My decks' }] }) %>
 
-<div class="container">
+<main class="container" id="main-content">
     <section class="hero">
-        <h1>📚 My Card Packs</h1>
-        <p>Create your own CAH decks. Public packs appear in everyone's lobby picker; private ones live by share code.</p>
+        <h1>My decks<% if (decks && decks.length) { %> <span style="color: var(--cf-text-3); font-weight: 500;"><%= decks.length %></span><% } %></h1>
+        <p>Write your own cards. Public decks are listed for everyone when they host a game. Private decks are only listed for you, and friends can add them with the share code.</p>
     </section>
 
     <div class="deck-grid">
-        <div class="new-deck">
-            <h3>+ New Pack</h3>
-            <input class="form-input" id="new-name" placeholder="Pack name" maxlength="60">
-            <input class="form-input" id="new-desc" placeholder="Short description (optional)" maxlength="120">
+        <section class="new-deck" aria-labelledby="new-deck-title">
+            <h2 id="new-deck-title">New deck</h2>
+            <div>
+                <label class="form-label" for="new-name">Name</label>
+                <input class="form-input" id="new-name" placeholder="Deck name" maxlength="60">
+            </div>
+            <div>
+                <label class="form-label" for="new-desc">Description <span style="color: var(--cf-text-3); font-weight: 400;">(optional)</span></label>
+                <input class="form-input" id="new-desc" placeholder="A short line about the deck" maxlength="120">
+            </div>
             <label class="form-check">
                 <input type="checkbox" id="new-public" checked>
-                <span style="font-size: 0.85rem;">Public — anyone can use it</span>
+                <span>Public: anyone can use it</span>
             </label>
             <label class="form-check">
                 <input type="checkbox" id="new-nsfw">
-                <span style="font-size: 0.85rem;">🔞 NSFW</span>
+                <span>NSFW</span>
             </label>
-            <button class="btn btn-primary" onclick="createDeck()">Create</button>
-            <div id="new-error" class="toast err" style="display:none;"></div>
-        </div>
+            <button type="button" class="btn btn-primary" onclick="createDeck()">Create deck</button>
+            <div id="new-error" class="toast err" role="alert" style="display:none;"></div>
+        </section>
 
         <% if (!decks || decks.length === 0) { %>
-            <div class="empty-state" style="grid-column: span 2;">
-                <div style="font-size: 1.5rem; margin-bottom: 0.5rem; opacity: 0.5;">📦</div>
-                <div>You haven't made any packs yet. Use the form on the left to create one.</div>
-            </div>
+            <div class="empty-state">You haven't made a deck yet. Name one and select Create deck.</div>
         <% } else { %>
             <% decks.forEach(d => { %>
-                <div class="deck-tile">
-                    <div class="name"><%= d.name %></div>
+                <article class="deck-tile">
+                    <h2 class="name"><%= d.name %></h2>
                     <div class="desc"><%= d.description || 'No description.' %></div>
                     <div class="stats">
                         <span class="pill"><%= d.white_count %> white</span>
                         <span class="pill"><%= d.black_count %> black</span>
                         <% if (d.is_public) { %><span class="pill pill-green">Public</span><% } else { %><span class="pill">Private</span><% } %>
-                        <% if (d.nsfw) { %><span class="pill pill-red">🔞</span><% } %>
+                        <% if (d.nsfw) { %><span class="pill pill-red">NSFW</span><% } %>
                     </div>
-                    <div class="code">Share code: <strong><%= d.share_code %></strong></div>
+                    <div class="code">Share code <code><%= d.share_code %></code></div>
                     <div class="actions">
-                        <a class="btn btn-outline btn-sm" href="/cah/my-decks/<%= d.id %>/edit">Edit</a>
-                        <button class="btn btn-ghost btn-sm" onclick="copyCode('<%= d.share_code %>', this)">Copy code</button>
-                        <button class="btn btn-danger btn-sm" onclick="deleteDeck(<%= d.id %>, this)" style="margin-left:auto;">Delete</button>
+                        <a class="btn btn-outline btn-sm" href="/cah/my-decks/<%= d.id %>/edit">Edit cards</a>
+                        <button type="button" class="btn btn-ghost btn-sm" onclick="copyCode('<%= d.share_code %>', this)">Copy code</button>
+                        <button type="button" class="btn btn-danger btn-sm push" onclick="deleteDeck(<%= d.id %>, this)">Delete</button>
                     </div>
-                </div>
+                </article>
             <% }); %>
         <% } %>
     </div>
-</div>
+</main>
 
 <script>
     async function createDeck() {
@@ -90,7 +97,7 @@
         if (!body.name) { err.textContent = 'Name is required.'; err.style.display = 'block'; return; }
         const res = await cfetch('/cah/my-decks/create', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         const data = await res.json();
-        if (!data.ok) { err.textContent = '⚠️ ' + (data.reason || 'failed'); err.style.display = 'block'; return; }
+        if (!data.ok) { err.textContent = 'Could not create the deck (' + (data.reason || 'error') + ').'; err.style.display = 'block'; return; }
         location.href = '/cah/my-decks/' + data.deckId + '/edit';
     }
 
@@ -100,16 +107,17 @@
         const res = await cfetch('/cah/my-decks/' + id, { method: 'DELETE' });
         const data = await res.json();
         if (data.ok) location.reload();
-        else { btn.disabled = false; alert('Failed: ' + data.reason); }
+        else { btn.disabled = false; alert('Could not delete the deck (' + (data.reason || 'error') + ').'); }
     }
 
     function copyCode(code, btn) {
         navigator.clipboard?.writeText(code).then(() => {
             const orig = btn.textContent;
-            btn.textContent = 'Copied ✓';
+            btn.textContent = 'Copied';
             setTimeout(() => btn.textContent = orig, 1500);
         });
     }
 </script>
+<%- include('partials/site-footer') %>
 </body>
 </html>

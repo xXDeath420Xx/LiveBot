@@ -97,7 +97,7 @@ export async function cleanup() {
     const totalCleaned = Object.values(results).reduce((a, b) => a + b, 0);
 
     if (totalCleaned > 0) {
-        logger.info('[Cleanup] Complete', {
+        logger.debug('[Cleanup] Complete', {
             ...results,
             duration: Date.now() - start
         });

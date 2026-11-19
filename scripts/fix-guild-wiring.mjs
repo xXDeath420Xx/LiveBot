@@ -4,10 +4,10 @@
 import { REST, Routes } from 'discord.js';
 import dotenv from 'dotenv';
 import pool from '../utils/db.js';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 dotenv.config();
 
-const BOT_ID = '1475353066243883111';
+// The acting bot comes from guild_bot_mapping — never pinned here.
 const GUILD  = '1475352754682597468';
 const ROLES_CHANNEL = '1487024719889825932'; // 🎭・roles
 
@@ -22,8 +22,8 @@ const NOTIF = [
   { mapId:134, emoji:'🎁', role:'1487024567108108358', name:'Giveaways' },
 ];
 
-const [[bot]] = [await pool.query('SELECT bot_token FROM custom_bots WHERE bot_id=?', [BOT_ID])];
-const token = encryption.decrypt(JSON.parse(bot[0].bot_token));
+const bot = await resolveBotForGuild(GUILD, { db: pool });
+const token = bot.token;
 const rest = new REST({ version: '10' }).setToken(token);
 
 // ---- GUARD: every target role + the roles channel must exist ----

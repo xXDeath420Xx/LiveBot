@@ -5,19 +5,15 @@
 
 import 'dotenv/config';
 import pool from '../utils/db.js';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 
 const GUILD_ID      = '1469931133981687873';
-const KITSUNE_ID    = '1498486251576229958';
+// The acting bot comes from guild_bot_mapping — never pinned here.
 const VERIFIED_ROLE = '1498502484912635906';
 const MIN_AGE_MS    = 24 * 60 * 60 * 1000;
 
-const [rows] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id = ?', [KITSUNE_ID]);
-if (rows.length === 0) {
-  console.error('Kitsune bot row not found');
-  process.exit(1);
-}
-const token = encryption.decrypt(JSON.parse(rows[0].bot_token));
+const bot = await resolveBotForGuild(GUILD_ID, { db: pool });
+const token = bot.token;
 
 async function api(method, path, body) {
   await new Promise(r => setTimeout(r, 60));

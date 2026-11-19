@@ -1,0 +1,13 @@
+<%#
+  A strip of key numbers above a page's sections (cf-settings.css .cf-kpis): counts, the current
+  channel, last run. Locals: items ([{ label, value, small }]; small = a word rather than a number),
+  label (aria-label for the list, optional).
+%>
+<% const _kpis = (typeof items !== 'undefined' && Array.isArray(items)) ? items : []; %>
+<% if (_kpis.length) { %>
+<dl class="cf-kpis" aria-label="<%= (typeof label !== 'undefined' && label) ? label : 'At a glance' %>">
+    <% _kpis.forEach(function (k) { %>
+    <div class="cf-kpi"><dt><%= k.label %></dt><dd class="cf-kpi-value<%= k.small ? ' is-small' : '' %>"><%= k.value %></dd></div>
+    <% }); %>
+</dl>
+<% } %>

@@ -40,6 +40,22 @@ export function startTwitchScheduleScheduler(client) {
   scheduledTask = cron.schedule('*/5 * * * *', async () => {
     logger.info('[TwitchScheduleScheduler] Running Twitch schedule sync check');
 
+    /* Pick up bots that logged in after this scheduler started.
+     *
+     * Managers were only ever built at start-up, from whatever was in
+     * botManager.clients at that instant. A custom bot that finished logging in
+     * a moment later got no manager at all, and its guild's schedule then sat
+     * unsynced until the next full restart happened to win the race — which is
+     * exactly what it looked like: a sync that worked one boot and silently did
+     * nothing the next. Rebuilding here costs a Map lookup per tick. */
+    if (global.botManager?.clients) {
+      for (const [botId, botClient] of global.botManager.clients.entries()) {
+        if (botId === 'default' || scheduleManagers.has(botId)) continue;
+        scheduleManagers.set(botId, new TwitchScheduleManager(botClient));
+        logger.info(`[TwitchScheduleScheduler] Added schedule manager for bot ${botId} that joined after start-up`);
+      }
+    }
+
     // Process schedules for all bots
     for (const [botId, manager] of scheduleManagers.entries()) {
       try {

@@ -1,6 +1,9 @@
 import { Events, EmbedBuilder, ChannelType } from 'discord.js';
 import logger from '../utils/logger.js';
-import { sendLogEmbed } from '../core/log-manager.js';
+import { sendLogEmbed, saveAuditLog } from '../core/log-manager.js';
+import { themeColor } from '../core/guild-theme.js';
+import { shouldIgnoreGuild } from '../utils/custom-bot-check.js';
+import { onChannelCreate as autoRoleCategories } from '../core/auto-role-categories.js';
 
 export default {
   name: Events.ChannelCreate,
@@ -8,6 +11,9 @@ export default {
     try {
       const guild = channel.guild;
       if (!guild) return;
+
+      // Auto-role-categories: generate a role + lock perms for new channels in registered categories.
+      autoRoleCategories(channel).catch(() => {});
 
       // Get channel type name
       const channelTypes = {
@@ -26,7 +32,7 @@ export default {
 
       // Create embed
       const embed = new EmbedBuilder()
-        .setColor(0x57F287) // Green
+        .setColor(themeColor(guild?.id, 'success')) // Green
         .setTitle('📝 Channel Created')
         .setDescription(`A new ${channelTypeDisplay} has been created`)
         .addFields(
@@ -49,6 +55,25 @@ export default {
 
       // Send log
       await sendLogEmbed(guild, 'channelCreate', embed);
+
+      // Persist to audit_logs like every other logged event (same row shape as
+      // log-manager's logChannelCreate, which is not called here because it would post a
+      // second embed). Where a custom bot serves the guild, only that bot writes the row.
+      if (!(channel.client.isDefaultBot && await shouldIgnoreGuild(guild.id))) {
+        await saveAuditLog(
+          guild.id,
+          'CHANNEL_CREATE',
+          null,
+          channel.id,
+          null,
+          channel.id,
+          'Channel created',
+          null,
+          null,
+          channel.name,
+          { type: channel.type, typeName: channelTypeName, parentId: channel.parentId || null }
+        );
+      }
 
       logger.info('[ChannelCreate] Channel created', {
         guildId: guild.id,

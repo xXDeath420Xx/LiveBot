@@ -5,6 +5,7 @@ import { requireBotOwner, requireBotCreator, requireBotOwnerOrGuildAdmin } from 
 import logger from '../../utils/logger.js';
 import { Client } from 'discord.js';
 import { testBotConnection } from '../../utils/bot-validator.js';
+import { isSuperAdmin } from '../../utils/constants.js';
 
 const router = express.Router();
 
@@ -84,6 +85,129 @@ router.get('/api/bots', requireBotCreator, async (req, res) => {
     } catch (error) {
         logger.error('[API Bots] Error fetching bots:', error);
         res.status(500).json({ error: 'Failed to fetch bots' });
+    }
+});
+
+/**
+ * Owner of the bot (with bot creator permission) or a super-admin. Used by every per-bot action
+ * on /bot-management, so the owner console can act on all bots through the same endpoints.
+ */
+async function requireBotAccess(req, res, next) {
+    if (!req.user) return res.status(401).json({ error: 'Unauthorized - Please log in' });
+    if (isSuperAdmin(req.user.id)) {
+        const [rows] = await pool.execute('SELECT 1 FROM custom_bots WHERE bot_id = ?', [req.params.botId]).catch(() => [[]]);
+        if (!rows.length && req.params.botId !== 'default') return res.status(404).json({ error: 'Bot not found' });
+        return next();
+    }
+    return requireBotCreator(req, res, () => requireBotOwnership(req, res, next));
+}
+
+/** Creator or super-admin (list endpoints). */
+async function requireCreatorOrSuperAdmin(req, res, next) {
+    if (!req.user) return res.status(401).json({ error: 'Unauthorized - Please log in' });
+    if (isSuperAdmin(req.user.id)) return next();
+    return requireBotCreator(req, res, next);
+}
+
+function avatarFor(botId, status) {
+    if (status?.avatar) return status.avatar;
+    if (status?.avatarHash) return `https://cdn.discordapp.com/avatars/${botId}/${status.avatarHash}.png?size=128`;
+    try { return `https://cdn.discordapp.com/embed/avatars/${Number((BigInt(botId) >> 22n) % 6n)}.png`; } catch { return null; }
+}
+
+/**
+ * GET /api/bots/fleet?scope=mine|all — everything /bot-management shows for each bot:
+ * state (online / connecting / offline / disabled / pending), the last error the bot manager
+ * recorded, and every server it serves: assigned in guild_bot_mapping and/or actually joined.
+ * scope=all (every owner's bots) is super-admin only.
+ */
+router.get('/api/bots/fleet', requireCreatorOrSuperAdmin, async (req, res) => {
+    try {
+        const superAdmin = isSuperAdmin(req.user.id);
+        const all = superAdmin && req.query.scope === 'all';
+        const [bots] = await pool.execute(`
+            SELECT bot_id, bot_name, client_id, owner_user_id, enabled, approved, approval_notes, created_at
+              FROM custom_bots ${all ? '' : 'WHERE owner_user_id = ?'}
+             ORDER BY created_at DESC`, all ? [] : [req.user.id]);
+        const ids = bots.map(b => b.bot_id);
+        const [maps] = ids.length
+            ? await pool.query('SELECT guild_id, bot_id, assigned_at FROM guild_bot_mapping WHERE bot_id IN (?)', [ids])
+            : [[]];
+        const mapsByBot = new Map();
+        for (const m of maps) {
+            if (!mapsByBot.has(m.bot_id)) mapsByBot.set(m.bot_id, []);
+            mapsByBot.get(m.bot_id).push(m);
+        }
+
+        const bm = global.botManager;
+        const mainClient = req.app.locals.client;
+        const ownerNames = new Map();
+        if (all) {
+            const owners = [...new Set(bots.map(b => b.owner_user_id).filter(Boolean))];
+            await Promise.all(owners.map(async id => {
+                const u = mainClient?.users.cache.get(id) || await mainClient?.users.fetch(id).catch(() => null);
+                ownerNames.set(id, u ? (u.globalName || u.username) : null);
+            }));
+        }
+
+        const out = bots.map(bot => {
+            const status = bm ? bm.getBotStatus(bot.bot_id) : null;
+            const client = bm?.getClient?.(bot.bot_id) || null;
+            const error = bm?.getBotError ? bm.getBotError(bot.bot_id) : null;
+            let state;
+            if (!bot.approved) state = 'pending';
+            else if (!bot.enabled) state = 'disabled';
+            else if (!status) state = 'offline';
+            else state = status.isReady ? 'online' : 'connecting';
+
+            const mapped = mapsByBot.get(bot.bot_id) || [];
+            const servers = new Map();
+            for (const m of mapped) {
+                const g = client?.guilds.cache.get(m.guild_id) || bm?.getGuildFromAnyClient?.(m.guild_id) || null;
+                servers.set(m.guild_id, {
+                    id: m.guild_id, name: g?.name || null, icon: g?.iconURL?.({ size: 64 }) || null,
+                    members: g?.memberCount || null, mapped: true,
+                    present: !!client?.guilds.cache.has(m.guild_id), assignedAt: m.assigned_at,
+                });
+            }
+            if (client?.isReady?.()) {
+                for (const g of client.guilds.cache.values()) {
+                    if (servers.has(g.id)) continue;
+                    servers.set(g.id, { id: g.id, name: g.name, icon: g.iconURL({ size: 64 }), members: g.memberCount || null, mapped: false, present: true, assignedAt: null });
+                }
+            }
+            const list = [...servers.values()].sort((a, b) => (b.members || 0) - (a.members || 0));
+            const appId = bot.client_id || bot.bot_id;
+            return {
+                bot_id: bot.bot_id,
+                name: (status?.isReady && status.username && status.username !== 'Unknown') ? status.username : bot.bot_name,
+                avatar: avatarFor(bot.bot_id, status),
+                owner_user_id: bot.owner_user_id,
+                owner_name: all ? (ownerNames.get(bot.owner_user_id) || null) : null,
+                mine: bot.owner_user_id === req.user.id,
+                enabled: !!bot.enabled,
+                approved: !!bot.approved,
+                approval_notes: bot.approved ? null : (bot.approval_notes || null),
+                created_at: bot.created_at,
+                state,
+                uptime_ms: status?.isReady ? (status.uptime || 0) : null,
+                error: (error && state !== 'disabled') ? error : null,
+                servers: list,
+                counts: { assigned: mapped.length, joined: list.filter(s => s.present).length, waiting: list.filter(s => s.mapped && !s.present).length },
+                invite_url: `https://discord.com/oauth2/authorize?client_id=${encodeURIComponent(appId)}&permissions=1643797540086&scope=bot+applications.commands`,
+            };
+        });
+
+        res.json({
+            success: true,
+            scope: all ? 'all' : 'mine',
+            superAdmin,
+            canCreate: !!req.user.canCreateBots || superAdmin,
+            bots: out,
+        });
+    } catch (error) {
+        logger.error('[API Bots] fleet failed:', error);
+        res.status(500).json({ error: 'Failed to load bots' });
     }
 });
 
@@ -218,7 +342,7 @@ router.post('/api/bots', requireBotCreator, async (req, res) => {
 /**
  * Update custom bot (bot owners can update their own bots)
  */
-router.put('/api/bots/:botId', requireBotCreator, requireBotOwnership, async (req, res) => {
+router.put('/api/bots/:botId', requireBotAccess, async (req, res) => {
     try {
         const { botId } = req.params;
         const { bot_name, client_secret, enabled } = req.body;
@@ -264,6 +388,21 @@ router.put('/api/bots/:botId', requireBotCreator, requireBotOwnership, async (re
             WHERE bot_id = ?
         `, values);
 
+        // Turning a bot back on used to only flip the column: the bot manager never loaded it,
+        // so it stayed offline until the next restart.
+        if (enabled && global.botManager && !global.botManager.getClient(botId)) {
+            const [[cfg]] = await pool.execute('SELECT bot_id, bot_name, bot_token, approved FROM custom_bots WHERE bot_id = ?', [botId]);
+            const [maps] = await pool.execute('SELECT guild_id FROM guild_bot_mapping WHERE bot_id = ?', [botId]);
+            if (cfg?.approved && maps.length) {
+                try {
+                    await global.botManager.addCustomBot({ bot_id: cfg.bot_id, bot_name: cfg.bot_name, bot_token: JSON.parse(cfg.bot_token), guild_ids: maps.map(m => m.guild_id) });
+                } catch (e) {
+                    logger.warn(`[API Bots] Bot ${botId} enabled but failed to start: ${e.message}`);
+                    return res.json({ success: true, started: false, message: `Turned on, but it could not log in: ${e.message}` });
+                }
+            }
+        }
+
         logger.info(`[API Bots] Bot ${botId} updated by ${req.user.username}`);
 
         res.json({ success: true, message: 'Bot updated successfully' });
@@ -277,7 +416,7 @@ router.put('/api/bots/:botId', requireBotCreator, requireBotOwnership, async (re
 /**
  * Delete custom bot (bot owners can delete their own bots)
  */
-router.delete('/api/bots/:botId', requireBotCreator, requireBotOwnership, async (req, res) => {
+router.delete('/api/bots/:botId', requireBotAccess, async (req, res) => {
     try {
         const { botId } = req.params;
 
@@ -319,6 +458,10 @@ router.post('/api/bots/:botId/assign', requireBotOwnerOrGuildAdmin, async (req, 
             return res.status(400).json({ error: 'Guild ID required' });
         }
 
+        if (typeof guildId !== 'string' || !/^\d{17,20}$/.test(guildId)) {
+            return res.status(400).json({ error: 'Invalid guild ID' });
+        }
+
         // Verify bot exists (or is default)
         if (botId !== 'default') {
             const [bots] = await pool.execute(
@@ -329,6 +472,18 @@ router.post('/api/bots/:botId/assign', requireBotOwnerOrGuildAdmin, async (req, 
             if (bots.length === 0) {
                 return res.status(404).json({ error: 'Bot not found or disabled' });
             }
+            // Security: requireBotOwnerOrGuildAdmin only proves the caller administers the guild,
+            // so any server admin could take over someone else's custom bot for their server.
+            if (!isSuperAdmin(req.user.id) && bots[0].owner_user_id !== req.user.id) {
+                return res.status(403).json({ error: 'You can only assign bots you own.' });
+            }
+        }
+
+        // Saving an unchanged assignment used to run the whole hand-over below, deleting every
+        // live announcement in the server so the stream checker re-posted them.
+        const [[current]] = await pool.execute('SELECT bot_id FROM guild_bot_mapping WHERE guild_id = ?', [guildId]);
+        if ((current?.bot_id || 'default') === botId) {
+            return res.json({ success: true, unchanged: true, message: 'Already assigned.' });
         }
 
         // Get the old bot client BEFORE updating mapping (for cleanup)
@@ -365,6 +520,7 @@ router.post('/api/bots/:botId/assign', requireBotOwnerOrGuildAdmin, async (req, 
 
                     await global.botManager.addCustomBot({
                         bot_id: botConfig[0].bot_id,
+                        bot_name: botConfig[0].bot_name,
                         bot_token: JSON.parse(botConfig[0].bot_token),
                         guild_ids: mappings.map(m => m.guild_id)
                     });
@@ -465,7 +621,7 @@ router.get('/api/guilds/:guildId/bot', async (req, res) => {
 /**
  * Get bot status
  */
-router.get('/api/bots/:botId/status', requireBotCreator, requireBotOwnership, async (req, res) => {
+router.get('/api/bots/:botId/status', requireBotAccess, async (req, res) => {
     try {
         const { botId } = req.params;
 
@@ -505,6 +661,35 @@ router.get('/api/bots/:botId/status', requireBotCreator, requireBotOwnership, as
     } catch (error) {
         logger.error('[API Bots] Error fetching bot status:', error);
         res.status(500).json({ error: 'Failed to fetch bot status' });
+    }
+});
+
+/**
+ * POST /api/bots/:botId/reconnect — log the bot out and in again (owner or super-admin).
+ * For a bot that failed to log in at startup or dropped its session; it was a restart before.
+ */
+const reconnecting = new Set();
+router.post('/api/bots/:botId/reconnect', requireBotAccess, async (req, res) => {
+    const { botId } = req.params;
+    const bm = global.botManager;
+    if (!bm) return res.status(503).json({ error: 'The bot manager is not running.' });
+    if (reconnecting.has(botId)) return res.status(409).json({ error: 'Already reconnecting.' });
+    try {
+        const [[bot]] = await pool.execute('SELECT bot_id, bot_name, bot_token, enabled, approved FROM custom_bots WHERE bot_id = ?', [botId]);
+        if (!bot) return res.status(404).json({ error: 'Bot not found' });
+        if (!bot.approved || !bot.enabled) return res.status(409).json({ error: 'Turn the bot on first.' });
+        const [maps] = await pool.execute('SELECT guild_id FROM guild_bot_mapping WHERE bot_id = ?', [botId]);
+        if (!maps.length) return res.status(409).json({ error: 'Assign the bot to a server first.' });
+        reconnecting.add(botId);
+        if (bm.getClient(botId)) await bm.removeCustomBot(botId).catch(e => logger.warn(`[API Bots] reconnect remove ${botId}: ${e.message}`));
+        await bm.addCustomBot({ bot_id: bot.bot_id, bot_name: bot.bot_name, bot_token: JSON.parse(bot.bot_token), guild_ids: maps.map(m => m.guild_id) });
+        logger.info(`[API Bots] Bot ${botId} reconnected by ${req.user.username}`);
+        res.json({ success: true, message: `${bot.bot_name} is back online.` });
+    } catch (error) {
+        logger.error(`[API Bots] reconnect ${botId} failed: ${error.message}`);
+        res.status(502).json({ error: `Could not log in: ${error.message}` });
+    } finally {
+        reconnecting.delete(botId);
     }
 });
 

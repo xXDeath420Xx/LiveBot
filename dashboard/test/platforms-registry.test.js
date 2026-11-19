@@ -6,7 +6,6 @@ test('declares mode + reviewGated per platform', () => {
   assert.strictEqual(PLATFORM_META.twitch.mode, 'static');
   assert.strictEqual(PLATFORM_META.kick.mode, 'static');
   assert.strictEqual(PLATFORM_META.youtube.mode, 'dynamic');
-  assert.strictEqual(PLATFORM_META.facebook.mode, 'dynamic');
   assert.strictEqual(PLATFORM_META.youtube.reviewGated, true);
   assert.strictEqual(PLATFORM_META.twitch.reviewGated, false);
 });

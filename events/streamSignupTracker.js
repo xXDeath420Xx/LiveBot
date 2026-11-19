@@ -6,14 +6,13 @@ import { ChannelType } from 'discord.js';
 import pool from '../utils/db.js';
 import logger from '../utils/logger.js';
 import { resolveStreamerIdentity, upsertStreamerByIdentity } from '../utils/platforms/resolve-identity.js';
+import { getStreamEndDefaults } from '../core/stream-end-defaults.js';
 
 const PATTERNS = [
     { platform: 'twitch',   re: /(?:https?:\/\/)?(?:www\.)?twitch\.tv\/([A-Za-z0-9_]{3,25})/i },
     { platform: 'kick',     re: /(?:https?:\/\/)?(?:www\.)?kick\.com\/([A-Za-z0-9_-]{3,25})/i },
     { platform: 'youtube',  re: /(?:https?:\/\/)?(?:www\.)?youtube\.com\/(?:@|c\/|channel\/|user\/)([A-Za-z0-9_.-]{3,})/i },
     { platform: 'tiktok',   re: /(?:https?:\/\/)?(?:www\.)?tiktok\.com\/@([A-Za-z0-9_.-]{2,24})/i },
-    { platform: 'trovo',    re: /(?:https?:\/\/)?(?:www\.)?trovo\.live\/([A-Za-z0-9_]{3,25})/i },
-    { platform: 'facebook', re: /(?:https?:\/\/)?(?:www\.)?facebook\.com\/([A-Za-z0-9_.-]{3,})/i },
 ];
 
 function parseStream(content) {
@@ -43,7 +42,7 @@ export default {
         const parsed = parseStream(message.content || '');
         if (!parsed) {
             await message.delete().catch(() => {});
-            await message.author.send(`In <#${message.channel.id}> please post only a supported stream URL (Twitch, Kick, YouTube, TikTok, Trovo, Facebook).`).catch(() => {});
+            await message.author.send(`In <#${message.channel.id}> please post only a supported stream URL (Twitch, Kick, YouTube, TikTok).`).catch(() => {});
             return;
         }
 
@@ -83,9 +82,10 @@ export default {
                 [stream_announcement_channel_id, subs[0].subscription_id]
             );
         } else {
+            const streamEnd = await getStreamEndDefaults(message.guild.id);
             await pool.execute(
-                'INSERT INTO subscriptions (guild_id, streamer_id, announcement_channel_id, paused) VALUES (?, ?, ?, 0)',
-                [message.guild.id, streamerId, stream_announcement_channel_id]
+                'INSERT INTO subscriptions (guild_id, streamer_id, announcement_channel_id, paused, delete_on_end, edit_on_end) VALUES (?, ?, ?, 0, ?, ?)',
+                [message.guild.id, streamerId, stream_announcement_channel_id, streamEnd.delete_on_end, streamEnd.edit_on_end]
             );
         }
 

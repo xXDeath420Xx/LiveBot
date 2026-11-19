@@ -1,6 +1,10 @@
 import { EmbedBuilder, ChannelType } from 'discord.js';
 import pool from '../../../utils/db.js';
 import logger from '../../../utils/logger.js';
+import { themeColor } from '../../../core/guild-theme.js';
+import {
+    addPattern, removePattern, setPatternEnabled, listPatterns, markPatternFalsePositive,
+} from '../../../core/advanced-automod-manager.js';
 
 export async function execute(interaction) {
     const subcommand = interaction.options.getSubcommand();
@@ -21,6 +25,16 @@ export async function execute(interaction) {
             return handlePatterns(interaction, guildId);
         case 'reset':
             return handleReset(interaction, guildId);
+        case 'pattern-add':
+            return handlePatternAdd(interaction, guildId);
+        case 'pattern-remove':
+            return handlePatternRemove(interaction, guildId);
+        case 'pattern-list':
+            return handlePatternList(interaction, guildId);
+        case 'pattern-toggle':
+            return handlePatternToggle(interaction, guildId);
+        case 'pattern-false-positive':
+            return handlePatternFalsePositive(interaction, guildId);
     }
 }
 
@@ -86,7 +100,7 @@ async function handleConfig(interaction, guildId) {
     await pool.execute(`UPDATE adaptive_spam_config SET ${updates.join(', ')} WHERE guild_id = ?`, values);
 
     const embed = new EmbedBuilder()
-        .setColor(0x2ecc71)
+        .setColor(themeColor(interaction.guildId, 'success'))
         .setTitle('✅ Adaptive Spam Configuration Updated')
         .setDescription('The following settings have been updated:');
 
@@ -121,7 +135,7 @@ async function handleStatus(interaction, guildId) {
     const [crossChannelCount] = await pool.execute(`SELECT COUNT(*) as count FROM cross_channel_spam WHERE guild_id = ? AND flagged = TRUE`, [guildId]);
 
     const embed = new EmbedBuilder()
-        .setColor(0x3498db)
+        .setColor(themeColor(interaction.guildId, 'primary'))
         .setTitle('📊 Adaptive Spam Detection Status')
         .setDescription('Current adaptive spam configuration:')
         .addFields(
@@ -188,38 +202,134 @@ async function handleUserProfile(interaction, guildId) {
     await interaction.editReply({ embeds: [embed] });
 }
 
+/**
+ * Effectiveness of this server's custom patterns. Hits are recorded by
+ * core/advanced-automod-manager.js whenever a pattern acts; misfires reported with
+ * `pattern-false-positive` move a hit to the false-positive column.
+ */
 async function handlePatterns(interaction, guildId) {
-    const manager = interaction.client.adaptiveSpamManager;
+    const rows = (await listPatterns(guildId))
+        .filter(p => Number(p.true_positives) + Number(p.false_positives) > 0)
+        .sort((a, b) => (Number(b.effectiveness_score) || 0) - (Number(a.effectiveness_score) || 0))
+        .slice(0, 10);
 
-    let patterns;
-    if (manager) {
-        patterns = await manager.getPatternEffectiveness(guildId, 10);
-    } else {
-        const [rows] = await pool.execute(
-            `SELECT s.*, p.pattern, p.pattern_type FROM spam_patterns_stats s JOIN automod_patterns p ON s.pattern_id = p.id WHERE s.guild_id = ? ORDER BY s.effectiveness_score DESC LIMIT 10`,
-            [guildId]
-        );
-        patterns = rows;
+    if (rows.length === 0) {
+        return await interaction.reply({
+            content: 'No pattern statistics yet. Add a pattern with `/protection spam pattern-add`; hits are counted each time one acts.',
+            ephemeral: true
+        });
     }
 
-    if (!patterns || patterns.length === 0) {
-        return await interaction.reply({ content: 'No pattern statistics available yet. Patterns will be tracked as they catch spam.', ephemeral: true });
-    }
-
-    const patternList = patterns.map((p, i) => {
-        const effectiveness = Math.round(p.effectiveness_score || 0);
+    const patternList = rows.map((p, i) => {
+        const effectiveness = Math.round(Number(p.effectiveness_score) || 0);
         const emoji = effectiveness >= 70 ? '🟢' : effectiveness >= 40 ? '🟡' : '🔴';
-        const preview = p.pattern.length > 30 ? p.pattern.substring(0, 30) + '...' : p.pattern;
-        return `${emoji} **${i + 1}.** \`${preview}\` (${p.pattern_type})\n└ Effectiveness: ${effectiveness}% | TP: ${p.true_positives} | FP: ${p.false_positives}`;
+        const lastHit = p.last_hit_at ? ` | last <t:${Math.floor(new Date(p.last_hit_at).getTime() / 1000)}:R>` : '';
+        return `${emoji} **${i + 1}.** #${p.id} ${previewPattern(p.pattern)} (${p.pattern_type})\n└ Effectiveness: ${effectiveness}% | TP: ${p.true_positives} | FP: ${p.false_positives}${lastHit}`;
     }).join('\n\n');
 
     const embed = new EmbedBuilder()
-        .setColor(0x3498db)
+        .setColor(themeColor(interaction.guildId, 'primary'))
         .setTitle('📈 Pattern Effectiveness Rankings')
-        .setDescription(patternList)
-        .setFooter({ text: 'TP = True Positives | FP = False Positives' });
+        .setDescription(patternList.substring(0, 4000))
+        .setFooter({ text: 'TP = True Positives | FP = False Positives (report with pattern-false-positive)' });
 
     await interaction.reply({ embeds: [embed], ephemeral: true });
+}
+
+/** Inline-code preview that cannot break out of its backticks. */
+function previewPattern(pattern, max = 40) {
+    const text = String(pattern).replace(/`/g, 'ˋ');
+    return `\`${text.length > max ? `${text.substring(0, max)}…` : text}\``;
+}
+
+async function handlePatternAdd(interaction, guildId) {
+    const type = interaction.options.getString('type', true);
+    const pattern = interaction.options.getString('pattern', true);
+    const action = interaction.options.getString('action') || 'delete';
+    const reason = interaction.options.getString('reason');
+
+    const result = await addPattern(guildId, type, pattern, action, reason, interaction.user.id);
+    if (!result.ok) {
+        return interaction.reply({ content: `❌ ${result.error}`, ephemeral: true });
+    }
+
+    const embed = new EmbedBuilder()
+        .setColor(themeColor(interaction.guildId, 'success'))
+        .setTitle(`✅ Pattern #${result.id} added`)
+        .addFields(
+            { name: 'Type', value: type, inline: true },
+            { name: 'Action', value: action, inline: true },
+            { name: 'Pattern', value: previewPattern(result.value, 200), inline: false },
+        )
+        .setFooter({ text: 'Applies to new messages within a few seconds. Admins, the owner and automod-exempt roles/channels are never checked.' });
+    if (reason) embed.addFields({ name: 'Reason', value: reason.substring(0, 200), inline: false });
+    if (action === 'kick' || action === 'ban') {
+        embed.setDescription('⚠️ This pattern removes members from the server. Test it with `delete` first if you are unsure.');
+    }
+    return interaction.reply({ embeds: [embed], ephemeral: true });
+}
+
+async function handlePatternRemove(interaction, guildId) {
+    const id = interaction.options.getInteger('id', true);
+    const removed = await removePattern(guildId, id);
+    return interaction.reply({
+        content: removed ? `🗑️ Pattern #${id} removed (and its statistics).` : `No pattern #${id} in this server. See \`/protection spam pattern-list\`.`,
+        ephemeral: true
+    });
+}
+
+async function handlePatternToggle(interaction, guildId) {
+    const id = interaction.options.getInteger('id', true);
+    const enabled = interaction.options.getBoolean('enabled', true);
+    const changed = await setPatternEnabled(guildId, id, enabled, enabled ? null : `Disabled by ${interaction.user.tag}`);
+    return interaction.reply({
+        content: changed ? `Pattern #${id} is now **${enabled ? 'enabled' : 'disabled'}**.` : `No pattern #${id} in this server.`,
+        ephemeral: true
+    });
+}
+
+async function handlePatternFalsePositive(interaction, guildId) {
+    const id = interaction.options.getInteger('id', true);
+    const ok = await markPatternFalsePositive(guildId, id);
+    return interaction.reply({
+        content: ok
+            ? `Recorded a false positive for pattern #${id}. If it keeps misfiring, disable it with \`/protection spam pattern-toggle id:${id} enabled:False\`.`
+            : `No pattern #${id} in this server.`,
+        ephemeral: true
+    });
+}
+
+async function handlePatternList(interaction, guildId) {
+    const rows = await listPatterns(guildId);
+    if (rows.length === 0) {
+        return interaction.reply({
+            content: 'This server has no custom patterns. Add one with `/protection spam pattern-add`.',
+            ephemeral: true
+        });
+    }
+
+    const lines = rows.map(p => {
+        const state = p.enabled ? '🟢' : '⚪';
+        const note = !p.enabled && p.disabled_reason ? ` — ${p.disabled_reason}` : '';
+        return `${state} **#${p.id}** ${p.pattern_type} → ${p.action}: ${previewPattern(p.pattern)} (${p.true_positives} hit${Number(p.true_positives) === 1 ? '' : 's'})${note}`;
+    });
+
+    // Stay inside one embed description (4096) even with 50 long patterns.
+    let description = '';
+    let shown = 0;
+    for (const line of lines) {
+        if (description.length + line.length + 1 > 3900) break;
+        description += `${line}\n`;
+        shown++;
+    }
+    if (shown < lines.length) description += `…and ${lines.length - shown} more`;
+
+    const embed = new EmbedBuilder()
+        .setColor(themeColor(interaction.guildId, 'primary'))
+        .setTitle(`🧩 Custom automod patterns (${rows.length})`)
+        .setDescription(description)
+        .setFooter({ text: '🟢 enabled  ⚪ disabled · pattern-remove / pattern-toggle take the #id' });
+    return interaction.reply({ embeds: [embed], ephemeral: true });
 }
 
 async function handleReset(interaction, guildId) {

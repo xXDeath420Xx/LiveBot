@@ -6,6 +6,7 @@
 import { Router } from 'express';
 import pool from '../../../utils/db.js';
 import logger from '../../../utils/logger.js';
+import { verifyBitsReceipt } from '../middleware/twitch-jwt.js';
 
 const router = Router();
 
@@ -44,14 +45,20 @@ router.get('/products', async (req, res) => {
  */
 async function processBitsTransaction(req, res) {
     try {
-        // Support both formats: {sku, transactionId} and {product_id, transaction_id}
-        const sku = req.body.sku || req.body.product_id;
-        const transactionId = req.body.transactionId || req.body.transaction_id;
-        const receipt = req.body.receipt;
-
-        if (!sku || !transactionId) {
-            return res.status(400).json({ error: 'SKU and transaction ID required', code: 'MISSING_FIELDS' });
+        // Only a Twitch-signed receipt counts (H-401). Bits can only be spent inside the
+        // Twitch extension, so the player must be the Twitch viewer the receipt names.
+        if (req.authMode !== 'twitch_extension' || req.player.platform !== 'twitch') {
+            return res.status(403).json({ error: 'Bits can only be used in the Twitch panel', code: 'NOT_EXTENSION' });
         }
+        const receipt = verifyBitsReceipt(req.body.transactionReceipt || req.body.receipt);
+        if (!receipt) {
+            return res.status(400).json({ error: 'Missing or invalid Bits receipt', code: 'INVALID_RECEIPT' });
+        }
+        if (receipt.userId !== String(req.player.platform_user_id)) {
+            return res.status(403).json({ error: 'This receipt belongs to another viewer', code: 'RECEIPT_USER_MISMATCH' });
+        }
+        const sku = receipt.sku;
+        const transactionId = receipt.transactionId;
 
         // Check if transaction already processed
         const [[existing]] = await pool.execute(
@@ -72,13 +79,16 @@ async function processBitsTransaction(req, res) {
         if (!product) {
             return res.status(404).json({ error: 'Product not found', code: 'NOT_FOUND' });
         }
+        if (!receipt.inDevelopment && receipt.bits < Number(product.bits_cost)) {
+            return res.status(400).json({ error: 'Receipt amount does not match the product', code: 'AMOUNT_MISMATCH' });
+        }
 
         // Record transaction
         const [result] = await pool.execute(
             `INSERT INTO cfx_bits_transactions
              (player_id, product_id, twitch_transaction_id, bits_amount, status, receipt_json)
              VALUES (?, ?, ?, ?, 'pending', ?)`,
-            [req.player.id, product.id, transactionId, product.bits_cost, JSON.stringify(receipt || {})]
+            [req.player.id, product.id, transactionId, receipt.bits || product.bits_cost, JSON.stringify(receipt)]
         );
 
         const transactionDbId = result.insertId;
@@ -162,7 +172,7 @@ async function processBitsTransaction(req, res) {
                 [transactionDbId]
             );
 
-            logger.info('[Bits] Transaction fulfilled', {
+            logger.debug('[Bits] Transaction fulfilled', {
                 playerId: req.player.id,
                 sku,
                 transactionId

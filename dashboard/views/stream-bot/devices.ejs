@@ -1,0 +1,105 @@
+<%#
+  GET /stream/bot/devices. Locals: devices [{ id, kind, name, tokenHint, capabilities[], clientInfo, createdAt, lastSeenAt, revoked,
+  online, studio: { appVersion, reported, obs: { connected, version, currentScene, scenes } | null, sounds } | null }], wsUrl. Pairing codes and tokens are made by /js/stream-bot.js (POST /stream/bot/api/devices/...) and shown once.
+%>
+<%- include('_head', { pageTitle: 'Devices', active: 'devices' }) %>
+<%
+  const _when = (iso) => iso ? new Date(iso).toISOString().slice(0, 16).replace('T', ' ') + ' UTC' : '';
+  const _kind = { studio: 'CertiFried Studio', overlay: 'Overlay', dock: 'OBS docks' };
+%>
+<div class="cf-page-head">
+    <div>
+        <h1 class="cf-page-title">Devices</h1>
+        <p class="cf-page-sub">CertiFried Studio on your PC and OBS overlays connect here to carry out actions such as switching scenes, playing sounds and showing alerts. Overlays come in a later update. Until a device is connected, those actions wait for one (2 minutes unless you change it on the action) and then expire.</p>
+    </div>
+    <div class="cf-page-actions"><a class="btn btn-secondary btn-sm" href="/downloads/studio">Download CertiFried Studio</a></div>
+</div>
+<%- include('_tabs', { active: 'devices' }) %>
+
+<section class="cf-section" aria-labelledby="sb-dev-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sb-dev-title">Your devices</h2></div>
+        <div class="cf-section-actions"><span class="cf-status-line" id="sb-dev-status" role="status" aria-live="polite"></span></div></header>
+    <div class="cf-rows">
+        <% if (!devices.length) { %>
+        <div class="cf-state cf-state--compact"><p class="cf-state-title">No devices yet.</p></div>
+        <% } else { %>
+        <div class="cf-list">
+            <% devices.forEach((d) => { %>
+            <div class="cf-list-item cf-list-item--multi">
+                <div class="cf-list-main">
+                    <p class="cf-list-title"><%= d.name %>
+                        <% if (d.revoked) { %><span class="cf-pill is-bad">Revoked</span><% } else if (d.kind === 'dock') { %><span class="cf-pill">Key active</span><% } else if (d.online) { %><span class="cf-pill is-ok">Online</span><% } else { %><span class="cf-pill">Offline</span><% } %></p>
+                    <p class="cf-list-meta">
+                        <span><%= _kind[d.kind] || d.kind %></span>
+                        <span>Token ending <code><%= d.tokenHint %></code></span>
+                        <span><% if (d.lastSeenAt) { %><%= d.kind === 'dock' ? 'Last used' : 'Last seen' %> <time datetime="<%= d.lastSeenAt %>"><%= _when(d.lastSeenAt) %></time><% } else { %><%= d.kind === 'dock' ? 'Not used yet' : 'Never connected' %><% } %></span>
+                        <% if (d.clientInfo) { %><span><%= d.clientInfo %></span><% } %>
+                    </p>
+                    <% if (d.studio) { %>
+                    <p class="cf-list-meta">
+                        <% if (d.studio.appVersion) { %><span>Studio <%= d.studio.appVersion %></span><% } %>
+                        <% if (!d.studio.reported) { %><span>OBS: not reported yet</span>
+                        <% } else if (d.studio.obs && d.studio.obs.connected) { %><span>OBS connected<%= d.studio.obs.version ? ' (' + d.studio.obs.version + ')' : '' %></span><% if (d.studio.obs.currentScene) { %><span>On air: <%= d.studio.obs.currentScene %></span><% } %><span><%= d.studio.obs.scenes %> scene<%= d.studio.obs.scenes === 1 ? '' : 's' %></span>
+                        <% } else { %><span>OBS not connected</span><% } %>
+                    </p>
+                    <% } %>
+                    <% if (d.kind === 'dock') { %><p class="cf-list-meta"><span>Shows your live feed, chat and counters in OBS and can run your automations. Replace it from CertiFried Studio, or revoke it here.</span></p><% } %>
+                    <% if (d.capabilities.length && d.kind !== 'dock') { %><ul class="cf-chips" aria-label="Can do"><% d.capabilities.forEach((c) => { %><li class="cf-chip"><span><%= c %></span></li><% }) %></ul><% } %>
+                </div>
+                <div class="cf-list-actions">
+                    <% if (!d.revoked) { %><button type="button" class="btn btn-secondary btn-sm" data-revoke-device="<%= d.id %>" data-name="<%= d.name %>">Revoke</button><% } %>
+                    <button type="button" class="btn btn-secondary btn-sm" data-delete-device="<%= d.id %>" data-name="<%= d.name %>">Delete</button>
+                </div>
+            </div>
+            <% }) %>
+        </div>
+        <% } %>
+    </div>
+</section>
+
+<section class="cf-section" aria-labelledby="sb-pair-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sb-pair-title">Pair CertiFried Studio</h2>
+        <p class="cf-section-desc">In Studio, Sign in with CertiFried is the quickest way. Or make a code here and type it into Studio, or use Open in CertiFried Studio on this PC. The code works once and for 10 minutes. <a href="/downloads/studio">Download CertiFried Studio</a> if you do not have it yet.</p></div></header>
+    <div class="cf-rows">
+        <form id="sb-pair-form" novalidate>
+            <div class="cf-row">
+                <div class="cf-row-text"><label class="cf-row-label" for="sb-pair-name">Device name</label><p class="cf-row-desc">Optional, such as Streaming PC. Studio can also send its own name.</p></div>
+                <div class="cf-row-control"><input type="text" id="sb-pair-name" maxlength="100" autocomplete="off"></div>
+            </div>
+            <div class="cf-section-foot">
+                <span class="cf-status-line" id="sb-pair-status" role="status" aria-live="polite"></span>
+                <button type="submit" class="btn btn-primary btn-sm">Make a pairing code</button>
+            </div>
+        </form>
+        <div class="sb-secret" id="sb-pair-result" hidden>
+            <p class="sb-secret-label">Pairing code</p>
+            <p class="sb-code" id="sb-pair-code"></p>
+            <p class="cf-muted" id="sb-pair-expiry"></p>
+            <p class="cf-muted"><a class="btn btn-secondary btn-sm" id="sb-pair-open" href="#">Open in CertiFried Studio</a> on the PC where Studio is installed, or type the code into Studio.</p>
+        </div>
+    </div>
+</section>
+
+<section class="cf-section" aria-labelledby="sb-token-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sb-token-title">Overlay token</h2>
+        <p class="cf-section-desc">An overlay connects with a token instead of a code. The token is shown once; anyone who has it can receive your overlay actions, so keep it private. Revoke it above if it leaks.</p></div></header>
+    <div class="cf-rows">
+        <form id="sb-token-form" novalidate>
+            <div class="cf-row">
+                <div class="cf-row-text"><label class="cf-row-label" for="sb-token-name">Overlay name</label><p class="cf-row-desc">Such as Alerts in Main scene.</p></div>
+                <div class="cf-row-control"><input type="text" id="sb-token-name" maxlength="100" autocomplete="off"></div>
+            </div>
+            <div class="cf-section-foot">
+                <span class="cf-status-line" id="sb-token-status" role="status" aria-live="polite"></span>
+                <button type="submit" class="btn btn-primary btn-sm">Make an overlay token</button>
+            </div>
+        </form>
+        <div class="sb-secret" id="sb-token-result" hidden>
+            <p class="sb-secret-label"><label for="sb-token-value">Token (shown once)</label></p>
+            <div class="cf-input-group"><input type="text" id="sb-token-value" readonly spellcheck="false"><button type="button" class="btn btn-secondary btn-sm" id="sb-token-copy">Copy</button></div>
+            <p class="cf-muted">Connects to <code><%= wsUrl %></code>.</p>
+        </div>
+    </div>
+</section>
+
+<%- include('_foot') %>

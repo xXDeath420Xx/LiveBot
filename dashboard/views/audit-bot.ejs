@@ -1,0 +1,306 @@
+<%#
+  /manage/:guildId for a server run only by the audit bot (dashboard/routes/audit-bot.js). Super-admins
+  only: checkGuildAdmin resolves the server through the auxiliary bot and sets req.auxBot.
+  Saves: POST /manage/:id/audit-bot/watcher and /manage/:id/audit-bot/adaptive-spam (unchanged).
+%>
+<%
+  // JSON for the inline script: escape "<" so a channel or role name can never close the <script>.
+  const js = (v) => JSON.stringify(v).replace(/</g, '\\u003c');
+  const sp = spam || {};
+  const _user = locals.user || null;
+%>
+<!DOCTYPE html>
+<html data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>" lang="en">
+<head>
+<%- include('partials/site-head', { title: (guild.name + ' · Audit bot') + ' · CertiFried', noindex: true }) %>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="/css/cf-settings.css">
+</head>
+<body class="cfs-body cf-site">
+<%- include('partials/site-header', { user: _user }) %>
+<main id="main-content" class="cf-main" tabindex="-1">
+<div class="cf-page">
+    <% if (_user) { %><%- include('partials/site/_owner-nav', { ownerActive: 'audit-bot' }) %><% } %>
+
+    <div class="cf-page-head">
+        <div class="cf-page-icon"><% if (guild.icon) { %><img src="<%= guild.icon %>" alt=""><% } else { %><%= guild.name.slice(0, 1) %><% } %></div>
+        <div>
+            <h1 class="cf-page-title"><%= guild.name %></h1>
+            <p class="cf-page-sub">Run by the <%= bot.label.toLowerCase() %><% if (bot.tag) { %> (<%= bot.tag %>)<% } %>. It only reads ban reports and checks for spam here.</p>
+        </div>
+        <div class="cf-page-actions">
+            <% if (status.connected) { %><span class="cf-pill is-ok"><span class="cf-dot is-ok"></span>Connected</span><% } else { %><span class="cf-pill is-bad"><span class="cf-dot is-bad"></span>Not connected</span><% } %>
+        </div>
+    </div>
+
+    <dl class="cf-kpis" aria-label="Audit bot at a glance">
+        <div class="cf-kpi"><dt>Channels read</dt><dd class="cf-kpi-value"><%= watchChannels.filter(w => w.enabled).length %></dd></div>
+        <div class="cf-kpi"><dt>Roles allowed to report</dt><dd class="cf-kpi-value"><%= watchRoles.length %></dd></div>
+        <div class="cf-kpi"><dt>Bans filed here, 30 days</dt><dd class="cf-kpi-value"><%= totals.last30 %></dd></div>
+        <div class="cf-kpi"><dt>Bans filed here, all time</dt><dd class="cf-kpi-value"><%= totals.total %></dd><% if (totals.unattributed) { %><dd class="cf-kpi-sub"><%= totals.unattributed %> older entries have no source server</dd><% } %></div>
+    </dl>
+
+    <section class="cf-section" id="watcher" aria-labelledby="ab-watch-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="ab-watch-title">Ban report watcher</h2>
+                <p class="cf-section-desc">When someone with an allowed role posts a user ID in one of these channels, the bot adds that user to the global ban list and reacts with a check mark. Changes apply to the next message.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-rows-head">Channels it reads</div>
+            <div class="cf-table-wrap">
+                <table class="cf-table cf-table--stack wtable" id="wtable">
+                    <thead><tr><th>Channel</th><th>Name in logs</th><th>Ban category</th><th>Read</th><th class="cf-cell-end"><span class="sr-only">Remove</span></th></tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+            <div class="cf-state cf-state--compact" id="wempty" hidden><p class="cf-state-title">No channels. Reports posted anywhere in this server are ignored.</p></div>
+            <div class="cf-row">
+                <div class="cf-row-text"><label class="cf-row-label" for="addChannel">Add a channel</label></div>
+                <div class="cf-row-control"><select id="addChannel"><option value="">Choose a channel</option></select></div>
+            </div>
+            <div class="cf-row cf-row--stack">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="addRole">Roles allowed to report</label>
+                    <p class="cf-row-desc">Reports from anyone without one of these roles are ignored.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-chips" id="roleChips"></div>
+                    <% if (missingRoles.length) { %><p class="ab-note is-warn"><%= missingRoles.length %> saved role<%= missingRoles.length === 1 ? ' no longer exists' : 's no longer exist' %> in this server and will be dropped when you save.</p><% } %>
+                    <p class="ab-note is-warn" id="noRolesWarn" hidden>With no roles, nobody's reports are acted on.</p>
+                    <select id="addRole" aria-label="Role to add"><option value="">Add a role</option></select>
+                </div>
+            </div>
+            <div class="cf-section-foot ab-foot">
+                <span class="cf-status-line" id="watcherStatus" role="status"></span>
+                <button type="button" class="btn btn-primary btn-sm" id="saveWatcher">Save watcher</button>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" id="spam" aria-labelledby="ab-spam-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="ab-spam-title">Adaptive spam detection</h2>
+                <p class="cf-section-desc">Learns how each member normally posts and flags the same message spreading across channels. Members it acts on are also added to the global ban list as spam.</p>
+            </div>
+        </header>
+        <form class="cf-rows" id="spamForm">
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text"><label class="cf-row-label" for="s-on">Adaptive spam detection</label></div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="s-on" name="enabled" <%= sp.enabled ? 'checked' : '' %>></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text"><label class="cf-row-label" for="s-th">Cross-channel threshold</label><p class="cf-row-desc">Channels the same message must appear in to be flagged. From 2 to 10.</p></div>
+                <div class="cf-row-control"><span class="cf-input-unit"><input id="s-th" type="number" name="cross_channel_threshold" min="2" max="10" value="<%= sp.cross_channel_threshold ?? 3 %>"><span class="cf-unit">channels</span></span></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text"><label class="cf-row-label" for="s-tf">Cross-channel timeframe</label><p class="cf-row-desc">The window for cross-channel detection. From 1 to 30.</p></div>
+                <div class="cf-row-control"><span class="cf-input-unit"><input id="s-tf" type="number" name="cross_channel_timeframe_minutes" min="1" max="30" value="<%= sp.cross_channel_timeframe_minutes ?? 5 %>"><span class="cf-unit">minutes</span></span></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text"><label class="cf-row-label" for="s-dev">Deviation multiplier</label><p class="cf-row-desc">Flag when a member's rate exceeds their usual rate by this factor. From 1.5 to 5.</p></div>
+                <div class="cf-row-control"><span class="cf-input-unit"><input id="s-dev" type="number" name="deviation_multiplier" min="1.5" max="5" step="0.1" value="<%= sp.deviation_multiplier ?? '2.0' %>"><span class="cf-unit">times</span></span></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text"><label class="cf-row-label" for="s-7d">New account multiplier, 7 days</label><p class="cf-row-desc">Score boost for accounts under 7 days old. From 1 to 3.</p></div>
+                <div class="cf-row-control"><span class="cf-input-unit"><input id="s-7d" type="number" name="new_account_multiplier_7d" min="1" max="3" step="0.1" value="<%= sp.new_account_multiplier_7d ?? '1.5' %>"><span class="cf-unit">times</span></span></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text"><label class="cf-row-label" for="s-24h">New account multiplier, 24 hours</label><p class="cf-row-desc">Score boost for accounts under 24 hours old. From 1 to 5.</p></div>
+                <div class="cf-row-control"><span class="cf-input-unit"><input id="s-24h" type="number" name="new_account_multiplier_24h" min="1" max="5" step="0.1" value="<%= sp.new_account_multiplier_24h ?? '2.0' %>"><span class="cf-unit">times</span></span></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text"><label class="cf-row-label" for="s-act">Action</label><p class="cf-row-desc">What happens to a member flagged for spam.</p></div>
+                <div class="cf-row-control"><select id="s-act" name="action">
+                    <% [['alert','Alert only'],['mute','Mute'],['kick','Kick'],['ban','Ban'],['delete+warn','Delete and warn']].forEach(([v, l]) => { %>
+                    <option value="<%= v %>" <%= (sp.action || 'alert') === v ? 'selected' : '' %>><%= l %></option><% }) %>
+                </select></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text"><label class="cf-row-label" for="s-alert">Alert channel</label><p class="cf-row-desc">Where spam alerts are posted.</p></div>
+                <div class="cf-row-control"><select id="s-alert" name="alert_channel_id">
+                    <option value="">No alert channel</option>
+                    <% channels.forEach(c => { %><option value="<%= c.id %>" <%= sp.alert_channel_id === c.id ? 'selected' : '' %>>#<%= c.name %><%= c.parent ? ' · ' + c.parent : '' %></option><% }) %>
+                </select></div>
+            </div>
+            <div class="cf-row cf-row--stack">
+                <div class="cf-row-text"><label class="cf-row-label" for="addExempt">Exempt channels</label><p class="cf-row-desc">Spam detection skips these.</p></div>
+                <div class="cf-row-control">
+                    <div class="cf-chips" id="exemptChips"></div>
+                    <select id="addExempt" aria-label="Channel to exempt"><option value="">Add a channel</option></select>
+                </div>
+            </div>
+            <div class="cf-section-foot ab-foot">
+                <span class="cf-status-line" id="spamStatus" role="status"></span>
+                <button type="submit" class="btn btn-primary btn-sm" id="saveSpam">Save spam detection</button>
+            </div>
+        </form>
+    </section>
+
+    <section class="cf-section" id="recent" aria-labelledby="ab-recent-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="ab-recent-title">Recent global bans filed from this server<span class="cf-count"><%= recent.length || '' %></span></h2>
+                <p class="cf-section-desc">Entries, reports and appeals are managed in the owner console under <a href="/super-admin#globalbans">Global bans</a>.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <% if (!recent.length) { %>
+            <div class="cf-state cf-state--compact"><p class="cf-state-title">None yet.</p></div>
+            <% } else { %>
+            <div class="cf-table-wrap">
+                <table class="cf-table cf-table--stack">
+                    <thead><tr><th>Filed</th><th>User</th><th>Category</th><th>From</th><th>Reported by</th><th>Status</th></tr></thead>
+                    <tbody>
+                    <% recent.forEach(e => { %>
+                    <tr>
+                        <td class="cf-nowrap"><%= new Date(e.created_at).toISOString().slice(0, 16).replace('T', ' ') %> UTC</td>
+                        <td><%= e.username || 'unknown' %> <span class="cf-muted cf-mono"><%= e.user_id %></span></td>
+                        <td><%= categoryLabels[e.category] || e.category %></td>
+                        <td class="cf-cell-muted"><%= e.source === 'manual_report' ? 'Report' : e.source === 'system' ? 'Spam detection' : e.source %></td>
+                        <td><%= e.reporter_name || '' %></td>
+                        <td><% if (e.active) { %><span class="cf-pill is-bad">Active</span><% } else { %><span class="cf-pill">Lifted</span><% } %></td>
+                    </tr>
+                    <% }) %>
+                    </tbody>
+                </table>
+            </div>
+            <% } %>
+        </div>
+    </section>
+</div>
+</main>
+<style>
+    .ab-note { margin: 6px 0; font-size: var(--cf-text-xs); }
+    .ab-note.is-warn { color: var(--cf-warning); }
+    .ab-issue { display: block; margin-top: 2px; font-size: var(--cf-text-xs); }
+    .ab-issue.is-bad { color: var(--cf-danger); }
+    .ab-issue.is-warn { color: var(--cf-warning); }
+    .cf-rows .ab-foot { display: flex; align-items: center; justify-content: flex-end; gap: var(--cf-3); }
+    .cf-rows .ab-foot .cf-status-line { margin-right: auto; }
+    .wtable input[type="text"] { width: 100%; min-width: 8rem; }
+    .wtable select { max-width: 100%; }
+    .cf-row-control > .cf-chips + select, .cf-row-control > .ab-note + select { margin-top: var(--cf-2); }
+    .cf-page-icon { font-weight: 600; }
+</style>
+<script>
+(function () {
+    var GUILD = <%- js(guild.id) %>;
+    var CHANNELS = <%- js(channels) %>;
+    var ROLES = <%- js(roles) %>;
+    var CATS = <%- js(categories.map(c => [c, categoryLabels[c]])) %>;
+    var watch = <%- js(watchChannels.map(w => ({ channel_id: w.channel_id, label: w.label, category: w.category, enabled: !!w.enabled, access: w.access }))) %>;
+    var roles = <%- js(watchRoles.filter(id => roles.some(r => r.id === id))) %>;
+    var exempt = <%- js(exempt) %>;
+    var byId = function (list) { var m = {}; list.forEach(function (x) { m[x.id] = x; }); return m; };
+    var chMap = byId(CHANNELS), roleMap = byId(ROLES);
+    var chName = function (id) { return chMap[id] ? '#' + chMap[id].name : 'deleted channel ' + id; };
+    var el = function (tag, attrs, text) { var e = document.createElement(tag); for (var k in (attrs || {})) e.setAttribute(k, attrs[k]); if (text != null) e.textContent = text; return e; };
+
+    function fillSelect(sel, items, taken, label) {
+        while (sel.options.length > 1) sel.remove(1);
+        items.forEach(function (it) { if (taken.indexOf(it.id) === -1) sel.add(new Option(label(it), it.id)); });
+        sel.value = '';
+    }
+    function channelLabel(c) { return '#' + c.name + (c.parent ? ' · ' + c.parent : ''); }
+
+    var tbody = document.querySelector('#wtable tbody');
+    function renderWatch() {
+        tbody.replaceChildren();
+        watch.forEach(function (w, i) {
+            var tr = el('tr');
+            var c1 = el('td'); c1.appendChild(el('span', null, chName(w.channel_id)));
+            var a = w.access;
+            if (a && !a.exists) c1.appendChild(el('span', { class: 'ab-issue is-bad' }, 'Channel no longer exists'));
+            else if (a && (!a.view || !a.history)) c1.appendChild(el('span', { class: 'ab-issue is-bad' }, 'The bot cannot read this channel'));
+            else if (a && !a.react) c1.appendChild(el('span', { class: 'ab-issue is-warn' }, 'The bot cannot add reactions here'));
+            var c2 = el('td'); var inp = el('input', { type: 'text', maxlength: '100', 'aria-label': 'Name in logs for ' + chName(w.channel_id) }); inp.value = w.label || '';
+            inp.addEventListener('input', function () { w.label = inp.value; }); c2.appendChild(inp);
+            var c3 = el('td'); var sel = el('select', { 'aria-label': 'Ban category for ' + chName(w.channel_id) });
+            CATS.forEach(function (c) { var o = new Option(c[1], c[0]); if (c[0] === w.category) o.selected = true; sel.add(o); });
+            sel.addEventListener('change', function () { w.category = sel.value; }); c3.appendChild(sel);
+            var c4 = el('td'); var cb = el('input', { type: 'checkbox', class: 'cf-switch', role: 'switch', 'aria-label': 'Read ' + chName(w.channel_id) }); cb.checked = w.enabled;
+            cb.addEventListener('change', function () { w.enabled = cb.checked; }); c4.appendChild(cb);
+            var c5 = el('td', { class: 'cf-cell-end' }); var rm = el('button', { type: 'button', class: 'btn btn-secondary btn-sm', 'aria-label': 'Remove ' + chName(w.channel_id) }, 'Remove');
+            rm.addEventListener('click', function () { watch.splice(i, 1); renderWatch(); }); c5.appendChild(rm);
+            [c1, c2, c3, c4, c5].forEach(function (c) { tr.appendChild(c); });
+            tbody.appendChild(tr);
+        });
+        document.getElementById('wempty').hidden = watch.length > 0;
+        fillSelect(document.getElementById('addChannel'), CHANNELS, watch.map(function (w) { return w.channel_id; }), channelLabel);
+    }
+    document.getElementById('addChannel').addEventListener('change', function () {
+        if (!this.value) return;
+        var c = chMap[this.value];
+        watch.push({ channel_id: c.id, label: c.name, category: 'auto', enabled: true, access: null });
+        renderWatch();
+    });
+
+    function renderChips(box, ids, nameOf, colorOf, onRemove) {
+        box.replaceChildren();
+        ids.forEach(function (id, i) {
+            var chip = el('span', { class: 'cf-chip' });
+            var col = colorOf && colorOf(id);
+            if (col) chip.style.setProperty('--cf-chip', col);
+            chip.appendChild(el('span', { class: 'cf-chip-dot' }));
+            chip.appendChild(el('span', null, nameOf(id)));
+            var b = el('button', { type: 'button', class: 'cf-chip-remove', 'aria-label': 'Remove ' + nameOf(id) }, '×');
+            b.addEventListener('click', function () { onRemove(i); }); chip.appendChild(b);
+            box.appendChild(chip);
+        });
+    }
+    function renderRoles() {
+        renderChips(document.getElementById('roleChips'), roles, function (id) { return roleMap[id] ? roleMap[id].name : id; },
+            function (id) { return roleMap[id] && roleMap[id].color; }, function (i) { roles.splice(i, 1); renderRoles(); });
+        document.getElementById('noRolesWarn').hidden = roles.length > 0;
+        fillSelect(document.getElementById('addRole'), ROLES, roles, function (r) { return r.name; });
+    }
+    document.getElementById('addRole').addEventListener('change', function () { if (this.value) { roles.push(this.value); renderRoles(); } });
+
+    function renderExempt() {
+        renderChips(document.getElementById('exemptChips'), exempt, chName, null, function (i) { exempt.splice(i, 1); renderExempt(); });
+        fillSelect(document.getElementById('addExempt'), CHANNELS, exempt, channelLabel);
+    }
+    document.getElementById('addExempt').addEventListener('change', function () { if (this.value) { exempt.push(this.value); renderExempt(); } });
+
+    function post(path, body, statusEl, button) {
+        statusEl.className = 'cf-status-line is-busy'; statusEl.textContent = 'Saving…'; button.disabled = true;
+        return fetch('/manage/' + GUILD + '/audit-bot/' + path, {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        }).then(function (r) { return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, j: j }; }); })
+          .then(function (res) {
+              statusEl.className = 'cf-status-line ' + (res.ok ? 'is-ok' : 'is-bad');
+              statusEl.textContent = res.ok ? 'Saved' : (res.j.error || 'Could not save');
+              return res.ok;
+          })
+          .catch(function () { statusEl.className = 'cf-status-line is-bad'; statusEl.textContent = 'Could not reach the server'; return false; })
+          .finally(function () { button.disabled = false; });
+    }
+
+    document.getElementById('saveWatcher').addEventListener('click', function () {
+        post('watcher', {
+            channels: watch.map(function (w) { return { channel_id: w.channel_id, label: w.label, category: w.category, enabled: w.enabled }; }),
+            roles: roles
+        }, document.getElementById('watcherStatus'), this);
+    });
+
+    document.getElementById('spamForm').addEventListener('submit', function (e) {
+        e.preventDefault();
+        var f = e.target, body = { exempt_channels: exempt };
+        ['cross_channel_threshold', 'cross_channel_timeframe_minutes', 'deviation_multiplier', 'new_account_multiplier_7d',
+         'new_account_multiplier_24h', 'action', 'alert_channel_id'].forEach(function (n) { body[n] = f.elements[n].value; });
+        body.enabled = f.elements.enabled.checked;
+        post('adaptive-spam', body, document.getElementById('spamStatus'), document.getElementById('saveSpam'));
+    });
+
+    renderWatch(); renderRoles(); renderExempt();
+})();
+</script>
+<%- include('partials/site-footer') %>
+<script src="/js/csrf.js"></script>
+</body>
+</html>

@@ -1,0 +1,178 @@
+{
+  "_meta": {
+    "name": "French",
+    "nativeName": "Français",
+    "discordLocales": [
+      "fr"
+    ]
+  },
+  "common": {
+    "enabled": "Activé",
+    "disabled": "Désactivé",
+    "yes": "Oui",
+    "no": "Non",
+    "none": "Aucun",
+    "unknown": "Inconnu",
+    "never": "Jamais",
+    "cancel": "Annuler",
+    "confirm": "Confirmer",
+    "save": "Enregistrer",
+    "loading": "Chargement…",
+    "page_of": "Page {current} sur {total}"
+  },
+  "errors": {
+    "generic": "Une erreur est survenue. Réessaie.",
+    "no_permission": "Tu n'as pas la permission de faire ça.",
+    "bot_missing_permission": "Il me manque la permission **{permission}** dans ce salon.",
+    "command_disabled": "Cette commande est désactivée sur ce serveur.",
+    "admin_only": "Cette commande est réservée aux modérateurs du serveur.",
+    "wrong_channel": "Cette commande ne peut être utilisée que dans {channel}.",
+    "cooldown": "Doucement — réessaie {relative}.",
+    "guild_only": "Cette commande ne fonctionne que sur un serveur.",
+    "not_found": "Je n'ai pas trouvé ça.",
+    "feature_not_configured": "**{feature}** n'est pas encore configuré sur ce serveur. Un administrateur peut l'activer avec {command}."
+  },
+  "leveling": {
+    "rank": {
+      "title": "Rang de {user}",
+      "level": "Niveau",
+      "xp": "XP",
+      "rank": "Classement",
+      "progress": "{current} / {required} XP jusqu'au niveau {next}",
+      "no_xp": "Envoie quelques messages pour commencer à gagner de l'XP."
+    },
+    "levelup": {
+      "default_message": "Bravo {user}, tu as atteint le niveau **{level}** !",
+      "role_reward": "Tu as obtenu le rôle {role}."
+    },
+    "leaderboard": {
+      "title": "Classement XP",
+      "empty": "Personne n'a encore gagné d'XP."
+    }
+  },
+  "welcome": {
+    "default_message": "Bienvenue {mention} !",
+    "default_goodbye": "{user} a quitté le serveur.",
+    "card": {
+      "title": "{user} vient de rejoindre le serveur",
+      "subtitle": "Membre n° {memberCount}"
+    }
+  },
+  "moderation": {
+    "banned": "**{user}** a été banni(e).",
+    "kicked": "**{user}** a été expulsé(e).",
+    "timed_out": "**{user}** a été exclu(e) temporairement pour {duration}.",
+    "warned": "**{user}** a reçu un avertissement.",
+    "reason": "Raison",
+    "no_reason": "Aucune raison indiquée",
+    "moderator": "Modérateur/trice",
+    "hierarchy_error": "Je ne peux rien faire contre **{user}** — son rôle le plus élevé est au-dessus du mien.",
+    "self_error": "Tu ne peux pas faire ça à toi-même."
+  },
+  "economy": {
+    "balance": "{user} possède **{amount} {currency}**.",
+    "insufficient_funds": "Il te faut **{amount} {currency}** et tu n'en as que **{balance}**.",
+    "transferred": "**{amount} {currency}** envoyé(s) à {user}.",
+    "daily_claimed": "Tu as récupéré **{amount} {currency}**. Reviens {relative}.",
+    "daily_already": "Tu as déjà récupéré ta récompense aujourd'hui. Réessaie {relative}."
+  },
+  "streams": {
+    "live_now": "{streamer} est en direct sur {platform} !",
+    "playing": "Joue à {game}",
+    "viewers": "{count} spectateurs",
+    "offline": "{streamer} a terminé son direct.",
+    "added": "**{username}** est maintenant suivi(e) sur {platform}.",
+    "removed": "**{username}** n'est plus suivi(e) sur {platform}.",
+    "already_tracked": "**{username}** est déjà suivi(e) sur {platform}."
+  },
+  "settings": {
+    "language": {
+      "command_name": "langue",
+      "command_description": "Choisis la langue dans laquelle le bot répond",
+      "current_user": "Ta langue est réglée sur **{language}**.",
+      "current_guild": "La langue par défaut de ce serveur est **{language}**.",
+      "set_user": "Ta langue est maintenant **{language}**. Elle s'applique partout où tu utilises le bot.",
+      "set_guild": "La langue par défaut de ce serveur est maintenant **{language}**. Chaque membre peut toujours choisir la sienne avec {command}.",
+      "reset_user": "Préférence de langue effacée — tu suivras la langue du serveur, ou celle de ton client Discord.",
+      "unsupported": "**{locale}** n'est pas encore disponible. Actuellement disponibles : {available}.",
+      "available_title": "Langues disponibles",
+      "help": "Choisis ta langue avec `/settings language scope:me`, ou celle du serveur avec `scope:server` (nécessite Gérer le serveur)."
+    }
+  },
+  "tickets": {
+    "created": "Ticket ouvert : {channel}",
+    "closed": "Ticket fermé par {user}.",
+    "already_open": "Tu as déjà un ticket ouvert : {channel}.",
+    "no_permission": "Tu ne peux pas ouvrir de ticket pour le moment."
+  },
+  "giveaway": {
+    "entered": "Tu participes. Bonne chance !",
+    "already_entered": "Tu participes déjà.",
+    "ended": "Tirage terminé — gagnant : {winners}",
+    "no_entries": "Le tirage s'est terminé sans participant.",
+    "requirement_role": "Il te faut le rôle {role} pour participer.",
+    "time_remaining": "Se termine {relative}"
+  },
+  "commands": {
+    "help": {
+      "description": "Découvre tout ce que ce bot sait faire"
+    },
+    "level": {
+      "description": "Consulte ton rang et ton XP sur ce serveur"
+    },
+    "rankcard": {
+      "description": "Personnalise l'apparence de ta carte de rang"
+    },
+    "ping": {
+      "description": "Vérifie si le bot répond, et à quelle vitesse"
+    },
+    "server": {
+      "description": "Informations sur ce serveur"
+    },
+    "user": {
+      "description": "Informations sur un membre"
+    },
+    "weather": {
+      "description": "Météo actuelle et prévisions pour n'importe quel lieu"
+    },
+    "timezone": {
+      "description": "Fuseaux horaires — convertis les heures citées en chat"
+    },
+    "economy": {
+      "description": "Solde, récompenses quotidiennes, boutique et paris"
+    },
+    "music": {
+      "description": "Joue de la musique dans un salon vocal"
+    },
+    "fun": {
+      "description": "Blagues, citations, jeux de soirée et absurdités"
+    },
+    "arcade": {
+      "description": "Quiz, pendu, comptage et autres jeux de salon"
+    },
+    "tools": {
+      "description": "Convertisseurs, QR codes, couleurs, traduction et plus"
+    },
+    "socials": {
+      "description": "Suis des streamers et des flux sociaux sur ce serveur"
+    },
+    "settings": {
+      "description": "Tes préférences et les valeurs par défaut du serveur"
+    },
+    "cat": {
+      "description": "Attrape, collectionne et échange des chats"
+    },
+    "fish": {
+      "description": "Va pêcher, constitue une collection, entre en tournoi"
+    },
+    "tree": {
+      "description": "Fais pousser un arbre avec tout le serveur"
+    },
+    "pokemon": {
+      "description": "Attrape et combats les Pokémon qui apparaissent en chat"
+    },
+    "qotd": {
+      "description": "Question du jour"
+    }
+  }
+}

@@ -80,7 +80,10 @@ export default class FreeGamesScraper {
       external_id: rawGame.id || rawGame.external_id,
       title: rawGame.title || rawGame.name,
       description: rawGame.description || '',
-      store: this.platform,
+      // A single-store scraper is its own store; an aggregator resolves the store per item and
+      // passes it in. Without this an aggregator's whole catalogue lands under one bogus store,
+      // and every `filter_<store>` lookup misses.
+      store: rawGame.store || this.platform,
       kind: rawGame.kind || 'game',
       platform_windows: rawGame.platforms?.windows ?? true,
       platform_mac: rawGame.platforms?.mac ?? false,
@@ -89,6 +92,8 @@ export default class FreeGamesScraper {
       platform_ios: rawGame.platforms?.ios ?? false,
       platform_xbox: rawGame.platforms?.xbox ?? false,
       platform_playstation: rawGame.platforms?.playstation ?? false,
+      platform_switch: rawGame.platforms?.switch ?? false,
+      platform_vr: rawGame.platforms?.vr ?? false,
       url: rawGame.url || rawGame.link,
       thumbnail_url: rawGame.thumbnail || rawGame.image,
       org_price_usd: price,

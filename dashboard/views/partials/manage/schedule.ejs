@@ -1,437 +1,324 @@
+<%#
+  Schedules: events (a marathon), their schedules (a day) and the runs in each, for speedrun-style
+  event schedules. Everything loads and saves through the JSON routes under
+  /manage/:guildId/schedule/…; the three views (#events-view, #schedules-view, #items-view) are
+  filled by the script below. Built on the settings-row kit (cf-settings.css); ids, field names and
+  handlers are unchanged. The rows and table the script builds (.schedule-card, .data-table, …) are
+  styled below to read as kit list rows and a kit table.
+%>
+<style>
+    /* Schedules page: the breadcrumb, the event/schedule name buttons and the runs table's
+       running/completed rows. Lists, states, pills and the table are the kit's. */
+    .sch-crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 var(--cf-4); font-size: var(--cf-text-sm); color: var(--cf-text-3); }
+    .sch-crumbs a { color: var(--cf-accent-fg); text-decoration: none; }
+    .sch-crumbs a:hover { text-decoration: underline; }
+    .sch-crumbs i { font-size: 0.75em; }
+    .sch-crumbs .fa-home { display: none; }
+    .sch-open { margin: 0; padding: 0; border: 0; background: none; font: inherit; color: var(--cf-text); text-align: left; cursor: pointer; overflow-wrap: anywhere; }
+    .sch-open:hover { color: var(--cf-accent-fg); text-decoration: underline; }
+    .sch-open:focus-visible { outline: 2px solid var(--cf-accent); outline-offset: 2px; border-radius: var(--cf-radius-sm); }
+    .cf-rows .sch-view-head { align-items: center; flex-direction: row; flex-wrap: wrap; border-bottom: 1px solid var(--cf-border);
+        background: color-mix(in srgb, var(--cf-surface-2) 45%, var(--cf-surface)); }
+    .cf-rows .sch-view-head .cf-list-title { font-size: var(--cf-text-md); }
+    .cf-rows .sch-view-head + .cf-list-item { border-top: 0; }
+    #runs-table .run-position { width: 40px; color: var(--cf-text-3); font-variant-numeric: tabular-nums; }
+    #runs-table .sch-game { font-weight: 600; }
+    #runs-table .sch-time { font-family: var(--cf-mono); font-variant-numeric: tabular-nums; }
+    #runs-table tbody tr.status-running { background: color-mix(in srgb, var(--cf-success) 8%, transparent); }
+    #runs-table tbody tr.status-completed { opacity: 0.6; }
+    .sch-run-actions { justify-content: flex-end; gap: 6px; }
+    .sch-modal .cf-rows .cf-row { grid-template-columns: minmax(0, 1fr); }
+    .cf-rows .sch-view-head .sch-view-sub { margin: 2px 0 0; font-size: var(--cf-text-xs); color: var(--cf-text-3); font-weight: 400; }
+    .cf-rows .sch-view-head > div { min-width: 0; flex: 1 1 auto; }
+</style>
+
 <div class="page-section">
     <div class="page-section-header">
         <div>
             <div class="page-section-title">
                 <i class="fas fa-calendar-alt"></i>
-                <span>Schedule Manager</span>
+                <span>Schedules</span>
             </div>
-            <div class="page-section-subtitle">
-                Create and manage event schedules for speedrun marathons and events
-            </div>
-        </div>
-        <button class="btn btn-primary" onclick="showCreateEventModal()">
-            <i class="fas fa-plus"></i>
-            <span>Create Event</span>
-        </button>
-    </div>
-
-    <!-- Navigation Breadcrumb -->
-    <nav id="schedule-breadcrumb" style="margin-bottom: var(--spacing-4); display: none;">
-        <div style="display: flex; align-items: center; gap: var(--spacing-2); font-size: var(--font-size-sm);">
-            <a href="#" onclick="loadEvents(); return false;" style="color: var(--color-primary-400); text-decoration: none;">
-                <i class="fas fa-home"></i> Events
-            </a>
-            <span id="breadcrumb-event" style="color: var(--color-text-muted);"></span>
-            <span id="breadcrumb-schedule" style="color: var(--color-text-muted);"></span>
-        </div>
-    </nav>
-
-    <!-- Stats Overview -->
-    <div id="schedule-stats" class="grid grid-cols-4" style="margin-bottom: var(--spacing-6);">
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Total Events</div>
-            <div id="stat-events" style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-primary-400);">0</div>
-        </div>
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Active Events</div>
-            <div id="stat-active" style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-success);">0</div>
-        </div>
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Total Schedules</div>
-            <div id="stat-schedules" style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary);">0</div>
-        </div>
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Total Runs</div>
-            <div id="stat-runs" style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-warning);">0</div>
+            <div class="page-section-subtitle">Events, the days in each, and the runs on each day.</div>
         </div>
     </div>
 
-    <!-- Main Content Area -->
-    <div id="schedule-content">
-        <!-- Events List (default view) -->
-        <div id="events-view">
-            <div id="events-list" class="empty-state">
-                <div class="empty-state-icon">
-                    <i class="fas fa-calendar-alt"></i>
+    <dl class="cf-kpis" id="schedule-stats" aria-label="Schedules at a glance">
+        <div class="cf-kpi"><dt>Events</dt><dd class="cf-kpi-value" id="stat-events">0</dd></div>
+        <div class="cf-kpi"><dt>Active events</dt><dd class="cf-kpi-value" id="stat-active">0</dd></div>
+        <div class="cf-kpi"><dt>Schedules</dt><dd class="cf-kpi-value" id="stat-schedules">0</dd></div>
+        <div class="cf-kpi"><dt>Runs</dt><dd class="cf-kpi-value" id="stat-runs">0</dd></div>
+    </dl>
+
+    <section class="cf-section" aria-labelledby="sch-events-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="sch-events-title">Events</h2>
+                <p class="cf-section-desc">Open an event to see its schedules, then a schedule to see and run its list of runs.</p>
+            </div>
+            <div class="cf-section-actions">
+                <button type="button" class="btn btn-primary btn-sm" onclick="showCreateEventModal()">Create event</button>
+            </div>
+        </header>
+
+        <nav id="schedule-breadcrumb" class="sch-crumbs" style="display: none;" aria-label="Where you are">
+            <a href="#" onclick="loadEvents(); return false;"><i class="fas fa-home"></i> All events</a>
+            <span id="breadcrumb-event"></span>
+            <span id="breadcrumb-schedule"></span>
+        </nav>
+
+        <div class="cf-rows">
+            <div id="schedule-content">
+                <div id="events-view">
+                    <div id="events-list">
+                        <div class="cf-state cf-state--empty">
+                            <p class="cf-state-title">No events yet</p>
+                            <p class="cf-state-text">Create an event, then add a schedule for each day of it.</p>
+                            <button type="button" class="btn btn-primary" onclick="showCreateEventModal()">Create event</button>
+                        </div>
+                    </div>
                 </div>
-                <div class="empty-state-title">No Events Yet</div>
-                <div class="empty-state-description">
-                    Create your first event to start building schedules
-                </div>
-                <button class="btn btn-primary" onclick="showCreateEventModal()">
-                    <i class="fas fa-plus"></i>
-                    <span>Create First Event</span>
-                </button>
+
+                <div id="schedules-view" style="display: none;"></div>
+
+                <div id="items-view" style="display: none;"></div>
             </div>
         </div>
-
-        <!-- Schedules List (shown when viewing an event) -->
-        <div id="schedules-view" style="display: none;"></div>
-
-        <!-- Items/Runs List (shown when viewing a schedule) -->
-        <div id="items-view" style="display: none;"></div>
-    </div>
+    </section>
 </div>
 
-<!-- Create Event Modal -->
-<div class="modal fade" id="createEventModal" tabindex="-1">
+<div class="modal fade sch-modal" id="createEventModal" tabindex="-1" aria-labelledby="cfk-sch-event-title">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Create Event</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <h5 class="modal-title" id="cfk-sch-event-title">Create event</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <form id="createEventForm" onsubmit="createEvent(event)">
                 <div class="modal-body">
-                    <div style="margin-bottom: var(--spacing-4);">
-                        <label class="form-label">Event Name</label>
-                        <input type="text" class="form-control" name="name" required placeholder="Summer Speedathon 2025">
-                    </div>
-                    <div style="margin-bottom: var(--spacing-4);">
-                        <label class="form-label">Slug (URL identifier)</label>
-                        <input type="text" class="form-control" name="slug" required placeholder="summer-speedathon-2025" pattern="[a-z0-9-]+">
-                        <div class="form-help">Lowercase letters, numbers, and hyphens only</div>
-                    </div>
-                    <div style="margin-bottom: var(--spacing-4);">
-                        <label class="form-label">Description</label>
-                        <textarea class="form-control" name="description" rows="3" placeholder="A weekend marathon featuring the best speedruns"></textarea>
-                    </div>
-                    <div style="margin-bottom: var(--spacing-4);">
-                        <label class="form-label">Twitch Channel (optional)</label>
-                        <input type="text" class="form-control" name="twitchChannel" placeholder="twitchchannel">
-                        <div class="form-help">Twitch channel name for stream integration</div>
+                    <div class="cf-rows">
+                        <div class="cf-row">
+                            <div class="cf-row-text"><label class="cf-row-label" for="f-schedule-name">Name</label></div>
+                            <div class="cf-row-control">
+                                <input id="f-schedule-name" type="text" class="form-control" name="name" required maxlength="255" placeholder="Summer speedathon 2026" data-sch-slug-for="f-schedule-slug">
+                            </div>
+                        </div>
+                        <div class="cf-row">
+                            <div class="cf-row-text">
+                                <label class="cf-row-label" for="f-schedule-slug">Slug</label>
+                                <p class="cf-row-desc" id="f-schedule-slug-desc">The event's public page is /schedule/&lt;slug&gt;, so no other event on any server can use the same one. Lowercase letters, numbers and hyphens; filled in from the name.</p>
+                            </div>
+                            <div class="cf-row-control">
+                                <input id="f-schedule-slug" type="text" class="form-control" name="slug" required maxlength="100" placeholder="summer-speedathon-2026" pattern="[a-z0-9-]+" aria-describedby="f-schedule-slug-desc">
+                            </div>
+                        </div>
+                        <div class="cf-row">
+                            <div class="cf-row-text"><label class="cf-row-label" for="f-schedule-description">Description</label><p class="cf-row-desc">Optional.</p></div>
+                            <div class="cf-row-control">
+                                <textarea id="f-schedule-description" class="form-control" name="description" rows="3" placeholder="A weekend marathon of community runs"></textarea>
+                            </div>
+                        </div>
+                        <div class="cf-row">
+                            <div class="cf-row-text">
+                                <label class="cf-row-label" for="f-schedule-twitchchannel">Twitch channel</label>
+                                <p class="cf-row-desc" id="f-schedule-twitchchannel-desc">Optional. The channel the event streams on.</p>
+                            </div>
+                            <div class="cf-row-control">
+                                <input id="f-schedule-twitchchannel" type="text" class="form-control" name="twitchChannel" maxlength="100" placeholder="channelname" aria-describedby="f-schedule-twitchchannel-desc">
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-plus"></i>
-                        <span>Create Event</span>
-                    </button>
+                    <button type="submit" class="btn btn-primary">Create event</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
 
-<!-- Create Schedule Modal -->
-<div class="modal fade" id="createScheduleModal" tabindex="-1">
+<div class="modal fade sch-modal" id="createScheduleModal" tabindex="-1" aria-labelledby="cfk-sch-schedule-title">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Create Schedule</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <h5 class="modal-title" id="cfk-sch-schedule-title">Add schedule</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <form id="createScheduleForm" onsubmit="createSchedule(event)">
                 <input type="hidden" name="eventId" id="scheduleEventId">
                 <div class="modal-body">
-                    <div style="margin-bottom: var(--spacing-4);">
-                        <label class="form-label">Schedule Name</label>
-                        <input type="text" class="form-control" name="name" required placeholder="Day 1 - Saturday">
-                    </div>
-                    <div style="margin-bottom: var(--spacing-4);">
-                        <label class="form-label">Slug</label>
-                        <input type="text" class="form-control" name="slug" required placeholder="day-1" pattern="[a-z0-9-]+">
-                    </div>
-                    <div style="margin-bottom: var(--spacing-4);">
-                        <label class="form-label">Description</label>
-                        <textarea class="form-control" name="description" rows="2" placeholder="First day of the marathon"></textarea>
-                    </div>
-                    <div style="margin-bottom: var(--spacing-4);">
-                        <label class="form-label">Start Time</label>
-                        <input type="datetime-local" class="form-control" name="startTime">
+                    <div class="cf-rows">
+                        <div class="cf-row">
+                            <div class="cf-row-text"><label class="cf-row-label" for="f-schedule-name-2">Name</label></div>
+                            <div class="cf-row-control">
+                                <input id="f-schedule-name-2" type="text" class="form-control" name="name" required maxlength="255" placeholder="Day 1, Saturday" data-sch-slug-for="f-schedule-slug-2">
+                            </div>
+                        </div>
+                        <div class="cf-row">
+                            <div class="cf-row-text">
+                                <label class="cf-row-label" for="f-schedule-slug-2">Slug</label>
+                                <p class="cf-row-desc" id="f-schedule-slug-2-desc">Lowercase letters, numbers and hyphens; filled in from the name.</p>
+                            </div>
+                            <div class="cf-row-control">
+                                <input id="f-schedule-slug-2" type="text" class="form-control" name="slug" required maxlength="100" placeholder="day-1" pattern="[a-z0-9-]+" aria-describedby="f-schedule-slug-2-desc">
+                            </div>
+                        </div>
+                        <div class="cf-row">
+                            <div class="cf-row-text"><label class="cf-row-label" for="f-schedule-description-2">Description</label><p class="cf-row-desc">Optional.</p></div>
+                            <div class="cf-row-control">
+                                <textarea id="f-schedule-description-2" class="form-control" name="description" rows="2" placeholder="First day of the marathon"></textarea>
+                            </div>
+                        </div>
+                        <div class="cf-row">
+                            <div class="cf-row-text">
+                                <label class="cf-row-label" for="f-schedule-starttime">Starts at</label>
+                                <p class="cf-row-desc" id="f-schedule-starttime-desc">Optional. With a start time, every run gets a planned start.</p>
+                            </div>
+                            <div class="cf-row-control">
+                                <input id="f-schedule-starttime" type="datetime-local" class="form-control" name="startTime" aria-describedby="f-schedule-starttime-desc">
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-plus"></i>
-                        <span>Create Schedule</span>
-                    </button>
+                    <button type="submit" class="btn btn-primary">Add schedule</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
 
-<!-- Add Run Modal -->
-<div class="modal fade" id="addRunModal" tabindex="-1">
+<div class="modal fade sch-modal" id="addRunModal" tabindex="-1" aria-labelledby="cfk-sch-run-title">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Add Run</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <h5 class="modal-title" id="cfk-sch-run-title">Add run</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <form id="addRunForm" onsubmit="addRun(event)">
                 <input type="hidden" name="scheduleId" id="runScheduleId">
                 <div class="modal-body">
-                    <div class="grid grid-cols-2" style="gap: var(--spacing-4);">
-                        <div style="margin-bottom: var(--spacing-4);">
-                            <label class="form-label">Game Name</label>
-                            <input type="text" class="form-control" name="gameName" required placeholder="Super Mario 64">
+                    <div class="cf-rows">
+                        <div class="cf-row cf-row--stack">
+                            <div class="cf-fields">
+                                <div class="cf-field">
+                                    <label for="f-schedule-gamename">Game</label>
+                                    <input id="f-schedule-gamename" type="text" class="form-control" name="gameName" required maxlength="255" placeholder="Super Mario 64">
+                                </div>
+                                <div class="cf-field">
+                                    <label for="f-schedule-category">Category</label>
+                                    <input id="f-schedule-category" type="text" class="form-control" name="category" maxlength="255" placeholder="120 star">
+                                </div>
+                            </div>
                         </div>
-                        <div style="margin-bottom: var(--spacing-4);">
-                            <label class="form-label">Category</label>
-                            <input type="text" class="form-control" name="category" placeholder="120 Star">
+                        <div class="cf-row cf-row--stack">
+                            <div class="cf-fields">
+                                <div class="cf-field">
+                                    <label for="f-schedule-runners">Runners</label>
+                                    <input id="f-schedule-runners" type="text" class="form-control" name="runners" placeholder="runner1, runner2" aria-describedby="f-schedule-runners-desc">
+                                    <span class="cf-field-hint" id="f-schedule-runners-desc">Separate names with commas.</span>
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                    <div style="margin-bottom: var(--spacing-4);">
-                        <label class="form-label">Runner(s)</label>
-                        <input type="text" class="form-control" name="runners" placeholder="Runner1, Runner2">
-                        <div class="form-help">Comma-separated list of runners</div>
-                    </div>
-                    <div class="grid grid-cols-2" style="gap: var(--spacing-4);">
-                        <div style="margin-bottom: var(--spacing-4);">
-                            <label class="form-label">Estimate</label>
-                            <input type="text" class="form-control" name="estimate" placeholder="1:45:00" pattern="[0-9]+:[0-5][0-9]:[0-5][0-9]">
-                            <div class="form-help">Format: HH:MM:SS</div>
+                        <div class="cf-row cf-row--stack">
+                            <div class="cf-fields">
+                                <div class="cf-field">
+                                    <label for="f-schedule-estimate">Estimate</label>
+                                    <input id="f-schedule-estimate" type="text" class="form-control" name="estimate" placeholder="1:45:00" pattern="[0-9]+:[0-5][0-9]:[0-5][0-9]" aria-describedby="f-schedule-estimate-desc">
+                                    <span class="cf-field-hint" id="f-schedule-estimate-desc">Hours:minutes:seconds.</span>
+                                </div>
+                                <div class="cf-field">
+                                    <label for="f-schedule-setup">Setup time</label>
+                                    <input id="f-schedule-setup" type="text" class="form-control" name="setup" placeholder="0:10:00" pattern="[0-9]+:[0-5][0-9]:[0-5][0-9]" aria-describedby="f-schedule-setup-desc">
+                                    <span class="cf-field-hint" id="f-schedule-setup-desc">Hours:minutes:seconds, before the next run.</span>
+                                </div>
+                            </div>
                         </div>
-                        <div style="margin-bottom: var(--spacing-4);">
-                            <label class="form-label">Setup Time</label>
-                            <input type="text" class="form-control" name="setup" placeholder="0:10:00" pattern="[0-9]+:[0-5][0-9]:[0-5][0-9]">
-                            <div class="form-help">Format: HH:MM:SS</div>
+                        <div class="cf-row cf-row--stack">
+                            <div class="cf-fields">
+                                <div class="cf-field">
+                                    <label for="f-schedule-notes">Notes</label>
+                                    <textarea id="f-schedule-notes" class="form-control" name="notes" rows="2" placeholder="Anything the hosts should know"></textarea>
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                    <div style="margin-bottom: var(--spacing-4);">
-                        <label class="form-label">Notes</label>
-                        <textarea class="form-control" name="notes" rows="2" placeholder="Any additional notes about this run"></textarea>
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-plus"></i>
-                        <span>Add Run</span>
-                    </button>
+                    <button type="submit" class="btn btn-primary">Add run</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
 
-<!-- Edit Run Modal -->
-<div class="modal fade" id="editRunModal" tabindex="-1">
+<div class="modal fade sch-modal" id="editRunModal" tabindex="-1" aria-labelledby="cfk-sch-edit-title">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Edit Run</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <h5 class="modal-title" id="cfk-sch-edit-title">Edit run</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <form id="editRunForm" onsubmit="updateRun(event)">
                 <input type="hidden" name="itemId" id="editItemId">
                 <div class="modal-body">
-                    <div class="grid grid-cols-2" style="gap: var(--spacing-4);">
-                        <div style="margin-bottom: var(--spacing-4);">
-                            <label class="form-label">Game Name</label>
-                            <input type="text" class="form-control" name="gameName" id="editGameName" required>
+                    <div class="cf-rows">
+                        <div class="cf-row cf-row--stack">
+                            <div class="cf-fields">
+                                <div class="cf-field">
+                                    <label for="editGameName">Game</label>
+                                    <input type="text" class="form-control" name="gameName" id="editGameName" required maxlength="255">
+                                </div>
+                                <div class="cf-field">
+                                    <label for="editCategory">Category</label>
+                                    <input type="text" class="form-control" name="category" id="editCategory" maxlength="255">
+                                </div>
+                            </div>
                         </div>
-                        <div style="margin-bottom: var(--spacing-4);">
-                            <label class="form-label">Category</label>
-                            <input type="text" class="form-control" name="category" id="editCategory">
+                        <div class="cf-row cf-row--stack">
+                            <div class="cf-fields">
+                                <div class="cf-field">
+                                    <label for="editRunners">Runners</label>
+                                    <input type="text" class="form-control" name="runners" id="editRunners">
+                                    <span class="cf-field-hint">Separate names with commas.</span>
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                    <div style="margin-bottom: var(--spacing-4);">
-                        <label class="form-label">Runner(s)</label>
-                        <input type="text" class="form-control" name="runners" id="editRunners">
-                    </div>
-                    <div class="grid grid-cols-2" style="gap: var(--spacing-4);">
-                        <div style="margin-bottom: var(--spacing-4);">
-                            <label class="form-label">Estimate</label>
-                            <input type="text" class="form-control" name="estimate" id="editEstimate" pattern="[0-9]+:[0-5][0-9]:[0-5][0-9]">
+                        <div class="cf-row cf-row--stack">
+                            <div class="cf-fields">
+                                <div class="cf-field">
+                                    <label for="editEstimate">Estimate</label>
+                                    <input type="text" class="form-control" name="estimate" id="editEstimate" pattern="[0-9]+:[0-5][0-9]:[0-5][0-9]">
+                                    <span class="cf-field-hint">Hours:minutes:seconds.</span>
+                                </div>
+                                <div class="cf-field">
+                                    <label for="editSetup">Setup time</label>
+                                    <input type="text" class="form-control" name="setup" id="editSetup" pattern="[0-9]+:[0-5][0-9]:[0-5][0-9]">
+                                    <span class="cf-field-hint">Hours:minutes:seconds, before the next run.</span>
+                                </div>
+                            </div>
                         </div>
-                        <div style="margin-bottom: var(--spacing-4);">
-                            <label class="form-label">Setup Time</label>
-                            <input type="text" class="form-control" name="setup" id="editSetup" pattern="[0-9]+:[0-5][0-9]:[0-5][0-9]">
+                        <div class="cf-row cf-row--stack">
+                            <div class="cf-fields">
+                                <div class="cf-field">
+                                    <label for="editNotes">Notes</label>
+                                    <textarea class="form-control" name="notes" id="editNotes" rows="2"></textarea>
+                                </div>
+                            </div>
                         </div>
-                    </div>
-                    <div style="margin-bottom: var(--spacing-4);">
-                        <label class="form-label">Notes</label>
-                        <textarea class="form-control" name="notes" id="editNotes" rows="2"></textarea>
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-save"></i>
-                        <span>Save Changes</span>
-                    </button>
+                    <button type="submit" class="btn btn-primary">Save</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
-
-<style>
-.empty-state {
-    text-align: center;
-    padding: var(--spacing-12) var(--spacing-8);
-    background: var(--color-dark-600);
-    border-radius: var(--radius-lg);
-    border: 1px solid var(--color-dark-400);
-}
-
-.empty-state-icon {
-    font-size: 4rem;
-    color: var(--color-text-muted);
-    margin-bottom: var(--spacing-4);
-}
-
-.empty-state-title {
-    font-size: var(--font-size-xl);
-    font-weight: var(--font-weight-bold);
-    color: var(--color-text-primary);
-    margin-bottom: var(--spacing-2);
-}
-
-.empty-state-description {
-    font-size: var(--font-size-base);
-    color: var(--color-text-secondary);
-    margin-bottom: var(--spacing-6);
-}
-
-.schedule-card {
-    background: var(--color-dark-600);
-    border: 1px solid var(--color-dark-400);
-    border-radius: var(--radius-lg);
-    padding: var(--spacing-5);
-    margin-bottom: var(--spacing-4);
-    transition: border-color var(--transition-base);
-}
-
-.schedule-card:hover {
-    border-color: var(--color-primary-400);
-}
-
-.schedule-card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: var(--spacing-3);
-}
-
-.schedule-card-title {
-    font-size: var(--font-size-lg);
-    font-weight: var(--font-weight-bold);
-    color: var(--color-text-primary);
-    margin: 0;
-    cursor: pointer;
-}
-
-.schedule-card-title:hover {
-    color: var(--color-primary-400);
-}
-
-.schedule-card-meta {
-    font-size: var(--font-size-sm);
-    color: var(--color-text-muted);
-}
-
-.schedule-card-description {
-    font-size: var(--font-size-sm);
-    color: var(--color-text-secondary);
-    margin-bottom: var(--spacing-3);
-}
-
-.schedule-card-actions {
-    display: flex;
-    gap: var(--spacing-2);
-}
-
-.table-container {
-    overflow-x: auto;
-    border: 1px solid var(--color-dark-400);
-    border-radius: var(--radius-lg);
-}
-
-.data-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-.data-table thead {
-    background: var(--color-dark-600);
-    border-bottom: 2px solid var(--color-dark-400);
-}
-
-.data-table th {
-    padding: var(--spacing-4);
-    text-align: left;
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-
-.data-table td {
-    padding: var(--spacing-4);
-    border-bottom: 1px solid var(--color-dark-400);
-}
-
-.data-table tbody tr {
-    transition: background var(--transition-base);
-}
-
-.data-table tbody tr:hover {
-    background: var(--color-dark-600);
-}
-
-.data-table tbody tr:last-child td {
-    border-bottom: none;
-}
-
-.data-table tbody tr.status-running {
-    background: rgba(var(--color-success-rgb), 0.1);
-}
-
-.data-table tbody tr.status-completed {
-    opacity: 0.6;
-}
-
-.run-position {
-    width: 40px;
-    text-align: center;
-    font-weight: var(--font-weight-bold);
-    color: var(--color-text-muted);
-}
-
-.drag-handle {
-    cursor: grab;
-    color: var(--color-text-muted);
-    padding: var(--spacing-2);
-}
-
-.drag-handle:hover {
-    color: var(--color-text-primary);
-}
-
-.form-label {
-    display: block;
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-primary);
-    margin-bottom: var(--spacing-2);
-}
-
-.form-help {
-    font-size: var(--font-size-xs);
-    color: var(--color-text-muted);
-    margin-top: var(--spacing-2);
-}
-
-.status-badge {
-    padding: var(--spacing-1) var(--spacing-2);
-    border-radius: var(--radius-sm);
-    font-size: var(--font-size-xs);
-    font-weight: var(--font-weight-semibold);
-    text-transform: uppercase;
-}
-
-.status-pending { background: var(--color-dark-400); color: var(--color-text-secondary); }
-.status-running { background: var(--color-success); color: white; }
-.status-completed { background: var(--color-primary-500); color: white; }
-.status-skipped { background: var(--color-warning); color: black; }
-</style>
 
 <script>
 const guildId = '<%= guild.id %>';
@@ -444,6 +331,98 @@ document.addEventListener('DOMContentLoaded', () => {
     loadEvents();
 });
 
+// Rows are built with createElement / textContent: event, schedule and run names (which can hold
+// apostrophes, quotes or markup) are never put into HTML or into inline onclick code. Each button
+// carries data-sch-action and the ids it needs; one click listener on #schedule-content routes it.
+function schEl(tag, className, text) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text != null) node.textContent = text;
+    return node;
+}
+function schIcon(name) {
+    const i = schEl('i', name);
+    i.setAttribute('aria-hidden', 'true');
+    return i;
+}
+function schButton(label, cls, action, data, iconName) {
+    const b = schEl('button', `btn btn-sm ${cls}`);
+    b.type = 'button';
+    b.dataset.schAction = action;
+    for (const [k, v] of Object.entries(data || {})) b.dataset[k] = String(v ?? '');
+    if (iconName) {
+        b.append(schIcon(`fas fa-${iconName}`));
+        b.title = label;
+        b.setAttribute('aria-label', label);
+    } else b.textContent = label;
+    return b;
+}
+function schState(title, text, button) {
+    const box = schEl('div', 'cf-state cf-state--empty');
+    box.append(schEl('p', 'cf-state-title', title), schEl('p', 'cf-state-text', text));
+    if (button) {
+        button.classList.remove('btn-sm');
+        box.append(button);
+    }
+    return box;
+}
+function schPill(status) {
+    const s = String(status || 'pending');
+    const tone = { running: 'is-ok', completed: 'is-info', skipped: 'is-warn' }[s] || '';
+    return schEl('span', `cf-pill ${tone}`.trim(), s.charAt(0).toUpperCase() + s.slice(1));
+}
+/** The heading line above a schedule's or an event's list: its name and the add button. */
+function schViewHead(title, button, sub) {
+    const head = schEl('div', 'cf-list-item sch-view-head');
+    const text = schEl('div');
+    text.append(schEl('h3', 'cf-list-title', title));
+    if (sub) text.append(schEl('p', 'sch-view-sub', sub));
+    head.append(text, button);
+    return head;
+}
+// Feedback goes to the dashboard's own toast (manage-tailwind.ejs defines window.showToast after
+// this partial, so it is looked up when a message is shown, not when the script loads).
+function schNotify(message, type = 'info') {
+    const toast = typeof window !== 'undefined' ? window.showToast : null;
+    if (typeof toast === 'function') toast(message, type);
+    else if (type === 'error' && typeof alert === 'function') alert(message);
+}
+// A slug from a name: "Day 1, Saturday" -> "day-1-saturday".
+function schSlugify(text) {
+    return String(text || '').toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '')
+        .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 100);
+}
+// Fill each slug from its name until someone types in the slug itself.
+for (const [nameId, slugId] of [['f-schedule-name', 'f-schedule-slug'], ['f-schedule-name-2', 'f-schedule-slug-2']]) {
+    const nameInput = document.getElementById(nameId);
+    const slugInput = document.getElementById(slugId);
+    if (!nameInput || !slugInput) continue;
+    slugInput.addEventListener('input', () => { slugInput.dataset.touched = slugInput.value ? '1' : ''; });
+    nameInput.addEventListener('input', () => { if (!slugInput.dataset.touched) slugInput.value = schSlugify(nameInput.value); });
+}
+function schWhen(iso) {
+    if (!iso) return '-';
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '-';
+    return d.toLocaleString(undefined, { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
+// The four totals at the top are for the whole server, whichever event or schedule is open.
+function schSetTotals(events) {
+    const sum = (k) => events.reduce((n, e) => n + (Number(e[k]) || 0), 0);
+    document.getElementById('stat-events').textContent = events.length;
+    document.getElementById('stat-active').textContent = events.filter(e => e.is_active).length;
+    document.getElementById('stat-schedules').textContent = sum('schedule_count');
+    document.getElementById('stat-runs').textContent = sum('run_count');
+}
+
+async function schRefreshTotals() {
+    try {
+        const data = await (await fetch(`/manage/${guildId}/schedule/events`)).json();
+        if (Array.isArray(data.events)) schSetTotals(data.events);
+    } catch (_) { /* totals stay as they were */ }
+}
+
 async function loadEvents() {
     currentEventId = null;
     currentScheduleId = null;
@@ -455,70 +434,62 @@ async function loadEvents() {
     try {
         const response = await fetch(`/manage/${guildId}/schedule/events`);
         const data = await response.json();
-
-        if (data.events && data.events.length > 0) {
-            document.getElementById('stat-events').textContent = data.events.length;
-            document.getElementById('stat-active').textContent = data.events.filter(e => e.is_active).length;
-
-            let html = '<div class="events-grid">';
-            data.events.forEach(event => {
-                html += `
-                    <div class="schedule-card">
-                        <div class="schedule-card-header">
-                            <div>
-                                <h3 class="schedule-card-title" onclick="loadSchedules(${event.id}, '${escapeHtml(event.name)}')">${escapeHtml(event.name)}</h3>
-                                <div class="schedule-card-meta">
-                                    <i class="fas fa-link"></i> ${event.slug}
-                                    ${event.twitch_channel ? `<span style="margin-left: var(--spacing-3);"><i class="fab fa-twitch" style="color: #9146ff;"></i> ${event.twitch_channel}</span>` : ''}
-                                </div>
-                            </div>
-                            <span class="status-badge ${event.is_active ? 'status-running' : 'status-pending'}">
-                                ${event.is_active ? 'Active' : 'Inactive'}
-                            </span>
-                        </div>
-                        ${event.description ? `<p class="schedule-card-description">${escapeHtml(event.description)}</p>` : ''}
-                        <div class="schedule-card-actions">
-                            <button class="btn btn-sm btn-primary" onclick="loadSchedules(${event.id}, '${escapeHtml(event.name)}')">
-                                <i class="fas fa-calendar"></i> View Schedules
-                            </button>
-                            <button class="btn btn-sm btn-secondary" onclick="toggleEventStatus(${event.id}, ${!event.is_active})">
-                                <i class="fas fa-${event.is_active ? 'pause' : 'play'}"></i>
-                            </button>
-                            <button class="btn btn-sm btn-danger" onclick="deleteEvent(${event.id})">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        </div>
-                    </div>
-                `;
-            });
-            html += '</div>';
-            document.getElementById('events-list').innerHTML = html;
-        } else {
-            document.getElementById('stat-events').textContent = '0';
-            document.getElementById('stat-active').textContent = '0';
-            document.getElementById('events-list').innerHTML = `
-                <div class="empty-state">
-                    <div class="empty-state-icon"><i class="fas fa-calendar-alt"></i></div>
-                    <div class="empty-state-title">No Events Yet</div>
-                    <div class="empty-state-description">Create your first event to start building schedules</div>
-                    <button class="btn btn-primary" onclick="showCreateEventModal()">
-                        <i class="fas fa-plus"></i> Create First Event
-                    </button>
-                </div>
-            `;
+        const events = Array.isArray(data.events) ? data.events : [];
+        schSetTotals(events);
+        const list = document.getElementById('events-list');
+        if (!events.length) {
+            list.replaceChildren(schState('No events yet', 'Create an event, then add a schedule for each day of it.',
+                schButton('Create event', 'btn-primary', 'create-event')));
+            return;
         }
+        list.replaceChildren(...events.map(event => {
+            const row = schEl('div', 'cf-list-item cf-list-item--multi');
+            const main = schEl('div', 'cf-list-main');
+            const title = schEl('p', 'cf-list-title');
+            const open = schEl('button', 'sch-open', event.name);
+            open.type = 'button';
+            open.dataset.schAction = 'open-event';
+            open.dataset.id = event.id;
+            open.dataset.name = event.name || '';
+            title.append(open, schEl('span', `cf-pill ${event.is_active ? 'is-ok' : ''}`.trim(), event.is_active ? 'Active' : 'Inactive'));
+            const meta = schEl('p', 'cf-list-meta');
+            const slug = schEl('span');
+            slug.append(schIcon('fas fa-link'), ` ${event.slug || ''}`);
+            meta.append(slug);
+            if (event.twitch_channel) {
+                const tw = schEl('span');
+                tw.append(schIcon('fab fa-twitch'), ` ${event.twitch_channel}`);
+                meta.append(tw);
+            }
+            main.append(title, meta);
+            if (event.description) main.append(schEl('p', 'cf-list-body', event.description));
+            const actions = schEl('div', 'cf-list-actions');
+            actions.append(
+                schButton('Open', 'btn-primary', 'open-event', { id: event.id, name: event.name }),
+                schButton(event.is_active ? 'Pause event' : 'Make event active', 'btn-secondary', 'toggle-event', { id: event.id, active: event.is_active ? '0' : '1' }, event.is_active ? 'pause' : 'play'),
+                schButton('Delete event', 'btn-danger', 'delete-event', { id: event.id }, 'trash'),
+            );
+            row.append(main, actions);
+            return row;
+        }));
     } catch (error) {
         console.error('Error loading events:', error);
-        showToast('Failed to load events', 'error');
+        schNotify('Failed to load events', 'error');
     }
+}
+
+function setCrumb(id, text) {
+    const crumb = document.getElementById(id);
+    if (!text) { crumb.replaceChildren(); return; }
+    crumb.replaceChildren(schIcon('fas fa-chevron-right'), ` ${text}`);
 }
 
 async function loadSchedules(eventId, eventName) {
     currentEventId = eventId;
     currentEventData = { id: eventId, name: eventName };
-    document.getElementById('schedule-breadcrumb').style.display = 'block';
-    document.getElementById('breadcrumb-event').innerHTML = `<i class="fas fa-chevron-right"></i> ${escapeHtml(eventName)}`;
-    document.getElementById('breadcrumb-schedule').innerHTML = '';
+    document.getElementById('schedule-breadcrumb').style.display = 'flex';
+    setCrumb('breadcrumb-event', eventName);
+    setCrumb('breadcrumb-schedule', '');
     document.getElementById('events-view').style.display = 'none';
     document.getElementById('schedules-view').style.display = 'block';
     document.getElementById('items-view').style.display = 'none';
@@ -526,161 +497,153 @@ async function loadSchedules(eventId, eventName) {
     try {
         const response = await fetch(`/manage/${guildId}/schedule/events/${eventId}/schedules`);
         const data = await response.json();
+        const schedules = Array.isArray(data.schedules) ? data.schedules : [];
+        schRefreshTotals();
 
-        document.getElementById('stat-schedules').textContent = data.schedules?.length || 0;
-
-        let html = `
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-4);">
-                <h3 style="margin: 0; color: var(--color-text-primary);">Schedules for ${escapeHtml(eventName)}</h3>
-                <button class="btn btn-primary" onclick="showCreateScheduleModal(${eventId})">
-                    <i class="fas fa-plus"></i> Add Schedule
-                </button>
-            </div>
-        `;
-
-        if (data.schedules && data.schedules.length > 0) {
-            data.schedules.forEach(schedule => {
-                html += `
-                    <div class="schedule-card">
-                        <div class="schedule-card-header">
-                            <div>
-                                <h3 class="schedule-card-title" onclick="loadItems(${schedule.id}, '${escapeHtml(schedule.name)}')">${escapeHtml(schedule.name)}</h3>
-                                <div class="schedule-card-meta">
-                                    ${schedule.start_time ? `<i class="fas fa-clock"></i> ${new Date(schedule.start_time).toLocaleString()}` : '<i class="fas fa-clock"></i> No start time set'}
-                                </div>
-                            </div>
-                        </div>
-                        ${schedule.description ? `<p class="schedule-card-description">${escapeHtml(schedule.description)}</p>` : ''}
-                        <div class="schedule-card-actions">
-                            <button class="btn btn-sm btn-primary" onclick="loadItems(${schedule.id}, '${escapeHtml(schedule.name)}')">
-                                <i class="fas fa-list"></i> View Runs
-                            </button>
-                            <button class="btn btn-sm btn-danger" onclick="deleteSchedule(${schedule.id})">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        </div>
-                    </div>
-                `;
-            });
-        } else {
-            html += `
-                <div class="empty-state">
-                    <div class="empty-state-icon"><i class="fas fa-calendar-day"></i></div>
-                    <div class="empty-state-title">No Schedules Yet</div>
-                    <div class="empty-state-description">Add schedules to organize runs by day or category</div>
-                    <button class="btn btn-primary" onclick="showCreateScheduleModal(${eventId})">
-                        <i class="fas fa-plus"></i> Add First Schedule
-                    </button>
-                </div>
-            `;
+        const parts = [schViewHead(`Schedules in ${eventName}`, schButton('Add schedule', 'btn-primary', 'add-schedule', { event: eventId }))];
+        if (!schedules.length) {
+            parts.push(schState('No schedules yet', 'Add a schedule for each day or block of the event.',
+                schButton('Add schedule', 'btn-primary', 'add-schedule', { event: eventId })));
         }
-
-        document.getElementById('schedules-view').innerHTML = html;
+        for (const schedule of schedules) {
+            const row = schEl('div', 'cf-list-item cf-list-item--multi');
+            const main = schEl('div', 'cf-list-main');
+            const title = schEl('p', 'cf-list-title');
+            const open = schEl('button', 'sch-open', schedule.name);
+            open.type = 'button';
+            open.dataset.schAction = 'open-schedule';
+            open.dataset.id = schedule.id;
+            open.dataset.name = schedule.name || '';
+            title.append(open);
+            const meta = schEl('p', 'cf-list-meta');
+            const when = schEl('span');
+            when.append(schIcon('fas fa-clock'), ` ${schedule.start_time ? new Date(schedule.start_time).toLocaleString() : 'No start time set'}`);
+            meta.append(when);
+            main.append(title, meta);
+            if (schedule.description) main.append(schEl('p', 'cf-list-body', schedule.description));
+            const actions = schEl('div', 'cf-list-actions');
+            actions.append(
+                schButton('Open', 'btn-primary', 'open-schedule', { id: schedule.id, name: schedule.name }),
+                schButton('Delete schedule', 'btn-danger', 'delete-schedule', { id: schedule.id }, 'trash'),
+            );
+            row.append(main, actions);
+            parts.push(row);
+        }
+        document.getElementById('schedules-view').replaceChildren(...parts);
     } catch (error) {
         console.error('Error loading schedules:', error);
-        showToast('Failed to load schedules', 'error');
+        schNotify('Failed to load schedules', 'error');
     }
 }
+
+// The runs on screen, by id, so Edit fills its form from the data and not from markup.
+let schRuns = new Map();
 
 async function loadItems(scheduleId, scheduleName) {
     currentScheduleId = scheduleId;
     currentScheduleData = { id: scheduleId, name: scheduleName };
-    document.getElementById('breadcrumb-schedule').innerHTML = `<i class="fas fa-chevron-right"></i> ${escapeHtml(scheduleName)}`;
+    setCrumb('breadcrumb-schedule', scheduleName);
     document.getElementById('schedules-view').style.display = 'none';
     document.getElementById('items-view').style.display = 'block';
 
     try {
         const response = await fetch(`/manage/${guildId}/schedule/schedules/${scheduleId}/items`);
         const data = await response.json();
+        const items = Array.isArray(data.items) ? data.items : [];
+        schRefreshTotals();
+        schRuns = new Map(items.map(item => [String(item.id), item]));
 
-        document.getElementById('stat-runs').textContent = data.items?.length || 0;
-
-        let html = `
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-4);">
-                <h3 style="margin: 0; color: var(--color-text-primary);">Runs in ${escapeHtml(scheduleName)}</h3>
-                <button class="btn btn-primary" onclick="showAddRunModal(${scheduleId})">
-                    <i class="fas fa-plus"></i> Add Run
-                </button>
-            </div>
-        `;
-
-        if (data.items && data.items.length > 0) {
-            html += `
-                <div class="table-container">
-                    <table class="data-table" id="runs-table">
-                        <thead>
-                            <tr>
-                                <th style="width: 50px;">#</th>
-                                <th>Game</th>
-                                <th>Category</th>
-                                <th>Runner(s)</th>
-                                <th>Estimate</th>
-                                <th>Setup</th>
-                                <th>Status</th>
-                                <th class="text-end">Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody id="runs-tbody">
-            `;
-
-            data.items.forEach((item, index) => {
-                html += `
-                    <tr class="status-${item.status || 'pending'}" data-item-id="${item.id}">
-                        <td class="run-position">${index + 1}</td>
-                        <td style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary);">${escapeHtml(item.game_name)}</td>
-                        <td style="color: var(--color-text-secondary);">${escapeHtml(item.category || '-')}</td>
-                        <td style="color: var(--color-text-secondary);">${escapeHtml(item.runners || '-')}</td>
-                        <td style="font-family: var(--font-family-mono);">${formatSeconds(item.estimate_seconds)}</td>
-                        <td style="font-family: var(--font-family-mono); color: var(--color-text-muted);">${formatSeconds(item.setup_seconds)}</td>
-                        <td><span class="status-badge status-${item.status || 'pending'}">${item.status || 'pending'}</span></td>
-                        <td class="text-end">
-                            <div style="display: flex; gap: var(--spacing-2); justify-content: flex-end;">
-                                ${item.status !== 'running' && item.status !== 'completed' ? `
-                                    <button class="btn btn-sm btn-success" onclick="setRunStatus(${item.id}, 'running')" title="Start Run">
-                                        <i class="fas fa-play"></i>
-                                    </button>
-                                ` : ''}
-                                ${item.status === 'running' ? `
-                                    <button class="btn btn-sm btn-primary" onclick="setRunStatus(${item.id}, 'completed')" title="Complete Run">
-                                        <i class="fas fa-check"></i>
-                                    </button>
-                                ` : ''}
-                                <button class="btn btn-sm btn-secondary" onclick="showEditRunModal(${item.id}, '${escapeHtml(item.game_name)}', '${escapeHtml(item.category || '')}', '${escapeHtml(item.runners || '')}', ${item.estimate_seconds}, ${item.setup_seconds}, '${escapeHtml(item.notes || '')}')">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-                                <button class="btn btn-sm btn-danger" onclick="deleteRun(${item.id})">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </div>
-                        </td>
-                    </tr>
-                `;
-            });
-
-            html += `
-                        </tbody>
-                    </table>
-                </div>
-            `;
+        const total = items.filter(i => i.status !== 'skipped')
+            .reduce((sum, i) => sum + (Number(i.estimate_seconds) || 0) + (Number(i.setup_seconds) || 0), 0);
+        const done = items.filter(i => i.status === 'completed').length;
+        const sub = items.length
+            ? `${items.length} run${items.length === 1 ? '' : 's'}, ${formatSeconds(total)} with setup${done ? `, ${done} done` : ''}`
+            : '';
+        const hasPlan = items.some(i => i.projected_start);
+        const parts = [schViewHead(`Runs in ${scheduleName}`, schButton('Add run', 'btn-primary', 'add-run', { schedule: scheduleId }), sub)];
+        if (!items.length) {
+            parts.push(schState('No runs yet', 'Add the runs in the order they will be played.',
+                schButton('Add run', 'btn-primary', 'add-run', { schedule: scheduleId })));
         } else {
-            html += `
-                <div class="empty-state">
-                    <div class="empty-state-icon"><i class="fas fa-running"></i></div>
-                    <div class="empty-state-title">No Runs Yet</div>
-                    <div class="empty-state-description">Add runs to build your schedule</div>
-                    <button class="btn btn-primary" onclick="showAddRunModal(${scheduleId})">
-                        <i class="fas fa-plus"></i> Add First Run
-                    </button>
-                </div>
-            `;
+            const wrap = schEl('div', 'cf-table-wrap');
+            const table = schEl('table', 'cf-table cf-table--stack');
+            table.id = 'runs-table';
+            const thead = schEl('thead');
+            const hr = schEl('tr');
+            const heads = [['#', 'run-position']].concat(hasPlan ? [['Starts']] : [], [['Game'], ['Category'], ['Runners'], ['Estimate'], ['Setup'], ['Status'], ['Actions', 'cf-cell-end']]);
+            for (const [label, cls] of heads) {
+                const th = schEl('th', cls || null, label);
+                th.scope = 'col';
+                hr.append(th);
+            }
+            thead.append(hr);
+            const tbody = schEl('tbody');
+            tbody.id = 'runs-tbody';
+            items.forEach((item, index) => {
+                const status = item.status || 'pending';
+                const tr = schEl('tr', `status-${status}`);
+                tr.dataset.itemId = item.id;
+                const cell = (label, text, cls) => {
+                    const td = schEl('td', cls || null, text);
+                    td.dataset.label = label;
+                    tr.append(td);
+                    return td;
+                };
+                cell('#', String(index + 1), 'run-position');
+                if (hasPlan) cell('Starts', status === 'skipped' ? '-' : schWhen(item.projected_start), 'sch-time');
+                cell('Game', item.game_name, 'sch-game');
+                cell('Category', item.category || '-', 'cf-cell-muted');
+                cell('Runners', item.runners || '-', 'cf-cell-muted');
+                cell('Estimate', formatSeconds(item.estimate_seconds), 'sch-time');
+                cell('Setup', formatSeconds(item.setup_seconds), 'sch-time cf-cell-muted');
+                cell('Status', null).append(schPill(status));
+                const actionsCell = schEl('td', 'cf-cell-end');
+                const actions = schEl('div', 'cf-inline sch-run-actions');
+                if (status !== 'running' && status !== 'completed') actions.append(schButton('Start run', 'btn-success', 'run-status', { id: item.id, status: 'running' }, 'play'));
+                if (status === 'running') actions.append(schButton('Mark run complete', 'btn-primary', 'run-status', { id: item.id, status: 'completed' }, 'check'));
+                actions.append(
+                    schButton('Edit run', 'btn-secondary', 'edit-run', { id: item.id }, 'edit'),
+                    schButton('Delete run', 'btn-danger', 'delete-run', { id: item.id }, 'trash'),
+                );
+                actionsCell.append(actions);
+                tr.append(actionsCell);
+                tbody.append(tr);
+            });
+            table.append(thead, tbody);
+            wrap.append(table);
+            parts.push(wrap);
         }
-
-        document.getElementById('items-view').innerHTML = html;
+        document.getElementById('items-view').replaceChildren(...parts);
     } catch (error) {
         console.error('Error loading items:', error);
-        showToast('Failed to load runs', 'error');
+        schNotify('Failed to load runs', 'error');
     }
 }
+
+document.getElementById('schedule-content').addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-sch-action]');
+    if (!btn) return;
+    const d = btn.dataset;
+    const id = Number(d.id);
+    switch (d.schAction) {
+        case 'create-event': return showCreateEventModal();
+        case 'open-event': return loadSchedules(id, d.name);
+        case 'toggle-event': return toggleEventStatus(id, d.active === '1');
+        case 'delete-event': return deleteEvent(id);
+        case 'add-schedule': return showCreateScheduleModal(Number(d.event));
+        case 'open-schedule': return loadItems(id, d.name);
+        case 'delete-schedule': return deleteSchedule(id);
+        case 'add-run': return showAddRunModal(Number(d.schedule));
+        case 'run-status': return setRunStatus(id, d.status);
+        case 'delete-run': return deleteRun(id);
+        case 'edit-run': {
+            const item = schRuns.get(String(d.id));
+            if (item) showEditRunModal(item.id, item.game_name || '', item.category || '', item.runners || '', item.estimate_seconds, item.setup_seconds, item.notes || '');
+            return undefined;
+        }
+        default: return undefined;
+    }
+});
 
 function showCreateEventModal() {
     document.getElementById('createEventForm').reset();
@@ -730,14 +693,14 @@ async function createEvent(e) {
         const data = await response.json();
         if (data.success) {
             bootstrap.Modal.getInstance(document.getElementById('createEventModal')).hide();
-            showToast('Event created successfully', 'success');
+            schNotify('Event created', 'success');
             loadEvents();
         } else {
-            showToast(data.error || 'Failed to create event', 'error');
+            schNotify(data.error || 'Failed to create event', 'error');
         }
     } catch (error) {
         console.error('Error creating event:', error);
-        showToast('Failed to create event', 'error');
+        schNotify('Failed to create event', 'error');
     }
 }
 
@@ -755,21 +718,25 @@ async function createSchedule(e) {
                 name: formData.get('name'),
                 slug: formData.get('slug'),
                 description: formData.get('description'),
-                startTime: formData.get('startTime') || null
+                // datetime-local is the browser's own time; the database keeps UTC, like /schedule list create.
+                startTime: (function (v) {
+                    var d = v ? new Date(v) : null;
+                    return d && !isNaN(d) ? d.toISOString().slice(0, 19).replace('T', ' ') : null;
+                })(formData.get('startTime'))
             })
         });
 
         const data = await response.json();
         if (data.success) {
             bootstrap.Modal.getInstance(document.getElementById('createScheduleModal')).hide();
-            showToast('Schedule created successfully', 'success');
+            schNotify('Schedule created', 'success');
             loadSchedules(eventId, currentEventData.name);
         } else {
-            showToast(data.error || 'Failed to create schedule', 'error');
+            schNotify(data.error || 'Failed to create schedule', 'error');
         }
     } catch (error) {
         console.error('Error creating schedule:', error);
-        showToast('Failed to create schedule', 'error');
+        schNotify('Failed to create schedule', 'error');
     }
 }
 
@@ -796,14 +763,14 @@ async function addRun(e) {
         const data = await response.json();
         if (data.success) {
             bootstrap.Modal.getInstance(document.getElementById('addRunModal')).hide();
-            showToast('Run added successfully', 'success');
+            schNotify('Run added', 'success');
             loadItems(scheduleId, currentScheduleData.name);
         } else {
-            showToast(data.error || 'Failed to add run', 'error');
+            schNotify(data.error || 'Failed to add run', 'error');
         }
     } catch (error) {
         console.error('Error adding run:', error);
-        showToast('Failed to add run', 'error');
+        schNotify('Failed to add run', 'error');
     }
 }
 
@@ -830,14 +797,14 @@ async function updateRun(e) {
         const data = await response.json();
         if (data.success) {
             bootstrap.Modal.getInstance(document.getElementById('editRunModal')).hide();
-            showToast('Run updated successfully', 'success');
+            schNotify('Run updated', 'success');
             loadItems(currentScheduleId, currentScheduleData.name);
         } else {
-            showToast(data.error || 'Failed to update run', 'error');
+            schNotify(data.error || 'Failed to update run', 'error');
         }
     } catch (error) {
         console.error('Error updating run:', error);
-        showToast('Failed to update run', 'error');
+        schNotify('Failed to update run', 'error');
     }
 }
 
@@ -851,14 +818,14 @@ async function deleteEvent(eventId) {
 
         const data = await response.json();
         if (data.success) {
-            showToast('Event deleted', 'success');
+            schNotify('Event deleted', 'success');
             loadEvents();
         } else {
-            showToast(data.error || 'Failed to delete event', 'error');
+            schNotify(data.error || 'Failed to delete event', 'error');
         }
     } catch (error) {
         console.error('Error deleting event:', error);
-        showToast('Failed to delete event', 'error');
+        schNotify('Failed to delete event', 'error');
     }
 }
 
@@ -872,14 +839,14 @@ async function deleteSchedule(scheduleId) {
 
         const data = await response.json();
         if (data.success) {
-            showToast('Schedule deleted', 'success');
+            schNotify('Schedule deleted', 'success');
             loadSchedules(currentEventId, currentEventData.name);
         } else {
-            showToast(data.error || 'Failed to delete schedule', 'error');
+            schNotify(data.error || 'Failed to delete schedule', 'error');
         }
     } catch (error) {
         console.error('Error deleting schedule:', error);
-        showToast('Failed to delete schedule', 'error');
+        schNotify('Failed to delete schedule', 'error');
     }
 }
 
@@ -893,14 +860,14 @@ async function deleteRun(itemId) {
 
         const data = await response.json();
         if (data.success) {
-            showToast('Run deleted', 'success');
+            schNotify('Run deleted', 'success');
             loadItems(currentScheduleId, currentScheduleData.name);
         } else {
-            showToast(data.error || 'Failed to delete run', 'error');
+            schNotify(data.error || 'Failed to delete run', 'error');
         }
     } catch (error) {
         console.error('Error deleting run:', error);
-        showToast('Failed to delete run', 'error');
+        schNotify('Failed to delete run', 'error');
     }
 }
 
@@ -914,14 +881,14 @@ async function toggleEventStatus(eventId, isActive) {
 
         const data = await response.json();
         if (data.success) {
-            showToast(`Event ${isActive ? 'activated' : 'deactivated'}`, 'success');
+            schNotify(`Event ${isActive ? 'activated' : 'deactivated'}`, 'success');
             loadEvents();
         } else {
-            showToast(data.error || 'Failed to update event', 'error');
+            schNotify(data.error || 'Failed to update event', 'error');
         }
     } catch (error) {
         console.error('Error updating event:', error);
-        showToast('Failed to update event', 'error');
+        schNotify('Failed to update event', 'error');
     }
 }
 
@@ -935,14 +902,14 @@ async function setRunStatus(itemId, status) {
 
         const data = await response.json();
         if (data.success) {
-            showToast(`Run ${status}`, 'success');
+            schNotify(`Run ${status}`, 'success');
             loadItems(currentScheduleId, currentScheduleData.name);
         } else {
-            showToast(data.error || 'Failed to update status', 'error');
+            schNotify(data.error || 'Failed to update status', 'error');
         }
     } catch (error) {
         console.error('Error updating status:', error);
-        showToast('Failed to update status', 'error');
+        schNotify('Failed to update status', 'error');
     }
 }
 
@@ -963,24 +930,4 @@ function parseTimeToSeconds(timeStr) {
     return 0;
 }
 
-function escapeHtml(text) {
-    if (!text) return '';
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-function showToast(message, type = 'info') {
-    if (typeof Toastify !== 'undefined') {
-        Toastify({
-            text: message,
-            duration: 3000,
-            gravity: 'top',
-            position: 'right',
-            backgroundColor: type === 'success' ? '#10b981' : type === 'error' ? '#ef4444' : '#3b82f6'
-        }).showToast();
-    } else {
-        console.log(`[${type}] ${message}`);
-    }
-}
 </script>

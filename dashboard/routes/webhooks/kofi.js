@@ -67,6 +67,8 @@ router.post(
     res.status(200).end();
 
     if (result.status === 'duplicate') return;
+    // Stream bot tip events (core/stream-bot) for streamers who added this server's Ko-fi as a tip source.
+    import('../../../core/stream-bot/index.js').then(({ onTip }) => onTip('kofi', payload, config.guild_id)).catch(() => {});
     announce(config, payload, result).catch(err =>
       logger.error(`[Kofi Webhook] announce failed: ${err.message}`));
   }

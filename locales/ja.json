@@ -1,0 +1,185 @@
+{
+  "_meta": {
+    "name": "Japanese",
+    "nativeName": "日本語",
+    "discordLocales": [
+      "ja"
+    ],
+    "note": "Stub — strings fall back to English until translated. Added 2026-10-14."
+  },
+  "common": {
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "yes": "Yes",
+    "no": "No",
+    "none": "None",
+    "unknown": "Unknown",
+    "never": "Never",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "save": "Save",
+    "loading": "Loading…",
+    "page_of": "Page {current} of {total}"
+  },
+  "errors": {
+    "generic": "Something went wrong. Please try again.",
+    "no_permission": "You don't have permission to do that.",
+    "bot_missing_permission": "I'm missing the **{permission}** permission in this channel.",
+    "command_disabled": "That command is disabled in this server.",
+    "admin_only": "That command is restricted to server moderators.",
+    "wrong_channel": "That command can only be used in {channel}.",
+    "cooldown": "Slow down — try again {relative}.",
+    "guild_only": "That command only works inside a server.",
+    "not_found": "I couldn't find that.",
+    "feature_not_configured": "**{feature}** hasn't been set up in this server yet. An admin can enable it with {command}."
+  },
+  "leveling": {
+    "rank": {
+      "title": "{user}'s Rank",
+      "level": "Level",
+      "xp": "XP",
+      "rank": "Rank",
+      "progress": "{current} / {required} XP to level {next}",
+      "no_xp": "Send some messages to start earning XP."
+    },
+    "levelup": {
+      "default_message": "GG {user}, you reached level **{level}**!",
+      "role_reward": "You've earned the {role} role."
+    },
+    "leaderboard": {
+      "title": "XP Leaderboard",
+      "empty": "Nobody has earned XP yet."
+    }
+  },
+  "welcome": {
+    "default_message": "Welcome {mention}!",
+    "default_goodbye": "{user} has left the server.",
+    "card": {
+      "title": "{user} just joined the server",
+      "subtitle": "Member #{memberCount}"
+    }
+  },
+  "moderation": {
+    "banned": "**{user}** has been banned.",
+    "kicked": "**{user}** has been kicked.",
+    "timed_out": "**{user}** has been timed out for {duration}.",
+    "warned": "**{user}** has been warned.",
+    "reason": "Reason",
+    "no_reason": "No reason given",
+    "moderator": "Moderator",
+    "hierarchy_error": "I can't action **{user}** — their highest role is above mine.",
+    "self_error": "You can't do that to yourself."
+  },
+  "economy": {
+    "balance": "{user} has **{amount} {currency}**.",
+    "insufficient_funds": "You need **{amount} {currency}** and only have **{balance}**.",
+    "transferred": "Sent **{amount} {currency}** to {user}.",
+    "daily_claimed": "You claimed **{amount} {currency}**. Come back {relative}.",
+    "daily_already": "You've already claimed today. Try again {relative}."
+  },
+  "streams": {
+    "live_now": "{streamer} is now live on {platform}!",
+    "playing": "Playing {game}",
+    "viewers": "{count} watching",
+    "offline": "{streamer} has ended their stream.",
+    "added": "Now tracking **{username}** on {platform}.",
+    "removed": "No longer tracking **{username}** on {platform}.",
+    "already_tracked": "**{username}** is already being tracked on {platform}."
+  },
+  "settings": {
+    "language": {
+      "command_name": "language",
+      "command_description": "Choose the language this bot replies in",
+      "current_user": "Your language is set to **{language}**.",
+      "current_guild": "This server's default language is **{language}**.",
+      "set_user": "Your language is now **{language}**. This applies wherever you use the bot.",
+      "set_guild": "This server's default language is now **{language}**. Members can still override it for themselves with {command}.",
+      "reset_user": "Cleared your language preference — you'll follow the server default, or your Discord client language.",
+      "unsupported": "**{locale}** isn't available yet. Currently available: {available}.",
+      "available_title": "Available languages",
+      "help": "Set your own language with `/settings language scope:me`, or the server default with `scope:server` (needs Manage Server)."
+    }
+  },
+  "tickets": {
+    "created": "Ticket opened: {channel}",
+    "closed": "Ticket closed by {user}.",
+    "already_open": "You already have an open ticket: {channel}.",
+    "no_permission": "You can't open a ticket right now."
+  },
+  "giveaway": {
+    "entered": "You're entered. Good luck!",
+    "already_entered": "You're already entered.",
+    "ended": "Giveaway ended — winner: {winners}",
+    "no_entries": "The giveaway ended with no entries.",
+    "requirement_role": "You need the {role} role to enter.",
+    "time_remaining": "Ends {relative}"
+  },
+  "alt_text": {
+    "rank_card": "Rank card for {username}. Level {level}. {xp} of {requiredXp} XP to the next level. Ranked {rank}.",
+    "welcome_card": "Welcome card for {username} in {guildName}. {memberCount} members.",
+    "schedule": "{title} for the week of {start} to {end}. {count} events.",
+    "no_events": "{title}. No events scheduled."
+  },
+  "commands": {
+    "help": {
+      "description": "Browse everything this bot can do"
+    },
+    "level": {
+      "description": "See your rank and XP in this server"
+    },
+    "rankcard": {
+      "description": "Customise how your rank card looks"
+    },
+    "ping": {
+      "description": "Check whether the bot is responding, and how fast"
+    },
+    "server": {
+      "description": "Information about this server"
+    },
+    "user": {
+      "description": "Information about a member"
+    },
+    "weather": {
+      "description": "Current weather and forecast for any location"
+    },
+    "timezone": {
+      "description": "Time zones — convert times mentioned in chat"
+    },
+    "economy": {
+      "description": "Balance, daily rewards, shop and gambling"
+    },
+    "music": {
+      "description": "Play music in a voice channel"
+    },
+    "fun": {
+      "description": "Jokes, quotes, party games and random silliness"
+    },
+    "arcade": {
+      "description": "Trivia, hangman, counting and other channel games"
+    },
+    "tools": {
+      "description": "Converters, QR codes, colours, translation and more"
+    },
+    "socials": {
+      "description": "Follow streamers and social feeds in this server"
+    },
+    "settings": {
+      "description": "Your preferences and this server's defaults"
+    },
+    "cat": {
+      "description": "Catch, collect and trade cats"
+    },
+    "fish": {
+      "description": "Go fishing, build a collection, enter tournaments"
+    },
+    "tree": {
+      "description": "Grow a tree together with the whole server"
+    },
+    "pokemon": {
+      "description": "Catch and battle Pokémon that spawn in chat"
+    },
+    "qotd": {
+      "description": "Question of the day"
+    }
+  }
+}

@@ -1,0 +1,188 @@
+{
+  "theme": "gaming",
+  "label": "Gaming",
+  "questions": [
+    {
+      "slug": "gaming-finished-once",
+      "text": "What game did you finish exactly once and refuse to ever replay, and what was it that you didn't want to sit through again?"
+    },
+    {
+      "slug": "gaming-hours-no-fun",
+      "text": "Which game do you have the most hours in that you'd admit you weren't actually enjoying for most of them?",
+      "group": "game-most-hours"
+    },
+    {
+      "slug": "gaming-bad-game-love",
+      "text": "What is a genuinely bad game you love anyway? Sell it to us with a straight face."
+    },
+    {
+      "slug": "gaming-quit-boss",
+      "text": "What boss, level, or puzzle made you put a controller down and walk away — and did you ever go back and beat it?"
+    },
+    {
+      "slug": "gaming-tutorial-skip",
+      "text": "What mechanic did you play wrong for dozens of hours before someone told you the real way to do it?"
+    },
+    {
+      "slug": "gaming-remake-demand",
+      "text": "Which old game deserves a remake, and what is the one thing they'd have to leave completely untouched?"
+    },
+    {
+      "slug": "gaming-npc-fixation",
+      "text": "Which NPC lives rent-free in your head? Not a main character — a side character you still think about."
+    },
+    {
+      "slug": "gaming-difficulty-honesty",
+      "text": "Be honest: do you play on the hardest difficulty, the default, or whatever lets you see the story? Defend it."
+    },
+    {
+      "slug": "gaming-multiplayer-friendship",
+      "text": "Which game has damaged one of your real friendships the most, and was it worth it?"
+    },
+    {
+      "slug": "gaming-genre-blind-spot",
+      "text": "What entire genre have you just never clicked with, and what would a game have to do to convert you?"
+    },
+    {
+      "slug": "gaming-ost-outside",
+      "text": "Which game soundtrack do you listen to outside the game, while doing something completely unrelated?"
+    },
+    {
+      "slug": "gaming-money-worst",
+      "text": "What's the worst money you have ever spent in a game, and how long did the regret take to arrive?"
+    },
+    {
+      "slug": "gaming-money-best",
+      "text": "What's the best money you've spent in a game — the purchase you'd make again instantly?"
+    },
+    {
+      "slug": "gaming-broken-build",
+      "text": "Describe the most broken build, loadout, or strategy you've ever run. Did they patch it?"
+    },
+    {
+      "slug": "gaming-first-online",
+      "text": "What was the first game you played online with strangers, and how did that go for you?"
+    },
+    {
+      "slug": "gaming-character-creator",
+      "text": "Do you make your character look like you, look like your ideal, or look like a war crime? Explain yourself."
+    },
+    {
+      "slug": "gaming-abandoned-save",
+      "text": "What game do you have an abandoned save file in that you fully intend to return to — and how long has that been true?"
+    },
+    {
+      "slug": "gaming-ending-argument",
+      "text": "What game ending do you still argue about, and which side are you on?"
+    },
+    {
+      "slug": "gaming-controller-loyalty",
+      "text": "Controller, mouse and keyboard, or something cursed like a fight stick or a wheel? What do you refuse to play without?"
+    },
+    {
+      "slug": "gaming-solo-vs-party",
+      "text": "Are you better as a solo player or in a squad? What does the answer say about you?"
+    },
+    {
+      "slug": "gaming-taught-you",
+      "text": "What did a video game genuinely teach you that carried over into real life?"
+    },
+    {
+      "slug": "gaming-loading-screen",
+      "text": "Which loading screen, menu theme, or startup sound is burned into your brain forever?"
+    },
+    {
+      "slug": "gaming-worst-teammate",
+      "text": "What is the single worst thing a teammate has ever done to you in a match?"
+    },
+    {
+      "slug": "gaming-carried",
+      "text": "Tell us about a time you got carried so hard that you felt embarrassed about it afterwards."
+    },
+    {
+      "slug": "gaming-glitch-favorite",
+      "text": "What's the funniest glitch you have ever witnessed with your own eyes?"
+    },
+    {
+      "slug": "gaming-backlog-guilt",
+      "text": "How big is your backlog, honestly, and which game in it are you most guilty about?"
+    },
+    {
+      "slug": "gaming-nostalgia-tainted",
+      "text": "Which childhood favourite did you go back to as an adult and immediately wish you hadn't?"
+    },
+    {
+      "slug": "gaming-first-purchase-own",
+      "text": "What was the first game you bought with your own money, and how long did you have to save for it?",
+      "group": "first-game-bought"
+    },
+    {
+      "slug": "gaming-competitive-peak",
+      "text": "What's the highest rank, score, or placement you've ever hit in anything competitive? Brag properly."
+    },
+    {
+      "slug": "gaming-hate-mechanic",
+      "text": "What game mechanic makes you close the game instantly? Escort missions, timed levels, fishing minigames — name it."
+    },
+    {
+      "slug": "gaming-underrated-pick",
+      "text": "Recommend one game you're sure most of this server has never played. Sell it in two sentences."
+    },
+    {
+      "slug": "gaming-cheat-codes",
+      "text": "Did you cheat as a kid — codes, GameShark, save scumming — or were you a purist? Any regrets?"
+    },
+    {
+      "slug": "gaming-console-war",
+      "text": "Which console generation was the best one, and don't just pick the one you were 12 for."
+    },
+    {
+      "slug": "gaming-couch-coop",
+      "text": "What's the best couch co-op or split-screen memory you have, and who were you sitting next to?"
+    },
+    {
+      "slug": "gaming-quit-forever",
+      "text": "Which live-service game did you quit for good, and what was the exact update that did it?"
+    },
+    {
+      "slug": "gaming-dream-sequel",
+      "text": "Name a game that never got a sequel and absolutely should have. What would the sequel need to do?"
+    },
+    {
+      "slug": "gaming-side-quest",
+      "text": "What side quest was better than the main story it was attached to?"
+    },
+    {
+      "slug": "gaming-mods-changed",
+      "text": "Has a mod ever changed a game so much you can't play it vanilla any more? Which one?"
+    },
+    {
+      "slug": "gaming-scariest-moment",
+      "text": "What is the most scared a game has ever made you? No judgement, we've all jumped."
+    },
+    {
+      "slug": "gaming-play-style-tell",
+      "text": "In an open world, are you a main-story sprinter, a completionist, or someone who spends four hours decorating a house?"
+    },
+    {
+      "slug": "gaming-hardware-sacrifice",
+      "text": "What's the most ridiculous thing you've done to run or play a game — bad laptop, weird setup, questionable cooling?"
+    },
+    {
+      "slug": "gaming-name-origin",
+      "text": "Where does your gamertag or username actually come from, and would you pick it again today?"
+    },
+    {
+      "slug": "gaming-childhood-lie",
+      "text": "What playground rumour about a secret character, level, or unlock did you fully believe as a kid?"
+    },
+    {
+      "slug": "gaming-npc-cruelty",
+      "text": "What's the worst thing you've done to an NPC purely to see what would happen?"
+    },
+    {
+      "slug": "gaming-perfect-length",
+      "text": "What's the perfect length for a game, and name one that got it exactly right."
+    }
+  ]
+}

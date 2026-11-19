@@ -3,9 +3,24 @@ import logger from '../utils/logger.js';
 import pool from '../utils/db.js';
 import encryption from '../utils/encryption.js';
 import { getChannelVIPs, getChannelModerators, refreshBroadcasterToken } from '../utils/platforms/twitch.js';
+import { logFeatureEvent } from '../core/feature-log.js';
 
 let schedulerTask = null;
 let defaultClient = null;
+
+/** Server-log notice that the VIP/Mod role sync switched itself off because the Twitch login can't be used. */
+function logSyncDisabled(config, why) {
+    const guild = (global.botManager?.getClientForGuild?.(config.guild_id) || defaultClient)?.guilds?.cache?.get(config.guild_id);
+    void logFeatureEvent(() => (guild), 'system.featureDisabled', () => ({
+        title: '⛔ Feature Auto-Disabled',
+        description: 'Twitch VIP/Mod role sync was turned off. Reconnect the broadcaster\'s Twitch account from the dashboard to turn it back on.',
+        fields: [
+            ['Feature', 'Twitch VIP/Mod role sync'],
+            ['Why', why],
+            ['Twitch channel', config.broadcaster_twitch_username],
+        ],
+    }));
+}
 
 /**
  * Get a valid access token for a broadcaster, refreshing if expired.
@@ -25,6 +40,7 @@ async function getValidToken(config) {
         if (!config.broadcaster_refresh_token) {
             logger.error(`[TwitchRoleSync] Token expired and no refresh token for guild ${config.guild_id}`);
             await pool.execute('UPDATE twitch_role_sync_config SET enabled = 0 WHERE guild_id = ?', [config.guild_id]);
+            logSyncDisabled(config, 'The Twitch login expired and could not be renewed');
             return null;
         }
 
@@ -51,6 +67,7 @@ async function getValidToken(config) {
         } catch (err) {
             logger.error(`[TwitchRoleSync] Token refresh failed for guild ${config.guild_id}:`, { error: err.message });
             await pool.execute('UPDATE twitch_role_sync_config SET enabled = 0 WHERE guild_id = ?', [config.guild_id]);
+            logSyncDisabled(config, 'Twitch refused to renew the login (it may have been revoked)');
             return null;
         }
     }

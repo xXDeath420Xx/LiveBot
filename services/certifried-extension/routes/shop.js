@@ -16,7 +16,7 @@ const router = Router();
 // ============================================
 // SHOP INVENTORY - Seeds are consumable!
 // ============================================
-const SHOP_SEEDS = {
+export const SHOP_SEEDS = {
     // Common seeds - affordable for beginners
     'og-kush': { name: 'OG Kush Seeds', price: 150, pack: 3, rarity: 'uncommon', description: 'The legendary OG. Complex terpene profile with earthy, pine notes.' },
     'jack-herer': { name: 'Jack Herer Seeds', price: 150, pack: 3, rarity: 'uncommon', description: 'Award-winning sativa named after the cannabis activist. Creative, clear-headed buzz.' },
@@ -70,7 +70,7 @@ const SHOP_WORKERS = [
  */
 router.get('/items', async (req, res) => {
     try {
-        logger.info('[Shop] GET /items', { playerId: req.player.id });
+        logger.debug('[Shop] GET /items', { playerId: req.player.id });
 
         // Get player's seed inventory
         const [seedInventory] = await pool.execute(
@@ -158,7 +158,7 @@ router.post('/buy', async (req, res) => {
 
     try {
         const { itemId, quantity = 1 } = req.body;
-        logger.info('[Shop] POST /buy', { playerId: req.player.id, itemId, quantity });
+        logger.debug('[Shop] POST /buy', { playerId: req.player.id, itemId, quantity });
 
         if (!itemId) {
             return res.status(400).json({ error: 'Item ID required', code: 'NO_ITEM' });
@@ -317,7 +317,7 @@ router.post('/buy', async (req, res) => {
 
         await conn.commit();
 
-        logger.info('[Shop] Purchase successful', {
+        logger.debug('[Shop] Purchase successful', {
             playerId: req.player.id,
             itemId,
             spent: totalPrice,
@@ -339,7 +339,7 @@ router.post('/buy', async (req, res) => {
         if (cashDeducted && totalPrice > 0) {
             try {
                 await awardCash(req.player.id, totalPrice);
-                logger.info('[Shop] Refunded cash after error', { playerId: req.player.id, refund: totalPrice });
+                logger.debug('[Shop] Refunded cash after error', { playerId: req.player.id, refund: totalPrice });
             } catch (refundError) {
                 logger.error('[Shop] Refund failed', { error: refundError.message });
             }
@@ -473,7 +473,7 @@ router.get('/active-boosters', async (req, res) => {
 router.post('/use', async (req, res) => {
     try {
         const { itemId } = req.body;
-        logger.info('[Shop] POST /use', { playerId: req.player.id, itemId });
+        logger.debug('[Shop] POST /use', { playerId: req.player.id, itemId });
 
         if (!itemId) {
             return res.status(400).json({ error: 'Item ID required', code: 'NO_ITEM' });
@@ -535,7 +535,7 @@ router.post('/use', async (req, res) => {
 
         await pool.execute(updateQuery, updateParams);
 
-        logger.info('[Shop] Item used', {
+        logger.debug('[Shop] Item used', {
             playerId: req.player.id,
             itemId,
             itemType: item.item_type,
@@ -703,7 +703,7 @@ router.post('/buy-deal', async (req, res) => {
 
         await conn.commit();
 
-        logger.info('[Shop] Deal purchased', {
+        logger.debug('[Shop] Deal purchased', {
             playerId,
             dealId,
             strain: deal.strain_name,

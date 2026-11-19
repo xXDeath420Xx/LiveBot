@@ -1,233 +1,275 @@
-<%- include('_head', { pageTitle: 'Manager Console', csrfToken, kickUser: user }) %>
+<%- include('_head', { pageTitle: 'Manager console', csrfToken, kickUser: user }) %>
+<%
+  var nameOf = function (b) { return b.username || b.platform_user_id || ''; };
+%>
 
   <div class="pagehead">
     <div>
-      <h1>🐻 Manager Console</h1>
-      <div class="sub">Curate the shared banlist that protects every connected channel.</div>
-    </div>
-    <nav class="subnav">
-      <a href="/kick">Channels</a>
-      <a href="/kick/managers" class="active">Manager console</a>
-      <% if (isAdmin) { %><a href="/kick/admin">Connected accounts</a><% } %>
-    </nav>
-  </div>
-
-  <!-- ── Overview stats ─────────────────────────────────────── -->
-  <div class="statgrid">
-    <div class="stat"><b><%= counts.banlist %></b><span>Banlist</span></div>
-    <div class="stat"><b><%= counts.sublist %></b><span>Sublist</span></div>
-    <div class="stat"><b><%= counts.unbanlist %></b><span>Unban list</span></div>
-    <div class="stat"><b><%= counts.sites %></b><span>Manual sites</span></div>
-    <div class="stat kick"><b><%= phishingCount.toLocaleString() %></b><span>Phishing domains</span></div>
-  </div>
-
-  <!-- ── Recent network activity ────────────────────────────── -->
-  <div class="card">
-    <h2>Recent network activity <button id="net-refresh" class="ghost" style="float:right">Refresh</button></h2>
-    <p class="muted" style="margin-bottom:.7rem">Live defender actions across every connected channel.</p>
-    <div id="net-feed" class="log-out">Loading…</div>
-  </div>
-
-  <!-- ── Add to banlist ─────────────────────────────────────── -->
-  <div class="card">
-    <h2>Add to banlist</h2>
-    <div class="srow">
-      <input id="ban-username" placeholder="username" />
-      <input id="ban-reason" placeholder="reason (optional)" />
-      <select id="ban-type">
-        <option value="ban">banlist</option>
-        <option value="sublist">sublist</option>
-      </select>
-      <button id="ban-add">Add ban</button>
-      <button id="ban-remove" class="danger">Remove ban</button>
+      <div class="kick-eyebrow">Kick Defender</div>
+      <h1>Manager console</h1>
+      <p class="sub">The shared lists every connected channel is protected by.</p>
     </div>
   </div>
+  <%- include('_tabs', { active: 'managers', isManager: true, isAdmin }) %>
 
-  <!-- ── Banlist ────────────────────────────────────────────── -->
-  <div class="card">
-    <h2>Banlist <span class="muted">(<%= counts.banlist %>)</span></h2>
-    <% if (!bans.length) { %>
-      <p class="muted">No users on the banlist yet. Add one above, or use <code>!add-ban &lt;user&gt;</code> in chat.</p>
-    <% } else { %>
-      <ul class="clean">
-        <% bans.forEach(function(b){ %>
-          <li>
-            <span><strong><%= b.username || b.platform_user_id %></strong><% if (b.reason) { %> <span class="muted">— <%= b.reason %></span><% } %></span>
-            <button class="danger ban-remove" data-username="<%= b.username || b.platform_user_id %>">Remove</button>
-          </li>
+  <dl class="cf-kpis">
+    <div class="cf-kpi"><dt>Banlist</dt><dd><%= Number(counts.banlist || 0).toLocaleString() %></dd></div>
+    <div class="cf-kpi"><dt>Sublist</dt><dd><%= Number(counts.sublist || 0).toLocaleString() %></dd></div>
+    <div class="cf-kpi"><dt>Whitelist</dt><dd><%= Number(counts.unbanlist || 0).toLocaleString() %></dd></div>
+    <div class="cf-kpi"><dt>Manual sites</dt><dd><%= Number(counts.sites || 0).toLocaleString() %></dd></div>
+    <div class="cf-kpi"><dt>Scam domains</dt><dd><%= Number(phishingCount || 0).toLocaleString() %></dd></div>
+  </dl>
+
+  <!-- Banlist -->
+  <section class="cf-section">
+    <header class="cf-section-head">
+      <div>
+        <h2 class="cf-section-title">Banlist <span class="muted">(<%= Number(counts.banlist || 0).toLocaleString() %>)</span></h2>
+        <p class="cf-section-desc">Accounts banned in every enrolled channel. In chat, <code>!add-ban &lt;user&gt;</code> does the same.</p>
+      </div>
+      <% if (bans.length > 15) { %><div class="cf-section-actions"><input type="search" class="kick-search kick-filter" data-list="ban-list" placeholder="Filter shown names" aria-label="Filter the banlist"></div><% } %>
+    </header>
+    <div class="cf-rows">
+      <div class="cf-row cf-row--stack">
+        <div class="cf-fields">
+          <div class="cf-field"><label for="ban-username">Kick username</label><input id="ban-username" maxlength="60" autocomplete="off"></div>
+          <div class="cf-field"><label for="ban-reason">Reason</label><input id="ban-reason" maxlength="200" autocomplete="off" placeholder="Optional"></div>
+          <div class="cf-field">
+            <label for="ban-type">List</label>
+            <select id="ban-type">
+              <option value="ban">Banlist</option>
+              <option value="sublist">Sublist</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="cf-section-foot">
+        <span class="kick-status cf-foot-note" id="ban-msg" role="status" aria-live="polite"></span>
+        <button type="button" id="ban-remove" class="btn btn-danger btn-sm">Remove this name</button>
+        <button type="button" id="ban-add" class="btn btn-primary btn-sm">Add</button>
+      </div>
+      <% if (!bans.length) { %>
+        <div class="cf-state cf-state--compact"><p class="cf-state-text">Nobody is on the banlist yet.</p></div>
+      <% } %>
+      <div class="cf-list" id="ban-list">
+        <% bans.forEach(function (b) { %>
+          <div class="cf-list-item" data-name="<%= nameOf(b).toLowerCase() %>">
+            <div class="cf-list-main"><span class="cf-em"><%= nameOf(b) %></span><% if (b.reason) { %> <span class="muted"><%= b.reason %></span><% } %></div>
+            <div class="cf-list-actions"><button type="button" class="btn btn-danger btn-sm ban-remove" data-username="<%= nameOf(b) %>">Remove</button></div>
+          </div>
         <% }) %>
-      </ul>
-      <% if (counts.banlist > bans.length) { %><p class="muted" style="margin-top:.6rem">Showing latest <%= bans.length %> of <%= counts.banlist %>.</p><% } %>
-    <% } %>
-  </div>
-
-  <!-- ── Phishing / scam links ──────────────────────────────── -->
-  <div class="card">
-    <h2>Phishing / scam links</h2>
-    <p class="muted" style="margin-bottom:.85rem">
-      Auto-protected against <strong><%= phishingCount.toLocaleString() %></strong> known phishing/scam domains
-      (synced from community lists every 4h). Posting one in an enrolled channel = delete + warn, then ban on repeat.
-    </p>
-    <div class="srow">
-      <input id="check-domain" placeholder="check a domain, e.g. free-nitro.xyz" style="flex:1;min-width:16rem" />
-      <button id="check-btn">Check</button>
+      </div>
+      <% if (counts.banlist > bans.length) { %>
+        <div class="cf-list-item"><span class="muted">Showing the latest <%= bans.length %> of <%= Number(counts.banlist).toLocaleString() %>. Add or remove any name with the form above.</span></div>
+      <% } %>
     </div>
-    <p id="check-result" class="muted" style="margin-top:.7rem"></p>
-  </div>
+  </section>
 
-  <!-- ── Sublist ────────────────────────────────────────────── -->
-  <div class="card">
-    <h2>Sublist <span class="muted">(<%= counts.sublist %>)</span> — raid / bot defense</h2>
-    <p class="muted" style="margin-bottom:.7rem">Mass-add names during a raid; cleared in one click.</p>
-    <div class="srow">
-      <input id="sub-username" placeholder="username" />
-      <input id="sub-reason" placeholder="reason (optional)" />
-      <button id="sub-add">Add to sublist</button>
-      <button id="sub-clear" class="danger">Clear sublist</button>
-    </div>
-    <% if (sublist.length) { %>
-      <ul class="clean">
-        <% sublist.forEach(function(b){ %>
-          <li>
-            <span><strong><%= b.username || b.platform_user_id %></strong><% if (b.reason) { %> <span class="muted">— <%= b.reason %></span><% } %></span>
-            <button class="danger ban-remove" data-username="<%= b.username || b.platform_user_id %>">Remove</button>
-          </li>
-        <% }) %>
-      </ul>
-    <% } %>
-  </div>
-
-  <!-- ── Unban / protection list ────────────────────────────── -->
-  <div class="card">
-    <h2>Unban / protection list <span class="muted">(<%= counts.unbanlist %>)</span></h2>
-    <p class="muted" style="margin-bottom:.7rem">Whitelisted users are never actioned (false-positive protection).</p>
-    <div class="srow">
-      <input id="unban-username" placeholder="username" />
-      <button id="unban-add">Add to whitelist</button>
-    </div>
-    <% if (unbans && unbans.length) { %>
-      <ul class="clean">
-        <% unbans.forEach(function(u){ %>
-          <li>
-            <span><strong><%= u.username || u.platform_user_id %></strong></span>
-            <button class="danger unban-remove" data-username="<%= u.username || u.platform_user_id %>">Remove</button>
-          </li>
-        <% }) %>
-      </ul>
-    <% } %>
-  </div>
-
-  <!-- ── Manual sites ───────────────────────────────────────── -->
-  <div class="card">
-    <h2>Manual sites <span class="muted">(<%= counts.sites %>)</span></h2>
-    <p class="muted" style="margin-bottom:.7rem">Add Kick-specific bad domains beyond the shared list.</p>
-    <div class="srow">
-      <input id="site-uri" placeholder="https://bad.example" style="flex:1;min-width:14rem" />
-      <button id="site-add">Add site</button>
-    </div>
-    <% if (sites.length) { %>
-      <ul class="clean">
-        <% sites.forEach(function(s){ %>
-          <li>
-            <span><%= s.uri %></span>
-            <button class="danger site-remove" data-uri="<%= s.uri %>">Remove</button>
-          </li>
-        <% }) %>
-      </ul>
-    <% } %>
-  </div>
-
-  <!-- ── Managers (admin) ───────────────────────────────────── -->
-  <% if (isAdmin) { %>
-    <div class="card">
-      <h2>Managers (admin)</h2>
-      <div class="srow">
-        <input id="mgr-id" placeholder="Kick username (or user id)" style="min-width:16rem" />
-        <button id="mgr-add">Add manager</button>
-        <button id="mgr-remove" class="danger">Remove manager</button>
+  <!-- Scam-link check -->
+  <section class="cf-section">
+    <header class="cf-section-head">
+      <div>
+        <h2 class="cf-section-title">Scam links</h2>
+        <p class="cf-section-desc"><%= Number(phishingCount || 0).toLocaleString() %> known phishing and scam domains, refreshed from community lists every 4 hours. A link in an enrolled channel is removed with a warning; the poster is banned once their links reach that channel's strike limit (2 by default, counted across the network).</p>
+      </div>
+    </header>
+    <div class="cf-rows">
+      <div class="cf-row">
+        <div class="cf-row-text"><label class="cf-row-label" for="check-domain">Check a domain</label><p class="cf-row-desc">Uses the same matching as the defender, including parent domains.</p></div>
+        <div class="cf-row-control">
+          <div class="kick-inline"><input id="check-domain" maxlength="300" placeholder="free-nitro.xyz"><button type="button" id="check-btn" class="btn btn-secondary btn-sm">Check</button></div>
+          <span id="check-result" class="kick-status" role="status" aria-live="polite"></span>
+        </div>
       </div>
     </div>
+  </section>
+
+  <!-- Manual sites -->
+  <section class="cf-section">
+    <header class="cf-section-head">
+      <div>
+        <h2 class="cf-section-title">Manual sites <span class="muted">(<%= Number(counts.sites || 0).toLocaleString() %>)</span></h2>
+        <p class="cf-section-desc">Bad domains seen on Kick that the shared lists don't have yet.</p>
+      </div>
+    </header>
+    <div class="cf-rows">
+      <div class="cf-row">
+        <div class="cf-row-text"><label class="cf-row-label" for="site-uri">Add a site</label></div>
+        <div class="cf-row-control"><div class="kick-inline"><input id="site-uri" maxlength="300" placeholder="https://bad.example"><button type="button" id="site-add" class="btn btn-primary btn-sm">Add site</button></div><span id="site-msg" class="kick-status" role="status" aria-live="polite"></span></div>
+      </div>
+      <div class="cf-list">
+        <% sites.forEach(function (s) { %>
+          <div class="cf-list-item">
+            <div class="cf-list-main"><%= s.uri %></div>
+            <div class="cf-list-actions"><button type="button" class="btn btn-danger btn-sm site-remove" data-uri="<%= s.uri %>">Remove</button></div>
+          </div>
+        <% }) %>
+      </div>
+    </div>
+  </section>
+
+  <!-- Sublist -->
+  <section class="cf-section">
+    <header class="cf-section-head">
+      <div>
+        <h2 class="cf-section-title">Sublist <span class="muted">(<%= Number(counts.sublist || 0).toLocaleString() %>)</span></h2>
+        <p class="cf-section-desc">Raid and bot accounts added during an attack. Cleared in one go when it's over.</p>
+      </div>
+      <div class="cf-section-actions">
+        <% if (sublist.length > 15) { %><input type="search" class="kick-search kick-filter" data-list="sub-list" placeholder="Filter names" aria-label="Filter the sublist"><% } %>
+        <button type="button" id="sub-clear" class="btn btn-danger btn-sm">Clear sublist</button>
+      </div>
+    </header>
+    <div class="cf-rows">
+      <div class="cf-row cf-row--stack">
+        <div class="cf-fields">
+          <div class="cf-field"><label for="sub-username">Kick username</label><input id="sub-username" maxlength="60" autocomplete="off"></div>
+          <div class="cf-field"><label for="sub-reason">Reason</label><input id="sub-reason" maxlength="200" autocomplete="off" placeholder="Optional"></div>
+        </div>
+      </div>
+      <div class="cf-section-foot">
+        <span class="kick-status cf-foot-note" id="sub-msg" role="status" aria-live="polite"></span>
+        <button type="button" id="sub-add" class="btn btn-primary btn-sm">Add to sublist</button>
+      </div>
+      <div class="cf-list" id="sub-list">
+        <% sublist.forEach(function (b) { %>
+          <div class="cf-list-item" data-name="<%= nameOf(b).toLowerCase() %>">
+            <div class="cf-list-main"><span class="cf-em"><%= nameOf(b) %></span><% if (b.reason) { %> <span class="muted"><%= b.reason %></span><% } %></div>
+            <div class="cf-list-actions"><button type="button" class="btn btn-danger btn-sm ban-remove" data-username="<%= nameOf(b) %>">Remove</button></div>
+          </div>
+        <% }) %>
+      </div>
+    </div>
+  </section>
+
+  <!-- Whitelist -->
+  <section class="cf-section">
+    <header class="cf-section-head">
+      <div>
+        <h2 class="cf-section-title">Whitelist <span class="muted">(<%= Number(counts.unbanlist || 0).toLocaleString() %>)</span></h2>
+        <p class="cf-section-desc">The defender never acts on these accounts, even if they're on the banlist.</p>
+      </div>
+      <% if (unbans && unbans.length > 15) { %><div class="cf-section-actions"><input type="search" class="kick-search kick-filter" data-list="unban-list" placeholder="Filter names" aria-label="Filter the whitelist"></div><% } %>
+    </header>
+    <div class="cf-rows">
+      <div class="cf-row">
+        <div class="cf-row-text"><label class="cf-row-label" for="unban-username">Add an account</label></div>
+        <div class="cf-row-control"><div class="kick-inline"><input id="unban-username" maxlength="60" autocomplete="off" placeholder="Kick username"><button type="button" id="unban-add" class="btn btn-primary btn-sm">Add to whitelist</button></div><span id="unban-msg" class="kick-status" role="status" aria-live="polite"></span></div>
+      </div>
+      <div class="cf-list" id="unban-list">
+        <% (unbans || []).forEach(function (u) { %>
+          <div class="cf-list-item" data-name="<%= nameOf(u).toLowerCase() %>">
+            <div class="cf-list-main"><span class="cf-em"><%= nameOf(u) %></span></div>
+            <div class="cf-list-actions"><button type="button" class="btn btn-danger btn-sm unban-remove" data-username="<%= nameOf(u) %>">Remove</button></div>
+          </div>
+        <% }) %>
+      </div>
+    </div>
+  </section>
+
+  <!-- Network activity -->
+  <section class="cf-section">
+    <header class="cf-section-head">
+      <div>
+        <h2 class="cf-section-title">Recent network activity</h2>
+        <p class="cf-section-desc">The latest defender actions across every connected channel.</p>
+      </div>
+      <div class="cf-section-actions"><button type="button" id="net-refresh" class="btn btn-secondary btn-sm">Refresh</button></div>
+    </header>
+    <div class="cf-rows"><div class="cf-row cf-row--stack"><div id="net-feed"><p class="muted">Loading…</p></div></div></div>
+  </section>
+
+  <% if (isAdmin) { %>
+    <p class="muted">Managers are added and removed on <a href="/kick/admin">Connected accounts</a>.</p>
   <% } %>
 
-<% var pageJs = `
   <script>
-    const CSRF = (document.querySelector('meta[name="csrf-token"]') || {}).content || '';
-    async function send(method, url, body) {
-      const res = await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF },
-        body: JSON.stringify({ ...(body || {}), _csrf: CSRF })
+  (function () {
+    var K = window.KickDash;
+    var $ = function (id) { return document.getElementById(id); };
+    var v = function (id) { return $(id).value.trim(); };
+
+    // Every change here reloads the page so the lists and counts are current.
+    async function send(method, url, body, out) {
+      K.status(out, 'Working…');
+      try {
+        if (method === 'DELETE') await K.del(url, body); else await K.post(url, body);
+        location.reload();
+      } catch (e) { K.status(out, e.message || 'Request failed.', 'bad'); }
+    }
+
+    $('ban-add').addEventListener('click', function () {
+      if (!v('ban-username')) { K.status($('ban-msg'), 'Enter a username.', 'bad'); return; }
+      send('POST', '/kick/api/ban', { username: v('ban-username'), reason: v('ban-reason'), listType: $('ban-type').value }, $('ban-msg'));
+    });
+    $('ban-remove').addEventListener('click', function () {
+      if (!v('ban-username')) { K.status($('ban-msg'), 'Enter the username to remove.', 'bad'); return; }
+      send('DELETE', '/kick/api/ban', { username: v('ban-username') }, $('ban-msg'));
+    });
+    document.querySelectorAll('.ban-remove').forEach(function (b) {
+      b.addEventListener('click', function () { b.disabled = true; send('DELETE', '/kick/api/ban', { username: b.dataset.username }, $('ban-msg')); });
+    });
+
+    $('site-add').addEventListener('click', function () {
+      if (!v('site-uri')) return;
+      send('POST', '/kick/api/site', { uri: v('site-uri') }, $('site-msg'));
+    });
+    document.querySelectorAll('.site-remove').forEach(function (b) {
+      b.addEventListener('click', function () { b.disabled = true; send('DELETE', '/kick/api/site', { uri: b.dataset.uri }, $('site-msg')); });
+    });
+
+    $('sub-add').addEventListener('click', function () {
+      if (!v('sub-username')) { K.status($('sub-msg'), 'Enter a username.', 'bad'); return; }
+      send('POST', '/kick/api/sublist', { username: v('sub-username'), reason: v('sub-reason') }, $('sub-msg'));
+    });
+    $('sub-clear').addEventListener('click', function () {
+      if (confirm('Clear the entire sublist?')) send('POST', '/kick/api/sublist/clear', {}, $('sub-msg'));
+    });
+
+    $('unban-add').addEventListener('click', function () {
+      if (!v('unban-username')) return;
+      send('POST', '/kick/api/unban', { username: v('unban-username') }, $('unban-msg'));
+    });
+    document.querySelectorAll('.unban-remove').forEach(function (b) {
+      b.addEventListener('click', function () { b.disabled = true; send('DELETE', '/kick/api/unban', { username: b.dataset.username }, $('unban-msg')); });
+    });
+
+    // Filters for long lists (only the rows on the page).
+    document.querySelectorAll('.kick-filter').forEach(function (inp) {
+      inp.addEventListener('input', function () {
+        var t = inp.value.trim().toLowerCase();
+        document.querySelectorAll('#' + inp.dataset.list + ' .cf-list-item').forEach(function (row) {
+          row.hidden = !!t && (row.dataset.name || '').indexOf(t) === -1;
+        });
       });
-      if (res.ok) { location.reload(); }
-      else { const j = await res.json().catch(() => ({})); alert(j.error || 'Request failed.'); }
-    }
-    const v = id => document.getElementById(id).value.trim();
-    const esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    });
 
-    // Network-wide recent defender activity feed.
-    async function loadNetFeed(){
-      try{
-        const r=await fetch('/kick/api/network-activity?limit=40');
-        const j=await r.json();
-        if(!r.ok) throw 0;
-        const el=document.getElementById('net-feed');
-        if(!j.events.length){el.textContent='No actions recorded yet.';return;}
-        el.innerHTML='<table>'+j.events.map(e=>'<tr><td>'+(e.created_at?new Date(e.created_at).toISOString().slice(0,16).replace('T',' '):'—')+'</td><td>'+esc(e.channel_name||e.channel_id)+'</td><td>'+esc(e.action)+(e.success?'':' (failed)')+'</td><td>'+esc(e.target_username)+'</td><td>'+esc(e.reason)+'</td></tr>').join('')+'</table>';
-      }catch(_){ const el=document.getElementById('net-feed'); if(el) el.textContent='Failed to load.'; }
+    // Scam-link lookup (no reload).
+    async function runCheck() {
+      var q = v('check-domain'), out = $('check-result');
+      if (!q) return;
+      K.status(out, 'Checking…');
+      try {
+        var j = await K.get('/kick/api/check-domain?q=' + encodeURIComponent(q));
+        if (j.safe) K.status(out, j.query + ' is on the allow list and is never blocked.', 'ok');
+        else if (j.blocked) K.status(out, j.query + ' is blocked (matched ' + j.matched + ').', 'bad');
+        else K.status(out, j.query + ' is not on the blocklist.');
+      } catch (e) { K.status(out, e.message || 'Check failed.', 'bad'); }
     }
+    $('check-btn').addEventListener('click', runCheck);
+    $('check-domain').addEventListener('keydown', function (e) { if (e.key === 'Enter') runCheck(); });
+
+    async function loadNetFeed() {
+      var host = $('net-feed');
+      try {
+        var j = await K.get('/kick/api/network-activity?limit=40');
+        K.table(host, ['Time', 'Channel', 'Action', 'User', 'Reason'], (j.events || []).map(function (e) {
+          return [{ text: K.fmtTime(e.created_at) || '—', cls: 'nowrap' }, e.channel_name || e.channel_id || '', e.action + (e.success ? '' : ' (failed)'), e.target_username || '', e.reason || ''];
+        }), 'No actions recorded yet.');
+      } catch (e) { host.replaceChildren(K.el('p', 'muted', e.message || 'Failed to load.')); }
+    }
+    $('net-refresh').addEventListener('click', loadNetFeed);
     loadNetFeed();
-    const netRefresh=document.getElementById('net-refresh');
-    if(netRefresh) netRefresh.onclick=loadNetFeed;
-
-    document.getElementById('ban-add').onclick = () =>
-      v('ban-username') && send('POST', '/kick/api/ban', { username: v('ban-username'), reason: v('ban-reason'), listType: v('ban-type') });
-    document.getElementById('ban-remove').onclick = () =>
-      v('ban-username') && send('DELETE', '/kick/api/ban', { username: v('ban-username') });
-    document.getElementById('site-add').onclick = () =>
-      v('site-uri') && send('POST', '/kick/api/site', { uri: v('site-uri') });
-    document.querySelectorAll('.site-remove').forEach(b =>
-      b.onclick = () => send('DELETE', '/kick/api/site', { uri: b.dataset.uri }));
-
-    // Remove banlist/sublist entries inline.
-    document.querySelectorAll('.ban-remove').forEach(b =>
-      b.onclick = () => send('DELETE', '/kick/api/ban', { username: b.dataset.username }));
-
-    // Phishing-domain lookup (GET, no reload).
-    const checkBtn = document.getElementById('check-btn');
-    if (checkBtn) {
-      const runCheck = async () => {
-        const q = v('check-domain');
-        if (!q) return;
-        const el = document.getElementById('check-result');
-        el.textContent = 'Checking…';
-        try {
-          const res = await fetch('/kick/api/check-domain?q=' + encodeURIComponent(q));
-          const j = await res.json();
-          if (j.safe) el.textContent = '✅ "' + j.query + '" is explicitly allow-listed (never blocked).';
-          else if (j.blocked) el.textContent = '🚫 "' + j.query + '" IS blocked (matched: ' + j.matched + ').';
-          else el.textContent = '— "' + j.query + '" is not in the blocklist.';
-        } catch { el.textContent = 'Check failed.'; }
-      };
-      checkBtn.onclick = runCheck;
-      document.getElementById('check-domain').addEventListener('keydown', e => { if (e.key === 'Enter') runCheck(); });
-    }
-
-    const mgrAdd = document.getElementById('mgr-add');
-    if (mgrAdd) {
-      mgrAdd.onclick = () => v('mgr-id') && send('POST', '/kick/api/managers', { user: v('mgr-id'), action: 'add' });
-      document.getElementById('mgr-remove').onclick = () => v('mgr-id') && send('POST', '/kick/api/managers', { user: v('mgr-id'), action: 'remove' });
-    }
-
-    const subAdd = document.getElementById('sub-add');
-    if (subAdd) {
-      subAdd.onclick = () => v('sub-username') && send('POST', '/kick/api/sublist', { username: v('sub-username'), reason: v('sub-reason') });
-      document.getElementById('sub-clear').onclick = () => { if (confirm('Clear the entire sublist?')) send('POST', '/kick/api/sublist/clear', {}); };
-    }
-    const unbanAdd = document.getElementById('unban-add');
-    if (unbanAdd) {
-      unbanAdd.onclick = () => v('unban-username') && send('POST', '/kick/api/unban', { username: v('unban-username') });
-      document.querySelectorAll('.unban-remove').forEach(b =>
-        b.onclick = () => send('DELETE', '/kick/api/unban', { username: b.dataset.username }));
-    }
-  </script>`; %>
-<%- include('_foot', { extraJs: pageJs }) %>
+  })();
+  </script>
+<%- include('_foot') %>

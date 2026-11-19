@@ -2,7 +2,7 @@
 // the community-support tracker pipeline. No Discord.js client, no gateway
 // connection — safe to run while PM2 bot is online.
 import 'dotenv/config';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 import pool from '../utils/db.js';
 import {
     getConfig, extractTwitchUsernames, checkAffiliateStatus,
@@ -12,12 +12,11 @@ import {
 const GUILD_ID = '902393911958470717';
 const CHANNEL_ID = '1318141825009319936';
 const MESSAGE_ID = '1493172452677652541';
-const BOT_ID = '1476040458680406214';
+// The acting bot comes from guild_bot_mapping — never pinned here.
 
 async function main() {
-    const [rows] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id = ?', [BOT_ID]);
-    if (!rows.length) throw new Error('bot not found');
-    const token = encryption.decrypt(JSON.parse(rows[0].bot_token));
+    const bot = await resolveBotForGuild(GUILD_ID, { db: pool });
+    const token = bot.token;
 
     const res = await fetch(`https://discord.com/api/v10/channels/${CHANNEL_ID}/messages/${MESSAGE_ID}`, {
         headers: { Authorization: `Bot ${token}` }

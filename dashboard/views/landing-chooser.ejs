@@ -1,86 +1,118 @@
 <!DOCTYPE html>
-<html lang="en">
+<html data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>" lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CertiFried Utility — Discord &amp; Kick bots</title>
-  <meta name="description" content="CertiFried Utility — server management and community games on Discord, and a shared-banlist defense network on Kick. Pick where you need us." />
-  <link rel="icon" type="image/png" href="/images/CertiFried.png" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
   <style>
-    *{box-sizing:border-box;margin:0;padding:0}
-    :root{--bg:#0a0911;--ink:#f1f0f6;--muted:#928da8;--discord:#7c84ff;--kick:#53FC18}
-    body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--ink);min-height:100vh}
-    .bg{position:fixed;inset:0;z-index:0;background:
-      radial-gradient(40rem 30rem at 20% -10%,rgba(124,132,255,.16),transparent 60%),
-      radial-gradient(40rem 30rem at 85% 0%,rgba(83,252,24,.10),transparent 55%);pointer-events:none}
-    .wrap{position:relative;z-index:1;max-width:62rem;margin:0 auto;padding:3rem 1.5rem 4rem;text-align:center}
-    .logo{display:inline-flex;align-items:center;gap:.6rem;font-weight:700;font-size:1rem;margin-bottom:3rem}
-    .logo img{width:32px;height:32px;border-radius:8px}
-    h1{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:clamp(2.4rem,6vw,4rem);line-height:1.05;letter-spacing:-.02em;margin-bottom:1.1rem}
-    h1 .g{background:linear-gradient(100deg,var(--discord),var(--kick));-webkit-background-clip:text;background-clip:text;color:transparent}
-    .lede{color:var(--muted);font-size:1.15rem;max-width:46ch;margin:0 auto 2.5rem;line-height:1.6}
-    .statbar{display:flex;justify-content:center;gap:0;flex-wrap:wrap;margin-bottom:3.5rem;border:1px solid rgba(255,255,255,.08);border-radius:16px;overflow:hidden;background:rgba(255,255,255,.02)}
-    .statbar .s{padding:1.2rem 1.8rem;border-right:1px solid rgba(255,255,255,.07);min-width:9rem;flex:1}
-    .statbar .s:last-child{border-right:none}
-    .statbar b{display:block;font-family:'Space Grotesk',sans-serif;font-size:1.9rem;font-weight:700}
-    .statbar span{color:var(--muted);font-size:.74rem;text-transform:uppercase;letter-spacing:.06em}
-    .cards{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;text-align:left}
+    /* Landing / product chooser. Tokens come from /css/cf-ui.css (loaded last).
+       The two platform colours are Discord's and Kick's own, used only to mark
+       which product a card is for and on its sign-in button. */
+    .wrap,.wrap *{box-sizing:border-box}
+    .wrap *{margin:0;padding:0}
+    :root{--discord:#5865f2;--kick:#53fc18}
+    .bg{display:none}
+    .wrap{position:relative;z-index:1;max-width:60rem;margin:0 auto;padding:56px 24px 24px}
+    @media(max-width:600px){.wrap{padding:32px 16px 16px}}
+    .cta{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 24px}
+    .what{margin:0 0 40px}
+    .what h2{font-size:1.125rem;font-weight:600;letter-spacing:-.01em;margin:0 0 4px}
+    .what > p{color:var(--text-secondary);font-size:.9375rem;margin:0 0 16px}
+    .what .cfs-grid{grid-template-columns:repeat(auto-fill,minmax(240px,1fr))}
+    .ftt-sub b{color:var(--text-primary)}
+    h1{font-weight:600;font-size:clamp(2rem,4.6vw,3rem);line-height:1.1;letter-spacing:-.03em;margin-bottom:16px;max-width:18ch}
+    h1 .g{color:inherit;background:none}
+    .lede{color:var(--text-secondary);font-size:1.0625rem;max-width:52ch;margin:0 0 24px;line-height:1.6}
+    .verified{display:inline-flex;align-items:center;gap:8px;margin:0 0 40px;padding:6px 12px;border-radius:6px;border:1px solid var(--border-color);background:var(--bg-secondary);color:var(--text-secondary);font-size:.8125rem;text-decoration:none}
+    .verified:hover,.verified:focus-visible{border-color:var(--border-strong);color:var(--text-primary)}
+    .verified .check{display:inline-flex;align-items:center;justify-content:center;width:16px;height:16px;border-radius:50%;background:var(--discord);color:#fff;font-size:10px;font-weight:700;flex:0 0 auto}
+    .verified .go-disc{color:var(--text-primary);font-weight:500;white-space:nowrap}
+    .cards{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:40px}
     @media(max-width:720px){.cards{grid-template-columns:1fr}}
-    .card{position:relative;border:1px solid rgba(255,255,255,.09);border-radius:20px;padding:2rem;background:rgba(255,255,255,.025);text-decoration:none;color:inherit;transition:transform .15s,border-color .15s,background .15s;overflow:hidden}
-    .card:hover{transform:translateY(-4px);background:rgba(255,255,255,.05)}
-    .card.d:hover{border-color:rgba(124,132,255,.6)}.card.k:hover{border-color:rgba(83,252,24,.5)}
-    .badge{display:inline-flex;align-items:center;gap:.45rem;font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;padding:.25rem .7rem;border-radius:999px;margin-bottom:1rem}
-    .card.d .badge{background:rgba(124,132,255,.16);color:#bcc2ff}.card.k .badge{background:rgba(83,252,24,.15);color:#7dfc4f}
-    .signed{font-size:.66rem;color:#7dfc4f;letter-spacing:.04em}
-    .card h3{font-family:'Space Grotesk',sans-serif;font-size:1.5rem;font-weight:700;margin-bottom:.6rem}
-    .card p{color:var(--muted);font-size:.96rem;line-height:1.55;margin-bottom:1.4rem}
-    .go{display:inline-flex;align-items:center;gap:.5rem;font-weight:700;font-size:.95rem;padding:.7rem 1.3rem;border-radius:11px}
-    .card.d .go{background:var(--discord);color:#0a0911}.card.k .go{background:var(--kick);color:#06140a}
-    .mini{margin-top:1.3rem;display:flex;gap:1.5rem}
-    .mini b{display:block;font-family:'Space Grotesk',sans-serif;font-size:1.3rem}
-    .mini span{color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.05em}
-    footer{position:relative;z-index:1;text-align:center;color:var(--muted);font-size:.8rem;padding:1.5rem}
-    footer a{color:var(--muted)}
+    .card{position:relative;display:flex;flex-direction:column;border:1px solid var(--border-color);border-radius:8px;padding:24px;background:var(--bg-secondary);text-decoration:none;color:inherit;transition:border-color .15s}
+    .card:hover{border-color:var(--border-strong);color:inherit}
+    .badge{display:inline-flex;align-items:center;gap:8px;font-size:.8125rem;font-weight:500;color:var(--text-muted);margin-bottom:8px}
+    .badge::before{content:'';width:8px;height:8px;border-radius:2px;background:var(--discord)}
+    .card.k .badge::before{background:var(--kick)}
+    .signed{font-size:.75rem;color:var(--accent-green)}
+    .card h2{font-size:1.25rem;font-weight:600;letter-spacing:-.015em;margin-bottom:8px}
+    .card p{color:var(--text-secondary);font-size:.9375rem;line-height:1.6;margin-bottom:20px;flex:1}
+    .go{align-self:flex-start;display:inline-flex;align-items:center;gap:8px;font-weight:600;font-size:.875rem;padding:8px 14px;border-radius:6px}
+    .card.d .go{background:var(--discord);color:#fff}.card.k .go{background:var(--kick);color:#06140a}
+    .card:hover .go{filter:brightness(1.08)}
+    .mini{margin-top:20px;padding-top:16px;border-top:1px solid var(--border-color);display:flex;gap:32px}
+    .mini b{display:block;font-size:1.125rem;font-weight:600;font-variant-numeric:tabular-nums}
+    .mini span{color:var(--text-muted);font-size:.8125rem}
+    .mini .sub{display:block;margin-top:2px;font-size:.75rem}
+    .statbar{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));margin-bottom:40px;border:1px solid var(--border-color);border-radius:8px;overflow:hidden;background:var(--bg-secondary)}
+    .statbar .s{padding:16px 20px;border-left:1px solid var(--border-color)}
+    .statbar .s:first-child{border-left:0}
+    .statbar b{display:block;font-size:1.5rem;font-weight:600;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+    .statbar span{color:var(--text-muted);font-size:.8125rem}
+    .statbar .sub{display:block;margin-top:2px;font-size:.75rem}
+    @media(max-width:720px){.statbar{grid-template-columns:1fr 1fr}.statbar .s:nth-child(3){border-left:0}.statbar .s:nth-child(n+3){border-top:1px solid var(--border-color)}}
     /* ---- 4:20 world clock ---- */
-    .ftt{position:relative;z-index:1;max-width:46rem;margin:0 auto 3rem;border:1px solid rgba(83,252,24,.22);border-radius:20px;padding:1.6rem 1.5rem;background:linear-gradient(160deg,rgba(83,252,24,.06),rgba(124,132,255,.05));text-align:center;transition:border-color .3s}
-    .ftt-head{display:flex;align-items:center;justify-content:center;gap:.5rem;font-size:.82rem;color:var(--muted);margin-bottom:1.1rem;text-transform:uppercase;letter-spacing:.09em;font-weight:600}
-    .ftt-head b{color:#7dfc4f;font-family:'Space Grotesk',sans-serif;font-weight:700}
-    .ftt-leaf{font-size:1.05rem}
-    .ftt-now{font-size:1.12rem;line-height:1.5;margin-bottom:1rem;min-height:1.6rem}
-    .ftt-now .place{font-family:'Space Grotesk',sans-serif;font-weight:700;color:var(--ink)}
-    .ftt-now.lit{color:#aaffa0}
-    .ftt-now.lit .place{color:#d7ffce}
-    .ftt-clock{font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:clamp(2.2rem,7vw,3.4rem);letter-spacing:.02em;line-height:1;background:linear-gradient(100deg,#7dfc4f,#7c84ff);-webkit-background-clip:text;background-clip:text;color:transparent}
-    .ftt-sub{color:var(--muted);font-size:.85rem;margin-top:.45rem}
-    .ftt-ticker{display:flex;flex-wrap:wrap;justify-content:center;gap:.4rem .55rem;margin-top:1.25rem}
-    .ftt-ticker .chip{font-size:.72rem;color:var(--muted);background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.07);border-radius:999px;padding:.25rem .65rem;white-space:nowrap}
-    .ftt-ticker .chip b{color:#cfd2ff;font-weight:600}
-    @keyframes fttpulse{0%,100%{transform:scale(1)}50%{transform:scale(1.035)}}
-    .ftt.islit{border-color:rgba(83,252,24,.55)}
-    .ftt.islit .ftt-clock{animation:fttpulse 1.6s ease-in-out infinite}
+    .ftt{position:relative;z-index:1;margin:0 0 40px;border:1px solid var(--border-color);border-radius:8px;padding:20px 24px;background:var(--bg-secondary);display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 24px;align-items:center}
+    .ftt-head{grid-column:1/-1;display:flex;align-items:center;gap:8px;font-size:.8125rem;color:var(--text-muted);margin-bottom:8px}
+    .ftt-head b{color:var(--text-primary);font-weight:600}
+    .ftt-leaf{display:none}
+    .ftt-now{font-size:1rem;line-height:1.5;color:var(--text-secondary)}
+    .ftt-now .place{font-weight:600;color:var(--text-primary)}
+    .ftt-now.lit,.ftt-now.lit .place{color:var(--accent-green)}
+    .ftt-clock{grid-row:2/4;grid-column:2;font-family:var(--cf-mono);font-weight:500;font-size:clamp(1.75rem,4vw,2.5rem);letter-spacing:-.02em;line-height:1;color:var(--text-primary);font-variant-numeric:tabular-nums}
+    .ftt-sub{color:var(--text-muted);font-size:.8125rem}
+    .ftt-ticker{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:6px;margin-top:16px}
+    .ftt-ticker .chip{font-size:.75rem;color:var(--text-muted);border:1px solid var(--border-color);border-radius:4px;padding:2px 8px;white-space:nowrap;font-variant-numeric:tabular-nums}
+    .ftt-ticker .chip b{color:var(--text-primary);font-weight:500}
+    .ftt.islit{border-color:color-mix(in srgb,var(--accent-green) 50%,var(--border-color))}
+    .ftt-obs{grid-column:1/-1;justify-self:start;margin-top:12px;font-size:.8125rem;color:var(--text-muted);text-decoration:underline;text-underline-offset:2px}
+    .ftt-obs:hover,.ftt-obs:focus-visible{color:var(--text-primary)}
+    @media(max-width:560px){.ftt{grid-template-columns:1fr}.ftt-clock{grid-row:auto;grid-column:1;margin-top:8px}}
+    /* ---- See it in action: guide screenshots (dashboard/public/img/guides, scripts/site-shots) ---- */
+    .show{margin:0 0 40px}
+    .show h2{font-size:1.125rem;font-weight:600;letter-spacing:-.01em;margin:0 0 4px}
+    .show > p{color:var(--text-secondary);font-size:.9375rem;margin:0 0 16px}
+    .show ul{list-style:none;display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,210px),1fr));gap:16px}
+    .show a{display:block;height:100%;border:1px solid var(--border-color);border-radius:8px;overflow:hidden;background:var(--bg-secondary);color:inherit;text-decoration:none;transition:border-color .15s}
+    .show a:hover{border-color:var(--border-strong)}
+    .show a:focus-visible{outline:2px solid var(--cf-accent);outline-offset:2px}
+    .show .pic{display:block;aspect-ratio:4/3;background:var(--cf-shot-bg);border-bottom:1px solid var(--border-color);overflow:hidden}
+    .show img{display:block;width:100%;height:100%;object-fit:cover;object-position:top left}
+    .show .cap{display:block;padding:12px 14px}
+    .show .cap b{display:block;font-size:.9375rem;font-weight:600;margin-bottom:2px}
+    .show .cap span{display:block;color:var(--text-secondary);font-size:.8125rem;line-height:1.5}
   </style>
+    <link rel="stylesheet" href="/css/dropdowns.css">
+<%- include('partials/site-head', { title: 'CertiFried Utility — Discord & Kick bots', description: 'CertiFried Utility — server management and community games on Discord, and a shared-banlist defense network on Kick. Pick where you need us.' }) %>
 </head>
-<body>
-  <div class="bg"></div>
-  <div class="wrap">
-    <div class="logo"><img src="/images/CertiFried.png" alt=""/> CertiFried Utility</div>
+<body class="cfs-body">
+<%- include('partials/site-header', { active: 'home', user: locals.user || null, returnTo: '/dashboard' }) %>
+  <main id="main-content" tabindex="-1" class="wrap">
     <h1>One toolkit for <span class="g">Discord</span> and <span class="g">Kick</span>.</h1>
-    <p class="lede">Server management and community games on Discord. A shared-banlist defense network on Kick. Pick where you need us.</p>
+    <p class="lede">Server management, protection and community games for Discord, and a shared ban list for Kick channels. Every feature is free.</p>
+    <div class="cta">
+      <% const _cid = (locals.clientId && /^\d{15,22}$/.test(String(locals.clientId))) ? String(locals.clientId) : (((locals.discoveryUrl || '').match(/(\d{15,22})$/) || [])[1] || null); const _invite = _cid ? 'https://discord.com/oauth2/authorize?client_id=' + _cid + '&permissions=1643797540086&scope=bot+applications.commands' : '/invite'; %>
+      <a class="btn btn-primary btn-lg" href="<%= _invite %>">Add to Discord</a>
+      <a class="btn btn-secondary btn-lg" href="<%= discordHref %>"><%= locals.discordLoggedIn ? 'Open dashboard' : 'Log in to the dashboard' %></a>
+      <a class="btn btn-secondary btn-lg" href="/docs">Read the docs</a>
+    </div>
+
+    <% if (locals.discoveryUrl) { %>
+    <a class="verified" href="<%= locals.discoveryUrl %>" target="_blank" rel="noopener">
+      <span class="check" aria-hidden="true">&#10003;</span>
+      <span>Verified Discord app &middot; <span class="go-disc">View in App Discovery</span></span>
+    </a>
+    <% } %>
 
     <div class="ftt" id="ftt">
-      <div class="ftt-head"><span class="ftt-leaf">🍃</span> Where in the world is it <b>4:20</b> right now?</div>
+      <div class="ftt-head"><span class="ftt-leaf" aria-hidden="true"></span>Where it is <b>4:20</b> next</div>
       <div class="ftt-now" id="ftt-now">Syncing the globe…</div>
       <div class="ftt-clock" id="ftt-clock">--:--:--</div>
       <div class="ftt-sub" id="ftt-sub">until the next 4:20</div>
       <div class="ftt-ticker" id="ftt-ticker"></div>
       <noscript><div class="ftt-sub" style="margin-top:1rem">Enable JavaScript to watch 4:20 roll around the planet.</div></noscript>
+      <a class="ftt-obs" href="/420/obs">Add this clock to your stream (OBS browser source) &rarr;</a>
     </div>
 
     <div class="statbar">
-      <div class="s"><b><%= Number(locals.discordServers || 0).toLocaleString() %></b><span>Discord servers</span></div>
+      <div class="s"><b><%= Number(locals.discordServers || 0).toLocaleString() %></b><span>Discord servers<% if (Number(locals.customBotServers || 0) > 0) { %><span class="sub"><%= Number(locals.customBotServers).toLocaleString() %> on their own branded bot</span><% } %></span></div>
       <div class="s"><b><%= Number(locals.discordUsers || 0).toLocaleString() %></b><span>Members reached</span></div>
       <div class="s"><b><%= Number(locals.kickChannels || 0).toLocaleString() %></b><span>Kick channels</span></div>
       <div class="s"><b><%= Number(locals.phishingBlocked || 0).toLocaleString() %></b><span>Scam domains blocked</span></div>
@@ -88,34 +120,59 @@
 
     <div class="cards">
       <a class="card d" href="<%= discordHref %>">
-        <span class="badge">Discord Bot<% if (locals.discordLoggedIn) { %> <span class="signed">● signed in</span><% } %></span>
-        <h3>Command your community</h3>
-        <p>Moderation, anti-nuke, leveling, economy, music, giveaways, reaction roles, stream alerts, plus games like a full D&amp;D 5e RPG, word games and Cards Against Humanity — all dashboard-driven.</p>
-        <span class="go"><%= locals.discordLoggedIn ? 'Open your dashboard' : 'Log in with Discord' %> →</span>
+        <span class="badge">Discord bot<% if (locals.discordLoggedIn) { %> <span class="signed">Signed in</span><% } %></span>
+        <h2>Manage a Discord server</h2>
+        <p>Moderation, raid and scam protection, verification, levels, economy, music, giveaways, reaction roles and stream alerts, plus games such as a D&amp;D 5e RPG, word games and Cards Against Humanity. Every feature can be set up from the dashboard.</p>
+        <span class="go"><%= locals.discordLoggedIn ? 'Open dashboard' : 'Log in with Discord' %></span>
         <div class="mini">
-          <div><b><%= Number(locals.discordServers || 0).toLocaleString() %></b><span>servers served</span></div>
+          <div><b><%= Number(locals.discordServers || 0).toLocaleString() %></b><span>servers<% if (Number(locals.customBotServers || 0) > 0) { %><span class="sub"><%= Number(locals.customBotServers).toLocaleString() %> on a custom bot</span><% } %></span></div>
         </div>
       </a>
       <a class="card k" href="<%= kickHref %>">
-        <span class="badge">Kick Bot<% if (locals.kickLoggedIn) { %> <span class="signed">● signed in</span><% } %></span>
-        <h3>Defend your channel</h3>
-        <p>Bad actors and scam links banned across every connected channel — automatically, the moment you connect. No mod-setup required.</p>
-        <span class="go"><%= locals.kickLoggedIn ? 'Open the defender' : 'Log in with Kick' %> →</span>
+        <span class="badge">Kick bot<% if (locals.kickLoggedIn) { %> <span class="signed">Signed in</span><% } %></span>
+        <h2>Protect a Kick channel</h2>
+        <p>Accounts and scam links banned in one connected channel are banned in all of them, starting as soon as you connect. No moderator setup is needed.</p>
+        <span class="go"><%= locals.kickLoggedIn ? 'Open the defender' : 'Log in with Kick' %></span>
         <div class="mini">
           <div><b><%= Number(locals.kickChannels || 0).toLocaleString() %></b><span>channels</span></div>
-          <div><b><%= Number(locals.kickEnrolled || 0).toLocaleString() %></b><span>defender-on</span></div>
+          <div><b><%= Number(locals.kickEnrolled || 0).toLocaleString() %></b><span>with defender on</span></div>
         </div>
       </a>
     </div>
-  </div>
-  <footer>
-    <a href="/discord">About the Discord bot</a> ·
-    <a href="/kick">Kick dashboard</a> ·
-    <a href="/sprites" style="color:#7b5cff;">👾 Fortnite Sprite Tracker</a> ·
-    <a href="/stream-team" style="color:#2dd4bf;">🌊 Join the Stream Team</a> ·
-    <a href="/docs#kick-defender">Kick docs</a> ·
-    <a href="/donate">Donate</a>
-  </footer>
+
+    <% const _sg = locals.siteGuides || null;
+       const _show = _sg ? [
+         ['go-live-discord', 'go-live-alerts', 'Go-live alerts', 'A post the moment a streamer goes live.'],
+         ['welcome-discord', 'welcome', 'Welcome cards', 'A greeting and a card for every new member.'],
+         ['levels-discord', 'levels', 'Levels and rank cards', 'XP, level-ups and role rewards.'],
+         ['raid-discord', 'raid-protection', 'Raid lockdown', 'New joins blocked automatically during a raid.'],
+       ].map(([id, slug, title, line]) => ({ im: _sg.guideImage(id), g: _sg.getGuide(slug), title, line })).filter((x) => x.im && x.g) : []; %>
+    <% if (_show.length) { %>
+    <section class="show" aria-labelledby="show-h">
+      <h2 id="show-h">See it in action</h2>
+      <p>What members see in Discord. Each picture links to the guide for setting it up.</p>
+      <ul>
+        <% _show.forEach(function (x) { const t = x.im.thumb || x.im; %>
+        <li><a href="/docs/guides/<%= x.g.slug %>"><span class="pic"><img src="<%= t.src %>" alt="<%= x.im.alt %>" width="<%= t.width %>" height="<%= t.height %>" loading="lazy" decoding="async"></span><span class="cap"><b><%= x.title %></b><span><%= x.line %></span></span></a></li>
+        <% }); %>
+      </ul>
+    </section>
+    <% } %>
+
+    <section class="what" aria-labelledby="what-h">
+      <h2 id="what-h">What the Discord bot does</h2>
+      <p>Most features are off until you turn them on with <code class="cfs-code">/setup</code> or on the dashboard. <a href="/compare">Compare with other bots</a>.</p>
+      <div class="cfs-grid">
+        <a class="cfs-tile" href="/docs#moderation"><h3>Moderation and protection</h3><p>Automod, raid lockdown, anti-nuke, a join gate, scam link removal and a cross-server ban list.</p></a>
+        <a class="cfs-tile" href="/docs#streams"><h3>Stream alerts and feeds</h3><p>Go-live posts for Twitch, YouTube, Kick, TikTok and Rumble, and feeds from YouTube, X, Bluesky, TikTok and RSS.</p></a>
+        <a class="cfs-tile" href="/docs#levels"><h3>Levels and community</h3><p>Levels with role rewards, reaction roles, welcome cards, tickets, birthdays, suggestions and giveaways.</p></a>
+        <a class="cfs-tile" href="/docs#music"><h3>Music and voice</h3><p>Music with playlists and filters, an AI DJ, voice rooms and a chat reader.</p></a>
+        <a class="cfs-tile" href="/docs#games"><h3>Games and economy</h3><p>A server economy, a D&amp;D 5e game with an AI Dungeon Master, Greenhouse Tycoon, word games and Cards Against Humanity.</p></a>
+        <a class="cfs-tile" href="/docs#creators"><h3>Creator tools</h3><p>Ko-fi, Buy Me a Coffee, Throne and Fourthwall announcements, and stream team applications.</p></a>
+      </div>
+    </section>
+  </main>
+<%- include('partials/site-footer') %>
 
   <script>
   (function () {
@@ -255,7 +312,7 @@
         var names = lit.map(function (x) {
           return '<span class="place">' + x.z.flag + ' ' + x.z.label + '</span> (4:20 ' + x.ap + ')';
         });
-        var lead = lit.length === 1 ? "🔥 It's <b>4:20</b> right now in " : '🔥 <b>4:20</b> right now in ';
+        var lead = lit.length === 1 ? "It's <b>4:20</b> right now in " : '<b>4:20</b> right now in ';
         elNow.innerHTML = lead + names.join(' · ');
       } else {
         elBox.classList.remove('islit');
@@ -266,7 +323,7 @@
 
       // Countdown to the next 4:20.
       elClock.textContent = hhmmss(target.secs);
-      elSub.innerHTML = 'until 4:20 ' + target.ap + ' in <b style="color:#cfd2ff">' +
+      elSub.innerHTML = 'until 4:20 ' + target.ap + ' in <b>' +
         target.z.flag + ' ' + target.z.label + '</b>';
 
       // Rotating ticker of the next handful of 4:20s.

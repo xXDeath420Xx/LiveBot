@@ -72,6 +72,9 @@
     function setTheme(themeName) {
         const theme = themes[themeName] || themes[DEFAULT_THEME];
         const root = document.documentElement;
+        // Pages on the site theme system (<html data-theme>, cf-ui.css tokens) own these variables:
+        // inline dark values here would beat Light/Sand, so leave them alone there.
+        if (root.hasAttribute('data-theme')) return;
 
         // Apply CSS variables
         Object.entries(theme).forEach(([property, value]) => {

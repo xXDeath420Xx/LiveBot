@@ -12,6 +12,7 @@
 import 'dotenv/config';
 import pool from '../utils/db.js';
 import encryption from '../utils/encryption.js';
+import { getMainBotId } from '../utils/bot-resolver.js';
 import { buildAboutEmbed } from './lib/about-embed.mjs';
 
 const APPLY = process.argv.includes('--apply');
@@ -59,7 +60,7 @@ async function main() {
     console.log(`Embed validated: ${newEmbed.fields.length} fields, ${total}/6000 chars.\n`);
 
     // Build bot roster: main + enabled custom bots.
-    const roster = [{ label: 'CertiFried Utility (main)', token: process.env.DISCORD_TOKEN, id: '1409904443125665875' }];
+    const roster = [{ label: 'CertiFried Utility (main)', token: process.env.DISCORD_TOKEN, id: getMainBotId() }];
     const [bots] = await pool.execute('SELECT bot_id, bot_name, bot_token FROM custom_bots WHERE enabled = 1');
     for (const b of bots) {
         try { roster.push({ label: b.bot_name || b.bot_id, token: encryption.decrypt(JSON.parse(b.bot_token)), id: b.bot_id }); }

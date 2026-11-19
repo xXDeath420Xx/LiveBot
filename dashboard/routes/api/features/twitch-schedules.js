@@ -15,8 +15,11 @@ import express from 'express';
 import pool from '../../../../utils/db.js';
 import logger from '../../../../utils/logger.js';
 import { getTwitchScheduleManager } from '../../../../jobs/twitch-schedule-scheduler.js';
+import { logFeatureEvent, userLabel } from '../../../../core/feature-log.js';
 
 const router = express.Router({ mergeParams: true });
+
+const liveGuild = (guildId) => global.botManager?.getClientForGuild?.(guildId)?.guilds.cache.get(guildId);
 
 const MIN_INTERVAL = 15;
 const MAX_INTERVAL = 10080; // 1 week in minutes
@@ -76,7 +79,7 @@ router.post('/sync', async (req, res) => {
 
         // Verify the streamer exists and is a Twitch streamer
         const [[streamer]] = await pool.execute(
-            'SELECT streamer_id, platform FROM streamers WHERE streamer_id = ?',
+            'SELECT streamer_id, platform, username FROM streamers WHERE streamer_id = ?',
             [streamerId]
         );
         if (!streamer) return res.status(404).json({ error: 'Streamer not found' });
@@ -106,6 +109,19 @@ router.post('/sync', async (req, res) => {
             customMessage || null
         ]);
 
+        void logFeatureEvent(() => (liveGuild(guildId)), 'twitch-schedule.added', () => ({
+            title: '➕ Schedule Sync Added',
+            description: `**${streamer.username}**'s Twitch schedule will be posted in <#${channelId}>.`,
+            fields: [
+                ['Streamer', streamer.username],
+                ['Channel', `<#${channelId}>`],
+                ['Mention', mentionRoleId ? `<@&${mentionRoleId}>` : null],
+                ['Check every', `${normalizeInterval(syncIntervalMinutes)} min`],
+                ['Weekly repost', weeklyRefresh ? 'On' : 'Off'],
+                ['By', userLabel(req.user)],
+            ],
+        }));
+
         res.json({ success: true, id: result.insertId });
     } catch (error) {
         logger.error('[API TwitchSchedules POST /sync] Error:', error);
@@ -130,12 +146,25 @@ router.patch('/:id', async (req, res) => {
             viewMode
         } = req.body;
 
-        // Verify the sync belongs to this guild
+        // Verify the sync belongs to this guild (SELECT *: paused_reason exists after migration 434)
         const [[existing]] = await pool.execute(
-            'SELECT id FROM twitch_schedule_sync_config WHERE id = ? AND guild_id = ?',
+            'SELECT * FROM twitch_schedule_sync_config WHERE id = ? AND guild_id = ?',
             [id, guildId]
         );
         if (!existing) return res.status(404).json({ error: 'Schedule sync not found' });
+        const newChannel = channelId !== undefined && channelId !== null && channelId !== '' ? String(channelId) : null;
+        const movesChannel = !!newChannel && newChannel !== String(existing.discord_channel_id);
+        if (movesChannel) {
+            const botGuild = global.botManager?.getClientForGuild?.(guildId)?.guilds.cache.get(guildId);
+            const target = botGuild?.channels.cache.get(newChannel);
+            if (botGuild && (!target || !target.isTextBased?.())) {
+                return res.status(400).json({ error: 'Pick a text channel in this server' });
+            }
+        }
+        // A sync paused because its channel was deleted (H-312) needs a new channel before it can run.
+        if (existing.paused_reason && isEnabled && !movesChannel) {
+            return res.status(400).json({ error: 'This schedule is paused because its channel was deleted. Pick a new channel to start it again.' });
+        }
 
         const sets = [];
         const params = [];
@@ -154,7 +183,18 @@ router.patch('/:id', async (req, res) => {
         }
         if (mentionRoleId !== undefined) { sets.push('mention_role_id = ?'); params.push(mentionRoleId || null); }
         if (customMessage !== undefined) { sets.push('custom_message = ?'); params.push(customMessage || null); }
-        if (channelId !== undefined) { sets.push('discord_channel_id = ?'); params.push(channelId); }
+        if (newChannel) {
+            sets.push('discord_channel_id = ?');
+            params.push(newChannel);
+            if (movesChannel) {
+                // The old message lives in the old channel; a paused sync was waiting for exactly this.
+                sets.push('last_message_id = NULL', 'schedule_hash = NULL');
+                if (existing.paused_reason) {
+                    sets.push('paused_reason = NULL', 'paused_at = NULL');
+                    if (isEnabled === undefined) sets.push('is_enabled = 1');
+                }
+            }
+        }
         if (viewMode !== undefined) {
             const v = viewMode === 'weekly' ? 'weekly' : 'monthly';
             sets.push('view_mode = ?');
@@ -189,6 +229,13 @@ router.post('/delete', async (req, res) => {
 
         if (!syncId) return res.status(400).json({ error: 'syncId is required' });
 
+        // Read before deleting so the server log can name what was removed (best-effort).
+        const [[gone]] = await pool.execute(
+            `SELECT s.username, tss.discord_channel_id FROM twitch_schedule_sync_config tss
+             LEFT JOIN streamers s ON s.streamer_id = tss.streamer_id WHERE tss.id = ? AND tss.guild_id = ?`,
+            [syncId, guildId]
+        ).catch(() => [[null]]);
+
         const [result] = await pool.execute(
             'DELETE FROM twitch_schedule_sync_config WHERE id = ? AND guild_id = ?',
             [syncId, guildId]
@@ -197,6 +244,16 @@ router.post('/delete', async (req, res) => {
         if (result.affectedRows === 0) {
             return res.status(404).json({ error: 'Schedule sync not found' });
         }
+
+        void logFeatureEvent(() => (liveGuild(guildId)), 'twitch-schedule.removed', () => ({
+            title: '🗑️ Schedule Sync Removed',
+            description: `**${gone?.username || `Sync #${syncId}`}**'s Twitch schedule will no longer be posted.`,
+            fields: [
+                ['Streamer', gone?.username],
+                ['Channel', gone?.discord_channel_id ? `<#${gone.discord_channel_id}>` : null],
+                ['By', userLabel(req.user)],
+            ],
+        }));
 
         res.json({ success: true });
     } catch (error) {

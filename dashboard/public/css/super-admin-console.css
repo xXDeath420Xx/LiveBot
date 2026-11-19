@@ -1,0 +1,147 @@
+/*
+ * super-admin-console.css — the owner console page (/super-admin, views/super-admin-tailwind.ejs).
+ * Only what the cf-settings.css kit and cf-site.css do not cover: the in-page sections, the server
+ * and global-ban tables the page script builds, and its dialogs. Tokens only, so every theme works.
+ */
+
+/* Brand/role hues the page script paints as text on their own tint: stepped darker on Light/Sand. */
+:root { --sa-blurple: #5865f2; --sa-discord-legacy: #7289da; --sa-owner: #ed8936; --sa-high: #f97316; }
+:root:is([data-theme="light"], [data-theme="sand"]) { --sa-blurple: #4149b8; --sa-discord-legacy: #4149b8; --sa-owner: #96470a; --sa-high: #a8380b; }
+
+.sa .admin-section { display: none; }
+.sa .admin-section.active { display: block; }
+.sa .hidden { display: none !important; }
+
+/* ---------------------------------------------------------------- controls used by the page script */
+.sa .input {
+    width: 100%; min-height: 34px; padding: 6px 10px; font: inherit; font-size: var(--cf-text-sm);
+    color: var(--cf-text); background: var(--cf-inset); border: 1px solid var(--cf-border-strong); border-radius: var(--cf-radius);
+}
+.sa .input:focus { outline: 2px solid var(--cf-accent); outline-offset: 0; border-color: var(--cf-accent); }
+.sa textarea.input { resize: vertical; }
+.sa .sa-auto { width: auto; }
+.sa .sa-grow { flex: 1 1 14rem; min-width: 0; }
+.sa .btn-ghost {
+    background: var(--cf-surface-2); border: 1px solid var(--cf-border-strong); color: var(--cf-text);
+}
+.sa .btn-ghost:hover { background: var(--cf-surface-3); }
+.sa .sa-filters { display: flex; flex-wrap: wrap; align-items: center; gap: var(--cf-2); padding: var(--cf-3) var(--cf-5); }
+.sa .sa-pagination { display: flex; justify-content: space-between; align-items: center; gap: var(--cf-2); padding: var(--cf-3) var(--cf-5); font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+.sa .sa-pagination:empty { display: none; }
+.sa .sa-pagination > div { display: flex; align-items: center; gap: var(--cf-2); }
+.sa .gb-tabs { margin: var(--cf-3) var(--cf-5) 0; }
+.sa .cf-toolbar .cf-segmented { flex-wrap: wrap; }
+.sa .guild-count { font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+
+/* ---------------------------------------------------------------- tables */
+.sa .sa-table-wrap { overflow-x: auto; }
+.sa .guild-table td .empty-state, .sa .guild-table td.empty-state { text-align: center; padding: var(--cf-6); color: var(--cf-text-3); }
+.sa .empty-state { display: flex; flex-direction: column; align-items: center; gap: var(--cf-2); padding: var(--cf-6); color: var(--cf-text-3); text-align: center; }
+.sa .empty-state p { margin: 0; }
+.sa .sa-clip { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sa .sa-uid { font-size: var(--cf-text-xs); margin-top: 1px; }
+.sa .guild-info { display: flex; align-items: center; gap: var(--cf-3); min-width: 0; }
+.sa .guild-icon, .sa .guild-icon-placeholder {
+    flex: none; width: 32px; height: 32px; border-radius: var(--cf-radius); object-fit: cover; background: var(--cf-surface-3);
+    display: inline-flex; align-items: center; justify-content: center; font-size: var(--cf-text-sm); font-weight: 600; color: var(--cf-text-2);
+}
+.sa .guild-name { font-weight: 600; color: var(--cf-text); overflow-wrap: anywhere; }
+.sa .guild-id { font-family: var(--cf-mono); font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+.sa .role-section-header td { background: var(--cf-surface-2) !important; padding-top: 8px !important; padding-bottom: 8px !important; }
+.sa .role-section-header .section-label { display: inline-flex; align-items: center; gap: var(--cf-2); font-size: var(--cf-text-xs); font-weight: 600; color: var(--cf-text-2); }
+.sa .badge {
+    --cf-tone: var(--cf-text-2);
+    display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 8px; border-radius: 999px; white-space: nowrap;
+    font-size: var(--cf-text-xs); font-weight: 500; color: var(--cf-tone);
+    background: color-mix(in srgb, var(--cf-tone) 13%, transparent); border: 1px solid color-mix(in srgb, var(--cf-tone) 28%, transparent);
+}
+.sa .badge-owner { --cf-tone: var(--cf-warning); }
+.sa .badge-admin { --cf-tone: var(--cf-accent-fg); }
+.sa .badge-mod { --cf-tone: var(--cf-info); }
+.sa .badge-bot-yes { --cf-tone: var(--cf-success); }
+.sa .badge-bot-no { --cf-tone: var(--cf-text-3); }
+.sa .btn-invite, .sa .btn-manage {
+    display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 4px 10px; border-radius: var(--cf-radius);
+    font: inherit; font-size: var(--cf-text-xs); font-weight: 500; text-decoration: none; cursor: pointer; white-space: nowrap;
+}
+.sa .btn-manage { color: var(--cf-text); background: var(--cf-surface-2); border: 1px solid var(--cf-border-strong); }
+.sa .btn-manage:hover { background: var(--cf-surface-3); }
+.sa .btn-invite { color: var(--cf-on-accent); background: var(--cf-accent); border: 1px solid var(--cf-accent); }
+.sa .btn-invite:hover { background: var(--cf-accent-hover); }
+.sa .guild-table td:last-child { text-align: right; }
+
+.sa .sa-sev { --cf-tone: var(--cf-text-2); }
+.sa .sa-sev-critical { --cf-tone: var(--cf-danger); }
+.sa .sa-sev-high { --cf-tone: color-mix(in srgb, var(--cf-danger) 55%, var(--cf-warning)); }
+.sa .sa-sev-medium { --cf-tone: var(--cf-warning); }
+.sa .sa-sev-low { --cf-tone: var(--cf-success); }
+
+/* Global ban entries */
+.sa #gb-tab-entries .guild-table th:last-child,
+.sa #gb-tab-entries .guild-table td:last-child { position: sticky; right: 0; background: var(--cf-surface); z-index: 1; }
+.sa .gb-expand-row td { padding: 0 !important; }
+.sa .gb-detail-panel { padding: var(--cf-4) var(--cf-5); background: var(--cf-surface-2); }
+.sa .gb-detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); gap: var(--cf-4); }
+.sa .gb-detail-label { margin-bottom: 2px; font-size: var(--cf-text-xs); font-weight: 500; color: var(--cf-text-3); }
+.sa .gb-detail-value { font-size: var(--cf-text-sm); color: var(--cf-text); line-height: 1.5; overflow-wrap: anywhere; }
+.sa .gb-detail-value.mono { font-family: var(--cf-mono); }
+.sa .gb-evidence-gallery { display: flex; flex-wrap: wrap; gap: var(--cf-2); margin-top: 4px; }
+.sa .gb-evidence-gallery a { display: block; border-radius: var(--cf-radius); overflow: hidden; border: 1px solid var(--cf-border); }
+.sa .gb-evidence-gallery a:hover { border-color: var(--cf-accent); }
+.sa .gb-evidence-gallery img { width: 80px; height: 80px; object-fit: cover; display: block; }
+.sa .gb-row-clickable { cursor: pointer; }
+.sa .gb-row-clickable td:last-child { cursor: default; }
+.sa .gb-sortable { cursor: pointer; user-select: none; }
+.sa .gb-sortable:hover { color: var(--cf-text) !important; }
+.sa .gb-sort-icon { font-size: 10px; margin-left: 3px; opacity: 0.35; }
+.sa .gb-sort-icon.gb-sort-active { opacity: 1; color: var(--cf-accent-fg); }
+.sa .gb-chevron { display: inline-block; font-size: 10px; color: var(--cf-text-3); transition: transform var(--cf-fast) var(--cf-ease); }
+.sa .gb-chevron.open { transform: rotate(90deg); }
+
+/* Breakdowns */
+.sa .sa-breakdowns { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); gap: var(--cf-4) var(--cf-6); margin-bottom: var(--cf-8); }
+.sa .sa-breakdowns .cf-section + .cf-section { margin-top: 0; }
+.sa .sa-breakdown { display: grid; padding: var(--cf-2) var(--cf-5); }
+.sa .sa-breakdown > p { margin: var(--cf-2) 0; }
+.sa .sa-breakdown-row { display: flex; align-items: center; justify-content: space-between; gap: var(--cf-3); padding: 6px 0; font-size: var(--cf-text-sm); color: var(--cf-text-2); }
+.sa .sa-breakdown-row + .sa-breakdown-row { border-top: 1px solid var(--cf-border); }
+
+/* ---------------------------------------------------------------- dialogs (.modal.show) */
+.sa ~ .modal, .modal { display: none; position: fixed; inset: 0; z-index: 1060; align-items: center; justify-content: center; padding: var(--cf-4); background: rgba(0, 0, 0, 0.6); }
+.modal.show { display: flex; }
+.modal > .modal-content {
+    width: min(100%, 30rem); max-height: calc(100vh - 2 * var(--cf-4)); overflow-y: auto; padding: var(--cf-5) !important;
+    color: var(--cf-text); background: var(--cf-surface) !important; border: 1px solid var(--cf-border) !important;
+    border-radius: var(--cf-radius-lg) !important; box-shadow: var(--cf-shadow-pop);
+}
+.modal .modal-title { display: flex; align-items: center; gap: var(--cf-2); margin: 0 0 var(--cf-4); }
+.modal .modal-label { display: block; margin: 0 0 6px; font-size: var(--cf-text-sm); font-weight: 500; color: var(--cf-text); }
+.modal .input {
+    width: 100%; min-height: 34px; padding: 6px 10px; margin-bottom: var(--cf-3); font: inherit; font-size: var(--cf-text-sm);
+    color: var(--cf-text); background: var(--cf-inset); border: 1px solid var(--cf-border-strong); border-radius: var(--cf-radius);
+}
+.modal .input:focus { outline: 2px solid var(--cf-accent); outline-offset: 0; }
+.modal .modal-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: var(--cf-2); margin-top: var(--cf-4); }
+.modal .btn-ghost { background: var(--cf-surface-2); border: 1px solid var(--cf-border-strong); color: var(--cf-text); }
+.modal .guild-filter-btn {
+    min-height: 30px; padding: 0 12px; border-radius: var(--cf-radius); font: inherit; font-size: var(--cf-text-sm); cursor: pointer;
+    color: var(--cf-text-2); background: transparent; border: 1px solid var(--cf-border);
+}
+.modal .guild-filter-btn.active { color: var(--cf-text); background: var(--cf-surface-3); }
+.modal .guild-table { width: 100%; border-collapse: collapse; font-size: var(--cf-text-xs); }
+.modal .guild-table th, .modal .guild-table td { padding: 6px 8px; border-bottom: 1px solid var(--cf-border); text-align: left; }
+.modal code { padding: 1px 5px; border-radius: var(--cf-radius-sm); background: var(--cf-surface-3); }
+.modal p { color: var(--cf-text-2); }
+.modal .sa-result-num { font-size: var(--cf-text-xl); font-weight: 600; }
+.sa-csv-error { margin-bottom: 4px; color: var(--cf-danger); }
+#gb-appeal-details p { margin: 0 0 6px; overflow-wrap: anywhere; }
+
+@media (max-width: 640px) {
+    .sa .sa-filters, .sa .sa-pagination { padding: var(--cf-3) var(--cf-4); }
+    .sa .gb-tabs { margin: var(--cf-3) var(--cf-4) 0; }
+    .sa .sa-clip { max-width: 140px; }
+}
+
+/* A table cell used as the empty / error row keeps its table layout. */
+.sa td.empty-state { display: table-cell; position: static !important; text-align: center !important; padding: var(--cf-6) !important; text-align: center; color: var(--cf-text-3); }
+.sa .cf-tabs + .sa-gb-body, .sa .gb-tabs ~ .sa-gb-body { border-top: 0; }

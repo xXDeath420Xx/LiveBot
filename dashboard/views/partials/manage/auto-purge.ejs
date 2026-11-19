@@ -1,130 +1,183 @@
+<%#
+  Scheduled channel purge: the list of schedules (POST toggle-purge / remove-purge) and the add form
+  (POST add-purge). Built on the settings-row kit (cf-settings.css); field names and ids are unchanged.
+%>
+<%
+const configs = typeof purgeConfigs !== 'undefined' ? purgeConfigs : [];
+const apTextChannels = (channels || []).filter(c => c.type === 0 || c.type === 5);
+const apRunning = configs.filter(c => c.enabled).length;
+const apWhen = (v) => { const d = new Date(v); return isNaN(d) ? '' : d.toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) + ' UTC'; };
+%>
+<style>
+    .ap-actions form { display: inline; margin: 0; }
+    .cf-rows .ap-item.is-filtered { display: none; }
+    .cf-rows .ap-item.is-paused .cf-list-title { color: var(--cf-text-2); }
+</style>
+
 <div class="page-section">
     <div class="page-section-header">
         <div>
             <div class="page-section-title">
                 <i class="fas fa-clock"></i>
-                <span>Scheduled Channel Purge</span>
+                <span>Scheduled channel purge</span>
             </div>
-            <div class="page-section-subtitle">
-                Automatically clear messages from channels on a schedule
-            </div>
+            <div class="page-section-subtitle">Pinned messages are always kept.</div>
         </div>
     </div>
 
-    <!-- Existing purge configs -->
-    <% const configs = typeof purgeConfigs !== 'undefined' ? purgeConfigs : []; %>
-    <% if (configs.length > 0) { %>
-    <div style="margin-bottom: var(--spacing-6);">
-        <h3 style="font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-3);">
-            Active Schedules (<%= configs.length %>)
-        </h3>
-        <div style="display: flex; flex-direction: column; gap: 8px;">
-            <% configs.forEach(cfg => {
-                const ch = channels.find(c => c.id === cfg.channel_id);
-            %>
-            <div style="display: flex; align-items: center; justify-content: space-between; background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-md); padding: var(--spacing-3) var(--spacing-4);">
-                <div style="display: flex; align-items: center; gap: var(--spacing-3); flex: 1;">
-                    <div style="width: 36px; height: 36px; background: <%= cfg.enabled ? 'rgba(34,197,94,0.15)' : 'rgba(255,255,255,0.05)' %>; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
-                        <i class="fas fa-<%= cfg.enabled ? 'check' : 'pause' %>" style="font-size: 0.85rem; color: <%= cfg.enabled ? '#22c55e' : 'var(--color-text-muted)' %>;"></i>
-                    </div>
-                    <div>
-                        <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary); font-size: var(--font-size-sm);">
-                            #<%= ch ? ch.name : cfg.channel_id %>
-                        </div>
-                        <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">
-                            <% if (cfg.interval_hours) { %>
-                                Every <%= cfg.interval_hours %> hour<%= cfg.interval_hours > 1 ? 's' : '' %>
-                            <% } else { %>
-                                Daily at <%= cfg.purge_time %> (server time)
-                            <% } %>
-                            <% if (cfg.last_purge_at) { %>
-                                &middot; Last purge: <%= new Date(cfg.last_purge_at).toLocaleString() %>
-                            <% } %>
-                        </div>
-                    </div>
-                </div>
-                <div style="display: flex; gap: 6px; flex-shrink: 0;">
-                    <form action="/manage/<%= guild.id %>/toggle-purge" method="POST" style="display: inline;">
-                        <input type="hidden" name="purgeId" value="<%= cfg.id %>">
-                        <input type="hidden" name="enabled" value="<%= cfg.enabled ? '0' : '1' %>">
-                        <button type="submit" style="background: rgba(167,139,250,0.1); border: 1px solid rgba(167,139,250,0.2); border-radius: var(--radius-md); padding: 6px 12px; color: #a78bfa; cursor: pointer; font-size: 0.75rem;">
-                            <i class="fas fa-<%= cfg.enabled ? 'pause' : 'play' %>"></i>
-                        </button>
-                    </form>
-                    <form action="/manage/<%= guild.id %>/remove-purge" method="POST" style="display: inline;" onsubmit="return confirm('Remove this auto-purge schedule?')">
-                        <input type="hidden" name="purgeId" value="<%= cfg.id %>">
-                        <button type="submit" style="background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.2); border-radius: var(--radius-md); padding: 6px 12px; color: #f87171; cursor: pointer; font-size: 0.75rem;">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </form>
-                </div>
+    <section class="cf-section" aria-labelledby="ap-list-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="ap-list-title">Schedules<% if (configs.length) { %> (<%= configs.length %>)<% } %></h2>
+                <p class="cf-section-desc"><% if (configs.length) { %><%= apRunning %> running, <%= configs.length - apRunning %> paused. <% } %>Each schedule wipes its channel at the set time.</p>
             </div>
-            <% }); %>
+            <% if (configs.length > 15) { %>
+            <div class="cf-section-actions">
+                <label class="cf-search">
+                    <i class="fas fa-search" aria-hidden="true"></i>
+                    <input type="search" id="cfk-ap-search" class="form-control" placeholder="Search by channel" aria-label="Search schedules by channel">
+                </label>
+            </div>
+            <% } %>
+        </header>
+        <div class="cf-rows">
+            <% if (configs.length > 0) { %>
+            <div class="cf-list">
+                <% configs.forEach(cfg => {
+                    const ch = channels.find(c => c.id === cfg.channel_id);
+                    const nextMs = cfg.enabled && cfg.interval_hours && cfg.last_purge_at ? new Date(cfg.last_purge_at).getTime() + cfg.interval_hours * 3600e3 : null;
+                %>
+                <div class="ap-item cf-list-item cf-list-item--multi<%= cfg.enabled ? '' : ' is-paused' %>">
+                    <div class="cf-list-main">
+                        <p class="cf-list-title">
+                            <span class="ap-chan">#<%= ch ? ch.name : cfg.channel_id %></span>
+                            <span class="cf-pill <%= cfg.enabled ? 'is-ok' : '' %>"><%= cfg.enabled ? 'Running' : 'Paused' %></span>
+                            <% if (!ch) { %><span class="cf-pill is-bad">Channel not found</span><% } %>
+                        </p>
+                        <p class="cf-list-meta">
+                            <span><% if (cfg.interval_hours) { %>Every <%= cfg.interval_hours %> hour<%= cfg.interval_hours > 1 ? 's' : '' %><% } else { %>Daily at <%= cfg.purge_time %>, server time<% } %></span>
+                            <span><% if (cfg.last_purge_at) { %>Last purge <%= apWhen(cfg.last_purge_at) %><% } else { %>Not run yet<% } %></span>
+                            <% if (nextMs && nextMs > Date.now()) { %><span>Next about <%= apWhen(nextMs) %></span><% } %>
+                        </p>
+                    </div>
+                    <div class="cf-list-actions ap-actions">
+                        <button type="button" class="btn btn-sm btn-secondary" data-ap-edit="<%= cfg.channel_id %>" data-ap-mode="<%= cfg.interval_hours ? 'interval' : 'daily' %>" data-ap-time="<%= cfg.purge_time || '00:00' %>" data-ap-hours="<%= cfg.interval_hours || 24 %>">Edit</button>
+                        <form action="/manage/<%= guild.id %>/toggle-purge" method="POST">
+                            <input type="hidden" name="purgeId" value="<%= cfg.id %>">
+                            <input type="hidden" name="enabled" value="<%= cfg.enabled ? '0' : '1' %>">
+                            <button type="submit" class="btn btn-sm btn-secondary"><%= cfg.enabled ? 'Pause' : 'Resume' %></button>
+                        </form>
+                        <form action="/manage/<%= guild.id %>/remove-purge" method="POST" onsubmit="return confirm('Remove this auto-purge schedule?')">
+                            <input type="hidden" name="purgeId" value="<%= cfg.id %>">
+                            <button type="submit" class="btn btn-sm btn-danger">Remove</button>
+                        </form>
+                    </div>
+                </div>
+                <% }); %>
+            </div>
+            <% if (configs.length > 15) { %>
+            <div class="cf-state cf-state--compact" id="cfk-ap-search-empty" hidden><p class="cf-state-text">No schedules match the search.</p></div>
+            <% } %>
+            <% } else { %>
+            <%- include('../kit/_state', { kind: 'empty', title: 'No schedules yet', text: 'Add one below to clear a channel on a schedule.', id: null, boxed: false, compact: false }) %>
+            <% } %>
         </div>
-    </div>
-    <% } else { %>
-    <div style="text-align: center; padding: 40px 20px; color: var(--color-text-muted); margin-bottom: var(--spacing-6);">
-        <i class="fas fa-clock" style="font-size: 2.5rem; margin-bottom: var(--spacing-3); display: block; opacity: 0.25;"></i>
-        <div style="font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); margin-bottom: 4px;">No auto-purge schedules</div>
-        <div style="font-size: var(--font-size-sm);">Add one below to automatically clear a channel on a schedule</div>
-    </div>
-    <% } %>
+    </section>
 
-    <!-- Add new purge -->
-    <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6);">
-        <h3 style="font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
-            <i class="fas fa-plus" style="color: var(--accent-purple); margin-right: var(--spacing-2);"></i>
-            Add Auto-Purge Schedule
-        </h3>
-
-        <form action="/manage/<%= guild.id %>/add-purge" method="POST">
-            <!-- Channel -->
-            <div style="margin-bottom: var(--spacing-4);">
-                <label class="form-label">Channel to Purge</label>
-                <select name="channel_id" class="form-select" required>
-                    <option value="">Select a channel...</option>
-                    <% channels.forEach(ch => { %>
-                    <option value="<%= ch.id %>">#<%= ch.name %></option>
-                    <% }); %>
-                </select>
+    <section class="cf-section" aria-labelledby="ap-add-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="ap-add-title">Add a schedule</h2>
+                <p class="cf-section-desc">The whole channel is cleared at once, so a message posted a minute before survives only a minute. To give every post the same time, or to delete only some kinds of post, use <a href="/manage/<%= guild.id %>?page=smart-purge">Smart purge rules</a> instead.</p>
             </div>
-
-            <!-- Schedule mode -->
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
-                <div>
-                    <label class="form-label">Schedule Mode</label>
-                    <select name="mode" class="form-select" id="purge-mode" onchange="document.getElementById('time-row').style.display = this.value === 'daily' ? 'block' : 'none'; document.getElementById('interval-row').style.display = this.value === 'interval' ? 'block' : 'none';">
-                        <option value="daily">Daily at a specific time</option>
-                        <option value="interval">Every X hours</option>
-                    </select>
+        </header>
+        <div class="cf-rows">
+            <form action="/manage/<%= guild.id %>/add-purge" method="POST">
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-auto-purge-channel_id">Channel</label>
+                        <p class="cf-row-desc">The channel to clear.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <select id="f-auto-purge-channel_id" name="channel_id" class="form-select" required>
+                            <option value="">Choose a channel</option>
+                            <% apTextChannels.forEach(c => { %><option value="<%= c.id %>" data-kind="text">#<%= c.name %><% if (configs.some(x => x.channel_id === c.id)) { %> (replaces its schedule)<% } %></option>
+                            <% }); %>
+                        </select>
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="purge-mode">Schedule</label>
+                        <p class="cf-row-desc">Once a day at a set time, or every few hours.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <select name="mode" class="form-select" id="purge-mode" onchange="document.getElementById('time-row').hidden = this.value !== 'daily'; document.getElementById('interval-row').hidden = this.value !== 'interval';">
+                            <option value="daily">Daily at a set time</option>
+                            <option value="interval">Every few hours</option>
+                        </select>
+                    </div>
                 </div>
                 <div id="time-row">
-                    <label class="form-label">Purge Time (server timezone)</label>
-                    <input type="time" name="purge_time" class="form-control" value="00:00">
-                    <div class="form-help">Uses your server's timezone from Core Settings</div>
+                    <div class="cf-row cf-row--sub">
+                        <div class="cf-row-text">
+                            <label class="cf-row-label" for="f-auto-purge-purge_time">Time</label>
+                            <p class="cf-row-desc" id="f-auto-purge-purge_time-desc">In the server's time zone, set under Core settings.</p>
+                        </div>
+                        <div class="cf-row-control">
+                            <input id="f-auto-purge-purge_time" type="time" name="purge_time" class="form-control" value="00:00" aria-describedby="f-auto-purge-purge_time-desc">
+                        </div>
+                    </div>
                 </div>
-                <div id="interval-row" style="display: none;">
-                    <label class="form-label">Interval (hours)</label>
-                    <input type="number" name="interval_hours" class="form-control" min="1" max="168" value="24" placeholder="24">
-                    <div class="form-help">Purge every N hours (1-168)</div>
+                <div id="interval-row" hidden>
+                    <div class="cf-row cf-row--sub">
+                        <div class="cf-row-text">
+                            <label class="cf-row-label" for="f-auto-purge-interval_hours">Every</label>
+                            <p class="cf-row-desc" id="f-auto-purge-interval_hours-desc">From 1 to 168 hours.</p>
+                        </div>
+                        <div class="cf-row-control">
+                            <div class="cf-input-unit">
+                                <input id="f-auto-purge-interval_hours" type="number" name="interval_hours" class="form-control" min="1" max="168" value="24" placeholder="24" aria-describedby="f-auto-purge-interval_hours-desc">
+                                <span class="cf-unit">hours</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-            </div>
-
-            <!-- Info -->
-            <div style="background: var(--color-dark-700); border-left: 4px solid var(--accent-purple); padding: var(--spacing-3); border-radius: var(--radius-sm); margin-bottom: var(--spacing-4); font-size: var(--font-size-xs); color: var(--color-text-muted);">
-                <i class="fas fa-info-circle" style="color: var(--accent-purple); margin-right: 4px;"></i>
-                Pinned messages are never deleted. Messages older than 14 days are deleted individually (slower due to Discord API limits).
-            </div>
-
-            <button type="submit" class="btn btn-primary">
-                <i class="fas fa-plus"></i>
-                <span>Add Schedule</span>
-            </button>
-        </form>
-    </div>
+                <div class="cf-section-foot">
+                    <span class="cf-foot-note">Messages older than 14 days are deleted one by one, which is slower. The bot needs Manage Messages and Read Message History.</span>
+                    <button type="submit" class="btn btn-primary">Add schedule</button>
+                </div>
+            </form>
+        </div>
+    </section>
 </div>
-
-<style>
-.form-label { display: block; font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-2); }
-.form-help { font-size: var(--font-size-xs); color: var(--color-text-muted); margin-top: var(--spacing-2); }
-</style>
+<script>
+(function () {
+    // Edit fills the add form: saving to a channel that has a schedule replaces it.
+    document.querySelectorAll('[data-ap-edit]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var channel = document.getElementById('f-auto-purge-channel_id');
+            var mode = document.getElementById('purge-mode');
+            channel.value = btn.getAttribute('data-ap-edit');
+            mode.value = btn.getAttribute('data-ap-mode');
+            mode.dispatchEvent(new Event('change'));
+            document.getElementById('f-auto-purge-purge_time').value = btn.getAttribute('data-ap-time');
+            document.getElementById('f-auto-purge-interval_hours').value = btn.getAttribute('data-ap-hours');
+            document.getElementById('ap-add-title').scrollIntoView({ behavior: 'smooth', block: 'start' });
+            channel.focus();
+        });
+    });
+    var search = document.getElementById('cfk-ap-search');
+    if (!search) return;
+    search.addEventListener('input', function () {
+        var q = search.value.trim().toLowerCase();
+        var shown = 0;
+        document.querySelectorAll('.ap-item').forEach(function (row) {
+            var hit = !q || row.textContent.toLowerCase().indexOf(q) !== -1;
+            row.classList.toggle('is-filtered', !hit);
+            if (hit) shown++;
+        });
+        document.getElementById('cfk-ap-search-empty').hidden = shown > 0;
+    });
+})();
+</script>

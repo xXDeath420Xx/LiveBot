@@ -11,6 +11,7 @@
  */
 import { validateMove } from './one-word-story.js';
 import { registerEngine, saveState, bumpStats } from '../word-game-manager.js';
+import '../word-game-results.js'; // leader role follows the stats (Word Games page)
 import logger from '../../utils/logger.js';
 
 async function react(message, emoji) {

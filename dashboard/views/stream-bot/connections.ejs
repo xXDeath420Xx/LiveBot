@@ -1,0 +1,242 @@
+<%#
+  GET /stream/bot/connections. Locals: notice ({ tone, text } | null, from the ?ok= / ?warn= / ?error= codes the OAuth flows send),
+  channels [{ id, platform, platformLabel, login, displayName, verifiedVia, linkedAt, health }], linkable [{ platform, platformLabel,
+  id, login, label }], grant ({ login, status, grantedAt, scopes[] } | null), scopes [{ scope, enables, later }], reapprove (labels of what
+  re-approving the grant turns on, empty when nothing is missing),
+  tipSources [{ id, source, label, refLabel, enabled, status, lastError, lastEventAt }], tipOptions { kofi[], fourthwall[], throne, bmac },
+  botSettings { storeChat, webhookAllowHosts[] }, csrfToken.
+%>
+<%- include('_head', { pageTitle: 'Connections', active: 'connections' }) %>
+<%
+  const _when = (iso) => iso ? new Date(iso).toISOString().slice(0, 16).replace('T', ' ') + ' UTC' : '';
+  const _via = { stream_bot_grant: 'Stream bot grant', twitch_oauth_accounts: 'Linked Twitch account', stream_platform_accounts: 'Platform sign-in' };
+  const _tone = { ok: 'is-ok', warn: 'is-warn', error: 'is-bad' };
+  const _tipStatus = { new: ['', 'Waiting for the first event'], ok: ['is-ok', 'Working'], listening: ['is-ok', 'Connected'], reconnecting: ['is-warn', 'Reconnecting'], error: ['is-bad', 'Error'], token_rejected: ['is-bad', 'Token refused: add it again'] };
+  const _hasTwitch = channels.some((c) => c.platform === 'twitch');
+  const _hasKick = channels.some((c) => c.platform === 'kick');
+%>
+<div class="cf-page-head">
+    <div>
+        <h1 class="cf-page-title">Connections</h1>
+        <p class="cf-page-sub">The channels the stream bot listens to, the Twitch permissions it has, and the tip services it reads. Channels are linked only from a sign-in that proves they are yours.</p>
+    </div>
+</div>
+<%- include('_tabs', { active: 'connections' }) %>
+
+<% if (notice) { %><div class="cf-notice <%= _tone[notice.tone] || '' %>" role="status"><div class="cf-notice-body"><%= notice.text %></div></div><% } %>
+<div class="cf-notice" id="sb-conn-msg" role="status" aria-live="polite" hidden><div class="cf-notice-body" id="sb-conn-msg-text"></div></div>
+
+<section class="cf-section" aria-labelledby="sb-linked-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sb-linked-title">Linked channels</h2>
+        <p class="cf-section-desc">Events from these channels reach your automations. A channel can be linked to one CertiFried account only.</p></div></header>
+    <div class="cf-rows">
+        <% if (!channels.length) { %>
+        <div class="cf-state cf-state--compact"><p class="cf-state-title">No channels linked. Add one below.</p></div>
+        <% } %>
+        <% channels.forEach((c) => { const h = c.health; %>
+        <div class="sb-channel">
+            <div class="sb-channel-head">
+                <div class="sb-channel-name">
+                    <span class="cf-em"><%= c.displayName || c.login %></span> <span class="cf-muted">on <%= c.platformLabel %>, linked through <%= _via[c.verifiedVia] || c.verifiedVia %></span>
+                </div>
+                <div class="cf-list-actions">
+                    <% if (h && h.ok) { %><span class="cf-pill is-ok">Receiving events</span><% } else if (h) { %><span class="cf-pill is-warn">Needs attention</span><% } %>
+                    <button type="button" class="btn btn-secondary btn-sm" data-unlink-channel="<%= c.id %>" data-name="<%= c.displayName || c.login %>">Unlink</button>
+                </div>
+            </div>
+            <% if (h && c.platform === 'twitch') { %>
+            <dl class="sb-facts">
+                <div><dt>Stream bot grant</dt><dd><%= h.grants && h.grants.streamBot ? (h.grants.streamBot.status === 'active' ? h.grants.streamBot.scopes + ' permissions' : 'Needs reconnecting') : 'None' %></dd></div>
+                <div><dt>Server analytics grant</dt><dd><%= h.grants && h.grants.serverAnalytics ? h.grants.serverAnalytics.servers + ' server' + (h.grants.serverAnalytics.servers === 1 ? '' : 's') + (h.grants.serverAnalytics.needsReauth ? ', ' + h.grants.serverAnalytics.needsReauth + ' needs reconnecting' : '') : 'None' %></dd></div>
+                <div><dt>Server write grant</dt><dd><%= h.grants && h.grants.serverWrite ? h.grants.serverWrite.servers + ' server' + (h.grants.serverWrite.servers === 1 ? '' : 's') + (h.grants.serverWrite.needsReauth ? ', ' + h.grants.serverWrite.needsReauth + ' needs reconnecting' : '') : 'None' %></dd></div>
+                <div><dt>Twitch event subscriptions</dt><dd><%= h.eventsub ? h.eventsub.enabled + ' working' + (h.eventsub.failing ? ', ' + h.eventsub.failing + ' not working' : '') : 'Unknown' %></dd></div>
+            </dl>
+            <% if (h.coverage) { %>
+            <div class="sb-coverage">
+                <p class="sb-coverage-label">Events this channel can send</p>
+                <ul class="cf-chips" aria-label="Events this channel can send">
+                    <% h.coverage.forEach((f) => { %><li class="cf-chip <%= f.covered ? (f.later ? 'is-info' : 'is-ok') : '' %>"><span><%= f.label %>: <%= f.covered ? (f.later ? 'allowed, used later' : 'yes') : 'no permission' %></span></li><% }) %>
+                </ul>
+            </div>
+            <% } %>
+            <% } else if (h && c.platform === 'kick') { %>
+            <dl class="sb-facts">
+                <div><dt>Kick webhooks</dt><dd><%= !h.webhook || !h.webhook.known ? 'Could not check' : (h.webhook.missing && h.webhook.missing.length ? h.webhook.missing.length + ' event' + (h.webhook.missing.length === 1 ? '' : 's') + ' not subscribed' : 'All events subscribed') %></dd></div>
+                <div><dt>Chat messages</dt><dd><%= h.webhook && h.webhook.known ? (h.webhook.chat ? 'Subscribed' : 'Not subscribed') : 'Could not check' %></dd></div>
+                <div><dt>Last chat received</dt><dd><% if (h.lastChatAt) { %><time datetime="<%= h.lastChatAt %>"><%= _when(h.lastChatAt) %></time><% } else { %>None since the last restart<% } %></dd></div>
+                <div><dt>Sending chat</dt><dd><%= h.chatSend ? 'Ready (Kick Defender is on)' : 'Turn on Kick Defender for this channel' %></dd></div>
+            </dl>
+            <% if (h.webhook && h.webhook.known && h.webhook.missing && h.webhook.missing.length) { %><p class="sb-channel-note">Unlink and link the channel again to subscribe the missing events.</p><% } %>
+            <% if (!h.chatSend) { %><p class="sb-channel-note">The chat message action on Kick uses Kick Defender. <a href="/kick">Set it up on the Kick Defender page</a>.</p><% } %>
+            <% } %>
+        </div>
+        <% }) %>
+    </div>
+</section>
+
+<section class="cf-section" aria-labelledby="sb-add-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sb-add-title">Add a channel</h2>
+        <p class="cf-section-desc">Sign in on Twitch or Kick to prove a channel is yours, then link it. Accounts you have already signed in with elsewhere on CertiFried are listed first.</p></div></header>
+    <div class="cf-rows">
+        <% if (linkable.length) { %>
+        <div class="cf-list">
+            <% linkable.forEach((c) => { %>
+            <div class="cf-list-item">
+                <div class="cf-list-main"><div class="cf-em"><%= c.login || c.id %> <span class="cf-muted">on <%= c.platformLabel %></span></div><div class="cf-muted">From your <%= c.label %></div></div>
+                <div class="cf-list-actions"><button type="button" class="btn btn-primary btn-sm" data-link-platform="<%= c.platform %>" data-link-id="<%= c.id %>">Link</button></div>
+            </div>
+            <% }) %>
+        </div>
+        <% } %>
+        <div class="cf-row">
+            <div class="cf-row-text"><span class="cf-row-label">Twitch</span>
+                <p class="cf-row-desc">The Stream bot grant asks Twitch for the permissions in the table below and links your channel. It never asks for who you follow or for your earnings.</p></div>
+            <div class="cf-row-control"><div class="cf-inline">
+                <a class="btn btn-primary btn-sm" href="/auth/twitch/streambot"><%= grant ? 'Reconnect Twitch' : 'Connect Twitch' %></a>
+                <a class="btn btn-secondary btn-sm" href="/stream/connect/twitch?for=bot">Sign in without the grant</a>
+            </div></div>
+        </div>
+        <div class="cf-row">
+            <div class="cf-row-text"><span class="cf-row-label">Kick</span>
+                <p class="cf-row-desc">Signing in with Kick links your channel and subscribes it to Kick's event webhooks.</p></div>
+            <div class="cf-row-control"><div class="cf-inline"><a class="btn btn-primary btn-sm" href="/stream/connect/kick?for=bot"><%= _hasKick ? 'Sign in with another Kick account' : 'Sign in with Kick' %></a></div></div>
+        </div>
+    </div>
+</section>
+
+<section class="cf-section" aria-labelledby="sb-grant-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sb-grant-title">Stream bot grant on Twitch</h2>
+        <p class="cf-section-desc">Permissions given to CertiFried for your own channel, not tied to a Discord server. If a server you manage already has the analytics or write grant for this channel, those permissions count too.</p></div></header>
+    <div class="cf-rows">
+        <div class="cf-row">
+            <div class="cf-row-text"><span class="cf-row-label">Status</span>
+                <p class="cf-row-desc"><% if (grant) { %>Granted for <strong><%= grant.login %></strong><% if (grant.grantedAt) { %> on <time datetime="<%= grant.grantedAt %>"><%= _when(grant.grantedAt) %></time><% } %><%= grant.status !== 'active' ? '. Twitch no longer accepts it: reconnect.' : '.' %><% } else { %>Not granted.<% } %></p></div>
+            <div class="cf-row-control"><div class="cf-inline">
+                <% if (grant) { %>
+                <form method="post" action="/auth/twitch/streambot/disconnect" class="sb-inline-form">
+                    <input type="hidden" name="_csrf" value="<%= locals.csrfToken || '' %>">
+                    <button type="submit" class="btn btn-danger btn-sm">Remove the grant</button>
+                </form>
+                <% } else { %><a class="btn btn-primary btn-sm" href="/auth/twitch/streambot">Connect Twitch</a><% } %>
+            </div></div>
+        </div>
+        <% if (locals.reapprove && reapprove.length) { %>
+        <div class="cf-notice is-warn" role="status"><div class="cf-notice-body"><span class="cf-notice-title">Re-approve to enable: <%= reapprove.join(', ') %></span>
+            Your grant was made before these were added. Re-approving shows the same Twitch screen with them included; nothing else changes. <a href="/auth/twitch/streambot">Re-approve on Twitch</a></div></div>
+        <% } %>
+        <div class="cf-table-wrap">
+            <table class="cf-table cf-table--stack">
+                <caption class="sr-only">What each Twitch permission is used for</caption>
+                <thead><tr><th scope="col">Permission</th><th scope="col">Used for</th><th scope="col">Granted</th></tr></thead>
+                <tbody>
+                    <% scopes.forEach((s) => { const has = !!(grant && grant.scopes.includes(s.scope)); %>
+                    <tr>
+                        <td><code><%= s.scope %></code></td>
+                        <td class="sb-wrap"><%= s.enables %><% if (s.later) { %> <span class="cf-pill">Used later</span><% } %></td>
+                        <td><%= has ? 'Yes' : 'No' %></td>
+                    </tr>
+                    <% }) %>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</section>
+
+<section class="cf-section" aria-labelledby="sb-tips-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sb-tips-title">Tip services</h2>
+        <p class="cf-section-desc">Tips, memberships and orders become events for your automations. CertiFried only reads the notifications; it never handles a payment.</p></div></header>
+    <div class="cf-rows">
+        <% if (tipSources.length) { %>
+        <div class="cf-list">
+            <% tipSources.forEach((t) => { const ts = _tipStatus[t.status] || ['', t.status]; %>
+            <div class="cf-list-item cf-list-item--multi">
+                <div class="cf-list-main">
+                    <p class="cf-list-title"><%= t.label %> <span class="cf-pill <%= ts[0] %>"><%= ts[1] %></span></p>
+                    <p class="cf-list-meta"><span><%= t.refLabel %></span><span><% if (t.lastEventAt) { %>Last event <time datetime="<%= t.lastEventAt %>"><%= _when(t.lastEventAt) %></time><% } else { %>No events yet<% } %></span></p>
+                    <% if (t.lastError) { %><p class="cf-list-body"><%= t.lastError %></p><% } %>
+                </div>
+                <div class="cf-list-actions">
+                    <label class="sr-only" for="sb-tip-on-<%= t.id %>">On: <%= t.label %></label>
+                    <input type="checkbox" class="cf-switch" role="switch" id="sb-tip-on-<%= t.id %>" data-toggle-tip="<%= t.id %>"<% if (t.enabled) { %> checked<% } %>>
+                    <button type="button" class="btn btn-secondary btn-sm" data-remove-tip="<%= t.id %>" data-name="<%= t.label %>">Remove</button>
+                </div>
+            </div>
+            <% }) %>
+        </div>
+        <% } %>
+        <form id="sb-tip-form" novalidate>
+            <div class="cf-row">
+                <div class="cf-row-text"><label class="cf-row-label" for="sb-tip-source">Add a tip service</label></div>
+                <div class="cf-row-control">
+                    <select id="sb-tip-source" name="source">
+                        <option value="streamelements">StreamElements</option>
+                        <option value="streamlabs">Streamlabs</option>
+                        <option value="kofi">Ko-fi</option>
+                        <option value="fourthwall">Fourthwall</option>
+                        <option value="throne">Throne</option>
+                        <option value="bmac">Buy Me a Coffee</option>
+                    </select>
+                </div>
+            </div>
+            <div class="cf-row" data-tip-for="streamelements streamlabs">
+                <div class="cf-row-text"><label class="cf-row-label" for="sb-tip-token">Token</label>
+                    <p class="cf-row-desc" id="sb-tip-token-desc" data-tip-help="streamelements">StreamElements: your JWT token, in your StreamElements account under Channels, Show secrets. It is stored encrypted and never shown again.</p>
+                    <p class="cf-row-desc" data-tip-help="streamlabs" hidden>Streamlabs: your Socket API token, in Streamlabs under Settings, API Settings. It is stored encrypted and never shown again.</p></div>
+                <div class="cf-row-control"><input type="password" id="sb-tip-token" name="token" autocomplete="off" maxlength="2000" aria-describedby="sb-tip-token-desc"></div>
+            </div>
+            <div class="cf-row" data-tip-for="kofi" hidden>
+                <div class="cf-row-text"><% if (tipOptions.kofi.length) { %><label class="cf-row-label" for="sb-tip-kofi">Server</label><% } else { %><span class="cf-row-label">Server</span><% } %>
+                    <p class="cf-row-desc">A Discord server you manage where Ko-fi is set up. Ko-fi sends its notifications to that server's webhook.</p></div>
+                <div class="cf-row-control">
+                    <% if (tipOptions.kofi.length) { %><select id="sb-tip-kofi" name="ref"><% tipOptions.kofi.forEach((g) => { %><option value="<%= g.id %>"><%= g.name %></option><% }) %></select>
+                    <% } else { %><p class="cf-row-desc">None of your servers has Ko-fi set up.</p><% } %>
+                </div>
+            </div>
+            <div class="cf-row" data-tip-for="fourthwall" hidden>
+                <div class="cf-row-text"><% if (tipOptions.fourthwall.length) { %><label class="cf-row-label" for="sb-tip-fourthwall">Server</label><% } else { %><span class="cf-row-label">Server</span><% } %>
+                    <p class="cf-row-desc">A Discord server you manage where Fourthwall is connected.</p></div>
+                <div class="cf-row-control">
+                    <% if (tipOptions.fourthwall.length) { %><select id="sb-tip-fourthwall" name="ref"><% tipOptions.fourthwall.forEach((g) => { %><option value="<%= g.id %>"><%= g.name %></option><% }) %></select>
+                    <% } else { %><p class="cf-row-desc">None of your servers has Fourthwall connected.</p><% } %>
+                </div>
+            </div>
+            <div class="cf-row" data-tip-for="throne" hidden>
+                <div class="cf-row-text"><span class="cf-row-label">Throne account</span>
+                    <p class="cf-row-desc"><% if (tipOptions.throne) { %>Gifts to <strong>throne.com/<%= tipOptions.throne %></strong>, the account linked to your Discord.<% } else { %>Link your Throne account first: <code>/creator throne link</code> in Discord.<% } %></p></div>
+            </div>
+            <div class="cf-row" data-tip-for="bmac" hidden>
+                <div class="cf-row-text"><span class="cf-row-label">Buy Me a Coffee account</span>
+                    <p class="cf-row-desc"><% if (tipOptions.bmac) { %>Your linked account. New supporters are checked every 5 minutes, so these events can arrive up to 5 minutes late.<% } else { %>Link your account first on the <a href="/buymeacoffee">Buy Me a Coffee page</a>.<% } %></p></div>
+            </div>
+            <div class="cf-section-foot">
+                <span class="cf-status-line" id="sb-tip-status" role="status" aria-live="polite"></span>
+                <button type="submit" class="btn btn-primary btn-sm">Add</button>
+            </div>
+        </form>
+    </div>
+</section>
+
+<section class="cf-section" aria-labelledby="sb-settings-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sb-settings-title">Settings</h2></div></header>
+    <div class="cf-rows">
+        <form id="sb-settings-form" novalidate>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text"><label class="cf-row-label" for="sb-store-chat">Keep chat in the event log</label>
+                    <p class="cf-row-desc" id="sb-store-chat-desc">Off by default. Chat always triggers automations and shows in the live feed; with this on it is also kept in the event log for 90 days.</p></div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="sb-store-chat" aria-describedby="sb-store-chat-desc"<% if (botSettings.storeChat) { %> checked<% } %>></div>
+            </div>
+            <div class="cf-row cf-row--wide">
+                <div class="cf-row-text"><label class="cf-row-label" for="sb-allow-hosts">Webhook allow-list</label>
+                    <p class="cf-row-desc" id="sb-allow-hosts-desc">Host names the webhook action may post to, one per line, such as hooks.example.com. Up to 20. Only https is used.</p></div>
+                <div class="cf-row-control"><textarea id="sb-allow-hosts" rows="3" aria-describedby="sb-allow-hosts-desc" spellcheck="false"><%= botSettings.webhookAllowHosts.join('\n') %></textarea></div>
+            </div>
+            <div class="cf-section-foot">
+                <span class="cf-status-line" id="sb-settings-status" role="status" aria-live="polite"></span>
+                <button type="submit" class="btn btn-primary btn-sm">Save settings</button>
+            </div>
+        </form>
+    </div>
+</section>
+
+<script type="application/json" id="sb-data"><%- JSON.stringify({ hasTwitch: _hasTwitch }).replace(/</g, '\\u003c') %></script>
+<%- include('_foot') %>

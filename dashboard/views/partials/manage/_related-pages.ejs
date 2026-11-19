@@ -1,0 +1,46 @@
+<%#
+  "Related pages" at the bottom of a feature page: 3-5 pages an admin usually sets up together with
+  this one (core/manage-nav.js relatedPages(): the explicit RELATED pairs first, then neighbours in
+  the same section). Locals: guild, related ([{ page, title, desc, icon, section }]).
+%>
+<% const _rel = (typeof related !== 'undefined' && Array.isArray(related)) ? related : []; %>
+<% if (_rel.length) { %>
+<nav class="cf-related" aria-labelledby="cfRelatedTitle">
+    <h2 class="cf-related-title" id="cfRelatedTitle">Related pages</h2>
+    <ul class="cf-related-list">
+        <% _rel.forEach(function (r) { %>
+        <li>
+            <a class="cf-related-item" href="/manage/<%= guild.id %>?page=<%= r.page %>" data-sec="<%= r.section %>">
+                <span class="cf-related-icon" aria-hidden="true"><i class="<%= r.icon %>"></i></span>
+                <span class="cf-related-text">
+                    <span class="cf-related-name"><%= r.title %></span>
+                    <% if (r.desc) { %><span class="cf-related-desc"><%= r.desc %></span><% } %>
+                </span>
+                <i class="fas fa-arrow-right cf-related-go" aria-hidden="true"></i>
+            </a>
+        </li>
+        <% }); %>
+    </ul>
+</nav>
+<style>
+    .cf-related { margin: var(--cf-10, 40px) 0 0; padding-top: var(--cf-6, 24px); border-top: 1px solid var(--cf-border); }
+    .cf-related-title { margin: 0 0 var(--cf-3, 12px); font-size: var(--cf-text-md, 15px); font-weight: 600; color: var(--cf-text-2); }
+    .cf-related-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 230px), 1fr)); gap: var(--cf-2, 8px); }
+    .cf-related-item {
+        display: flex; align-items: center; gap: var(--cf-3, 12px); height: 100%; padding: var(--cf-3, 12px);
+        background: var(--cf-surface); border: 1px solid var(--cf-border); border-radius: var(--cf-radius-lg, 12px);
+        color: inherit; text-decoration: none; transition: border-color var(--cf-fast, 120ms) ease, background-color var(--cf-fast, 120ms) ease;
+    }
+    .cf-related-item:hover { border-color: var(--cf-border-strong); background: var(--cf-surface-2); }
+    .cf-related-icon {
+        flex: none; width: 32px; height: 32px; border-radius: var(--cf-radius, 8px); display: inline-flex; align-items: center; justify-content: center;
+        font-size: 14px; color: var(--sec, var(--cf-accent-fg)); background: color-mix(in srgb, var(--sec, var(--cf-accent)) 14%, transparent);
+    }
+    :root[data-style="compact"] .cf-related-icon { color: var(--cf-text-3); background: var(--cf-surface-2); }
+    .cf-related-text { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+    .cf-related-name { font-size: var(--cf-text-sm, 14px); font-weight: 600; color: var(--cf-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .cf-related-desc { margin-top: 1px; font-size: var(--cf-text-xs, 13px); color: var(--cf-text-3); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .cf-related-go { flex: none; font-size: 12px; color: var(--cf-text-3); transition: transform var(--cf-fast, 120ms) ease; }
+    .cf-related-item:hover .cf-related-go { color: var(--cf-text); transform: translateX(2px); }
+</style>
+<% } %>

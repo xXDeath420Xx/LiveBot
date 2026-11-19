@@ -2,6 +2,7 @@ import { EmbedBuilder } from 'discord.js';
 import pool from '../../../utils/db.js';
 import logger from '../../../utils/logger.js';
 import { triggerManualCheck } from '../../../jobs/free-games-scheduler.js';
+import { themeColor } from '../../../core/guild-theme.js';
 
 export async function execute(interaction) {
   const subcommand = interaction.options.getSubcommand();
@@ -51,9 +52,9 @@ async function freeGamesSubscribe(interaction) {
       `INSERT INTO free_games_subscriptions (
         guild_id, discord_channel_id, mention_role_id, custom_message,
         notify_free, notify_weekend, notify_dlc,
-        filter_steam, filter_epic, filter_gog, filter_humble, filter_prime,
+        filter_steam, filter_epic, filter_gog, filter_prime,
         filter_windows, is_enabled
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         interaction.guild.id,
         channel.id,
@@ -65,7 +66,6 @@ async function freeGamesSubscribe(interaction) {
         true,  // filter_steam
         true,  // filter_epic
         true,  // filter_gog
-        true,  // filter_humble
         true,  // filter_prime
         true,  // filter_windows
         true   // is_enabled
@@ -73,13 +73,13 @@ async function freeGamesSubscribe(interaction) {
     );
 
     const embed = new EmbedBuilder()
-      .setColor('#00FF00')
+      .setColor(themeColor(interaction.guildId, 'success'))
       .setTitle('Free Game Notifications Enabled')
       .setDescription(`You'll now receive free game notifications in ${channel}`)
       .addFields(
         { name: 'Channel', value: `${channel}`, inline: true },
         { name: 'Mention Role', value: mentionRole ? `${mentionRole}` : 'None', inline: true },
-        { name: 'Stores', value: 'Steam, Epic Games, GOG, Humble Bundle, Prime Gaming', inline: false },
+        { name: 'Stores', value: 'Steam, Epic Games, GOG, Prime Gaming', inline: false },
         { name: 'Platforms', value: 'Windows', inline: true },
         { name: 'Types', value: 'Free to Keep Only', inline: true }
       )
@@ -139,7 +139,7 @@ async function freeGamesList(interaction) {
     }
 
     const embed = new EmbedBuilder()
-      .setColor('#7289DA')
+      .setColor(themeColor(interaction.guildId, 'accent'))
       .setTitle('Free Game Subscriptions')
       .setDescription(`**${subscriptions.length}** subscription(s) configured`)
       .setTimestamp();
@@ -148,17 +148,18 @@ async function freeGamesList(interaction) {
       const channel = await interaction.guild.channels.fetch(sub.discord_channel_id).catch(() => null);
       const channelMention = channel ? `<#${sub.discord_channel_id}>` : 'Channel not found';
 
-      const stores = [];
-      if (sub.filter_steam) stores.push('Steam');
-      if (sub.filter_epic) stores.push('Epic');
-      if (sub.filter_gog) stores.push('GOG');
-      if (sub.filter_humble) stores.push('Humble');
-      if (sub.filter_prime) stores.push('Prime Gaming');
+      // Only what a live scraper can emit. The GamerPower aggregator was the sole source of
+      // Ubisoft, EA/Origin, itch.io, Humble, Battle.net, "other" and every console/mobile
+      // platform; it was removed, so listing those toggles would report settings that cannot
+      // affect a single notification.
+      const stores = [
+        ['filter_steam', 'Steam'], ['filter_epic', 'Epic'], ['filter_gog', 'GOG'],
+        ['filter_prime', 'Prime Gaming'],
+      ].filter(([col]) => sub[col]).map(([, label]) => label);
 
-      const platforms = [];
-      if (sub.filter_windows) platforms.push('Windows');
-      if (sub.filter_mac) platforms.push('Mac');
-      if (sub.filter_linux) platforms.push('Linux');
+      const platforms = [
+        ['filter_windows', 'Windows'], ['filter_mac', 'Mac'], ['filter_linux', 'Linux'],
+      ].filter(([col]) => sub[col]).map(([, label]) => label);
 
       const types = [];
       if (sub.notify_free) types.push('Free to Keep');
@@ -207,26 +208,44 @@ async function freeGamesFilters(interaction) {
     const updates = [];
     const values = [];
 
-    if (storesStr !== null) {
-      const stores = storesStr.toLowerCase().split(',').map(s => s.trim());
-      updates.push('filter_steam = ?', 'filter_epic = ?', 'filter_gog = ?', 'filter_humble = ?', 'filter_prime = ?');
-      values.push(
-        stores.includes('steam') ? 1 : 0,
-        stores.includes('epic') ? 1 : 0,
-        stores.includes('gog') ? 1 : 0,
-        stores.includes('humble') ? 1 : 0,
-        stores.includes('prime') ? 1 : 0
-      );
+    // A named store/platform sets its column to 1 and everything unnamed in the same group
+    // to 0, so `stores:steam,epic` means exactly those two.
+    //
+    // These lists are the stores and platforms a live scraper can actually produce, NOT every
+    // column the schema has. The GamerPower aggregator that fed the rest was removed, so
+    // accepting `stores:itch` here would set a column nothing ever reads and report success.
+    const STORE_COLUMNS = {
+      steam: 'filter_steam', epic: 'filter_epic', gog: 'filter_gog',
+      prime: 'filter_prime',
+    };
+    const PLATFORM_COLUMNS = {
+      windows: 'filter_windows', mac: 'filter_mac', linux: 'filter_linux',
+    };
+
+    /** Apply a comma-separated selection to every column in its group. */
+    function applyGroup(input, columnMap) {
+      const chosen = new Set(input.toLowerCase().split(',').map(s => s.trim()).filter(Boolean));
+      const unknown = [...chosen].filter(c => !columnMap[c]);
+      // Every distinct column in the group, since aliases (ea/origin, ps/playstation) collide.
+      for (const col of new Set(Object.values(columnMap))) {
+        const on = [...chosen].some(c => columnMap[c] === col);
+        updates.push(`${col} = ?`);
+        values.push(on ? 1 : 0);
+      }
+      return unknown;
     }
 
-    if (platformsStr !== null) {
-      const platforms = platformsStr.toLowerCase().split(',').map(p => p.trim());
-      updates.push('filter_windows = ?', 'filter_mac = ?', 'filter_linux = ?');
-      values.push(
-        platforms.includes('windows') ? 1 : 0,
-        platforms.includes('mac') ? 1 : 0,
-        platforms.includes('linux') ? 1 : 0
-      );
+    const unknownNames = [];
+    if (storesStr !== null) unknownNames.push(...applyGroup(storesStr, STORE_COLUMNS));
+    if (platformsStr !== null) unknownNames.push(...applyGroup(platformsStr, PLATFORM_COLUMNS));
+
+    if (unknownNames.length) {
+      return interaction.editReply({
+        content: `I do not recognise: ${unknownNames.map(u => `\`${u}\``).join(', ')}\n\n` +
+          `**Stores:** ${[...new Set(Object.keys(STORE_COLUMNS))].join(', ')}\n` +
+          `**Platforms:** ${[...new Set(Object.keys(PLATFORM_COLUMNS))].join(', ')}\n\n` +
+          'Nothing was changed.'
+      });
     }
 
     if (freeToKeep !== null) {
@@ -300,7 +319,7 @@ async function freeGamesCurrent(interaction) {
     }
 
     const embed = new EmbedBuilder()
-      .setColor('#00FF00')
+      .setColor(themeColor(interaction.guildId, 'success'))
       .setTitle('Currently Available Free Games')
       .setDescription(`**${products.length}** free game(s) available right now`)
       .setTimestamp();

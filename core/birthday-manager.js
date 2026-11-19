@@ -3,11 +3,42 @@ import crypto from 'crypto';
 import pool from '../utils/db.js';
 import logger from '../utils/logger.js';
 import configCache from '../utils/configCache.js';
-import { validateBirthday, computeAge } from './birthday-helpers.js';
+import {
+  validateBirthday, computeAge, dateIn, isoDate, birthdaysOn, nextBirthdayDate, BIRTHDAY_ZONE,
+} from './birthday-helpers.js';
+import { themeColor } from './guild-theme.js';
 
 /**
  * Birthday Manager - Handles birthday tracking and announcements
  */
+/**
+ * The birthday announcement text: the server's message (dashboard "Birthday message") with {user}
+ * (a mention), {username}, {server} and {age} filled in, or the default. When the age is known and
+ * the message does not use {age}, the "Turning N today" line is added under it.
+ */
+export function birthdayText(template, { userId, name, server, age }) {
+  const own = String(template || '').trim();
+  const ageLine = age !== null && age !== undefined ? `\n🎂 Turning **${age}** today!` : '';
+  if (!own) return `Join us in wishing <@${userId}> a very happy birthday!${ageLine}`;
+  const text = own
+    .replaceAll('{user}', () => `<@${userId}>`)
+    .replaceAll('{username}', () => String(name ?? ''))
+    .replaceAll('{server}', () => String(server ?? ''))
+    .replaceAll('{age}', () => (age !== null && age !== undefined ? String(age) : ''));
+  return (own.includes('{age}') ? text : text + ageLine).slice(0, 4096);
+}
+
+/**
+ * The card type for a card the bot opens itself: the server's "Card type" (birthday page,
+ * birthday_config.default_card_type). The legacy value 'classic', and anything else unknown, is the
+ * group board, which is what the card page shows for it.
+ */
+export const BOT_CARD_TYPES = Object.freeze(['board', 'greeting_card', 'one_person']);
+export function cardTypeFor(config) {
+  const type = String(config?.default_card_type ?? '').trim();
+  return BOT_CARD_TYPES.includes(type) ? type : 'board';
+}
+
 class BirthdayManager {
   constructor(client) {
     this.client = client;
@@ -66,9 +97,12 @@ class BirthdayManager {
    * @param {Client} client - The bot client to use (default or custom bot)
    */
   async checkBirthdays(client = this.client) {
-    const today = new Date();
-    const month = today.getMonth() + 1;
-    const day = today.getDate();
+    // The date in New York, where the daily run fires at midnight. The server clock is UTC, so
+    // between 00:00 and 05:00 UTC (a restart, say) its own date is already tomorrow's.
+    const today = dateIn(BIRTHDAY_ZONE);
+    const { month, day } = today;
+    const todayIso = isoDate(today);
+    const matches = birthdaysOn(today);
 
     const botInfo = client.isDefaultBot ? 'default bot' : `custom bot ${client.botId}`;
     logger.info(`[BirthdayManager] Checking birthdays for ${month}/${day} (${botInfo})`);
@@ -76,7 +110,7 @@ class BirthdayManager {
     try {
       // Build guild filter based on bot assignment to prevent race conditions
       let guildFilter = '';
-      const params = [month, day];
+      const params = [...matches.flatMap(d => [d.month, d.day]), todayIso];
 
       if (client.isDefaultBot) {
         // Default bot handles guilds NOT assigned to any custom bot
@@ -89,7 +123,9 @@ class BirthdayManager {
       }
 
       const [birthdays] = await pool.execute(
-        `SELECT user_id, guild_id FROM user_birthdays WHERE month = ? AND day = ? AND (last_announced IS NULL OR last_announced < CURDATE()) ${guildFilter}`,
+        `SELECT user_id, guild_id FROM user_birthdays
+          WHERE (${matches.map(() => '(month = ? AND day = ?)').join(' OR ')})
+            AND (last_announced IS NULL OR last_announced < ?) ${guildFilter}`,
         params
       );
 
@@ -103,7 +139,7 @@ class BirthdayManager {
       for (const { user_id, guild_id } of birthdays) {
         // Get the correct bot client for this guild
         const guildClient = global.botManager?.getClientForGuild(guild_id) || client;
-        await this.announceBirthday(user_id, guild_id, guildClient);
+        await this.announceBirthday(user_id, guild_id, guildClient, todayIso);
       }
     } catch (error) {
       logger.error(`[BirthdayManager] Error checking birthdays: ${error.message}`);
@@ -116,7 +152,7 @@ class BirthdayManager {
    * @param {string} guildId - The guild ID
    * @param {Client} guildClient - The bot client for this guild (supports multi-bot)
    */
-  async announceBirthday(userId, guildId, guildClient = this.client) {
+  async announceBirthday(userId, guildId, guildClient = this.client, dayIso = isoDate(dateIn(BIRTHDAY_ZONE))) {
     try {
       const guild = await guildClient.guilds.fetch(guildId).catch(() => null);
       if (!guild) {
@@ -173,10 +209,7 @@ class BirthdayManager {
       // Create birthday embed
       const embed = new EmbedBuilder()
         .setTitle(`Happy Birthday ${member.displayName}!`)
-        .setDescription(
-          `Join us in wishing <@${userId}> a very happy birthday!` +
-          (age !== null ? `\n🎂 Turning **${age}** today!` : '')
-        )
+        .setDescription(birthdayText(config.message_template, { userId, name: member.displayName, server: guild.name, age }))
         .setColor('#FF69B4')
         .setThumbnail(member.user.displayAvatarURL({ extension: 'png', size: 256 }))
         .setFooter({ text: `${guild.name} • Birthday Celebration` })
@@ -187,19 +220,25 @@ class BirthdayManager {
         embeds: [embed]
       });
 
-      // Assign birthday role if configured
+      // Assign birthday role if configured. birthday_role_given_at starts its 24 hours
+      // (jobs/birthday-scheduler.js takes it back).
+      let roleGiven = false;
       if (config.birthday_role_id) {
         const role = guild.roles.cache.get(config.birthday_role_id);
         if (role) {
-          await member.roles.add(role).catch(err => {
+          roleGiven = await member.roles.add(role).then(() => true).catch(err => {
             logger.warn(`[BirthdayManager] Failed to add birthday role: ${err.message}`);
+            return false;
           });
-          logger.info(`[BirthdayManager] Assigned birthday role to ${userId} in ${guildId}`);
+          if (roleGiven) logger.info(`[BirthdayManager] Assigned birthday role to ${userId} in ${guildId}`);
         }
       }
 
-      // Mark as announced today to prevent duplicates on restart
-      await pool.execute('UPDATE user_birthdays SET last_announced = CURDATE() WHERE user_id = ? AND guild_id = ?', [userId, guildId]);
+      // Mark as announced for this (New York) day to prevent duplicates on restart
+      await pool.execute(
+        'UPDATE user_birthdays SET last_announced = ?, birthday_role_given_at = IF(?, NOW(), birthday_role_given_at) WHERE user_id = ? AND guild_id = ?',
+        [dayIso, roleGiven ? 1 : 0, userId, guildId]
+      );
 
       logger.info(`[BirthdayManager] Announced birthday for ${member.user.tag} in ${guild.name}`);
 
@@ -224,7 +263,8 @@ class BirthdayManager {
       for (let d = 1; d <= 14; d++) {
         const check = new Date(today);
         check.setDate(check.getDate() + d);
-        datesToCheck.push({ month: check.getMonth() + 1, day: check.getDate() });
+        // 28 February in a common year also stands for the 29th.
+        datesToCheck.push(...birthdaysOn({ year: check.getFullYear(), month: check.getMonth() + 1, day: check.getDate() }));
       }
 
       // Build WHERE clause for all dates in the range
@@ -264,20 +304,27 @@ class BirthdayManager {
         if (!config.enabled) continue;
         if (config.cards_enabled === 0) continue; // Cards explicitly disabled
 
-        // Create the card
-        const shareToken = crypto.randomBytes(16).toString('hex');
-        await pool.execute(
-          'INSERT INTO birthday_cards (guild_id, user_id, card_name, birthday_month, birthday_day, share_token, slug) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          [birthday.guild_id, birthday.user_id, `Happy Birthday ${member.displayName}`, birthday.month, birthday.day, shareToken, `happy-birthday-${member.displayName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').substring(0, 40)}-${shareToken.substring(0, 12)}`]
-        );
-
-        // Post "card is open" announcement
+        // Resolve the member BEFORE writing anything. Both the card name and the slug are
+        // built from their display name, and `member` used to be read here while still in
+        // its temporal dead zone — it was declared below, after the INSERT — so every
+        // upcoming card threw "Cannot access 'member' before initialization" and no card
+        // was ever created. Resolving first also stops us inserting an orphan
+        // birthday_cards row for someone who has since left the guild.
         const guildClient = global.botManager?.getClientForGuild(birthday.guild_id) || client;
         const guild = guildClient.guilds.cache.get(birthday.guild_id);
         if (!guild) continue;
 
         const member = await guild.members.fetch(birthday.user_id).catch(() => null);
         if (!member) continue;
+
+        // Create the card
+        const shareToken = crypto.randomBytes(16).toString('hex');
+        await pool.execute(
+          'INSERT INTO birthday_cards (guild_id, user_id, card_name, birthday_month, birthday_day, share_token, card_type, slug) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+          [birthday.guild_id, birthday.user_id, `Happy Birthday ${member.displayName}`, birthday.month, birthday.day, shareToken, cardTypeFor(config), `happy-birthday-${member.displayName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').substring(0, 40)}-${shareToken.substring(0, 12)}`]
+        );
+
+        // Post "card is open" announcement
 
         // Use card_channel_id for the "sign the card" post (hidden from birthday person)
         // Falls back to announcement_channel_id if no separate card channel is set
@@ -358,7 +405,7 @@ class BirthdayManager {
       const embed = new EmbedBuilder()
         .setTitle('🎁 Your Birthday Card Has Arrived!')
         .setDescription(`**${sigCount}** people signed your birthday card! Open it to see all the messages:`)
-        .setColor('#FFD700')
+        .setColor(themeColor(guildId, 'warning'))
         .setFooter({ text: 'Happy Birthday!' })
         .setTimestamp();
 
@@ -486,9 +533,20 @@ class BirthdayManager {
    */
   async removeBirthday(userId, guildId) {
     try {
-      await pool.execute(
+      const [result] = await pool.execute(
         'DELETE FROM user_birthdays WHERE user_id = ? AND guild_id = ?',
         [userId, guildId]
+      );
+
+      // Report the truth: nothing deleted means they had no birthday stored, and the
+      // caller says so instead of claiming a removal that never happened.
+      if (result.affectedRows === 0) return false;
+
+      // An unposted card is scaffolding for a birthday that no longer exists. Drop it
+      // (signatures cascade) so nobody signs a card that will never be delivered.
+      await pool.execute(
+        'DELETE FROM birthday_cards WHERE guild_id = ? AND user_id = ? AND is_posted = 0',
+        [guildId, userId]
       );
 
       logger.info(`[BirthdayManager] Removed birthday for user ${userId} in guild ${guildId}`);
@@ -520,12 +578,9 @@ class BirthdayManager {
       );
 
       for (const birthday of allBirthdays) {
-        const birthdayDate = new Date(today.getFullYear(), birthday.month - 1, birthday.day);
-
-        // If birthday has passed this year, check next year
-        if (birthdayDate < today) {
-          birthdayDate.setFullYear(today.getFullYear() + 1);
-        }
+        // This year's, or next year's once it has passed; 29 February is kept on the 28th in
+        // years without one (new Date(y, 1, 29) would roll over to 1 March).
+        const birthdayDate = nextBirthdayDate(birthday.month, birthday.day, today);
 
         const daysUntil = Math.round((birthdayDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
 
@@ -554,17 +609,19 @@ class BirthdayManager {
   /**
    * Configure birthday settings for a guild
    */
-  async configureBirthdays(guildId, channelId, enabled = true, roleId = null, template = null) {
+  async configureBirthdays(guildId, channelId, enabled = true, roleId = undefined, template = undefined) {
     try {
+      // roleId / template left undefined keep what is saved (set on the dashboard, say); null clears.
+      const keep = (col, value) => (value === undefined ? `${col} = ${col}` : `${col} = VALUES(${col})`);
       await pool.execute(
         `INSERT INTO birthday_config (guild_id, announcement_channel_id, enabled, birthday_role_id, message_template)
          VALUES (?, ?, ?, ?, ?)
          ON DUPLICATE KEY UPDATE
             announcement_channel_id = VALUES(announcement_channel_id),
             enabled = VALUES(enabled),
-            birthday_role_id = VALUES(birthday_role_id),
-            message_template = VALUES(message_template)`,
-        [guildId, channelId, enabled ? 1 : 0, roleId, template]
+            ${keep('birthday_role_id', roleId)},
+            ${keep('message_template', template)}`,
+        [guildId, channelId, enabled ? 1 : 0, roleId ?? null, template ?? null]
       );
 
       logger.info(`[BirthdayManager] Configured birthdays for guild ${guildId}`);

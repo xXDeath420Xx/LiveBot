@@ -22,6 +22,7 @@ export { default as CFQuests } from './cf-quests.js';
 export { default as CFMore } from './cf-more.js';
 export { default as CFSkills } from './cf-skills.js';
 export { default as CFLeaderboard } from './cf-leaderboard.js';
+export { default as CFSeasonStrip } from './cf-season-strip.js';
 export { default as CFAchievements } from './cf-achievements.js';
 
 // New feature components

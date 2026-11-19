@@ -196,7 +196,7 @@ router.post('/claim', async (req, res) => {
 
         await conn.commit();
 
-        logger.info('[DailyRewards] Claimed', {
+        logger.debug('[DailyRewards] Claimed', {
             playerId,
             streak: newStreak,
             rewardType: reward.type,

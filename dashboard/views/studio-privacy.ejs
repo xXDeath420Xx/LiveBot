@@ -1,0 +1,144 @@
+<%#
+  GET /studio/privacy (dashboard/routes/legal-pages.js). Locals: user, facts (STUDIO_FACTS).
+  Every statement was checked against desktop/studio/src on 2026-11-19: config.js (settings, secrets), local-key.js,
+  logger.js (redaction, 1 MB x 5), engine-client.js (hello, state, event, request), main.js (fitState, defaultDeviceName,
+  syncSounds, openExternal), obs.js (events, replay file name only), voice.js, updater.js, obs-config.js, vod-safe.js,
+  package.json (dependencies), renderer/index.html (Content-Security-Policy), and electron-updater 6.8.11 AppUpdater.js
+  (x-user-staging-id; from 0.2.5 updater.js blankStagingId() sends the nil UUID and deletes .updaterId, H-767). Server side: migrations 454-457, core/stream-bot/studio.js (settings.studio), privacy.js.
+  tests/legal-studio-pages.test.js re-checks the facts that can drift (defaults, log size, dependencies, retention).
+%>
+<!DOCTYPE html>
+<html lang="en" data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>">
+<head>
+<%- include('partials/site-head', { title: 'CertiFried Studio privacy · CertiFried', description: 'Exactly what CertiFried Studio keeps on your PC, what it sends to CertiFried and why, what never leaves your PC, and how to export, delete, unpair and revoke.', path: '/studio/privacy' }) %>
+    <link rel="stylesheet" href="/css/cf-studio-pages.css">
+</head>
+<body class="cfs-body">
+<%- include('partials/site-header', { active: '', user: locals.user || null, returnTo: '/studio/privacy' }) %>
+<% const _f = locals.facts || {}; %>
+    <main id="main-content" tabindex="-1" class="cfs-main">
+        <div class="cfs-pagehead">
+            <span class="cfs-eyebrow">CertiFried Studio</span>
+            <h1>Studio privacy</h1>
+            <p class="cfs-lede">What the Windows app keeps on your PC, what it sends to CertiFried and why, and what never leaves your PC. This page covers the app; the <a href="/privacy">Privacy Policy</a> covers everything else.</p>
+            <p class="cfs-meta">Last updated November 19, 2026. Checked against Studio's source code.</p>
+        </div>
+        <%- include('partials/studio-nav', { current: 'privacy' }) %>
+
+        <div class="cfs-doc">
+            <nav class="cfs-toc" aria-label="On this page">
+                <h2>On this page</h2>
+                <ol>
+                    <li><a href="#short-version">The short version</a></li>
+                    <li><a href="#on-your-pc">Kept on your PC</a></li>
+                    <li><a href="#sent">Sent to CertiFried, and why</a></li>
+                    <li><a href="#never-leaves">Never leaves your PC</a></li>
+                    <li><a href="#no-telemetry">No telemetry</a></li>
+                    <li><a href="#on-the-server">Kept on the server</a></li>
+                    <li><a href="#export-delete">Export and delete</a></li>
+                    <li><a href="#unpair">Unpair, revoke, uninstall</a></li>
+                    <li><a href="#third-parties">Third parties</a></li>
+                    <li><a href="#changes">Changes to this page</a></li>
+                </ol>
+            </nav>
+            <div class="cfs-prose">
+                <h2 id="short-version">The short version</h2>
+                <ul>
+                    <li>Studio has no analytics, telemetry, crash reporting or advertising code.</li>
+                    <li>Your OBS password and your microphone audio never leave your PC.</li>
+                    <li>Studio tells CertiFried the names of your OBS scenes, sources, audio sources and filters, and of your sounds, so the dashboard can offer them in the automation editor. It never sends video, audio or the contents of your files.</li>
+                    <li>Studio connects to certifriedmultitool.com, to OBS on your PC, and to web addresses you put in a Play a sound action. Nothing else.</li>
+                </ul>
+
+                <h2 id="on-your-pc">Kept on your PC</h2>
+                <p>Everything is in <code><%= _f.dataDir %></code> unless the table says otherwise.</p>
+                <div class="cfs-table-wrap"><table class="cfs-table-stack">
+                    <thead><tr><th>What</th><th>Where</th><th>How it is protected</th></tr></thead>
+                    <tbody>
+                        <tr><td>Settings: server address, this PC's device name, OBS address and port, output device and volume, hotkeys, voice options and phrases, app options</td><td data-label="Where"><code>settings.json</code></td><td data-label="Protection">Your Windows account's folder permissions</td></tr>
+                        <tr><td>Device token (from pairing) and OBS WebSocket password</td><td data-label="Where"><code>secrets.json</code></td><td data-label="Protection">Encrypted with Windows' own protection for your account (DPAPI). Never stored in plain text. See the note below.</td></tr>
+                        <tr><td>Fallback key</td><td data-label="Where"><code>local-key.bin</code> (only while DPAPI is not working)</td><td data-label="Protection">A random key, readable only by your Windows user. Deleted once DPAPI works again.</td></tr>
+                        <tr><td>Log files</td><td data-label="Where"><code>logs\studio.log</code> and up to <%= _f.logKeep %> older files of <%= _f.logMb %> MB each</td><td data-label="Protection">Device tokens, pairing codes, passwords and authorisation headers are removed before anything is written</td></tr>
+                        <tr><td>Your own sounds, and copies of the sounds you uploaded to the dashboard</td><td data-label="Where"><code>Sounds</code> and <code>Dashboard sounds</code></td><td data-label="Protection">Folder permissions</td></tr>
+                        <tr><td>The phrase list for voice commands</td><td data-label="Where"><code>voice\voice-phrases.json</code></td><td data-label="Protection">Folder permissions. No audio is ever saved.</td></tr>
+                        <tr><td>Screenshots an automation takes</td><td data-label="Where"><code><%= _f.screenshotsDir %></code></td><td data-label="Protection">Folder permissions</td></tr>
+                        <tr><td>Nothing for updates: versions before 0.2.5 kept a random ID from the update component in <code>.updaterId</code>; 0.2.5 and later delete that file and never make one</td><td data-label="Where"><code>.updaterId</code> (removed)</td><td data-label="Protection">Not kept</td></tr>
+                        <tr><td>Backups Studio makes before changing OBS files</td><td data-label="Where">Next to the file, in OBS's folder (<code>%APPDATA%\obs-studio</code>)</td><td data-label="Protection">Copies of your own OBS settings</td></tr>
+                    </tbody>
+                </table></div>
+                <div class="cfs-note"><p><strong>When Windows' protection is not working.</strong> After some Windows updates, DPAPI refuses every request until the PC restarts. Studio then encrypts the token and OBS password with AES-256-GCM under the fallback key above, and moves them back to DPAPI by itself once it works again. Against other programs running as you, this is about as strong as DPAPI. Against someone who copies your whole disk, it is weaker, because the key sits next to the data instead of being tied to your Windows password. If even the key cannot be written, Studio keeps the secrets in memory only and asks for them again next time.</p></div>
+
+                <h2 id="sent">Sent to CertiFried, and why</h2>
+                <p>Everything goes over HTTPS or an encrypted WebSocket to the server address in Studio's Settings (certifriedmultitool.com unless you changed it).</p>
+                <div class="cfs-table-wrap"><table class="cfs-table-stack">
+                    <thead><tr><th>What</th><th>When</th><th>Why</th></tr></thead>
+                    <tbody>
+                        <tr><td>The pairing code or sign-in request, a device name (<code><%= _f.deviceName %></code> unless you type another), Studio's version and what it can do (OBS, sound, hotkeys)</td><td data-label="When">Once, when you pair</td><td data-label="Why">Add this PC to your Devices list. The PC name is only used as the default device name.</td></tr>
+                        <tr><td>The device token, and a small heartbeat</td><td data-label="When">On connect, then every 20 seconds or so</td><td data-label="Why">Prove the connection is yours and notice when it drops</td></tr>
+                        <tr><td>OBS report: whether OBS is connected, its version, studio mode, the scene on air, the names of your scenes, of the sources in each, of your audio and other sources (with their type), of your filters, and the names of your sounds</td><td data-label="When">When it changes</td><td data-label="Why">Suggest these names in the automation editor and show the scene on air on Devices</td></tr>
+                        <tr><td>VOD protection status: on or off, the reason, which tracks are the live and VOD tracks, whether OBS is streaming or recording</td><td data-label="When">When it changes</td><td data-label="Why">Song requests play only while your VOD is protected</td></tr>
+                        <tr><td>OBS events: scene changed (with the scene names), streaming, recording, replay buffer and virtual camera started or stopped, and the file name of a saved replay (not its folder)</td><td data-label="When">As they happen</td><td data-label="Why">They can start your automations</td></tr>
+                        <tr><td>A recognised voice phrase and how confident the match was</td><td data-label="When">When you say one of your phrases</td><td data-label="Why">Start the automation it belongs to</td></tr>
+                        <tr><td>The result of each action: done or failed, with a short reason and small details (the scene switched to, a screenshot's file name)</td><td data-label="When">After each action</td><td data-label="Why">Your Run history</td></tr>
+                        <tr><td>Requests for your automation list, voice phrases, sound list, dock addresses and the music player address; downloads of your dashboard sounds</td><td data-label="When">On connect and when they change</td><td data-label="Why">Hotkeys, voice commands, sounds, docks and song requests</td></tr>
+                        <tr><td>Update check: a request for <code>latest.yml</code>. No ID that tells your PC apart: from 0.2.5 the installed copy's update component (electron-updater) sends the same all-zero ID from every PC instead of a random one from <code>.updaterId</code> (CertiFried does not use staged roll-outs). Versions before 0.2.5 sent that random ID; CertiFried never read or stored it. The portable copy sends no ID.</td><td data-label="When">Shortly after start, then every <%= _f.updateHours %> hours, unless you turn it off</td><td data-label="Why">Offer new versions</td></tr>
+                    </tbody>
+                </table></div>
+                <p>Studio also opens your web browser on certifriedmultitool.com when you choose Sign in with CertiFried, Guide or Devices. It only opens addresses on certifriedmultitool.com.</p>
+
+                <h2 id="never-leaves">Never leaves your PC</h2>
+                <ul>
+                    <li>Your OBS WebSocket password. Use my OBS settings reads OBS's WebSocket settings file only when you click it, and stores the password like any other secret.</li>
+                    <li>Microphone audio. Voice commands are recognised by Windows on your PC; Studio passes the audio straight to the recogniser and records nothing. The microphone is off until you turn it on.</li>
+                    <li>Your log files, unless you send them to support yourself (Settings, Open log folder).</li>
+                    <li>The contents of your sound files (only their names are reported), your screenshots, and your hotkey settings.</li>
+                    <li>Your stream key, OBS's other settings, video, and anything else on your PC.</li>
+                </ul>
+
+                <h2 id="no-telemetry">No telemetry</h2>
+                <p>Studio contains no analytics, usage tracking, crash reporting or advertising code. What we checked: its only dependencies are electron-updater (updates), obs-websocket-js (OBS), uiohook-napi (pressing and listening for keys) and ws (the connection to CertiFried); its window is not allowed to load anything from the internet; and the only addresses in its code are certifriedmultitool.com and OBS on your PC. A sound action you write with an https address makes Studio download that address, which the site behind it can see. Errors are written to your local log and nowhere else. The source code is public, so you can check this yourself.</p>
+
+                <h2 id="on-the-server">Kept on the server</h2>
+                <div class="cfs-table-wrap"><table class="cfs-table-stack">
+                    <thead><tr><th>What</th><th>How long</th></tr></thead>
+                    <tbody>
+                        <tr><td>The device (name, app version, capabilities, last seen, a hash of the token)</td><td data-label="How long">Until you delete your data. Revoke stops it at once and it stays listed as revoked.</td></tr>
+                        <tr><td>The latest OBS report (each new one replaces it)</td><td data-label="How long">Until you delete your data</td></tr>
+                        <tr><td>OBS events and voice phrases, in your event log</td><td data-label="How long">90 days</td></tr>
+                        <tr><td>Actions sent to Studio and their results</td><td data-label="How long">7 days</td></tr>
+                        <tr><td>Run history</td><td data-label="How long">30 days</td></tr>
+                        <tr><td>Pairing codes (as hashes; each works for 10 minutes)</td><td data-label="How long">1 day</td></tr>
+                        <tr><td>Sounds you upload to the dashboard</td><td data-label="How long">Until you delete them</td></tr>
+                    </tbody>
+                </table></div>
+                <p>The periods come from the retention table the server enforces every night. <a href="/legal/data">Data we collect</a> shows the live values for everything CertiFried keeps.</p>
+
+                <h2 id="export-delete">Export and delete</h2>
+                <p>Use the CertiFried bot's <code>/privacy</code> command in any server or in a direct message with the bot:</p>
+                <ul>
+                    <li><code>/privacy export</code> sends you a file with your stream bot profile, devices (without token hashes), automations, the newest events and runs, the last OBS report and your sound names. Tokens and keys are never included.</li>
+                    <li><code>/privacy delete</code> deletes your stream bot profile and everything under it, including your devices, events, runs and uploaded sound files. Studio on your PC then stops connecting; delete its folder too (see below).</li>
+                </ul>
+                <p>If you cannot use the command, email <a href="mailto:support@certifriedmultitool.com">support@certifriedmultitool.com</a>.</p>
+
+                <h2 id="unpair">Unpair, revoke, uninstall</h2>
+                <ul>
+                    <li><strong>Revoke</strong>: on the dashboard, Stream bot, <a href="/stream/bot/devices">Devices</a>, choose Revoke next to the PC. It is disconnected at once and its token stops working. Dock keys are revoked the same way.</li>
+                    <li><strong>Unpair</strong>: in Studio, Settings, Unpair this PC. The token is deleted from your PC. Revoke it on Devices too.</li>
+                    <li><strong>Uninstall</strong>: Windows Settings, Apps. Uninstalling leaves your settings so a reinstall keeps them; to remove everything, also delete <code><%= _f.dataDir %></code> and <code><%= _f.screenshotsDir %></code>. Backups Studio made in OBS's folder end in <code>.certifried-backup-&lt;time&gt;</code> and can be deleted.</li>
+                </ul>
+
+                <h2 id="third-parties">Third parties</h2>
+                <p>Studio itself talks to no third-party service, except a web address you put in a Play a sound action. Voice recognition uses Windows' built-in offline recogniser. Our website is served through Cloudflare, so Studio's connections to certifriedmultitool.com pass through Cloudflare. What the CertiFried server shares with Twitch, Kick, tip services and music services is in the <a href="/privacy#information-sharing">Privacy Policy</a>.</p>
+
+                <h2 id="changes">Changes to this page</h2>
+                <p>When Studio starts sending something new, this page changes before the version that sends it is published.</p>
+                <ul>
+                    <li>2026-11-19: First version, for Studio 0.2.4.</li>
+                </ul>
+            </div>
+        </div>
+    </main>
+<%- include('partials/site-footer') %>
+</body>
+</html>

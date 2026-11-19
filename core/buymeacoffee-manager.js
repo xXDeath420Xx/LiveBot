@@ -4,6 +4,16 @@ import logger from '../utils/logger.js';
 import encryption from '../utils/encryption.js';
 
 const LOG_TAG = '[BMC]';
+
+/** Did this Discord user turn Buy Me a Coffee on as a stream bot tip source (core/stream-bot)? */
+async function streamBotWantsUser(userId) {
+    try {
+        const { streamBotBmacOwners } = await import('./stream-bot/index.js');
+        return (await streamBotBmacOwners()).includes(String(userId));
+    } catch {
+        return false;
+    }
+}
 const BMC_API_BASE = 'https://developers.buymeacoffee.com/api/v1';
 
 /**
@@ -270,7 +280,7 @@ export default class BuyMeACoffeeManager {
     async setAnnounce(userId, guildId, channelId, addedBy) {
         const link = await this.getLink(userId);
         if (!link) {
-            throw new Error('Link your Buy Me a Coffee first with /buymeacoffee link.');
+            throw new Error('Link your Buy Me a Coffee first with /creator buymeacoffee link.');
         }
         await pool.execute(
             `INSERT INTO bmc_announce (user_id, guild_id, channel_id, enabled, added_by)
@@ -332,7 +342,8 @@ export default class BuyMeACoffeeManager {
             }
 
             const targets = await this.getAnnounceTargets(userId);
-            if (targets.length === 0) return 0;
+            // No announce target: still poll when the user turned Buy Me a Coffee on as a stream bot tip source.
+            if (targets.length === 0 && !(await streamBotWantsUser(userId))) return 0;
 
             const { supporters, subscriptions, extras } = await this.fetchAll(apiKey);
 
@@ -360,6 +371,12 @@ export default class BuyMeACoffeeManager {
             .sort((a, b) => (BigInt(a.id) < BigInt(b.id) ? -1 : 1));
 
         if (fresh.length === 0) return 0;
+
+        // Stream bot tip events (core/stream-bot). The normaliser ignores items older than an hour, so a first
+        // poll after linking does not replay old supporters.
+        for (const item of fresh) {
+            import('./stream-bot/index.js').then(({ onTip }) => onTip('bmac', item, userId)).catch(() => {});
+        }
 
         let announced = 0;
         let maxSeen = lastId;

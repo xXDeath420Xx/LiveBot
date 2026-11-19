@@ -1,0 +1,168 @@
+{
+  "theme": "internet",
+  "label": "Internet & Tech",
+  "questions": [
+    {
+      "slug": "net-first-username",
+      "text": "What was your first ever username, and does any part of it survive today?"
+    },
+    {
+      "slug": "net-rabbit-hole",
+      "text": "What's the deepest rabbit hole you've gone down recently, and how did it start?"
+    },
+    {
+      "slug": "net-tab-count",
+      "text": "How many tabs are open right now, and what's the oldest one you refuse to close?"
+    },
+    {
+      "slug": "net-app-deleted",
+      "text": "What app did you delete and never reinstall, and did your life measurably improve?"
+    },
+    {
+      "slug": "net-meme-favourite",
+      "text": "What meme format will you defend forever, and which one needs to be retired?"
+    },
+    {
+      "slug": "net-online-fight",
+      "text": "What's the dumbest thing you've ever argued about online?"
+    },
+    {
+      "slug": "net-tech-hoard",
+      "text": "What old device is sitting in a drawer that you can't bring yourself to throw out?"
+    },
+    {
+      "slug": "net-password-shame",
+      "text": "Without saying it — how bad was your password hygiene at its worst?"
+    },
+    {
+      "slug": "net-scam-close",
+      "text": "Have you ever nearly fallen for a scam? What tipped you off, or didn't?"
+    },
+    {
+      "slug": "net-notification-policy",
+      "text": "How many notifications do you actually allow through, and what's your unread count?"
+    },
+    {
+      "slug": "net-setup-brag",
+      "text": "Describe your setup — desk, screens, chair, cable management. Be honest about the cables."
+    },
+    {
+      "slug": "net-favourite-shortcut",
+      "text": "What keyboard shortcut or hidden feature do you use constantly that most people don't know about?"
+    },
+    {
+      "slug": "net-ai-usage",
+      "text": "What do you actually use AI tools for day to day, and where have they been useless?"
+    },
+    {
+      "slug": "net-website-dead",
+      "text": "What website that no longer exists do you miss the most?"
+    },
+    {
+      "slug": "net-doomscroll",
+      "text": "What's your worst digital habit, and have you tried to break it?"
+    },
+    {
+      "slug": "net-tech-support-family",
+      "text": "Are you the family tech support? What's the most repeated question you get?"
+    },
+    {
+      "slug": "net-purchase-best",
+      "text": "What's the best piece of tech you've bought in the last five years, price aside?"
+    },
+    {
+      "slug": "net-purchase-worst",
+      "text": "What gadget did you buy that's now a very expensive paperweight?"
+    },
+    {
+      "slug": "net-online-community",
+      "text": "Which online community shaped you the most, and what did you take from it?"
+    },
+    {
+      "slug": "net-privacy-line",
+      "text": "Where's your personal line on privacy versus convenience, and where have you already crossed it?"
+    },
+    {
+      "slug": "net-search-history",
+      "text": "What's the most innocent-but-unhinged thing in your search history right now?"
+    },
+    {
+      "slug": "net-emoji-signature",
+      "text": "What's the emoji you use most, and what does it actually mean when you use it?",
+      "group": "most-used-emoji"
+    },
+    {
+      "slug": "net-lost-data",
+      "text": "What's the worst thing you've ever lost to a dead drive, a wiped phone, or a failed backup?"
+    },
+    {
+      "slug": "net-phone-screen-time",
+      "text": "What's your weekly screen time number and how do you feel about it?"
+    },
+    {
+      "slug": "net-old-forum-name",
+      "text": "What's the strangest niche forum, wiki, or subreddit you've been genuinely active in?"
+    },
+    {
+      "slug": "net-tech-learn",
+      "text": "What tech skill would you most like to learn, and what's actually stopping you?"
+    },
+    {
+      "slug": "net-typing-speed",
+      "text": "How fast do you type, and did you ever learn properly or just develop your own system?"
+    },
+    {
+      "slug": "net-photos-count",
+      "text": "How many photos are on your phone, and when did you last actually go back through them?"
+    },
+    {
+      "slug": "net-desktop-chaos",
+      "text": "Is your desktop a clean grid or 400 files named 'final_v2_actual'? Show us your organisational philosophy."
+    },
+    {
+      "slug": "net-app-cant-quit",
+      "text": "What app do you complain about constantly and refuse to leave?"
+    },
+    {
+      "slug": "net-fixed-yourself",
+      "text": "What's something you fixed yourself instead of paying someone, and did it hold?"
+    },
+    {
+      "slug": "net-online-vs-real",
+      "text": "Are you the same person online as you are in a room? What's different?"
+    },
+    {
+      "slug": "net-first-purchase-online",
+      "text": "What was the first thing you ever bought over the internet, and was it terrifying at the time?"
+    },
+    {
+      "slug": "net-tech-prediction",
+      "text": "What do you think will look completely absurd about today's technology in twenty years?",
+      "group": "future-absurdity"
+    },
+    {
+      "slug": "net-autocorrect",
+      "text": "What's the worst thing autocorrect has ever done to you?"
+    },
+    {
+      "slug": "net-cloud-vs-local",
+      "text": "Do you back things up, or are you living on borrowed time? Be honest."
+    },
+    {
+      "slug": "net-favourite-tool",
+      "text": "What's one small piece of software you'd pay for again immediately if it vanished?"
+    },
+    {
+      "slug": "net-online-anonymous",
+      "text": "How anonymous are you online, and has that changed over the years?"
+    },
+    {
+      "slug": "net-video-algorithm",
+      "text": "What has your recommended feed decided you are into? Is it right?"
+    },
+    {
+      "slug": "net-typed-deleted",
+      "text": "How often do you type out a whole reply and then delete it? What was the last one?"
+    }
+  ]
+}

@@ -2,6 +2,7 @@
  * RPG Inventory subcommand handlers
  */
 import { EmbedBuilder } from 'discord.js';
+import { themeColor } from '../../../../core/guild-theme.js';
 
 export async function handleInventory(interaction, subcommand, characterManager, shopManager) {
     const character = await characterManager.getCharacter(interaction.user.id, interaction.guild.id);
@@ -34,7 +35,7 @@ async function handleView(interaction, character, characterManager) {
     }
 
     const embed = new EmbedBuilder()
-        .setColor('#E67E22')
+        .setColor(themeColor(interaction.guildId, 'warning'))
         .setTitle(`${character.character_name}'s Inventory`)
         .setDescription(`Total Items: ${items.length}`);
 

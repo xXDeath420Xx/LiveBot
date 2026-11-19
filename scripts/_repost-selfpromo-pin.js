@@ -2,15 +2,18 @@ import dotenv from 'dotenv';
 dotenv.config();
 import { Client, GatewayIntentBits, EmbedBuilder } from 'discord.js';
 import mysql from 'mysql2/promise';
-const { default: encryption } = await import('../utils/encryption.js');
+const { resolveBotForGuild } = await import('../utils/bot-resolver.js');
+
+// The acting bot comes from guild_bot_mapping — never pinned here.
+const GUILD_ID = '1485188364318539837'; // Team MANHANDS — owns the channel below
 
 const pool = mysql.createPool({
     host: process.env.DB_HOST, user: process.env.DB_USER,
     password: process.env.DB_PASSWORD, database: process.env.DB_NAME,
 });
 
-const [bots] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id = ?', ['1486807000854823155']);
-const token = encryption.decrypt(JSON.parse(bots[0].bot_token));
+const bot = await resolveBotForGuild(GUILD_ID, { db: pool });
+const token = bot.token;
 
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages] });
 await client.login(token);
@@ -27,7 +30,7 @@ const embed = new EmbedBuilder()
         '> 🔔 **Subscribe to your stream** — live notifications when you go live\n' +
         '> 📝 **Edit your announcement** when you go offline\n' +
         '> 💬 **DM you a confirmation** when your stream is tracked\n\n' +
-        '**Supported platforms:** Twitch, YouTube, Kick, TikTok, Trovo, Facebook, Instagram\n\n' +
+        '**Supported platforms:** Twitch, YouTube, Kick, TikTok, Rumble, Facebook, Instagram\n\n' +
         '**How to use:**\n' +
         '1. Paste your stream URL\n' +
         '2. Your message will be auto-deleted after processing\n' +

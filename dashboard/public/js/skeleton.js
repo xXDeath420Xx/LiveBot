@@ -19,9 +19,9 @@
         .skeleton {
             background: linear-gradient(
                 90deg,
-                rgba(255, 255, 255, 0.03) 0%,
-                rgba(255, 255, 255, 0.08) 50%,
-                rgba(255, 255, 255, 0.03) 100%
+                color-mix(in srgb, var(--cf-text, #fff) 3%, transparent) 0%,
+                color-mix(in srgb, var(--cf-text, #fff) 8%, transparent) 50%,
+                color-mix(in srgb, var(--cf-text, #fff) 3%, transparent) 100%
             );
             background-size: 200% 100%;
             animation: skeleton-shimmer 1.5s infinite;

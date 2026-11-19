@@ -4,6 +4,7 @@ import pool from '../../utils/db.js';
 import fetch from 'node-fetch';
 import encryption from '../../utils/encryption.js';
 import logger from '../../utils/logger.js';
+import { completeTwitchLink } from './link-twitch.js';
 
 const router = express.Router();
 
@@ -78,6 +79,9 @@ router.get('/auth/twitch', (req, res) => {
     // Store validated return URL in session
     if (req.session) {
         req.session.twitchReturnTo = returnTo;
+        // Starting a schedule login cancels any half-finished member link, so an abandoned link
+        // cannot leave a stale flag behind and divert this callback into the wrong flow.
+        delete req.session.twitchLinkFlow;
     }
 
     const params = new URLSearchParams({
@@ -94,6 +98,13 @@ router.get('/auth/twitch', (req, res) => {
 // Twitch OAuth callback
 router.get('/auth/twitch/callback', async (req, res) => {
     const { code, error } = req.query;
+
+    // The member "Link My Twitch" flow borrows this callback, because it is the URI registered on
+    // the Twitch app. If that flow is the one in flight, hand it straight back — otherwise its code
+    // would be exchanged here as a schedule login and the user would land on /schedule.
+    if (req.session?.twitchLinkFlow) {
+        return completeTwitchLink(req, res);
+    }
 
     if (error) {
         logger.error('[Twitch Auth] OAuth error', { error });
@@ -142,9 +153,13 @@ router.get('/auth/twitch/callback', async (req, res) => {
 
         const twitchUser = userData.data[0];
 
-        // Upsert user in database
+        // The schedule pages need only who signed in (H-759): the Twitch tokens are not stored and expire unused
+        // (not revoked: the same Twitch app holds this user's other CertiFried grants). Rows saved before this
+        // keep their old token columns until the owner clears them (docs/feature-health-register.md H-759).
+
+        // Upsert user in database (identity only)
         const [existingUsers] = await pool.execute(
-            'SELECT * FROM schedule_users WHERE twitch_id = ?',
+            'SELECT id FROM schedule_users WHERE twitch_id = ?',
             [twitchUser.id]
         );
 
@@ -157,8 +172,6 @@ router.get('/auth/twitch/callback', async (req, res) => {
                     twitch_display_name = ?,
                     twitch_email = ?,
                     twitch_avatar = ?,
-                    twitch_access_token = ?,
-                    twitch_refresh_token = ?,
                     last_login = NOW()
                 WHERE twitch_id = ?`,
                 [
@@ -166,8 +179,6 @@ router.get('/auth/twitch/callback', async (req, res) => {
                     twitchUser.display_name,
                     twitchUser.email || null,
                     twitchUser.profile_image_url,
-                    tokenData.access_token,
-                    tokenData.refresh_token || null,
                     twitchUser.id
                 ]
             );
@@ -176,16 +187,14 @@ router.get('/auth/twitch/callback', async (req, res) => {
             // Create new user
             const [result] = await pool.execute(
                 `INSERT INTO schedule_users
-                    (twitch_id, twitch_login, twitch_display_name, twitch_email, twitch_avatar, twitch_access_token, twitch_refresh_token)
-                VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                    (twitch_id, twitch_login, twitch_display_name, twitch_email, twitch_avatar)
+                VALUES (?, ?, ?, ?, ?)`,
                 [
                     twitchUser.id,
                     twitchUser.login,
                     twitchUser.display_name,
                     twitchUser.email || null,
-                    twitchUser.profile_image_url,
-                    tokenData.access_token,
-                    tokenData.refresh_token || null
+                    twitchUser.profile_image_url
                 ]
             );
             userId = result.insertId;
@@ -336,6 +345,7 @@ router.get('/auth/twitch/link/callback', async (req, res) => {
                 access_token = VALUES(access_token),
                 refresh_token = VALUES(refresh_token),
                 expires_at = VALUES(expires_at),
+                token_status = 'active',
                 verified_at = NOW()`,
             [
                 req.user.id,

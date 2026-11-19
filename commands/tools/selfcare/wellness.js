@@ -1,5 +1,7 @@
 import { EmbedBuilder } from 'discord.js';
 import pool from '../../../utils/db.js';
+import { displayNameFor } from '../../../utils/display-name.js';
+import { themeColor } from '../../../core/guild-theme.js';
 
 export async function execute(interaction) {
     const subcommand = interaction.options.getSubcommand();
@@ -111,7 +113,7 @@ async function handleAffirmation(interaction) {
     };
 
     const embed = new EmbedBuilder()
-        .setColor('#9B59B6')
+        .setColor(themeColor(interaction.guildId, 'accent'))
         .setTitle(`${categoryEmojis[category]} Daily Affirmation`)
         .setDescription(`**${randomAffirmation}**`)
         .addFields({
@@ -262,7 +264,7 @@ async function handleMoodStats(interaction) {
         }
 
         const embed = new EmbedBuilder()
-            .setColor('#9B59B6')
+            .setColor(themeColor(interaction.guildId, 'accent'))
             .setTitle('📊 Your Mood Statistics')
             .setDescription(`Analysis of the last ${days} day${days > 1 ? 's' : ''} (${entries.length} ${entries.length === 1 ? 'entry' : 'entries'})`)
             .addFields(
@@ -400,22 +402,9 @@ async function handlePomodoro(interaction) {
     const guildId = interaction.guild.id;
 
     try {
-        // Create pomodoro tracking table if it doesn't exist
-        await pool.execute(`
-            CREATE TABLE IF NOT EXISTS wellness_pomodoro_sessions (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                guild_id VARCHAR(20) NOT NULL,
-                user_id VARCHAR(20) NOT NULL,
-                work_duration INT NOT NULL,
-                break_duration INT NOT NULL,
-                started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                completed BOOLEAN DEFAULT FALSE,
-                INDEX idx_user_sessions (guild_id, user_id, started_at)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-        `);
-
+        // wellness_pomodoro_sessions is created by migration 263.
         // Insert new session
-        await pool.execute(
+        const [inserted] = await pool.execute(
             'INSERT INTO wellness_pomodoro_sessions (guild_id, user_id, work_duration, break_duration) VALUES (?, ?, ?, ?)',
             [guildId, userId, duration, breakDuration]
         );
@@ -424,7 +413,7 @@ async function handlePomodoro(interaction) {
         const breakEndTime = new Date(Date.now() + (duration + breakDuration) * 60 * 1000);
 
         const embed = new EmbedBuilder()
-            .setColor('#E74C3C')
+            .setColor(themeColor(interaction.guildId, 'danger'))
             .setTitle('🍅 Pomodoro Timer Started!')
             .setDescription('Focus time has begun. Eliminate distractions and concentrate on your task.')
             .addFields(
@@ -454,21 +443,23 @@ async function handlePomodoro(interaction) {
 
         await interaction.reply({ embeds: [embed] });
 
+        // When the work timer runs out, mark THIS session completed (for every duration, so
+        // /selfcare wellness pomostat counts sessions longer than 15 minutes too).
+        const sessionId = inserted.insertId;
+        setTimeout(() => {
+            pool.execute('UPDATE wellness_pomodoro_sessions SET completed = TRUE WHERE id = ?', [sessionId])
+                .catch(err => console.error('[Pomodoro] Failed to mark session complete', { sessionId, error: err.message }));
+        }, duration * 60 * 1000);
+
         // Schedule a follow-up reminder (Discord interaction tokens last 15 minutes)
         // For longer sessions, we just track in database
         if (duration <= 15) {
             setTimeout(async () => {
                 try {
-                    // Mark session as completed
-                    await pool.execute(
-                        'UPDATE wellness_pomodoro_sessions SET completed = TRUE WHERE guild_id = ? AND user_id = ? AND completed = FALSE ORDER BY started_at DESC LIMIT 1',
-                        [guildId, userId]
-                    );
-
                     const reminderEmbed = new EmbedBuilder()
-                        .setColor('#2ECC71')
+                        .setColor(themeColor(interaction.guildId, 'success'))
                         .setTitle('✅ Work Session Complete!')
-                        .setDescription(`Great job, ${interaction.user.username}! Time for your ${breakDuration}-minute break.`)
+                        .setDescription(`Great job, ${displayNameFor(interaction.user, interaction.guild)}! Time for your ${breakDuration}-minute break.`)
                         .addFields({
                             name: '☕ Break Activities',
                             value: '• Stretch and move around\n• Get water or a healthy snack\n• Step outside for fresh air\n• Rest your eyes\n• Avoid screens if possible',
@@ -559,7 +550,7 @@ async function handlePomodoroStats(interaction) {
         }
 
         const embed = new EmbedBuilder()
-            .setColor('#E74C3C')
+            .setColor(themeColor(interaction.guildId, 'danger'))
             .setTitle('🍅 Your Pomodoro Statistics')
             .setDescription('Track your focus and productivity over time')
             .addFields(

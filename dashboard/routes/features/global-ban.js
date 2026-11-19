@@ -2,8 +2,21 @@ import express from 'express';
 import pool from '../../../utils/db.js';
 import { ensureAuth, ensureGuildPerms } from '../api.js';
 import logger from '../../../utils/logger.js';
+import configCache from '../../../utils/configCache.js';
+import { normaliseMode, normaliseThreshold, DEFAULT_THRESHOLD } from '../../../core/global-ban-confidence.js';
+import { logFeatureEvent, userLabel } from '../../../core/feature-log.js';
+import { liveConfigAccess } from '../../../core/protection-exempt.js';
 
+/*
+ * Global Ban page API. Since migration 329: the server's mode (protect | alert | feed) and confidence
+ * threshold, a privacy-safe network check for one user (/check/:userId — the same as `/globalban check`)
+ * and network stats (/network — the same as `/globalban stats`). Config saves are partial: a field the
+ * request leaves out keeps its value (the page used to wipe the exempt roles on every save).
+ */
 const router = express.Router();
+const SNOWFLAKE = /^\d{15,25}$/;
+const ACTIONS = ['ban', 'kick', 'alert', 'none'];
+const managerFor = (req) => req.guildObject?.client?.globalBanManager || null;
 
 /**
  * GET /:guildId/global-ban/config
@@ -28,7 +41,9 @@ router.get('/:guildId/global-ban/config', ensureAuth, ensureGuildPerms, async (r
                 check_on_join: true,
                 check_on_message: false,
                 auto_aggregate_opt_in: true,
-                exempt_roles: '[]'
+                exempt_roles: '[]',
+                mode: 'protect',
+                confidence_threshold: DEFAULT_THRESHOLD
             }
         });
     } catch (error) {
@@ -43,49 +58,55 @@ router.get('/:guildId/global-ban/config', ensureAuth, ensureGuildPerms, async (r
  */
 router.put('/:guildId/global-ban/config', ensureAuth, ensureGuildPerms, async (req, res) => {
     try {
-        const {
-            enabled,
-            action_critical,
-            action_high,
-            action_medium,
-            action_low,
-            alert_channel_id,
-            check_on_join,
-            check_on_message,
-            auto_aggregate_opt_in,
-            exempt_roles
-        } = req.body;
+        // Judged live (owner, Administrator, Manage Server or a bot-manager role), not from the login.
+        if (!req.isSuperAdmin && req.guildObject) {
+            const a = await liveConfigAccess(req.guildObject, req.user.id);
+            if (!a.ok) return res.status(403).json({ error: 'You need Manage Server, Administrator or a bot-manager role in this server.' });
+        }
+        const b = req.body || {};
+        const sets = [];
+        const vals = [];
+        const put = (col, val) => { sets.push(`${col} = ?`); vals.push(val); };
+        const flag = (v) => (v ? 1 : 0);
 
-        await pool.execute(`
-            INSERT INTO global_ban_config
-                (guild_id, enabled, action_critical, action_high, action_medium, action_low,
-                 alert_channel_id, check_on_join, check_on_message, auto_aggregate_opt_in, exempt_roles)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE
-                enabled = VALUES(enabled),
-                action_critical = VALUES(action_critical),
-                action_high = VALUES(action_high),
-                action_medium = VALUES(action_medium),
-                action_low = VALUES(action_low),
-                alert_channel_id = VALUES(alert_channel_id),
-                check_on_join = VALUES(check_on_join),
-                check_on_message = VALUES(check_on_message),
-                auto_aggregate_opt_in = VALUES(auto_aggregate_opt_in),
-                exempt_roles = VALUES(exempt_roles)
-        `, [
-            req.guildId,
-            enabled ? 1 : 0,
-            action_critical || 'ban',
-            action_high || 'ban',
-            action_medium || 'kick',
-            action_low || 'alert',
-            alert_channel_id || null,
-            check_on_join ? 1 : 0,
-            check_on_message ? 1 : 0,
-            auto_aggregate_opt_in ? 1 : 0,
-            JSON.stringify(exempt_roles || [])
-        ]);
+        if (b.enabled !== undefined) put('enabled', flag(b.enabled));
+        for (const col of ['action_critical', 'action_high', 'action_medium', 'action_low']) {
+            if (b[col] !== undefined) {
+                if (!ACTIONS.includes(b[col])) return res.status(400).json({ error: `Unknown action for ${col}.` });
+                put(col, b[col]);
+            }
+        }
+        if (b.alert_channel_id !== undefined) {
+            const ch = b.alert_channel_id ? String(b.alert_channel_id) : null;
+            if (ch && !SNOWFLAKE.test(ch)) return res.status(400).json({ error: 'Bad alert channel.' });
+            put('alert_channel_id', ch);
+        }
+        if (b.check_on_join !== undefined) put('check_on_join', flag(b.check_on_join));
+        if (b.check_on_message !== undefined) put('check_on_message', flag(b.check_on_message));
+        if (b.auto_aggregate_opt_in !== undefined) put('auto_aggregate_opt_in', flag(b.auto_aggregate_opt_in));
+        if (b.exempt_roles !== undefined) {
+            const roles = Array.isArray(b.exempt_roles) ? b.exempt_roles.map(String).filter(r => SNOWFLAKE.test(r)) : [];
+            put('exempt_roles', JSON.stringify(roles));
+        }
+        if (b.mode !== undefined) put('mode', normaliseMode(b.mode));
+        if (b.confidence_threshold !== undefined) put('confidence_threshold', normaliseThreshold(b.confidence_threshold));
+        if (!sets.length) return res.status(400).json({ error: 'Nothing to save.' });
 
+        const [[before]] = await pool.execute('SELECT mode, confidence_threshold FROM global_ban_config WHERE guild_id = ?', [req.guildId]);
+        await pool.execute('INSERT IGNORE INTO global_ban_config (guild_id) VALUES (?)', [req.guildId]);
+        await pool.execute(`UPDATE global_ban_config SET ${sets.join(', ')} WHERE guild_id = ?`, [...vals, req.guildId]);
+        configCache.invalidate('global_ban_config', req.guildId);
+        configCache.invalidate('global_ban_config_any', req.guildId);
+
+        const [[after]] = await pool.execute('SELECT mode, confidence_threshold FROM global_ban_config WHERE guild_id = ?', [req.guildId]);
+        if (req.guildObject && after && (!before || before.mode !== after.mode || before.confidence_threshold !== after.confidence_threshold)) {
+            void logFeatureEvent(() => (req.guildObject), 'moderation.globalBanSettings', () => ({
+                title: '🌐 Global Ban Mode Changed',
+                fields: [['Mode', after.mode], ['Threshold', after.mode === 'protect' ? String(after.confidence_threshold) : null],
+                    ['By', `${userLabel(req.user.id)} (dashboard)`]],
+            }));
+        }
+        logger.info(`[API GlobalBan Config PUT] ${req.user.username} saved ${sets.length} setting(s) in ${req.guildId}`);
         res.json({ success: true, message: 'Global ban config updated' });
     } catch (error) {
         logger.error('[API GlobalBan Config PUT] Error:', error);
@@ -243,13 +264,57 @@ router.get('/:guildId/global-ban/lookup/:userId', ensureAuth, ensureGuildPerms, 
             [userId]
         );
 
+        // Who reported is private to the network: only super-admins see reporters and their servers.
+        const safeReports = req.isSuperAdmin ? reports : reports.map(r => ({
+            id: r.id, category: r.category, severity: r.severity, status: r.status, created_at: r.created_at,
+        }));
         res.json({
             success: true,
-            record: { entries, reports, aggregateData }
+            record: { entries, reports: safeReports, aggregateData }
         });
     } catch (error) {
         logger.error('[API GlobalBan Lookup GET] Error:', error);
         res.status(500).json({ error: 'Failed to look up user' });
+    }
+});
+
+/**
+ * GET /:guildId/global-ban/check/:userId
+ * Privacy-safe network check: confidence, independent servers, kinds of source and reasons, and what
+ * this server's mode would do — never which servers reported or who moderated (as `/globalban check`).
+ */
+router.get('/:guildId/global-ban/check/:userId', ensureAuth, ensureGuildPerms, async (req, res) => {
+    const userId = String(req.params.userId || '').replace(/[<@!>]/g, '');
+    if (!SNOWFLAKE.test(userId)) return res.status(400).json({ error: 'Give a user ID.' });
+    const manager = managerFor(req);
+    if (!manager) return res.status(503).json({ error: 'The global ban system is not running on this bot.' });
+    try {
+        const check = await manager.getNetworkCheck(userId, req.guildId);
+        const user = await req.guildObject.client.users.fetch(userId).catch(() => null);
+        res.json({
+            success: true,
+            user: user ? { id: user.id, username: user.username, avatar: user.displayAvatarURL({ size: 64 }) } : { id: userId },
+            check,
+        });
+    } catch (error) {
+        logger.error('[API GlobalBan Check GET] Error:', error);
+        res.status(500).json({ error: 'Failed to check this user' });
+    }
+});
+
+/**
+ * GET /:guildId/global-ban/network
+ * Network size, recent additions, modes in use, and this server's own contribution and actions.
+ */
+router.get('/:guildId/global-ban/network', ensureAuth, ensureGuildPerms, async (req, res) => {
+    const manager = managerFor(req);
+    if (!manager) return res.status(503).json({ error: 'The global ban system is not running on this bot.' });
+    try {
+        const stats = await manager.getNetworkStats(req.guildId);
+        res.json({ success: true, stats });
+    } catch (error) {
+        logger.error('[API GlobalBan Network GET] Error:', error);
+        res.status(500).json({ error: 'Failed to fetch network stats' });
     }
 });
 

@@ -747,15 +747,14 @@ class CAHGame extends EventEmitter {
 /**
  * Decide who judges the next round.
  *
- * TODO(host): three modes are exposed via settings.czarRotation. Fill in the
- * logic for each. The current game state you can use:
- *   - game.players       : Map of userId -> { points, ... }
- *   - game.czarUserId    : who judged the last round (null on round 1)
- *   - game.lastRoundWinnerId : winner of the last round (null on round 1)
- *   - game.czarRotationIndex : monotonic counter you can mutate for strict rotation
- *   - game.settings.czarRotation : 'rotate' | 'random' | 'previous_winner'
+ * Supports three modes (settings.czarRotation):
+ *   - rotate          : strict round-robin via czarRotationIndex (default, feels fairest)
+ *   - random          : uniform random each round
+ *   - previous_winner : last round's winner judges the next round
  *
- * Return a userId string. Don't return null.
+ * Solo-with-randos special case: if there's only one human and the rest are randos,
+ * include randos in the pool so the human actually gets to PLAY cards. Auto-pick fires
+ * from _beginJudging when a rando is czar.
  */
 function selectNextCzar(game) {
     // Randos CAN czar — otherwise a 1-human + N-randos game has the human as
@@ -910,6 +909,8 @@ export async function listPublicLobbies() {
             guildId: r.guild_id,
             settings: { ...s, hasPassword: !!r.password_hash, joinPassword: undefined },
             createdAt: r.created_at,
+            // Display name for the lobby list (the page used to print the first digits of the host's id).
+            hostName: activeGames.get(r.id)?.players.get(r.host_user_id)?.displayName || null,
             playerCount: activeGames.get(r.id)?.players.size ?? 0
         };
     });

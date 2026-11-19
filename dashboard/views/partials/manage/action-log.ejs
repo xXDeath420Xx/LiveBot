@@ -1,72 +1,116 @@
+<%#
+  Action log: changes made through the bot and this dashboard, loaded page by page from
+  GET /manage/:id/audit-logs (dashboard/routes/features/statistics.js; type, user, days, page,
+  limit) by the script below. Each row opens to show the full before / after values. CSV export
+  pages through the same endpoint. Built on the settings-row kit (cf-settings.css); ids and the
+  loadAuditLogs handler are unchanged. Rows are built with createElement/textContent.
+%>
+<style>
+    .al-filters { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 0.8fr) auto; gap: var(--cf-3); align-items: end; }
+    .al-filters > .cf-field:last-child { align-self: end; }
+    .al-pager { display: flex; justify-content: space-between; align-items: center; gap: var(--cf-3); flex-wrap: wrap; }
+    .al-pager-info { font-size: var(--cf-text-xs); color: var(--cf-text-3); font-variant-numeric: tabular-nums; }
+    #al-body td { overflow-wrap: anywhere; vertical-align: top; }
+    #al-body td.al-when { white-space: nowrap; color: var(--cf-text-3); }
+    #al-body td.al-detail-cell { max-width: 22rem; color: var(--cf-text-2); }
+    #al-body .al-detail-text { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 22rem; }
+    #al-body tr.al-more > td { background: color-mix(in srgb, var(--cf-surface-2) 55%, transparent); }
+    #al-body .al-diff { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); gap: var(--cf-3); }
+    #al-body .al-diff h4 { margin: 0 0 4px; font-size: var(--cf-text-xs); font-weight: 600; color: var(--cf-text-3); }
+    #al-body .al-diff pre { margin: 0; padding: var(--cf-2) var(--cf-3); max-height: 16rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere;
+        font-family: var(--cf-mono); font-size: var(--cf-text-xs); color: var(--cf-text); background: var(--cf-surface); border: 1px solid var(--cf-border); border-radius: var(--cf-radius); }
+    #al-body .al-toggle { padding: 0 8px; min-height: 26px; font-size: var(--cf-text-xs); }
+    #al-body td.al-state { text-align: center; padding: var(--cf-6) var(--cf-4) !important; color: var(--cf-text-3); }
+    #al-body td.al-state.is-bad { color: var(--cf-danger); }
+    @media (max-width: 900px) { .al-filters { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } }
+    @media (max-width: 640px) {
+        .al-filters { grid-template-columns: minmax(0, 1fr); }
+        .al-pager-info { order: -1; flex-basis: 100%; text-align: center; }
+        .al-pager .btn { flex: 1 1 0; }
+    }
+</style>
+
 <div class="page-section">
     <div class="page-section-header">
         <div>
             <div class="page-section-title">
                 <i class="fas fa-history"></i>
-                <span>Action Log</span>
+                <span>Action log</span>
             </div>
-            <div class="page-section-subtitle">
-                Detailed history of all server events and moderation actions
+            <div class="page-section-subtitle">Server events and moderation actions, newest first.</div>
+        </div>
+    </div>
+
+    <dl class="cf-kpis" aria-label="Action log at a glance">
+        <div class="cf-kpi"><dt>Events</dt><dd class="cf-kpi-value" id="al-total">-</dd></div>
+        <div class="cf-kpi"><dt>Event types</dt><dd class="cf-kpi-value" id="al-types">-</dd></div>
+        <div class="cf-kpi"><dt>Page</dt><dd class="cf-kpi-value" id="al-page">-</dd></div>
+    </dl>
+
+    <section class="cf-section" aria-labelledby="al-events-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="al-events-title">Events</h2>
+                <p class="cf-section-desc">Filter by event type, member and time. Open a row for the full before and after values.</p>
+            </div>
+            <div class="cf-section-actions">
+                <span id="cfk-al-csv-status" class="cf-status-line" role="status" aria-live="polite"></span>
+                <button type="button" class="btn btn-secondary btn-sm" id="cfk-al-csv"><i class="fas fa-download" aria-hidden="true"></i> Download CSV</button>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--stack">
+                <div class="al-filters cf-fields">
+                    <div class="cf-field">
+                        <label for="al-type-filter">Event type</label>
+                        <select id="al-type-filter" class="form-select">
+                            <option value="">All event types</option>
+                        </select>
+                    </div>
+                    <div class="cf-field">
+                        <label for="al-user-filter">Member</label>
+                        <input type="text" id="al-user-filter" class="form-control" placeholder="User ID or mention" inputmode="numeric" autocomplete="off" aria-describedby="al-user-filter-error">
+                        <p class="cf-field-error" id="al-user-filter-error" hidden></p>
+                    </div>
+                    <div class="cf-field">
+                        <label for="cfk-al-days">When</label>
+                        <select id="cfk-al-days" class="form-select">
+                            <option value="0">Any time</option>
+                            <option value="1">Last 24 hours</option>
+                            <option value="7">Last 7 days</option>
+                            <option value="30">Last 30 days</option>
+                            <option value="90">Last 90 days</option>
+                        </select>
+                    </div>
+                    <div class="cf-field">
+                        <button type="button" onclick="loadAuditLogs(1)" class="btn btn-primary">Filter</button>
+                    </div>
+                </div>
+            </div>
+            <div class="cf-table-wrap">
+                <table class="cf-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Event</th>
+                            <th scope="col">Action</th>
+                            <th scope="col">User</th>
+                            <th scope="col">Target</th>
+                            <th scope="col">Details</th>
+                            <th scope="col">When</th>
+                        </tr>
+                    </thead>
+                    <tbody id="al-body">
+                        <tr><td colspan="6" class="cf-cell-muted al-state">Loading</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="cf-section-foot al-pager">
+                <button type="button" id="al-prev" onclick="loadAuditLogs(currentPage - 1)" class="btn btn-secondary btn-sm" disabled>Previous</button>
+                <span id="al-page-info" class="al-pager-info"></span>
+                <button type="button" id="al-next" onclick="loadAuditLogs(currentPage + 1)" class="btn btn-secondary btn-sm">Next</button>
             </div>
         </div>
-    </div>
-
-    <!-- Stats -->
-    <div class="grid grid-cols-3" style="margin-bottom: 1.5rem;">
-        <div style="background: rgba(255,255,255,0.03); padding: 1rem; border-radius: 12px; border: 1px solid rgba(255,255,255,0.06); border-left: 3px solid var(--accent-purple, #a78bfa); border-radius: 4px 12px 12px 4px;">
-            <div style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">Total Events</div>
-            <div id="al-total" style="font-size: 1.5rem; font-weight: 800; color: var(--text-primary);">-</div>
-        </div>
-        <div style="background: rgba(255,255,255,0.03); padding: 1rem; border-radius: 12px; border: 1px solid rgba(255,255,255,0.06); border-left: 3px solid var(--accent-blue, #60a5fa); border-radius: 4px 12px 12px 4px;">
-            <div style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">Event Types</div>
-            <div id="al-types" style="font-size: 1.5rem; font-weight: 800; color: var(--text-primary);">-</div>
-        </div>
-        <div style="background: rgba(255,255,255,0.03); padding: 1rem; border-radius: 12px; border: 1px solid rgba(255,255,255,0.06); border-left: 3px solid var(--accent-green, #23f56b); border-radius: 4px 12px 12px 4px;">
-            <div style="font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;">Page</div>
-            <div id="al-page" style="font-size: 1.5rem; font-weight: 800; color: var(--text-primary);">-</div>
-        </div>
-    </div>
-
-    <!-- Filters -->
-    <div style="display: flex; gap: 0.75rem; margin-bottom: 1.25rem; flex-wrap: wrap;">
-        <select id="al-type-filter" class="form-select" style="max-width: 240px; font-size: 0.85rem;">
-            <option value="">All Event Types</option>
-        </select>
-        <input type="text" id="al-user-filter" class="form-control" placeholder="Filter by User ID..." style="max-width: 220px; font-size: 0.85rem;">
-        <button onclick="loadAuditLogs(1)" class="btn btn-primary" style="font-size: 0.85rem; padding: 0.5rem 1rem;">
-            <i class="fas fa-search"></i> Filter
-        </button>
-    </div>
-
-    <!-- Log Table -->
-    <div style="overflow-x: auto; border: 1px solid rgba(255,255,255,0.06); border-radius: 12px;">
-        <table class="data-table" style="width: 100%; border-collapse: collapse;">
-            <thead>
-                <tr>
-                    <th style="padding: 0.75rem 1rem; font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid rgba(255,255,255,0.06); text-align: left;">Event</th>
-                    <th style="padding: 0.75rem 1rem; font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid rgba(255,255,255,0.06); text-align: left;">Action</th>
-                    <th style="padding: 0.75rem 1rem; font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid rgba(255,255,255,0.06); text-align: left;">User</th>
-                    <th style="padding: 0.75rem 1rem; font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid rgba(255,255,255,0.06); text-align: left;">Target</th>
-                    <th style="padding: 0.75rem 1rem; font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid rgba(255,255,255,0.06); text-align: left;">Details</th>
-                    <th style="padding: 0.75rem 1rem; font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid rgba(255,255,255,0.06); text-align: left;">When</th>
-                </tr>
-            </thead>
-            <tbody id="al-body">
-                <tr><td colspan="6" style="text-align: center; padding: 2rem; color: var(--text-muted);">Loading...</td></tr>
-            </tbody>
-        </table>
-    </div>
-
-    <!-- Pagination -->
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 1rem;">
-        <button id="al-prev" onclick="loadAuditLogs(currentPage - 1)" class="btn btn-secondary" style="font-size: 0.8rem;" disabled>
-            <i class="fas fa-chevron-left"></i> Previous
-        </button>
-        <span id="al-page-info" style="font-size: 0.8rem; color: var(--text-muted);"></span>
-        <button id="al-next" onclick="loadAuditLogs(currentPage + 1)" class="btn btn-secondary" style="font-size: 0.8rem;">
-            Next <i class="fas fa-chevron-right"></i>
-        </button>
-    </div>
+    </section>
 </div>
 
 <script>
@@ -76,138 +120,219 @@
     var totalPages = 1;
     window.currentPage = currentPage;
 
-    loadAuditLogs(1);
+    function el(tag, cls, text) {
+        var n = document.createElement(tag);
+        if (cls) n.className = cls;
+        if (text != null) n.textContent = String(text);
+        return n;
+    }
+    function stateRow(text, bad) {
+        var tr = el('tr');
+        var td = el('td', 'al-state' + (bad ? ' is-bad' : ''), text);
+        td.colSpan = 6;
+        tr.appendChild(td);
+        return tr;
+    }
+
+    // "123", "<@123>" or "<@!123>" -> "123"; anything else is an error.
+    function userFilter() {
+        var input = document.getElementById('al-user-filter');
+        var err = document.getElementById('al-user-filter-error');
+        var raw = input.value.trim();
+        var m = raw.match(/^<@!?(\d{15,22})>$/) || raw.match(/^(\d{15,22})$/);
+        var bad = raw && !m;
+        input.setAttribute('aria-invalid', bad ? 'true' : 'false');
+        err.textContent = bad ? 'Enter a user ID (15 to 22 digits) or a mention like <@123...>.' : '';
+        err.hidden = !bad;
+        return bad ? null : (m ? m[1] : '');
+    }
+
+    function query(page, limit) {
+        var typeFilter = document.getElementById('al-type-filter').value;
+        var user = userFilter();
+        if (user === null) return null;
+        var days = document.getElementById('cfk-al-days').value;
+        var url = '/manage/' + GUILD_ID + '/audit-logs?page=' + page + '&limit=' + limit;
+        if (typeFilter) url += '&type=' + encodeURIComponent(typeFilter);
+        if (user) url += '&user=' + encodeURIComponent(user);
+        if (days && days !== '0') url += '&days=' + encodeURIComponent(days);
+        return url;
+    }
 
     window.loadAuditLogs = async function(page) {
         if (page < 1) return;
+        var url = query(page, 50);
+        if (!url) return;
         currentPage = page;
         window.currentPage = page;
-
-        var typeFilter = document.getElementById('al-type-filter').value;
-        var userFilter = document.getElementById('al-user-filter').value.trim();
-
-        var url = '/manage/' + GUILD_ID + '/audit-logs?page=' + page + '&limit=50';
-        if (typeFilter) url += '&type=' + encodeURIComponent(typeFilter);
-        if (userFilter) url += '&user=' + encodeURIComponent(userFilter);
 
         try {
             var resp = await fetch(url, { credentials: 'include' });
             var data = await resp.json();
+            if (!resp.ok) throw new Error(data.error || ('HTTP ' + resp.status));
 
-            document.getElementById('al-total').textContent = data.total.toLocaleString();
-            document.getElementById('al-types').textContent = data.eventTypes.length;
-            document.getElementById('al-page').textContent = data.page + '/' + data.totalPages;
-            totalPages = data.totalPages;
+            document.getElementById('al-total').textContent = Number(data.total || 0).toLocaleString();
+            document.getElementById('al-types').textContent = (data.eventTypes || []).length;
+            document.getElementById('al-page').textContent = data.totalPages ? data.page + '/' + data.totalPages : '-';
+            totalPages = data.totalPages || 1;
 
-            // Populate type filter on first load
+            // The type list is the server's full list; fill it once.
             var select = document.getElementById('al-type-filter');
-            if (select.options.length <= 1 && data.eventTypes.length) {
+            if (select.options.length <= 1 && (data.eventTypes || []).length) {
                 data.eventTypes.forEach(function(t) {
                     var opt = document.createElement('option');
-                    opt.value = t; opt.textContent = t.replace(/_/g, ' ');
+                    opt.value = t; opt.textContent = String(t).replace(/_/g, ' ').toLowerCase();
                     select.appendChild(opt);
                 });
             }
 
-            renderLogs(data.logs);
+            renderLogs(data.logs || []);
 
             document.getElementById('al-prev').disabled = page <= 1;
             document.getElementById('al-next').disabled = page >= totalPages;
-            document.getElementById('al-page-info').textContent = 'Page ' + page + ' of ' + totalPages + ' (' + data.total + ' events)';
+            document.getElementById('al-page-info').textContent = 'Page ' + page + ' of ' + Math.max(1, totalPages) + ' (' + Number(data.total || 0).toLocaleString() + ' events)';
         } catch (err) {
-            document.getElementById('al-body').textContent = '';
-            var tr = document.createElement('tr');
-            var td = document.createElement('td');
-            td.colSpan = 6;
-            td.style.cssText = 'text-align:center;padding:2rem;color:var(--accent-red)';
-            td.textContent = 'Error loading logs: ' + err.message;
-            tr.appendChild(td);
-            document.getElementById('al-body').appendChild(tr);
+            document.getElementById('al-body').replaceChildren(stateRow('Could not load the log: ' + err.message, true));
         }
     };
 
-    var eventColors = {
-        'MEMBER_BAN_ADD': '#ef4444', 'MEMBER_BAN_REMOVE': '#23f56b', 'MEMBER_KICK': '#fb923c',
-        'MEMBER_ROLES_ADDED': '#a78bfa', 'MEMBER_ROLES_REMOVED': '#f87171',
-        'MEMBER_JOIN': '#22d3ee', 'MEMBER_LEAVE': '#6b7280',
-        'MESSAGE_DELETE': '#fbbf24', 'MESSAGE_UPDATE': '#60a5fa',
-        'CHANNEL_CREATE': '#23f56b', 'CHANNEL_DELETE': '#f87171', 'CHANNEL_UPDATE': '#60a5fa',
-        'ROLE_CREATE': '#a78bfa', 'ROLE_DELETE': '#f87171', 'ROLE_UPDATE': '#818cf8'
-    };
+    // Colour by what happened: removals and bans red, additions green, edits blue.
+    function tone(type) {
+        var t = String(type || '').toUpperCase();
+        if (/BAN_ADD|KICK|DELETE|REMOVED|TIMEOUT|BAN$/.test(t)) return ' is-bad';
+        if (/BAN_REMOVE|UNBAN|CREATE|ADDED|JOIN/.test(t)) return ' is-ok';
+        if (/UPDATE|EDIT|CHANGE/.test(t)) return ' is-info';
+        if (/LEAVE/.test(t)) return ' is-warn';
+        return '';
+    }
+    // Pretty-print JSON values; anything else as it is.
+    function pretty(v) {
+        if (v == null || v === '') return '';
+        var s = String(v);
+        try { var j = JSON.parse(s); if (j && typeof j === 'object') return JSON.stringify(j, null, 2); } catch (e) { /* plain text */ }
+        return s;
+    }
+    function summary(log) {
+        if (log.old_value || log.new_value) {
+            var o = log.old_value ? String(log.old_value) : '', n = log.new_value ? String(log.new_value) : '';
+            return (o ? 'From ' + o.substring(0, 40) + (o.length > 40 ? '...' : '') : '') + (o && n ? ' ' : '') + (n ? (o ? 'to ' : 'To ') + n.substring(0, 40) + (n.length > 40 ? '...' : '') : '');
+        }
+        return log.reason || '-';
+    }
+
+    document.getElementById('al-type-filter').addEventListener('change', function() { loadAuditLogs(1); });
+    document.getElementById('cfk-al-days').addEventListener('change', function() { loadAuditLogs(1); });
+    document.getElementById('al-user-filter').addEventListener('keydown', function(e) { if (e.key === 'Enter') { e.preventDefault(); loadAuditLogs(1); } });
+
+    // First load, now that window.loadAuditLogs exists.
+    loadAuditLogs(1);
 
     function renderLogs(logs) {
         var tbody = document.getElementById('al-body');
-        tbody.textContent = '';
-
         if (!logs.length) {
-            var tr = document.createElement('tr');
-            var td = document.createElement('td');
-            td.colSpan = 6;
-            td.style.cssText = 'text-align:center;padding:2rem;color:var(--text-muted)';
-            td.textContent = 'No events found';
-            tr.appendChild(td);
-            tbody.appendChild(tr);
+            tbody.replaceChildren(stateRow('No events match these filters.'));
             return;
         }
+        var rows = [];
+        logs.forEach(function(log, i) {
+            var tr = el('tr');
 
-        logs.forEach(function(log) {
-            var tr = document.createElement('tr');
-            tr.style.transition = 'background 0.15s';
-            tr.onmouseenter = function() { tr.style.background = 'rgba(255,255,255,0.02)'; };
-            tr.onmouseleave = function() { tr.style.background = ''; };
+            var td1 = el('td');
+            td1.appendChild(el('span', 'cf-pill' + tone(log.event_type), String(log.event_type || 'event').replace(/_/g, ' ').toLowerCase()));
 
-            var tdStyle = 'padding:0.6rem 1rem;border-bottom:1px solid rgba(255,255,255,0.04);font-size:0.82rem;vertical-align:top;';
+            var td2 = el('td', null, log.action ? String(log.action).replace(/_/g, ' ') : '-');
 
-            // Event type badge
-            var td1 = document.createElement('td');
-            td1.style.cssText = tdStyle;
-            var badge = document.createElement('span');
-            var color = eventColors[log.event_type] || '#6b7280';
-            badge.style.cssText = 'background:' + color + '20;color:' + color + ';padding:0.2rem 0.5rem;border-radius:4px;font-size:0.7rem;font-weight:600;white-space:nowrap;';
-            badge.textContent = log.event_type.replace(/_/g, ' ');
-            td1.appendChild(badge);
+            var td3 = el('td');
+            if (log.user_id && window.CFUser) td3.appendChild(CFUser.cell(log.user || log.user_id, { size: 'sm', storedName: log.userName }));
+            else td3.textContent = log.userName || log.user_id || '-';
 
-            // Action
-            var td2 = document.createElement('td');
-            td2.style.cssText = tdStyle + 'color:var(--text-primary);font-weight:500;';
-            td2.textContent = log.action || '-';
+            // A target is a person only when it resolved to one (it can be a channel or role id).
+            var td4 = el('td');
+            if (log.target && window.CFUser) td4.appendChild(CFUser.cell(log.target, { size: 'sm' }));
+            else td4.textContent = log.targetName || log.target_id || '-';
 
-            // User
-            var td3 = document.createElement('td');
-            td3.style.cssText = tdStyle;
-            td3.textContent = log.userName || (log.user_id ? log.user_id.substring(0, 8) + '...' : '-');
-
-            // Target
-            var td4 = document.createElement('td');
-            td4.style.cssText = tdStyle;
-            td4.textContent = log.targetName || (log.target_id ? log.target_id.substring(0, 8) + '...' : '-');
-
-            // Details
-            var td5 = document.createElement('td');
-            td5.style.cssText = tdStyle + 'color:var(--text-muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;';
-            if (log.old_value || log.new_value) {
-                td5.textContent = (log.old_value ? 'Old: ' + String(log.old_value).substring(0, 30) : '') + (log.new_value ? ' New: ' + String(log.new_value).substring(0, 30) : '');
-            } else if (log.reason) {
-                td5.textContent = log.reason;
-            } else {
-                td5.textContent = '-';
+            var td5 = el('td', 'al-detail-cell');
+            var text = summary(log);
+            var span = el('span', 'al-detail-text', text);
+            span.title = text;
+            td5.appendChild(span);
+            var full = [['Before', pretty(log.old_value)], ['After', pretty(log.new_value)], ['Reason', log.reason || ''], ['More', pretty(log.metadata)]]
+                .filter(function(p) { return p[1]; });
+            var more = null;
+            if (full.length) {
+                var btn = el('button', 'btn btn-secondary btn-sm al-toggle', 'Show');
+                btn.type = 'button';
+                btn.setAttribute('aria-expanded', 'false');
+                more = el('tr', 'al-more');
+                more.hidden = true;
+                var cell = el('td');
+                cell.colSpan = 6;
+                var grid = el('div', 'al-diff');
+                full.forEach(function(p) {
+                    var box = el('div');
+                    box.appendChild(el('h4', null, p[0]));
+                    box.appendChild(el('pre', null, p[1]));
+                    grid.appendChild(box);
+                });
+                cell.appendChild(grid);
+                more.appendChild(cell);
+                btn.addEventListener('click', function() {
+                    var open = more.hidden;
+                    more.hidden = !open;
+                    btn.setAttribute('aria-expanded', String(open));
+                    btn.textContent = open ? 'Hide' : 'Show';
+                });
+                td5.appendChild(btn);
             }
-            td5.title = td5.textContent;
 
-            // Timestamp
-            var td6 = document.createElement('td');
-            td6.style.cssText = tdStyle + 'color:var(--text-muted);white-space:nowrap;';
+            var td6 = el('td', 'al-when');
             var d = new Date(log.timestamp);
-            td6.textContent = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) + ' ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+            td6.textContent = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: d.getFullYear() === new Date().getFullYear() ? undefined : 'numeric' })
+                + ' ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+            td6.title = d.toISOString();
 
-            tr.appendChild(td1);
-            tr.appendChild(td2);
-            tr.appendChild(td3);
-            tr.appendChild(td4);
-            tr.appendChild(td5);
-            tr.appendChild(td6);
-            tbody.appendChild(tr);
+            [td1, td2, td3, td4, td5, td6].forEach(function(td) { tr.appendChild(td); });
+            rows.push(tr);
+            if (more) rows.push(more);
         });
+        tbody.replaceChildren.apply(tbody, rows);
     }
+
+    // CSV of everything that matches the filters (up to 5,000 rows, 200 a request).
+    var csvBtn = document.getElementById('cfk-al-csv');
+    var csvStatus = document.getElementById('cfk-al-csv-status');
+    csvBtn.addEventListener('click', async function() {
+        if (query(1, 200) === null) return;
+        csvBtn.disabled = true;
+        csvStatus.className = 'cf-status-line is-busy';
+        csvStatus.textContent = 'Preparing';
+        var q = function(v) { var s = v == null ? '' : String(v); return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+        var lines = [['time_utc', 'event_type', 'action', 'user_id', 'user', 'target_id', 'target', 'moderator_id', 'reason', 'old_value', 'new_value'].join(',')];
+        try {
+            for (var page = 1, pages = 1; page <= pages && page <= 25; page++) {
+                var resp = await fetch(query(page, 200), { credentials: 'include' });
+                var data = await resp.json();
+                if (!resp.ok) throw new Error(data.error || ('HTTP ' + resp.status));
+                pages = data.totalPages || 1;
+                (data.logs || []).forEach(function(l) {
+                    lines.push([new Date(l.timestamp).toISOString(), l.event_type, l.action, l.user_id, l.userName, l.target_id, l.targetName, l.moderator_id, l.reason, l.old_value, l.new_value].map(q).join(','));
+                });
+                csvStatus.textContent = 'Preparing (' + (lines.length - 1) + ' rows)';
+            }
+            var a = document.createElement('a');
+            a.href = URL.createObjectURL(new Blob([lines.join('\r\n') + '\r\n'], { type: 'text/csv;charset=utf-8' }));
+            a.download = 'action-log-' + GUILD_ID + '.csv';
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(function() { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+            csvStatus.className = 'cf-status-line is-ok';
+            csvStatus.textContent = (lines.length - 1).toLocaleString() + ' rows' + (lines.length - 1 >= 5000 ? ' (first 5,000)' : '');
+        } catch (e) {
+            csvStatus.className = 'cf-status-line is-bad';
+            csvStatus.textContent = 'Could not export: ' + e.message;
+        } finally {
+            csvBtn.disabled = false;
+        }
+    });
 })();
 </script>

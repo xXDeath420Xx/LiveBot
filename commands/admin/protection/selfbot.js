@@ -1,6 +1,7 @@
 import { EmbedBuilder, ChannelType } from 'discord.js';
 import pool from '../../../utils/db.js';
 import logger from '../../../utils/logger.js';
+import { themeColor } from '../../../core/guild-theme.js';
 
 export async function execute(interaction) {
     const subcommand = interaction.options.getSubcommand();
@@ -139,7 +140,7 @@ async function handleConfig(interaction, guildId) {
     );
 
     const embed = new EmbedBuilder()
-        .setColor(0x2ecc71)
+        .setColor(themeColor(interaction.guildId, 'success'))
         .setTitle('✅ Self-Bot Detection Configuration Updated')
         .setDescription('The following settings have been updated:');
 
@@ -185,7 +186,7 @@ async function handleStatus(interaction, guildId) {
     );
 
     const embed = new EmbedBuilder()
-        .setColor(0x3498db)
+        .setColor(themeColor(interaction.guildId, 'primary'))
         .setTitle('🤖 Self-Bot Detection Status')
         .setDescription('Current self-bot detection configuration:')
         .addFields(
@@ -233,7 +234,7 @@ async function handleExempt(interaction, guildId) {
         const roleList = exemptRoles.map(id => `<@&${id}>`).join('\n');
 
         const embed = new EmbedBuilder()
-            .setColor(0x3498db)
+            .setColor(themeColor(interaction.guildId, 'primary'))
             .setTitle('📋 Exempt Roles')
             .setDescription(`**${exemptRoles.length}** role${exemptRoles.length !== 1 ? 's' : ''} exempt from self-bot detection:\n\n${roleList}`);
 
@@ -362,7 +363,7 @@ async function handleHistory(interaction, guildId) {
     }).join('\n\n');
 
     const embed = new EmbedBuilder()
-        .setColor(0x3498db)
+        .setColor(themeColor(interaction.guildId, 'primary'))
         .setTitle(user ? `📋 Detection History: ${user.tag}` : '📋 Self-Bot Detection History')
         .setDescription(detections)
         .setFooter({ text: `Showing last ${rows.length} detections` });

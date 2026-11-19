@@ -2,9 +2,18 @@ import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'disc
 import pool from '../utils/db.js';
 import logger from '../utils/logger.js';
 import * as opentdb from '../utils/opentdb.js';
+import { displayNameFor } from '../utils/display-name.js';
+import { themeColor } from './guild-theme.js';
+import { updateChallengeProgress } from './daily-challenges-manager.js';
 
 // Store active trivia sessions
 const activeTriviaGames = new Map();
+
+// Daily-challenge progress is fire-and-forget: a failure there must never break the game.
+function trackChallenge(guildId, userId, challengeType) {
+    updateChallengeProgress(guildId, userId, challengeType, 1).catch(err =>
+        logger.warn('[Trivia] Daily challenge progress failed', { error: err.message, guildId, userId, challengeType }));
+}
 
 export async function handleStart(interaction) {
     const category = interaction.options.getString('category') || 'random';
@@ -25,9 +34,9 @@ export async function handleStart(interaction) {
 
     await interaction.deferReply();
 
-    // Build query to get questions
-    let query = 'SELECT * FROM trivia_questions WHERE 1=1';
-    const params = [];
+    // Build query to get questions: the shared bank plus this server's own (migration 261)
+    let query = 'SELECT * FROM trivia_questions WHERE (guild_id IS NULL OR guild_id = ?)';
+    const params = [interaction.guild.id];
 
     if (category !== 'random') {
         query += ' AND category = ?';
@@ -44,15 +53,16 @@ export async function handleStart(interaction) {
 
     let [questions] = await pool.execute(query, params);
 
-    // If no local questions found or not enough, fetch from OpenTDB
+    // Not enough local questions: top up from OpenTDB, keeping the local (incl. this server's) ones
     if (questions.length < questionCount) {
+        const needed = questionCount - questions.length;
         try {
-            logger.info(`[Trivia] Fetching ${questionCount} questions from OpenTDB (category: ${category}, difficulty: ${difficulty})`);
+            logger.info(`[Trivia] Fetching ${needed} questions from OpenTDB (category: ${category}, difficulty: ${difficulty})`);
 
             const openTdbQuestions = await opentdb.fetchQuestions({
                 category: category,
                 difficulty: difficulty,
-                amount: questionCount,
+                amount: needed,
                 type: 'multiple'
             });
 
@@ -66,18 +76,19 @@ export async function handleStart(interaction) {
                 points_value: q.difficulty === 'easy' ? 10 : q.difficulty === 'hard' ? 30 : 20
             }));
 
-            questions = transformedQuestions;
+            questions = [...questions, ...transformedQuestions].slice(0, questionCount);
+            shuffleArray(questions);
 
         } catch (error) {
             logger.error('[Trivia] Error fetching from OpenTDB:', { error: error.message });
-
-            if (questions.length === 0) {
-                return interaction.editReply({
-                    content: '❌ No trivia questions found. Please try again later.'
-                });
-            }
             // If we have some local questions, use them even if we couldn't get OpenTDB ones
         }
+    }
+
+    if (questions.length === 0) {
+        return interaction.editReply({
+            content: '❌ No trivia questions found. Please try again later.'
+        });
     }
 
     // Initialize game session
@@ -122,9 +133,12 @@ export async function sendQuestion(interaction, gameId) {
     // Prepare answers (shuffle correct and incorrect)
     const allAnswers = [question.correct_answer, ...JSON.parse(question.incorrect_answers)];
     shuffleArray(allAnswers);
+    // Buttons carry the answer's index, not its text: custom ids are capped at 100 chars, and a
+    // long (e.g. server-written) answer would otherwise make the whole question fail to send.
+    game.currentAnswers = allAnswers;
 
     const embed = new EmbedBuilder()
-        .setColor('#3498db')
+        .setColor(themeColor(interaction.guildId, 'primary'))
         .setTitle(`🧠 Trivia Question ${game.currentQuestion + 1}/${game.questions.length}`)
         .setDescription(question.question)
         .addFields(
@@ -142,7 +156,7 @@ export async function sendQuestion(interaction, gameId) {
     allAnswers.forEach((answer, index) => {
         buttons.addComponents(
             new ButtonBuilder()
-                .setCustomId(`trivia_answer_${gameId}_${answer}`)
+                .setCustomId(`trivia_answer_${gameId}_${game.currentQuestion}_${index}`)
                 .setLabel(`${String.fromCharCode(65 + index)}. ${answer.length > 50 ? answer.substring(0, 50) + '...' : answer}`)
                 .setStyle(ButtonStyle.Primary)
                 .setEmoji(answerEmojis[index])
@@ -165,7 +179,15 @@ export async function endGame(interaction, gameId) {
     const duration = Math.floor((Date.now() - game.startTime) / 1000);
     const accuracy = game.questions.length > 0 ? Math.round((game.correctAnswers / game.questions.length) * 100) : 0;
 
+    // Daily challenges: the player took part; a win (same rule as game_stats below) also counts
+    trackChallenge(game.guildId, game.userId, 'trivia');
+    trackChallenge(game.guildId, game.userId, 'games');
+    if (game.correctAnswers > game.questions.length / 2) {
+        trackChallenge(game.guildId, game.userId, 'trivia_win');
+    }
+
     // Update database stats
+    let newAchievements = [];
     try {
         // Get or create game stats
         const [[stats]] = await pool.execute(
@@ -249,8 +271,8 @@ export async function endGame(interaction, gameId) {
             }
         }
 
-        // Check for achievements
-        await checkAchievements(game.guildId, game.userId, stats, game);
+        // Check for achievements (returns only the ones earned for the first time just now)
+        newAchievements = await checkAchievements(game.guildId, game.userId, stats, game);
 
     } catch (error) {
         logger.error('[Trivia] Error updating stats:', { error: error.message });
@@ -271,6 +293,13 @@ export async function endGame(interaction, gameId) {
 
     if (economyReward > 0) {
         embed.addFields({ name: '🪙 Coins Earned', value: `+${economyReward.toLocaleString()}`, inline: true });
+    }
+
+    if (newAchievements.length) {
+        embed.addFields({
+            name: newAchievements.length === 1 ? 'Achievement unlocked' : 'Achievements unlocked',
+            value: newAchievements.map(a => `**${a.name}** - ${a.description}`).join('\n'),
+        });
     }
 
     // Performance message
@@ -302,7 +331,7 @@ export async function handleStats(interaction) {
         return interaction.reply({
             content: targetUser.id === interaction.user.id
                 ? "❌ You haven't played any trivia games yet! Use `/trivia start` to begin."
-                : `❌ ${targetUser.username} hasn't played any trivia games yet.`,
+                : `❌ ${displayNameFor(targetUser, interaction.guild)} hasn't played any trivia games yet.`,
             ephemeral: true
         });
     }
@@ -311,8 +340,8 @@ export async function handleStats(interaction) {
     const avgScore = stats.games_played > 0 ? Math.round(stats.total_score / stats.games_played) : 0;
 
     const embed = new EmbedBuilder()
-        .setColor('#3498db')
-        .setTitle(`🧠 Trivia Statistics - ${targetUser.username}`)
+        .setColor(themeColor(interaction.guildId, 'primary'))
+        .setTitle(`🧠 Trivia Statistics - ${displayNameFor(targetUser, interaction.guild)}`)
         .setThumbnail(targetUser.displayAvatarURL())
         .addFields(
             { name: '🎮 Games Played', value: `${stats.games_played}`, inline: true },
@@ -327,6 +356,17 @@ export async function handleStats(interaction) {
         )
         .setFooter({ text: `Last played: ${new Date(stats.last_played).toLocaleDateString()}` })
         .setTimestamp();
+
+    const achievements = await getTriviaAchievements(interaction.guild.id, targetUser.id);
+    if (achievements.length) {
+        embed.addFields({
+            name: `Achievements (${achievements.length})`,
+            value: achievements
+                .map(a => `**${a.achievement_name}** - ${a.achievement_description || ''} (<t:${Math.floor(new Date(a.earned_at).getTime() / 1000)}:d>)`)
+                .join('\n')
+                .slice(0, 1024),
+        });
+    }
 
     await interaction.reply({ embeds: [embed] });
 }
@@ -349,7 +389,7 @@ export async function handleLeaderboard(interaction) {
     }
 
     const embed = new EmbedBuilder()
-        .setColor('#FFD700')
+        .setColor(themeColor(interaction.guildId, 'warning'))
         .setTitle('🏆 Trivia Leaderboard')
         .setDescription('Top 10 trivia masters in this server');
 
@@ -357,7 +397,7 @@ export async function handleLeaderboard(interaction) {
     for (let i = 0; i < topPlayers.length; i++) {
         const player = topPlayers[i];
         const user = await interaction.client.users.fetch(player.user_id).catch(() => null);
-        const username = user ? user.username : 'Unknown User';
+        const username = displayNameFor(user, interaction.guild);
         const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`;
         const winRate = player.games_played > 0 ? Math.round((player.games_won / player.games_played) * 100) : 0;
 
@@ -393,8 +433,11 @@ export async function checkAchievements(guildId, userId, oldStats, game) {
             });
         }
 
-        // Streak Master Achievement
-        if (oldStats && oldStats.current_streak >= 10) {
+        // Streak Master Achievement — the streak including this game (endGame's won rule), so a
+        // loss after a 10-game run does not award it.
+        const wonThis = game.correctAnswers > game.questions.length / 2;
+        const streakNow = wonThis ? (oldStats?.current_streak || 0) + 1 : 0;
+        if (streakNow >= 10) {
             achievements.push({
                 type: 'trivia_streak_master',
                 name: '🔥 Streak Master',
@@ -402,16 +445,37 @@ export async function checkAchievements(guildId, userId, oldStats, game) {
             });
         }
 
-        // Insert new achievements
+        // Insert new achievements. INSERT IGNORE hits the (guild, user, type) unique key for
+        // ones already held, so affectedRows tells us which were earned just now.
+        const earned = [];
         for (const achievement of achievements) {
-            await pool.execute(
+            const [result] = await pool.execute(
                 `INSERT IGNORE INTO game_achievements (guild_id, user_id, achievement_type, achievement_name, achievement_description)
                  VALUES (?, ?, ?, ?, ?)`,
                 [guildId, userId, achievement.type, achievement.name, achievement.description]
             );
+            if (result?.affectedRows) earned.push(achievement);
         }
+        return earned;
     } catch (error) {
         logger.error('[Trivia] Error checking achievements:', { error: error.message });
+        return [];
+    }
+}
+
+/** Trivia achievements a user holds in a guild, oldest first. */
+export async function getTriviaAchievements(guildId, userId) {
+    try {
+        const [rows] = await pool.execute(
+            `SELECT achievement_name, achievement_description, earned_at FROM game_achievements
+              WHERE guild_id = ? AND user_id = ? AND achievement_type LIKE 'trivia\\_%'
+              ORDER BY earned_at ASC`,
+            [guildId, userId]
+        );
+        return rows;
+    } catch (error) {
+        logger.error('[Trivia] Error loading achievements:', { error: error.message });
+        return [];
     }
 }
 
@@ -451,9 +515,11 @@ export function shuffleArray(array) {
 export async function handleButton(interaction) {
     if (!interaction.customId.startsWith('trivia_answer_')) return false;
 
+    // trivia_answer_<gameId>_<questionIndex>_<answerIndex>
     const parts = interaction.customId.split('_');
     const gameId = parts[2];
-    const answer = parts.slice(3).join('_');
+    const questionIndex = Number(parts[3]);
+    const answerIndex = Number(parts[4]);
 
     const game = activeTriviaGames.get(gameId);
     if (!game) {
@@ -470,8 +536,17 @@ export async function handleButton(interaction) {
         });
     }
 
+    if (questionIndex !== game.currentQuestion || game.awaitingNext) {
+        return interaction.reply({
+            content: '❌ You already answered that question.',
+            ephemeral: true
+        });
+    }
+
     const question = game.questions[game.currentQuestion];
+    const answer = game.currentAnswers?.[answerIndex];
     const correct = answer === question.correct_answer;
+    game.awaitingNext = true;
 
     if (correct) {
         game.score += question.points_value;
@@ -487,7 +562,12 @@ export async function handleButton(interaction) {
             : `The correct answer was: **${question.correct_answer}**`)
         .setFooter({ text: `Score: ${game.score}` });
 
-    await interaction.reply({
+    // Acknowledge the click by deferring an update of the question message, then send the
+    // feedback privately. Deferring (rather than replying) is what lets sendQuestion/endGame
+    // editReply that same message with the next question or the results; replying here made
+    // the next sendQuestion call reply() a second time and throw, so games stalled after Q1.
+    await interaction.deferUpdate();
+    await interaction.followUp({
         embeds: [feedbackEmbed],
         ephemeral: true
     });
@@ -496,7 +576,12 @@ export async function handleButton(interaction) {
     game.currentQuestion++;
 
     setTimeout(async () => {
-        await sendQuestion(interaction, gameId);
+        game.awaitingNext = false;
+        try {
+            await sendQuestion(interaction, gameId);
+        } catch (error) {
+            logger.error('[Trivia] Error sending next question', { error: error.message, gameId });
+        }
     }, 2000);
 
     return true;

@@ -23,7 +23,7 @@ const TARGETS = [
   { guild: '980331356196311070',  ch: '1482179928718966958', msg: '1482202821607817357', name: 'Stab Crazies' },
 ];
 
-const NOTE = '\n\n📝 **Add My Socials** — streaming on Kick, Trovo, YouTube, or a Twitch you haven\'t linked to Discord (so auto-detect can\'t catch you)? Click and paste your channel link(s) to join the live rotation.';
+const NOTE = '\n\n📝 **Add My Socials** — streaming on Kick, Rumble, YouTube, or a Twitch you haven\'t linked to Discord (so auto-detect can\'t catch you)? Click and paste your channel link(s) to join the live rotation.';
 
 async function tokenFor(guild) {
   const [m] = await pool.execute('SELECT bot_id FROM guild_bot_mapping WHERE guild_id = ?', [guild]);

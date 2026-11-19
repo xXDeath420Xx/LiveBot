@@ -7,6 +7,7 @@ import {
   stopGuild, sanitizeName, ALLOWED_EXT, MAX_BYTES,
 } from '../../core/soundboard-manager.js';
 
+import { themeColor } from '../../core/guild-theme.js';
 const PER_PAGE = 20; // 4 rows of sounds; the 5th row is reserved for nav when paginated
 
 // Build a paginated soundboard payload: up to 20 sound buttons (sb_play:<id>)
@@ -124,7 +125,7 @@ export default {
       const sounds = await listSounds(guildId);
       if (!sounds.length) return interaction.reply({ content: 'No sounds yet — add some with `/soundboard upload`.', ephemeral: true });
       const lines = sounds.map(s => `${s.emoji || '🔊'} **${s.name}**${s.play_count ? ` · played ${s.play_count}×` : ''}`);
-      const embed = new EmbedBuilder().setColor(0x5865f2).setTitle(`📋 Soundboard — ${sounds.length} sound${sounds.length === 1 ? '' : 's'}`)
+      const embed = new EmbedBuilder().setColor(themeColor(interaction.guildId, 'primary')).setTitle(`📋 Soundboard — ${sounds.length} sound${sounds.length === 1 ? '' : 's'}`)
         .setDescription(lines.join('\n').slice(0, 4000));
       return interaction.reply({ embeds: [embed], ephemeral: true });
     }

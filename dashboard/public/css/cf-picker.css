@@ -1,0 +1,93 @@
+/*
+ * cf-picker.css — chip picker drawn by cf-picker.js over every <select multiple>.
+ * Uses the cf-ui.css tokens only, so every theme (dark, light, slate, midnight…) styles it.
+ */
+select.cf-pk-native {
+    position: absolute !important; width: 1px !important; height: 1px !important; min-height: 0 !important;
+    padding: 0 !important; margin: -1px !important; overflow: hidden !important;
+    clip: rect(0 0 0 0) !important; border: 0 !important; opacity: 0 !important; pointer-events: none !important;
+}
+.cf-pk { position: relative; width: 100%; min-width: 0; }
+.cf-pk-chips {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+    min-height: 40px; padding: 5px 8px;
+    background: var(--cf-inset, var(--cf-surface-2));
+    border: 1px solid var(--cf-border-strong, var(--cf-border));
+    border-radius: var(--cf-radius);
+    cursor: text;
+    transition: border-color var(--cf-fast, 120ms) var(--cf-ease, ease), box-shadow var(--cf-fast, 120ms) var(--cf-ease, ease);
+}
+.cf-pk:hover .cf-pk-chips { border-color: var(--cf-text-3); }
+.cf-pk.is-open .cf-pk-chips,
+.cf-pk-chips:focus-within { border-color: var(--cf-accent-line, var(--cf-accent)); box-shadow: 0 0 0 3px var(--cf-accent-soft); }
+.cf-pk.is-disabled .cf-pk-chips { opacity: 0.55; cursor: not-allowed; }
+
+.cf-pk-chip {
+    display: inline-flex; align-items: center; gap: 6px; max-width: 100%;
+    height: 26px; padding: 0 4px 0 9px;
+    background: var(--cf-surface-3); color: var(--cf-text);
+    border: 1px solid var(--cf-border); border-radius: 999px;
+    font-size: var(--cf-text-sm); line-height: 1;
+}
+.cf-pk-chip .cf-pk-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 22ch; }
+.cf-pk-dot { flex: 0 0 auto; width: 9px; height: 9px; border-radius: 50%; }
+.cf-pk-sigil { flex: 0 0 auto; color: var(--cf-text-3); font-size: 0.85em; }
+.cf-pk-x {
+    display: inline-grid; place-items: center; width: 20px; height: 20px; padding: 0; margin: 0;
+    background: transparent; border: 0; border-radius: 50%;
+    color: var(--cf-text-3); font-size: 15px; line-height: 1; cursor: pointer;
+}
+.cf-pk-x:hover { background: var(--cf-surface-2); color: var(--cf-text); }
+.cf-pk-x:focus-visible { outline: 2px solid var(--cf-accent); outline-offset: 1px; }
+
+.cf-pk-input {
+    flex: 1 1 120px; min-width: 120px; height: 28px; padding: 0 4px; margin: 0;
+    background: transparent !important; border: 0 !important; box-shadow: none !important; outline: none;
+    color: var(--cf-text); font: inherit; font-size: var(--cf-text-sm);
+}
+.cf-pk-input::placeholder { color: var(--cf-text-3); }
+
+.cf-pk-list {
+    position: absolute; z-index: 60; left: 0; right: 0; top: calc(100% + 4px);
+    max-height: 264px; overflow-y: auto; margin: 0; padding: 4px; list-style: none;
+    background: var(--cf-surface); border: 1px solid var(--cf-border-strong, var(--cf-border));
+    border-radius: var(--cf-radius); box-shadow: var(--cf-shadow-pop, 0 8px 24px rgba(0,0,0,.35));
+}
+.cf-pk-opt {
+    display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: var(--cf-radius-sm);
+    color: var(--cf-text-2); font-size: var(--cf-text-sm); cursor: pointer;
+}
+.cf-pk-opt .cf-pk-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cf-pk-opt:hover, .cf-pk-opt.is-active { background: var(--cf-surface-2); color: var(--cf-text); }
+.cf-pk-empty { padding: 8px 10px; color: var(--cf-text-3); font-size: var(--cf-text-sm); }
+
+/* Rows that used to make room for a tall native list box. */
+.cf-rows .cf-row-control > .cf-pk { min-width: 260px; }
+
+/* ---- cf-fields.js: character counter + variable chips under text fields ---- */
+.cf-fk { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--cf-2); margin-top: 6px; }
+.cf-fk-vars { display: flex; flex-wrap: wrap; gap: 4px; min-width: 0; }
+.cf-fk-var {
+    height: 22px; padding: 0 7px; margin: 0;
+    background: var(--cf-accent-soft); color: var(--cf-accent-fg, var(--cf-accent));
+    border: 1px solid var(--cf-accent-line, transparent); border-radius: var(--cf-radius-sm);
+    font-family: var(--cf-mono); font-size: 12px; line-height: 20px; cursor: pointer;
+}
+.cf-fk-var:hover { filter: brightness(1.15); }
+.cf-fk-var:focus-visible { outline: 2px solid var(--cf-accent); outline-offset: 1px; }
+.cf-fk-count { margin-left: auto; flex: 0 0 auto; color: var(--cf-text-3); font-size: 12px; font-variant-numeric: tabular-nums; line-height: 22px; }
+.cf-fk-count.is-near { color: var(--cf-warning); }
+.cf-fk-count.is-full { color: var(--cf-danger); font-weight: 600; }
+
+/* ---- cf-pagehead.js: the page's master switch in the header ---- */
+.cf-has-head-switch { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--cf-4); }
+.cf-head-switch {
+    flex: 0 0 auto; display: inline-flex; align-items: center; gap: 10px; margin: 2px 0 0;
+    padding: 6px 8px 6px 12px; border: 1px solid var(--cf-border); border-radius: 999px;
+    background: var(--cf-surface); cursor: pointer; user-select: none;
+}
+.cf-head-switch .cf-head-state { font-size: var(--cf-text-sm); font-weight: 600; color: var(--cf-text-3); min-width: 2.2em; text-align: right; }
+.cf-head-switch.is-on { border-color: var(--cf-accent-line, var(--cf-border)); }
+.cf-head-switch.is-on .cf-head-state { color: var(--cf-accent-fg, var(--cf-accent)); }
+.cf-head-switch .cf-switch { margin: 0; }
+.cf-row.cf-row--in-head { display: none !important; }

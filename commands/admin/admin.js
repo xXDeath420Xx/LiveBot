@@ -14,6 +14,12 @@ import * as embedHandler from './admin-embed-handler.js';
 import * as modHandler from './admin-mod-handler.js';
 import * as teamsyncHandler from './admin-teamsync-handler.js';
 import * as vcsoundsHandler from './admin-vcsounds-handler.js';
+import * as forumHandler from './admin-forum-handler.js';
+import * as channelAccessHandler from './admin-channelaccess-handler.js';
+import * as rolesHandler from './admin-roles-handler.js';
+import * as blocklistHandler from './admin-blocklist-handler.js';
+import { CONVERTIBLE_CHANNEL_TYPES } from './admin-channelaccess-handler.js';
+import { themeColor } from '../../core/guild-theme.js';
 
 function requireAdmin(interaction) {
     if (!interaction.member.permissions.has(PermissionsBitField.Flags.Administrator)) {
@@ -42,7 +48,7 @@ export default {
                         .setRequired(true))
                 .addChannelOption(option =>
                     option.setName('requests-channel')
-                        .setDescription('The channel where the bot will post the requests for approval.')
+                        .setDescription('Channel where requests are posted for approval')
                         .addChannelTypes(ChannelType.GuildText)
                         .setRequired(true))
         )
@@ -68,6 +74,29 @@ export default {
         )
 
         // ─── embed group (5 subcmds) ───
+        .addSubcommandGroup(group =>
+            group
+                .setName('blocklist')
+                // Descriptions here are kept terse on purpose. Discord caps a command at 8000
+                // characters across every name, description and choice in it, and /admin sits at
+                // ~7900 with this group present — adding another one will need trimming elsewhere.
+                .setDescription('Block scam images so reposts are deleted')
+                .addSubcommand(sub =>
+                    sub.setName('add')
+                        .setDescription('Block the images on a message')
+                        .addStringOption(opt =>
+                            opt.setName('message')
+                                .setDescription('Message link to the scam post')
+                                .setRequired(true))
+                        .addStringOption(opt =>
+                            opt.setName('label')
+                                .setDescription('Label for the listing')
+                                .setMaxLength(200)))
+                .addSubcommand(sub => sub.setName('list').setDescription('Show blocked images'))
+                .addSubcommand(sub =>
+                    sub.setName('remove').setDescription('Remove a blocklist entry')
+                        .addIntegerOption(opt =>
+                            opt.setName('id').setDescription('Entry ID from the list').setRequired(true))))
         .addSubcommandGroup(group =>
             group
                 .setName('embed')
@@ -119,7 +148,10 @@ export default {
                 .addSubcommand(sub =>
                     sub.setName('ban').setDescription('Bans a user from the server.')
                         .addUserOption(opt => opt.setName('user').setDescription('The user to ban.').setRequired(true))
-                        .addStringOption(opt => opt.setName('reason').setDescription('The reason for the ban.').setRequired(true)))
+                        .addStringOption(opt => opt.setName('reason').setDescription('The reason for the ban.').setRequired(true))
+                        // Optional: makes it a temporary ban, lifted by jobs/timed-moderation-job.js. Without it the
+                        // server's default ban length applies (Moderation page); "permanent" skips that default.
+                        .addStringOption(opt => opt.setName('duration').setDescription('Unban automatically after e.g. 12h, 7d, or "permanent"').setMaxLength(40)))
                 .addSubcommand(sub =>
                     sub.setName('unban').setDescription('Revokes a ban for a user.')
                         .addStringOption(opt => opt.setName('user-id').setDescription('The ID of the user to unban.').setRequired(true))
@@ -129,10 +161,12 @@ export default {
                         .addUserOption(opt => opt.setName('user').setDescription('The user to kick.').setRequired(true))
                         .addStringOption(opt => opt.setName('reason').setDescription('The reason for the kick.').setRequired(true)))
                 .addSubcommand(sub =>
-                    sub.setName('mute').setDescription('Times out a user, preventing them from talking or speaking.')
+                    sub.setName('mute').setDescription('Times out a user.')
                         .addUserOption(opt => opt.setName('user').setDescription('The user to mute.').setRequired(true))
-                        .addStringOption(opt => opt.setName('duration').setDescription('The duration of the mute (e.g., 5m, 1h, 3d). Max 28d.').setRequired(true))
-                        .addStringOption(opt => opt.setName('reason').setDescription('The reason for the mute.').setRequired(true)))
+                        .addStringOption(opt => opt.setName('reason').setDescription('The reason for the mute.').setRequired(true))
+                        // Optional (Discord lists optional options last): without it the server's default timeout
+                        // length from the Moderation page applies.
+                        .addStringOption(opt => opt.setName('duration').setDescription('The duration of the mute (e.g., 5m, 1h, 3d). Max 28d. Empty = server default.').setMaxLength(40)))
                 .addSubcommand(sub =>
                     sub.setName('unmute').setDescription('Removes a timeout from a user.')
                         .addUserOption(opt => opt.setName('user').setDescription('The user to unmute.').setRequired(true))
@@ -161,10 +195,10 @@ export default {
                                     { name: 'Has Link', value: 'links' },
                                     { name: 'Has Attachment', value: 'files' }
                                 ))
-                        .addUserOption(opt => opt.setName('user').setDescription('The user whose messages to delete (required if filter is "User").'))
-                        .addStringOption(opt => opt.setName('text').setDescription('The text to search for (required if filter is "Contains Text").')))
+                        .addUserOption(opt => opt.setName('user').setDescription('Whose messages to delete (filter: User)'))
+                        .addStringOption(opt => opt.setName('text').setDescription('Text to match (filter: Contains Text)')))
                 .addSubcommand(sub =>
-                    sub.setName('quarantine').setDescription('Quarantines a user, temporarily restricting their permissions.')
+                    sub.setName('quarantine').setDescription('Quarantine a user (temporarily restrict permissions)')
                         .addUserOption(opt => opt.setName('user').setDescription('The user to quarantine.').setRequired(true))
                         .addBooleanOption(opt => opt.setName('enable').setDescription('Enable or disable quarantine for the user.').setRequired(true)))
                 .addSubcommand(sub =>
@@ -172,13 +206,17 @@ export default {
                         .addStringOption(opt => opt.setName('duration').setDescription('The slowmode duration (e.g., 10m, 5m, 1h) or "off".').setRequired(true))
                         .addStringOption(opt => opt.setName('reason').setDescription('The reason for changing the slowmode.')))
                 .addSubcommand(sub =>
-                    sub.setName('lock').setDescription('Locks the current channel, preventing @everyone from sending messages.')
+                    sub.setName('lock').setDescription('Locks this channel for @everyone.')
                         .addStringOption(opt => opt.setName('reason').setDescription('The reason for locking the channel.')))
-                .addSubcommand(sub => sub.setName('unlock').setDescription('Unlocks the current channel, allowing @everyone to send messages.'))
+                .addSubcommand(sub => sub.setName('unlock').setDescription('Unlocks this channel, restoring its previous state.'))
+                // Temporary role, removed by jobs/timed-moderation-job.js. Kept terse: /admin is near
+                // Discord's 8000-character ceiling for one command.
                 .addSubcommand(sub =>
-                    sub.setName('lockdown').setDescription('Locks the current channel. Requires a special password.')
-                        .addStringOption(opt => opt.setName('password').setDescription('The password required to execute this sensitive action.').setRequired(true))
-                        .addBooleanOption(opt => opt.setName('unlock').setDescription('Set to true to unlock the channel.')))
+                    sub.setName('temprole').setDescription('Give a role that is removed after a set time.')
+                        .addUserOption(opt => opt.setName('user').setDescription('Member to give it to').setRequired(true))
+                        .addRoleOption(opt => opt.setName('role').setDescription('Role to give').setRequired(true))
+                        .addStringOption(opt => opt.setName('duration').setDescription('e.g. 2h, 7d, or off').setRequired(true).setMaxLength(40))
+                        .addStringOption(opt => opt.setName('reason').setDescription('Why').setMaxLength(400)))
                 .addSubcommand(sub =>
                     sub.setName('announce').setDescription('Sends an announcement to a specified channel.')
                         .addChannelOption(opt => opt.setName('channel').setDescription('The channel to send the announcement to.').addChannelTypes(ChannelType.GuildText).setRequired(true))
@@ -198,6 +236,74 @@ export default {
                     sub.setName('team').setDescription('Sync a specific team')
                         .addStringOption(opt => opt.setName('team_name').setDescription('The name of the Twitch team to sync').setRequired(true).setAutocomplete(true)))
                 .addSubcommand(sub => sub.setName('status').setDescription('Show current team sync status and next scheduled run'))
+                .addSubcommand(sub =>
+                    sub.setName('exclude').setDescription('Stop team sync re-adding a streamer here')
+                        .addStringOption(opt => opt.setName('streamer').setDescription('Twitch username').setRequired(true).setAutocomplete(true).setMaxLength(60))
+                        .addStringOption(opt => opt.setName('reason').setDescription('Why (shown in the excluded list)').setMaxLength(255)))
+                .addSubcommand(sub =>
+                    sub.setName('include').setDescription('Let team sync add an excluded streamer again')
+                        .addStringOption(opt => opt.setName('streamer').setDescription('Twitch username').setRequired(true).setAutocomplete(true).setMaxLength(60)))
+                .addSubcommand(sub => sub.setName('excluded').setDescription('List streamers excluded from team sync in this server'))
+        )
+
+        // ─── channel-access group (4 subcmds) ───
+        .addSubcommandGroup(group =>
+            group
+                .setName('channel-access')
+                .setDescription('Replace per-user channel whitelists with a role')
+                .addSubcommand(sub =>
+                    sub.setName('scan').setDescription('List channels that grant access per user instead of by role'))
+                .addSubcommand(sub =>
+                    sub.setName('convert').setDescription('Fold a channel\'s per-user whitelist into a role')
+                        .addChannelOption(opt => opt.setName('channel').setDescription('The channel whose whitelist should become a role.').addChannelTypes(...CONVERTIBLE_CHANNEL_TYPES).setRequired(true))
+                        .addRoleOption(opt => opt.setName('role').setDescription('The role that should grant access instead.').setRequired(true))
+                        .addBooleanOption(opt => opt.setName('dry-run').setDescription('Show what would change without touching anything.'))
+                        .addBooleanOption(opt => opt.setName('watch').setDescription('Also auto-convert any future per-user grant on this channel.')))
+                .addSubcommand(sub =>
+                    sub.setName('watch').setDescription('Auto-convert future per-user grants on a channel to a role')
+                        .addChannelOption(opt => opt.setName('channel').setDescription('The channel to watch.').addChannelTypes(...CONVERTIBLE_CHANNEL_TYPES).setRequired(true))
+                        .addRoleOption(opt => opt.setName('role').setDescription('The role new grants should become (required when enabling).'))
+                        .addBooleanOption(opt => opt.setName('enabled').setDescription('False stops watching the channel.')))
+                .addSubcommand(sub =>
+                    sub.setName('watch-list').setDescription('Show which channels are being watched'))
+        )
+
+        // ─── forum group (3 subcmds) ───
+        // Per-forum rules, applied by core/forum-manager.js on thread creation. Rows are
+        // per forum channel, so a guild can run several forums with different rules.
+        .addSubcommandGroup(group =>
+            group
+                .setName('forum')
+                .setDescription('Automatic rules for forum channels')
+                .addSubcommand(sub =>
+                    sub.setName('setup').setDescription('Set the rules applied to new posts in a forum')
+                        .addChannelOption(opt =>
+                            opt.setName('forum').setDescription('The forum channel these rules apply to')
+                                .addChannelTypes(ChannelType.GuildForum).setRequired(true))
+                        .addBooleanOption(opt =>
+                            opt.setName('require-tag').setDescription('Delete posts made without a tag, and tell the author why'))
+                        .addIntegerOption(opt =>
+                            opt.setName('slowmode').setDescription('Slowmode on new posts, in seconds (0 to clear)')
+                                .setMinValue(0).setMaxValue(21600))
+                        .addIntegerOption(opt =>
+                            opt.setName('auto-archive').setDescription('Archive a post after this long with no activity')
+                                .addChoices(
+                                    { name: '1 hour', value: 60 },
+                                    { name: '1 day', value: 1440 },
+                                    { name: '3 days', value: 4320 },
+                                    { name: '1 week', value: 10080 },
+                                ))
+                        .addBooleanOption(opt =>
+                            opt.setName('lock-on-archive').setDescription('Lock a post once it archives'))
+                        .addStringOption(opt =>
+                            opt.setName('reaction').setDescription('Emoji the bot adds to every new post (blank to clear)')))
+                .addSubcommand(sub =>
+                    sub.setName('disable').setDescription('Stop applying rules to a forum')
+                        .addChannelOption(opt =>
+                            opt.setName('forum').setDescription('The forum channel')
+                                .addChannelTypes(ChannelType.GuildForum).setRequired(true)))
+                .addSubcommand(sub =>
+                    sub.setName('list').setDescription('Show the forum rules configured in this server'))
         )
 
         // ─── temp-channel group (2 subcmds) ───
@@ -216,14 +322,14 @@ export default {
                         .addStringOption(opt =>
                             opt.setName('naming-template').setDescription('The name for new channels. Use {user} for the user\'s name.'))
                         .addRoleOption(opt =>
-                            opt.setName('required-role').setDescription('Optional: only members with this role can spawn a temp VC from this creator.'))
+                            opt.setName('required-role').setDescription('Only members with this role can use this creator'))
                         .addIntegerOption(opt =>
                             opt.setName('default-user-limit').setDescription('Optional: default user limit for spawned VCs (1-99).')
                                 .setMinValue(1).setMaxValue(99)))
                 .addSubcommand(sub =>
-                    sub.setName('disable').setDescription('Disables a temp channel creator (or all if no creator-channel given).')
+                    sub.setName('disable').setDescription('Disable a temp channel creator (or all of them)')
                         .addChannelOption(opt =>
-                            opt.setName('creator-channel').setDescription('The specific creator channel to disable. Omit to disable all.')
+                            opt.setName('creator-channel').setDescription('Creator channel to disable (omit for all)')
                                 .addChannelTypes(ChannelType.GuildVoice)))
         )
 
@@ -241,11 +347,32 @@ export default {
                             opt.setName('role').setDescription('The role to grant to users upon verification.').setRequired(true)))
         )
 
+        // ─── roles group (1 subcmd) ───
+        .addSubcommandGroup(group =>
+            group
+                .setName('roles')
+                .setDescription('Bulk role tools')
+                .addSubcommand(sub =>
+                    sub.setName('bulk-create')
+                        .setDescription('Create many roles at once from a line-separated list of names')
+                        .addStringOption(opt =>
+                            opt.setName('color').setDescription('Default colour: hex like #5865F2, a name like blurple, or "random"'))
+                        .addStringOption(opt =>
+                            opt.setName('permissions').setDescription('Default permissions for every role in the list')
+                                .addChoices(...rolesHandler.PRESET_CHOICES))
+                        .addRoleOption(opt =>
+                            opt.setName('below').setDescription('Place the new roles directly below this role'))
+                        .addBooleanOption(opt =>
+                            opt.setName('hoist').setDescription('Show members with these roles separately in the member list'))
+                        .addBooleanOption(opt =>
+                            opt.setName('mentionable').setDescription('Let anyone @mention these roles')))
+        )
+
         // ─── vcsounds group (14 subcmds) ───
         .addSubcommandGroup(group =>
             group
                 .setName('vcsounds')
-                .setDescription('Configure VC sound drops (random/scheduled sounds in voice channels)')
+                .setDescription('Configure VC sound drops in voice channels')
                 .addSubcommand(sub =>
                     sub.setName('enable').setDescription('Enable VC sound drops')
                         .addStringOption(opt =>
@@ -317,7 +444,7 @@ export default {
                 }
 
                 const embed = new EmbedBuilder()
-                    .setColor('#5865F2')
+                    .setColor(themeColor(interaction.guildId, 'primary'))
                     .setTitle('Request Live Stream Announcements')
                     .setDescription('Click the button below to open a form and add your stream to the announcement list for this server.')
                     .setFooter({ text: 'CertiFried Utility | User Requests' });
@@ -360,6 +487,15 @@ export default {
                 }
                 break;
 
+            // ─── blocklist (admin-only; gated again inside the handler) ───
+            case 'blocklist':
+                switch (subcommand) {
+                    case 'add': return blocklistHandler.handleAdd(interaction);
+                    case 'list': return blocklistHandler.handleList(interaction);
+                    case 'remove': return blocklistHandler.handleRemove(interaction);
+                }
+                break;
+
             // ─── embed ───
             case 'embed':
                 switch (subcommand) {
@@ -387,7 +523,7 @@ export default {
                     case 'slowmode': return modHandler.handleSlowmode(interaction);
                     case 'lock': return modHandler.handleLock(interaction);
                     case 'unlock': return modHandler.handleUnlock(interaction);
-                    case 'lockdown': return modHandler.handleLockdown(interaction);
+                    case 'temprole': return modHandler.handleTempRole(interaction);
                     case 'announce': return modHandler.handleAnnounce(interaction);
                 }
                 break;
@@ -399,8 +535,27 @@ export default {
                     case 'all': return teamsyncHandler.handleAll(interaction);
                     case 'team': return teamsyncHandler.handleTeam(interaction);
                     case 'status': return teamsyncHandler.handleStatus(interaction);
+                    case 'exclude': return teamsyncHandler.handleExclude(interaction);
+                    case 'include': return teamsyncHandler.handleInclude(interaction);
+                    case 'excluded': return teamsyncHandler.handleExcluded(interaction);
                 }
                 break;
+
+            // ─── channel-access (admin-only) ───
+            case 'channel-access':
+                if (!requireAdmin(interaction)) return;
+                switch (subcommand) {
+                    case 'scan': return channelAccessHandler.handleScan(interaction);
+                    case 'convert': return channelAccessHandler.handleConvert(interaction);
+                    case 'watch': return channelAccessHandler.handleWatch(interaction);
+                    case 'watch-list': return channelAccessHandler.handleWatchList(interaction);
+                }
+                break;
+
+            // ─── forum (admin-only) ───
+            case 'forum':
+                if (!requireAdmin(interaction)) return;
+                return forumHandler.handleForum(interaction, subcommand);
 
             // ─── temp-channel (admin-only) ───
             case 'temp-channel':
@@ -430,17 +585,16 @@ export default {
                         const limitNote = defaultUserLimit ? ` Default limit: ${defaultUserLimit}.` : '';
                         await interaction.editReply(`Creator configured! Users joining ${creatorChannel} will spawn a temp VC under **${category.name}**.${gateNote}${limitNote}`);
                     } else if (subcommand === 'disable') {
+                        // The same state the Utilities page switch turns off (core/temp-channel-config.js).
+                        const { disableTempChannels } = await import('../../core/temp-channel-config.js');
                         const creatorChannel = interaction.options.getChannel('creator-channel');
                         if (creatorChannel) {
-                            const [res] = await pool.execute(
-                                'DELETE FROM temp_channel_config WHERE guild_id = ? AND creator_channel_id = ?',
-                                [interaction.guild.id, creatorChannel.id]
-                            );
-                            await interaction.editReply(res.affectedRows
+                            const removed = await disableTempChannels(interaction.guild.id, { creatorChannelId: creatorChannel.id });
+                            await interaction.editReply(removed
                                 ? `Disabled creator ${creatorChannel}.`
                                 : `No creator config found for ${creatorChannel}.`);
                         } else {
-                            await pool.execute('DELETE FROM temp_channel_config WHERE guild_id = ?', [interaction.guild.id]);
+                            await disableTempChannels(interaction.guild.id);
                             await interaction.editReply('All temp channel creators for this guild have been disabled.');
                         }
                     }
@@ -463,39 +617,32 @@ export default {
                         return;
                     }
 
+                    // One verification system (core/verification.js, verify_config). This used to write a
+                    // second config (join_gate_config.verification_*) that nothing enforced, and post a
+                    // button nobody handled; it now sets the live gate and posts its panel. The full
+                    // setup (CAPTCHA, channel locking, undo) is `/systems verification setup`.
                     try {
-                        await pool.execute(
-                            `INSERT INTO join_gate_config (guild_id, verification_enabled, verification_role_id, verification_channel_id)
-                             VALUES (?, 1, ?, ?)
-                             ON DUPLICATE KEY UPDATE
-                                verification_enabled = 1,
-                                verification_role_id = VALUES(verification_role_id),
-                                verification_channel_id = VALUES(verification_channel_id)`,
-                            [interaction.guild.id, role.id, channel.id]
-                        );
-
-                        const verifyEmbed = new EmbedBuilder()
-                            .setColor('#2ECC71')
-                            .setTitle(`Welcome to ${interaction.guild.name}!`)
-                            .setDescription('To gain access to the rest of the server, please click the button below to verify that you are human.')
-                            .setFooter({ text: 'This helps protect our community from raids and bots.' });
-
-                        const verifyRow = new ActionRowBuilder()
-                            .addComponents(
-                                new ButtonBuilder()
-                                    .setCustomId('verify_member')
-                                    .setLabel('Verify')
-                                    .setStyle(ButtonStyle.Success)
-                                    .setEmoji('✅')
-                            );
-
-                        await channel.send({ embeds: [verifyEmbed], components: [verifyRow] });
-                        await interaction.editReply(`Verification panel has been created in ${channel}.`);
+                        const { saveVerifyConfig, postPanel, VerificationError } = await import('../../core/verification.js');
+                        try {
+                            await saveVerifyConfig(interaction.guild.id, { verified_role_id: role.id, gate_channel_id: channel.id, enabled: 1 });
+                            await postPanel(interaction.guild, { channelId: channel.id });
+                        } catch (err) {
+                            if (err instanceof VerificationError) { await interaction.editReply(err.message); return; }
+                            throw err;
+                        }
+                        await interaction.editReply(`Verification panel has been created in ${channel}. For a CAPTCHA, channel locking and stats use \`/systems verification\` or the dashboard's Verification page.`);
 
                     } catch (error) {
                         logger.error('[Admin Command] Verification setup error', { error: error.message, stack: error.stack });
                         await interaction.editReply('An error occurred. I may be missing permissions to send messages in that channel.');
                     }
+                }
+                break;
+
+            // ─── roles ───
+            case 'roles':
+                switch (subcommand) {
+                    case 'bulk-create': return rolesHandler.handleBulkCreate(interaction);
                 }
                 break;
 

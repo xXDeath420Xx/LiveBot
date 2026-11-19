@@ -1,0 +1,89 @@
+<%#
+  Super-admin incident history panel for /status (status-tailwind.ejs).
+  Rendered only for signed-in visitors, and it stays hidden unless GET /api/status/incidents answers
+  200 — that endpoint is super-admin only, so everyone else never sees it. Built with DOM APIs
+  (no HTML string injection). Data: dashboard/services/status-incidents.js.
+%>
+<% if (typeof user !== 'undefined' && user) { %>
+<section class="section" id="incidents-section" hidden>
+    <div class="section-header">
+        <h2 class="section-title">Incident History <span id="incidents-window" style="font-size:0.8rem;color:var(--text-muted);font-weight:500;"></span></h2>
+    </div>
+    <div id="incidents-summary" style="display:flex;flex-wrap:wrap;gap:0.75rem;margin-bottom:1rem;"></div>
+    <div id="incidents-list" style="display:flex;flex-direction:column;gap:0.5rem;"></div>
+</section>
+<script>
+(function () {
+    const SEV_COLORS = { critical: 'var(--accent-red)', major: 'var(--si-major, #f97316)', minor: 'var(--accent-yellow)', info: 'var(--accent-blue)' };
+    const SOURCE_LABEL = { bot: 'Bot', music: 'Music' };
+
+    function el(tag, style, text) {
+        const node = document.createElement(tag);
+        if (style) node.setAttribute('style', style);
+        if (text !== undefined && text !== null) node.textContent = text;
+        return node;
+    }
+    function fmtDuration(sec) {
+        if (sec === null || sec === undefined) return 'downtime not measured';
+        if (sec < 60) return sec + 's';
+        const m = Math.floor(sec / 60), h = Math.floor(m / 60), d = Math.floor(h / 24);
+        if (d > 0) return d + 'd ' + (h % 24) + 'h';
+        if (h > 0) return h + 'h ' + (m % 60) + 'm';
+        return m + 'm';
+    }
+    function fmtWhen(iso) {
+        if (!iso) return 'unknown';
+        try { return new Date(iso).toLocaleString(); } catch (e) { return iso; }
+    }
+    function pill(label, value, color) {
+        const p = el('div', 'background:var(--bg-card);border:1px solid var(--border-color);border-radius:10px;padding:0.5rem 0.9rem;');
+        p.appendChild(el('div', 'font-size:1.1rem;font-weight:700;color:' + (color || 'var(--text-primary)') + ';', String(value)));
+        p.appendChild(el('div', 'font-size:0.75rem;color:var(--text-muted);', label));
+        return p;
+    }
+
+    fetch('/api/status/incidents?days=30&limit=15', { credentials: 'same-origin' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (data) {
+            if (!data || !data.success) return;   // not a super admin, or unavailable: stay hidden
+            const section = document.getElementById('incidents-section');
+            const summary = document.getElementById('incidents-summary');
+            const list = document.getElementById('incidents-list');
+            document.getElementById('incidents-window').textContent = '· last ' + data.window_days + ' days';
+
+            const s = data.summary || {};
+            summary.appendChild(pill('Incidents', s.total || 0));
+            summary.appendChild(pill('Ongoing', s.ongoing || 0, (s.ongoing ? SEV_COLORS.critical : 'var(--accent-green)')));
+            summary.appendChild(pill('Bot downtime (measured)', fmtDuration(s.bot_downtime_seconds || 0)));
+            if (s.bot_uptime_percent !== null && s.bot_uptime_percent !== undefined) {
+                summary.appendChild(pill('Bot uptime', s.bot_uptime_percent.toFixed(2) + '%', 'var(--accent-green)'));
+            }
+            ['critical', 'major', 'minor'].forEach(function (k) {
+                if (s.by_severity && s.by_severity[k]) summary.appendChild(pill(k, s.by_severity[k], SEV_COLORS[k]));
+            });
+
+            if (!data.incidents || !data.incidents.length) {
+                list.appendChild(el('div', 'color:var(--text-secondary);', 'No incidents in this period.'));
+            }
+            (data.incidents || []).forEach(function (i) {
+                const row = el('div', 'background:var(--bg-card);border:1px solid var(--border-color);border-left:4px solid '
+                    + (SEV_COLORS[i.severity] || 'var(--border-color)') + ';border-radius:10px;padding:0.75rem 1rem;');
+                const head = el('div', 'display:flex;flex-wrap:wrap;justify-content:space-between;gap:0.5rem;');
+                const title = el('div', 'font-weight:600;color:var(--text-primary);',
+                    (SOURCE_LABEL[i.source] || i.source) + ' · ' + i.title + (i.ongoing ? ' (ongoing)' : ''));
+                let length = i.downtime_measured ? 'down ' + fmtDuration(i.duration_seconds) : 'downtime not measured';
+                if (i.restarts > 1 && i.span_seconds) length += ' · over ' + fmtDuration(i.span_seconds);
+                const meta = el('div', 'font-size:0.8rem;color:var(--text-muted);',
+                    i.severity.toUpperCase() + ' · ' + fmtWhen(i.started_at) + ' · ' + length);
+                head.appendChild(title);
+                head.appendChild(meta);
+                row.appendChild(head);
+                if (i.detail) row.appendChild(el('div', 'font-size:0.85rem;color:var(--text-secondary);margin-top:0.35rem;white-space:pre-wrap;', i.detail));
+                list.appendChild(row);
+            });
+            section.hidden = false;
+        })
+        .catch(function () { /* panel is optional — stay hidden */ });
+})();
+</script>
+<% } %>

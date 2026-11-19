@@ -1,230 +1,177 @@
-<%
-const csConfig = typeof communitySupportConfig !== 'undefined' ? communitySupportConfig : {};
-const csEnabled = !!csConfig.enabled;
+<%#
+  Community support: counts raids and support posts in two channels, awards points, and each month
+  posts the top supporters and announces their streams in the shoutout channel for the next month
+  (events/communitySupportTracker.js, jobs/community-support-rotation.js). Saved with
+  PUT /api/guilds/:id/community-support/config. Field names and ids are unchanged.
 %>
-
+<%
+const csConfig = typeof communitySupportConfig !== 'undefined' && communitySupportConfig ? communitySupportConfig : {};
+const csEnabled = !!csConfig.enabled;
+const csText = (channels || []).filter(c => c.type === 0 || c.type === 5 || c.type === undefined);
+const csOpts = (selected) => csText.map(c => ({ id: c.id, name: c.name, sel: String(c.id) === String(selected || '') }));
+%>
 <style>
-.cs-card {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(139, 92, 246, 0.15);
-    border-radius: 12px;
-    overflow: hidden;
-    margin-bottom: 16px;
-}
-.cs-card-header {
-    background: rgba(139, 92, 246, 0.08);
-    padding: 14px 18px;
-    border-bottom: 1px solid rgba(139, 92, 246, 0.15);
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-.cs-card-header i { font-size: 1rem; color: #8b5cf6; }
-.cs-card-header h3 { font-size: 0.95rem; font-weight: 600; color: #fff; margin: 0; }
-.cs-card-body { padding: 18px; }
-.cs-form-group { margin-bottom: 16px; }
-.cs-form-label { display: block; font-size: 0.8rem; font-weight: 600; color: rgba(255,255,255,0.7); margin-bottom: 6px; }
-.cs-form-hint { font-size: 0.7rem; color: rgba(255,255,255,0.4); margin-top: 4px; }
-.cs-form-select, .cs-form-input {
-    width: 100%;
-    background: rgba(0,0,0,0.3);
-    border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 8px;
-    color: #fff;
-    padding: 8px 12px;
-    font-size: 0.85rem;
-}
-.cs-form-input { max-width: 120px; }
-.cs-toggle-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 10px 14px;
-    background: rgba(0,0,0,0.15);
-    border: 1px solid rgba(255,255,255,0.06);
-    border-radius: 8px;
-    margin-bottom: 8px;
-}
-.cs-toggle-label { font-size: 0.85rem; color: rgba(255,255,255,0.8); }
-.cs-toggle-hint { font-size: 0.7rem; color: rgba(255,255,255,0.4); }
-.cs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-.cs-points-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
-.cs-save-btn {
-    background: linear-gradient(135deg, #8b5cf6, #7c3aed);
-    color: #fff;
-    border: none;
-    padding: 10px 24px;
-    border-radius: 8px;
-    font-weight: 600;
-    cursor: pointer;
-    font-size: 0.9rem;
-}
-.cs-save-btn:hover { opacity: 0.9; }
-.cs-status-msg {
-    padding: 8px 14px;
-    border-radius: 8px;
-    font-size: 0.85rem;
-    margin-bottom: 16px;
-    display: none;
-}
-.cs-status-msg.success { display: block; background: rgba(139, 92, 246, 0.15); color: #a78bfa; border: 1px solid rgba(139, 92, 246, 0.3); }
-.cs-status-msg.error { display: block; background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); }
-@media (max-width: 640px) { .cs-grid, .cs-points-grid { grid-template-columns: 1fr; } }
+    #csPage .cf-section-foot > .cf-status-line { margin-right: auto; }
 </style>
 
-<div class="page-section">
+<div class="page-section" id="csPage">
     <div class="page-section-header">
         <div>
             <div class="page-section-title">
-                <i class="fas fa-hands-helping"></i>
-                <span>Community Support</span>
+                <i class="fas fa-hands-helping" aria-hidden="true"></i>
+                <span>Community support</span>
             </div>
-            <div class="page-section-subtitle">
-                Track raid/support activity and reward top community supporters
-            </div>
+            <div class="page-section-subtitle">Points for raids and support posts, counted per calendar month.</div>
         </div>
+        <a class="btn btn-secondary btn-sm" href="/supporters/<%= guild.id %>" target="_blank" rel="noopener">Public leaderboard</a>
     </div>
 
-    <div id="cs-status" class="cs-status-msg"></div>
-
-    <form id="cs-form">
-        <!-- Enable -->
-        <div class="cs-card">
-            <div class="cs-card-header">
-                <i class="fas fa-power-off"></i>
-                <h3>Enable Community Support</h3>
-            </div>
-            <div class="cs-card-body">
-                <div class="cs-toggle-row">
-                    <div>
-                        <div class="cs-toggle-label">Community Support System</div>
-                        <div class="cs-toggle-hint">Track raids and support activity, award points, monthly leaderboard</div>
-                    </div>
-                    <input type="checkbox" name="enabled" id="cs-enabled" <%= csEnabled ? 'checked' : '' %> style="accent-color: #8b5cf6;">
+    <form id="cs-form" novalidate>
+        <%# Not used by the bot; kept as stored so saving here never clears them. %>
+        <input type="hidden" id="f-community-support-affiliate_link_channel_id" name="affiliate_link_channel_id" value="<%= csConfig.affiliate_link_channel_id || '' %>">
+        <input type="hidden" id="f-community-support-non_affiliate_link_channel_id" name="non_affiliate_link_channel_id" value="<%= csConfig.non_affiliate_link_channel_id || '' %>">
+        <section class="cf-section" aria-labelledby="cs-general-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="cs-general-title">Channels</h2>
+                    <p class="cf-section-desc">Members earn points by mentioning the streamer they raided or supported, or posting their twitch.tv link.</p>
                 </div>
-            </div>
-        </div>
-
-        <!-- Channels -->
-        <div class="cs-card">
-            <div class="cs-card-header">
-                <i class="fas fa-hashtag"></i>
-                <h3>Channels</h3>
-            </div>
-            <div class="cs-card-body">
-                <div class="cs-grid">
-                    <div class="cs-form-group">
-                        <label class="cs-form-label">Raid Channel</label>
-                        <select name="raid_channel_id" class="cs-form-select">
-                            <option value="">Select...</option>
-                            <% channels.forEach(ch => { %>
-                                <option value="<%= ch.id %>" <%= csConfig.raid_channel_id === ch.id ? 'selected' : '' %>>#<%= ch.name %></option>
-                            <% }); %>
-                        </select>
-                        <div class="cs-form-hint">Channel where raid posts are tracked</div>
+            </header>
+            <div class="cf-rows">
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="cs-enabled">Community support</label>
+                        <p class="cf-row-desc" id="cs-enabled-desc">Count points in the channels below and run the monthly shoutout.</p>
                     </div>
-                    <div class="cs-form-group">
-                        <label class="cs-form-label">Support Channel</label>
-                        <select name="support_channel_id" class="cs-form-select">
-                            <option value="">Select...</option>
-                            <% channels.forEach(ch => { %>
-                                <option value="<%= ch.id %>" <%= csConfig.support_channel_id === ch.id ? 'selected' : '' %>>#<%= ch.name %></option>
-                            <% }); %>
-                        </select>
-                        <div class="cs-form-hint">Channel where support activity is tracked</div>
+                    <div class="cf-row-control">
+                        <input type="checkbox" class="cf-switch" role="switch" name="enabled" id="cs-enabled" aria-describedby="cs-enabled-desc" data-feature-switch <%= csEnabled ? 'checked' : '' %>>
                     </div>
-                    <div class="cs-form-group">
-                        <label class="cs-form-label">Shoutout Channel</label>
-                        <select name="shoutout_channel_id" class="cs-form-select">
-                            <option value="">Select...</option>
-                            <% channels.forEach(ch => { %>
-                                <option value="<%= ch.id %>" <%= csConfig.shoutout_channel_id === ch.id ? 'selected' : '' %>>#<%= ch.name %></option>
-                            <% }); %>
-                        </select>
-                        <div class="cs-form-hint">Monthly top supporters are posted here</div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-community-support-raid_channel_id">Raid channel</label>
+                        <p class="cf-row-desc">Each post here counts as a raid.</p>
                     </div>
-                    <div class="cs-form-group">
-                        <label class="cs-form-label">Affiliate Link Channel</label>
-                        <select name="affiliate_link_channel_id" class="cs-form-select">
+                    <div class="cf-row-control">
+                        <select id="f-community-support-raid_channel_id" name="raid_channel_id" class="form-select">
                             <option value="">None</option>
-                            <% channels.forEach(ch => { %>
-                                <option value="<%= ch.id %>" <%= csConfig.affiliate_link_channel_id === ch.id ? 'selected' : '' %>>#<%= ch.name %></option>
-                            <% }); %>
+                            <% csOpts(csConfig.raid_channel_id).forEach(o => { %><option value="<%= o.id %>" data-kind="text"<%= o.sel ? ' selected' : '' %>>#<%= o.name %></option>
+                            <% }) %>
                         </select>
                     </div>
-                    <div class="cs-form-group">
-                        <label class="cs-form-label">Non-Affiliate Link Channel</label>
-                        <select name="non_affiliate_link_channel_id" class="cs-form-select">
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-community-support-support_channel_id">Support channel</label>
+                        <p class="cf-row-desc">Each post here counts as support; a post that says "raided" counts as a raid.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <select id="f-community-support-support_channel_id" name="support_channel_id" class="form-select">
                             <option value="">None</option>
-                            <% channels.forEach(ch => { %>
-                                <option value="<%= ch.id %>" <%= csConfig.non_affiliate_link_channel_id === ch.id ? 'selected' : '' %>>#<%= ch.name %></option>
-                            <% }); %>
+                            <% csOpts(csConfig.support_channel_id).forEach(o => { %><option value="<%= o.id %>" data-kind="text"<%= o.sel ? ' selected' : '' %>>#<%= o.name %></option>
+                            <% }) %>
+                        </select>
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-community-support-shoutout_channel_id">Shoutout channel</label>
+                        <p class="cf-row-desc">Early on the 1st of each month (UTC) the top 10 supporters are posted here, and their streams are announced here for that month. /alerts shoutout add uses it too.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <select id="f-community-support-shoutout_channel_id" name="shoutout_channel_id" class="form-select">
+                            <option value="">None</option>
+                            <% csOpts(csConfig.shoutout_channel_id).forEach(o => { %><option value="<%= o.id %>" data-kind="text"<%= o.sel ? ' selected' : '' %>>#<%= o.name %></option>
+                            <% }) %>
                         </select>
                     </div>
                 </div>
             </div>
-        </div>
+        </section>
 
-        <!-- Points -->
-        <div class="cs-card">
-            <div class="cs-card-header">
-                <i class="fas fa-star"></i>
-                <h3>Point Values</h3>
-            </div>
-            <div class="cs-card-body">
-                <div class="cs-points-grid">
-                    <div class="cs-form-group">
-                        <label class="cs-form-label">Raid Affiliate</label>
-                        <input type="number" name="raid_affiliate_points" class="cs-form-input" value="<%= csConfig.raid_affiliate_points || 5 %>" min="1" max="100">
-                        <div class="cs-form-hint">Points for raiding an affiliate</div>
+        <section class="cf-section" aria-labelledby="cs-points-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="cs-points-title">Points</h2>
+                    <p class="cf-section-desc">What each post is worth, from 1 to 100. Affiliate status is checked on Twitch.</p>
+                </div>
+            </header>
+            <div class="cf-rows">
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-community-support-raid_affiliate_points">Raiding an affiliate</label>
                     </div>
-                    <div class="cs-form-group">
-                        <label class="cs-form-label">Raid Non-Affiliate</label>
-                        <input type="number" name="raid_non_affiliate_points" class="cs-form-input" value="<%= csConfig.raid_non_affiliate_points || 10 %>" min="1" max="100">
-                        <div class="cs-form-hint">Points for raiding a non-affiliate</div>
-                    </div>
-                    <div class="cs-form-group">
-                        <label class="cs-form-label">Support</label>
-                        <input type="number" name="support_points" class="cs-form-input" value="<%= csConfig.support_points || 3 %>" min="1" max="100">
-                        <div class="cs-form-hint">Points for support channel activity</div>
+                    <div class="cf-row-control">
+                        <div class="cf-input-unit">
+                            <input id="f-community-support-raid_affiliate_points" type="number" name="raid_affiliate_points" class="form-control" value="<%= csConfig.raid_affiliate_points || 5 %>" min="1" max="100">
+                            <span class="cf-unit">points</span>
+                        </div>
                     </div>
                 </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-community-support-raid_non_affiliate_points">Raiding a non-affiliate</label>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="cf-input-unit">
+                            <input id="f-community-support-raid_non_affiliate_points" type="number" name="raid_non_affiliate_points" class="form-control" value="<%= csConfig.raid_non_affiliate_points || 10 %>" min="1" max="100">
+                            <span class="cf-unit">points</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-community-support-support_points">Support post</label>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="cf-input-unit">
+                            <input id="f-community-support-support_points" type="number" name="support_points" class="form-control" value="<%= csConfig.support_points || 3 %>" min="1" max="100">
+                            <span class="cf-unit">points</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="cf-section-foot">
+                    <span class="cf-status-line" id="cs-status" role="status" aria-live="polite"></span>
+                    <button type="submit" class="btn btn-primary">Save</button>
+                </div>
             </div>
-        </div>
-
-        <button type="submit" class="cs-save-btn">
-            <i class="fas fa-save"></i> Save Community Support Config
-        </button>
+        </section>
     </form>
 </div>
 
 <script>
-document.getElementById('cs-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
+(function () {
+    const form = document.getElementById('cs-form');
+    if (!form) return;
     const status = document.getElementById('cs-status');
-    const body = {
-        enabled: document.getElementById('cs-enabled').checked,
-        raid_channel_id: e.target.raid_channel_id.value || null,
-        support_channel_id: e.target.support_channel_id.value || null,
-        shoutout_channel_id: e.target.shoutout_channel_id.value || null,
-        affiliate_link_channel_id: e.target.affiliate_link_channel_id.value || null,
-        non_affiliate_link_channel_id: e.target.non_affiliate_link_channel_id.value || null,
-        raid_affiliate_points: parseInt(e.target.raid_affiliate_points.value) || 5,
-        raid_non_affiliate_points: parseInt(e.target.raid_non_affiliate_points.value) || 10,
-        support_points: parseInt(e.target.support_points.value) || 3
-    };
-    try {
-        const res = await fetch('/api/guilds/<%= guild.id %>/community-support/config', {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
-        });
-        const data = await res.json();
-        status.textContent = data.success ? 'Community support config saved!' : (data.error || 'Failed to save');
-        status.className = 'cs-status-msg ' + (data.success ? 'success' : 'error');
-    } catch (err) {
-        status.textContent = 'Network error';
-        status.className = 'cs-status-msg error';
-    }
-});
+    const say = (text, cls) => { status.textContent = text; status.className = 'cf-status-line' + (cls ? ' ' + cls : ''); };
+    const pts = (name, dflt) => Math.min(100, Math.max(1, parseInt(form[name].value, 10) || dflt));
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const body = {
+            enabled: document.getElementById('cs-enabled').checked,
+            raid_channel_id: form.raid_channel_id.value || null,
+            support_channel_id: form.support_channel_id.value || null,
+            shoutout_channel_id: form.shoutout_channel_id.value || null,
+            raid_affiliate_points: pts('raid_affiliate_points', 5),
+            raid_non_affiliate_points: pts('raid_non_affiliate_points', 10),
+            support_points: pts('support_points', 3),
+        };
+        if (body.enabled && !body.raid_channel_id && !body.support_channel_id) return say('Choose a raid or support channel, or nothing is counted.', 'is-bad');
+        say('Saving', 'is-busy');
+        try {
+            const res = await fetch('/api/guilds/<%= guild.id %>/community-support/config', {
+                method: 'PUT', credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || !data.success) throw new Error(data.error || 'Could not save.');
+            say('Saved', 'is-ok');
+            form.dispatchEvent(new CustomEvent('cf:clean', { bubbles: true }));
+        } catch (err) {
+            say(err.message, 'is-bad');
+        }
+    });
+})();
 </script>

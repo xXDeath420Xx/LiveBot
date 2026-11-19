@@ -1,0 +1,696 @@
+/*
+ * cf-settings.css — the settings-row kit for manage feature pages.
+ *
+ * Loaded by both manage templates (manage-tailwind.ejs for the Cards and Compact styles,
+ * manage-classic.ejs for Classic), after their own styles. Everything is drawn from the --cf-*
+ * tokens, which cf-ui.css defines for every colour theme and manage-classic.ejs maps onto its
+ * own palette, so a kit page follows the theme and the site style without page CSS of its own.
+ *
+ * Markup (helpers in dashboard/views/partials/kit/):
+ *
+ *   section.cf-section[.cf-section--danger]
+ *     header.cf-section-head > div > h2.cf-section-title + p.cf-section-desc   (+ .cf-section-actions)
+ *     div.cf-rows                                   one panel per section; rows are hairline-split
+ *       div.cf-row[.cf-row--switch|--stack|--sub]
+ *         div.cf-row-text > label.cf-row-label[for] + p.cf-row-desc
+ *         div.cf-row-control > the control (select / input / .cf-input-unit / input.cf-switch)
+ *       div.cf-rows-head                            a small heading between groups of rows
+ *       div.cf-state[.cf-state--loading|--error]    empty, loading and error states (_state.ejs)
+ *       div.cf-list > div.cf-list-item              list rows with actions (rules, rewards)
+ *       div.cf-table-wrap > table.cf-table[.cf-table--stack]
+ *       div.cf-section-foot                         the section's Save / Add buttons
+ *   aside.cf-help                                   "What this does" (_help.ejs, cf-settings.js)
+ *
+ * Common parts (each documented at its block below): .cf-tabs / .cf-segmented (tab bar, filter),
+ * .cf-notice (inline banner), .cf-chips > .cf-chip (tags, colour-coded or script-built),
+ * .cf-list-item--multi (multi-line list rows), details.cf-expand (expandable rows),
+ * .cf-input-group (a field with buttons), .cf-check-grid (columns of checkboxes), .cf-range,
+ * .cf-search, .cf-status-line (inline "Saved" line), .cf-kpi-sub (KPI second line), .cf-dropzone,
+ * .cf-gallery (image tiles) and .cf-modal (dialog shell).
+ *
+ * Panels hide children that are [hidden] or empty (a list a script has not filled yet) and draw no
+ * divider for them; [hidden] always beats a kit component's own display.
+ *
+ * Rows put the label and its description on the left and the control on the right; under
+ * 640px they stack (a switch stays on the right of its label). Controls, switches and buttons
+ * are at least 44px tall on phones. Headings are sentence case; no icons in rows.
+ *
+ * Specificity: rules are scoped under .cf-rows / .cf-section / .cf-help (two classes), which
+ * beats Classic's `.page-content *` colour rule and Bootstrap's single-class rules without
+ * !important; !important is used only against cf-ui.css and Classic rules that use it themselves.
+ */
+
+/* ---------------------------------------------------------------- page help */
+.cf-help {
+    display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: var(--cf-3) var(--cf-5);
+    margin: 0 0 var(--cf-6); padding: var(--cf-4) var(--cf-5);
+    background: var(--cf-surface); border: 1px solid var(--cf-border); border-radius: var(--cf-radius-lg);
+}
+.cf-help .cf-help-text { min-width: 0; }
+.cf-help .cf-help-label {
+    display: block; margin: 0 0 2px; font-size: var(--cf-text-xs); font-weight: 600; letter-spacing: 0.01em;
+    color: var(--cf-text-3);
+}
+.cf-help .cf-help-body { margin: 0; font-size: var(--cf-text-md); line-height: 1.5; color: var(--cf-text-2); max-width: 78ch; }
+.cf-help .cf-help-actions { display: flex; gap: var(--cf-2); align-items: center; }
+.cf-help .cf-help-preview { grid-column: 1 / -1; border-top: 1px solid var(--cf-border); padding-top: var(--cf-3); }
+.cf-help .cf-help-preview[hidden] { display: none; }
+.cf-help .cf-help-note { margin: 0 0 var(--cf-2); font-size: var(--cf-text-sm); color: var(--cf-text-2); line-height: 1.5; }
+.cf-help .cf-help-status { margin: 0 0 var(--cf-2); font-size: var(--cf-text-sm); font-weight: 600; color: var(--cf-text); }
+.cf-help .cf-help-changes { list-style: none; margin: 0 0 var(--cf-3); padding: 0; display: grid; gap: 4px; }
+.cf-help .cf-help-changes li {
+    display: grid; grid-template-columns: minmax(0, 14rem) minmax(0, 1fr); gap: var(--cf-3);
+    font-size: var(--cf-text-sm); color: var(--cf-text-2); padding: 4px 0;
+}
+.cf-help .cf-help-changes li + li { border-top: 1px dashed var(--cf-border); }
+.cf-help .cf-help-field { color: var(--cf-text); font-weight: 500; overflow-wrap: anywhere; }
+.cf-help .cf-help-from { color: var(--cf-text-3); text-decoration: line-through; text-decoration-thickness: 1px; }
+.cf-help .cf-help-to { color: var(--cf-text); font-weight: 500; }
+.cf-help .cf-help-skip { color: var(--cf-text-3); }
+.cf-help .cf-help-buttons { display: flex; gap: var(--cf-2); flex-wrap: wrap; }
+
+/* A field the recommended button just changed: a quiet marker until it is edited or saved. */
+.cf-rec-changed { box-shadow: inset 3px 0 0 var(--cf-accent); background: color-mix(in srgb, var(--cf-accent) 5%, transparent); }
+input.cf-rec-changed, select.cf-rec-changed, textarea.cf-rec-changed { box-shadow: 0 0 0 2px var(--cf-accent-soft) !important; border-color: var(--cf-accent) !important; background: inherit; }
+
+/* ---------------------------------------------------------------- sections */
+.cf-section { --cf-section-gap: var(--cf-8); margin: 0 0 var(--cf-section-gap); min-width: 0; }
+.cf-section:last-child { margin-bottom: 0; }
+/* A section that ends a <form> is its form's last child, but it still needs its gap when more of
+   the page follows the form (pages with one form per section). */
+form:has(~ :not(script, style, template, link, input[type="hidden"], [hidden])) > .cf-section:last-child { margin-bottom: var(--cf-section-gap); }
+.cf-section .cf-section-head {
+    display: flex; align-items: flex-end; justify-content: space-between; gap: var(--cf-3) var(--cf-4);
+    flex-wrap: wrap; margin: 0 0 var(--cf-3);
+}
+.cf-section .cf-section-head > div:first-child { min-width: 0; flex: 1 1 20rem; }
+.cf-section .cf-section-title {
+    margin: 0; font-size: var(--cf-text-lg); font-weight: 600; line-height: 1.3; letter-spacing: -0.01em; color: var(--cf-text);
+}
+.cf-section .cf-section-desc { margin: 3px 0 0; font-size: var(--cf-text-sm); line-height: 1.5; color: var(--cf-text-3); max-width: 78ch; }
+.cf-section .cf-section-actions { display: flex; gap: var(--cf-2); align-items: center; flex-wrap: wrap; }
+
+/* The hidden attribute always wins over a kit component's own display (rows, states, list items,
+   KPI strips, buttons and fields inside a kit page), so scripts can show and hide with .hidden. */
+[hidden]:is([class*="cf-"], .btn, .form-control, .form-select),
+:is(.cf-section, .cf-help, .cf-kpis, .cf-modal, .cf-form-actions, .cf-notice) [hidden] { display: none !important; }
+
+/* One panel per section. */
+.cf-rows {
+    background: var(--cf-surface); border: 1px solid var(--cf-border); border-radius: var(--cf-radius-lg);
+    min-width: 0;
+}
+/*
+ * Children split by hairlines. Hidden children and EMPTY ones (a list a script has not filled, or
+ * has cleared) take no room and draw no divider; the first and last child that is shown get the
+ * panel's rounded corners. "Shown" = not [hidden], .cf-hidden, :empty, or a non-visual element.
+ */
+.cf-rows > :is([hidden], .cf-hidden, :empty:not(input, select, textarea, img, canvas, iframe, video, audio, hr, svg, object)) { display: none !important; }
+.cf-rows > :not([hidden], .cf-hidden, :empty, script, style, template, link, input[type="hidden"]) ~ * { border-top: 1px solid var(--cf-border); }
+.cf-rows > :not([hidden], .cf-hidden, :empty, script, style, template, link, input[type="hidden"]):not(:not([hidden], .cf-hidden, :empty, script, style, template, link, input[type="hidden"]) ~ *) {
+    border-top-left-radius: inherit; border-top-right-radius: inherit;
+}
+.cf-rows > :not([hidden], .cf-hidden, :empty, script, style, template, link, input[type="hidden"]):not(:has(~ :not([hidden], .cf-hidden, :empty, script, style, template, link, input[type="hidden"]))) {
+    border-bottom-left-radius: inherit; border-bottom-right-radius: inherit;
+}
+/* A form that is one part of a panel (an "add" form under a list): its rows split the same way. */
+.cf-rows > form { display: block; margin: 0; border-radius: inherit; }
+.cf-rows > form > :is([hidden], .cf-hidden, :empty:not(input, select, textarea, img, canvas, iframe, video, audio, hr, svg, object)) { display: none !important; }
+.cf-rows > form > :not([hidden], .cf-hidden, :empty, script, style, template, link, input[type="hidden"]) ~ * { border-top: 1px solid var(--cf-border); }
+.cf-rows > form > :first-child { border-top-left-radius: inherit; border-top-right-radius: inherit; }
+.cf-rows > form > :last-child { border-bottom-left-radius: inherit; border-bottom-right-radius: inherit; }
+
+.cf-rows .cf-rows-head {
+    padding: var(--cf-3) var(--cf-5) var(--cf-2); background: color-mix(in srgb, var(--cf-surface-2) 55%, var(--cf-surface));
+    font-size: var(--cf-text-xs); font-weight: 600; color: var(--cf-text-2); letter-spacing: 0.01em;
+}
+.cf-rows .cf-rows-head + * { border-top-color: transparent; }
+
+/* Rows grouped in a wrapper (a block a page script shows or hides) still split from each other. */
+.cf-rows .cf-row + .cf-row { border-top: 1px solid var(--cf-border); }
+
+/* ---------------------------------------------------------------- rows */
+.cf-rows .cf-row {
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(14rem, 22rem);
+    align-items: center; gap: var(--cf-2) var(--cf-6);
+    padding: var(--cf-4) var(--cf-5);
+}
+.cf-rows .cf-row--switch { grid-template-columns: minmax(0, 1fr) auto; }
+.cf-rows .cf-row--stack { grid-template-columns: minmax(0, 1fr); align-items: stretch; }
+.cf-rows .cf-row--sub { padding-left: calc(var(--cf-5) + var(--cf-5)); }
+.cf-rows .cf-row--wide { grid-template-columns: minmax(0, 1fr) minmax(14rem, 30rem); }
+.cf-rows .cf-row-text { min-width: 0; }
+.cf-rows .cf-row-label {
+    display: block; margin: 0; font-size: var(--cf-text-md); font-weight: 500; line-height: 1.4; color: var(--cf-text);
+    text-transform: none; letter-spacing: 0;
+}
+label.cf-row-label { cursor: pointer; }
+.cf-rows .cf-row-desc { margin: 2px 0 0; font-size: var(--cf-text-sm); line-height: 1.45; color: var(--cf-text-3); max-width: 70ch; }
+.cf-rows .cf-row-desc code, .cf-help code, .cf-section .cf-section-desc code, .cf-state .cf-state-text code,
+.cf-notice code, .cf-rows .cf-list-meta code, .cf-rows .cf-field-hint code, .cf-modal .cf-modal-desc code {
+    font-size: 0.88em; padding: 1px 5px; border-radius: var(--cf-radius-sm);
+    background: var(--cf-surface-2); border: 1px solid var(--cf-border); color: var(--cf-text-2);
+}
+.cf-rows .cf-row-control { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.cf-rows .cf-row--switch .cf-row-control { align-items: flex-end; }
+.cf-rows .cf-row-control > select,
+.cf-rows .cf-row-control > input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),
+.cf-rows .cf-row-control > textarea { width: 100%; max-width: 100%; margin: 0; }
+.cf-rows .cf-row-control > select[multiple] { min-height: 7.5rem; }
+.cf-rows .cf-row-meta { font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+.cf-rows .cf-inline { display: flex; flex-wrap: wrap; gap: var(--cf-2); align-items: center; }
+.cf-rows .cf-chips-row { display: flex; flex-wrap: wrap; gap: 6px; }
+.cf-rows .cf-token {
+    display: inline-flex; align-items: center; height: 24px; padding: 0 8px; border-radius: var(--cf-radius-sm);
+    background: var(--cf-surface-2); border: 1px solid var(--cf-border); color: var(--cf-text-2);
+    font-family: var(--cf-mono); font-size: var(--cf-text-xs);
+}
+
+/* Several fields side by side inside one stacked row (a rule builder). */
+.cf-rows .cf-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr)); gap: var(--cf-3) var(--cf-4); align-items: start; }
+.cf-rows .cf-field { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.cf-rows .cf-field > label { margin: 0; font-size: var(--cf-text-sm); font-weight: 500; color: var(--cf-text); }
+.cf-rows .cf-field > select, .cf-rows .cf-field > input, .cf-rows .cf-field > textarea { width: 100%; margin: 0; }
+.cf-rows .cf-field-hint { font-size: var(--cf-text-xs); color: var(--cf-text-3); line-height: 1.4; }
+
+/* ---------------------------------------------------------------- controls */
+/* Switch: a real checkbox (role="switch"), drawn without images so it needs no extra tokens. */
+.cf-switch {
+    -webkit-appearance: none; appearance: none; flex: none; display: inline-block; vertical-align: middle;
+    width: 40px; height: 24px; margin: 0; padding: 0; cursor: pointer;
+    border-radius: 999px; border: 1px solid var(--cf-border-strong);
+    background-color: var(--cf-surface-3);
+    background-image: radial-gradient(circle closest-side, var(--cf-text-3) 0 calc(100% - 1px), transparent 100%);
+    background-repeat: no-repeat; background-size: 18px 18px; background-position: 2px 50%;
+    transition: background-color var(--cf-fast) var(--cf-ease), border-color var(--cf-fast) var(--cf-ease), background-position var(--cf-fast) var(--cf-ease);
+}
+.cf-switch:checked {
+    background-color: var(--cf-accent); border-color: var(--cf-accent);
+    background-image: radial-gradient(circle closest-side, var(--cf-on-accent) 0 calc(100% - 1px), transparent 100%);
+    background-position: calc(100% - 2px) 50%;
+}
+.cf-switch:hover { border-color: var(--cf-text-3); }
+.cf-switch:checked:hover { border-color: var(--cf-accent-hover); }
+.cf-switch:focus-visible { outline: 2px solid var(--cf-accent); outline-offset: 2px; }
+.cf-switch:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Checkbox and radio choices inside a row (a group of options under one label). */
+.cf-rows .cf-choice { display: flex; align-items: flex-start; gap: 10px; margin: 0; font-size: var(--cf-text-sm); color: var(--cf-text); cursor: pointer; line-height: 1.45; }
+.cf-rows .cf-choice > input { flex: none; margin: 3px 0 0; width: 16px; height: 16px; accent-color: var(--cf-accent); }
+.cf-rows .cf-choice-desc { display: block; color: var(--cf-text-3); }
+.cf-rows .cf-choices { display: grid; gap: var(--cf-2); }
+
+/* Number (or text) with a unit after it. */
+.cf-input-unit { display: flex; align-items: stretch; min-width: 0; width: 100%; }
+.cf-input-unit > input { flex: 1 1 auto; min-width: 0; width: 100%; margin: 0;
+    border-top-right-radius: 0 !important; border-bottom-right-radius: 0 !important; }
+.cf-input-unit > .cf-unit {
+    display: inline-flex; align-items: center; flex: none; padding: 0 10px; white-space: nowrap;
+    font-size: var(--cf-text-sm); color: var(--cf-text-2);
+    background: var(--cf-surface-2); border: 1px solid var(--cf-border-strong); border-left: 0;
+    border-radius: 0 var(--cf-radius) var(--cf-radius) 0;
+}
+
+/* Inline validation (cf-settings.js shows the browser's own message under the field). */
+.cf-rows [aria-invalid="true"], .cf-rows .is-invalid { border-color: var(--cf-danger) !important; box-shadow: 0 0 0 3px color-mix(in srgb, var(--cf-danger) 18%, transparent) !important; }
+.cf-field-error { display: flex; gap: 6px; align-items: baseline; margin: 0; font-size: var(--cf-text-xs); line-height: 1.4; color: var(--cf-danger); }
+.cf-field-error[hidden] { display: none; }
+.cf-field-error::before { content: ''; flex: none; width: 6px; height: 6px; border-radius: 50%; background: currentColor; transform: translateY(-1px); }
+
+/* ---------------------------------------------------------------- section footer */
+.cf-rows .cf-section-foot {
+    display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap; gap: var(--cf-2) var(--cf-3);
+    padding: var(--cf-3) var(--cf-5);
+    background: color-mix(in srgb, var(--cf-surface-2) 45%, var(--cf-surface));
+}
+.cf-rows .cf-section-foot .cf-foot-note { margin-right: auto; font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+.cf-section .btn, .cf-help .btn { white-space: nowrap; }
+/* One Save for a form that spans several sections. */
+.cf-form-actions { display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap; gap: var(--cf-2) var(--cf-3); margin: calc(-1 * var(--cf-3)) 0 var(--cf-8); }
+.cf-form-actions .cf-foot-note { margin-right: auto; font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+
+/* ---------------------------------------------------------------- lists and tables */
+.cf-rows .cf-list { display: block; }
+.cf-rows .cf-list-item {
+    display: flex; align-items: center; justify-content: space-between; gap: var(--cf-3) var(--cf-4);
+    padding: var(--cf-3) var(--cf-5); min-width: 0;
+}
+.cf-rows .cf-list-item + .cf-list-item { border-top: 1px solid var(--cf-border); }
+.cf-rows .cf-list-main { min-width: 0; font-size: var(--cf-text-sm); color: var(--cf-text); line-height: 1.5; }
+.cf-rows .cf-list-actions { display: flex; flex-wrap: wrap; gap: var(--cf-2); flex: none; }
+.cf-rows .cf-em { font-weight: 600; color: var(--cf-text); font-variant-numeric: tabular-nums; }
+
+/* A table whose rows a script fills hides its header row while it has none. */
+.cf-table-wrap:has(tbody:empty) { display: none; }
+.cf-table-wrap { overflow-x: auto; max-width: 100%; -webkit-overflow-scrolling: touch; }
+.cf-rows table.cf-table { width: 100%; border-collapse: collapse; margin: 0; font-size: var(--cf-text-sm); background: transparent; }
+.cf-rows table.cf-table th {
+    padding: 8px var(--cf-4) !important; text-align: left; white-space: nowrap;
+    font-size: var(--cf-text-xs) !important; font-weight: 500 !important; color: var(--cf-text-3) !important;
+    text-transform: none !important; letter-spacing: 0 !important; background: transparent !important;
+    border-bottom: 1px solid var(--cf-border) !important;
+}
+.cf-rows table.cf-table td { padding: 10px var(--cf-4) !important; vertical-align: middle; border-bottom: 1px solid var(--cf-border) !important; color: var(--cf-text); }
+/* The wider side padding of the first and last column. A stacked table only gets it above the phone
+   breakpoint: under it its cells sit flush with the row (see "phones"). */
+.cf-rows table.cf-table:not(.cf-table--stack) :is(th, td):first-child { padding-left: var(--cf-5) !important; }
+.cf-rows table.cf-table:not(.cf-table--stack) :is(th, td):last-child { padding-right: var(--cf-5) !important; }
+@media (min-width: 641px) {
+    .cf-rows table.cf-table--stack :is(th, td):first-child { padding-left: var(--cf-5) !important; }
+    .cf-rows table.cf-table--stack :is(th, td):last-child { padding-right: var(--cf-5) !important; }
+}
+.cf-rows table.cf-table tbody tr:last-child td { border-bottom: 0 !important; }
+.cf-rows table.cf-table .cf-cell-end { text-align: right; }
+.cf-rows table.cf-table .cf-cell-muted { color: var(--cf-text-3); font-size: var(--cf-text-xs); }
+
+/* Status pill (rule type, action). One tone variable, the same recipe as cf-ui's badges. */
+.cf-pill {
+    --cf-tone: var(--cf-text-2);
+    display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 8px; border-radius: 999px;
+    font-size: var(--cf-text-xs); font-weight: 500; line-height: 1; white-space: nowrap; text-decoration: none;
+    color: var(--cf-tone); background: color-mix(in srgb, var(--cf-tone) 13%, transparent);
+    border: 1px solid color-mix(in srgb, var(--cf-tone) 28%, transparent);
+}
+.cf-pill.is-ok { --cf-tone: var(--cf-success); }
+.cf-pill.is-warn { --cf-tone: var(--cf-warning); }
+.cf-pill.is-bad { --cf-tone: var(--cf-danger); }
+.cf-pill.is-info { --cf-tone: var(--cf-info); }
+.cf-pill.is-accent { --cf-tone: var(--cf-accent-fg); }
+/* Light and Sand: the text a quarter of the way to the ink, for 4.5:1 on the tint (cf-ui.css --cf-success-ink). */
+:root:is([data-theme="light"], [data-theme="sand"]) .cf-pill { color: color-mix(in srgb, var(--cf-tone) 76%, var(--cf-text)); }
+a.cf-pill:hover { text-decoration: underline; }
+
+/* Key numbers above a section (counts, last run). */
+.cf-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 9.5rem), 1fr)); margin: 0 0 var(--cf-6);
+    background: var(--cf-surface); border: 1px solid var(--cf-border); border-radius: var(--cf-radius-lg); overflow: hidden; }
+.cf-kpi { padding: var(--cf-3) var(--cf-4); min-width: 0; box-shadow: -1px 0 0 var(--cf-border), 0 -1px 0 var(--cf-border); }
+.cf-kpi dt, .cf-kpi .cf-kpi-label { margin: 0 0 2px; font-size: var(--cf-text-xs); font-weight: 500; color: var(--cf-text-3); }
+.cf-kpi dd, .cf-kpi .cf-kpi-value { margin: 0; font-size: var(--cf-text-xl); font-weight: 600; color: var(--cf-text); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; overflow-wrap: anywhere; }
+.cf-kpi .cf-kpi-value.is-small { font-size: var(--cf-text-md); padding-top: 4px; }
+
+/* ---------------------------------------------------------------- empty / loading / error */
+.cf-state {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+    padding: var(--cf-8) var(--cf-5); text-align: center; font-size: var(--cf-text-sm); color: var(--cf-text-2);
+}
+.cf-state .cf-state-title { margin: 0; font-size: var(--cf-text-md); font-weight: 600; color: var(--cf-text); }
+.cf-state .cf-state-text { margin: 0; max-width: 46ch; color: var(--cf-text-3); line-height: 1.5; }
+.cf-state .btn { margin-top: var(--cf-3); }
+.cf-state--compact { flex-direction: row; justify-content: flex-start; text-align: left; padding: var(--cf-4) var(--cf-5); gap: var(--cf-2); }
+.cf-state--error .cf-state-title { color: var(--cf-danger); }
+.cf-state--boxed { border: 1px dashed var(--cf-border-strong); border-radius: var(--cf-radius-lg); }
+.cf-spinner {
+    flex: none; width: 16px; height: 16px; border-radius: 50%;
+    border: 2px solid var(--cf-border-strong); border-top-color: var(--cf-accent);
+    animation: cf-spin 0.8s linear infinite;
+}
+@keyframes cf-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .cf-spinner { animation-duration: 2.4s; } }
+
+/* ---------------------------------------------------------------- tabs and segmented filters
+   .cf-tabs[role=tablist] > button.cf-tab[role=tab][aria-selected]   a page-level tab bar
+   .cf-segmented > button.cf-segment[aria-pressed]                   a small filter inside a section
+   The selected one is aria-selected="true" / aria-pressed="true", or has .is-active / .active (the
+   page script that switches panels sets it). Panels are shown and hidden with [hidden]. */
+.cf-tabs {
+    display: flex; gap: 2px; margin: 0 0 var(--cf-6); padding: 3px; overflow-x: auto; scrollbar-width: none;
+    background: var(--cf-surface); border: 1px solid var(--cf-border); border-radius: var(--cf-radius-lg);
+}
+.cf-tabs::-webkit-scrollbar { display: none; }
+.cf-tabs:empty { display: none; }
+.cf-tab, .cf-segmented > :is(button, a, .cf-segment) {
+    flex: 1 0 auto; display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    min-height: 36px; padding: 0 14px; margin: 0; border: 0; border-radius: var(--cf-radius); background: transparent;
+    font: inherit; font-size: var(--cf-text-sm); font-weight: 500; line-height: 1.2; color: var(--cf-text-2);
+    white-space: nowrap; cursor: pointer; text-decoration: none;
+}
+.cf-tab:hover, .cf-segmented > :is(button, a, .cf-segment):hover { color: var(--cf-text); background: var(--cf-surface-2); }
+.cf-tab:focus-visible, .cf-segmented > :is(button, a, .cf-segment):focus-visible { outline: 2px solid var(--cf-accent); outline-offset: 1px; }
+.cf-tab:is([aria-selected="true"], .is-active, .active),
+.cf-segmented > :is(button, a, .cf-segment):is([aria-pressed="true"], [aria-selected="true"], .is-active, .active) {
+    color: var(--cf-text); background: var(--cf-surface-3);
+}
+.cf-tab .cf-tab-count { font-size: var(--cf-text-xs); color: var(--cf-text-3); font-variant-numeric: tabular-nums; }
+.cf-segmented {
+    display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 2px; max-width: 100%;
+    background: var(--cf-surface-2); border: 1px solid var(--cf-border); border-radius: var(--cf-radius);
+}
+.cf-segmented:empty { display: none; }
+.cf-rows .cf-segmented { justify-self: start; align-self: flex-start; }
+.cf-segmented > :is(button, a, .cf-segment) { flex: 0 1 auto; min-height: 30px; padding: 0 12px; border-radius: calc(var(--cf-radius) - 2px); }
+.cf-segmented > :is(button, a, .cf-segment):is([aria-pressed="true"], [aria-selected="true"], .is-active, .active) {
+    background: var(--cf-surface); box-shadow: 0 0 0 1px var(--cf-border);
+}
+.cf-rows > .cf-segmented, .cf-rows > .cf-tabs { margin: var(--cf-3) var(--cf-5); border-radius: var(--cf-radius); }
+.cf-rows > .cf-tabs { padding: 2px; background: var(--cf-surface-2); }
+
+/* ---------------------------------------------------------------- inline notice
+   .cf-notice[.is-info|is-warn|is-bad|is-ok] > i (optional icon) + .cf-notice-body (strong /
+   .cf-notice-title + text). Above a section it is a banner; as a child of a panel it is one tinted
+   line of the panel. */
+.cf-notice {
+    --cf-tone: var(--cf-info);
+    display: flex; gap: 10px; align-items: baseline; margin: 0 0 var(--cf-6); padding: var(--cf-3) var(--cf-4);
+    border-radius: var(--cf-radius-lg); font-size: var(--cf-text-sm); line-height: 1.5; color: var(--cf-text-2);
+    background: color-mix(in srgb, var(--cf-tone) 9%, var(--cf-surface)); border: 1px solid color-mix(in srgb, var(--cf-tone) 35%, var(--cf-border));
+}
+.cf-notice.is-info { --cf-tone: var(--cf-info); }
+.cf-notice.is-warn { --cf-tone: var(--cf-warning); }
+.cf-notice.is-bad { --cf-tone: var(--cf-danger); }
+.cf-notice.is-ok { --cf-tone: var(--cf-success); }
+.cf-notice.is-accent { --cf-tone: var(--cf-accent); }
+.cf-notice > i, .cf-notice > .fas, .cf-notice > .far { flex: none; color: var(--cf-tone); }
+.cf-notice > .cf-notice-body { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.cf-notice strong, .cf-notice .cf-notice-title { color: var(--cf-text); font-weight: 600; }
+.cf-notice .cf-notice-title { display: block; margin: 0 0 2px; }
+.cf-notice p { margin: 0; }
+.cf-notice p + p { margin-top: 4px; }
+.cf-notice a { color: inherit; text-decoration: underline; }
+.cf-notice .btn { margin-left: auto; flex: none; align-self: center; }
+.cf-rows > .cf-notice, .cf-modal-body > .cf-notice:last-child, .cf-rows :is(.cf-row-control, .cf-field, .cf-row-text) > .cf-notice { margin: 0; }
+.cf-rows > .cf-notice { border-width: 0; border-radius: 0; padding: var(--cf-3) var(--cf-5); }
+
+/* ---------------------------------------------------------------- chips (tags, pills in a list)
+   .cf-chips > .cf-chip[.is-ok|is-warn|is-bad|is-info|is-accent]
+   Colour from data (a tag's own colour): style="--cf-chip: #3b82f6" (from a script:
+   chip.style.setProperty('--cf-chip', colour)). A removable chip ends in button.cf-chip-remove; a
+   chip can itself be a <button> or <a>. .cf-chip-dot is a small swatch before the text. */
+.cf-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.cf-chips:empty { display: none; }
+.cf-chip {
+    --cf-tone: var(--cf-chip, var(--cf-text-2));
+    display: inline-flex; align-items: center; gap: 5px; max-width: 100%; height: 24px; padding: 0 9px; margin: 0;
+    border-radius: 999px; font: inherit; font-size: var(--cf-text-xs); font-weight: 500; line-height: 1; white-space: nowrap; text-decoration: none;
+    color: color-mix(in srgb, var(--cf-tone) 72%, var(--cf-text)); background: color-mix(in srgb, var(--cf-tone) 12%, transparent);
+    border: 1px solid color-mix(in srgb, var(--cf-tone) 32%, transparent);
+}
+.cf-chip > :is(span, code) { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.cf-chip.is-ok { --cf-tone: var(--cf-success); }
+.cf-chip.is-warn { --cf-tone: var(--cf-warning); }
+.cf-chip.is-bad { --cf-tone: var(--cf-danger); }
+.cf-chip.is-info { --cf-tone: var(--cf-info); }
+.cf-chip.is-accent { --cf-tone: var(--cf-accent-fg); }
+.cf-chip code { font-family: var(--cf-mono); font-size: 1em; background: none; border: 0; padding: 0; color: inherit; }
+.cf-chip .cf-chip-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--cf-tone); }
+button.cf-chip, a.cf-chip { cursor: pointer; }
+button.cf-chip:hover, a.cf-chip:hover { background: color-mix(in srgb, var(--cf-tone) 22%, transparent); }
+button.cf-chip:focus-visible, a.cf-chip:focus-visible, .cf-chip-remove:focus-visible { outline: 2px solid var(--cf-accent); outline-offset: 1px; }
+.cf-chip-remove {
+    flex: none; display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; margin: 0 -4px 0 0; padding: 0;
+    border: 0; border-radius: 50%; background: transparent; color: inherit; font-size: 10px; line-height: 1; cursor: pointer; opacity: 0.75;
+}
+.cf-chip-remove:hover { opacity: 1; background: color-mix(in srgb, var(--cf-tone) 25%, transparent); }
+.cf-chip-remove:disabled { opacity: 0.35; cursor: not-allowed; background: transparent; }
+
+/* ---------------------------------------------------------------- multi-line list rows
+   .cf-list-item.cf-list-item--multi > [.cf-list-lead] + .cf-list-main(.cf-list-title, .cf-list-meta,
+   .cf-list-body, .cf-chips) + .cf-list-actions: a title line, a quiet meta line, free text and
+   chips, with the actions top-right (under them on phones). */
+.cf-rows .cf-list-item--multi { align-items: flex-start; justify-content: flex-start; }
+.cf-rows .cf-list-item--multi > .cf-list-main { flex: 1 1 auto; display: grid; gap: 4px; }
+.cf-rows .cf-list-item--multi > .cf-list-actions { margin-left: auto; }
+.cf-rows .cf-list-lead { flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 28px; color: var(--cf-text-3); }
+.cf-rows .cf-list-lead img { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; background: var(--cf-surface-3); }
+.cf-rows .cf-list-title {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 0;
+    font-size: var(--cf-text-md); font-weight: 600; line-height: 1.4; color: var(--cf-text); overflow-wrap: anywhere;
+}
+.cf-rows .cf-list-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 12px; margin: 0; font-size: var(--cf-text-xs); color: var(--cf-text-3); line-height: 1.5; }
+.cf-rows .cf-list-body { margin: 0; font-size: var(--cf-text-sm); line-height: 1.5; color: var(--cf-text-2); overflow-wrap: anywhere; }
+.cf-rows .cf-list-body.is-pre { white-space: pre-wrap; }
+
+/* ---------------------------------------------------------------- expandable rows
+   details.cf-expand > summary + .cf-expand-body (no script needed), or a script-driven
+   button.cf-expand-toggle[aria-expanded] that shows a [hidden] body. */
+.cf-rows .cf-expand > summary, .cf-rows .cf-expand-toggle {
+    display: flex; align-items: center; justify-content: space-between; gap: var(--cf-3); width: 100%;
+    padding: var(--cf-3) var(--cf-5); margin: 0; border: 0; background: transparent; text-align: left;
+    font: inherit; font-size: var(--cf-text-sm); font-weight: 500; color: var(--cf-text); cursor: pointer; list-style: none;
+}
+.cf-rows .cf-expand > summary::-webkit-details-marker { display: none; }
+.cf-rows .cf-expand > summary::after, .cf-rows .cf-expand-toggle::after {
+    content: ''; flex: none; width: 7px; height: 7px; margin-right: 3px;
+    border-right: 2px solid var(--cf-text-3); border-bottom: 2px solid var(--cf-text-3);
+    transform: translateY(-2px) rotate(45deg); transition: transform var(--cf-fast) var(--cf-ease);
+}
+.cf-rows .cf-expand[open] > summary::after, .cf-rows .cf-expand-toggle[aria-expanded="true"]::after { transform: translateY(2px) rotate(-135deg); }
+.cf-rows .cf-expand > summary:hover, .cf-rows .cf-expand-toggle:hover { background: color-mix(in srgb, var(--cf-surface-2) 50%, transparent); }
+.cf-rows .cf-expand > summary:focus-visible, .cf-rows .cf-expand-toggle:focus-visible { outline: 2px solid var(--cf-accent); outline-offset: -2px; }
+.cf-rows .cf-expand-body { padding: 0 var(--cf-5) var(--cf-4); min-width: 0; }
+.cf-rows .cf-expand-body > .cf-rows { margin-top: var(--cf-2); }
+
+/* ---------------------------------------------------------------- small controls
+   .cf-input-group  a field with its buttons beside it (Add, Check, Copy); wraps on phones
+   .cf-check-grid   a long list of checkboxes (.cf-choice) in as many columns as fit
+   .cf-range        a slider with its value (an <output> or a small number box) beside it
+   .cf-search       a search box with an optional leading icon; full width on phones
+   .cf-status-line       a one-line result next to a button ("Saved", "Could not save"); aria-live
+   .cf-kpi-sub      a quiet second line under a KPI value ("of 40", "last run 2h ago") */
+.cf-input-group { display: flex; align-items: stretch; gap: var(--cf-2); min-width: 0; width: 100%; }
+.cf-input-group > :is(input, select, textarea, .cf-input-unit, .form-control, .form-select) { flex: 1 1 auto; min-width: 0; width: auto; margin: 0; }
+.cf-input-group > .btn { flex: none; }
+.cf-check-grid, .cf-rows .cf-check-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--cf-check-min, 10rem)), 1fr)); gap: var(--cf-2) var(--cf-4); }
+.cf-range { display: flex; align-items: center; gap: var(--cf-3); min-width: 0; width: 100%; }
+.cf-range > input[type="range"] { flex: 1 1 auto; min-width: 0; margin: 0; accent-color: var(--cf-accent); }
+.cf-range > input[type="number"] { flex: none; width: 6.5rem; margin: 0; }
+.cf-range > output, .cf-range > .cf-range-value { flex: none; min-width: 4.5ch; text-align: right; font-weight: 600; color: var(--cf-text); font-variant-numeric: tabular-nums; }
+.cf-search { position: relative; display: inline-flex; align-items: center; width: min(100%, 18rem); min-width: 0; }
+.cf-search > i, .cf-search > .cf-search-icon { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); font-size: var(--cf-text-xs); color: var(--cf-text-3); pointer-events: none; }
+.cf-search > input { width: 100%; min-width: 0; margin: 0; }
+.cf-search > i ~ input, .cf-search > .cf-search-icon ~ input { padding-left: 30px !important; }
+.cf-status-line { display: inline-flex; align-items: center; gap: 6px; padding: 0; border: 0; background: none; font-size: var(--cf-text-xs); line-height: 1.4; color: var(--cf-text-3); }
+.cf-status-line:is(.is-ok, .is-bad, .is-warn)::before { content: ''; flex: none; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.cf-status-line:empty::before { display: none; }
+/* Status text uses the -ink tokens (cf-ui.css): the plain status colours are fill colours and miss 4.5:1 as text in Light and Sand (H-727). */
+.cf-status-line.is-ok { color: var(--cf-success-ink, var(--cf-success)); }
+.cf-status-line.is-bad { color: var(--cf-danger-ink, var(--cf-danger)); }
+.cf-status-line.is-warn { color: var(--cf-warning-ink, var(--cf-warning)); }
+.cf-status-line.is-busy::before {
+    content: ''; flex: none; width: 10px; height: 10px; border-radius: 50%;
+    border: 2px solid var(--cf-border-strong); border-top-color: var(--cf-accent); animation: cf-spin 0.8s linear infinite;
+}
+.cf-kpi .cf-kpi-sub { display: block; margin: 2px 0 0; font-size: var(--cf-text-xs); font-weight: 400; color: var(--cf-text-3); overflow-wrap: anywhere; letter-spacing: 0; }
+
+/* ---------------------------------------------------------------- file drop zone
+   label.cf-dropzone > input[type=file] + .cf-dropzone-icon + .cf-dropzone-text + .cf-dropzone-hint
+   The file input covers the zone (click or drop); a script adds .is-dragover while a file is over it. */
+.cf-dropzone {
+    position: relative; display: block; margin: 0; padding: var(--cf-6) var(--cf-4); text-align: center; cursor: pointer;
+    border: 1px dashed var(--cf-border-strong); border-radius: var(--cf-radius); background: var(--cf-surface-2);
+    transition: border-color var(--cf-fast) var(--cf-ease), background-color var(--cf-fast) var(--cf-ease);
+}
+.cf-dropzone:hover, .cf-dropzone.is-dragover, .cf-dropzone:focus-within {
+    border-color: var(--cf-accent); background: color-mix(in srgb, var(--cf-accent) 6%, var(--cf-surface-2));
+}
+.cf-dropzone > input[type="file"] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.cf-dropzone .cf-dropzone-icon { display: block; margin: 0 0 6px; font-size: 20px; color: var(--cf-text-3); }
+.cf-dropzone .cf-dropzone-text { display: block; font-size: var(--cf-text-sm); font-weight: 500; color: var(--cf-text); overflow-wrap: anywhere; }
+.cf-dropzone .cf-dropzone-hint { display: block; margin-top: 4px; font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+
+/* ---------------------------------------------------------------- image gallery
+   .cf-gallery > .cf-gallery-item[.is-muted|.is-contain] > img + .cf-gallery-body(.cf-gallery-name, meta,
+   .cf-gallery-actions). Square tiles by default (style="--cf-gallery-ratio: 16 / 9" for wide
+   images, --cf-gallery-min for the tile width). As a child of a panel it gets the panel's padding. */
+.cf-gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--cf-gallery-min, 10rem)), 1fr)); gap: var(--cf-3); min-width: 0; }
+.cf-rows > .cf-gallery { padding: var(--cf-4) var(--cf-5); }
+.cf-gallery-item {
+    position: relative; display: flex; flex-direction: column; min-width: 0; overflow: hidden;
+    border: 1px solid var(--cf-border); border-radius: var(--cf-radius); background: var(--cf-surface-2);
+}
+.cf-gallery-item.is-muted { opacity: 0.55; }
+.cf-gallery-item > img, .cf-gallery-item > .cf-gallery-media {
+    display: block; width: 100%; aspect-ratio: var(--cf-gallery-ratio, 1); object-fit: cover; background: var(--cf-surface-3);
+}
+.cf-gallery-item.is-contain > img { object-fit: contain; padding: var(--cf-2); }
+.cf-gallery-body { display: grid; gap: 4px; padding: var(--cf-2) var(--cf-3); min-width: 0; font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+.cf-gallery-name { font-size: var(--cf-text-sm); font-weight: 500; color: var(--cf-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cf-gallery-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+
+/* ---------------------------------------------------------------- modal / dialog shell
+   div.cf-modal[hidden] > .cf-modal-dialog[.is-wide|.is-xl] > header.cf-modal-head(.cf-modal-title,
+   .cf-modal-desc, button.cf-modal-close) + .cf-modal-body + footer.cf-modal-foot; or a native
+   <dialog class="cf-modal-dialog">. Bootstrap modals (.modal-content) get the kit's field labels. */
+.cf-modal {
+    position: fixed; inset: 0; z-index: 1060; display: flex; align-items: center; justify-content: center;
+    padding: var(--cf-4); background: rgba(0, 0, 0, 0.6);
+}
+.cf-modal-dialog {
+    position: relative; width: min(100%, var(--cf-modal-w, 34rem)); max-height: calc(100vh - 2 * var(--cf-4));
+    display: flex; flex-direction: column; min-width: 0; padding: 0; color: var(--cf-text);
+    background: var(--cf-surface); border: 1px solid var(--cf-border); border-radius: var(--cf-radius-lg); box-shadow: var(--cf-shadow-pop);
+}
+dialog.cf-modal-dialog:not([open]) { display: none; }
+dialog.cf-modal-dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
+.cf-modal-dialog.is-wide { --cf-modal-w: 48rem; }
+.cf-modal-dialog.is-xl { --cf-modal-w: 70rem; }
+.cf-modal-head {
+    display: flex; align-items: flex-start; justify-content: space-between; gap: var(--cf-3); flex: none;
+    padding: var(--cf-4) var(--cf-5); border-bottom: 1px solid var(--cf-border);
+}
+.cf-modal-head > div { min-width: 0; }
+.cf-modal-title { margin: 0; font-size: var(--cf-text-lg); font-weight: 600; line-height: 1.3; color: var(--cf-text); overflow-wrap: anywhere; }
+.cf-modal-desc { margin: 2px 0 0; font-size: var(--cf-text-sm); line-height: 1.45; color: var(--cf-text-3); }
+.cf-modal-close {
+    flex: none; width: 36px; height: 36px; display: inline-flex; align-items: center; justify-content: center; padding: 0; cursor: pointer;
+    border-radius: var(--cf-radius); background: transparent; border: 1px solid var(--cf-border); color: var(--cf-text-2); font: inherit;
+}
+.cf-modal-close:hover { background: var(--cf-surface-2); color: var(--cf-text); }
+.cf-modal-close:focus-visible { outline: 2px solid var(--cf-accent); outline-offset: 2px; }
+.cf-modal-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: var(--cf-5); }
+.cf-modal-body > * + * { margin-top: var(--cf-4); }
+.cf-modal-foot {
+    display: flex; justify-content: flex-end; align-items: center; flex-wrap: wrap; gap: var(--cf-2) var(--cf-3); flex: none;
+    padding: var(--cf-3) var(--cf-5); border-top: 1px solid var(--cf-border); background: color-mix(in srgb, var(--cf-surface-2) 45%, var(--cf-surface));
+    border-radius: 0 0 var(--cf-radius-lg) var(--cf-radius-lg);
+}
+.cf-modal-foot .cf-foot-note { margin-right: auto; font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+.modal-content .form-label { font-size: var(--cf-text-sm); font-weight: 500; color: var(--cf-text); margin-bottom: 6px; }
+.modal-content .form-text { font-size: var(--cf-text-xs); color: var(--cf-text-3); margin-top: 4px; }
+.modal-content .cf-rows + .cf-rows, .modal-content .cf-notice + .cf-rows { margin-top: var(--cf-4); }
+
+/* ---------------------------------------------------------------- danger zone */
+.cf-section--danger .cf-section-title { color: var(--cf-danger); }
+.cf-section--danger .cf-rows { border-color: color-mix(in srgb, var(--cf-danger) 45%, var(--cf-border)); }
+.cf-section--danger .cf-rows > *, .cf-section--danger .cf-rows > form > * { border-top-color: color-mix(in srgb, var(--cf-danger) 20%, var(--cf-border)); }
+
+/* ---------------------------------------------------------------- site styles
+   Cards (default): roomier rows, rounder panels (radius tokens from cf-ui.css).
+   Compact: denser rows and a flatter section head.
+   Classic: the purple accent and rounder corners come from manage-classic.ejs's tokens; titles
+   take the heavier Classic weight. */
+:root[data-style="compact"] .cf-rows .cf-row { padding: var(--cf-3) var(--cf-4); gap: var(--cf-2) var(--cf-5); }
+:root[data-style="compact"] .cf-rows .cf-row--sub { padding-left: calc(var(--cf-4) + var(--cf-4)); }
+:root[data-style="compact"] .cf-rows .cf-section-foot,
+:root[data-style="compact"] .cf-rows .cf-list-item,
+:root[data-style="compact"] .cf-rows .cf-rows-head { padding-left: var(--cf-4); padding-right: var(--cf-4); }
+:root[data-style="compact"] .cf-section { --cf-section-gap: var(--cf-6); }
+:root[data-style="compact"] .cf-section .cf-section-title { font-size: var(--cf-text-md); }
+:root[data-style="compact"] .cf-help { padding: var(--cf-3) var(--cf-4); margin-bottom: var(--cf-5); }
+:root[data-style="compact"] .cf-rows table.cf-table:not(.cf-table--stack) :is(th, td):first-child { padding-left: var(--cf-4) !important; }
+@media (min-width: 641px) {
+    :root[data-style="compact"] .cf-rows table.cf-table--stack :is(th, td):first-child { padding-left: var(--cf-4) !important; }
+}
+:root:not([data-style="compact"]) .cf-rows .cf-row { min-height: 68px; }
+:root[data-style="classic"] .cf-section .cf-section-title { font-weight: 700; }
+:root[data-style="classic"] .cf-help { border-left: 3px solid var(--cf-accent); }
+
+/* ---------------------------------------------------------------- phones */
+@media (max-width: 640px) {
+    .cf-help { grid-template-columns: minmax(0, 1fr); padding: var(--cf-4); }
+    .cf-help .cf-help-actions .btn { width: 100%; justify-content: center; min-height: 44px; }
+    .cf-help .cf-help-changes li { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+    .cf-help .cf-help-buttons .btn { flex: 1 1 auto; justify-content: center; min-height: 44px; }
+
+    .cf-section { --cf-section-gap: var(--cf-6); }
+    .cf-rows .cf-row,
+    .cf-rows .cf-row--wide { grid-template-columns: minmax(0, 1fr); gap: var(--cf-2); padding: var(--cf-4); align-items: stretch; }
+    .cf-rows .cf-row--switch { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+    .cf-rows .cf-row--sub { padding-left: calc(var(--cf-4) + var(--cf-3)); }
+    .cf-rows .cf-rows-head, .cf-rows .cf-list-item, .cf-rows .cf-section-foot { padding-left: var(--cf-4); padding-right: var(--cf-4); }
+    .cf-rows .cf-list-item { flex-direction: column; align-items: stretch; }
+    .cf-rows .cf-list-actions { justify-content: flex-end; }
+
+    /* 44px touch targets */
+    .cf-rows .cf-row-control > select, .cf-rows .cf-row-control > input:not([type="checkbox"]):not([type="radio"]),
+    .cf-rows .cf-field > select, .cf-rows .cf-field > input:not([type="checkbox"]):not([type="radio"]),
+    .cf-input-unit > input, .cf-input-unit > .cf-unit { min-height: 44px; }
+    .cf-switch { width: 48px; height: 28px; background-size: 22px 22px; }
+    .cf-rows .cf-choice { min-height: 44px; align-items: center; }
+    .cf-rows .cf-choice > input { margin-top: 0; width: 20px; height: 20px; }
+    .cf-section .btn, .cf-rows .btn { min-height: 44px; }
+    .cf-rows .cf-section-foot .btn { flex: 1 1 auto; justify-content: center; }
+    .cf-rows .cf-section-foot .cf-foot-note { flex-basis: 100%; }
+
+    /* Wide tables become stacked rows: each cell on its own line, labelled from data-label. */
+    .cf-rows table.cf-table--stack thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+    .cf-rows table.cf-table--stack, .cf-rows table.cf-table--stack tbody { display: block; }
+    .cf-rows table.cf-table--stack tr { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; padding: var(--cf-3) var(--cf-4); }
+    .cf-rows table.cf-table--stack tr + tr { border-top: 1px solid var(--cf-border); }
+    /* A cell is one line: its label (7rem) then everything in the cell, on that line while it fits
+       ("500" and "coins" stay together); longer content wraps inside the cell. */
+    .cf-rows table.cf-table--stack td {
+        display: flex; flex-wrap: wrap; align-items: center; gap: 4px var(--cf-3); min-width: 0; overflow-wrap: anywhere;
+        padding: 0 !important; border: 0 !important; font-size: var(--cf-text-sm) !important; text-align: left !important;
+    }
+    .cf-rows table.cf-table--stack td > * { flex: 0 1 auto; min-width: 0; max-width: 100%; }
+    .cf-rows table.cf-table--stack td::before { content: attr(data-label); flex: 0 0 7rem; font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+    .cf-rows table.cf-table--stack td:not([data-label])::before, .cf-rows table.cf-table--stack td[data-label=""]::before { display: none; }
+    /* Labelled values read left to right like every other line; an unlabelled end cell (the
+       row's buttons) keeps them on the right. */
+    .cf-rows table.cf-table--stack td.cf-cell-end:not([data-label]), .cf-rows table.cf-table--stack td.cf-cell-end[data-label=""] { justify-content: flex-end; }
+
+    .cf-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+    .cf-tabs { flex-wrap: wrap; }
+    .cf-tab { flex: 1 1 auto; min-height: 44px; }
+    .cf-segmented, .cf-rows .cf-segmented { display: flex; width: 100%; justify-self: stretch; }
+    .cf-segmented > :is(button, a, .cf-segment) { flex: 1 1 auto; min-height: 40px; }
+    .cf-rows > .cf-segmented, .cf-rows > .cf-tabs { margin: var(--cf-3) var(--cf-4); width: auto; }
+    .cf-rows > .cf-notice { padding: var(--cf-3) var(--cf-4); }
+    .cf-notice { flex-wrap: wrap; }
+    .cf-notice .btn { margin-left: 0; flex: 1 1 100%; justify-content: center; min-height: 44px; }
+    .cf-rows .cf-list-item--multi > .cf-list-actions { margin-left: 0; }
+    .cf-rows .cf-expand > summary, .cf-rows .cf-expand-toggle { padding: var(--cf-3) var(--cf-4); min-height: 44px; }
+    .cf-rows .cf-expand-body { padding: 0 var(--cf-4) var(--cf-4); }
+    .cf-input-group { flex-wrap: wrap; }
+    .cf-input-group > :is(input, select, textarea, .cf-input-unit, .form-control, .form-select) { flex: 1 1 100%; min-height: 44px; }
+    .cf-input-group > .btn { flex: 1 1 auto; justify-content: center; }
+    .cf-range > input[type="number"] { width: 5.5rem; min-height: 44px; }
+    .cf-search, .cf-section-actions > input[type="search"] { width: 100%; flex: 1 1 100%; min-height: 44px; }
+    /* The actions box itself takes the full row when it holds a search, so the search can. */
+    .cf-section-actions:has(> .cf-search, > input[type="search"]) { flex: 1 1 100%; }
+    .cf-search > input { min-height: 44px; }
+    .cf-chip-remove { width: 24px; height: 24px; margin-right: -7px; }
+    .cf-gallery { --cf-gallery-min: 8.5rem; gap: var(--cf-2); }
+    .cf-rows > .cf-gallery { padding: var(--cf-3) var(--cf-4); }
+    .cf-modal { padding: 0; align-items: stretch; }
+    .cf-modal-dialog { width: 100%; max-height: 100vh; border-radius: 0; }
+    .cf-modal-head, .cf-modal-body { padding: var(--cf-4); }
+    .cf-modal-foot { padding: var(--cf-3) var(--cf-4); border-radius: 0; }
+    .cf-modal-foot .btn { flex: 1 1 auto; justify-content: center; min-height: 44px; }
+    .cf-modal-foot .cf-foot-note { flex-basis: 100%; }
+}
+
+/* ---------------------------------------------------------------- option list (choices with a description)
+   .cf-opts[role=radiogroup] > label.cf-opt > input[type=radio|checkbox] + .cf-opt-body > .cf-opt-title + .cf-opt-desc
+   A choice between a few options where each needs a sentence saying what it does (keep every
+   reward, or only the highest). The checked option is outlined in the accent colour. */
+.cf-opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: var(--cf-2); min-width: 0; }
+.cf-opt {
+    display: flex; align-items: flex-start; gap: 10px; margin: 0; min-width: 0; padding: var(--cf-3) var(--cf-4);
+    border: 1px solid var(--cf-border); border-radius: var(--cf-radius); background: var(--cf-surface); cursor: pointer;
+    transition: border-color var(--cf-fast) var(--cf-ease), background-color var(--cf-fast) var(--cf-ease);
+}
+.cf-opt:hover { border-color: var(--cf-border-strong); }
+.cf-opt > input { flex: none; margin: 3px 0 0; width: 16px; height: 16px; accent-color: var(--cf-accent); }
+.cf-opt:has(> input:checked) { border-color: var(--cf-accent); background: color-mix(in srgb, var(--cf-accent) 9%, var(--cf-surface)); }
+.cf-opt:has(> input:focus-visible) { outline: 2px solid var(--cf-accent); outline-offset: 2px; }
+.cf-opt:has(> input:disabled) { opacity: 0.55; cursor: not-allowed; }
+.cf-opt-body { display: grid; gap: 2px; min-width: 0; }
+.cf-opt-title { font-size: var(--cf-text-sm); font-weight: 500; line-height: 1.4; color: var(--cf-text); }
+.cf-opt-desc { font-size: var(--cf-text-xs); line-height: 1.45; color: var(--cf-text-3); }
+/* On the chosen option's accent tint the muted grey drops under 4.5:1; the secondary ink keeps it readable. */
+.cf-opt:has(> input:checked) .cf-opt-desc { color: var(--cf-text-2); }
+
+/* ---------------------------------------------------------------- folding sections
+   details.cf-section.cf-fold[open] > summary.cf-section-head (the h2 and description) + the panel.
+   Open by default; the header folds a long page's groups away. */
+details.cf-fold > summary.cf-section-head { cursor: pointer; list-style: none; border-radius: var(--cf-radius); }
+details.cf-fold > summary.cf-section-head::-webkit-details-marker { display: none; }
+details.cf-fold > summary.cf-section-head::after {
+    content: ''; flex: none; align-self: center; width: 8px; height: 8px; margin-right: 4px;
+    border-right: 2px solid var(--cf-text-3); border-bottom: 2px solid var(--cf-text-3);
+    transform: rotate(45deg) translateY(-2px); transition: transform var(--cf-fast) var(--cf-ease);
+}
+details.cf-fold:not([open]) > summary.cf-section-head::after { transform: rotate(-45deg); }
+details.cf-fold > summary.cf-section-head:hover .cf-section-title { color: var(--cf-accent-fg); }
+details.cf-fold > summary.cf-section-head:focus-visible { outline: 2px solid var(--cf-accent); outline-offset: 4px; }
+details.cf-fold:not([open]) > summary.cf-section-head { margin-bottom: 0; }
+details.cf-fold:not([open]) { --cf-section-gap: var(--cf-5); }
+/* A master switch moved to the page header (cf-pagehead.js) leaves its row hidden at the top of a
+   panel; the row after it draws no extra top line. */
+.cf-rows > .cf-row--in-head:first-child + * { border-top-color: transparent; }
+
+@media (max-width: 640px) {
+    .cf-opt { min-height: 44px; }
+}

@@ -17,8 +17,21 @@ const router = express.Router();
 
 const TWITCH_CLIENT_ID     = process.env.TWITCH_CLIENT_ID;
 const TWITCH_CLIENT_SECRET = process.env.TWITCH_CLIENT_SECRET;
-const BASE_URL             = process.env.DASHBOARD_BASE_URL || `http://localhost:${process.env.DASHBOARD_PORT || 3001}`;
-const REDIRECT_URI         = `${BASE_URL}/link/twitch/callback`;
+// Same source every other OAuth route uses. This read DASHBOARD_BASE_URL — a name nothing sets — so
+// it fell through to a localhost origin. Trailing slash is stripped: DASHBOARD_URL carries one, and
+// a doubled slash would not match a registered URI either.
+const BASE_URL             = (process.env.DASHBOARD_URL || 'https://certifriedmultitool.com').replace(/\/+$/, '');
+
+// Deliberately NOT /link/twitch/callback. Twitch only honours redirect URIs registered on the app,
+// and this one never was — sending it got the whole authorize request rejected, with the failure
+// delivered to the app's registered callback (/auth/twitch/callback), which is why linking dumped
+// people on /schedule?error=twitch_auth_failed instead of anywhere near this flow.
+//
+// So we borrow that already-registered callback. /auth/twitch/callback checks for the session flag
+// set below and hands control back here (see completeTwitchLink), which keeps this flow working
+// without registering anything new on Twitch. The token exchange must quote the SAME redirect_uri
+// that was sent to /authorize, so both use this constant.
+const REDIRECT_URI         = `${BASE_URL}/auth/twitch/callback`;
 
 function ensureDiscordAuthed(req, res, next) {
     if (req.isAuthenticated && req.isAuthenticated() && req.user?.id) return next();
@@ -37,6 +50,9 @@ router.get('/link/twitch', ensureDiscordAuthed, (req, res) => {
 router.get('/link/twitch/start', ensureDiscordAuthed, (req, res) => {
     const state = crypto.randomBytes(16).toString('hex');
     req.session.twitchLinkState = state;
+    // Tells the shared /auth/twitch/callback that the code coming back belongs to THIS flow, not the
+    // schedule login it normally serves. Cleared as soon as it is consumed.
+    req.session.twitchLinkFlow = true;
     const params = new URLSearchParams({
         client_id: TWITCH_CLIENT_ID,
         redirect_uri: REDIRECT_URI,
@@ -48,8 +64,21 @@ router.get('/link/twitch/start', ensureDiscordAuthed, (req, res) => {
     res.redirect(`https://id.twitch.tv/oauth2/authorize?${params}`);
 });
 
-router.get('/link/twitch/callback', ensureDiscordAuthed, async (req, res) => {
+/**
+ * Finish a member Twitch link. Called by /auth/twitch/callback (the registered redirect) once it
+ * sees req.session.twitchLinkFlow, and still reachable at /link/twitch/callback if that URI is ever
+ * registered on the Twitch app.
+ */
+export async function completeTwitchLink(req, res) {
     const { code, state, error: oauthError } = req.query;
+    delete req.session.twitchLinkFlow;
+
+    // We need the Discord identity to know who we are linking. The flow starts behind
+    // ensureDiscordAuthed, so this only trips if the session died mid-OAuth.
+    if (!req.isAuthenticated?.() || !req.user?.id) {
+        return res.redirect('/auth/discord?returnTo=' + encodeURIComponent('/link/twitch'));
+    }
+
     if (oauthError) return res.redirect('/link/twitch?error=' + encodeURIComponent(oauthError));
     if (!code) return res.redirect('/link/twitch?error=no_code');
     if (!state || state !== req.session.twitchLinkState) return res.redirect('/link/twitch?error=state_mismatch');
@@ -125,6 +154,8 @@ router.get('/link/twitch/callback', ensureDiscordAuthed, async (req, res) => {
         logger.error('[LinkTwitch] callback error:', { error: err.message, stack: err.stack });
         res.redirect('/link/twitch?error=server_error');
     }
-});
+}
+
+router.get('/link/twitch/callback', ensureDiscordAuthed, completeTwitchLink);
 
 export default router;

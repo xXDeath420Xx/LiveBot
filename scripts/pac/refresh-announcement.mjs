@@ -1,18 +1,17 @@
 import 'dotenv/config';
 import mysql from 'mysql2/promise';
-import enc from '/home/death/CertiFriedUtility/utils/encryption.js';
+import { resolveBotForGuild } from '/home/death/CertiFriedUtility/utils/bot-resolver.js';
 
 const GUILD = '1099732505243959407';
 const ANNOUNCE_CH = '1439738183645401268';
 const ANNOUNCE_MSG = '1496391378819747932';
-const NEW_BOT_ID = '1496352090950467595';
+// The acting bot comes from guild_bot_mapping — never pinned here.
 const COLOR = 0xCDC3FF;
 
 const pool = mysql.createPool({ host: process.env.DB_HOST, user: process.env.DB_USER, password: process.env.DB_PASSWORD, database: process.env.DB_NAME });
-const [r] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id = ?', [NEW_BOT_ID]);
-const token = enc.decrypt(JSON.parse(r[0].bot_token));
+const bot = await resolveBotForGuild(GUILD, { db: pool });
 await pool.end();
-const H = { Authorization: 'Bot ' + token, 'Content-Type': 'application/json' };
+const H = { Authorization: bot.auth, 'Content-Type': 'application/json' };
 
 const embeds = [
     {
@@ -68,7 +67,7 @@ const embeds = [
         description:
             "Hit **level 3** by chatting in the server and you automatically get the **Shoutout Eligible** role.\n\n" +
             "Once you're eligible, paste your stream URL in **#stream-signup** and the bot auto-signs you up. When you go live, the shoutout drops in **#live-streams** automatically.\n\n" +
-            "**Supported:** Twitch, Kick, YouTube, TikTok, Trovo, Facebook.\n\n" +
+            "**Supported:** Twitch, Kick, YouTube, TikTok, Rumble, Facebook.\n\n" +
             "**Rules**\n" +
             "• Non-link messages in #stream-signup are deleted automatically\n" +
             "• Post below level 3 → removed + DM explaining why\n" +

@@ -1,7 +1,7 @@
 import cron from 'node-cron';
 import pool from '../utils/db.js';
 import logger from '../utils/logger.js';
-import { postQOTD, shouldPost } from '../core/qotd-poster.js';
+import { postQOTD, shouldPost, qotdEnabledFor } from '../core/qotd-poster.js';
 
 let schedulerTask = null;
 
@@ -21,9 +21,12 @@ export function startQOTDScheduler(client) {
 
         try {
             // Get all enabled QOTD channels
+            // Library-backed channels have no deck at all, so a deck requirement here
+            // silently skipped them.
             const [channels] = await pool.execute(`
                 SELECT * FROM qotd_channels
-                WHERE enabled = 1 AND active_deck_id IS NOT NULL
+                WHERE enabled = 1
+                  AND (source_mode IN ('library', 'mixed') OR active_deck_id IS NOT NULL)
             `);
 
             if (channels.length === 0) {
@@ -35,6 +38,8 @@ export function startQOTDScheduler(client) {
 
             for (const channelConfig of channels) {
                 try {
+                    // The page's Enabled switch turned off: no scheduled posts in this server.
+                    if (!(await qotdEnabledFor(channelConfig.guild_id))) continue;
                     // Check if this channel should post based on schedule
                     if (shouldPost(channelConfig)) {
                         logger.info('[QOTD Scheduler] Posting to channel', {

@@ -9,8 +9,45 @@ import pool from '../../../utils/db.js';
 import logger from '../../../utils/logger.js';
 import { verifyTwitchJWT } from '../middleware/twitch-jwt.js';
 import { createGameJWT, createRefreshToken, verifyRefreshToken } from '../middleware/oauth-auth.js';
+import { getOrCreatePlayer } from '../game/player-factory.js';
 
 const router = Router();
+
+/** Game token + refresh token for a player row (every sign-in path returns both; H-405). */
+function issueTokens(player) {
+    return {
+        token: createGameJWT({
+            id: player.id,
+            platform: player.platform,
+            platformUserId: player.platform_user_id,
+            displayName: player.display_name
+        }),
+        refreshToken: createRefreshToken(player.id)
+    };
+}
+
+const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+/**
+ * Sign-in for a Discord user who is already logged in to the dashboard
+ * (used by POST /cfx/session/discord in the dashboard, H-407). The Discord
+ * chat commands use the same platform id, so it is the same player.
+ */
+export async function createDiscordSession(discordUser) {
+    if (!discordUser?.id || !/^\d{17,20}$/.test(String(discordUser.id))) throw new Error('Invalid Discord user');
+    const avatar = discordUser.avatar
+        ? `https://cdn.discordapp.com/avatars/${discordUser.id}/${discordUser.avatar}.png?size=128`
+        : null;
+    const { player, created } = await getOrCreatePlayer(
+        'discord', String(discordUser.id), discordUser.global_name || discordUser.username, avatar
+    );
+    if (player.is_banned) {
+        const err = new Error('Account is banned');
+        err.code = 'BANNED';
+        throw err;
+    }
+    return { ...issueTokens(player), player: { id: player.id, displayName: player.display_name, level: player.level, isNew: created } };
+}
 
 // Store PKCE verifiers temporarily (in production, use Redis or similar)
 const pkceStore = new Map();
@@ -40,65 +77,19 @@ router.post('/twitch', async (req, res) => {
             });
         }
 
-        // Get or create player
-        const [[existing]] = await pool.execute(
-            'SELECT * FROM cfx_players WHERE platform = ? AND platform_user_id = ?',
-            ['twitch', twitchData.userId]
-        );
-
-        let player;
-        if (existing) {
-            player = existing;
-            await pool.execute(
-                'UPDATE cfx_players SET last_online_at = NOW() WHERE id = ?',
-                [player.id]
-            );
-        } else {
-            // Create new player
-            const [result] = await pool.execute(
-                `INSERT INTO cfx_players (platform, platform_user_id, display_name)
-                 VALUES ('twitch', ?, ?)`,
-                [twitchData.userId, `Twitch User ${twitchData.userId}`]
-            );
-
-            const playerId = result.insertId;
-
-            // Create initial grow slots
-            await pool.execute(
-                `INSERT INTO cfx_grow_slots (player_id, slot_number) VALUES (?, 1), (?, 2)`,
-                [playerId, playerId]
-            );
-
-            // Grant starter strains
-            const [starters] = await pool.execute('SELECT id FROM cfx_strains WHERE is_starter = 1');
-            for (const strain of starters) {
-                await pool.execute(
-                    'INSERT INTO cfx_strain_discoveries (player_id, strain_id) VALUES (?, ?)',
-                    [playerId, strain.id]
-                );
-            }
-
-            [[player]] = await pool.execute('SELECT * FROM cfx_players WHERE id = ?', [playerId]);
-
-            logger.info('[Auth] New player created via Twitch extension', { playerId, twitchUserId: twitchData.userId });
+        const { player, created } = await getOrCreatePlayer('twitch', twitchData.userId, `Twitch User ${twitchData.userId}`);
+        if (player.is_banned) {
+            return res.status(403).json({ error: 'Account is banned', code: 'BANNED' });
         }
-
-        // Create game JWT
-        const gameToken = createGameJWT({
-            id: player.id,
-            platform: 'twitch',
-            platformUserId: twitchData.userId,
-            displayName: player.display_name
-        });
 
         res.json({
             success: true,
-            token: gameToken,
+            ...issueTokens(player),
             player: {
                 id: player.id,
                 displayName: player.display_name,
                 level: player.level,
-                isNew: !existing
+                isNew: created
             }
         });
 
@@ -156,66 +147,20 @@ router.post('/oauth/twitch', async (req, res) => {
         const userData = await userResponse.json();
         const twitchUser = userData.data[0];
 
-        // Get or create player
-        const [[existing]] = await pool.execute(
-            'SELECT * FROM cfx_players WHERE platform = ? AND platform_user_id = ?',
-            ['twitch', twitchUser.id]
-        );
-
-        let player;
-        if (existing) {
-            player = existing;
-            await pool.execute(
-                'UPDATE cfx_players SET display_name = ?, avatar_url = ?, last_online_at = NOW() WHERE id = ?',
-                [twitchUser.display_name, twitchUser.profile_image_url, player.id]
-            );
-        } else {
-            const [result] = await pool.execute(
-                `INSERT INTO cfx_players (platform, platform_user_id, display_name, avatar_url)
-                 VALUES ('twitch', ?, ?, ?)`,
-                [twitchUser.id, twitchUser.display_name, twitchUser.profile_image_url]
-            );
-
-            const playerId = result.insertId;
-
-            // Create initial slots
-            await pool.execute(
-                `INSERT INTO cfx_grow_slots (player_id, slot_number) VALUES (?, 1), (?, 2)`,
-                [playerId, playerId]
-            );
-
-            // Grant starter strains
-            const [starters] = await pool.execute('SELECT id FROM cfx_strains WHERE is_starter = 1');
-            for (const strain of starters) {
-                await pool.execute(
-                    'INSERT INTO cfx_strain_discoveries (player_id, strain_id) VALUES (?, ?)',
-                    [playerId, strain.id]
-                );
-            }
-
-            [[player]] = await pool.execute('SELECT * FROM cfx_players WHERE id = ?', [playerId]);
-            logger.info('[Auth] New player created via Twitch OAuth', { playerId, twitchId: twitchUser.id });
+        const { player, created } = await getOrCreatePlayer('twitch', twitchUser.id, twitchUser.display_name, twitchUser.profile_image_url);
+        if (player.is_banned) {
+            return res.status(403).json({ error: 'Account is banned', code: 'BANNED' });
         }
-
-        const gameToken = createGameJWT({
-            id: player.id,
-            platform: 'twitch',
-            platformUserId: twitchUser.id,
-            displayName: twitchUser.display_name
-        });
-
-        const refreshToken = createRefreshToken(player.id);
 
         res.json({
             success: true,
-            token: gameToken,
-            refreshToken,
+            ...issueTokens(player),
             player: {
                 id: player.id,
-                displayName: twitchUser.display_name,
+                displayName: player.display_name,
                 avatar: twitchUser.profile_image_url,
                 level: player.level,
-                isNew: !existing
+                isNew: created
             }
         });
 
@@ -277,64 +222,20 @@ router.post('/oauth/kick', async (req, res) => {
             return res.status(401).json({ error: 'Invalid user data from Kick', code: 'INVALID_USER_DATA' });
         }
 
-        // Get or create player (Kick uses user_id, name, profile_picture)
-        const [[existing]] = await pool.execute(
-            'SELECT * FROM cfx_players WHERE platform = ? AND platform_user_id = ?',
-            ['kick', kickUser.user_id.toString()]
-        );
-
-        let player;
-        if (existing) {
-            player = existing;
-            await pool.execute(
-                'UPDATE cfx_players SET display_name = ?, avatar_url = ?, last_online_at = NOW() WHERE id = ?',
-                [kickUser.name, kickUser.profile_picture, player.id]
-            );
-        } else {
-            const [result] = await pool.execute(
-                `INSERT INTO cfx_players (platform, platform_user_id, display_name, avatar_url)
-                 VALUES ('kick', ?, ?, ?)`,
-                [kickUser.user_id.toString(), kickUser.name, kickUser.profile_picture]
-            );
-
-            const playerId = result.insertId;
-
-            await pool.execute(
-                `INSERT INTO cfx_grow_slots (player_id, slot_number) VALUES (?, 1), (?, 2)`,
-                [playerId, playerId]
-            );
-
-            const [starters] = await pool.execute('SELECT id FROM cfx_strains WHERE is_starter = 1');
-            for (const strain of starters) {
-                await pool.execute(
-                    'INSERT INTO cfx_strain_discoveries (player_id, strain_id) VALUES (?, ?)',
-                    [playerId, strain.id]
-                );
-            }
-
-            [[player]] = await pool.execute('SELECT * FROM cfx_players WHERE id = ?', [playerId]);
-            logger.info('[Auth] New player created via Kick OAuth (POST)', { playerId, kickId: kickUser.user_id });
+        const { player, created } = await getOrCreatePlayer('kick', kickUser.user_id.toString(), kickUser.name, kickUser.profile_picture);
+        if (player.is_banned) {
+            return res.status(403).json({ error: 'Account is banned', code: 'BANNED' });
         }
-
-        const gameToken = createGameJWT({
-            id: player.id,
-            platform: 'kick',
-            platformUserId: kickUser.user_id.toString(),
-            displayName: kickUser.name
-        });
-
-        const refreshToken = createRefreshToken(player.id);
 
         res.json({
             success: true,
-            token: gameToken,
-            refreshToken,
+            ...issueTokens(player),
             player: {
                 id: player.id,
-                displayName: kickUser.name,
+                displayName: player.display_name,
                 avatar: kickUser.profile_picture,
                 level: player.level,
-                isNew: !existing
+                isNew: created
             }
         });
 
@@ -375,16 +276,10 @@ router.post('/refresh', async (req, res) => {
             return res.status(403).json({ error: 'Account banned', code: 'BANNED' });
         }
 
-        const newToken = createGameJWT({
-            id: player.id,
-            platform: player.platform,
-            platformUserId: player.platform_user_id,
-            displayName: player.display_name
-        });
-
+        // A fresh refresh token too, so a player who keeps playing never has to sign in again
         res.json({
             success: true,
-            token: newToken
+            ...issueTokens(player)
         });
 
     } catch (error) {
@@ -421,6 +316,13 @@ router.get('/twitch', (req, res) => {
     authUrl.searchParams.set('redirect_uri', redirectUri);
     authUrl.searchParams.set('response_type', 'code');
     authUrl.searchParams.set('scope', scopes);
+    // state ties the callback to this redirect (login CSRF)
+    const state = crypto.randomBytes(16).toString('hex');
+    pkceStore.set(`twitch:${state}`, { expires: Date.now() + 600000 });
+    for (const [key, value] of pkceStore.entries()) {
+        if (value.expires < Date.now()) pkceStore.delete(key);
+    }
+    authUrl.searchParams.set('state', state);
 
     res.redirect(authUrl.toString());
 });
@@ -431,7 +333,7 @@ router.get('/twitch', (req, res) => {
  */
 router.get('/twitch/callback', async (req, res) => {
     try {
-        const { code, error } = req.query;
+        const { code, error, state } = req.query;
 
         if (error) {
             return res.send(oauthErrorPage('Twitch authorization was denied'));
@@ -439,6 +341,12 @@ router.get('/twitch/callback', async (req, res) => {
 
         if (!code) {
             return res.send(oauthErrorPage('No authorization code received'));
+        }
+
+        const stateEntry = pkceStore.get(`twitch:${state}`);
+        pkceStore.delete(`twitch:${state}`);
+        if (!state || !stateEntry || stateEntry.expires < Date.now()) {
+            return res.send(oauthErrorPage('Sign-in session expired, please try again'));
         }
 
         const redirectUri = `${CFX_BASE_URL}/cfx-api/api/v1/auth/twitch/callback`;
@@ -478,56 +386,13 @@ router.get('/twitch/callback', async (req, res) => {
         const userData = await userResponse.json();
         const twitchUser = userData.data[0];
 
-        // Get or create player
-        const [[existing]] = await pool.execute(
-            'SELECT * FROM cfx_players WHERE platform = ? AND platform_user_id = ?',
-            ['twitch', twitchUser.id]
-        );
-
-        let player;
-        if (existing) {
-            player = existing;
-            await pool.execute(
-                'UPDATE cfx_players SET display_name = ?, avatar_url = ?, last_online_at = NOW() WHERE id = ?',
-                [twitchUser.display_name, twitchUser.profile_image_url, player.id]
-            );
-        } else {
-            const [result] = await pool.execute(
-                `INSERT INTO cfx_players (platform, platform_user_id, display_name, avatar_url)
-                 VALUES ('twitch', ?, ?, ?)`,
-                [twitchUser.id, twitchUser.display_name, twitchUser.profile_image_url]
-            );
-
-            const playerId = result.insertId;
-
-            // Create initial slots
-            await pool.execute(
-                `INSERT INTO cfx_grow_slots (player_id, slot_number) VALUES (?, 1), (?, 2)`,
-                [playerId, playerId]
-            );
-
-            // Grant starter strains
-            const [starters] = await pool.execute('SELECT id FROM cfx_strains WHERE is_starter = 1');
-            for (const strain of starters) {
-                await pool.execute(
-                    'INSERT INTO cfx_strain_discoveries (player_id, strain_id) VALUES (?, ?)',
-                    [playerId, strain.id]
-                );
-            }
-
-            [[player]] = await pool.execute('SELECT * FROM cfx_players WHERE id = ?', [playerId]);
-            logger.info('[Auth] New player created via Twitch OAuth', { playerId, twitchId: twitchUser.id });
+        const { player } = await getOrCreatePlayer('twitch', twitchUser.id, twitchUser.display_name, twitchUser.profile_image_url);
+        if (player.is_banned) {
+            return res.send(oauthErrorPage('This account is banned from the game'));
         }
 
-        const gameToken = createGameJWT({
-            id: player.id,
-            platform: 'twitch',
-            platformUserId: twitchUser.id,
-            displayName: twitchUser.display_name
-        });
-
         // Send success page that posts message to opener
-        res.send(oauthSuccessPage(gameToken));
+        res.send(oauthSuccessPage(issueTokens(player)));
 
     } catch (error) {
         logger.error('[Auth] Twitch callback error', { error: error.message });
@@ -637,173 +502,92 @@ router.get('/kick/callback', async (req, res) => {
             return res.send(oauthErrorPage('Failed to get Kick user info'));
         }
 
-        // Get or create player (Kick uses user_id, name, profile_picture)
-        const [[existing]] = await pool.execute(
-            'SELECT * FROM cfx_players WHERE platform = ? AND platform_user_id = ?',
-            ['kick', kickUser.user_id.toString()]
-        );
-
-        let player;
-        if (existing) {
-            player = existing;
-            await pool.execute(
-                'UPDATE cfx_players SET display_name = ?, avatar_url = ?, last_online_at = NOW() WHERE id = ?',
-                [kickUser.name, kickUser.profile_picture, player.id]
-            );
-        } else {
-            const [result] = await pool.execute(
-                `INSERT INTO cfx_players (platform, platform_user_id, display_name, avatar_url)
-                 VALUES ('kick', ?, ?, ?)`,
-                [kickUser.user_id.toString(), kickUser.name, kickUser.profile_picture]
-            );
-
-            const playerId = result.insertId;
-
-            await pool.execute(
-                `INSERT INTO cfx_grow_slots (player_id, slot_number) VALUES (?, 1), (?, 2)`,
-                [playerId, playerId]
-            );
-
-            const [starters] = await pool.execute('SELECT id FROM cfx_strains WHERE is_starter = 1');
-            for (const strain of starters) {
-                await pool.execute(
-                    'INSERT INTO cfx_strain_discoveries (player_id, strain_id) VALUES (?, ?)',
-                    [playerId, strain.id]
-                );
-            }
-
-            [[player]] = await pool.execute('SELECT * FROM cfx_players WHERE id = ?', [playerId]);
-            logger.info('[Auth] New player created via Kick OAuth', { playerId, kickId: kickUser.user_id });
+        const { player } = await getOrCreatePlayer('kick', kickUser.user_id.toString(), kickUser.name, kickUser.profile_picture);
+        if (player.is_banned) {
+            return res.send(oauthErrorPage('This account is banned from the game'));
         }
 
-        const gameToken = createGameJWT({
-            id: player.id,
-            platform: 'kick',
-            platformUserId: kickUser.user_id.toString(),
-            displayName: kickUser.name
-        });
-
-        res.send(oauthSuccessPage(gameToken));
+        res.send(oauthSuccessPage(issueTokens(player)));
 
     } catch (error) {
         logger.error('[Auth] Kick callback error', { error: error.message, stack: error.stack });
-        // Show actual error in development
-        const errorMsg = process.env.NODE_ENV === 'production'
-            ? 'Authentication failed'
-            : `Authentication failed: ${error.message}`;
-        res.send(oauthErrorPage(errorMsg));
+        res.send(oauthErrorPage('Authentication failed'));
     }
 });
 
 /**
- * Generate OAuth success page that posts message to opener
+ * Page the OAuth popup lands on after a successful sign-in. Hands both tokens
+ * to the game tab (postMessage, plus localStorage for when the opener link is
+ * lost, e.g. under Cross-Origin-Opener-Policy) and closes, or goes to /game
+ * when it was not opened as a popup.
  */
-function oauthSuccessPage(token) {
-    const targetOrigin = CFX_BASE_URL.replace('/cfx-api', '');
+function oauthSuccessPage({ token, refreshToken }) {
+    const targetOrigin = new URL(CFX_BASE_URL).origin;
+    // Tokens are JWTs (base64url + dots); JSON.stringify plus '<' escaping keeps the inline script safe regardless
+    const data = JSON.stringify({ type: 'cfx_oauth_success', token, refreshToken }).replace(/</g, '\\u003c');
     return `<!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>CertiFried - Login Success</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>CertiFried - Signed in</title>
     <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: #111827;
-            color: #f9fafb;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            margin: 0;
-            text-align: center;
-        }
-        .success { color: #22c55e; font-size: 24px; margin-bottom: 16px; }
-        .message { color: #9ca3af; }
-        .debug { color: #6b7280; font-size: 12px; margin-top: 16px; }
+        body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; background: #111827; color: #f9fafb;
+               display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; text-align: center; }
+        h1 { font-size: 20px; margin: 0 0 8px; }
+        p { color: #9ca3af; margin: 0; }
+        a { color: #22c55e; }
     </style>
 </head>
 <body>
     <div>
-        <div class="success">✓ Login Successful</div>
-        <div class="message" id="status">Completing login...</div>
-        <div class="debug" id="debug"></div>
+        <h1>Signed in</h1>
+        <p id="status">Taking you back to the game...</p>
     </div>
     <script>
-        const debug = document.getElementById('debug');
-        const status = document.getElementById('status');
-        const targetOrigin = '${targetOrigin}';
-
-        // Always save to localStorage as fallback (before trying postMessage)
-        try {
-            localStorage.setItem('cfx_oauth_token', '${token}');
-            debug.textContent = 'Token saved';
-        } catch (e) {
-            debug.textContent = 'localStorage failed';
-        }
-
-        debug.textContent += ' | Opener: ' + (window.opener ? 'yes' : 'no');
-
-        if (window.opener) {
+        (function () {
+            var data = ${data};
+            var status = document.getElementById('status');
             try {
-                window.opener.postMessage({
-                    type: 'cfx_oauth_success',
-                    token: '${token}'
-                }, targetOrigin);
-                status.textContent = 'You can close this window...';
-                debug.textContent += ' | Message sent!';
-                setTimeout(() => window.close(), 2000);
-            } catch (err) {
-                status.textContent = 'Closing... (go back to game tab)';
-                debug.textContent += ' | postMessage error: ' + err.message;
-                setTimeout(() => window.close(), 3000);
+                localStorage.setItem('cfx_oauth_token', data.token);
+                localStorage.setItem('cfx_oauth_refresh', data.refreshToken);
+            } catch (e) { /* storage blocked: postMessage below still works */ }
+            if (window.opener) {
+                try { window.opener.postMessage(data, ${JSON.stringify(targetOrigin)}); } catch (e) { /* opener gone */ }
+                setTimeout(function () { window.close(); }, 800);
+                setTimeout(function () { status.textContent = 'You can close this window now.'; }, 1500);
+            } else {
+                setTimeout(function () { location.replace('/game'); }, 600);
             }
-        } else {
-            status.textContent = 'Login complete! Close this and return to game.';
-            debug.textContent += ' | Using localStorage fallback';
-            setTimeout(() => window.close(), 3000);
-        }
+        })();
     </script>
 </body>
 </html>`;
 }
 
 /**
- * Generate OAuth error page
+ * Generate OAuth error page (message is escaped; callers pass fixed text)
  */
 function oauthErrorPage(message) {
     return `<!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>CertiFried - Login Error</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>CertiFried - Sign-in failed</title>
     <style>
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: #111827;
-            color: #f9fafb;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            height: 100vh;
-            margin: 0;
-            text-align: center;
-        }
-        .error { color: #ef4444; font-size: 24px; margin-bottom: 16px; }
-        .message { color: #9ca3af; margin-bottom: 24px; }
-        button {
-            background: #374151;
-            color: white;
-            border: none;
-            padding: 12px 24px;
-            border-radius: 8px;
-            cursor: pointer;
-        }
-        button:hover { background: #4b5563; }
+        body { font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; background: #111827; color: #f9fafb;
+               display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; text-align: center; }
+        h1 { font-size: 20px; margin: 0 0 8px; color: #f87171; }
+        p { color: #9ca3af; margin: 0 0 20px; }
+        a { color: #22c55e; }
     </style>
 </head>
 <body>
     <div>
-        <div class="error">✗ Login Failed</div>
-        <div class="message">${message}</div>
-        <button onclick="window.close()">Close Window</button>
+        <h1>Sign-in failed</h1>
+        <p>${escapeHtml(message)}</p>
+        <a href="/game">Back to the game</a>
     </div>
 </body>
 </html>`;
@@ -811,77 +595,31 @@ function oauthErrorPage(message) {
 
 /**
  * POST /auth/dev
- * Development-only authentication for testing
- * Creates or returns a test player without external auth
+ * Test sign-in without an external account. Only works when CFX_DEV_AUTH=1 is
+ * set AND the request comes straight from this machine (loopback, no proxy
+ * headers), so it can never be reached through the website (H-400).
  */
+export function devAuthAllowed(req) {
+    if (process.env.CFX_DEV_AUTH !== '1') return false;
+    const ip = req.socket?.remoteAddress || '';
+    const loopback = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+    const proxied = req.headers['x-forwarded-for'] || req.headers['cf-connecting-ip'] || req.headers['x-real-ip'] || req.headers['forwarded'];
+    return loopback && !proxied;
+}
+
 router.post('/dev', async (req, res) => {
-    // Only allow in development
-    if (process.env.NODE_ENV === 'production') {
-        return res.status(403).json({ error: 'Dev auth disabled in production', code: 'FORBIDDEN' });
+    if (!devAuthAllowed(req)) {
+        return res.status(404).json({ error: 'Not found', code: 'NOT_FOUND' });
     }
 
     try {
-        const { testId } = req.body;
-        const devUserId = testId || 'dev_test_user_001';
-        const displayName = `TestPlayer_${devUserId}`;
-
-        // Get or create dev test player
-        let [[player]] = await pool.execute(
-            'SELECT * FROM cfx_players WHERE platform = ? AND platform_user_id = ?',
-            ['dev', devUserId]
-        );
-
-        if (!player) {
-            // Create new test player with starter resources
-            const [result] = await pool.execute(
-                `INSERT INTO cfx_players (platform, platform_user_id, display_name, cash, level, xp)
-                 VALUES ('dev', ?, ?, 50000, 5, 1000)`,
-                [devUserId, displayName]
-            );
-
-            const playerId = result.insertId;
-
-            // Create grow slots
-            await pool.execute(
-                `INSERT INTO cfx_grow_slots (player_id, slot_number) VALUES (?, 1), (?, 2), (?, 3), (?, 4)`,
-                [playerId, playerId, playerId, playerId]
-            );
-
-            // Grant ALL starter strains with seeds
-            const [starters] = await pool.execute('SELECT id FROM cfx_strains WHERE is_starter = 1');
-            for (const strain of starters) {
-                await pool.execute(
-                    'INSERT INTO cfx_strain_discoveries (player_id, strain_id) VALUES (?, ?)',
-                    [playerId, strain.id]
-                );
-                await pool.execute(
-                    `INSERT INTO cfx_seed_inventory (player_id, strain_id, quantity, total_gifted)
-                     VALUES (?, ?, 20, 20)`,
-                    [playerId, strain.id]
-                );
-            }
-
-            // Create player stats
-            await pool.execute('INSERT INTO cfx_player_stats (player_id) VALUES (?)', [playerId]);
-
-            // Create player settings
-            await pool.execute('INSERT INTO cfx_player_settings (player_id) VALUES (?)', [playerId]);
-
-            [[player]] = await pool.execute('SELECT * FROM cfx_players WHERE id = ?', [playerId]);
-            logger.info('[Auth] Created dev test player', { playerId, devUserId });
-        }
-
-        // Create game JWT
-        const gameToken = createGameJWT({
-            id: player.id,
-            platform: 'dev',
-            platformUserId: devUserId,
-            displayName: player.display_name
-        });
+        const testId = String(req.body?.testId || 'dev_test_user_001').slice(0, 60);
+        const { player } = await getOrCreatePlayer('dev', testId, `TestPlayer_${testId}`, null,
+            { extra: { cash: 50000, level: 5, xp: 1000 } });
 
         res.json({
             success: true,
-            token: gameToken,
+            ...issueTokens(player),
             player: {
                 id: player.id,
                 displayName: player.display_name,

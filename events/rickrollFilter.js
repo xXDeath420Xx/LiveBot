@@ -11,6 +11,7 @@
  * serves the guild.
  */
 import logger from '../utils/logger.js';
+import { displayNameFor } from '../utils/display-name.js';
 
 // Guilds where the rickroll filter is active.
 const RICKROLL_GUILDS = new Set([
@@ -60,7 +61,7 @@ export default {
     try {
       await message.delete();
       logger.info(`[RickrollFilter] Deleted rickroll (${id}) from ${message.author.tag} in guild ${message.guild.id} #${message.channel.id}`);
-      const who = message.member?.displayName || message.author.username;
+      const who = displayNameFor(message.member || message.author, message.guild);
       const notice = await message.channel.send(`🚫 Nice try, ${who} — no rickrolls here.`).catch(() => null);
       if (notice) setTimeout(() => notice.delete().catch(() => {}), 6000);
     } catch (err) {

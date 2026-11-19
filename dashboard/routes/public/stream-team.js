@@ -8,8 +8,11 @@ import {
     PermissionsBitField
 } from 'discord.js';
 import pool from '../../../utils/db.js';
+import { nextTicketNumber } from '../../../core/ticket-number.js';
 import logger from '../../../utils/logger.js';
 import { resolveStreamerIdentity } from '../../../utils/platforms/resolve-identity.js';
+import { parseOptions } from '../../../core/form-questions.js';
+import { logFeatureEvent, userLabel } from '../../../core/feature-log.js';
 
 /**
  * PUBLIC Stream Team Signup API.
@@ -67,8 +70,11 @@ async function resolvePanel() {
     if (panels.length === 0) return null;
     const panel = panels[0];
 
+    // Ordered and shaped exactly like the Discord side reads it, so the web form and the modal
+    // ask the same questions in the same order with the same choices.
     const [questions] = await pool.execute(
-        "SELECT question_id, question_text, question_type FROM ticket_form_questions WHERE form_id = ? ORDER BY question_id",
+        `SELECT * FROM ticket_form_questions WHERE form_id = ?
+          ORDER BY question_order ASC, question_id ASC`,
         [panel.form_id]
     );
     return { panel, questions };
@@ -101,7 +107,9 @@ router.get('/panel', async (req, res) => {
             questions: questions.map(q => ({
                 question_id: q.question_id,
                 question_text: q.question_text,
-                question_type: q.question_type
+                question_type: q.question_type,
+                question_options: parseOptions(q.question_options),
+                is_required: Number(q.is_required) ? 1 : 0
             })),
             loggedIn: !!req.user
         });
@@ -167,8 +175,11 @@ router.post('/apply', applyLimiter, async (req, res) => {
         const responses = {};
         for (const q of questions) {
             const raw = answers[q.question_id];
-            const text = typeof raw === 'string' ? raw.trim() : '';
-            if (!text) {
+            // A checkbox question answers with a list; everything else with a string.
+            const text = Array.isArray(raw)
+                ? raw.map(v => String(v).trim()).filter(Boolean).join(', ')
+                : (typeof raw === 'string' ? raw.trim() : '');
+            if (!text && Number(q.is_required)) {
                 return res.status(400).json({ error: `Please answer: ${q.question_text}` });
             }
             responses[q.question_text] = text;
@@ -250,17 +261,13 @@ router.post('/apply', applyLimiter, async (req, res) => {
         });
 
         // h. INSERT into tickets — user_id = openerId || '0' (varchar NOT NULL sentinel).
+        // The server's next ticket number (core/ticket-number.js, H-661), shown in place of the database id.
+        const ticketNumber = await nextTicketNumber(guildId);
         const [result] = await pool.execute(
-            "INSERT INTO tickets (guild_id, panel_id, user_id, channel_id, status, form_id, form_responses) VALUES (?, ?, ?, ?, 'open', ?, ?)",
-            [guildId, panel.panel_id, openerId || '0', channel.id, panel.form_id, formResponses]
+            "INSERT INTO tickets (guild_id, ticket_number, panel_id, user_id, channel_id, status, form_id, form_responses) VALUES (?, ?, ?, ?, ?, 'open', ?, ?)",
+            [guildId, ticketNumber, panel.panel_id, openerId || '0', channel.id, panel.form_id, formResponses]
         );
         const ticketId = result.insertId;
-
-        const [ticketCount] = await pool.execute(
-            "SELECT COUNT(*) as count FROM tickets WHERE guild_id = ?",
-            [guildId]
-        );
-        const ticketNumber = ticketCount[0].count;
 
         // i. Welcome embed + form responses + close button.
         const embed = new EmbedBuilder()
@@ -302,6 +309,16 @@ router.post('/apply', applyLimiter, async (req, res) => {
 
         logger.info(`Stream Team application ticket #${ticketId} created (${openerId ? 'linked:' + openerId : 'anonymous'}) for twitch:${canonicalHandle}`, { guildId, category: 'tickets' });
 
+        void logFeatureEvent(() => (guild), 'tickets.opened', () => ({
+            title: '🎫 Ticket Opened',
+            fields: [
+                ['Opened By', openerId ? userLabel(openerId) : 'Website (anonymous)'], ['Ticket', `<#${channel.id}> (#${ticketNumber})`],
+                ['Panel', panel.panel_name || 'Stream Team'], ['Twitch', canonicalHandle], ['Source', 'Website application'],
+            ],
+            url: `https://discord.com/channels/${guildId}/${channel.id}`,
+            avoidChannelIds: [panel.alert_channel_id],
+        }));
+
         // Alert embed → panel.alert_channel_id (mirror ticket_create.js).
         if (panel.alert_channel_id) {
             try {
@@ -310,13 +327,13 @@ router.post('/apply', applyLimiter, async (req, res) => {
                     const alertEmbed = new EmbedBuilder()
                         .setColor('#2ECC71')
                         .setTitle('🎫 New Stream Team Application')
-                        .setDescription(`**${channelName}** with ID: ${ticketId} has been opened.`)
+                        .setDescription(`**${channelName}** (ticket #${ticketNumber}) has been opened.`)
                         .addFields(
                             { name: '📨 Opened By', value: openerId ? `<@${openerId}>` : 'Website (anonymous)', inline: true },
                             { name: '📋 Panel', value: panel.panel_name || 'Default', inline: true },
                             { name: '📌 Channel', value: `<#${channel.id}>`, inline: true }
                         )
-                        .setFooter({ text: `Ticket #${ticketId}` })
+                        .setFooter({ text: `Ticket #${ticketNumber}` })
                         .setTimestamp();
 
                     const joinRow = new ActionRowBuilder().addComponents(

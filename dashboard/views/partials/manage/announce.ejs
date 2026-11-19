@@ -1,0 +1,470 @@
+<%# Announce — post/edit picture-on-top announcement cards. Dashboard twin of /announce.
+    API: /api/guilds/:guildId/announce (routes/api/features/announce.js). Needs guild, channels, roles.
+    Built on the settings-row kit (cf-settings.css); ids are unchanged. %>
+<div class="page-section" id="announcePage" data-guild-id="<%= guild.id %>">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-bullhorn"></i>
+                <span>Announce</span>
+            </div>
+            <div class="page-section-subtitle">
+                The same post <code>/manage announce</code> makes in Discord, written and edited here.
+            </div>
+        </div>
+    </div>
+
+    <div id="annError" class="cf-notice is-bad" role="alert" hidden></div>
+
+    <div class="ann-grid">
+        <section class="cf-section" aria-labelledby="ann-compose-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="ann-compose-title">Write</h2>
+                    <p class="cf-section-desc">Nothing is posted until you press Post.</p>
+                </div>
+            </header>
+            <div class="cf-rows">
+                <div id="annEditing" class="ann-editing cf-notice is-accent" hidden>
+                    <span class="cf-notice-body">Editing a posted announcement. <a id="annEditLink" href="#" target="_blank" rel="noopener">View in Discord</a></span>
+                    <button type="button" class="btn btn-secondary btn-sm" id="annCancelEdit">Cancel</button>
+                </div>
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-row-text"><label class="cf-row-label" for="annChannel">Channel</label></div>
+                    <div class="cf-row-control">
+                        <select id="annChannel" class="form-select">
+                            <option value="">Choose a channel</option>
+                            <% (locals.channels || []).filter(c => c.type === 0 || c.type === 5).sort((a, b) => a.rawPosition - b.rawPosition).forEach(c => { %>
+                            <option value="<%= c.id %>" data-kind="text">#<%= c.name %></option>
+                            <% }) %>
+                        </select>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-row-text">
+                        <span class="cf-row-label">Picture</span>
+                        <p class="cf-row-desc">Shown above the text. PNG, JPEG, GIF or WebP, up to 10 MB.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="ann-drop cf-dropzone" id="annDrop" tabindex="0" role="button" aria-label="Choose a picture">
+                            <input type="file" id="annImage" accept="image/png,image/jpeg,image/gif,image/webp" hidden>
+                            <span id="annDropText" class="cf-dropzone-text"><i class="fas fa-image"></i> Drop an image here or click to choose (max 10 MB)</span>
+                        </div>
+                        <label class="cf-choice" id="annRemoveWrap" hidden>
+                            <input type="checkbox" id="annRemoveImage"> Remove the current picture
+                        </label>
+                        <div><button type="button" class="btn btn-secondary btn-sm" id="annClearImage" hidden>Clear picture</button></div>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-row-text"><label class="cf-row-label" for="annTitle">Title</label><p class="cf-row-desc">Optional.</p></div>
+                    <div class="cf-row-control"><input id="annTitle" class="form-control" maxlength="256" placeholder="Halloween giveaway"></div>
+                </div>
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-row-text"><label class="cf-row-label" for="annBody">Text</label><p class="cf-row-desc">Blank lines make paragraphs. **bold**, *italic*, <code>### headings</code>, <code>-# small text</code>, <code>&gt; quotes</code>, emoji and mentions such as &lt;#channel id&gt; carry over.</p></div>
+                    <div class="cf-row-control"><textarea id="annBody" class="form-control" rows="14"></textarea></div>
+                </div>
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-row-text"><label class="cf-row-label" for="annFooter">Small print</label><p class="cf-row-desc">Optional. Shown under a line at the bottom.</p></div>
+                    <div class="cf-row-control"><input id="annFooter" class="form-control" maxlength="500"></div>
+                </div>
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-fields">
+                        <div class="cf-field">
+                            <label for="annPing">Ping</label>
+                            <select id="annPing" class="form-select">
+                                <option value="">No ping</option>
+                                <option value="everyone">@everyone</option>
+                                <% (locals.roles || []).slice().sort((a, b) => b.position - a.position).forEach(r => { %>
+                                <option value="<%= r.id %>" data-kind="role"<% if (r.hexColor && r.hexColor !== '#000000') { %> data-color="<%= r.hexColor %>"<% } %>>@<%= r.name %></option>
+                                <% }) %>
+                            </select>
+                        </div>
+                        <div class="cf-field">
+                            <label for="annColor">Stripe colour</label>
+                            <div class="ann-color">
+                                <input type="color" id="annColorPick" value="#5865f2" aria-label="Pick a stripe colour">
+                                <input id="annColor" class="form-control" placeholder="Server theme" maxlength="7">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="cf-section-foot ann-actions">
+                    <span class="ann-count cf-foot-note" id="annCount"></span>
+                    <span class="ann-status cf-status-line" id="annStatus" aria-live="polite"></span>
+                    <button type="button" class="btn btn-primary" id="annSubmit"><i class="fas fa-paper-plane"></i> Post</button>
+                </div>
+            </div>
+        </section>
+
+        <section class="cf-section ann-preview-col" aria-labelledby="ann-preview-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="ann-preview-title">Preview</h2>
+                    <p class="cf-section-desc">Close to what Discord shows; Discord has the final say on spacing.</p>
+                </div>
+            </header>
+            <div class="ann-preview">
+                <div id="pvPing" class="pv-ping" hidden></div>
+                <div class="pv-embed" id="pvCard">
+                    <img id="pvImage" alt="" hidden>
+                    <div id="pvTitle" class="pv-h1" hidden></div>
+                    <div id="pvBody" class="pv-body"></div>
+                    <div id="pvFooter" class="pv-footer" hidden></div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <section class="cf-section" aria-labelledby="ann-recent-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="ann-recent-title">Recent announcements</h2>
+                <p class="cf-section-desc">Posted from here or with <code>/manage announce</code>. Deleting one removes it from Discord.</p>
+            </div>
+            <div class="cf-section-actions">
+                <label class="cf-search" id="cfk-ann-search-wrap" hidden>
+                    <i class="fas fa-search" aria-hidden="true"></i>
+                    <input type="search" id="cfk-ann-search" class="form-control" placeholder="Search announcements" aria-label="Search announcements">
+                </label>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div id="annPosts"><div class="cf-state cf-state--compact cf-state--loading" role="status"><span class="cf-spinner" aria-hidden="true"></span><p class="cf-state-text">Loading</p></div></div>
+        </div>
+    </section>
+</div>
+
+<style>
+  #announcePage .ann-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:var(--cf-6); align-items:start; margin-bottom:var(--cf-8); }
+  #announcePage .ann-grid > .cf-section { margin-bottom:0; }
+  #announcePage .ann-preview-col { position:sticky; top:calc(var(--cf-header-h, 56px) + var(--cf-4)); }
+  @media (max-width:1000px){ #announcePage .ann-grid { grid-template-columns:minmax(0,1fr); } #announcePage .ann-preview-col { position:static; } }
+  #announcePage textarea { font-family:inherit; resize:vertical; min-height:14rem; }
+  #announcePage .ann-color { display:flex; gap:var(--cf-2); }
+  #announcePage .ann-color input[type=color] { flex:none; width:2.6rem; height:38px; padding:2px; border:1px solid var(--cf-border-strong); border-radius:var(--cf-radius); background:var(--cf-surface); cursor:pointer; }
+  #announcePage .ann-color input:not([type=color]) { flex:1 1 auto; min-width:0; }
+  #announcePage .ann-count { font-variant-numeric:tabular-nums; }
+  #announcePage .ann-count.over { color:var(--cf-danger); font-weight:600; }
+
+  /* Discord-like preview of a Components V2 container (Discord's dark colours here, its light theme in Light and Sand below) */
+  #announcePage .ann-preview { background:#313338; border:1px solid var(--cf-border); border-radius:var(--cf-radius-lg); padding:1rem; color:#dbdee1; font-size:.95rem; line-height:1.375; }
+  #announcePage .pv-ping { margin-bottom:.4rem; }
+  #announcePage .pv-mention { background:rgba(88,101,242,.3); color:#c9cdfb; border-radius:3px; padding:0 2px; font-weight:500; }
+  #announcePage .pv-embed { background:#393a41; border:1px solid #44464e; border-left:4px solid #5865F2; border-radius:8px; padding:.9rem 1rem; overflow-wrap:anywhere; }
+  #announcePage .pv-embed img { width:100%; border-radius:6px; display:block; margin-bottom:.6rem; }
+  #announcePage .pv-h1 { font-size:1.5rem; font-weight:700; line-height:1.25; margin:.2rem 0 .5rem; color:#f2f3f5; }
+  #announcePage .pv-body .cf-dc-h1 { font-size:1.5rem; margin:.5rem 0 .25rem; }
+  #announcePage .pv-body .cf-dc-h2 { font-size:1.25rem; margin:.5rem 0 .25rem; }
+  #announcePage .pv-body .cf-dc-h3 { font-size:1rem; margin:.5rem 0 .25rem; }
+  #announcePage .pv-body .cf-dc-h { font-weight:700; color:#f2f3f5; }
+  #announcePage .pv-body .sub, #announcePage .pv-footer { font-size:.78rem; color:#949ba4; }
+  #announcePage .pv-footer { border-top:1px solid #44464e; margin-top:.7rem; padding-top:.55rem; }
+  #announcePage .pv-body .cf-dc-quote { border-left:4px solid #4e5058; margin:0; padding-left:.6rem; }
+  #announcePage .pv-body .cf-dc-code { background:#2b2d31; border-radius:3px; padding:0 .2em; font-size:.85em; }
+  #announcePage .pv-body .cf-dc-link { color:#00a8fc; }
+  #announcePage .pv-empty { color:#b5bac1; font-style:italic; }
+  #announcePage .pv-body .cf-dc-sub, #announcePage .pv-footer .cf-dc-sub { font-size:.78rem; color:#949ba4; }
+  #announcePage .cf-dc-mention { background:rgba(88,101,242,.3); color:#c9cdfb; border-radius:3px; padding:0 2px; font-weight:500; }
+  #announcePage .cf-dc-spoiler { color:transparent; border-radius:3px; cursor:pointer; }
+  #announcePage .cf-dc-spoiler.is-shown { color:inherit; }
+  :where(:root:not([data-theme="light"]):not([data-theme="sand"])) #announcePage .cf-dc-spoiler { background:#1e1f22; }
+  :where(:root:not([data-theme="light"]):not([data-theme="sand"])) #announcePage .cf-dc-spoiler.is-shown { background:rgba(255,255,255,.1); }
+  #announcePage .pv-h1 .cf-dc-h { font-size:inherit; margin:0; }
+  /* Light and Sand: Discord's light theme. */
+  :root:is([data-theme="light"], [data-theme="sand"]) #announcePage .ann-preview { background:#ffffff; color:#313338; }
+  :root:is([data-theme="light"], [data-theme="sand"]) #announcePage :is(.pv-mention, .cf-dc-mention) { background:rgba(88,101,242,.15); color:#4752c4; }
+  :root:is([data-theme="light"], [data-theme="sand"]) #announcePage .pv-embed { background:#f2f3f5; border-top-color:#e3e5e8; border-right-color:#e3e5e8; border-bottom-color:#e3e5e8; }
+  :root:is([data-theme="light"], [data-theme="sand"]) #announcePage :is(.pv-h1, .pv-body .cf-dc-h) { color:#060607; }
+  :root:is([data-theme="light"], [data-theme="sand"]) #announcePage :is(.pv-body .sub, .pv-footer, .pv-body .cf-dc-sub, .pv-footer .cf-dc-sub, .pv-empty) { color:#5c5e66; }
+  :root:is([data-theme="light"], [data-theme="sand"]) #announcePage .pv-footer { border-top-color:#e3e5e8; }
+  :root:is([data-theme="light"], [data-theme="sand"]) #announcePage .pv-body .cf-dc-quote { border-left-color:#c4c9ce; }
+  :root:is([data-theme="light"], [data-theme="sand"]) #announcePage .pv-body .cf-dc-code { background:#ebedef; color:#313338; }
+  :root:is([data-theme="light"], [data-theme="sand"]) #announcePage .pv-body .cf-dc-link { color:#0062cc; }
+  :root:is([data-theme="light"], [data-theme="sand"]) #announcePage .cf-dc-spoiler { background:#e3e5e8; }
+  :root:is([data-theme="light"], [data-theme="sand"]) #announcePage .cf-dc-spoiler.is-shown { background:rgba(0,0,0,.06); }
+  #announcePage .ann-post.is-filtered { display:none; }
+  @media (max-width:640px){
+    #announcePage .ann-color input[type=color] { height:44px; }
+  }
+</style>
+
+<script src="/js/cf-msgpreview.js"></script>
+<script>
+(function () {
+  const root = document.getElementById('announcePage');
+  if (!root) return;
+  const guildId = root.dataset.guildId;
+  const api = (p = '') => `/api/guilds/${guildId}/announce${p}`;
+  const $ = (id) => document.getElementById(id);
+  const TEXT_LIMIT = 4000;
+  const DEFAULT_COLOR = '#5865F2';
+
+  const roleNames = {};
+  $('annPing').querySelectorAll('option').forEach(o => { if (/^\d+$/.test(o.value)) roleNames[o.value] = o.textContent.trim(); });
+
+  // null = new post; otherwise { channelId, messageId, url, imageUrl }
+  let editing = null;
+  let file = null;
+  let fileUrl = null;
+
+  async function req(url, options = {}) {
+    const res = await fetch(url, { credentials: 'same-origin', ...options });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
+    return body;
+  }
+  const showError = (m) => { const el = $('annError'); el.hidden = !m; el.textContent = m || ''; };
+  const status = (m, ok = true, busy = false) => { const el = $('annStatus'); el.textContent = m; el.className = 'ann-status cf-status-line' + (!m ? '' : busy ? ' is-busy' : ok ? ' is-ok' : ' is-bad'); };
+
+  // Channel names for <#id> mentions in the preview, from the channel picker.
+  const channelNames = {};
+  $('annChannel').querySelectorAll('option').forEach(o => { if (/^\d+$/.test(o.value)) channelNames[o.value] = o.textContent.trim().replace(/^#/, ''); });
+  const roleInfo = {};
+  Object.keys(roleNames).forEach(id => { roleInfo[id] = { name: roleNames[id].replace(/^@/, '') }; });
+  const NAMES = { channels: channelNames, roles: roleInfo };
+
+  // Discord's markdown as DOM nodes (/js/cf-msgpreview.js); nothing typed becomes HTML.
+  function md(text) {
+    return window.cfDiscordPreview ? window.cfDiscordPreview.markdown(text, NAMES) : document.createTextNode(text);
+  }
+  function paint(box, text) { box.replaceChildren(md(text)); }
+
+  function colorValue() {
+    const v = $('annColor').value.trim();
+    if (!v) return null;
+    const hex = v.startsWith('#') ? v : '#' + v;
+    return /^#[0-9a-f]{6}$/i.test(hex) ? hex : undefined; // undefined = invalid
+  }
+
+  function textLen() {
+    const t = $('annTitle').value.trim(), b = $('annBody').value.trim(), f = $('annFooter').value.trim();
+    const p = $('annPing').value;
+    return (t ? t.length + 2 : 0) + b.length + (f ? f.length + 3 : 0)
+      + (p === 'everyone' ? 9 : p ? p.length + 4 : 0);
+  }
+
+  function render() {
+    const title = $('annTitle').value.trim(), body = $('annBody').value.trim(), footer = $('annFooter').value.trim();
+    $('pvTitle').hidden = !title; paint($('pvTitle'), title);
+    if (body) paint($('pvBody'), body);
+    else { const empty = document.createElement('span'); empty.className = 'pv-empty'; empty.textContent = 'Your announcement text shows here.'; $('pvBody').replaceChildren(empty); }
+    $('pvFooter').hidden = !footer; paint($('pvFooter'), footer);
+
+    const ping = $('annPing').value;
+    $('pvPing').hidden = !ping;
+    if (ping) {
+      const m = document.createElement('span');
+      m.className = 'pv-mention';
+      m.textContent = ping === 'everyone' ? '@everyone' : roleNames[ping] || '@role';
+      $('pvPing').replaceChildren(m);
+    } else $('pvPing').replaceChildren();
+
+    const c = colorValue();
+    $('pvCard').style.borderLeftColor = c || DEFAULT_COLOR;
+    if (c) $('annColorPick').value = c.toLowerCase();
+
+    const src = fileUrl || (editing && editing.imageUrl && !$('annRemoveImage').checked ? editing.imageUrl : null);
+    $('pvImage').hidden = !src;
+    if (src) $('pvImage').src = src; else $('pvImage').removeAttribute('src');
+
+    const n = textLen();
+    $('annCount').textContent = `${n} / ${TEXT_LIMIT}`;
+    $('annCount').classList.toggle('over', n > TEXT_LIMIT);
+  }
+
+  function setSubmitLabel(iconName, text) {
+    const i = document.createElement('i');
+    i.className = `fas fa-${iconName}`;
+    i.setAttribute('aria-hidden', 'true');
+    $('annSubmit').replaceChildren(i, ` ${text}`);
+  }
+
+  function setFile(f) {
+    if (f && !/^image\//.test(f.type)) return status('That file isn\'t an image.', false);
+    if (f && f.size > 10 * 1024 * 1024) return status('That picture is over 10 MB.', false);
+    if (fileUrl) URL.revokeObjectURL(fileUrl);
+    file = f || null;
+    fileUrl = f ? URL.createObjectURL(f) : null;
+    const icon = document.createElement('i');
+    icon.className = f ? 'fas fa-check' : 'fas fa-image';
+    icon.setAttribute('aria-hidden', 'true');
+    $('annDropText').replaceChildren(icon, f ? ` ${f.name}` : ' Drop an image here or click to choose (max 10 MB)');
+    $('annClearImage').hidden = !f;
+    if (f) $('annRemoveImage').checked = false;
+    render();
+  }
+
+  function resetForm() {
+    editing = null;
+    ['annTitle', 'annBody', 'annFooter', 'annColor'].forEach(id => { $(id).value = ''; });
+    $('annPing').value = '';
+    $('annChannel').disabled = false;
+    $('annRemoveImage').checked = false;
+    $('annRemoveWrap').hidden = true;
+    $('annEditing').hidden = true;
+    setSubmitLabel('paper-plane', 'Post');
+    $('annImage').value = '';
+    setFile(null);
+  }
+
+  async function startEdit(channelId, messageId) {
+    showError('');
+    try {
+      const { post } = await req(api(`/${channelId}/${messageId}`));
+      resetForm();
+      editing = { channelId, messageId, url: post.url, imageUrl: post.imageUrl };
+      $('annChannel').value = channelId;
+      $('annChannel').disabled = true; // a Discord message can't move channels
+      $('annTitle').value = post.title || '';
+      $('annBody').value = post.body || '';
+      $('annFooter').value = post.footer || '';
+      $('annPing').value = post.pingRoleId || '';
+      $('annColor').value = post.color != null ? '#' + post.color.toString(16).padStart(6, '0').toUpperCase() : '';
+      $('annRemoveWrap').hidden = !post.imageUrl;
+      $('annEditLink').href = post.url;
+      $('annEditing').hidden = false;
+      setSubmitLabel('save', 'Save changes');
+      render();
+      root.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (err) {
+      showError(err.message);
+      loadPosts();
+    }
+  }
+
+  async function submit() {
+    status('');
+    const body = $('annBody').value.trim();
+    if (!editing && !$('annChannel').value) return status('Pick a channel.', false);
+    if (!body) return status('Write the announcement text.', false);
+    if (colorValue() === undefined) return status('Colour must be a hex code like #FF7518.', false);
+    if (textLen() > TEXT_LIMIT) return status(`Too long by ${textLen() - TEXT_LIMIT} characters.`, false);
+
+    const fd = new FormData();
+    fd.append('channelId', editing ? editing.channelId : $('annChannel').value);
+    fd.append('title', $('annTitle').value);
+    fd.append('body', body);
+    fd.append('footer', $('annFooter').value);
+    fd.append('color', colorValue() || '');
+    fd.append('pingRoleId', $('annPing').value);
+    if (file) fd.append('image', file);
+    if (editing && $('annRemoveImage').checked) fd.append('removeImage', '1');
+
+    const ping = $('annPing').value;
+    if (!editing && ping && !confirm(`This will ping ${ping === 'everyone' ? '@everyone' : roleNames[ping]}. Post it?`)) return;
+
+    const btn = $('annSubmit');
+    btn.disabled = true;
+    status(editing ? 'Saving…' : 'Posting…', true, true);
+    try {
+      const r = editing
+        ? await req(api(`/${editing.channelId}/${editing.messageId}`), { method: 'PUT', body: fd })
+        : await req(api('/'), { method: 'POST', body: fd });
+      const wasEdit = !!editing;
+      resetForm();
+      const view = document.createElement('a');
+      view.href = /^https:\/\//.test(r.url || '') ? r.url : '#';
+      view.target = '_blank';
+      view.rel = 'noopener';
+      view.textContent = 'View in Discord';
+      $('annStatus').replaceChildren(`${wasEdit ? 'Saved' : 'Posted'}. `, view);
+      $('annStatus').className = 'ann-status cf-status-line is-ok';
+      loadPosts();
+    } catch (err) {
+      status(err.message, false); // the form keeps its text, so nothing is lost
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function node(tag, cls, text) {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+  }
+  async function loadPosts() {
+    try {
+      const { posts } = await req(api('/'));
+      $('ann-recent-title').textContent = posts.length ? `Recent announcements (${posts.length})` : 'Recent announcements';
+      $('cfk-ann-search-wrap').hidden = posts.length <= 15;
+      if (!posts.length) {
+        const state = node('div', 'cf-state');
+        state.append(node('p', 'cf-state-title', 'Nothing posted yet'),
+          node('p', 'cf-state-text', 'Announcements you post from here or with /manage announce show up here.'));
+        $('annPosts').replaceChildren(state);
+        return;
+      }
+      const list = node('div', 'cf-list');
+      posts.forEach(p => {
+        const ch = p.channel_name ? `#${p.channel_name}` : channelNames[p.channel_id] ? `#${channelNames[p.channel_id]}` : 'unknown channel';
+        const when = new Date(p.updated_at || p.created_at).toLocaleString();
+        const row = node('div', 'ann-post cf-list-item cf-list-item--multi');
+        const main = node('div', 'cf-list-main');
+        main.append(node('p', 'cf-list-title', p.title || '(untitled)'),
+          node('p', 'cf-list-meta', `${ch} · ${p.updated_at ? 'edited' : 'posted'} ${when} · via ${p.source || 'dashboard'}`));
+        const actions = node('div', 'btns cf-list-actions');
+        const open = node('a', 'btn btn-secondary btn-sm', 'Open');
+        open.href = /^https:\/\//.test(p.url || '') ? p.url : '#';
+        open.target = '_blank';
+        open.rel = 'noopener';
+        const edit = node('button', 'btn btn-secondary btn-sm', 'Edit');
+        edit.type = 'button';
+        edit.dataset.edit = `${p.channel_id}/${p.message_id}`;
+        const del = node('button', 'btn btn-danger btn-sm', 'Delete');
+        del.type = 'button';
+        del.dataset.del = `${p.channel_id}/${p.message_id}`;
+        actions.append(open, edit, del);
+        row.append(main, actions);
+        list.append(row);
+      });
+      $('annPosts').replaceChildren(list);
+      filterPosts();
+    } catch (err) { showError(err.message); }
+  }
+  function filterPosts() {
+    const q = $('cfk-ann-search').value.trim().toLowerCase();
+    $('annPosts').querySelectorAll('.ann-post').forEach(row => row.classList.toggle('is-filtered', !!q && !row.textContent.toLowerCase().includes(q)));
+  }
+  $('cfk-ann-search').addEventListener('input', filterPosts);
+
+  // ── wiring ──
+  ['annTitle', 'annBody', 'annFooter', 'annColor'].forEach(id => $(id).addEventListener('input', render));
+  ['annPing', 'annRemoveImage'].forEach(id => $(id).addEventListener('change', render));
+  $('annColorPick').addEventListener('input', e => { $('annColor').value = e.target.value.toUpperCase(); render(); });
+  $('annSubmit').addEventListener('click', submit);
+  $('annCancelEdit').addEventListener('click', () => { resetForm(); status(''); });
+  $('annClearImage').addEventListener('click', () => { $('annImage').value = ''; setFile(null); });
+
+  const drop = $('annDrop');
+  drop.addEventListener('click', () => $('annImage').click());
+  drop.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('annImage').click(); } });
+  $('annImage').addEventListener('change', e => setFile(e.target.files[0]));
+  drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('is-dragover'); });
+  drop.addEventListener('dragleave', () => drop.classList.remove('is-dragover'));
+  drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('is-dragover'); setFile(e.dataTransfer.files[0]); });
+
+  $('annPosts').addEventListener('click', async (e) => {
+    const ed = e.target.closest('[data-edit]');
+    if (ed) { const [c, m] = ed.dataset.edit.split('/'); return startEdit(c, m); }
+    const del = e.target.closest('[data-del]');
+    if (del) {
+      if (!confirm('Delete this announcement from Discord? This can\'t be undone.')) return;
+      const [c, m] = del.dataset.del.split('/');
+      try {
+        await req(api(`/${c}/${m}`), { method: 'DELETE' });
+        if (editing && editing.messageId === m) resetForm();
+        loadPosts();
+      } catch (err) { showError(err.message); }
+    }
+  });
+
+  window.addEventListener('beforeunload', e => {
+    if ($('annBody').value.trim() && !$('annSubmit').disabled && !editing) { e.preventDefault(); e.returnValue = ''; }
+  });
+
+  render();
+  loadPosts();
+})();
+</script>

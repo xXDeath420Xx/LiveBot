@@ -32,6 +32,50 @@ export function validateBirthday(month, day, year) {
     return { ok: true };
 }
 
+/** Birthdays are announced at midnight in this zone, for every server. */
+export const BIRTHDAY_ZONE = 'America/New_York';
+
+/** The birthday role is taken back this long after the announcement that gave it. */
+export const BIRTHDAY_ROLE_HOURS = 24;
+
+export function isLeapYear(year) {
+    return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+}
+
+/** The calendar date (year, month 1-12, day) at instant `now` in `zone`. */
+export function dateIn(zone = BIRTHDAY_ZONE, now = new Date()) {
+    const parts = {};
+    for (const p of new Intl.DateTimeFormat('en-US', { timeZone: zone, year: 'numeric', month: 'numeric', day: 'numeric' }).formatToParts(now)) {
+        if (p.type !== 'literal') parts[p.type] = Number(p.value);
+    }
+    return { year: parts.year, month: parts.month, day: parts.day };
+}
+
+/** 'YYYY-MM-DD' for a { year, month, day }. */
+export function isoDate({ year, month, day }) {
+    return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+/**
+ * The saved birthdays celebrated on a calendar date. Someone born on 29 February is celebrated on
+ * the 28th in years without a 29th; otherwise a date only matches itself.
+ */
+export function birthdaysOn({ year, month, day }) {
+    const out = [{ month, day }];
+    if (month === 2 && day === 28 && !isLeapYear(year)) out.push({ month: 2, day: 29 });
+    return out;
+}
+
+/**
+ * The next date (local midnight) a birthday is celebrated, on or after `today` (a local-midnight
+ * Date). 29 February falls on the 28th in years without one.
+ */
+export function nextBirthdayDate(month, day, today) {
+    const on = (year) => new Date(year, month - 1, month === 2 && day === 29 && !isLeapYear(year) ? 28 : day);
+    const thisYear = on(today.getFullYear());
+    return thisYear < today ? on(today.getFullYear() + 1) : thisYear;
+}
+
 /**
  * Age the person reaches in `today`'s year. Announcements fire on the birthday,
  * so age = today's year - birth year. Returns null when no year is known.

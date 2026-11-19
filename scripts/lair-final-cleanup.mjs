@@ -7,17 +7,17 @@ import 'dotenv/config';
 import mysql from 'mysql2/promise';
 
 const GUILD   = '1216126780767731722';
-const OLD_BOT = '1409904443125665875';
-const NEW_BOT = '1496406792417185802';
+const OLD_BOT = '1409904443125665875';  // bot-id-ok: previous author of the messages being deleted, not a credential
+// The acting bot comes from guild_bot_mapping — never pinned here.
 const LOG_NAMES = ['member-log', 'message-log', 'mod-log', 'channel-log', 'role-log'];
 
 const pool = mysql.createPool({
     host: process.env.DB_HOST, user: process.env.DB_USER,
     password: process.env.DB_PASSWORD, database: process.env.DB_NAME,
 });
-const enc = (await import('/home/death/CertiFriedUtility/utils/encryption.js')).default;
-const [r] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id = ?', [NEW_BOT]);
-const bearToken = enc.decrypt(JSON.parse(r[0].bot_token));
+const { resolveBotForGuild } = await import('../utils/bot-resolver.js');
+const bearBot = await resolveBotForGuild(GUILD, { db: pool });
+const bearToken = bearBot.token;
 const H = { Authorization: 'Bot ' + bearToken, 'Content-Type': 'application/json' };
 const H_NO_CT = { Authorization: 'Bot ' + bearToken };
 

@@ -7,7 +7,11 @@ import {
     PermissionsBitField
 } from 'discord.js';
 import pool from '../../../../utils/db.js';
+import { nextTicketNumber } from '../../../../core/ticket-number.js';
+import { buildTicketChannelName } from '../../../../utils/ticket-channel-name.js';
 import logger from '../../../../utils/logger.js';
+import { parseOptions } from '../../../../core/form-questions.js';
+import { logFeatureEvent, userLabel } from '../../../../core/feature-log.js';
 
 /**
  * User-scoped Stream Team Signup API.
@@ -41,8 +45,11 @@ async function resolvePanel() {
     if (panels.length === 0) return null;
     const panel = panels[0];
 
+    // Ordered and shaped exactly like the Discord side reads it, so the web form and the modal
+    // ask the same questions in the same order with the same choices.
     const [questions] = await pool.execute(
-        "SELECT question_id, question_text, question_type FROM ticket_form_questions WHERE form_id = ? ORDER BY question_id",
+        `SELECT * FROM ticket_form_questions WHERE form_id = ?
+          ORDER BY question_order ASC, question_id ASC`,
         [panel.form_id]
     );
     return { panel, questions };
@@ -68,7 +75,9 @@ router.get('/panel', async (req, res) => {
             questions: questions.map(q => ({
                 question_id: q.question_id,
                 question_text: q.question_text,
-                question_type: q.question_type
+                question_type: q.question_type,
+                question_options: parseOptions(q.question_options),
+                is_required: Number(q.is_required) ? 1 : 0
             })),
             hasOpenTicket: openTickets.length > 0,
             openChannelId: openTickets.length > 0 ? openTickets[0].channel_id : null
@@ -122,20 +131,22 @@ router.post('/signup', async (req, res) => {
         const responses = {};
         for (const q of questions) {
             const raw = answers[q.question_id];
-            const text = typeof raw === 'string' ? raw.trim() : '';
-            if (!text) {
+            // A checkbox question answers with a list; everything else with a string.
+            const text = Array.isArray(raw)
+                ? raw.map(v => String(v).trim()).filter(Boolean).join(', ')
+                : (typeof raw === 'string' ? raw.trim() : '');
+            if (!text && Number(q.is_required)) {
                 return res.status(400).json({ error: `Please answer: ${q.question_text}` });
             }
             responses[q.question_text] = text;
         }
         const formResponses = JSON.stringify(responses);
 
-        // e. Channel name from panel.ticket_name_format, {username} sanitized like ticket_create.js.
-        let channelName = panel.ticket_name_format || 'ticket-{username}';
-        channelName = channelName
-            .replace(/{username}/g, member.user.username.toLowerCase().replace(/[^a-z0-9]/g, '-'))
-            .replace(/{id}/g, userId);
-        channelName = channelName.substring(0, 100).toLowerCase();
+        // e. Channel name from panel.ticket_name_format, built the same way as ticket_create.js.
+        const channelName = buildTicketChannelName(panel.ticket_name_format, {
+            username: member.user.username,
+            userId,
+        });
 
         // Permission overwrites — EXACTLY mirror ticket_create.js (support_role_id empty):
         // deny @everyone, allow applicant, allow extra_viewer (owner).
@@ -183,18 +194,13 @@ router.post('/signup', async (req, res) => {
         });
 
         // f. INSERT into tickets — same columns as ticket_create.js.
+        // The server's next ticket number (core/ticket-number.js, H-661), as ticket_create.js does.
+        const ticketNumber = await nextTicketNumber(guildId);
         const [result] = await pool.execute(
-            "INSERT INTO tickets (guild_id, panel_id, user_id, channel_id, status, form_id, form_responses) VALUES (?, ?, ?, ?, 'open', ?, ?)",
-            [guildId, panel.panel_id, userId, channel.id, panel.form_id, formResponses]
+            "INSERT INTO tickets (guild_id, ticket_number, panel_id, user_id, channel_id, status, form_id, form_responses) VALUES (?, ?, ?, ?, ?, 'open', ?, ?)",
+            [guildId, ticketNumber, panel.panel_id, userId, channel.id, panel.form_id, formResponses]
         );
         const ticketId = result.insertId;
-
-        // Ticket number for the embed title (mirror ticket_create.js count-based numbering).
-        const [ticketCount] = await pool.execute(
-            "SELECT COUNT(*) as count FROM tickets WHERE guild_id = ?",
-            [guildId]
-        );
-        const ticketNumber = ticketCount[0].count;
 
         // g. Welcome embed + form responses + close button, pinging applicant + owner.
         const embed = new EmbedBuilder()
@@ -232,6 +238,16 @@ router.post('/signup', async (req, res) => {
 
         logger.info(`Stream Team ticket #${ticketId} created via dashboard by ${member.user.tag}`, { guildId, category: 'tickets' });
 
+        void logFeatureEvent(() => (guild), 'tickets.opened', () => ({
+            title: '🎫 Ticket Opened',
+            fields: [
+                ['Opened By', userLabel(member)], ['Ticket', `<#${channel.id}> (#${ticketNumber})`],
+                ['Panel', panel.panel_name || 'Stream Team'], ['Source', 'Dashboard signup'],
+            ],
+            url: `https://discord.com/channels/${guildId}/${channel.id}`,
+            avoidChannelIds: [panel.alert_channel_id],
+        }));
+
         // h. Alert embed → panel.alert_channel_id (mirror ticket_create.js).
         if (panel.alert_channel_id) {
             try {
@@ -240,13 +256,13 @@ router.post('/signup', async (req, res) => {
                     const alertEmbed = new EmbedBuilder()
                         .setColor('#2ECC71')
                         .setTitle('🎫 New Ticket Opened')
-                        .setDescription(`**${channelName}** with ID: ${ticketId} has been opened.`)
+                        .setDescription(`**${channelName}** (ticket #${ticketNumber}) has been opened.`)
                         .addFields(
                             { name: '📨 Opened By', value: `<@${userId}>`, inline: true },
                             { name: '📋 Panel', value: panel.panel_name || 'Default', inline: true },
                             { name: '📌 Channel', value: `<#${channel.id}>`, inline: true }
                         )
-                        .setFooter({ text: `Ticket #${ticketId}` })
+                        .setFooter({ text: `Ticket #${ticketNumber}` })
                         .setTimestamp();
 
                     const joinRow = new ActionRowBuilder().addComponents(

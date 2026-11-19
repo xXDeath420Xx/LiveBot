@@ -15,24 +15,18 @@ dotenv.config({ path: '/home/death/CertiFriedUtility/.env' });
 import pool from '../utils/db.js';
 import * as twitchApi from '../utils/platforms/twitch.js';
 import * as kickApi from '../utils/platforms/kick.js';
-import * as facebookApi from '../utils/platforms/facebook.js';
-import * as instagramApi from '../utils/platforms/instagram.js';
 import * as youtubeApi from '../utils/platforms/youtube.js';
 import * as tiktokApi from '../utils/platforms/tiktok.js';
-import * as trovoApi from '../utils/platforms/trovo-api.js';
 
 const GUILD_ID = '1475096615940521994';
 const DISCORD_USER_ID = '391228386040610816';
-const BOT_ID = '1478035213148754072';
+const BOT_ID = '1478035213148754072';  // bot-id-ok: the bot id the bug report named, checked AGAINST guild_bot_mapping below — resolving it would make the check tautological
 
 const platformModules = {
     twitch: twitchApi,
     kick: kickApi,
-    facebook: facebookApi,
-    instagram: instagramApi,
     youtube: youtubeApi,
     tiktok: tiktokApi,
-    trovo: trovoApi,
 };
 
 function section(title) {

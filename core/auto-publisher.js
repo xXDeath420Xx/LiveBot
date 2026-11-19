@@ -1,6 +1,7 @@
-import { ChannelType } from 'discord.js';
+import { ChannelType, MessageType } from 'discord.js';
 import pool from '../utils/db.js';
 import logger from '../utils/logger.js';
+import { logFeatureEvent, userLabel } from './feature-log.js';
 
 /**
  * Handles automatic publishing/crossposting of messages in announcement channels
@@ -19,7 +20,13 @@ export async function handleAutoPublisher(message) {
 
   if (!message.guild) return;
 
+  // Discord only publishes ordinary messages: pins, thread starts and other system messages, and
+  // polls, answer 50068 "Invalid message type" (same rule as discord.js's Message#crosspostable).
+  if (message.type !== MessageType.Default || message.poll) return;
+
   const guildId = message.guild.id;
+  // Only a failed crosspost is an auto-publish failure; a failed config read is not (the feature may be off).
+  let crosspostAttempted = false;
 
   try {
     const [rows] = await pool.execute(
@@ -29,14 +36,36 @@ export async function handleAutoPublisher(message) {
     const config = rows[0];
 
     if (config && config.is_enabled) {
+      crosspostAttempted = true;
       await message.crosspost();
       logger.info(`[AutoPublisher] Automatically published message ${message.id} in channel ${message.channel.id}`, {
         guildId,
         channelId: message.channel.id,
         messageId: message.id
       });
+      void logFeatureEvent(() => (message.guild), 'auto-publisher.published', () => ({
+        title: '📢 Message Auto-Published',
+        fields: [
+          ['Channel', `<#${message.channel.id}>`],
+          ['Author', userLabel(message.author)],
+        ],
+        url: message.url,
+      }));
     }
   } catch (error) {
+    if (crosspostAttempted) {
+      void logFeatureEvent(() => (message.guild), 'auto-publisher.failed', () => ({
+        title: '⚠️ Auto-Publish Failed',
+        fields: [
+          ['Channel', `<#${message.channel.id}>`],
+          ['Author', userLabel(message.author)],
+          ['Error code', error.code != null ? String(error.code) : 'none'],
+          ['Error', error.code === 50024 ? 'Discord would not publish it (already published, or not publishable)' : error.message, false],
+        ],
+        url: message.url,
+        throttle: { key: 'autopub-fail:' + message.channel.id, ms: 3600000 },
+      }));
+    }
     // Error code 50024: Cannot crosspost message (already published or other reason)
     if (error.code === 50024) {
       logger.warn(`[AutoPublisher] Failed to publish message ${message.id}. It may have already been published.`, {

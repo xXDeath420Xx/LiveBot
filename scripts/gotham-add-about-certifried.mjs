@@ -5,21 +5,20 @@
 
 import 'dotenv/config';
 import pool from '../utils/db.js';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 
 const GUILD = '800157336458231848';
 const ANCHOR_CH = '1503912714479730799'; // #tech-questions-and-answers
+const SOURCE_GUILD = '1099732505243959407'; // The Pac, which owns SOURCE_CH
 const SOURCE_CH = '1496641417173532683'; // Twatwaffle's #about-certifried
 
-const HARLEY_BOT_ID    = '1503936879635202149';
-const TWATWAFFLE_BOT   = '1496352090950467595';
-
-const [[h], [t]] = await Promise.all([
-  pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id=?', [HARLEY_BOT_ID]),
-  pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id=?', [TWATWAFFLE_BOT]),
+// Both acting bots come from guild_bot_mapping — never pinned here.
+const [harleyBot, twatBot] = await Promise.all([
+  resolveBotForGuild(GUILD, { db: pool }),
+  resolveBotForGuild(SOURCE_GUILD, { db: pool }),
 ]);
-const harleyToken = encryption.decrypt(JSON.parse(h[0].bot_token));
-const twatToken   = encryption.decrypt(JSON.parse(t[0].bot_token));
+const harleyToken = harleyBot.token;
+const twatToken   = twatBot.token;
 
 async function api(token, method, path, body) {
   await new Promise(r => setTimeout(r, 100));

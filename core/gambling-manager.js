@@ -18,13 +18,20 @@ export async function getGamblingConfig(guildId) {
     );
 
     if (rows && rows.length > 0) {
-        return rows[0];
+        // The dashboard saves the limits as max_bet / min_bet; the games read max_bet_amount
+        const row = rows[0];
+        return {
+            ...row,
+            max_bet_amount: Number(row.max_bet ?? 10000),
+            min_bet: Number(row.min_bet ?? 1)
+        };
     }
 
     // Return default config
     return {
         enabled: true,
         max_bet_amount: 10000,
+        min_bet: 1,
         house_edge: 0.05, // 5% house edge
         cooldown_seconds: 5
     };
@@ -40,11 +47,42 @@ export async function getGamblingConfig(guildId) {
  * @param {string} result - Game result
  */
 async function logGamble(guildId, userId, gameType, betAmount, winAmount, result) {
-    await db.execute(
-        `INSERT INTO gambling_history (guild_id, user_id, game_type, bet_amount, win_amount, result)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [guildId, userId, gameType, betAmount, winAmount, result]
+    // Runs after the wallet has already changed — a logging failure must never reach the player
+    try {
+        await db.execute(
+            `INSERT INTO gambling_history (guild_id, user_id, game_type, bet_amount, win_amount, result)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [guildId, userId, gameType, betAmount, winAmount, result]
+        );
+    } catch (error) {
+        logger.error('[Gambling] Failed to log gambling history', { error: error.message, guildId, userId, gameType, betAmount, winAmount });
+    }
+}
+
+/**
+ * Record the economy_transactions row for a settled game. Non-fatal for the same reason as logGamble.
+ */
+async function safeLogTransaction(...args) {
+    try {
+        await logTransaction(...args);
+    } catch (error) {
+        logger.error('[Gambling] Failed to log economy transaction', { error: error.message, guildId: args[0], userId: args[1], amount: args[3] });
+    }
+}
+
+/**
+ * Apply a game's result to the wallet. Guarded on the wallet still covering the bet, so two games
+ * started at once can't both spend the same coins; nothing has moved if this throws.
+ */
+async function settleWallet(guildId, userId, betAmount, netChange, earned, config) {
+    const [result] = await db.execute(
+        'UPDATE user_economy SET wallet = wallet + ?, total_earned = total_earned + ? WHERE guild_id = ? AND user_id = ? AND wallet >= ?',
+        [netChange, earned, guildId, userId, betAmount]
     );
+
+    if (!result || result.affectedRows === 0) {
+        throw new Error(`You don't have enough ${config.currency_name} to cover that bet anymore.`);
+    }
 }
 
 /**
@@ -67,7 +105,27 @@ function validateBet(userEconomy, betAmount, config, gamblingConfig) {
     if (betAmount < 1) {
         throw new Error('Bet amount must be at least 1!');
     }
+
+    if (gamblingConfig.min_bet && betAmount < gamblingConfig.min_bet) {
+        throw new Error(`Minimum bet amount is ${formatMoney(gamblingConfig.min_bet, config)}!`);
+    }
+
+    // "Wait between games" on the Gambling page (gambling_config.cooldown_seconds). Only for servers that
+    // saved their settings (a real row has guild_id): the built-in defaults never enforced a wait.
+    const cooldown = gamblingConfig.guild_id ? Number(gamblingConfig.cooldown_seconds) || 0 : 0;
+    if (cooldown > 0 && userEconomy.guild_id && userEconomy.user_id) {
+        const key = `${userEconomy.guild_id}:${userEconomy.user_id}`;
+        const waitMs = (lastGameAt.get(key) || 0) + cooldown * 1000 - Date.now();
+        if (waitMs > 0) throw new Error(`Wait ${Math.ceil(waitMs / 1000)}s before your next game.`);
+        lastGameAt.set(key, Date.now());
+        if (lastGameAt.size > 5000) {
+            const cutoff = Date.now() - 3600 * 1000;
+            for (const [k, t] of lastGameAt) if (t < cutoff) lastGameAt.delete(k);
+        }
+    }
 }
+/** guild:user -> when their last game started, for the cooldown above. */
+const lastGameAt = new Map();
 
 // ============================================
 // COINFLIP
@@ -99,16 +157,13 @@ export async function playCoinflip(guildId, userId, betAmount, userChoice) {
     const netChange = won ? betAmount : -betAmount;
 
     // Update balance
-    await db.execute(
-        'UPDATE user_economy SET wallet = wallet + ?, total_earned = total_earned + ? WHERE guild_id = ? AND user_id = ?',
-        [netChange, won ? betAmount : 0, guildId, userId]
-    );
+    await settleWallet(guildId, userId, betAmount, netChange, won ? betAmount : 0, config);
 
     // Log gambling history
     await logGamble(guildId, userId, 'coinflip', betAmount, winAmount, result);
 
     // Log transaction
-    await logTransaction(
+    await safeLogTransaction(
         guildId,
         userId,
         'gamble',
@@ -167,16 +222,13 @@ export async function playDice(guildId, userId, betAmount, prediction) {
     const netChange = won ? winAmount : -betAmount;
 
     // Update balance
-    await db.execute(
-        'UPDATE user_economy SET wallet = wallet + ?, total_earned = total_earned + ? WHERE guild_id = ? AND user_id = ?',
-        [netChange, won ? winAmount : 0, guildId, userId]
-    );
+    await settleWallet(guildId, userId, betAmount, netChange, won ? winAmount : 0, config);
 
     // Log gambling history
     await logGamble(guildId, userId, 'dice', betAmount, winAmount, `${dice1}+${dice2}=${total}`);
 
     // Log transaction
-    await logTransaction(
+    await safeLogTransaction(
         guildId,
         userId,
         'gamble',
@@ -282,16 +334,13 @@ export async function playSlots(guildId, userId, betAmount) {
     const netChange = won ? winAmount - betAmount : -betAmount;
 
     // Update balance
-    await db.execute(
-        'UPDATE user_economy SET wallet = wallet + ?, total_earned = total_earned + ? WHERE guild_id = ? AND user_id = ?',
-        [netChange, won ? winAmount : 0, guildId, userId]
-    );
+    await settleWallet(guildId, userId, betAmount, netChange, won ? winAmount : 0, config);
 
     // Log gambling history
     await logGamble(guildId, userId, 'slots', betAmount, winAmount, `${slot1}${slot2}${slot3}`);
 
     // Log transaction
-    await logTransaction(
+    await safeLogTransaction(
         guildId,
         userId,
         'gamble',
@@ -397,16 +446,13 @@ export async function playBlackjack(guildId, userId, betAmount) {
     const netChange = won ? winAmount - betAmount : -betAmount;
 
     // Update balance
-    await db.execute(
-        'UPDATE user_economy SET wallet = wallet + ?, total_earned = total_earned + ? WHERE guild_id = ? AND user_id = ?',
-        [netChange, won ? winAmount : 0, guildId, userId]
-    );
+    await settleWallet(guildId, userId, betAmount, netChange, won ? winAmount : 0, config);
 
     // Log gambling history
     await logGamble(guildId, userId, 'blackjack', betAmount, winAmount, `P:${playerTotal} D:${dealerTotal}`);
 
     // Log transaction
-    await logTransaction(
+    await safeLogTransaction(
         guildId,
         userId,
         'gamble',
@@ -495,16 +541,13 @@ export async function playRoulette(guildId, userId, betAmount, betType) {
     const netChange = won ? winAmount - betAmount : -betAmount;
 
     // Update balance
-    await db.execute(
-        'UPDATE user_economy SET wallet = wallet + ?, total_earned = total_earned + ? WHERE guild_id = ? AND user_id = ?',
-        [netChange, won ? winAmount : 0, guildId, userId]
-    );
+    await settleWallet(guildId, userId, betAmount, netChange, won ? winAmount : 0, config);
 
     // Log gambling history
     await logGamble(guildId, userId, 'roulette', betAmount, winAmount, `${number} (${betType})`);
 
     // Log transaction
-    await logTransaction(
+    await safeLogTransaction(
         guildId,
         userId,
         'gamble',
@@ -567,16 +610,13 @@ export async function playHighLow(guildId, userId, betAmount, guess) {
     const netChange = won ? winAmount - betAmount : -betAmount;
 
     // Update balance
-    await db.execute(
-        'UPDATE user_economy SET wallet = wallet + ?, total_earned = total_earned + ? WHERE guild_id = ? AND user_id = ?',
-        [netChange, won ? winAmount : 0, guildId, userId]
-    );
+    await settleWallet(guildId, userId, betAmount, netChange, won ? winAmount : 0, config);
 
     // Log gambling history
     await logGamble(guildId, userId, 'highlow', betAmount, winAmount, `${number} (${guess})`);
 
     // Log transaction
-    await logTransaction(
+    await safeLogTransaction(
         guildId,
         userId,
         'gamble',

@@ -2,10 +2,10 @@
 // channels (Leaders text, Leaders voice, mod-section, Commands).
 import 'dotenv/config';
 import pool from '../utils/db.js';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 
 const GUILD_ID = '1469931133981687873';
-const BOT_ID   = '1498486251576229958';
+// The acting bot comes from guild_bot_mapping — never pinned here.
 const ITTO     = '1470666282280943740';
 
 const BIT = {
@@ -32,8 +32,8 @@ const TEXT_ALLOW = BIT.VIEW_CHANNEL | BIT.READ_MESSAGE_HISTORY | BIT.SEND_MESSAG
                  | BIT.EMBED_LINKS | BIT.ATTACH_FILES | BIT.USE_EXTERNAL_EMOJIS | BIT.ADD_REACTIONS;
 const VOICE_ALLOW = BIT.VIEW_CHANNEL | BIT.CONNECT | BIT.SPEAK | BIT.USE_EXTERNAL_EMOJIS;
 
-const [rows] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id = ?', [BOT_ID]);
-const token = encryption.decrypt(JSON.parse(rows[0].bot_token));
+const bot = await resolveBotForGuild(GUILD_ID, { db: pool });
+const token = bot.token;
 
 async function api(method, path, body) {
   const init = {

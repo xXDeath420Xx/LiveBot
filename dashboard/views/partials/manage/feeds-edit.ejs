@@ -1,0 +1,129 @@
+<%#
+  The edit panel under one feed on the Social feeds page (partials/manage/feeds.ejs): channel, custom
+  message, ping role and the filters that feed type has. Saved by the page script with
+  PATCH /api/guilds/:guildId/feeds/:kind/:id (dashboard/routes/api/features/feeds.js); the controls
+  carry data-f (the API field) instead of a form name. Locals: kind ('reddit', 'youtube', 'twitter', 'bluesky' or 'rss'), feed, channels, roles.
+%>
+<%
+const _feed = feed || {};
+const _roles = Array.isArray(roles) ? roles : [];
+const _channelId = kind === 'youtube' ? _feed.discord_channel_id : _feed.channel_id;
+const _on = (v, dflt) => (v === undefined || v === null) ? dflt : Number(v) !== 0;
+const _vars = {
+    reddit: '{subreddit}, {title}, {author}, {flair} and {url}',
+    youtube: '{channel}, {title}, {type} and {url}',
+    twitter: '{username}, {name} and {url}',
+    bluesky: '{handle}, {name} and {url}',
+    rss: '{feed}, {title}, {author} and {url}',
+}[kind];
+const _source = {
+    reddit: 'r/' + (_feed.subreddit || 'subreddit'),
+    youtube: _feed.channel_name || 'The channel',
+    twitter: _feed.twitter_username || 'username',
+    bluesky: _feed.bluesky_handle || 'name.bsky.social',
+    rss: _feed.feed_title || (String(_feed.feed_url || '').replace(/^https?:\/\//, '').split('/')[0]) || 'The feed',
+}[kind];
+const _varList = {
+    reddit: 'subreddit,title,author,flair,url',
+    youtube: 'channel,title,type,url',
+    twitter: 'username,name,url',
+    bluesky: 'handle,name,url',
+    rss: 'feed,title,author,url',
+}[kind];
+const _placeholder = {
+    reddit: 'New in {subreddit}: {title}',
+    youtube: '{channel} posted a new {type}: {url}',
+    twitter: '{name} just posted on X',
+    bluesky: '{name} just posted on Bluesky',
+    rss: 'New on {feed}: {title}',
+}[kind];
+%>
+<div class="fd-edit" data-fd-source="<%= _source %>">
+    <div class="cf-fields">
+        <div class="cf-field">
+            <label class="fd-ctl"><span>Post to</span>
+                <select class="form-select" data-f="channel_id">
+                    <% if (!(channels || []).some(function (c) { return String(c.id) === String(_channelId); })) { %><option value="" selected>Choose a channel</option><% } %>
+                    <%- include('../kit/_options', { items: channels, selected: _channelId, prefix: '#', empty: null }) %>
+                </select>
+            </label>
+        </div>
+        <div class="cf-field">
+            <label class="fd-ctl"><span>Ping role</span>
+                <select class="form-select" data-f="ping_role_id">
+                    <option value="">No ping</option>
+                    <option value="everyone"<% if (_feed.ping_role_id === 'everyone') { %> selected<% } %>>@everyone</option>
+                    <% _roles.forEach(function (r) { %><option value="<%= r.id %>" data-kind="role" data-color="<%= r.hexColor || '' %>"<% if (String(_feed.ping_role_id || '') === String(r.id)) { %> selected<% } %>>@<%= r.name %></option>
+                    <% }); %>
+                </select>
+            </label>
+            <span class="cf-field-hint">Mentioned in front of the message.</span>
+        </div>
+    </div>
+    <div class="cf-field fd-wide">
+        <label class="fd-ctl"><span>Message</span>
+            <textarea class="form-control" rows="2" maxlength="1500" data-f="custom_message" data-vars="<%= _varList %>" placeholder="<%= _placeholder %>"><%= _feed.custom_message || '' %></textarea>
+        </label>
+        <span class="cf-field-hint">Sent above the post. You can use <%= _vars %>. <%= kind === 'youtube' ? 'Leave blank for the standard line.' : 'Leave blank to post the card on its own.' %></span>
+    </div>
+    <% if (kind === 'reddit' || kind === 'rss') { %>
+    <div class="cf-fields">
+        <div class="cf-field">
+            <label class="fd-ctl"><span>Title must contain</span>
+                <input type="text" class="form-control" maxlength="500" data-f="title_include" value="<%= _feed.title_include || '' %>" placeholder="giveaway, update">
+            </label>
+            <span class="cf-field-hint">Any of these words. Separate with commas; blank posts every title.</span>
+        </div>
+        <div class="cf-field">
+            <label class="fd-ctl"><span>Skip titles containing</span>
+                <input type="text" class="form-control" maxlength="500" data-f="title_exclude" value="<%= _feed.title_exclude || '' %>" placeholder="meta, removed">
+            </label>
+            <span class="cf-field-hint">Separate with commas.</span>
+        </div>
+        <% if (kind === 'reddit') { %>
+        <div class="cf-field">
+            <label class="fd-ctl"><span>Only these flairs</span>
+                <input type="text" class="form-control" maxlength="255" data-f="flair_filter" value="<%= _feed.flair_filter || '' %>" placeholder="News, Discussion">
+            </label>
+            <span class="cf-field-hint">Exact flair names, separated with commas. Reddit only shares flairs with bots that use its API; without that, no posts match while this is set.</span>
+        </div>
+        <% } %>
+    </div>
+    <% } else if (kind === 'youtube') { %>
+    <fieldset class="fd-group">
+        <legend>Post these</legend>
+        <div class="cf-check-grid">
+            <label class="cf-choice"><input type="checkbox" data-f="include_videos"<% if (_on(_feed.include_videos, true)) { %> checked<% } %>><span>Videos</span></label>
+            <label class="cf-choice"><input type="checkbox" data-f="include_shorts"<% if (_on(_feed.include_shorts, true)) { %> checked<% } %>><span>Shorts</span></label>
+            <label class="cf-choice"><input type="checkbox" data-f="include_live"<% if (_on(_feed.include_live, true)) { %> checked<% } %>><span>Live streams and premieres</span></label>
+        </div>
+    </fieldset>
+    <% } else if (kind === 'twitter') { %>
+    <fieldset class="fd-group">
+        <legend>Post these</legend>
+        <div class="cf-check-grid">
+            <label class="cf-choice"><input type="checkbox" data-f="include_replies"<% if (!_on(_feed.filter_replies, true)) { %> checked<% } %>><span>Replies</span></label>
+            <label class="cf-choice"><input type="checkbox" data-f="include_retweets"<% if (!_on(_feed.filter_retweets, true)) { %> checked<% } %>><span>Reposts</span></label>
+            <label class="cf-choice"><input type="checkbox" data-f="media_only"<% if (_on(_feed.filter_media_only, false)) { %> checked<% } %>><span>Only posts with images or video</span></label>
+            <label class="cf-choice"><input type="checkbox" data-f="include_images"<% if (_on(_feed.include_images, true)) { %> checked<% } %>><span>Show images</span></label>
+        </div>
+    </fieldset>
+    <% } else if (kind === 'bluesky') { %>
+    <fieldset class="fd-group">
+        <legend>Post these</legend>
+        <div class="cf-check-grid">
+            <label class="cf-choice"><input type="checkbox" data-f="include_replies"<% if (!_on(_feed.filter_replies, true)) { %> checked<% } %>><span>Replies</span></label>
+            <label class="cf-choice"><input type="checkbox" data-f="include_reposts"<% if (!_on(_feed.filter_reposts, true)) { %> checked<% } %>><span>Reposts</span></label>
+        </div>
+    </fieldset>
+    <% } %>
+    <div class="fd-preview">
+        <span class="fd-preview-label">Preview</span>
+        <div class="cf-mp-frame"><div data-fd-preview></div></div>
+    </div>
+    <div class="fd-edit-foot">
+        <button type="button" class="btn btn-sm btn-primary" data-fd-act="save">Save</button>
+        <button type="button" class="btn btn-sm btn-secondary" data-fd-act="cancel">Cancel</button>
+        <span class="cf-status-line" role="status" aria-live="polite" data-fd-status></span>
+    </div>
+</div>

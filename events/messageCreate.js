@@ -1,6 +1,9 @@
 import { Events, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 import logger from '../utils/logger.js';
 import { processMessage } from '../core/automod.js';
+import { checkMessage as checkCommissionSpam } from '../core/commission-spam-filter.js';
+import { checkMessage as checkLinkPolicy } from '../core/link-filter.js';
+import { checkMessage as checkWordFilter } from '../core/word-filter.js';
 import AdvancedAutomodManager from '../core/advanced-automod-manager.js';
 import { logMessageActivity } from '../core/activity-logger.js';
 import TagsManager from '../core/tags-manager.js';
@@ -14,48 +17,34 @@ import { shouldIgnoreGuild } from '../utils/custom-bot-check.js';
 import { handlePrefixCommand } from '../core/prefix-command-manager.js';
 import { handleOwoNaturalPrefix } from '../core/owo-natural-prefix.js';
 import { handleSelfPromoMessage, checkAnnounceChannelGate } from '../core/self-promo-handler.js';
+import { enforceChannelPostRules } from '../core/channel-post-rules.js';
 import { handleStaffLiveForward } from '../core/staff-live-forward.js';
 import { checkBlockedImage } from '../core/image-blocklist.js';
 import { handleShowcaseMessage } from '../core/showcase-manager.js';
 import { spawnPokemon } from '../commands/games/pokemon.js';
+import { spawnDigimon } from '../commands/games/digimon.js';
 import { handleRPGReply, handleRPGMentionOrChannel, getUserActiveChannel } from '../core/rpg-reply-handler.js';
 import pool from '../utils/db.js';
 import { getRequestChannel, getLeaveOptions } from '../utils/music_helpers.js';
 import configCache from '../utils/configCache.js';
 import { saveMessage } from '../utils/message-cache.js';
 import { isWhitelisted } from '../utils/automod-whitelist.js';
+import { markActivity as markTempAccessActivity } from '../core/temp-access-manager.js';
+import { noteMessage as noteActivityMessage } from '../core/member-activity.js';
+import { noteMemberActivity as noteStatRoleActivity } from '../core/statrole-manager.js';
+import { updateChallengeProgress, noteActivityMinute } from '../core/daily-challenges-manager.js';
+import { themeColor } from '../core/guild-theme.js';
+import { handleApplicantDm } from '../core/form-inbox.js';
+import { handleModmailDM, handleModmailStaffMessage } from '../core/modmail-manager.js';
+import { noteTicketMessage } from '../core/ticket-activity.js';
+import { foldConfusables } from '../utils/text-fold.js';
+import { checkEveryone } from '../core/message-threats.js';
+import { handleCountdownUrlInMessage } from '../core/holiday-auto-reply.js';
+import { recordNetworkMessage } from '../core/network-intel.js';
 
-// Normalize Unicode (small caps, bold, italic math symbols, etc.) to plain ASCII for comparison
-const UNICODE_MAP = new Map([
-  // Latin small caps
-  ...'ᴀᴁᴂᴃᴄᴅᴆᴇᴈᴉᴊᴋᴌᴍᴎᴏᴐᴑᴒᴓᴔᴕᴖᴗᴘᴙᴚᴛᴜᴝᴞᴟᴠᴡᴢ'.split('').map((c, i) => {
-    const map = 'aabcddeegijklmnooooeoupqrstuvwz';
-    return [c, map[i] || c];
-  }),
-  // Explicit small caps corrections
-  ['ᴀ','a'],['ᴄ','c'],['ᴅ','d'],['ᴇ','e'],['ɢ','g'],['ʜ','h'],['ɪ','i'],['ᴊ','j'],
-  ['ᴋ','k'],['ʟ','l'],['ᴍ','m'],['ɴ','n'],['ᴏ','o'],['ᴘ','p'],['ʀ','r'],['ꜱ','s'],
-  ['ᴛ','t'],['ᴜ','u'],['ᴠ','v'],['ᴡ','w'],['ʏ','y'],['ᴢ','z'],['ꜰ','f'],['ǫ','q'],
-  ['ʙ','b'],['ᴅ','d'],['ᴇ','e'],['ᴄ','c'],
-]);
-function normalizeUnicode(str) {
-  let out = '';
-  for (const c of str) {
-    const mapped = UNICODE_MAP.get(c);
-    if (mapped) { out += mapped; continue; }
-    const cp = c.codePointAt(0);
-    // Math bold sans-serif caps 𝗔(0x1D5D4)-𝗭(0x1D5ED)
-    if (cp >= 0x1D5D4 && cp <= 0x1D5ED) { out += String.fromCharCode(cp - 0x1D5D4 + 0x61); continue; }
-    // Math bold sans-serif lower 𝗮(0x1D5EE)-𝘇(0x1D607)
-    if (cp >= 0x1D5EE && cp <= 0x1D607) { out += String.fromCharCode(cp - 0x1D5EE + 0x61); continue; }
-    // Math bold serif caps 𝐀(0x1D400)-𝐙(0x1D419)
-    if (cp >= 0x1D400 && cp <= 0x1D419) { out += String.fromCharCode(cp - 0x1D400 + 0x61); continue; }
-    // Math bold serif lower 𝐚(0x1D41A)-𝐳(0x1D433)
-    if (cp >= 0x1D41A && cp <= 0x1D433) { out += String.fromCharCode(cp - 0x1D41A + 0x61); continue; }
-    out += c;
-  }
-  return out.toLowerCase();
-}
+// Fancy channel names (small caps, bold maths letters, lookalikes) are folded to plain ASCII by the
+// shared folder in utils/text-fold.js before the self-promo keyword check.
+const normalizeUnicode = (str) => foldConfusables(str);
 
 // Regex patterns for live promotion messages (case-insensitive)
 const LIVE_PROMOTION_PATTERNS = [
@@ -69,7 +58,7 @@ const LIVE_PROMOTION_PATTERNS = [
 // Only treat it as stream self-promotion when it's paired with real broadcast context:
 // a streaming link/platform, a broadcast time, or a "come watch"/"link in bio" CTA.
 // This prevents deleting normal chat (the reported false positive: "I live at" a place).
-const STREAM_PROMO_CONTEXT = /(twitch\.tv|kick\.com|youtu\.?be|youtube\.com|trovo\.live|tiktok\.com\/@|\b[\w-]{2,}\.tv\b|\b\d{1,2}(:\d{2})?\s*(a\.?m\.?|p\.?m\.?|est|pst|cst|gmt|utc)\b|come\s+(watch|hang)|tune\s+in|link\s+in\s+bio|drop(?:ping)?\s+a?\s*follow)/i;
+const STREAM_PROMO_CONTEXT = /(twitch\.tv|kick\.com|youtu\.?be|youtube\.com|tiktok\.com\/@|\b[\w-]{2,}\.tv\b|\b\d{1,2}(:\d{2})?\s*(a\.?m\.?|p\.?m\.?|est|pst|cst|gmt|utc)\b|come\s+(watch|hang)|tune\s+in|link\s+in\s+bio|drop(?:ping)?\s+a?\s*follow)/i;
 
 // Channel name keywords that allow self-promotion (case-insensitive check)
 const SELF_PROMO_CHANNEL_KEYWORDS = [
@@ -151,6 +140,18 @@ export default {
   name: Events.MessageCreate,
   async execute(message) {
     try {
+      // A DM from somebody we already wrote to about their form response is that conversation
+      // continuing, and it is forwarded to whoever asked the question. Checked BEFORE the ban
+      // appeal handler: a form conversation is a specific context we opened deliberately, so it
+      // must not be swallowed by the generic DM path.
+      if (!message.guild && !message.author.bot) {
+        if (await handleApplicantDm(message)) return;
+        // Modmail: a member writing to the bot to reach a server's staff (core/modmail-manager.js).
+        // Returns false when the sender shares no modmail-enabled server with this bot, so the
+        // global-ban appeal handler below still gets every other DM.
+        if (await handleModmailDM(message)) return;
+      }
+
       // Handle DM appeals for global ban system
       if (!message.guild && !message.author.bot && message.client.globalBanManager) {
         await message.client.globalBanManager.handleDMAppeal(message);
@@ -172,14 +173,54 @@ export default {
         return;
       }
 
+      // Anti-everyone for webhooks (core/message-threats.js): a leaked webhook URL pinging @everyone.
+      // Webhook messages count as bot messages and stop below either way; app-owned webhooks (bots,
+      // including this one's announcements) and crossposts are skipped inside.
+      if (message.webhookId && message.mentions?.everyone) {
+        if (!(message.client.isDefaultBot && await shouldIgnoreGuild(message.guild.id))) await checkEveryone(message);
+        return;
+      }
+
       // Ignore bot messages for all other processing
       if (message.author.bot) return;
 
       // Only the default bot should ignore guilds with custom bots
       if (message.client.isDefaultBot && await shouldIgnoreGuild(message.guild.id)) return;
 
+      // Network Intel (core/network-intel.js): mark "this user has posted somewhere in the network".
+      // Debounced in-module to one DB write per user per hour, so this is cheap on hot guilds.
+      recordNetworkMessage(message).catch(() => {});
+
+      // Anti-everyone: the mention_everyone FLAG from a member who only had the permission through the
+      // @everyone role, i.e. a permission misconfiguration (core/message-threats.js). Off by default.
+      if (message.mentions?.everyone && await checkEveryone(message)) return;
+
+      // Temporary access: posting anything ends a guest's trial in their favour.
+      // Placed above every handler that can `return` — a guest whose first message
+      // happens to be a prefix command or a counting-game move still counted as
+      // showing up. In-memory Set lookup, so it costs nothing for everyone else.
+      markTempAccessActivity(message.guild.id, message.author.id, 'message', message.member);
+      // Last-activity record for the inactivity prune (memory only; flushed every minute).
+      noteActivityMessage(message.guild.id, message.author.id, message.channel.id, message.id);
+      // Open ticket channels: who wrote last, for "Waiting on staff" on the Tickets page (core/ticket-activity.js).
+      noteTicketMessage(message).catch(() => {});
+
+      // AFK — runs EARLY and never consumes the message. It used to sit near the end of this handler,
+      // after prefix commands, games, counting, owo, cat, word games and a dozen other `return`s that
+      // consume a message before it got there — so in a feature-heavy server the "welcome back" removal
+      // and the "@user is AFK" notice almost never fired. Clearing your own AFK and warning someone who
+      // pings an AFK member must work regardless of what else the message triggers, so it goes first.
+      if (message.client.afkManager) {
+        try { await message.client.afkManager.handleMessage(message); }
+        catch (error) { logger.error('[MessageCreate] AFK handler error', { error: error.message, guildId: message.guild?.id }); }
+      }
+
       // Prefix command handling — runs before all other message processing
       if (await handlePrefixCommand(message)) return;
+
+      // Modmail staff channels: relay staff replies to the member's DMs (`//` = staff-only note).
+      // After the bot / custom-bot-guild checks above, so exactly one client relays each message.
+      if (await handleModmailStaffMessage(message)) return;
 
       // OwO's own `owo` prefix (`owoh`, `owo hunt`, `owolb all`) + the silent
       // owo/uwu point counter. Only consumes the message if a command actually ran.
@@ -206,6 +247,14 @@ export default {
         } catch (error) {
           logger.error('[MessageCreate] Error in staff live forwarder', { error: error.message });
         }
+      }
+
+      // Per-channel posting requirements (image required, activity gate, blocked
+      // domains). Runs before the self-promo tracker so a bare stream link in a
+      // gated channel is removed rather than auto-subscribed. Inert unless the
+      // channel has a channel_post_rules row.
+      if (!isAutomodWhitelisted && message.guild && message.author && !message.author.bot) {
+        if (await enforceChannelPostRules(message)) return;
       }
 
       // Self-promo announcement-channel gate — runs BEFORE the URL handler so
@@ -257,6 +306,11 @@ export default {
 
       // Log message activity for stats tracking
       logMessageActivity(message);
+
+      // Daily challenges: messages sent and minutes active (members without an open challenge cost no query)
+      updateChallengeProgress(message.guild.id, message.author.id, 'messages', 1)
+        .catch(err => logger.warn('[DailyChallenges] messages progress failed', { error: err.message }));
+      noteActivityMinute(message.guild.id, message.author.id);
 
       // Save message to DB for enriched deletion logs (fire-and-forget)
       saveMessage(message);
@@ -329,7 +383,7 @@ export default {
 
               // Create confirmation embed
               const embed = new EmbedBuilder()
-                .setColor('#00ff00')
+                .setColor(themeColor(message.guild?.id, 'success'))
                 .setAuthor({ name: 'Song Added to Queue', iconURL: message.author.displayAvatarURL() })
                 .setTitle(track.title)
                 .setURL(track.url)
@@ -397,6 +451,10 @@ export default {
       // and is inert unless an admin ran /timezone server.
       handleTimeMessage(message).catch(() => {});
 
+      // Holiday /countdown/<slug> URL → live-editable reply. Fire-and-forget;
+      // inert unless this channel is opted in via dashboard. Never consumes.
+      handleCountdownUrlInMessage(message).catch(() => {});
+
       // Handle RPG session replies (players replying to bot's RPG messages)
       if (message.reference?.messageId) {
         try {
@@ -423,6 +481,33 @@ export default {
           }
         } catch (error) {
           logger.error('[MessageCreate] Error in RPG mention handler', {
+            error: error.message,
+            guildId: message.guild?.id
+          });
+        }
+      }
+
+      // AI assistant fallback for a plain @mention.
+      //
+      // Runs LAST among mention handlers on purpose: real commands and RPG keep priority, so
+      // "@bot play song" still routes to the music command and only free-form questions
+      // ("@bot what's the weather?") reach the model. Opt-in per guild; returns null when the
+      // server has not enabled it, so nothing changes for anyone who has not asked for it.
+      if (isBotMentioned) {
+        try {
+          const prompt = message.content
+            .replace(new RegExp(`<@!?${message.client.user.id}>`, 'g'), '')
+            .trim();
+          if (prompt) {
+            const { handleMention } = await import('../core/ai-assistant.js');
+            const answer = await handleMention(message, prompt);
+            if (answer) {
+              await message.reply({ content: answer, allowedMentions: { repliedUser: true, parse: [] } });
+              return;
+            }
+          }
+        } catch (error) {
+          logger.error('[MessageCreate] Error in AI assistant handler', {
             error: error.message,
             guildId: message.guild?.id
           });
@@ -470,6 +555,16 @@ export default {
       }
 
       if (!isAdmin && !isOwner && !isAutomodWhitelisted && !isExemptChannel) {
+        // Filtered words: deleted and flagged for the moderators. First, so a repeated word reaches them
+        // rather than the spam filters, which would time the member out on their own.
+        try {
+          if (await checkWordFilter(message)) return;
+        } catch (error) {
+          logger.error('[MessageCreate] Error in word filter', {
+            error: error.message, guildId: message.guild?.id, userId: message.author.id
+          });
+        }
+
         // Live promotion filter - delete "I'm live", "Going live", "Live at" from non-mods
         // Moderators are allowed to post live promotions
         // Also allowed in designated self-promo channels
@@ -508,7 +603,7 @@ export default {
 
                   if (logChannel && logChannel.isTextBased()) {
                     const logEmbed = new EmbedBuilder()
-                      .setColor('#9B59B6') // Purple for auto-delete
+                      .setColor(themeColor(message.guild?.id, 'accent')) // Purple for auto-delete
                       .setAuthor({ name: 'Auto-Moderation Log' })
                       .setTitle('Live Promotion Deleted')
                       .addFields(
@@ -597,6 +692,27 @@ export default {
           }
         }
 
+        // Commission / paid-work advertising filter. Runs first: if it removed the message there
+        // is nothing left for the other systems to inspect. Non-staff only; staff are exempt inside.
+        try {
+          if (await checkCommissionSpam(message)) return;
+        } catch (error) {
+          logger.error('[MessageCreate] Error in commission spam filter', {
+            error: error.message, guildId: message.guild?.id, userId: message.author.id
+          });
+        }
+
+        // Default-deny link policy. Runs after the commission filter (which is more specific) and
+        // before automod, so a blocked link is gone before anything else inspects it. Off unless a
+        // guild has explicitly opted in; Discord invites are left to events/inviteLinkFilter.js.
+        try {
+          if (await checkLinkPolicy(message)) return;
+        } catch (error) {
+          logger.error('[MessageCreate] Error in link policy filter', {
+            error: error.message, guildId: message.guild?.id, userId: message.author.id
+          });
+        }
+
         // Run basic automod (heat-based system)
         await processMessage(message);
 
@@ -644,15 +760,15 @@ export default {
         }
       }
 
-      // Handle AFK status checks and removals
-      if (message.client.afkManager) {
-        await message.client.afkManager.handleMessage(message);
-      }
+      // (AFK is handled early, near the top of this function — see the note there.)
 
       // Track server statistics
       if (message.client.serverStatsManager) {
         await message.client.serverStatsManager.trackMessage(message);
       }
+
+      // Stat roles (statrole_configs): debounced per member; guilds without rules return on a cached lookup. Never throws.
+      noteStatRoleActivity(message.member, 'message');
 
       // Track emoji statistics
       if (message.client.emojiStatsManager) {
@@ -733,7 +849,8 @@ export default {
         }
 
         // Repost sticky message
-        const newSticky = await message.channel.send(sticky.message_content);
+        // Reposts never ping (H-117): a role or @everyone in a sticky notified everyone on every repost.
+        const newSticky = await message.channel.send({ content: sticky.message_content, allowedMentions: { parse: [] } });
 
         // Update database with new message ID
         await pool.execute(
@@ -750,6 +867,9 @@ export default {
       if (pokemonEnabled) {
         await spawnPokemon(message);
       }
+
+      // Digimon spawns: spawnDigimon reads the server's digimon settings (cached) and returns at once when off.
+      await spawnDigimon(message);
 
       // Check for tag triggers (messages starting with !)
       if (message.content.startsWith('!') && tagsManager) {

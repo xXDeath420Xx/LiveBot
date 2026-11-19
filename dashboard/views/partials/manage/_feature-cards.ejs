@@ -1,0 +1,24 @@
+<%
+/*
+ * Generated feature cards for one manage-page section.
+ *
+ * Included at the end of each section's .module-grid, so a generated card is visually and
+ * behaviourally identical to a hand-written one — same markup, same search tags, same
+ * collapse/reorder behaviour from the section header.
+ *
+ * Expects: cards = [[key, spec], …], guild
+ */
+const fcCards = typeof cards !== 'undefined' ? cards : [];
+%>
+<% fcCards.forEach(function(entry) { const key = entry[0], spec = entry[1]; %>
+<a href="/manage/<%= guild.id %>?page=<%= key %>" class="module-card <%= spec.colour || 'purple' %>"
+   data-tags="<%= key %> <%= spec.label.toLowerCase() %> <%= (spec.commands || []).join(' ').replace(/\//g, '') %> <%= spec.blurb.toLowerCase() %><%= spec.unwired ? ' not connected unwired' : '' %>">
+    <div class="module-header">
+        <div class="module-icon"><i class="<%= spec.iconPack || 'fas' %> <%= spec.icon %>"></i></div>
+        <div>
+            <div class="module-title"><%= spec.label %><% if (spec.unwired) { %> <span style="font-size:.6rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;background:color-mix(in srgb, var(--cf-warning) 16%, transparent);color:var(--cf-warning-ink);padding:1px 6px;border-radius:999px;vertical-align:middle">not connected</span><% } %></div>
+            <div class="module-desc"><%= spec.blurb %></div>
+        </div>
+    </div>
+</a>
+<% }); %>

@@ -3,6 +3,7 @@
  */
 import { EmbedBuilder } from 'discord.js';
 import RPGDiceEngine, { ABILITIES } from '../../../../core/rpg-dice-engine.js';
+import { themeColor } from '../../../../core/guild-theme.js';
 
 export async function handleRoll(interaction, subcommand, characterManager) {
     if (subcommand === 'dice') {
@@ -35,7 +36,7 @@ async function handleDice(interaction) {
         }
 
         const embed = new EmbedBuilder()
-            .setColor('#5865F2')
+            .setColor(themeColor(interaction.guildId, 'primary'))
             .setTitle(`Dice Roll`)
             .setDescription(`**${interaction.user.displayName}** rolled \`${notation}\``)
             .addFields(

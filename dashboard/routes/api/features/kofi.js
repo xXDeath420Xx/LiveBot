@@ -40,6 +40,13 @@ router.get('/', async (req, res) => {
             getTiers(req.params.guildId),
             listSupporters(req.params.guildId, 25),
         ]);
+        // Show linked supporters by their server name rather than a bare id.
+        const kfGuild = req.botClient?.guilds?.cache?.get(req.params.guildId);
+        for (const s of supporters || []) {
+            if (!s.user_id) continue;
+            const m = kfGuild?.members?.cache?.get(String(s.user_id));
+            s.member_name = m ? (m.displayName || m.user?.username || null) : null;
+        }
         res.json({
             configured: !!config,
             config: publicConfig(config),
@@ -86,6 +93,35 @@ router.put('/config', async (req, res) => {
     } catch (err) {
         logger.error(`[API kofi] save failed: ${err.message}`);
         res.status(500).json({ error: 'Failed to save Ko-fi settings' });
+    }
+});
+
+/**
+ * POST /test — post the thank-you message to a channel with sample values, so the page's preview
+ * can be checked in Discord. Uses the values in the form (saved or not); built the same way as
+ * announce() in dashboard/routes/webhooks/kofi.js. Pings nobody.
+ */
+router.post('/test', async (req, res) => {
+    const { channel_id, thank_you_message } = req.body || {};
+    const message = thank_you_message == null ? '' : String(thank_you_message).trim();
+    if (message.length > 500) return res.status(400).json({ error: 'Thank-you message must be 500 characters or fewer.' });
+    if (!/^\d{15,25}$/.test(String(channel_id || ''))) return res.status(400).json({ error: 'Choose a thank-you channel first.' });
+    const client = global.botManager?.getClientForGuild?.(req.params.guildId) || req.botClient;
+    const guild = client?.guilds?.cache?.get(req.params.guildId);
+    const channel = guild?.channels?.cache?.get(String(channel_id));
+    if (!channel || ![0, 5].includes(channel.type)) return res.status(400).json({ error: 'Pick a text channel in this server.' });
+    const who = req.user?.id ? `<@${req.user.id}>` : 'Someone';
+    const amount = '**USD 5.00**';
+    const body = message
+        ? message.replace(/{user}/g, who).replace(/{amount}/g, amount).replace(/{tier}/g, 'Gold')
+        : `☕ ${who} sent a tip — ${amount}. Thank you!`;
+    try {
+        await channel.send({ content: `${body}
+-# Test from the dashboard. Sample values.`.slice(0, 2000), allowedMentions: { parse: [] } });
+        res.json({ success: true });
+    } catch (err) {
+        logger.warn(`[API kofi] test post failed: ${err.message}`);
+        res.status(400).json({ error: 'The bot could not post there. Check it can view the channel and send messages.' });
     }
 });
 

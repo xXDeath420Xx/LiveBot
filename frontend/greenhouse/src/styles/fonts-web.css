@@ -1,0 +1,9 @@
+/* Website only (build.mjs adds it to the website's CSS): Geist Mono for the account-link code, which the
+   Twitch panel does not show. SIL Open Font License 1.1, Geist-OFL.txt next to the font. */
+@font-face {
+    font-family: 'Geist Mono';
+    src: url('./GeistMono-Variable.woff2') format('woff2');
+    font-weight: 100 900;
+    font-style: normal;
+    font-display: swap;
+}

@@ -15,6 +15,7 @@ import {
 import { getGame, STATES } from '../../core/cah-manager.js';
 import { buildHandSelectMenu, buildHandEmbed } from '../../core/cah-discord-adapter.js';
 import logger from '../../utils/logger.js';
+import { displayNameFor } from '../../utils/display-name.js';
 
 function gameFromId(customId) {
     const parts = customId.split(':');
@@ -44,7 +45,7 @@ export async function handleCahJoin(interaction) {
             ));
         return interaction.showModal(modal);
     }
-    const r = game.addPlayer({ userId: interaction.user.id, platform: 'discord', displayName: interaction.user.displayName || interaction.user.username });
+    const r = game.addPlayer({ userId: interaction.user.id, platform: 'discord', displayName: displayNameFor(interaction.user, interaction.guild) });
     if (!r.ok) return interaction.reply({ content: `❌ \`${r.reason}\``, ephemeral: true });
     return interaction.reply({ content: `✅ Joined.`, ephemeral: true });
 }

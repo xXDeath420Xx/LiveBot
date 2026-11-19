@@ -1,4 +1,5 @@
-<%# Counting game — per-channel rules. API-driven; needs `guild` and `channels` in locals. %>
+<%# Counting game — per-channel rules. API-driven; needs `guild` and `channels` in locals. Cards are built with createElement/textContent. %>
+<%- include('_game-kit') %>
 <div class="page-section" id="countingPage" data-guild-id="<%= guild.id %>">
     <div class="page-section-header">
         <div>
@@ -6,54 +7,133 @@
                 <i class="fas fa-sort-numeric-up"></i>
                 <span>Counting</span>
             </div>
-            <div class="page-section-subtitle">
-                Members count upward together. Choose whether a wrong number resets the count,
-                or is simply deleted so the run never breaks.
+            <div class="page-section-subtitle">Each channel keeps its own count, record and rules.</div>
+        </div>
+    </div>
+
+    <div id="cntError" class="cf-notice is-bad" role="alert" hidden></div>
+
+    <section class="cf-section" aria-labelledby="cnt-add-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="cnt-add-title">Start counting in a channel</h2>
+                <p class="cf-section-desc">Taking over from another bot mid-run? Set the first number to the next one it expects, or use Set count on the channel afterwards.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="cntChannel">Channel</label>
+                    <p class="cf-row-desc">A text or announcement channel.</p>
+                </div>
+                <div class="cf-row-control">
+                    <select id="cntChannel" class="form-control">
+                        <option value="">Choose a channel</option>
+                        <% (locals.channels || []).filter(c => c.type === 0 || c.type === 5).forEach(c => { %>
+                            <option value="<%= c.id %>" data-kind="text">#<%= c.name %></option>
+                        <% }) %>
+                    </select>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="cntStart">First number</label>
+                    <p class="cf-row-desc">The number members post first. Usually 1.</p>
+                </div>
+                <div class="cf-row-control">
+                    <input type="number" id="cntStart" class="form-control" min="0" value="1" placeholder="1">
+                </div>
+            </div>
+            <div class="cf-section-foot">
+                <span class="cf-status-line cnt-status" id="cntAddStatus" role="status" aria-live="polite"></span>
+                <button class="btn btn-primary" id="cntAdd" type="button">Enable counting</button>
             </div>
         </div>
-    </div>
+    </section>
 
-    <div id="cntError" class="alert alert-danger" hidden></div>
-
-    <!-- Add -->
-    <div class="cnt-card">
-        <h3 class="cnt-h"><i class="fas fa-plus"></i> Start counting in a channel</h3>
-        <div class="cnt-add">
-            <select id="cntChannel" class="form-control">
-                <option value="">Choose a channel…</option>
-                <% (locals.channels || []).filter(c => c.type === 0 || c.type === 5).forEach(c => { %>
-                    <option value="<%= c.id %>">#<%= c.name %></option>
-                <% }) %>
-            </select>
-            <input type="number" id="cntStart" class="form-control" min="0" value="1" placeholder="Start at">
-            <button class="btn btn-primary" id="cntAdd">Enable</button>
+    <section class="cf-section" aria-labelledby="cnt-list-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="cnt-list-title">Counting channels <span class="gk-cmd-count" id="cntCount"></span></h2>
+                <p class="cf-section-desc">Changes save as soon as you make them.</p>
+            </div>
+        </header>
+        <div id="cntChannels">
+            <div class="cf-rows"><%- include('../kit/_state', { kind: 'loading', title: 'Loading counting channels', text: null, id: null, boxed: false, compact: true }) %></div>
         </div>
-        <small class="form-help">
-            Taking over from another bot mid-run? Set <em>Start at</em> to the next number it expects,
-            or use <strong>Set count</strong> below afterwards.
-        </small>
-        <span class="cnt-status" id="cntAddStatus"></span>
-    </div>
+    </section>
 
-    <div id="cntChannels"></div>
+    <section class="cf-section" aria-labelledby="cnt-preview-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="cnt-preview-title">In Discord</h2>
+                <p class="cf-section-desc">A counting channel with each choice for a wrong number.</p>
+            </div>
+            <div class="cf-section-actions">
+                <div class="cf-segmented" role="group" aria-label="Wrong number">
+                    <button type="button" class="cf-segment is-active" aria-pressed="true" data-cnt-pv="reset">Reset to 0</button>
+                    <button type="button" class="cf-segment" aria-pressed="false" data-cnt-pv="delete">Delete it</button>
+                </div>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="gk-preview">
+                <div>
+                    <div class="cf-dc">
+                        <%- include('_gk-author', { gkMember: 'Sam' }) %>
+                        <div class="cf-dc-text">41</div>
+                        <div class="cf-dc-reacts"><span class="cf-dc-react">&#9989; 1</span></div>
+                    </div>
+                    <div class="cf-dc">
+                        <%- include('_gk-author', { gkMember: 'Alex' }) %>
+                        <div class="cf-dc-text">42</div>
+                        <div class="cf-dc-reacts"><span class="cf-dc-react">&#9989; 1</span></div>
+                    </div>
+                    <div class="cf-dc">
+                        <%- include('_gk-author', { gkMember: 'Robin' }) %>
+                        <div class="cf-dc-text" data-cnt-pv-show="reset">44</div>
+                        <div class="cf-dc-reacts" data-cnt-pv-show="reset"><span class="cf-dc-react">&#10060; 1</span></div>
+                        <div class="cf-dc-gone" data-cnt-pv-show="delete" hidden>44 is deleted at once and the count stays at 42.</div>
+                    </div>
+                    <div class="cf-dc" data-cnt-pv-show="reset">
+                        <%- include('_gk-author') %>
+                        <div class="cf-dc-embed" style="--cf-dc-bar: #da373c">
+                            <div class="cf-dc-title">Count Reset!</div>
+                            <div class="cf-dc-desc">Wrong number! Count reset to <strong>0</strong>.</div>
+                            <div class="cf-dc-fields">
+                                <div class="cf-dc-field"><div class="cf-dc-fname">Failed At</div>42</div>
+                                <div class="cf-dc-field"><div class="cf-dc-fname">Expected</div>43</div>
+                                <div class="cf-dc-field"><div class="cf-dc-fname">Got</div>44</div>
+                                <div class="cf-dc-field"><div class="cf-dc-fname">Next Number</div>1</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="cf-dc">
+                        <%- include('_gk-author') %>
+                        <div class="cf-dc-embed" style="--cf-dc-bar: #f0b232">
+                            <div class="cf-dc-title">Milestone Reached!</div>
+                            <div class="cf-dc-desc">Congratulations! You've reached <strong>50</strong>!</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <%- include('_game-commands', { gkCommands: [{ cmd: 'arcade', groups: ['counting'] }] }) %>
 </div>
 
 <style>
-  #countingPage .cnt-card { background:#1e2028; border:1px solid #2c2f3a; border-radius:10px; padding:1.1rem 1.25rem; margin-bottom:1rem; }
-  #countingPage .cnt-h { margin:0 0 .5rem; font-size:1rem; font-weight:600; }
-  #countingPage .cnt-add { display:grid; grid-template-columns: 1fr 9rem auto; gap:.5rem; }
-  @media (max-width:800px){ #countingPage .cnt-add { grid-template-columns:1fr; } }
-  #countingPage .cnt-status { font-size:.85rem; color:#57F287; min-height:1em; display:block; margin-top:.4rem; }
-  #countingPage .cnt-head { display:flex; align-items:center; justify-content:space-between; gap:1rem; flex-wrap:wrap; }
-  #countingPage .cnt-num { font-size:1.6rem; font-weight:700; }
-  #countingPage .cnt-muted { color:#8b8f9e; font-size:.85rem; }
-  #countingPage .cnt-modes { display:grid; gap:.55rem; margin-top:1rem; }
-  #countingPage .cnt-toggle { display:flex; align-items:flex-start; gap:.6rem; font-size:.9rem; }
-  #countingPage .cnt-toggle input { margin-top:.25rem; }
-  #countingPage .cnt-toggle .hint { color:#8b8f9e; font-size:.82rem; }
-  #countingPage .cnt-row { display:flex; gap:.5rem; align-items:center; margin-top:.9rem; flex-wrap:wrap; }
-  #countingPage .cnt-off { opacity:.55; }
-  #countingPage .radio-row { display:flex; gap:1.2rem; flex-wrap:wrap; }
+  /* Kit gap: several cf-rows panels stacked in one section; a large tabular number in a row. */
+  #countingPage .cnt-channel + .cnt-channel { margin-top: var(--cf-4); }
+  #countingPage .cf-section-foot > .cnt-status { margin-right: auto; }
+  #countingPage .cnt-num { font-size: var(--cf-text-xl); font-weight: 600; color: var(--cf-text); font-variant-numeric: tabular-nums; text-align: right; line-height: 1.1; }
+  #countingPage .cnt-num-label { font-size: var(--cf-text-xs); color: var(--cf-text-3); text-align: right; }
+  #countingPage label.cf-row { margin: 0; cursor: pointer; }
+  #countingPage .cf-row .cf-row-label, #countingPage .cf-row .cf-row-desc { display: block; }
+  #countingPage .cnt-off { opacity: .55; }
+  #countingPage .cnt-setcount { max-width: 9rem; }
+  @media (max-width: 640px) { #countingPage .cnt-setcount { max-width: none; flex: 1 1 100%; } }
 </style>
 
 <script>
@@ -63,7 +143,19 @@
   const guildId = root.dataset.guildId;
   const api = (p) => `/api/guilds/${guildId}/counting${p}`;
   const $ = (id) => document.getElementById(id);
-  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  const channelNames = (window.GK_DATA && GK_DATA.channels) || {};
+
+  // h('div', { className, text, attrs, data }, ...children): text goes in as text only.
+  function h(tag, props, ...kids) {
+    const n = document.createElement(tag);
+    const p = props || {};
+    if (p.className) n.className = p.className;
+    if (p.text !== undefined) n.textContent = String(p.text);
+    for (const [k, v] of Object.entries(p.attrs || {})) if (v !== false && v != null) n.setAttribute(k, v === true ? '' : v);
+    for (const [k, v] of Object.entries(p.data || {})) n.dataset[k] = v;
+    for (const kid of kids) if (kid != null) n.append(kid);
+    return n;
+  }
 
   async function req(url, options) {
     const res = await fetch(url, { credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, ...options });
@@ -71,71 +163,65 @@
     if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
     return body;
   }
-  const showError = (m) => { const el = $('cntError'); if (!m) { el.hidden = true; return; } el.textContent = m; el.hidden = false; };
-  const flash = (el, m, ok = true) => { el.textContent = m; el.style.color = ok ? '#57F287' : '#ED4245'; setTimeout(() => { el.textContent = ''; }, 3000); };
+  const showError = (m) => { const el = $('cntError'); el.textContent = m || ''; el.hidden = !m; };
+  const flash = (el, m, ok = true) => { el.textContent = m; el.classList.remove('is-ok', 'is-bad'); el.classList.add(ok ? 'is-ok' : 'is-bad'); setTimeout(() => { el.textContent = ''; el.classList.remove('is-ok', 'is-bad'); }, 3000); };
 
   const TOGGLES = [
-    ['delete_chatter',      'Delete non-numeric messages',   'Keeps the channel pure numbers. Only applies in delete mode.'],
-    ['allow_same_user',     'Allow counting twice in a row', 'Off means one person cannot post two numbers back to back.'],
-    ['react_on_valid',      'React ✅ on a valid count',      'Turn off for a silent channel.'],
-    ['announce_milestones', 'Announce milestones',           'Celebrates 25, 50, 100, 200, 500… and pays economy coins.'],
+    ['delete_chatter',      'Delete messages that are not numbers', 'Keeps the channel to numbers only. Only applies when wrong numbers are deleted.'],
+    ['react_on_valid',      'React to correct numbers',             'Adds a check mark to each correct number. Turn off for a quiet channel.'],
+    ['announce_milestones', 'Announce milestones',                  'Posts at 25, 50, 100, 200, 500 and so on, and pays the counter that many coins when the economy is on.'],
   ];
 
   function channelCard(c) {
+    const id = String(c.channel_id);
     const del = c.fail_mode === 'delete';
-    const name = c.channel_name ? `#${esc(c.channel_name)}` : `channel ${esc(c.channel_id)}`;
+    const name = '#' + (c.channel_name || channelNames[id] || 'unknown-channel');
 
-    const toggles = TOGGLES.map(([key, label, hint]) => `
-      <label class="cnt-toggle ${key === 'delete_chatter' && !del ? 'cnt-off' : ''}">
-        <input type="checkbox" data-toggle="${key}" data-channel="${c.channel_id}"
-               ${c[key] ? 'checked' : ''} ${key === 'delete_chatter' && !del ? 'disabled' : ''}>
-        <span><strong>${label}</strong><br><span class="hint">${hint}</span></span>
-      </label>`).join('');
+    const head = h('div', { className: 'cf-row cf-row--switch' },
+      h('div', { className: 'cf-row-text' },
+        h('span', { className: 'cf-row-label' }, name, c.is_active ? null : ' ', c.is_active ? null : h('span', { className: 'cf-pill', text: 'Off' })),
+        h('span', { className: 'cf-row-desc', text: `Record ${Number(c.highest_count) || 0} · ${Number(c.reset_count) || 0} resets` })),
+      h('div', { className: 'cf-row-control' },
+        h('div', { className: 'cnt-num', text: Number(c.next_number) || 0 }),
+        h('div', { className: 'cnt-num-label', text: 'next number' })));
 
-    return `<div class="cnt-card" data-card="${c.channel_id}">
-      <div class="cnt-head">
-        <div>
-          <h3 class="cnt-h">${name} ${c.is_active ? '' : '<span class="cnt-muted">(disabled)</span>'}</h3>
-          <div class="cnt-muted">Highest ever: ${c.highest_count} · resets: ${c.reset_count}</div>
-        </div>
-        <div style="text-align:right">
-          <div class="cnt-num">${c.next_number}</div>
-          <div class="cnt-muted">next number</div>
-        </div>
-      </div>
+    const choice = (mode, label, desc, checked) => h('label', { className: 'cf-choice' },
+      h('input', { attrs: { type: 'radio', name: 'mode-' + id, checked }, data: { mode, channel: id } }),
+      h('span', null, label, h('span', { className: 'cf-choice-desc', text: desc })));
 
-      <div class="cnt-modes">
-        <div><strong>When someone posts the wrong number</strong></div>
-        <div class="radio-row">
-          <label class="cnt-toggle">
-            <input type="radio" name="mode-${c.channel_id}" data-mode="delete" data-channel="${c.channel_id}" ${del ? 'checked' : ''}>
-            <span><strong>Delete it</strong><br><span class="hint">The count never resets. Anyone may post the correct number. Needs Manage Messages.</span></span>
-          </label>
-          <label class="cnt-toggle">
-            <input type="radio" name="mode-${c.channel_id}" data-mode="reset" data-channel="${c.channel_id}" ${del ? '' : 'checked'}>
-            <span><strong>Reset to 0</strong><br><span class="hint">The classic game. Announces the break.</span></span>
-          </label>
-        </div>
-        ${toggles}
-      </div>
+    const toggles = TOGGLES.map(([key, label, hint]) => {
+      const off = key === 'delete_chatter' && !del;
+      return h('label', { className: 'cf-row cf-row--switch' + (off ? ' cnt-off' : '') },
+        h('span', { className: 'cf-row-text' }, h('span', { className: 'cf-row-label', text: label }), h('span', { className: 'cf-row-desc', text: hint })),
+        h('span', { className: 'cf-row-control' },
+          h('input', { className: 'cf-switch', attrs: { type: 'checkbox', role: 'switch', checked: !!c[key], disabled: off }, data: { toggle: key, channel: id } })));
+    });
 
-      <div class="cnt-row">
-        <input type="number" min="0" class="form-control" style="max-width:9rem"
-               data-setcount-input="${c.channel_id}" placeholder="Last number">
-        <button class="btn btn-secondary btn-sm" data-setcount="${c.channel_id}">Set count</button>
-        <button class="btn btn-danger btn-sm" data-disable="${c.channel_id}" ${c.is_active ? '' : 'disabled'}>Disable</button>
-        <span class="cnt-status" data-status="${c.channel_id}"></span>
-      </div>
-    </div>`;
+    return h('div', { className: 'cf-rows cnt-channel', data: { card: id } },
+      head,
+      h('div', { className: 'cf-rows-head', text: 'When someone posts the wrong number' }),
+      h('div', { className: 'cf-row cf-row--stack' },
+        h('div', { className: 'cf-choices' },
+          choice('delete', 'Delete it', 'The count never resets; anyone may post the right number next. Needs Manage Messages.', del),
+          choice('reset', 'Reset to 0', 'The classic game. The bot posts what went wrong.', !del))),
+      ...toggles,
+      h('div', { className: 'cf-section-foot' },
+        h('span', { className: 'cf-status-line cnt-status', attrs: { role: 'status' }, data: { status: id } }),
+        h('input', { className: 'form-control cnt-setcount', attrs: { type: 'number', min: '0', 'aria-label': 'Last number posted', placeholder: 'Last number' }, data: { setcountInput: id } }),
+        h('button', { className: 'btn btn-secondary btn-sm', text: 'Set count', attrs: { type: 'button' }, data: { setcount: id } }),
+        h('button', { className: 'btn btn-danger btn-sm', text: 'Stop counting', attrs: { type: 'button', disabled: !c.is_active }, data: { disable: id } })));
   }
 
   async function load() {
     try {
       showError('');
       const { channels } = await req(api('/'));
-      $('cntChannels').innerHTML = channels.length
-        ? channels.map(channelCard).join('')
-        : '<div class="cnt-card cnt-muted">No counting channels yet.</div>';
+      $('cntCount').textContent = channels.length ? String(channels.length) : '';
+      $('cntChannels').replaceChildren(...(channels.length
+        ? channels.map(channelCard)
+        : [h('div', { className: 'cf-rows' }, h('div', { className: 'cf-state cf-state--empty' },
+            h('p', { className: 'cf-state-title', text: 'No counting channels yet' }),
+            h('p', { className: 'cf-state-text', text: 'Choose a channel above to start a count.' })))]));
     } catch (err) { showError(err.message); }
   }
 
@@ -151,6 +237,7 @@
   }
 
   $('cntAdd').addEventListener('click', async () => {
+    if (!$('cntChannel').value) return flash($('cntAddStatus'), 'Choose a channel first.', false);
     try {
       await req(api('/'), { method: 'POST', body: JSON.stringify({
         channel_id: $('cntChannel').value,
@@ -172,6 +259,13 @@
   });
 
   root.addEventListener('click', async (e) => {
+    const pv = e.target.closest('[data-cnt-pv]');
+    if (pv) {
+      root.querySelectorAll('[data-cnt-pv]').forEach(b => { const on = b === pv; b.classList.toggle('is-active', on); b.setAttribute('aria-pressed', String(on)); });
+      root.querySelectorAll('[data-cnt-pv-show]').forEach(n => { n.hidden = n.dataset.cntPvShow !== pv.dataset.cntPv; });
+      return;
+    }
+
     const setBtn = e.target.closest('[data-setcount]');
     if (setBtn) {
       const id = setBtn.dataset.setcount;
@@ -188,7 +282,7 @@
 
     const offBtn = e.target.closest('[data-disable]');
     if (offBtn) {
-      if (!confirm('Stop counting in this channel? Stats are kept.')) return;
+      if (!confirm('Stop counting in this channel? Its stats are kept.')) return;
       try { await req(api(`/${offBtn.dataset.disable}/disable`), { method: 'POST' }); await load(); }
       catch (err) { showError(err.message); }
     }

@@ -1,0 +1,713 @@
+{
+ "_about": "Guide screenshots from scripts/site-shots/run.mjs (invented demo server \"Maple Hollow\"; no real data). Regenerate with: node scripts/site-shots/run.mjs",
+ "generated": "2026-11-19",
+ "images": [
+  {
+   "id": "getting-started-setup",
+   "file": "getting-started-setup.webp",
+   "alt": "The reply to /setup in Discord: Maple Hollow has 6 of 41 features running, a list of what is on and what is one click away, and a menu to start from a preset.",
+   "width": 1200,
+   "height": 1024,
+   "guides": [
+    "getting-started"
+   ],
+   "thumb": {
+    "file": "getting-started-setup.thumb.webp",
+    "width": 480,
+    "height": 410
+   }
+  },
+  {
+   "id": "go-live-discord",
+   "file": "go-live-discord.webp",
+   "alt": "A go-live post in #stream-alerts: \"rowanpike_plays is LIVE on Twitch!\", the stream title, the game, and a card with the streamer's name, title and viewer count.",
+   "width": 1200,
+   "height": 890,
+   "guides": [
+    "go-live-alerts"
+   ],
+   "thumb": {
+    "file": "go-live-discord.thumb.webp",
+    "width": 480,
+    "height": 356
+   }
+  },
+  {
+   "id": "feeds-discord",
+   "file": "feeds-discord.webp",
+   "alt": "Two feed posts: a new YouTube upload with its title, description and thumbnail, then a Bluesky post from the Maple Hollow account.",
+   "width": 1200,
+   "height": 1380,
+   "guides": [
+    "social-feeds"
+   ],
+   "thumb": {
+    "file": "feeds-discord.thumb.webp",
+    "width": 480,
+    "height": 552
+   }
+  },
+  {
+   "id": "levels-discord",
+   "file": "levels-discord.webp",
+   "alt": "A level-up post for Sorrel Quinn reaching level 15 with the Sapling role as a reward, then the rank card Sorrel gets from /level rank.",
+   "width": 1200,
+   "height": 972,
+   "guides": [
+    "levels"
+   ],
+   "thumb": {
+    "file": "levels-discord.thumb.webp",
+    "width": 480,
+    "height": 389
+   }
+  },
+  {
+   "id": "welcome-discord",
+   "file": "welcome-discord.webp",
+   "alt": "A welcome post for Wren Alder: a greeting with links to #rules and #roles, and a card with their avatar, \"Wren Alder just joined the server\" and \"Member #1284\".",
+   "width": 1200,
+   "height": 866,
+   "guides": [
+    "welcome"
+   ],
+   "thumb": {
+    "file": "welcome-discord.thumb.webp",
+    "width": 480,
+    "height": 346
+   }
+  },
+  {
+   "id": "reaction-roles-discord",
+   "file": "reaction-roles-discord.webp",
+   "alt": "A role panel called Pick your roles with four buttons (Night owls, Artists, Gamers, Stream pings), and the private reply \"You now have the Artists role!\".",
+   "width": 1200,
+   "height": 846,
+   "guides": [
+    "reaction-roles"
+   ],
+   "thumb": {
+    "file": "reaction-roles-discord.thumb.webp",
+    "width": 480,
+    "height": 338
+   }
+  },
+  {
+   "id": "moderation-discord",
+   "file": "moderation-discord.webp",
+   "alt": "A mod log entry: Warn Issued, with the member, the moderator and the reason.",
+   "width": 1200,
+   "height": 652,
+   "guides": [
+    "moderation"
+   ],
+   "thumb": {
+    "file": "moderation-discord.thumb.webp",
+    "width": 480,
+    "height": 261
+   }
+  },
+  {
+   "id": "raid-discord",
+   "file": "raid-discord.webp",
+   "alt": "A lockdown alert: Server Lockdown Started, every new member is kicked until it ends in an hour, started by the auto-trigger after 22 joins in 10 seconds.",
+   "width": 1200,
+   "height": 690,
+   "guides": [
+    "raid-protection"
+   ],
+   "thumb": {
+    "file": "raid-discord.thumb.webp",
+    "width": 480,
+    "height": 276
+   }
+  },
+  {
+   "id": "tickets-discord",
+   "file": "tickets-discord.webp",
+   "alt": "The Help desk ticket panel with an Open a ticket button, and the first message in a new private ticket channel with a Close Ticket button.",
+   "width": 1200,
+   "height": 866,
+   "guides": [
+    "support-tickets"
+   ],
+   "thumb": {
+    "file": "tickets-discord.thumb.webp",
+    "width": 480,
+    "height": 346
+   }
+  },
+  {
+   "id": "music-discord",
+   "file": "music-discord.webp",
+   "alt": "The AI DJ starting from the prompt \"rainy evening lo-fi\", then the Now Playing card for the current track with its artist, length, who asked for it and a progress bar.",
+   "width": 1200,
+   "height": 1012,
+   "guides": [
+    "music"
+   ],
+   "thumb": {
+    "file": "music-discord.thumb.webp",
+    "width": 480,
+    "height": 405
+   }
+  },
+  {
+   "id": "economy-discord",
+   "file": "economy-discord.webp",
+   "alt": "Two economy replies: Pip claims a daily reward of 250 acorns with a 3-day streak bonus, then checks a balance of 4,450 acorns in the wallet and 12,800 in the bank.",
+   "width": 1200,
+   "height": 1038,
+   "guides": [
+    "economy"
+   ],
+   "thumb": {
+    "file": "economy-discord.thumb.webp",
+    "width": 480,
+    "height": 415
+   }
+  },
+  {
+   "id": "community-discord",
+   "file": "community-discord.webp",
+   "alt": "Three posts: a starboard repost of a message with 5 stars, a suggestion with 14 up votes and 2 down votes, and a birthday announcement for Wren Alder.",
+   "width": 1200,
+   "height": 1370,
+   "guides": [
+    "community"
+   ],
+   "thumb": {
+    "file": "community-discord.thumb.webp",
+    "width": 480,
+    "height": 548
+   }
+  },
+  {
+   "id": "greenhouse-discord",
+   "file": "greenhouse-discord.webp",
+   "alt": "The reply to /arcade greenhouse status: Thistle's level, cash, benches ready to harvest, the daily reward, quests, season points and the weekly challenge, with an Open the game button.",
+   "width": 1200,
+   "height": 780,
+   "guides": [
+    "greenhouse"
+   ],
+   "thumb": {
+    "file": "greenhouse-discord.thumb.webp",
+    "width": 480,
+    "height": 312
+   }
+  },
+  {
+   "id": "privacy-discord",
+   "file": "privacy-discord.webp",
+   "alt": "The private reply to /privacy status: message logging is on, leaderboards are hidden, the last export date, and the four /privacy commands.",
+   "width": 1200,
+   "height": 1084,
+   "guides": [
+    "privacy"
+   ],
+   "thumb": {
+    "file": "privacy-discord.thumb.webp",
+    "width": 480,
+    "height": 434
+   }
+  },
+  {
+   "id": "schedules-poster",
+   "file": "schedules-poster.webp",
+   "alt": "A December 2026 stream schedule poster: a month grid with a show and start time on stream days and NO STREAM on the others.",
+   "width": 1200,
+   "height": 675,
+   "guides": [
+    "schedules"
+   ],
+   "thumb": {
+    "file": "schedules-poster.thumb.webp",
+    "width": 480,
+    "height": 270
+   }
+  },
+  {
+   "id": "getting-started-servers",
+   "file": "getting-started-servers.webp",
+   "alt": "The dashboard server picker: Maple Hollow and three other servers, each card opening that server's settings.",
+   "width": 1200,
+   "height": 760,
+   "guides": [
+    "getting-started"
+   ],
+   "thumb": {
+    "file": "getting-started-servers.thumb.webp",
+    "width": 480,
+    "height": 304
+   }
+  },
+  {
+   "id": "getting-started-overview",
+   "file": "getting-started-overview.webp",
+   "alt": "The Maple Hollow overview on the dashboard: member and stream counts, then the setup checklist with two steps left.",
+   "width": 1200,
+   "height": 760,
+   "guides": [
+    "getting-started"
+   ],
+   "thumb": {
+    "file": "getting-started-overview.thumb.webp",
+    "width": 480,
+    "height": 304
+   }
+  },
+  {
+   "id": "go-live-streamers",
+   "file": "go-live-streamers.webp",
+   "alt": "The Streamers page: four tracked streamers with their platforms, and the form for adding another.",
+   "width": 1200,
+   "height": 760,
+   "guides": [
+    "go-live-alerts"
+   ],
+   "thumb": {
+    "file": "go-live-streamers.thumb.webp",
+    "width": 480,
+    "height": 304
+   }
+  },
+  {
+   "id": "feeds-page",
+   "file": "feeds-page.webp",
+   "alt": "The Social feeds page: the YouTube section with one channel posting to #new-videos, and the X section below it.",
+   "width": 1200,
+   "height": 760,
+   "guides": [
+    "social-feeds"
+   ],
+   "thumb": {
+    "file": "feeds-page.thumb.webp",
+    "width": 480,
+    "height": 304
+   }
+  },
+  {
+   "id": "levels-page",
+   "file": "levels-page.webp",
+   "alt": "The Leveling page: XP settings, the level-up channel and three role rewards at levels 5, 15 and 30.",
+   "width": 1200,
+   "height": 760,
+   "guides": [
+    "levels"
+   ],
+   "thumb": {
+    "file": "levels-page.thumb.webp",
+    "width": 480,
+    "height": 304
+   }
+  },
+  {
+   "id": "levels-rank-card",
+   "file": "levels-rank-card.webp",
+   "alt": "A rank card for sorrelq: rank 3, level 18, 1240 of 2100 XP to the next level with the bar at 59 percent, and 24,860 XP in total.",
+   "width": 934,
+   "height": 282,
+   "guides": [
+    "levels"
+   ],
+   "thumb": {
+    "file": "levels-rank-card.thumb.webp",
+    "width": 480,
+    "height": 145
+   }
+  },
+  {
+   "id": "welcome-page",
+   "file": "welcome-page.webp",
+   "alt": "The Welcome page: the welcome channel, the message with placeholders, and the welcome card settings.",
+   "width": 1200,
+   "height": 760,
+   "guides": [
+    "welcome"
+   ],
+   "thumb": {
+    "file": "welcome-page.thumb.webp",
+    "width": 480,
+    "height": 304
+   }
+  },
+  {
+   "id": "reaction-roles-page",
+   "file": "reaction-roles-page.webp",
+   "alt": "The Reaction roles page with one panel, Pick your roles, giving four roles with buttons.",
+   "width": 1200,
+   "height": 760,
+   "guides": [
+    "reaction-roles"
+   ],
+   "thumb": {
+    "file": "reaction-roles-page.thumb.webp",
+    "width": 480,
+    "height": 304
+   }
+  },
+  {
+   "id": "moderation-page",
+   "file": "moderation-page.webp",
+   "alt": "The Moderation page: the mod log channel, an escalation rule and the latest warnings, bans and timeouts.",
+   "width": 1200,
+   "height": 760,
+   "guides": [
+    "moderation"
+   ],
+   "thumb": {
+    "file": "moderation-page.thumb.webp",
+    "width": 480,
+    "height": 304
+   }
+  },
+  {
+   "id": "automod-page",
+   "file": "automod-page.webp",
+   "alt": "The AutoMod page with two rules: an anti-spam rule that times members out and a banned words rule that deletes the message.",
+   "width": 1200,
+   "height": 760,
+   "guides": [
+    "moderation"
+   ],
+   "thumb": {
+    "file": "automod-page.thumb.webp",
+    "width": 480,
+    "height": 304
+   }
+  },
+  {
+   "id": "logging-page",
+   "file": "logging-page.webp",
+   "alt": "The Logging page: the server log channel and which events are logged.",
+   "width": 1200,
+   "height": 760,
+   "guides": [
+    "moderation"
+   ],
+   "thumb": {
+    "file": "logging-page.thumb.webp",
+    "width": 480,
+    "height": 304
+   }
+  },
+  {
+   "id": "raid-page",
+   "file": "raid-page.webp",
+   "alt": "The Raid lockdown panel on the dashboard: no lockdown running, and the form to start one with the action for every join, how long it lasts and whether to pause invites.",
+   "width": 1200,
+   "height": 760,
+   "guides": [
+    "raid-protection"
+   ],
+   "thumb": {
+    "file": "raid-page.thumb.webp",
+    "width": 480,
+    "height": 304
+   }
+  },
+  {
+   "id": "tickets-page",
+   "file": "tickets-page.webp",
+   "alt": "The Tickets page with one panel, Help desk, posting in #support and opening tickets in the Support tickets category.",
+   "width": 1200,
+   "height": 760,
+   "guides": [
+    "support-tickets"
+   ],
+   "thumb": {
+    "file": "tickets-page.thumb.webp",
+    "width": 480,
+    "height": 304
+   }
+  },
+  {
+   "id": "music-page",
+   "file": "music-page.webp",
+   "alt": "The Music page: DJ role, vote skip at 50 percent, playlist limits and the AI DJ voice.",
+   "width": 1200,
+   "height": 760,
+   "guides": [
+    "music"
+   ],
+   "thumb": {
+    "file": "music-page.thumb.webp",
+    "width": 480,
+    "height": 304
+   }
+  },
+  {
+   "id": "economy-page",
+   "file": "economy-page.webp",
+   "alt": "The Economy page: the currency is acorns, the daily reward and work pay, and two items in the shop.",
+   "width": 1200,
+   "height": 760,
+   "guides": [
+    "economy"
+   ],
+   "thumb": {
+    "file": "economy-page.thumb.webp",
+    "width": 480,
+    "height": 304
+   }
+  },
+  {
+   "id": "starboard-page",
+   "file": "starboard-page.webp",
+   "alt": "The Starboard page: posts to #starboard once a message has 3 star reactions.",
+   "width": 1200,
+   "height": 760,
+   "guides": [
+    "community"
+   ],
+   "thumb": {
+    "file": "starboard-page.thumb.webp",
+    "width": 480,
+    "height": 304
+   }
+  },
+  {
+   "id": "birthday-page",
+   "file": "birthday-page.webp",
+   "alt": "The Birthdays page: announcements in #birthdays with a Birthday role, and three saved birthdays.",
+   "width": 1200,
+   "height": 760,
+   "guides": [
+    "community"
+   ],
+   "thumb": {
+    "file": "birthday-page.thumb.webp",
+    "width": 480,
+    "height": 304
+   }
+  },
+  {
+   "id": "suggestions-page",
+   "file": "suggestions-page.webp",
+   "alt": "The Suggestions page: approval required with a staff review channel, one suggestion waiting for approval and one approved with its votes.",
+   "width": 1200,
+   "height": 760,
+   "guides": [
+    "community"
+   ],
+   "thumb": {
+    "file": "suggestions-page.thumb.webp",
+    "width": 480,
+    "height": 304
+   }
+  },
+  {
+   "id": "greenhouse-page",
+   "file": "greenhouse-page.webp",
+   "alt": "The Greenhouse Tycoon page on the dashboard: the current season, this week's challenge and the Maple Hollow members who play, ranked by season points.",
+   "width": 1200,
+   "height": 760,
+   "guides": [
+    "greenhouse"
+   ],
+   "thumb": {
+    "file": "greenhouse-page.thumb.webp",
+    "width": 480,
+    "height": 304
+   }
+  },
+  {
+   "id": "schedule-page",
+   "file": "schedule-page.webp",
+   "alt": "The Schedules page on the dashboard with the Maple Hollow Charity Marathon event and an older one.",
+   "width": 1200,
+   "height": 760,
+   "guides": [
+    "schedules"
+   ],
+   "thumb": {
+    "file": "schedule-page.thumb.webp",
+    "width": 480,
+    "height": 304
+   }
+  },
+  {
+   "id": "schedules-public",
+   "file": "schedules-public.webp",
+   "alt": "The public schedule page for the Maple Hollow Charity Marathon: a table of runs with the game, runners, estimate and status, and the run that is live now.",
+   "width": 1200,
+   "height": 1080,
+   "guides": [
+    "schedules"
+   ],
+   "thumb": {
+    "file": "schedules-public.thumb.webp",
+    "width": 480,
+    "height": 432
+   }
+  },
+  {
+   "id": "kick-defender-panel",
+   "file": "kick-defender-panel.webp",
+   "alt": "The Kick Defender page for one channel: the defender switch on, chat connected, ban length, scam-link strikes and the warning message.",
+   "width": 1200,
+   "height": 900,
+   "guides": [
+    "kick-defender"
+   ],
+   "thumb": {
+    "file": "kick-defender-panel.thumb.webp",
+    "width": 480,
+    "height": 360
+   }
+  },
+  {
+   "id": "stream-bot-overview",
+   "file": "stream-bot-overview.webp",
+   "alt": "The Stream bot overview: a Twitch and a Kick channel linked with the Twitch one live, today's follows, subs, bits, raids and tips, and the live feed of recent events.",
+   "width": 1200,
+   "height": 1000,
+   "guides": [
+    "stream-bot"
+   ],
+   "thumb": {
+    "file": "stream-bot-overview.thumb.webp",
+    "width": 480,
+    "height": 400
+   }
+  },
+  {
+   "id": "stream-bot-editor",
+   "file": "stream-bot-editor.webp",
+   "alt": "The automation editor for Thank followers in chat: the trigger is Follow, a cooldown is counted for each person, and a Send a chat message action thanks the follower by name.",
+   "width": 1200,
+   "height": 1150,
+   "guides": [
+    "stream-bot"
+   ],
+   "thumb": {
+    "file": "stream-bot-editor.thumb.webp",
+    "width": 480,
+    "height": 460
+   }
+  },
+  {
+   "id": "stream-bot-connections",
+   "file": "stream-bot-connections.webp",
+   "alt": "The Connections page: the linked Twitch channel with its Stream bot grant, its event subscriptions and the events it can send, and the linked Kick channel.",
+   "width": 1200,
+   "height": 1000,
+   "guides": [
+    "stream-bot"
+   ],
+   "thumb": {
+    "file": "stream-bot-connections.thumb.webp",
+    "width": 480,
+    "height": 400
+   }
+  },
+  {
+   "id": "stream-bot-editor-flow",
+   "file": "stream-bot-editor-flow.webp",
+   "alt": "The automation editor with an If step that mutes the microphone on the Starting Soon, Be right back and Ending scenes and unmutes it otherwise, then Create a clip, a chat announcement with the clip link, and a title change on Twitch and Kick.",
+   "width": 1200,
+   "height": 1400,
+   "guides": [
+    "stream-bot"
+   ],
+   "thumb": {
+    "file": "stream-bot-editor-flow.thumb.webp",
+    "width": 480,
+    "height": 560
+   }
+  },
+  {
+   "id": "stream-bot-timers",
+   "file": "stream-bot-timers.webp",
+   "alt": "The Timers page: a Socials timer with two messages taking turns every 20 minutes on Twitch and Kick, only while live and after 10 chat lines, a Stretch break timer that is off, and a timer from the Kick channel page.",
+   "width": 1200,
+   "height": 900,
+   "guides": [
+    "stream-bot"
+   ],
+   "thumb": {
+    "file": "stream-bot-timers.thumb.webp",
+    "width": 480,
+    "height": 360
+   }
+  },
+  {
+   "id": "stream-bot-overlays",
+   "file": "stream-bot-overlays.webp",
+   "alt": "The Overlays tab: an alert box, a chat overlay, a follower goal at 64 of 100, a Deaths counter and a recent events list, each with whether it is open in OBS, the kinds of overlay to add, and the images and videos uploaded for alerts.",
+   "width": 1200,
+   "height": 1150,
+   "guides": [
+    "stream-bot"
+   ],
+   "thumb": {
+    "file": "stream-bot-overlays.thumb.webp",
+    "width": 480,
+    "height": 460
+   }
+  },
+  {
+   "id": "stream-bot-overlay-alerts",
+   "file": "stream-bot-overlay-alerts.webp",
+   "alt": "An alert box's page: its private browser-source address with Copy and New address, a live preview showing a Bits alert, and a Test button for each alert type.",
+   "width": 1200,
+   "height": 1100,
+   "guides": [
+    "stream-bot"
+   ],
+   "thumb": {
+    "file": "stream-bot-overlay-alerts.thumb.webp",
+    "width": 480,
+    "height": 440
+   }
+  },
+  {
+   "id": "stream-bot-overlay-live",
+   "file": "stream-bot-overlay-live.webp",
+   "alt": "The alert box in OBS over a scene: MapleFan_88 threw 1,000 Bits, with an image and the viewer's message under it, and a Deaths: 13 text in the top right corner from an automation.",
+   "width": 1200,
+   "height": 675,
+   "guides": [
+    "stream-bot"
+   ],
+   "thumb": {
+    "file": "stream-bot-overlay-live.thumb.webp",
+    "width": 480,
+    "height": 270
+   }
+  },
+  {
+   "id": "studio-hotkeys",
+   "file": "studio-hotkeys.webp",
+   "alt": "CertiFried Studio's Hotkeys tab with demo data: Ctrl+Shift+F1 runs the BRB automation, F13 plays Airhorn.mp3, Ctrl+Alt+M mutes or unmutes the Mic, and a form to add a hotkey.",
+   "width": 1192,
+   "height": 780,
+   "guides": [
+    "stream-bot"
+   ],
+   "thumb": {
+    "file": "studio-hotkeys.thumb.webp",
+    "width": 480,
+    "height": 314
+   },
+   "external": true
+  },
+  {
+   "id": "studio-status",
+   "file": "studio-status.webp",
+   "alt": "CertiFried Studio's Status tab with demo data: connected to CertiFried and to OBS 31 on 127.0.0.1 port 4455, the scene on air, and recent actions, OBS events and hotkeys, one of them failed because a source was missing.",
+   "width": 1192,
+   "height": 780,
+   "guides": [
+    "stream-bot"
+   ],
+   "thumb": {
+    "file": "studio-status.thumb.webp",
+    "width": 480,
+    "height": 314
+   },
+   "external": true
+  }
+ ]
+}

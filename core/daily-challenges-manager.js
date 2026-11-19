@@ -1,6 +1,7 @@
 import { EmbedBuilder } from 'discord.js';
 import pool from '../utils/db.js';
 import logger from '../utils/logger.js';
+import { getOrCreateUserEconomy, getEconomyConfig, logTransaction } from './economy-manager.js';
 
 /**
  * Daily Challenges Manager
@@ -52,6 +53,7 @@ export async function assignDailyChallenges(guildId, userId) {
       );
     }
 
+    forgetOpenTypes(guildId, userId);
     logger.info(`[Daily Challenges] Assigned 3 challenges to user ${userId} in guild ${guildId}`);
     return true;
 
@@ -86,9 +88,75 @@ export async function getUserChallenges(guildId, userId) {
   }
 }
 
+/*
+ * Progress is reported from hot paths (every message, reaction and command), but only members who
+ * opened /selfcare challenges today have rows. Cache which challenge types each member still has
+ * open today so everyone else costs a Map lookup instead of a query.
+ */
+const OPEN_TTL_MS = 2 * 60 * 1000;
+const openTypes = new Map();      // `${guildId}:${userId}` -> { day, at, types: Set }
+const activityMinute = new Map(); // `${guildId}:${userId}` -> last minute counted toward 'activity'
+
+function todayUtc() {
+  return new Date().toISOString().split('T')[0];
+}
+
+function forgetOpenTypes(guildId, userId) {
+  openTypes.delete(`${guildId}:${userId}`);
+}
+
+async function hasOpenChallenge(guildId, userId, challengeType) {
+  const key = `${guildId}:${userId}`;
+  const day = todayUtc();
+  let entry = openTypes.get(key);
+  if (!entry || entry.day !== day || Date.now() - entry.at > OPEN_TTL_MS) {
+    const [rows] = await pool.execute(
+      `SELECT DISTINCT dc.challenge_type
+       FROM user_daily_challenges uc
+       JOIN daily_challenges dc ON uc.challenge_id = dc.id
+       WHERE uc.guild_id = ? AND uc.user_id = ? AND uc.assigned_date = ? AND uc.completed = 0`,
+      [guildId, userId, day]
+    );
+    if (openTypes.size > 50000) openTypes.clear();
+    entry = { day, at: Date.now(), types: new Set(rows.map(r => r.challenge_type)) };
+    openTypes.set(key, entry);
+  }
+  return entry.types.has(challengeType);
+}
+
+/** Count at most one minute of 'activity' per member per minute of chatting. */
+export function noteActivityMinute(guildId, userId) {
+  const key = `${guildId}:${userId}`;
+  const minute = Math.floor(Date.now() / 60000);
+  if (activityMinute.get(key) === minute) return;
+  if (activityMinute.size > 50000) activityMinute.clear();
+  activityMinute.set(key, minute);
+  updateChallengeProgress(guildId, userId, 'activity', 1)
+    .catch(err => logger.warn('[Daily Challenges] activity progress failed', { error: err.message }));
+}
+
+/** 'streak' challenges track consecutive days with a completed challenge, so they are set, not added. */
+async function syncStreakChallenge(guildId, userId) {
+  const streak = await getCurrentStreak(guildId, userId);
+  const [result] = await pool.execute(
+    `UPDATE user_daily_challenges uc
+     JOIN daily_challenges dc ON uc.challenge_id = dc.id
+     SET uc.progress = LEAST(?, dc.requirement_count),
+         uc.completed = (? >= dc.requirement_count),
+         uc.completed_at = IF(? >= dc.requirement_count, NOW(), NULL)
+     WHERE uc.guild_id = ? AND uc.user_id = ? AND uc.assigned_date = ?
+       AND dc.challenge_type = 'streak' AND uc.completed = 0`,
+    [streak, streak, streak, guildId, userId, todayUtc()]
+  );
+  if (result.affectedRows) forgetOpenTypes(guildId, userId);
+}
+
 export async function updateChallengeProgress(guildId, userId, challengeType, amount = 1) {
   try {
-    const today = new Date().toISOString().split('T')[0];
+    if (!guildId || !userId || !(amount > 0)) return [];
+    if (!(await hasOpenChallenge(guildId, userId, challengeType))) return [];
+
+    const today = todayUtc();
 
     // Get relevant challenges
     const [challenges] = await pool.execute(
@@ -123,6 +191,14 @@ export async function updateChallengeProgress(guildId, userId, challengeType, am
       }
     }
 
+    if (completedChallenges.length) {
+      forgetOpenTypes(guildId, userId);
+      if (challengeType !== 'streak') {
+        await syncStreakChallenge(guildId, userId)
+          .catch(err => logger.warn('[Daily Challenges] streak sync failed', { error: err.message }));
+      }
+    }
+
     return completedChallenges;
 
   } catch (error) {
@@ -152,31 +228,46 @@ export async function claimRewards(guildId, userId, challengeId) {
       };
     }
 
-    // Mark as claimed
-    await pool.execute(
-      'UPDATE user_daily_challenges SET claimed = 1 WHERE id = ?',
+    // Mark as claimed — guarded so a double-click can't pay the same challenge twice
+    const [claim] = await pool.execute(
+      'UPDATE user_daily_challenges SET claimed = 1 WHERE id = ? AND claimed = 0',
       [userChallenge.id]
     );
 
-    // Award XP if leveling is enabled
-    if (userChallenge.xp_reward > 0) {
-      await pool.execute(
-        `INSERT INTO leveling_users (guild_id, user_id, xp, level, last_message)
-         VALUES (?, ?, ?, 0, NOW())
-         ON DUPLICATE KEY UPDATE xp = xp + ?`,
-        [guildId, userId, userChallenge.xp_reward, userChallenge.xp_reward]
-      ).catch(() => {}); // Ignore if leveling table doesn't exist
+    if (claim.affectedRows === 0) {
+      return {
+        success: false,
+        message: 'Challenge not found, not completed, or already claimed'
+      };
     }
 
-    // Award currency if economy is enabled
-    if (userChallenge.currency_reward > 0) {
-      await pool.execute(
-        `INSERT INTO economy_users (guild_id, user_id, wallet, bank, total_earned)
-         VALUES (?, ?, ?, 0, ?)
-         ON DUPLICATE KEY UPDATE wallet = wallet + ?, total_earned = total_earned + ?`,
-        [guildId, userId, userChallenge.currency_reward, userChallenge.currency_reward,
-         userChallenge.currency_reward, userChallenge.currency_reward]
-      ).catch(() => {}); // Ignore if economy table doesn't exist
+    const xpReward = Number(userChallenge.xp_reward) || 0;
+    const currencyReward = Number(userChallenge.currency_reward) || 0;
+
+    // Currency → live economy wallet (user_economy) + ledger row. If the wallet credit itself fails,
+    // un-claim so the member can try again instead of silently losing the reward.
+    if (currencyReward > 0) {
+      try {
+        await payCurrency(guildId, userId, currencyReward, `Daily challenge: ${userChallenge.challenge_name}`);
+      } catch (error) {
+        logger.error('[Daily Challenges] Failed to pay currency reward', { error: error.message, guildId, userId, challengeId, currencyReward });
+        await pool.execute('UPDATE user_daily_challenges SET claimed = 0 WHERE id = ?', [userChallenge.id])
+          .catch(err => logger.error('[Daily Challenges] Failed to un-claim after payout error', { error: err.message, id: userChallenge.id }));
+        return {
+          success: false,
+          message: 'Failed to pay your reward — please try claiming again'
+        };
+      }
+    }
+
+    // XP → leveling manager (user_levels, level maths included)
+    if (xpReward > 0) {
+      const levelingManager = getLevelingManager(guildId);
+      if (levelingManager) {
+        await levelingManager.addXP(guildId, userId, xpReward);
+      } else {
+        logger.error('[Daily Challenges] Leveling manager unavailable — XP reward not paid', { guildId, userId, challengeId, xpReward });
+      }
     }
 
     logger.info(`[Daily Challenges] User ${userId} claimed rewards for challenge ${challengeId}`);
@@ -184,8 +275,8 @@ export async function claimRewards(guildId, userId, challengeId) {
     return {
       success: true,
       challenge: userChallenge.challenge_name,
-      xpReward: userChallenge.xp_reward,
-      currencyReward: userChallenge.currency_reward
+      xpReward,
+      currencyReward
     };
 
   } catch (error) {
@@ -194,6 +285,37 @@ export async function claimRewards(guildId, userId, challengeId) {
       success: false,
       message: 'Failed to claim rewards'
     };
+  }
+}
+
+/**
+ * The leveling manager of the bot serving this guild (custom bots each carry their own).
+ */
+function getLevelingManager(guildId) {
+  const bm = global.botManager;
+  return bm?.getClientForGuild?.(guildId)?.levelingManager
+    || bm?.getDefaultClient?.()?.levelingManager
+    || null;
+}
+
+/**
+ * Credit currency to user_economy.wallet and record it in economy_transactions.
+ * The ledger insert runs after the wallet changed, so its failure is logged, not thrown.
+ */
+async function payCurrency(guildId, userId, amount, description) {
+  const config = await getEconomyConfig(guildId);
+  const economy = await getOrCreateUserEconomy(guildId, userId, config);
+  const before = Number(economy.wallet) || 0;
+
+  await pool.execute(
+    'UPDATE user_economy SET wallet = wallet + ?, total_earned = total_earned + ? WHERE guild_id = ? AND user_id = ?',
+    [amount, amount, guildId, userId]
+  );
+
+  try {
+    await logTransaction(guildId, userId, 'reward', amount, before, before + amount, description);
+  } catch (error) {
+    logger.error('[Daily Challenges] Failed to log reward transaction', { error: error.message, guildId, userId, amount });
   }
 }
 
@@ -299,6 +421,7 @@ export default {
   assignDailyChallenges,
   getUserChallenges,
   updateChallengeProgress,
+  noteActivityMinute,
   claimRewards,
   getStats,
   getDifficultyColor,

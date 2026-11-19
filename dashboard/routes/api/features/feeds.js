@@ -1,14 +1,19 @@
-// Content feeds API (Reddit / YouTube / Twitter / Bluesky).
+// Content feeds API (Reddit / YouTube / Twitter / Bluesky / RSS).
 // Mounted at /api/guilds/:guildId/feeds by the main API router.
 
 import express from 'express';
 import pool from '../../../../utils/db.js';
 import logger from '../../../../utils/logger.js';
+import { cleanList, FEED_MESSAGE_MAX, FEED_KEYWORDS_MAX } from '../../../../core/feed-message.js';
+import { fetchFeed, RSS_MAX_PER_GUILD } from '../../../../core/rss-feed.js';
+import { checkUrl } from '../../../../utils/safe-fetch.js';
 
 const router = express.Router({ mergeParams: true });
 
 // ─────────────── REDDIT ───────────────
 router.post('/reddit', async (req, res) => {
+    const { redditAvailable, REDDIT_UNAVAILABLE_NOTE } = await import('../../../../utils/reddit.js');
+    if (!redditAvailable()) return res.status(410).json({ error: REDDIT_UNAVAILABLE_NOTE });
     try {
         const { guildId } = req.params;
         const { subreddit } = req.body;
@@ -138,6 +143,199 @@ router.delete('/bluesky/:id', async (req, res) => {
     } catch (e) {
         logger.error('[API Feeds] bluesky delete error', { err: e.message });
         res.status(500).json({ error: 'Failed to remove Bluesky feed' });
+    }
+});
+
+// ─────────────── RSS / ATOM (blogs, news, podcasts) ───────────────
+// The address is fetched once here (through utils/safe-fetch.js) to check it is a feed and to remember
+// its current items, so adding a feed never posts its back catalogue. core/rss-feed.js polls it after.
+router.post('/rss', async (req, res) => {
+    const { guildId } = req.params;
+    try {
+        const guild = global.botManager?.getClientForGuild?.(guildId)?.guilds.cache.get(guildId) || null;
+        const channelId = String(req.body?.channel_id || '').trim();
+        const channel = /^\d{17,20}$/.test(channelId) ? guild?.channels?.cache?.get(channelId) : null;
+        if (!channel || ![0, 5].includes(channel.type)) return res.status(400).json({ error: 'Choose a text or announcement channel in this server.' });
+        let url;
+        try {
+            url = checkUrl(req.body?.feed_url).href;
+        } catch (e) {
+            const local = e.code === 'blocked_address' || e.code === 'blocked_host';
+            return res.status(400).json({ error: local ? 'That address is on a private or local network, which is not allowed.' : 'Enter the full feed address, starting with https://' });
+        }
+        if (url.length > 1000) return res.status(400).json({ error: 'That address is too long.' });
+        const [[{ n }]] = await pool.execute('SELECT COUNT(*) AS n FROM rss_feeds WHERE guild_id = ?', [guildId]);
+        if (n >= RSS_MAX_PER_GUILD) return res.status(400).json({ error: `A server can have up to ${RSS_MAX_PER_GUILD} RSS feeds.` });
+        let parsed;
+        try {
+            parsed = await fetchFeed(url);
+        } catch (e) {
+            const why = String(e.message || 'no answer').replace(/the API/gi, 'the site');
+            return res.status(400).json({ error: `Could not read that feed: ${why}` });
+        }
+        const [result] = await pool.execute(
+            'INSERT INTO rss_feeds (guild_id, feed_url, channel_id, feed_title, seen_ids) VALUES (?, ?, ?, ?, ?)',
+            [guildId, url, channelId, parsed.title ? parsed.title.slice(0, 255) : null, JSON.stringify(parsed.items.map(i => i.key).slice(0, 150))]
+        );
+        logger.info(`[API Feeds] RSS ${url} → ${channelId} in ${guildId} (${parsed.items.length} items baselined)`);
+        res.json({ success: true, id: result.insertId, feed_title: parsed.title, items: parsed.items.length });
+    } catch (e) {
+        if (e.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'That feed already posts in that channel.' });
+        if (e.code === 'ER_NO_SUCH_TABLE') return res.status(503).json({ error: 'RSS feeds are not available yet (a database update has not run).' });
+        logger.error('[API Feeds] rss add error', { err: e.message });
+        res.status(500).json({ error: 'Failed to add the RSS feed' });
+    }
+});
+
+router.delete('/rss/:id', async (req, res) => {
+    try {
+        const [result] = await pool.execute('DELETE FROM rss_feeds WHERE id = ? AND guild_id = ?', [req.params.id, req.params.guildId]);
+        if (!result.affectedRows) return res.status(404).json({ error: 'Feed not found' });
+        res.json({ success: true });
+    } catch (e) {
+        if (e.code === 'ER_NO_SUCH_TABLE') return res.status(404).json({ error: 'Feed not found' });
+        logger.error('[API Feeds] rss delete error', { err: e.message });
+        res.status(500).json({ error: 'Failed to remove the RSS feed' });
+    }
+});
+
+// ─────────────── PER-FEED OPTIONS ───────────────
+// PATCH /:kind/:id changes one feed's channel, message, ping role and filters. Only the fields sent
+// are changed. The posters read these through core/feed-message.js.
+//
+// Field  -> column, how the value is checked, and (for the "include" toggles over filter_* columns)
+// whether it is stored inverted.
+const FEED_KINDS = {
+    reddit: {
+        table: 'reddit_feeds', channelCol: 'channel_id',
+        fields: {
+            custom_message: { col: 'custom_message', type: 'message' },
+            ping_role_id: { col: 'ping_role_id', type: 'ping' },
+            title_include: { col: 'title_include', type: 'list' },
+            title_exclude: { col: 'title_exclude', type: 'list' },
+            flair_filter: { col: 'flair_filter', type: 'list', max: 255 },
+        },
+    },
+    youtube: {
+        table: 'youtube_feeds', channelCol: 'discord_channel_id',
+        fields: {
+            custom_message: { col: 'custom_message', type: 'message' },
+            ping_role_id: { col: 'ping_role_id', type: 'ping' },
+            include_videos: { col: 'include_videos', type: 'bool' },
+            include_shorts: { col: 'include_shorts', type: 'bool' },
+            include_live: { col: 'include_live', type: 'bool' },
+        },
+    },
+    twitter: {
+        table: 'twitter_feeds', channelCol: 'channel_id',
+        fields: {
+            custom_message: { col: 'custom_message', type: 'message' },
+            ping_role_id: { col: 'ping_role_id', type: 'ping' },
+            include_replies: { col: 'filter_replies', type: 'bool', invert: true },
+            include_retweets: { col: 'filter_retweets', type: 'bool', invert: true },
+            media_only: { col: 'filter_media_only', type: 'bool' },
+            include_images: { col: 'include_images', type: 'bool' },
+        },
+    },
+    bluesky: {
+        table: 'bluesky_feeds', channelCol: 'channel_id',
+        fields: {
+            custom_message: { col: 'custom_message', type: 'message' },
+            ping_role_id: { col: 'ping_role_id', type: 'ping' },
+            include_replies: { col: 'filter_replies', type: 'bool', invert: true },
+            include_reposts: { col: 'filter_reposts', type: 'bool', invert: true },
+        },
+    },
+    rss: {
+        table: 'rss_feeds', channelCol: 'channel_id',
+        fields: {
+            custom_message: { col: 'custom_message', type: 'message' },
+            ping_role_id: { col: 'ping_role_id', type: 'ping' },
+            title_include: { col: 'title_include', type: 'list' },
+            title_exclude: { col: 'title_exclude', type: 'list' },
+        },
+    },
+};
+
+class FeedInputError extends Error {}
+
+const asBool = (v) => v === true || v === 1 || v === '1' || v === 'true' || v === 'on';
+
+function feedGuild(guildId) {
+    return global.botManager?.getClientForGuild?.(guildId)?.guilds.cache.get(guildId) || null;
+}
+
+/** One field's value as stored, or a FeedInputError explaining what is wrong with it. */
+function feedValue(spec, raw, guild) {
+    switch (spec.type) {
+        case 'message': {
+            const s = raw == null ? '' : String(raw).replace(/\r\n/g, '\n').trim();
+            if (s.length > FEED_MESSAGE_MAX) throw new FeedInputError(`The message can be at most ${FEED_MESSAGE_MAX} characters.`);
+            return s || null;
+        }
+        case 'ping': {
+            const s = raw == null ? '' : String(raw).trim();
+            if (!s) return null;
+            if (s === 'everyone') return 'everyone';
+            if (!/^\d{17,20}$/.test(s) || !guild?.roles?.cache?.has(s) || s === guild.id) {
+                throw new FeedInputError('That ping role is not a role in this server.');
+            }
+            return s;
+        }
+        case 'list':
+            return cleanList(raw, spec.max || FEED_KEYWORDS_MAX);
+        case 'bool': {
+            const on = asBool(raw);
+            return (spec.invert ? !on : on) ? 1 : 0;
+        }
+        default:
+            throw new FeedInputError('Unknown field.');
+    }
+}
+
+router.patch('/:kind/:id', async (req, res) => {
+    const { guildId, kind } = req.params;
+    const def = FEED_KINDS[kind];
+    const id = Number.parseInt(req.params.id, 10);
+    if (!def || !Number.isInteger(id) || id <= 0) return res.status(404).json({ error: 'Feed not found' });
+    const body = req.body && typeof req.body === 'object' ? req.body : {};
+    try {
+        const guild = feedGuild(guildId);
+        const sets = [];
+        const values = [];
+        if (body.channel_id !== undefined) {
+            const ch = String(body.channel_id || '').trim();
+            const channel = /^\d{17,20}$/.test(ch) ? guild?.channels?.cache?.get(ch) : null;
+            if (!channel || ![0, 5].includes(channel.type)) {
+                return res.status(400).json({ error: 'Choose a text or announcement channel in this server.' });
+            }
+            sets.push(`\`${def.channelCol}\` = ?`);
+            values.push(ch);
+        }
+        for (const [field, spec] of Object.entries(def.fields)) {
+            if (body[field] === undefined) continue;
+            sets.push(`\`${spec.col}\` = ?`);
+            values.push(feedValue(spec, body[field], guild));
+        }
+        if (!sets.length) return res.status(400).json({ error: 'Nothing to change.' });
+
+        const [result] = await pool.execute(
+            `UPDATE \`${def.table}\` SET ${sets.join(', ')} WHERE id = ? AND guild_id = ?`,
+            [...values, id, guildId]
+        );
+        if (!result.affectedRows) return res.status(404).json({ error: 'Feed not found' });
+        const [[feed]] = await pool.execute(`SELECT * FROM \`${def.table}\` WHERE id = ? AND guild_id = ?`, [id, guildId]);
+        logger.info(`[API Feeds] ${kind} feed ${id} updated in ${guildId}: ${sets.map(s => s.split('`')[1]).join(', ')}`);
+        res.json({ success: true, feed });
+    } catch (e) {
+        if (e instanceof FeedInputError) return res.status(400).json({ error: e.message });
+        if (e.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'This server already has that feed posting in that channel.' });
+        if (e.code === 'ER_BAD_FIELD_ERROR') {
+            logger.warn(`[API Feeds] ${kind} feed options need the social feed migration: ${e.message}`);
+            return res.status(503).json({ error: 'These options are not available yet (a database update has not run).' });
+        }
+        logger.error('[API Feeds] update error', { err: e.message, kind, id });
+        res.status(500).json({ error: 'Failed to save the feed' });
     }
 });
 

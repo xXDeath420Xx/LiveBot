@@ -1,0 +1,22 @@
+<%#
+  "What this does" at the top of a manage page (core/page-help.js pageHelp()). Rendered by both
+  manage templates just before the page partial; cf-settings.js moves it under the page's own
+  title and runs the "Recommended settings" button (fill, preview, undo; never saves).
+  Locals: help ({ page, help, recommended: { note, values } | null } or null).
+%>
+<% const _h = (typeof help !== 'undefined' && help && help.help) ? help : null; %>
+<% if (_h) { %>
+<aside class="cf-help" id="cfHelp" aria-labelledby="cfHelpLabel" data-page="<%= _h.page %>">
+    <div class="cf-help-text">
+        <h2 class="cf-help-label" id="cfHelpLabel">What this does</h2>
+        <p class="cf-help-body"><%= _h.help %></p>
+    </div>
+    <% if (_h.recommended) { %>
+    <div class="cf-help-actions">
+        <button type="button" class="btn btn-secondary btn-sm" id="cfHelpRec" aria-controls="cfHelpPreview" aria-expanded="false">Recommended settings</button>
+    </div>
+    <div class="cf-help-preview" id="cfHelpPreview" role="region" aria-label="Recommended settings preview" hidden></div>
+    <script type="application/json" id="cfHelpData"><%- JSON.stringify(_h.recommended).replace(/</g, '\\u003c') %></script>
+    <% } %>
+</aside>
+<% } %>

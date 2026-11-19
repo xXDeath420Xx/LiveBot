@@ -3,13 +3,16 @@ import {
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
-    PermissionsBitField,
-    ModalBuilder,
-    TextInputBuilder,
-    TextInputStyle
+    PermissionsBitField
 } from 'discord.js';
 import pool from '../../utils/db.js';
+import { nextTicketNumber } from '../../core/ticket-number.js';
+import { rememberTicketChannel } from '../../core/ticket-activity.js';
+import { buildTicketChannelName } from '../../utils/ticket-channel-name.js';
 import logger from '../../utils/logger.js';
+import { themeColor } from '../../core/guild-theme.js';
+import { buildFormModal, MODAL_FIELD_LIMIT } from '../../core/form-questions.js';
+import { logFeatureEvent, userLabel } from '../../core/feature-log.js';
 
 /**
  * Handle ticket creation button clicks
@@ -50,23 +53,13 @@ export async function handleTicketCreate(interaction) {
             const panelFormId = prows[0]?.form_id;
             if (panelFormId) {
                 const [questions] = await pool.execute(
-                    "SELECT question_id, question_text, question_type FROM ticket_form_questions WHERE form_id = ? ORDER BY question_id LIMIT 5",
+                    `SELECT * FROM ticket_form_questions WHERE form_id = ?
+                      ORDER BY question_order ASC, question_id ASC LIMIT ${MODAL_FIELD_LIMIT}`,
                     [panelFormId]
                 );
                 if (questions.length > 0) {
-                    const modal = new ModalBuilder()
-                        .setCustomId(`ticket_form_submit_${panelFormId}_${panelId}`)
-                        .setTitle('Application');
-                    for (const question of questions) {
-                        modal.addComponents(new ActionRowBuilder().addComponents(
-                            new TextInputBuilder()
-                                .setCustomId(`question_${question.question_id}`)
-                                .setLabel(question.question_text.substring(0, 45))
-                                .setStyle(question.question_type === 'paragraph' ? TextInputStyle.Paragraph : TextInputStyle.Short)
-                                .setRequired(true)
-                        ));
-                    }
-                    await interaction.showModal(modal);
+                    await interaction.showModal(
+                        buildFormModal(questions, `ticket_form_submit_${panelFormId}_${panelId}`, 'Application'));
                     return;
                 }
             }
@@ -75,7 +68,8 @@ export async function handleTicketCreate(interaction) {
 
             // Get form questions
             const [questions] = await pool.execute(
-                "SELECT question_id, question_text, question_type FROM ticket_form_questions WHERE form_id = ? ORDER BY question_id LIMIT 5",
+                `SELECT * FROM ticket_form_questions WHERE form_id = ?
+                  ORDER BY question_order ASC, question_id ASC LIMIT ${MODAL_FIELD_LIMIT}`,
                 [formId]
             );
 
@@ -85,23 +79,8 @@ export async function handleTicketCreate(interaction) {
                 return;
             }
 
-            // Create modal with questions
-            const modal = new ModalBuilder()
-                .setCustomId(`ticket_form_submit_${formId}_${panelId || ''}`)
-                .setTitle('Create Ticket');
-
-            for (const question of questions) {
-                const textInput = new TextInputBuilder()
-                    .setCustomId(`question_${question.question_id}`)
-                    .setLabel(question.question_text.substring(0, 45)) // Discord limit
-                    .setStyle(question.question_type === 'paragraph' ? TextInputStyle.Paragraph : TextInputStyle.Short)
-                    .setRequired(true);
-
-                const row = new ActionRowBuilder().addComponents(textInput);
-                modal.addComponents(row);
-            }
-
-            await interaction.showModal(modal);
+            await interaction.showModal(
+                buildFormModal(questions, `ticket_form_submit_${formId}_${panelId || ''}`, 'Create Ticket'));
             return;
         }
 
@@ -165,22 +144,16 @@ export async function createTicket(interaction, formResponses = null, formId = n
             await interaction.deferReply({ ephemeral: true });
         }
 
-        // Get next ticket number
-        const [ticketCount] = await pool.execute(
-            "SELECT COUNT(*) as count FROM tickets WHERE guild_id = ?",
-            [guildId]
-        );
-        const ticketNumber = ticketCount[0].count + 1;
+        // The server's next ticket number (core/ticket-number.js): stored on the ticket and shown everywhere,
+        // never reused. It used to be the server's ticket count + 1, which repeats after deletions (H-661).
+        const ticketNumber = await nextTicketNumber(guildId);
 
         // Generate channel name using format from panel (or default)
-        let channelName = config.ticket_name_format || 'ticket-{username}';
-        channelName = channelName
-            .replace(/{username}/g, interaction.user.username.toLowerCase().replace(/[^a-z0-9]/g, '-'))
-            .replace(/{number}/g, ticketNumber)
-            .replace(/{id}/g, userId);
-
-        // Ensure valid channel name (Discord limits)
-        channelName = channelName.substring(0, 100).toLowerCase();
+        const channelName = buildTicketChannelName(config.ticket_name_format, {
+            username: interaction.user.username,
+            userId,
+            number: ticketNumber,
+        });
 
         // Create ticket channel
         const permissionOverwrites = [
@@ -232,15 +205,17 @@ export async function createTicket(interaction, formResponses = null, formId = n
 
         // Insert ticket into database
         const [result] = await pool.execute(
-            "INSERT INTO tickets (guild_id, panel_id, user_id, channel_id, status, form_id, form_responses) VALUES (?, ?, ?, ?, 'open', ?, ?)",
-            [guildId, panelId, userId, channel.id, formId, formResponses]
+            "INSERT INTO tickets (guild_id, ticket_number, panel_id, user_id, channel_id, status, form_id, form_responses) VALUES (?, ?, ?, ?, ?, 'open', ?, ?)",
+            [guildId, ticketNumber, panelId, userId, channel.id, formId, formResponses]
         );
 
         const ticketId = result.insertId;
+        // Count the opener's first messages towards "Waiting on staff" straight away (core/ticket-activity.js).
+        rememberTicketChannel(channel.id, ticketId, userId);
 
         // Create welcome embed
         const embed = new EmbedBuilder()
-            .setColor('#5865F2')
+            .setColor(themeColor(interaction.guildId, 'primary'))
             .setTitle(`Ticket #${ticketNumber}`)
             .setDescription(`Welcome ${interaction.user}! A support staff member will be with you shortly.\n\nPlease describe your issue in detail.`)
             .setTimestamp();
@@ -284,40 +259,20 @@ export async function createTicket(interaction, formResponses = null, formId = n
             ? await interaction.editReply({ content: `Your ticket has been created: ${channel}` })
             : await interaction.reply({ content: `Your ticket has been created: ${channel}`, ephemeral: true });
 
-        logger.info(`Ticket #${ticketId} created by ${interaction.user.tag}`, { guildId, category: 'tickets' });
+        logger.info(`Ticket #${ticketNumber} (id ${ticketId}) created by ${interaction.user.tag}`, { guildId, category: 'tickets' });
 
-        // Send alert to ticket-alert channel (Tickets v2 style)
-        if (config.alert_channel_id) {
-            try {
-                const alertChannel = await interaction.guild.channels.fetch(config.alert_channel_id).catch(() => null);
-                if (alertChannel) {
-                    const alertEmbed = new EmbedBuilder()
-                        .setColor('#2ECC71')
-                        .setTitle('🎫 New Ticket Opened')
-                        .setDescription(`**${channelName}** with ID: ${ticketId} has been opened.`)
-                        .addFields(
-                            { name: '📨 Opened By', value: `${interaction.user}`, inline: true },
-                            { name: '📋 Panel', value: config.panel_name || 'Default', inline: true },
-                            { name: '📌 Channel', value: `<#${channel.id}>`, inline: true }
-                        )
-                        .setFooter({ text: `Ticket #${ticketId}` })
-                        .setTimestamp();
+        void logFeatureEvent(() => (interaction.guild), 'tickets.opened', () => ({
+            title: '🎫 Ticket Opened',
+            fields: [
+                ['Opened By', userLabel(interaction.user)], ['Ticket', `<#${channel.id}> (#${ticketNumber})`],
+                ['Panel', config.panel_name || 'Default'], ['Form', formResponses ? 'Answered' : null],
+            ],
+            url: `https://discord.com/channels/${guildId}/${channel.id}`,
+            avoidChannelIds: [config.alert_channel_id],
+        }));
 
-                    const joinRow = new ActionRowBuilder()
-                        .addComponents(
-                            new ButtonBuilder()
-                                .setStyle(ButtonStyle.Link)
-                                .setLabel('Join Ticket')
-                                .setEmoji('➕')
-                                .setURL(`https://discord.com/channels/${guildId}/${channel.id}`)
-                        );
-
-                    await alertChannel.send({ embeds: [alertEmbed], components: [joinRow] });
-                }
-            } catch (alertErr) {
-                logger.warn('[Ticket Alert] Failed to send alert', { error: alertErr.message, guildId });
-            }
-        }
+        // "New Ticket Opened" to the panel's alert channel (ticket_panels or, for the default panel, ticket_config).
+        await sendTicketAlert({ guild: interaction.guild, config, user: interaction.user, channelId: channel.id, channelName, ticketNumber });
 
     } catch (error) {
         logger.error('[Create Ticket Error]', error);
@@ -328,6 +283,48 @@ export async function createTicket(interaction, formResponses = null, formId = n
         } else {
             await interaction.reply(errorMsg).catch(() => {});
         }
+    }
+}
+
+/**
+ * Post "New Ticket Opened" with a Join Ticket link to config.alert_channel_id (H-714). Set on the Tickets page
+ * (each panel, and the default panel) or with /support ticket setup alert-channel. Never throws.
+ * @returns {Promise<boolean>} whether the alert was posted
+ */
+export async function sendTicketAlert({ guild, config, user, channelId, channelName, ticketNumber }) {
+    if (!config?.alert_channel_id || !guild) return false;
+    try {
+        const alertChannel = await guild.channels.fetch(config.alert_channel_id).catch(() => null);
+        if (!alertChannel?.send) {
+            logger.warn('[Ticket Alert] Alert channel not found', { guildId: guild.id, channelId: config.alert_channel_id });
+            return false;
+        }
+        const alertEmbed = new EmbedBuilder()
+            .setColor(themeColor(guild.id, 'success'))
+            .setTitle('🎫 New Ticket Opened')
+            .setDescription(`**${channelName}** (ticket #${ticketNumber}) has been opened.`)
+            .addFields(
+                { name: '📨 Opened By', value: `${user}`, inline: true },
+                { name: '📋 Panel', value: config.panel_name || 'Default', inline: true },
+                { name: '📌 Channel', value: `<#${channelId}>`, inline: true }
+            )
+            .setFooter({ text: `Ticket #${ticketNumber}` })
+            .setTimestamp();
+
+        const joinRow = new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setStyle(ButtonStyle.Link)
+                    .setLabel('Join Ticket')
+                    .setEmoji('➕')
+                    .setURL(`https://discord.com/channels/${guild.id}/${channelId}`)
+            );
+
+        await alertChannel.send({ embeds: [alertEmbed], components: [joinRow] });
+        return true;
+    } catch (alertErr) {
+        logger.warn('[Ticket Alert] Failed to send alert', { error: alertErr.message, guildId: guild.id });
+        return false;
     }
 }
 

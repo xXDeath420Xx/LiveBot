@@ -127,7 +127,7 @@ export async function rollMutation(playerId, growSlotId, strainRarity = 'common'
                     [playerId, mutation.id]
                 );
 
-                logger.info('[Mutations] Mutation discovered', {
+                logger.debug('[Mutations] Mutation discovered', {
                     playerId,
                     growSlotId,
                     mutationId: mutation.id,

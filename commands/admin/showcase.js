@@ -6,6 +6,7 @@ import {
     addShowcaseChannel, removeShowcaseChannel, listShowcaseChannels, handleShowcaseUploadCommand,
 } from '../../core/showcase-manager.js';
 import logger from '../../utils/logger.js';
+import { themeColor } from '../../core/guild-theme.js';
 
 export default {
     category: 'admin',
@@ -60,7 +61,7 @@ export default {
                 return interaction.editReply(
                     `✅ <#${channel.id}> is now a **Creator Showcase**.\n` +
                     `Creators can post protected streams two ways:\n` +
-                    `• **\`/showcase upload\`** in that channel — the recommended, private path (their file is never posted publicly).\n` +
+                    `• **\`/creator showcase upload\`** in that channel — the recommended, private path (their file is never posted publicly).\n` +
                     `• Just **dropping a file** in the channel — convenient, but the raw file briefly hits Discord's CDN before I delete it.\n` +
                     `_Either way: I re-host it as a watermarked, download-disabled stream. Note that anything playable can still be screen/stream-captured — this stops casual downloading, not determined ripping._`
                 );
@@ -70,7 +71,7 @@ export default {
                 const channel = interaction.options.getChannel('channel') || interaction.channel;
                 await addShowcaseChannel(interaction.guildId, channel.id, interaction.user.id);
                 const embed = new EmbedBuilder()
-                    .setColor(0xF0A500)
+                    .setColor(themeColor(interaction.guildId, 'warning'))
                     .setTitle('🎶 Share your music & video')
                     .setDescription(
                         'Drop your **own** tracks and clips here as **protected streams** — they play in the browser, ' +
@@ -97,7 +98,7 @@ export default {
                 const ids = await listShowcaseChannels(interaction.guildId);
                 return interaction.editReply(ids.length
                     ? `**Creator Showcase channels:**\n${ids.map(id => `• <#${id}>`).join('\n')}`
-                    : 'No Creator Showcase channels set. Use `/showcase add` to create one.');
+                    : 'No Creator Showcase channels set. Use `/creator showcase add` to create one.');
             }
         } catch (err) {
             logger.error('[Showcase command] error', { error: err.message, sub });

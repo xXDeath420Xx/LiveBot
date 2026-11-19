@@ -1,266 +1,221 @@
+<%#
+  Gambling: limits for the economy's gambling games (POST gambling/config), a preview, recent games and
+  the leaderboard by amount wagered. Built on the settings-row kit (cf-settings.css); field names and
+  ids are unchanged. The cooldown is enforced by core/gambling-manager.js (validateBet).
+%>
+<%
+const gbWagered = Number(gamblingStats?.total_wagered || 0);
+const gbPaid = Number(gamblingStats?.total_won || 0);
+const gbHouse = gbWagered - gbPaid;
+const gbCfg = gamblingConfig || {};
+// Never saved: core/gambling-manager.js plays with gambling on, bets from 1 to 10,000 and no wait, so the page shows that.
+const gbSaved = (typeof gamblingConfigured !== 'undefined') ? !!gamblingConfigured : gbCfg.enabled !== undefined;
+const gbGames = gamblingHistory || [];
+%>
+<%- include('_game-kit') %>
+<style>
+    .gb-num { font-variant-numeric: tabular-nums; color: var(--cf-text); }
+    .gb-up { color: var(--cf-success); font-weight: 600; font-variant-numeric: tabular-nums; }
+    .gb-down { color: var(--cf-danger); font-weight: 600; font-variant-numeric: tabular-nums; }
+    .gb-flat { color: var(--cf-text-3); font-variant-numeric: tabular-nums; }
+</style>
+
 <div class="page-section">
     <div class="page-section-header">
         <div>
             <div class="page-section-title">
                 <i class="fas fa-dice"></i>
-                <span>Gambling System</span>
+                <span>Gambling</span>
             </div>
-            <div class="page-section-subtitle">
-                Monitor gambling activity, configure settings, and view leaderboards
-            </div>
+            <div class="page-section-subtitle">Bets use the server currency from the <a href="?page=economy">Economy page</a>.</div>
         </div>
     </div>
 
-    <!-- Stats Overview -->
-    <div class="grid grid-cols-4" style="margin-bottom: var(--spacing-6);">
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Total Games</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-primary-400);"><%= gamblingStats?.total_games || 0 %></div>
-        </div>
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Total Wagered</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-warning);"><%= gamblingStats?.total_wagered?.toLocaleString() || 0 %></div>
-        </div>
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Total Won</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-success);"><%= gamblingStats?.total_won?.toLocaleString() || 0 %></div>
-        </div>
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">House Edge</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: <%= (gamblingStats?.house_edge || 0) > 0 ? 'var(--color-success)' : 'var(--color-danger)' %>;">
-                <%= ((gamblingStats?.house_edge || 0) > 0 ? '+' : '') + (gamblingStats?.house_edge?.toLocaleString() || 0) %>
-            </div>
-        </div>
-    </div>
+    <dl class="cf-kpis" aria-label="Gambling at a glance">
+        <div class="cf-kpi"><dt>Games played</dt><dd class="cf-kpi-value"><%= Number(gamblingStats?.total_games || 0).toLocaleString() %></dd></div>
+        <div class="cf-kpi"><dt>Wagered</dt><dd class="cf-kpi-value"><%= gbWagered.toLocaleString() %></dd></div>
+        <div class="cf-kpi"><dt>Paid out</dt><dd class="cf-kpi-value"><%= gbPaid.toLocaleString() %></dd></div>
+        <div class="cf-kpi"><dt>Kept by the house</dt><dd class="cf-kpi-value <%= gbHouse > 0 ? 'gb-up' : gbHouse < 0 ? 'gb-down' : '' %>"><%= (gbHouse > 0 ? '+' : '') + gbHouse.toLocaleString() %></dd></div>
+    </dl>
 
-    <!-- Gambling Configuration -->
-    <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6); margin-bottom: var(--spacing-6);">
-        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
-            <i class="fas fa-cog"></i> Gambling Configuration
-        </h3>
+    <section class="cf-section" aria-labelledby="gb-config-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="gb-config-title">Limits</h2>
+                <p class="cf-section-desc">Apply to every game under <code>/economy gamble</code>.</p>
+            </div>
+        </header>
         <form action="/manage/<%= guild.id %>/gambling/config" method="POST">
-            <div class="grid grid-cols-2" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
-                <div>
-                    <div style="display: flex; align-items: center; gap: var(--spacing-2);">
-                        <input type="checkbox" id="gamblingEnabled" name="enabled" class="form-check-input" style="width: 20px; height: 20px;" <%= gamblingConfig?.enabled ? 'checked' : '' %>>
-                        <label for="gamblingEnabled" class="form-label" style="margin: 0; cursor: pointer;">Enable Gambling System</label>
+            <div class="cf-rows">
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="gamblingEnabled">Gambling</label>
+                        <p class="cf-row-desc" id="gamblingEnabled-desc">Members can bet their currency on the games.<% if (!gbSaved) { %> Not saved yet: gambling is on with the values shown here.<% } %></p>
                     </div>
-                    <div class="form-help" style="margin-left: 28px;">Allow users to gamble with currency</div>
+                    <div class="cf-row-control">
+                        <input type="checkbox" class="cf-switch" role="switch" id="gamblingEnabled" name="enabled" aria-describedby="gamblingEnabled-desc" data-feature-switch <%= (gbSaved ? !!Number(gbCfg.enabled) : true) ? 'checked' : '' %>>
+                    </div>
                 </div>
-                <div>
-                    <label class="form-label">Minimum Bet Amount</label>
-                    <input type="number" class="form-control" name="min_bet" value="<%= gamblingConfig?.min_bet || 10 %>" min="1">
-                    <div class="form-help">Smallest amount users can bet</div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-gambling-min_bet">Smallest bet</label>
+                        <p class="cf-row-desc">The least a member can bet on one game.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input id="f-gambling-min_bet" type="number" class="form-control" name="min_bet" value="<%= gbSaved ? (gbCfg.min_bet || 10) : 1 %>" min="1">
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-gambling-max_bet">Largest bet</label>
+                        <p class="cf-row-desc">The most a member can bet on one game.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input id="f-gambling-max_bet" type="number" class="form-control" name="max_bet" value="<%= gbCfg.max_bet || 10000 %>" min="1">
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-gambling-cooldown">Wait between games</label>
+                        <p class="cf-row-desc">0 lets members play back to back.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="cf-input-unit">
+                            <input id="f-gambling-cooldown" type="number" class="form-control" name="cooldown" value="<%= gbSaved ? (gbCfg.cooldown ?? 5) : 0 %>" min="0" max="3600">
+                            <span class="cf-unit">seconds</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="cf-section-foot">
+                    <button type="submit" class="btn btn-primary">Save</button>
                 </div>
             </div>
-            <div class="grid grid-cols-2" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
-                <div>
-                    <label class="form-label">Maximum Bet Amount</label>
-                    <input type="number" class="form-control" name="max_bet" value="<%= gamblingConfig?.max_bet || 10000 %>" min="1">
-                    <div class="form-help">Largest amount users can bet</div>
-                </div>
-                <div>
-                    <label class="form-label">Cooldown (seconds)</label>
-                    <input type="number" class="form-control" name="cooldown" value="<%= gamblingConfig?.cooldown || 5 %>" min="0">
-                    <div class="form-help">Time between gambling commands</div>
-                </div>
-            </div>
-            <button type="submit" class="btn btn-primary">
-                <i class="fas fa-save"></i>
-                <span>Save Configuration</span>
-            </button>
         </form>
-    </div>
+    </section>
 
-    <!-- Recent Gambling Activity -->
-    <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6); margin-bottom: var(--spacing-6);">
-        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
-            <i class="fas fa-history"></i> Recent Gambling Activity (Last 50)
-        </h3>
+    <section class="cf-section" aria-labelledby="gb-preview-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="gb-preview-title">In Discord</h2>
+                <p class="cf-section-desc">A slot machine spin. Every game replies with the bet, the result and the new balance.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="gk-preview">
+                <div class="cf-dc" aria-label="Preview: a slot machine spin">
+                    <%- include('_gk-author', { gkUsed: '/economy gamble slots' }) %>
+                    <div class="cf-dc-embed" style="--cf-dc-bar: #00ff00">
+                        <div class="cf-dc-title">🎰 Slot Machine</div>
+                        <div class="cf-dc-desc"><strong>[ 🔔 | 🔔 | 🍒 ]</strong>
 
-        <% if (gamblingHistory && gamblingHistory.length > 0) { %>
-            <div class="table-container">
-                <table class="data-table">
+Two in a row!</div>
+                        <div class="cf-dc-fields">
+                            <div class="cf-dc-field"><div class="cf-dc-fname">Bet Amount</div>💰 100 coins</div>
+                            <div class="cf-dc-field"><div class="cf-dc-fname">Result</div>✅ Won 💰 200 coins (2x)</div>
+                            <div class="cf-dc-field"><div class="cf-dc-fname">New Balance</div>💰 1,350 coins</div>
+                        </div>
+                        <div class="cf-dc-footer">7️⃣ Jackpot: 50x | 💎 Diamonds: 20x | 🔔 Bells: 10x | Triple: 5x | Double: 2x</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="gb-recent-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="gb-recent-title">Recent games</h2>
+                <p class="cf-section-desc">The last 25 games played.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+        <% if (gbGames.length > 0) { %>
+            <div class="cf-table-wrap">
+                <table class="cf-table cf-table--stack">
                     <thead>
                         <tr>
-                            <th>Time</th>
-                            <th>User</th>
-                            <th>Game</th>
-                            <th class="text-end">Bet</th>
-                            <th>Result</th>
-                            <th class="text-end">Payout</th>
-                            <th class="text-end">Profit/Loss</th>
+                            <th scope="col">Time</th>
+                            <th scope="col">Member</th>
+                            <th scope="col">Game</th>
+                            <th scope="col" class="cf-cell-end">Bet</th>
+                            <th scope="col">Result</th>
+                            <th scope="col" class="cf-cell-end">Paid out</th>
+                            <th scope="col" class="cf-cell-end">Won or lost</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <% gamblingHistory.forEach(g => {
-                            const profitLoss = (g.payout || 0) - g.bet_amount;
+                        <% gbGames.forEach(g => {
+                            const profitLoss = (Number(g.payout) || 0) - (Number(g.bet_amount) || 0);
+                            const game = String(g.game_type || '');
                         %>
                             <tr>
-                                <td>
-                                    <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">
-                                        <%= new Date(g.timestamp).toLocaleString() %>
-                                    </div>
+                                <td data-label="Time" class="cf-cell-muted"><%= g.timestamp ? new Date(g.timestamp).toLocaleString() : '' %></td>
+                                <td data-label="Member"><%- include('_user-cell', { cfUser: null, cfUserId: g.user_id, cfUserName: null, cfUserSize: 'sm' }) %></td>
+                                <td data-label="Game"><span class="cf-pill"><%= game.charAt(0).toUpperCase() + game.slice(1) %></span></td>
+                                <td data-label="Bet" class="cf-cell-end"><span class="gb-num"><%= Number(g.bet_amount || 0).toLocaleString() %></span></td>
+                                <td data-label="Result">
+                                    <% if (g.result === 'win') { %><span class="cf-pill is-ok">Win</span>
+                                    <% } else if (g.result === 'loss') { %><span class="cf-pill is-bad">Loss</span>
+                                    <% } else { %><span class="cf-pill">Draw</span><% } %>
                                 </td>
-                                <td>
-                                    <code style="font-size: var(--font-size-xs); color: var(--color-text-secondary);"><%= g.user_id %></code>
-                                </td>
-                                <td>
-                                    <span class="badge badge-secondary" style="text-transform: capitalize;"><%= g.game_type %></span>
-                                </td>
-                                <td class="text-end">
-                                    <span style="color: var(--color-warning);"><%= g.bet_amount.toLocaleString() %></span>
-                                </td>
-                                <td>
-                                    <% if (g.result === 'win') { %>
-                                        <span class="badge badge-success">Win</span>
-                                    <% } else if (g.result === 'loss') { %>
-                                        <span class="badge badge-danger">Loss</span>
-                                    <% } else { %>
-                                        <span class="badge" style="background: var(--color-accent-purple);">Draw</span>
-                                    <% } %>
-                                </td>
-                                <td class="text-end">
-                                    <span style="color: var(--color-success);"><%= (g.payout || 0).toLocaleString() %></span>
-                                </td>
-                                <td class="text-end">
-                                    <strong style="color: <%= profitLoss > 0 ? 'var(--color-success)' : profitLoss < 0 ? 'var(--color-danger)' : 'var(--color-text-muted)' %>;">
-                                        <%= profitLoss > 0 ? '+' : '' %><%= profitLoss.toLocaleString() %>
-                                    </strong>
-                                </td>
+                                <td data-label="Paid out" class="cf-cell-end"><span class="gb-num"><%= Number(g.payout || 0).toLocaleString() %></span></td>
+                                <td data-label="Won or lost" class="cf-cell-end"><span class="<%= profitLoss > 0 ? 'gb-up' : profitLoss < 0 ? 'gb-down' : 'gb-flat' %>"><%= profitLoss > 0 ? '+' : '' %><%= profitLoss.toLocaleString() %></span></td>
                             </tr>
                         <% }); %>
                     </tbody>
                 </table>
             </div>
         <% } else { %>
-            <div style="background: var(--color-dark-700); border: 1px solid var(--color-dark-400); border-radius: var(--radius-md); padding: var(--spacing-8); text-align: center;">
-                <div style="font-size: var(--font-size-base); color: var(--color-text-muted);">
-                    No gambling activity yet
-                </div>
-            </div>
+            <%- include('../kit/_state', { kind: 'empty', title: 'No games yet', text: 'Games members play are listed here.', id: null, boxed: false, compact: false }) %>
         <% } %>
-    </div>
+        </div>
+    </section>
 
-    <!-- Top Gamblers Leaderboard -->
-    <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6);">
-        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
-            <i class="fas fa-trophy"></i> Top Gamblers (By Total Wagered)
-        </h3>
-
+    <section class="cf-section" aria-labelledby="gb-top-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="gb-top-title">Top gamblers</h2>
+                <p class="cf-section-desc">Ranked by the total amount wagered.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
         <% if (topGamblers && topGamblers.length > 0) { %>
-            <div class="table-container">
-                <table class="data-table">
+            <div class="cf-table-wrap">
+                <table class="cf-table cf-table--stack">
                     <thead>
                         <tr>
-                            <th style="width: 60px;">Rank</th>
-                            <th>User</th>
-                            <th class="text-end">Games Played</th>
-                            <th class="text-end">Total Wagered</th>
-                            <th class="text-end">Total Won</th>
-                            <th class="text-end">Net Profit</th>
-                            <th class="text-end">Win Rate</th>
+                            <th scope="col">Rank</th>
+                            <th scope="col">Member</th>
+                            <th scope="col" class="cf-cell-end">Games</th>
+                            <th scope="col" class="cf-cell-end">Wagered</th>
+                            <th scope="col" class="cf-cell-end">Won</th>
+                            <th scope="col" class="cf-cell-end">Net</th>
+                            <th scope="col" class="cf-cell-end">Win rate</th>
                         </tr>
                     </thead>
                     <tbody>
                         <% topGamblers.forEach((user, index) => {
-                            const netProfit = (user.total_won || 0) - (user.total_wagered || 0);
-                            const winRate = user.games_played > 0 ? ((user.wins / user.games_played) * 100).toFixed(1) : 0;
+                            const netProfit = (Number(user.total_won) || 0) - (Number(user.total_wagered) || 0);
+                            const winRate = user.games_played > 0 ? ((Number(user.wins) / Number(user.games_played)) * 100).toFixed(1) : 0;
                         %>
                             <tr>
-                                <td>
-                                    <div style="font-size: var(--font-size-lg);">
-                                        <% if (index === 0) { %>🥇
-                                        <% } else if (index === 1) { %>🥈
-                                        <% } else if (index === 2) { %>🥉
-                                        <% } else { %>
-                                            <span style="font-weight: var(--font-weight-semibold); color: var(--color-text-muted);">#<%= index + 1 %></span>
-                                        <% } %>
-                                    </div>
-                                </td>
-                                <td>
-                                    <code style="font-size: var(--font-size-sm); color: var(--color-text-secondary);"><%= user.user_id %></code>
-                                </td>
-                                <td class="text-end">
-                                    <span style="color: var(--color-text-primary);"><%= user.games_played %></span>
-                                </td>
-                                <td class="text-end">
-                                    <span style="color: var(--color-warning);"><%= user.total_wagered.toLocaleString() %></span>
-                                </td>
-                                <td class="text-end">
-                                    <span style="color: var(--color-success);"><%= user.total_won.toLocaleString() %></span>
-                                </td>
-                                <td class="text-end">
-                                    <strong style="color: <%= netProfit > 0 ? 'var(--color-success)' : netProfit < 0 ? 'var(--color-danger)' : 'var(--color-text-muted)' %>;">
-                                        <%= netProfit > 0 ? '+' : '' %><%= netProfit.toLocaleString() %>
-                                    </strong>
-                                </td>
-                                <td class="text-end">
-                                    <span class="badge" style="background: <%= winRate >= 50 ? 'var(--color-success)' : 'var(--color-danger)' %>;">
-                                        <%= winRate %>%
-                                    </span>
-                                </td>
+                                <td data-label="Rank"><span class="gb-num"><%= index + 1 %></span></td>
+                                <td data-label="Member"><%- include('_user-cell', { cfUser: null, cfUserId: user.user_id, cfUserName: user.username || null }) %></td>
+                                <td data-label="Games" class="cf-cell-end"><span class="gb-num"><%= Number(user.games_played).toLocaleString() %></span></td>
+                                <td data-label="Wagered" class="cf-cell-end"><span class="gb-num"><%= Number(user.total_wagered || 0).toLocaleString() %></span></td>
+                                <td data-label="Won" class="cf-cell-end"><span class="gb-num"><%= Number(user.total_won || 0).toLocaleString() %></span></td>
+                                <td data-label="Net" class="cf-cell-end"><span class="<%= netProfit > 0 ? 'gb-up' : netProfit < 0 ? 'gb-down' : 'gb-flat' %>"><%= netProfit > 0 ? '+' : '' %><%= netProfit.toLocaleString() %></span></td>
+                                <td data-label="Win rate" class="cf-cell-end"><span class="gb-num"><%= winRate %>%</span></td>
                             </tr>
                         <% }); %>
                     </tbody>
                 </table>
             </div>
         <% } else { %>
-            <div style="background: var(--color-dark-700); border: 1px solid var(--color-dark-400); border-radius: var(--radius-md); padding: var(--spacing-8); text-align: center;">
-                <div style="font-size: var(--font-size-base); color: var(--color-text-muted);">
-                    No gambling data yet
-                </div>
-            </div>
+            <%- include('../kit/_state', { kind: 'empty', title: 'No gamblers yet', text: 'The leaderboard fills in once members start playing.', id: null, boxed: false, compact: false }) %>
         <% } %>
-    </div>
+        </div>
+    </section>
+
+    <%- include('_game-commands', { gkCommands: [{ cmd: 'economy', groups: ['gamble'] }] }) %>
 </div>
-
-<style>
-.table-container {
-    overflow-x: auto;
-    border: 1px solid var(--color-dark-400);
-    border-radius: var(--radius-lg);
-}
-
-.data-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-.data-table thead {
-    background: var(--color-dark-600);
-    border-bottom: 2px solid var(--color-dark-400);
-}
-
-.data-table th {
-    padding: var(--spacing-4);
-    text-align: left;
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-
-.data-table td {
-    padding: var(--spacing-4);
-    border-bottom: 1px solid var(--color-dark-400);
-    color: var(--color-text-secondary);
-}
-
-.data-table tbody tr {
-    transition: background var(--transition-base);
-}
-
-.data-table tbody tr:hover {
-    background: var(--color-dark-700);
-}
-
-.data-table tbody tr:last-child td {
-    border-bottom: none;
-}
-
-.text-end {
-    text-align: right;
-}
-</style>

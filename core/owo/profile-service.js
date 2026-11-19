@@ -1,8 +1,10 @@
 /*
  * CC-BY-NC-SA-4.0 derivative module. See /LICENSE-OWO-NOTICE.md.
  *
- * OwO user profile — about-me, title, accent colors. Backgrounds are
- * catalogued in owo_backgrounds but seeding them is a follow-up.
+ * OwO user profile — about-me, title, accent colors, privacy.
+ * owo_user_profile.bid is the equipped wallpaper — bought and equipped through
+ * core/owo/wallpaper-service.js (`owo wallpaper`, `/owo2 wallpaper`). 0 / NULL = none.
+ * owo_user_profile.about is NOT NULL DEFAULT '' — "no about" is stored as ''.
  */
 
 import pool from '../../utils/db.js';
@@ -18,10 +20,10 @@ function normalizeAccent(v) {
     return s.startsWith('#') ? s : '#' + s;
 }
 
-async function ensureProfile(guildId, userId) {
+export async function ensureProfile(guildId, userId) {
     await pool.execute(
         `INSERT IGNORE INTO owo_user_profile (guild_id, uid, bid, accent, about, accent2, title, private)
-         VALUES (?, ?, 0, NULL, NULL, NULL, NULL, 0)`,
+         VALUES (?, ?, 0, NULL, '', NULL, NULL, 0)`,
         [guildId, userId]
     );
 }
@@ -46,7 +48,8 @@ export async function getProfile(guildId, userId) {
 
 export async function setAbout(guildId, userId, about) {
     await ensureProfile(guildId, userId);
-    const v = about ? String(about).slice(0, ABOUT_MAX) : null;
+    // Clearing writes '' — the column is NOT NULL, so NULL fails under strict mode.
+    const v = about ? String(about).slice(0, ABOUT_MAX) : '';
     await pool.execute(
         'UPDATE owo_user_profile SET about = ? WHERE guild_id = ? AND uid = ?',
         [v, guildId, userId]

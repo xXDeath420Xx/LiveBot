@@ -36,7 +36,6 @@ const URL_PATTERNS = [
   { re: /(?:^|[^a-z0-9])(?:www\.)?youtube\.com\/(?:c\/|channel\/|user\/|@)([A-Za-z0-9_-]{2,64})/i, platform: 'youtube' },
   { re: /(?:^|[^a-z0-9])(?:www\.)?youtube\.com\/watch\?v=([A-Za-z0-9_-]{6,32})/i, platform: 'youtube-video' }, // discard
   { re: /(?:^|[^a-z0-9])(?:www\.)?tiktok\.com\/@([A-Za-z0-9_.]{2,32})/i, platform: 'tiktok' },
-  { re: /(?:^|[^a-z0-9])trovo\.live\/([A-Za-z0-9_-]{3,32})/i, platform: 'trovo' },
   { re: /(?:^|[^a-z0-9])(?:fb|facebook)\.gg\/([A-Za-z0-9_.-]{3,64})/i, platform: 'facebook' },
 ];
 

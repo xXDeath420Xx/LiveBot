@@ -1,54 +1,93 @@
-<%
-  // Soundboard management section. Receives { guild }. All data is loaded
-  // client-side from /api/guilds/:guildId/soundboard/sounds.
+<%#
+  Soundboard: upload clips and manage the server's sounds, all through
+  /api/guilds/:guildId/soundboard/sounds. The library is shared with VC sound drops (vc_sound_files,
+  sounds/<guildId>/), so a clip's preview uses that page's player route
+  (/api/guilds/:guildId/vc-sounds/:name/audio). Built on the settings-row kit (cf-settings.css).
 %>
 <style>
-  .sb-wrap { max-width: 920px; }
-  .sb-card { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 20px; margin-bottom: 20px; }
-  .sb-drop { position: relative; border: 2px dashed rgba(139,148,255,0.5); border-radius: 14px; padding: 34px 20px; text-align: center; cursor: pointer; transition: all .15s ease; background: rgba(88,101,242,0.05); }
-  .sb-drop:hover, .sb-drop.drag { border-color: #8b94ff; background: rgba(88,101,242,0.14); }
-  .sb-drop input[type=file] { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
-  .sb-drop-icon { font-size: 34px; color: #8b94ff; margin-bottom: 8px; }
-  .sb-drop-text { font-weight: 600; }
-  .sb-drop-hint { font-size: 12px; opacity: .6; margin-top: 4px; }
-  .sb-fields { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
-  .sb-fields input { flex: 1; min-width: 140px; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.12); background: rgba(0,0,0,0.25); color: #fff; }
-  .sb-fields input.sb-emoji { flex: 0 0 90px; min-width: 90px; text-align: center; }
-  .sb-btn { padding: 10px 18px; border-radius: 10px; border: 0; background: #5865f2; color: #fff; font-weight: 600; cursor: pointer; }
-  .sb-btn:disabled { opacity: .5; cursor: default; }
-  .sb-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; margin-top: 6px; }
-  .sb-item { display: flex; align-items: center; gap: 10px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 10px 12px; }
-  .sb-item-emoji { font-size: 22px; width: 26px; text-align: center; }
-  .sb-item-body { flex: 1; min-width: 0; }
-  .sb-item-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .sb-item-meta { font-size: 11px; opacity: .55; }
-  .sb-del { background: transparent; border: 0; color: #f87171; cursor: pointer; font-size: 15px; padding: 4px; }
-  .sb-empty { opacity: .6; padding: 24px; text-align: center; }
+  /* A sound row stays one line on phones: play, its emoji and name, delete. */
+  .sb-wrap .cf-rows .cf-list-item.sb-item { flex-direction: row; align-items: center; }
+  .sb-wrap .sb-item .cf-list-lead { font-size: 18px; min-width: 32px; }
+  .sb-wrap .sb-item .cf-list-title { display: block; font-size: var(--cf-text-sm); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sb-wrap .sb-item .cf-list-actions { flex-wrap: nowrap; }
+  .sb-wrap .sb-play[aria-pressed="true"] { border-color: var(--cf-accent); color: var(--cf-accent-fg, var(--cf-accent)); }
+  .sb-wrap .sb-count { margin-left: 6px; font-size: var(--cf-text-sm); font-weight: 500; color: var(--cf-text-3); font-variant-numeric: tabular-nums; }
+  .sb-wrap .sb-search { width: 16rem; max-width: 100%; }
+  .sb-wrap .sb-emoji { max-width: 8rem; }
 </style>
 
-<div class="sb-wrap" data-guild="<%= guild.id %>">
-  <h2 style="font-size:22px;font-weight:700;margin-bottom:6px;"><i class="fas fa-volume-high" style="color:#8b94ff;margin-right:8px;"></i>Soundboard</h2>
-  <p style="opacity:.65;margin-bottom:18px;">Upload clips (up to 10MB — way past Discord's native limit). Play them in voice with <code>/soundboard play</code> or the <code>/soundboard panel</code> buttons.</p>
-
-  <div class="sb-card">
-    <div class="sb-drop" id="sbDrop">
-      <input type="file" id="sbFile" accept=".mp3,.wav,.ogg,.flac,.m4a,.webm" multiple>
-      <div class="sb-drop-icon"><i class="fas fa-cloud-upload-alt"></i></div>
-      <div class="sb-drop-text" id="sbDropText">Drop audio here or click to browse</div>
-      <div class="sb-drop-hint">mp3, wav, ogg, flac, m4a, webm &middot; up to 10MB &middot; drop several at once for bulk upload</div>
+<div class="page-section sb-wrap" data-guild="<%= guild.id %>">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-volume-high"></i>
+                <span>Soundboard</span>
+            </div>
+            <div class="page-section-subtitle">Played in voice with <code>/soundboard play</code> or the <code>/soundboard panel</code> buttons.</div>
+        </div>
     </div>
-    <div class="sb-fields">
-      <input type="text" id="sbName" placeholder="Name (optional — defaults to filename)" maxlength="100">
-      <input type="text" id="sbEmoji" class="sb-emoji" placeholder="😀" maxlength="8">
-      <button class="sb-btn" id="sbUpload" disabled>Upload</button>
-    </div>
-  </div>
 
-  <div class="sb-card">
-    <h3 style="font-weight:600;margin-bottom:12px;">Your sounds (<span id="sbCount">0</span>)</h3>
-    <div class="sb-grid" id="sbGrid"></div>
-    <div class="sb-empty" id="sbEmpty" style="display:none;">No sounds yet — drop a clip above to get started.</div>
-  </div>
+    <section class="cf-section" aria-labelledby="sb-upload-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="sb-upload-title">Upload sounds</h2>
+                <p class="cf-section-desc">MP3, WAV, OGG, FLAC, M4A or WebM, up to 10 MB each. Drop several files to upload them together.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--stack">
+                <label class="cf-dropzone" id="sbDrop">
+                    <input type="file" id="sbFile" accept=".mp3,.wav,.ogg,.flac,.m4a,.webm" multiple aria-label="Audio files">
+                    <span class="cf-dropzone-icon" aria-hidden="true"><i class="fas fa-upload"></i></span>
+                    <span class="cf-dropzone-text" id="sbDropText">Drop audio here or click to browse</span>
+                    <span class="cf-dropzone-hint">One file or several</span>
+                </label>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="sbName">Name</label>
+                    <p class="cf-row-desc">Optional. The file name is used when this is empty, and always when uploading several files.</p>
+                </div>
+                <div class="cf-row-control">
+                    <input type="text" id="sbName" class="form-control" placeholder="File name" maxlength="100" data-no-fieldkit>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="sbEmoji">Emoji</label>
+                    <p class="cf-row-desc">Optional. Shown on the sound's button in the soundboard panel.</p>
+                </div>
+                <div class="cf-row-control">
+                    <input type="text" id="sbEmoji" class="form-control sb-emoji" placeholder="None" maxlength="8">
+                </div>
+            </div>
+            <div class="cf-section-foot">
+                <span class="cf-foot-note cf-status-line" id="cfk-sb-status" role="status" aria-live="polite"></span>
+                <button type="button" class="btn btn-primary" id="sbUpload" disabled>Upload</button>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="sb-list-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="sb-list-title">Sounds <span class="sb-count" id="sbCount"></span></h2>
+                <p class="cf-section-desc">The same library <a href="/manage/<%= guild.id %>?page=vc-sounds">VC sound drops</a> picks from; switching a clip off there hides it here.</p>
+            </div>
+            <div class="cf-section-actions" id="cfk-sb-search-wrap" hidden>
+                <input type="search" id="cfk-sb-search" class="form-control sb-search" placeholder="Search sounds" aria-label="Search sounds">
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-list" id="sbGrid"></div>
+            <%- include('../kit/_state', { kind: 'loading', title: 'Loading sounds', text: null, id: 'cfk-sb-loading', boxed: false, compact: true }) %>
+            <div class="cf-state" id="sbEmpty" hidden>
+                <p class="cf-state-title">No sounds yet</p>
+                <p class="cf-state-text">Upload a clip above to add the first one.</p>
+            </div>
+            <div class="cf-state cf-state--compact" id="sb-nomatch-empty" hidden><p class="cf-state-text">No sound matches that search.</p></div>
+        </div>
+    </section>
 </div>
 
 <script>
@@ -58,20 +97,22 @@
   wrap.dataset.init = '1';
   var guildId = wrap.dataset.guild;
   var API = '/api/guilds/' + guildId + '/soundboard/sounds';
-  var toast = window.showToast || function (m) { alert(m); };
+  var AUDIO = function (name) { return '/api/guilds/' + guildId + '/vc-sounds/' + encodeURIComponent(name) + '/audio'; };
+  // window.showToast is defined further down manage-tailwind.ejs than this partial, so look it up when a
+  // message is shown, not now. Without it the message goes to the page's status line (never a blocking alert).
+  function toast(m, kind) {
+    if (typeof window.showToast === 'function') return window.showToast(m, kind);
+    status(m, kind === 'error' ? 'bad' : kind === 'success' ? 'ok' : '');
+  }
+  function el(tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
+  function icon(name) { var i = el('i', 'fas ' + name); i.setAttribute('aria-hidden', 'true'); return i; }
 
-  var drop = document.getElementById('sbDrop');
-  var fileInput = document.getElementById('sbFile');
-  var dropText = document.getElementById('sbDropText');
-  var nameInput = document.getElementById('sbName');
-  var emojiInput = document.getElementById('sbEmoji');
-  var uploadBtn = document.getElementById('sbUpload');
-  var grid = document.getElementById('sbGrid');
-  var empty = document.getElementById('sbEmpty');
-  var countEl = document.getElementById('sbCount');
-  var pending = [];
+  var drop = document.getElementById('sbDrop'), fileInput = document.getElementById('sbFile'), dropText = document.getElementById('sbDropText');
+  var nameInput = document.getElementById('sbName'), emojiInput = document.getElementById('sbEmoji'), uploadBtn = document.getElementById('sbUpload');
+  var grid = document.getElementById('sbGrid'), search = document.getElementById('cfk-sb-search');
+  var pending = [], all = [], audio = null, playing = null;
 
-  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]; }); }
+  function status(text, kind) { var s = document.getElementById('cfk-sb-status'); if (!s) return; s.textContent = text || ''; s.className = 'cf-foot-note cf-status-line' + (kind ? ' is-' + kind : ''); }
 
   function setPending(files) {
     pending = Array.prototype.slice.call(files || []);
@@ -80,10 +121,9 @@
     uploadBtn.disabled = false;
     if (pending.length === 1 && !nameInput.value) nameInput.value = pending[0].name.replace(/\.[^.]+$/, '');
   }
-
-  drop.addEventListener('dragover', function (e) { e.preventDefault(); drop.classList.add('drag'); });
-  drop.addEventListener('dragleave', function () { drop.classList.remove('drag'); });
-  drop.addEventListener('drop', function (e) { e.preventDefault(); drop.classList.remove('drag'); setPending(e.dataTransfer.files); });
+  drop.addEventListener('dragover', function (e) { e.preventDefault(); drop.classList.add('is-dragover'); });
+  drop.addEventListener('dragleave', function () { drop.classList.remove('is-dragover'); });
+  drop.addEventListener('drop', function (e) { e.preventDefault(); drop.classList.remove('is-dragover'); setPending(e.dataTransfer.files); });
   fileInput.addEventListener('change', function () { setPending(fileInput.files); });
 
   async function uploadOne(file, name, emoji) {
@@ -99,53 +139,73 @@
 
   uploadBtn.addEventListener('click', async function () {
     if (!pending.length) return;
+    var tooBig = pending.filter(function (f) { return f.size > 10 * 1024 * 1024; });
+    if (tooBig.length) { status(tooBig[0].name + ' is over 10 MB.', 'bad'); return; }
     uploadBtn.disabled = true;
+    status('Uploading…', 'busy');
     var emoji = emojiInput.value.trim();
-    var ok = 0;
-    try {
-      if (pending.length === 1) {
-        await uploadOne(pending[0], nameInput.value.trim(), emoji);
-        ok = 1;
-      } else {
-        for (var i = 0; i < pending.length; i++) {
-          try { await uploadOne(pending[i], '', emoji); ok++; }
-          catch (e) { toast('“' + pending[i].name + '”: ' + e.message, 'error'); }
-        }
-      }
-      toast(ok + ' sound' + (ok === 1 ? '' : 's') + ' uploaded.', 'success');
-      nameInput.value = ''; emojiInput.value = ''; fileInput.value = ''; setPending([]);
-      load();
-    } catch (e) {
-      toast(e.message, 'error');
-      uploadBtn.disabled = false;
+    var ok = 0, failed = [];
+    for (var i = 0; i < pending.length; i++) {
+      try { await uploadOne(pending[i], pending.length === 1 ? nameInput.value.trim() : '', emoji); ok++; }
+      catch (e) { failed.push(pending[i].name + ': ' + e.message); }
     }
+    if (failed.length) status((ok ? ok + ' uploaded. ' : '') + failed.join('; '), 'bad');
+    else status(ok + ' sound' + (ok === 1 ? '' : 's') + ' uploaded.', 'ok');
+    nameInput.value = ''; emojiInput.value = ''; fileInput.value = ''; setPending([]);
+    load();
   });
 
-  async function del(id, name) {
-    if (!confirm('Delete “' + name + '”?')) return;
+  function stop() {
+    if (audio) { audio.pause(); audio = null; }
+    if (playing) { playing.setAttribute('aria-pressed', 'false'); playing.replaceChildren(icon('fa-play')); playing = null; }
+  }
+  function play(btn, s) {
+    var same = playing === btn;
+    stop();
+    if (same) return;
+    audio = new Audio(AUDIO(s.name));
+    playing = btn;
+    btn.setAttribute('aria-pressed', 'true');
+    btn.replaceChildren(icon('fa-stop'));
+    audio.addEventListener('ended', stop);
+    audio.addEventListener('error', function () { stop(); toast('Could not play "' + s.name + '".', 'error'); });
+    audio.play().catch(function () { stop(); });
+  }
+
+  async function del(s) {
+    if (!confirm('Delete "' + s.name + '"? It is removed from VC sound drops too.')) return;
     try {
-      var resp = await fetch(API + '/' + id, { method: 'DELETE', credentials: 'include' });
+      var resp = await fetch(API + '/' + encodeURIComponent(s.id), { method: 'DELETE', credentials: 'include' });
       if (!resp.ok) { var d = await resp.json().catch(function () { return {}; }); throw new Error(d.error || 'Delete failed'); }
-      toast('Deleted “' + name + '”.', 'success');
+      toast('Deleted "' + s.name + '".', 'success');
       load();
     } catch (e) { toast(e.message, 'error'); }
   }
 
-  function render(sounds) {
-    countEl.textContent = sounds.length;
-    empty.style.display = sounds.length ? 'none' : 'block';
-    grid.innerHTML = '';
-    sounds.forEach(function (s) {
-      var el = document.createElement('div');
-      el.className = 'sb-item';
-      el.innerHTML =
-        '<div class="sb-item-emoji">' + esc(s.emoji || '🔊') + '</div>' +
-        '<div class="sb-item-body"><div class="sb-item-name">' + esc(s.name) + '</div>' +
-        '<div class="sb-item-meta">' + (s.play_count ? ('played ' + s.play_count + '×') : 'not played yet') + '</div></div>' +
-        '<button class="sb-del" title="Delete"><i class="fas fa-trash"></i></button>';
-      el.querySelector('.sb-del').addEventListener('click', function () { del(s.id, s.name); });
-      grid.appendChild(el);
+  function render() {
+    var q = search.value.trim().toLowerCase();
+    var list = all.filter(function (s) { return !q || String(s.name).toLowerCase().indexOf(q) !== -1; });
+    grid.replaceChildren();
+    list.forEach(function (s) {
+      var row = el('div', 'cf-list-item cf-list-item--multi sb-item');
+      row.appendChild(el('div', 'cf-list-lead', s.emoji || ''));
+      if (!s.emoji) row.firstChild.appendChild(icon('fa-volume-low'));
+      var main = el('div', 'cf-list-main');
+      main.appendChild(el('div', 'cf-list-title', s.name));
+      main.appendChild(el('div', 'cf-list-meta', s.play_count ? ('Played ' + s.play_count + (s.play_count === 1 ? ' time' : ' times')) : 'Not played yet'));
+      row.appendChild(main);
+      var actions = el('div', 'cf-list-actions');
+      var p = el('button', 'btn btn-sm btn-secondary sb-play'); p.type = 'button';
+      p.setAttribute('aria-pressed', 'false'); p.setAttribute('aria-label', 'Play ' + s.name); p.appendChild(icon('fa-play'));
+      p.addEventListener('click', function () { play(p, s); });
+      var d = el('button', 'btn btn-sm btn-secondary'); d.type = 'button';
+      d.setAttribute('aria-label', 'Delete ' + s.name); d.appendChild(icon('fa-trash'));
+      d.addEventListener('click', function () { del(s); });
+      actions.appendChild(p); actions.appendChild(d);
+      row.appendChild(actions);
+      grid.appendChild(row);
     });
+    document.getElementById('sb-nomatch-empty').hidden = list.length > 0 || !all.length;
   }
 
   async function load() {
@@ -153,10 +213,19 @@
       var resp = await fetch(API, { credentials: 'include' });
       var data = await resp.json();
       if (!resp.ok) throw new Error(data.error || 'Failed to load');
-      render(data.sounds || []);
-    } catch (e) { toast(e.message, 'error'); }
+      stop();
+      all = data.sounds || [];
+      document.getElementById('sbCount').textContent = all.length;
+      document.getElementById('cfk-sb-loading').hidden = true;
+      document.getElementById('sbEmpty').hidden = all.length > 0;
+      document.getElementById('cfk-sb-search-wrap').hidden = all.length <= 15;
+      render();
+    } catch (e) {
+      document.getElementById('cfk-sb-loading').hidden = true;
+      toast(e.message, 'error');
+    }
   }
-
+  search.addEventListener('input', render);
   load();
 })();
 </script>

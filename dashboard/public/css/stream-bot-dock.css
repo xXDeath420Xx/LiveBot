@@ -1,0 +1,29 @@
+/*
+ * OBS docks for the stream bot (views/stream-bot/dock.ejs). Narrow (300-450 px), no site chrome; colours from the
+ * cf-ui.css tokens so Dark, Light and Sand all work (?theme=light|sand).
+ */
+html, body { margin: 0; background: var(--cf-bg); color: var(--cf-text); font-family: var(--cf-font); font-size: var(--cf-text-sm); line-height: 1.45; }
+.dock-main { padding: 10px 12px 16px; }
+.dock-title { font-size: var(--cf-text-sm); font-weight: 600; margin: 4px 0 8px; display: flex; align-items: center; gap: 8px; }
+section + section { margin-top: 14px; }
+.dock-live { font-size: var(--cf-text-xs); font-weight: 500; color: var(--cf-success); border: 1px solid currentColor; border-radius: 999px; padding: 0 6px; }
+.dock-empty, .dock-state { color: var(--cf-text-2); margin: 6px 0; }
+.dock-state { padding: 16px 4px; }
+.dock-feed, .dock-list { list-style: none; margin: 0; padding: 0; }
+.dock-item { padding: 6px 0; border-top: 1px solid var(--cf-border); overflow-wrap: anywhere; }
+.dock-item:first-child { border-top: 0; }
+.dock-meta { color: var(--cf-text-3); font-size: var(--cf-text-xs); }
+.dock-name { font-weight: 600; }
+.dock-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 0; border-top: 1px solid var(--cf-border); }
+.dock-row:first-child { border-top: 0; }
+.dock-row-main { display: flex; flex-direction: column; min-width: 0; }
+.dock-row-main .dock-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dock-btn { font: inherit; font-size: var(--cf-text-xs); font-weight: 500; padding: 4px 10px; border-radius: var(--cf-radius); border: 1px solid var(--cf-border-strong); background: var(--cf-surface-2); color: var(--cf-text); cursor: pointer; flex: none; }
+.dock-btn:hover { background: var(--cf-surface-3); }
+.dock-btn:disabled { opacity: 0.6; cursor: default; }
+.dock-btn:focus-visible { outline: 2px solid var(--cf-accent-line); outline-offset: 1px; }
+.dock-status { min-height: 1.4em; color: var(--cf-text-2); font-size: var(--cf-text-xs); margin: 6px 0 0; }
+.dock-status.is-bad { color: var(--cf-danger); }
+.dock-counters { display: grid; grid-template-columns: 1fr auto; gap: 4px 10px; margin: 0; }
+.dock-counters dt { color: var(--cf-text-2); overflow-wrap: anywhere; }
+.dock-counters dd { margin: 0; font-family: var(--cf-mono); text-align: right; }

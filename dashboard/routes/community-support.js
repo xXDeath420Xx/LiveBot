@@ -52,9 +52,15 @@ router.get('/supporters/:guildId', async (req, res) => {
 
         // Check if community support is enabled
         const [configRows] = await pool.execute(
-            'SELECT enabled FROM community_support_config WHERE guild_id = ?',
+            'SELECT enabled, raid_affiliate_points, raid_non_affiliate_points, support_points FROM community_support_config WHERE guild_id = ?',
             [guildId]
         );
+        // The page shows this server's own point values (they are configurable per server).
+        const scoring = configRows[0] ? {
+            raidAffiliate: Number(configRows[0].raid_affiliate_points) || 0,
+            raidNonAffiliate: Number(configRows[0].raid_non_affiliate_points) || 0,
+            support: Number(configRows[0].support_points) || 0
+        } : null;
 
         if (configRows.length === 0 || !configRows[0].enabled) {
             return res.render('community-support-leaderboard', {
@@ -214,6 +220,7 @@ router.get('/supporters/:guildId', async (req, res) => {
             },
             user: req.user || null,
             isAdmin,
+            scoring,
             users,
             entriesByUser,
             pagination: {

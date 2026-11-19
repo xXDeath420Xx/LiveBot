@@ -1,0 +1,175 @@
+{
+  "theme": "music",
+  "label": "Music",
+  "questions": [
+    {
+      "slug": "music-skip-track",
+      "text": "Which track on an album you love do you skip every single time?"
+    },
+    {
+      "slug": "music-guilty-loud",
+      "text": "What do you sing along to at full volume when you're completely alone?"
+    },
+    {
+      "slug": "music-live-best",
+      "text": "What's the best live performance you've witnessed, and what made it different from the record?",
+      "group": "best-live-show"
+    },
+    {
+      "slug": "music-live-worst",
+      "text": "Have you ever seen an artist you love be genuinely bad live? What went wrong?"
+    },
+    {
+      "slug": "music-first-love",
+      "text": "Which artist were you first genuinely obsessed with, and do you still listen?"
+    },
+    {
+      "slug": "music-changed-taste",
+      "text": "What song or album completely changed what you listen to?"
+    },
+    {
+      "slug": "music-lyrics-wrong",
+      "text": "What lyric did you get spectacularly wrong for years before someone corrected you?"
+    },
+    {
+      "slug": "music-instrument-play",
+      "text": "What instrument do you play, or which one do you wish you'd stuck with?"
+    },
+    {
+      "slug": "music-workout-track",
+      "text": "What's the one song that makes you work harder, and does it still work after a hundred plays?"
+    },
+    {
+      "slug": "music-driving-album",
+      "text": "What album is made for a long drive at night, front to back?"
+    },
+    {
+      "slug": "music-artist-dead-see",
+      "text": "Which artist would you go back in time to see live, and which era of them specifically?"
+    },
+    {
+      "slug": "music-genre-hate-love",
+      "text": "What genre did you dismiss for years and then finally get?"
+    },
+    {
+      "slug": "music-song-cry",
+      "text": "What song gets you every single time, no matter your mood?"
+    },
+    {
+      "slug": "music-cover-better",
+      "text": "Which cover version is better than the original? Be prepared to defend it."
+    },
+    {
+      "slug": "music-sad-playlist",
+      "text": "Do you lean into sad music when you're low, or fight it with something upbeat? Which works?"
+    },
+    {
+      "slug": "music-most-played",
+      "text": "Check your most-played track of the year. Are you proud of it?"
+    },
+    {
+      "slug": "music-shared-taste",
+      "text": "Whose music taste do you trust more than your own?"
+    },
+    {
+      "slug": "music-concert-bucket",
+      "text": "Who's still on your must-see-live list, and how close have you come?"
+    },
+    {
+      "slug": "music-song-memory",
+      "text": "Which song is permanently attached to one specific person or moment for you?"
+    },
+    {
+      "slug": "music-album-perfect",
+      "text": "Name an album with no bad tracks. All killer, start to finish."
+    },
+    {
+      "slug": "music-background-vs-focus",
+      "text": "Can you listen to music while you work, or does it hijack your attention? What's the exception?"
+    },
+    {
+      "slug": "music-karaoke-song",
+      "text": "What's your karaoke song — the one you can actually pull off?"
+    },
+    {
+      "slug": "music-underrated-artist",
+      "text": "Who's an artist you can't believe isn't bigger? Drop a track for the server."
+    },
+    {
+      "slug": "music-overplayed-ruined",
+      "text": "Which song did radio, ads, or TikTok completely ruin for you?"
+    },
+    {
+      "slug": "music-listening-format",
+      "text": "Vinyl, streaming, CDs, files on a drive — what's your setup and why do you defend it?"
+    },
+    {
+      "slug": "music-headphones-speakers",
+      "text": "What's the best listening setup you've ever had, and what are you working with now?"
+    },
+    {
+      "slug": "music-song-for-server",
+      "text": "If this server had a theme song, what would it be and why is that painfully accurate?"
+    },
+    {
+      "slug": "music-artist-evolution",
+      "text": "Which artist got better as they went, and which one peaked early?"
+    },
+    {
+      "slug": "music-language-barrier",
+      "text": "Do you listen to music in a language you don't speak? What got you into it?"
+    },
+    {
+      "slug": "music-song-hype",
+      "text": "What's the track you put on right before you have to do something intimidating?"
+    },
+    {
+      "slug": "music-lyric-tattoo",
+      "text": "If you had to get one lyric permanently on you, which one and where?"
+    },
+    {
+      "slug": "music-band-reunion",
+      "text": "Which broken-up band or duo would you most want back together, and should they stay apart?"
+    },
+    {
+      "slug": "music-discovery-method",
+      "text": "How do you actually find new music these days? Algorithms, friends, digging, or luck?"
+    },
+    {
+      "slug": "music-worst-taste-era",
+      "text": "What did you listen to in your worst-taste era, and can you still hear it fondly?"
+    },
+    {
+      "slug": "music-song-nobody-knows",
+      "text": "What's a song you love that nobody around you has ever heard of?"
+    },
+    {
+      "slug": "music-soundtrack-life",
+      "text": "Your life is a film. What plays over the opening credits and what plays over the closing ones?"
+    },
+    {
+      "slug": "music-argument-song",
+      "text": "What song have you argued with someone about, and who was right?"
+    },
+    {
+      "slug": "music-festival-lineup",
+      "text": "Build a three-artist festival lineup, any era, alive or not. Who's headlining?"
+    },
+    {
+      "slug": "music-song-first-dance",
+      "text": "What song would you want playing at the biggest celebration of your life?"
+    },
+    {
+      "slug": "music-instrumental",
+      "text": "What's the best piece of music with no words in it that you return to?"
+    },
+    {
+      "slug": "music-hate-love-song",
+      "text": "What song do you hate but can't stop listening to?"
+    },
+    {
+      "slug": "music-first-gig-money",
+      "text": "What's the most you've ever paid for a ticket, and would you pay it again?"
+    }
+  ]
+}

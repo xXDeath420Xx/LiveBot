@@ -13,6 +13,8 @@ import { assignQuests } from './quest-system.js';
 import { checkAchievements } from '../routes/achievements.js';
 import { getRaidStatus } from './raid-system.js';
 import { getTotalSlots } from '../routes/locations.js';
+import { seasonEarningsSql } from './season-system.js';
+import { isFrozen } from '../freeze.js';
 
 // Per-player mutex to prevent race conditions
 const playerMutex = new MutexManager({
@@ -128,14 +130,15 @@ export async function awardXp(playerId, amount) {
 
             // Update player
             await conn.execute(
-                'UPDATE cfx_players SET xp = ?, level = ?, skill_points = ? WHERE id = ?',
-                [newTotalXp, levelInfo.level, newSkillPoints, playerId]
+                // season_xp: XP earned in the running season (season leaderboard, H-408)
+                'UPDATE cfx_players SET xp = ?, level = ?, skill_points = ?, season_xp = season_xp + ? WHERE id = ?',
+                [newTotalXp, levelInfo.level, newSkillPoints, finalXp, playerId]
             );
 
             await conn.commit();
 
             if (leveledUp) {
-                logger.info('[Engine] Player leveled up', {
+                logger.debug('[Engine] Player leveled up', {
                     playerId,
                     oldLevel: player.level,
                     newLevel: levelInfo.level,
@@ -213,8 +216,10 @@ export async function awardCash(playerId, amount) {
 
             // Use integers for SQL to avoid DOUBLE type coercion issues with BIGINT columns
             await conn.execute(
-                'UPDATE cfx_players SET cash = ?, lifetime_earnings = lifetime_earnings + ? WHERE id = ?',
-                [Math.round(newCash), Math.round(finalCash), playerId]
+                `UPDATE cfx_players SET cash = ?, lifetime_earnings = lifetime_earnings + ?${seasonEarningsSql()} WHERE id = ?`,
+                seasonEarningsSql()
+                    ? [Math.round(newCash), Math.round(finalCash), Math.round(finalCash), playerId]
+                    : [Math.round(newCash), Math.round(finalCash), playerId]
             );
 
             await conn.commit();
@@ -288,6 +293,8 @@ export async function deductCash(playerId, amount) {
  * @returns {object} Catch-up results
  */
 export async function processOfflineCatchUp(playerId) {
+    // Frozen (H-636): no catch-up growth
+    if (isFrozen()) return { processed: false, reason: 'frozen' };
     return playerMutex.runExclusive(`tick:${playerId}`, async () => {
         const [[player]] = await pool.execute(
             'SELECT * FROM cfx_players WHERE id = ?',
@@ -350,11 +357,15 @@ export async function processOfflineCatchUp(playerId) {
  * @returns {object} Complete game state
  */
 export async function getFullGameState(playerId) {
+    // Frozen (H-636): a pure read. No catch-up, quest assignment, achievement payouts, heat update or
+    // slot creation.
+    const frozen = isFrozen();
+
     // Process any pending offline time first
     const catchUp = await processOfflineCatchUp(playerId);
 
     // Run initialization tasks in parallel
-    await Promise.all([
+    if (!frozen) await Promise.all([
         assignQuests(playerId),
         checkAchievements(playerId)
     ]);
@@ -466,7 +477,7 @@ export async function getFullGameState(playerId) {
     // Get bonuses, raid status, and location slots in parallel
     const [bonuses, raidStatus, locationSlots] = await Promise.all([
         getBonuses(playerId),
-        getRaidStatus(playerId).catch(e => {
+        (frozen ? Promise.resolve(null) : getRaidStatus(playerId)).catch(e => {
             logger.warn('[GameState] Could not get raid status', { error: e.message });
             return null;
         }),
@@ -481,7 +492,7 @@ export async function getFullGameState(playerId) {
 
     // Auto-create missing grow slots if location capacity exceeds actual slot rows
     let finalSlots = slots;
-    if (slots.length < maxGrowSlots) {
+    if (!frozen && slots.length < maxGrowSlots) {
         const existingSlotNumbers = new Set(slots.map(s => s.slot_number));
         const slotsToCreate = [];
 
@@ -511,7 +522,7 @@ export async function getFullGameState(playerId) {
                 );
                 finalSlots = newSlots;
 
-                logger.info('[GameState] Auto-created missing grow slots', {
+                logger.debug('[GameState] Auto-created missing grow slots', {
                     playerId,
                     created: slotsToCreate.length,
                     totalSlots: maxGrowSlots

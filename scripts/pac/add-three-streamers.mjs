@@ -1,11 +1,11 @@
 import 'dotenv/config';
 import mysql from 'mysql2/promise';
-import enc from '/home/death/CertiFriedUtility/utils/encryption.js';
+import { resolveBotForGuild } from '/home/death/CertiFriedUtility/utils/bot-resolver.js';
 import { resolveStreamerIdentity, upsertStreamerByIdentity } from '/home/death/CertiFriedUtility/utils/platforms/resolve-identity.js';
 
 const GUILD = '1099732505243959407';
 const ANNOUNCE_CH = '1496351043372716053';  // #live-streams
-const NEW_BOT_ID = '1496352090950467595';   // Twatwaffle Patrol (for Discord user lookup)
+// The acting bot comes from guild_bot_mapping — never pinned here.
 
 const STREAMERS = [
     { twitchName: 'xbatmangoddessx', discordName: 'xbatmangoddessx' },
@@ -15,10 +15,9 @@ const STREAMERS = [
 
 const pool = mysql.createPool({ host: process.env.DB_HOST, user: process.env.DB_USER, password: process.env.DB_PASSWORD, database: process.env.DB_NAME });
 
-// Fetch guild members via Twatwaffle's token for Discord user lookup (CertiFried isn't in this guild anymore)
-const [r] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id = ?', [NEW_BOT_ID]);
-const token = enc.decrypt(JSON.parse(r[0].bot_token));
-const H = { Authorization: 'Bot ' + token };
+// Fetch guild members via the guild's own bot token for Discord user lookup (CertiFried isn't in this guild anymore)
+const bot = await resolveBotForGuild(GUILD, { db: pool });
+const H = { Authorization: bot.auth };
 
 let members = [], after = '0';
 while (true) {

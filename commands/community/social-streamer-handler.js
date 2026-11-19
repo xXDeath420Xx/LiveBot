@@ -11,22 +11,21 @@ import {
 import pool from '../../utils/db.js';
 import logger from '../../utils/logger.js';
 import { crossPollinateStreamer } from '../../utils/streamer-cross-pollinate.js';
+import { getStreamEndDefaults } from '../../core/stream-end-defaults.js';
 import * as twitchApi from '../../utils/platforms/twitch.js';
 import * as kickApi from '../../utils/platforms/kick.js';
 import * as youtubeApi from '../../utils/platforms/youtube.js';
-import * as facebookApi from '../../utils/platforms/facebook.js';
 import * as tiktokApi from '../../utils/platforms/tiktok.js';
-import * as trovoApi from '../../utils/platforms/trovo.js';
 import * as rumbleApi from '../../utils/platforms/rumble.js';
 import encryption from '../../utils/encryption.js';
+import { accessibleAttachment } from '../../utils/accessible-attachment.js';
+import { themeColor } from '../../core/guild-theme.js';
 
 export const platformChoices = [
     { name: 'Twitch', value: 'twitch' },
     { name: 'Kick', value: 'kick' },
     { name: 'YouTube', value: 'youtube' },
     { name: 'TikTok', value: 'tiktok' },
-    { name: 'Trovo', value: 'trovo' },
-    { name: 'Facebook', value: 'facebook' },
     { name: 'Rumble', value: 'rumble' }
 ];
 
@@ -34,9 +33,7 @@ const platformModules = {
     twitch: twitchApi,
     kick: kickApi,
     youtube: youtubeApi,
-    facebook: facebookApi,
     tiktok: tiktokApi,
-    trovo: trovoApi,
     rumble: rumbleApi
 };
 
@@ -131,7 +128,7 @@ export async function handleSetup(interaction) {
         }
 
         const embed = new EmbedBuilder()
-            .setColor('#57F287')
+            .setColor(themeColor(interaction.guildId, 'success'))
             .setTitle('Stream Announcement Settings Updated')
             .setDescription('Your stream notification settings have been configured.')
             .setTimestamp();
@@ -191,12 +188,14 @@ export async function handleAdd(interaction) {
                 platformUserId = user.id;
                 canonicalUsername = user.login;
             } else if (platform === 'kick') {
+                // getKickUser wraps the channel: { user: { id, username }, livestream, _raw }. Reading
+                // user.id / user.slug off the wrapper gave "undefined" as every new Kick streamer's id.
                 const user = await kickApi.getKickUser(username);
                 if (!user) {
                     return await interaction.editReply(`Kick user "${username}" not found.`);
                 }
-                platformUserId = String(user.id);
-                canonicalUsername = user.slug || username;
+                platformUserId = String(user.user.id);
+                canonicalUsername = user.user.username || username;
             } else if (platform === 'youtube') {
                 platformUserId = username;
                 canonicalUsername = username;
@@ -253,13 +252,14 @@ export async function handleAdd(interaction) {
             return await interaction.editReply(`${canonicalUsername} on ${platform} is already being tracked in this server.`);
         }
 
+        const streamEnd = await getStreamEndDefaults(interaction.guild.id);
         await connection.query(
-            'INSERT INTO subscriptions (guild_id, streamer_id) VALUES (?, ?)',
-            [interaction.guild.id, streamerId]
+            'INSERT INTO subscriptions (guild_id, streamer_id, delete_on_end, edit_on_end) VALUES (?, ?, ?, ?)',
+            [interaction.guild.id, streamerId, streamEnd.delete_on_end, streamEnd.edit_on_end]
         );
 
         const embed = new EmbedBuilder()
-            .setColor('#57F287')
+            .setColor(themeColor(interaction.guildId, 'success'))
             .setTitle('Streamer Added')
             .setDescription(`Successfully added **${canonicalUsername}** from **${platform}** to your tracked streamers!`)
             .setTimestamp();
@@ -318,7 +318,8 @@ export async function handleRemove(interaction) {
         const streamerId = streamers[0].streamer_id;
 
         const [result] = await connection.query(
-            'DELETE FROM subscriptions WHERE guild_id = ? AND streamer_id = ?',
+            // Soft-delete so Dashboard > Streaming > "Recently removed" can quick-restore it.
+            "UPDATE subscriptions SET paused = 1, departed_at = NOW(), departed_reason = 'manual' WHERE guild_id = ? AND streamer_id = ? AND departed_at IS NULL",
             [interaction.guild.id, streamerId]
         );
 
@@ -332,7 +333,7 @@ export async function handleRemove(interaction) {
         );
 
         const embed = new EmbedBuilder()
-            .setColor('#ED4245')
+            .setColor(themeColor(interaction.guildId, 'danger'))
             .setTitle('Streamer Removed')
             .setDescription(`Successfully removed **${streamers[0].username}** from **${platform}** from your tracked streamers.`)
             .setTimestamp();
@@ -389,7 +390,7 @@ export async function handleList(interaction) {
         }
 
         const embed = new EmbedBuilder()
-            .setColor('#5865F2')
+            .setColor(themeColor(interaction.guildId, 'primary'))
             .setTitle(platform ? `Tracked ${platform.charAt(0).toUpperCase() + platform.slice(1)} Streamers` : 'Tracked Streamers')
             .setTimestamp();
 
@@ -445,7 +446,7 @@ export async function handleCheckLive(interaction) {
 
         if (liveStreamers.length === 0) {
             const embed = new EmbedBuilder()
-                .setColor('#ED4245')
+                .setColor(themeColor(interaction.guildId, 'danger'))
                 .setTitle('No Live Streamers')
                 .setDescription('None of your tracked streamers are currently live.')
                 .setTimestamp();
@@ -454,7 +455,7 @@ export async function handleCheckLive(interaction) {
         }
 
         const embed = new EmbedBuilder()
-            .setColor('#57F287')
+            .setColor(themeColor(interaction.guildId, 'success'))
             .setTitle(`\ud83d\udd34 ${liveStreamers.length} Streamer${liveStreamers.length > 1 ? 's' : ''} Currently Live`)
             .setTimestamp();
 
@@ -463,7 +464,6 @@ export async function handleCheckLive(interaction) {
             kick: (username) => `https://kick.com/${username}`,
             youtube: (id) => `https://youtube.com/channel/${id}`,
             tiktok: (username) => `https://tiktok.com/@${username}`,
-            trovo: (username) => `https://trovo.live/s/${username}`,
             facebook: (username) => `https://facebook.com/gaming/${username}`
         };
 
@@ -514,7 +514,7 @@ export async function handleEdit(interaction) {
         const streamer = rows[0];
 
         const embed = new EmbedBuilder()
-            .setColor('#5865F2')
+            .setColor(themeColor(interaction.guildId, 'primary'))
             .setTitle(`Edit Settings: ${streamer.username}`)
             .setDescription(`Configure announcement settings for **${streamer.username}** on **${platform}**`)
             .addFields(
@@ -975,8 +975,8 @@ export async function handleMassAdd(interaction) {
                         failed.push(`${username} (not found)`);
                         continue;
                     }
-                    platformUserId = String(user.id);
-                    canonicalUsername = user.slug || username;
+                    platformUserId = String(user.user.id);
+                    canonicalUsername = user.user.username || username;
                 } else if (platform === 'rumble') {
                     const v = await rumbleApi.validateUser(username);
                     if (!v) {
@@ -1015,9 +1015,10 @@ export async function handleMassAdd(interaction) {
                     continue;
                 }
 
+                const streamEnd = await getStreamEndDefaults(interaction.guild.id);
                 await connection.query(
-                    'INSERT INTO subscriptions (guild_id, streamer_id) VALUES (?, ?)',
-                    [interaction.guild.id, streamerId]
+                    'INSERT INTO subscriptions (guild_id, streamer_id, delete_on_end, edit_on_end) VALUES (?, ?, ?, ?)',
+                    [interaction.guild.id, streamerId, streamEnd.delete_on_end, streamEnd.edit_on_end]
                 );
 
                 added.push(canonicalUsername);
@@ -1029,7 +1030,7 @@ export async function handleMassAdd(interaction) {
         }
 
         const embed = new EmbedBuilder()
-            .setColor('#5865F2')
+            .setColor(themeColor(interaction.guildId, 'primary'))
             .setTitle('Mass Add Report')
             .setTimestamp();
 
@@ -1100,7 +1101,8 @@ export async function handleMassRemove(interaction) {
                 const streamerId = streamers[0].streamer_id;
 
                 const [result] = await connection.query(
-                    'DELETE FROM subscriptions WHERE guild_id = ? AND streamer_id = ?',
+                    // Soft-delete so Dashboard > Streaming > "Recently removed" can quick-restore it.
+            "UPDATE subscriptions SET paused = 1, departed_at = NOW(), departed_reason = 'manual' WHERE guild_id = ? AND streamer_id = ? AND departed_at IS NULL",
                     [interaction.guild.id, streamerId]
                 );
 
@@ -1121,7 +1123,7 @@ export async function handleMassRemove(interaction) {
         }
 
         const embed = new EmbedBuilder()
-            .setColor('#ED4245')
+            .setColor(themeColor(interaction.guildId, 'danger'))
             .setTitle('Mass Remove Report')
             .setTimestamp();
 
@@ -1301,18 +1303,33 @@ export async function handleImport(interaction) {
                     let platformUserId = username;
                     let canonicalUsername = username;
 
+                    // A name the platform can't find is a failed row, as in mass-add. Saving it with the
+                    // username as its id left rows that could never be checked or subscribed
+                    // (Twitch EventSub rejected them every 30 minutes).
                     if (platform === 'twitch') {
                         const user = await twitchApi.getTwitchUser(username);
-                        if (user) {
-                            platformUserId = user.id;
-                            canonicalUsername = user.login;
+                        if (!user) {
+                            failed.push(`${username} (not found)`);
+                            continue;
                         }
+                        platformUserId = user.id;
+                        canonicalUsername = user.login;
                     } else if (platform === 'kick') {
                         const user = await kickApi.getKickUser(username);
-                        if (user) {
-                            platformUserId = String(user.id);
-                            canonicalUsername = user.slug || username;
+                        if (!user) {
+                            failed.push(`${username} (not found)`);
+                            continue;
                         }
+                        platformUserId = String(user.user.id);
+                        canonicalUsername = user.user.username || username;
+                    } else if (platform === 'rumble') {
+                        const v = await rumbleApi.validateUser(username);
+                        if (!v) {
+                            failed.push(`${username} (not found)`);
+                            continue;
+                        }
+                        platformUserId = v.platformUserId;
+                        canonicalUsername = v.canonicalUsername;
                     }
 
                     const [existingStreamer] = await connection.query(
@@ -1341,9 +1358,10 @@ export async function handleImport(interaction) {
                         continue;
                     }
 
+                    const streamEnd = await getStreamEndDefaults(interaction.guild.id);
                     await connection.query(
-                        'INSERT INTO subscriptions (guild_id, streamer_id) VALUES (?, ?)',
-                        [interaction.guild.id, streamerId]
+                        'INSERT INTO subscriptions (guild_id, streamer_id, delete_on_end, edit_on_end) VALUES (?, ?, ?, ?)',
+                        [interaction.guild.id, streamerId, streamEnd.delete_on_end, streamEnd.edit_on_end]
                     );
 
                     added.push(canonicalUsername);
@@ -1355,7 +1373,7 @@ export async function handleImport(interaction) {
             }
 
             const embed = new EmbedBuilder()
-                .setColor('#5865F2')
+                .setColor(themeColor(interaction.guildId, 'primary'))
                 .setTitle('CSV Import Report')
                 .setTimestamp();
 
@@ -1435,8 +1453,9 @@ export async function handleExport(interaction) {
 
         const csvContent = csv.join('\n');
         const buffer = Buffer.from(csvContent, 'utf-8');
-        const attachment = new AttachmentBuilder(buffer, {
-            name: `streamers_${interaction.guild.id}_${Date.now()}.csv`
+        const attachment = accessibleAttachment(buffer, {
+            name: `streamers_${interaction.guild.id}_${Date.now()}.csv`,
+            description: `CSV export of ${streamers.length} tracked streamer(s) for ${interaction.guild.name}. Columns: platform, username, discord_user_id.`,
         });
 
         await interaction.editReply({

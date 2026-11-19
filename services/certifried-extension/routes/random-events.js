@@ -147,12 +147,13 @@ router.post('/:id/resolve', async (req, res) => {
             outcomeValue = 0;
         }
 
-        // Mark as resolved
+        // Mark as resolved (cfx_player_events keeps the player's choice in `outcome`;
+        // the rolled value is returned to the client below)
         await conn.execute(`
             UPDATE cfx_player_events
-            SET resolved = TRUE, outcome = ?, outcome_value = ?
+            SET resolved = TRUE, outcome = ?
             WHERE id = ?
-        `, [choice, outcomeValue, eventId]);
+        `, [choice === 'accept' ? 'accept' : 'decline', eventId]);
 
         await conn.commit();
 

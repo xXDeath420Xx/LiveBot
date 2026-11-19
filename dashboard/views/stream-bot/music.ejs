@@ -1,0 +1,243 @@
+<%#
+  GET /stream/bot/music (dashboard/routes/stream-bot-music.js). Locals: ready, profile, state { vod, running, overlays, now, pending[], queued[] },
+  settings, bans, playlists, history (requestView rows), plays, overlayUrl, commands, commandsMade, defaults, messageVars, approvalModes,
+  sources, sourceLabels, limits, spotifyLinked, musicData (page JSON). Buttons and forms run in /js/stream-bot-music.js, which builds
+  every element with createElement and textContent.
+%>
+<%- include('_head', { pageTitle: 'Music', active: 'music' }) %>
+<%
+  const _when = (iso) => iso ? new Date(iso).toISOString().slice(0, 16).replace('T', ' ') + ' UTC' : '';
+  const _status = { pending: 'Waiting for approval', queued: 'In the queue', playing: 'Playing', played: 'Played', skipped: 'Skipped', removed: 'Removed', denied: 'Denied', failed: "Couldn't play" };
+  const _approval = { none: 'No: requests go straight into the queue', explicit: 'Explicit songs', explicit_or_unknown: 'Explicit songs and songs whose rating is not known (YouTube, SoundCloud, other links)', all: 'Every request' };
+  const _roles = [['broadcaster', 'You'], ['moderator', 'Moderators'], ['vip', 'VIPs'], ['subscriber', 'Subscribers']];
+  const _on = (v) => v ? ' checked' : '';
+  const _sp = locals.spotify || null;
+%>
+<div class="cf-page-head">
+    <div>
+        <h1 class="cf-page-title">Music</h1>
+        <p class="cf-page-sub">Song requests from Twitch and Kick chat, played in OBS through CertiFried's music service: Spotify, YouTube, YouTube Music and SoundCloud links, or a song name. No Spotify developer app is needed.</p>
+    </div>
+</div>
+<%- include('_tabs', { active: 'music' }) %>
+
+<div class="cf-notice" id="sbm-msg" role="status" aria-live="polite" hidden><div class="cf-notice-body" id="sbm-msg-text"></div></div>
+
+<% if (!ready) { %>
+<section class="cf-section"><div class="cf-rows"><div class="cf-state cf-state--compact"><p class="cf-state-title">Song requests start after the next CertiFried restart.</p></div></div></section>
+<% } else { %>
+
+<section class="cf-section" aria-labelledby="sbm-now-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbm-now-title">Now</h2>
+        <p class="cf-section-desc" id="sbm-vod"><%= state.vod.line %></p></div>
+        <div class="cf-section-actions"><span class="cf-status-line" id="sbm-status" role="status" aria-live="polite"></span></div></header>
+    <div class="cf-rows">
+        <div class="cf-row">
+            <div class="cf-row-text"><p class="cf-row-label">Playing</p>
+                <p class="cf-row-desc" id="sbm-now"><% if (state.now) { %><%= state.now.title %><% if (state.now.artist) { %> by <%= state.now.artist %><% } %><% if (state.now.requester) { %> (requested by <%= state.now.requester %>)<% } %><% if (state.now.paused) { %>, paused<% } %><% } else { %>Nothing<% } %></p></div>
+            <div class="cf-row-control sb-checks">
+                <button type="button" class="btn btn-primary btn-sm" data-control="start">Play</button>
+                <button type="button" class="btn btn-secondary btn-sm" data-control="pause">Pause</button>
+                <button type="button" class="btn btn-secondary btn-sm" data-control="skip">Skip</button>
+                <button type="button" class="btn btn-secondary btn-sm" data-control="back">Back</button>
+                <button type="button" class="btn btn-secondary btn-sm" data-control="stop">Stop</button>
+            </div>
+        </div>
+        <div class="cf-row">
+            <div class="cf-row-text"><p class="cf-row-label">Player in OBS</p>
+                <p class="cf-row-desc" id="sbm-player"><%= state.overlays ? 'Connected.' : 'Not connected. CertiFried Studio adds the "CertiFried Music" browser source to OBS for you; it can also be added by hand with the link below.' %></p></div>
+        </div>
+        <% if (!state.vod.on) { %>
+        <div class="cf-row"><div class="cf-row-text"><p class="cf-row-label">Requests are paused</p>
+            <p class="cf-row-desc">Songs only start while CertiFried Studio confirms the music source is kept off your Twitch VOD track and the player is open in OBS. Chat is told requests are paused until then.</p></div></div>
+        <% } %>
+        <details class="cf-expand">
+            <summary>What VOD protection covers</summary>
+            <div class="cf-expand-body">
+                <p class="cf-list-body">The music plays only in the "CertiFried Music" source in OBS, set to every audio track except the one Twitch records for VODs. It never plays through your speakers or Desktop Audio.</p>
+                <p class="cf-list-body">Still included: clips (they are cut from the live stream), Kick VODs if Kick gets the live track, and local recordings unless "Record without music" is on in CertiFried Studio.</p>
+                <p class="cf-list-body">Playing copyrighted music on stream can still lead to takedowns or strikes. To limit what can be played, allow only your own playlists or SoundCloud under Settings.</p>
+            </div>
+        </details>
+    </div>
+</section>
+
+<section class="cf-section" aria-labelledby="sbm-queue-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbm-queue-title">Queue</h2>
+        <p class="cf-section-desc">Requests from chat land here. Approve or deny the ones waiting; remove any song before it plays.</p></div></header>
+    <div class="cf-rows">
+        <div id="sbm-pending" class="cf-list"></div>
+        <div id="sbm-queued" class="cf-list"></div>
+        <form id="sbm-add-form" class="cf-row" novalidate>
+            <div class="cf-row-text"><label class="cf-row-label" for="sbm-add">Add a song</label><p class="cf-row-desc">A link or a song name. Songs you add skip approval and limits.</p></div>
+            <div class="cf-row-control"><input type="text" id="sbm-add" maxlength="400" autocomplete="off"> <button type="submit" class="btn btn-secondary btn-sm">Add</button></div>
+        </form>
+    </div>
+</section>
+
+<section class="cf-section" aria-labelledby="sbm-obs-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbm-obs-title">Player link</h2>
+        <p class="cf-section-desc">The page OBS plays the music in. Keep it private: anyone with it can hear the songs. A new link stops the old one.</p></div></header>
+    <div class="cf-rows">
+        <div class="cf-row">
+            <div class="cf-row-text"><label class="cf-row-label" for="sbm-overlay-url">Browser source URL</label><p class="cf-row-desc">Turn on "Control audio via OBS" for the source, then set its tracks in Advanced Audio Properties. Studio does both for you.</p></div>
+            <div class="cf-row-control"><input type="text" id="sbm-overlay-url" readonly value="<%= overlayUrl %>"> <button type="button" class="btn btn-secondary btn-sm" id="sbm-copy">Copy</button> <button type="button" class="btn btn-secondary btn-sm" id="sbm-rotate">New link</button></div>
+        </div>
+    </div>
+</section>
+
+<section class="cf-section" aria-labelledby="sbm-cmd-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbm-cmd-title">Chat commands</h2>
+        <p class="cf-section-desc"><%= commandsMade %> of <%= commands.length + 1 %> are set up. Each one is an automation: turn it on or off, rename it, or add a cooldown on <a href="/stream/bot/automations">Automations</a>.</p></div></header>
+    <div class="cf-rows">
+        <% if (commandsMade < commands.length + 1) { %>
+        <form id="sbm-cmd-form" class="cf-row" novalidate>
+            <div class="cf-row-text"><p class="cf-row-label">Set up the commands</p><p class="cf-row-desc">Adds the ones that are missing. Nothing you changed is touched.</p></div>
+            <div class="cf-row-control sb-checks"><label class="sb-check"><input type="checkbox" id="sbm-cmd-on" checked> Switch them on</label> <button type="submit" class="btn btn-primary btn-sm">Add commands</button></div>
+        </form>
+        <% } %>
+        <details class="cf-expand">
+            <summary>All commands</summary>
+            <div class="cf-expand-body">
+                <div class="cf-table-wrap"><table class="cf-table"><thead><tr><th scope="col">Command</th><th scope="col">What it does</th><th scope="col">Who</th></tr></thead><tbody>
+                <% commands.forEach((c) => { %><tr><td><code>!<%= c.names[0] %></code></td><td><%= c.label %></td><td><%= c.mod ? 'Mods' : 'Everyone' %></td></tr><% }) %>
+                </tbody></table></div>
+            </div>
+        </details>
+    </div>
+</section>
+
+<section class="cf-section" aria-labelledby="sbm-sp-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbm-sp-title">Spotify</h2>
+        <p class="cf-section-desc" id="sbm-sp-line"><% if (_sp && _sp.linked) { %><% if (!_sp.enabled) { %>Spotify linked. Spotify requests play from the YouTube Music match until you turn on "Play Spotify requests with my Spotify" under Settings.<% } else if (_sp.suspended) { %>Spotify linked, resting until <time datetime="<%= _sp.suspended.until %>"><%= _when(_sp.suspended.until) %></time>: <%= _sp.suspended.why %><% } else { %>Spotify linked: plays real Spotify audio.<% } %><% } else { %>Spotify is not linked. Songs from Spotify links play from the YouTube Music match.<% } %></p></div></header>
+    <div class="cf-rows">
+        <% if (_sp && _sp.note) { %><div class="cf-row"><div class="cf-row-text"><p class="cf-row-label">Last Spotify song</p><p class="cf-row-desc"><%= _sp.note %></p></div></div><% } %>
+        <% if (!_sp || !_sp.linked) { %>
+        <form id="sbm-link-form" novalidate>
+            <div class="cf-row"><div class="cf-row-text"><p class="cf-row-label">Link Spotify</p>
+                <p class="cf-row-desc">The same link the Discord music bot uses (/spotify link). Spotify Premium is needed. After you agree, your browser shows a page that does not load: copy its whole address from the address bar and paste it here.</p></div>
+                <div class="cf-row-control"><button type="button" class="btn btn-secondary btn-sm" id="sbm-link-start">Open Spotify</button></div></div>
+            <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbm-link-url">Address from the browser</label></div>
+                <div class="cf-row-control"><input type="url" id="sbm-link-url" maxlength="2000" autocomplete="off" placeholder="http://127.0.0.1:…/login?code=…"> <button type="submit" class="btn btn-secondary btn-sm">Finish</button></div></div>
+            <div class="cf-section-foot"><span class="cf-status-line" id="sbm-link-status" role="status" aria-live="polite"></span></div>
+        </form>
+        <% } %>
+        <details class="cf-expand">
+            <summary>How Spotify audio works on stream</summary>
+            <div class="cf-expand-body">
+                <p class="cf-list-body">A Spotify account plays in one place at a time. While your requests play from Spotify, your own Spotify app stops; if you start Spotify yourself, the song stops and CertiFried uses the YouTube Music match for the next 30 minutes.</p>
+                <p class="cf-list-body">If the CertiFried music bot is playing your Spotify in a Discord voice channel, the stream never takes it: that song plays from the YouTube Music match instead.</p>
+                <p class="cf-list-body">Spotify's terms do not allow broadcasting its audio in public. Whether you play it on stream is your choice.</p>
+            </div>
+        </details>
+    </div>
+</section>
+
+<section class="cf-section" aria-labelledby="sbm-set-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbm-set-title">Settings</h2></div></header>
+    <form id="sbm-settings" class="cf-rows" novalidate>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbm-open">Take requests</label></div>
+            <div class="cf-row-control"><input type="checkbox" id="sbm-open" name="open"<%= _on(settings.open) %>></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbm-approval">Needs mod approval</label></div>
+            <div class="cf-row-control"><select id="sbm-approval" name="approval"><% approvalModes.forEach((m) => { %><option value="<%= m %>"<%= settings.approval === m ? ' selected' : '' %>><%= _approval[m] %></option><% }) %></select></div></div>
+        <fieldset class="cf-row"><div class="cf-row-text"><legend class="cf-row-label">Skip approval</legend></div>
+            <div class="cf-row-control sb-checks"><% _roles.forEach(([r, l]) => { %><label class="sb-check"><input type="checkbox" name="approvalBypass" value="<%= r %>"<%= _on(settings.approvalBypass.includes(r)) %>> <%= l %></label><% }) %></div></fieldset>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbm-explicit">Allow explicit songs</label><p class="cf-row-desc">Only Spotify tells whether a song is explicit.</p></div>
+            <div class="cf-row-control"><input type="checkbox" id="sbm-explicit" name="allowExplicit"<%= _on(settings.allowExplicit) %>></div></div>
+        <fieldset class="cf-row"><div class="cf-row-text"><legend class="cf-row-label">Allowed sources</legend><p class="cf-row-desc">"Songs from your playlists" lets a request through when the song is in one of your playlists, whatever the source.</p></div>
+            <div class="cf-row-control sb-checks"><% sources.forEach((s) => { %><label class="sb-check"><input type="checkbox" name="sources" value="<%= s %>"<%= _on(settings.sources.includes(s)) %>> <%= sourceLabels[s] %></label><% }) %></div></fieldset>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbm-peruser">Songs per viewer in the queue</label></div>
+            <div class="cf-row-control"><input type="number" id="sbm-peruser" name="maxPerUser" min="<%= limits.maxPerUser[0] %>" max="<%= limits.maxPerUser[1] %>" value="<%= settings.maxPerUser %>"></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbm-maxq">Songs in the queue at most</label></div>
+            <div class="cf-row-control"><input type="number" id="sbm-maxq" name="maxQueue" min="<%= limits.maxQueue[0] %>" max="<%= limits.maxQueue[1] %>" value="<%= settings.maxQueue %>"></div></div>
+        <fieldset class="cf-row"><div class="cf-row-text"><legend class="cf-row-label">No limits for</legend></div>
+            <div class="cf-row-control sb-checks"><% _roles.forEach(([r, l]) => { %><label class="sb-check"><input type="checkbox" name="limitBypass" value="<%= r %>"<%= _on(settings.limitBypass.includes(r)) %>> <%= l %></label><% }) %></div></fieldset>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbm-maxlen">Longest song (seconds)</label></div>
+            <div class="cf-row-control"><input type="number" id="sbm-maxlen" name="maxDurationSec" min="<%= limits.maxDurationSec[0] %>" max="<%= limits.maxDurationSec[1] %>" value="<%= settings.maxDurationSec %>"></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbm-dupes">Allow a song already in the queue</label></div>
+            <div class="cf-row-control"><input type="checkbox" id="sbm-dupes" name="allowDuplicates"<%= _on(settings.allowDuplicates) %>></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbm-votes">Votes to skip (!voteskip)</label></div>
+            <div class="cf-row-control"><input type="number" id="sbm-votes" name="voteSkip" min="<%= limits.voteSkip[0] %>" max="<%= limits.voteSkip[1] %>" value="<%= settings.voteSkip %>"></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbm-skipown">Viewers may skip their own song</label></div>
+            <div class="cf-row-control"><input type="checkbox" id="sbm-skipown" name="skipOwn"<%= _on(settings.skipOwn) %>></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbm-removeown">Viewers may remove their own requests</label></div>
+            <div class="cf-row-control"><input type="checkbox" id="sbm-removeown" name="removeOwn"<%= _on(settings.removeOwn) %>></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbm-volume">Volume</label></div>
+            <div class="cf-row-control"><input type="number" id="sbm-volume" name="volume" min="0" max="100" value="<%= settings.volume %>"></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbm-fallback">When the queue is empty, play</label></div>
+            <div class="cf-row-control"><select id="sbm-fallback" name="fallbackPlaylistId"><option value="">Nothing</option><% playlists.forEach((p) => { %><option value="<%= p.id %>"<%= settings.fallbackPlaylistId === p.id ? ' selected' : '' %>><%= p.name %></option><% }) %></select></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbm-default">!addSong adds to</label></div>
+            <div class="cf-row-control"><select id="sbm-default" name="defaultPlaylistId"><option value="">Ask for a playlist</option><% playlists.forEach((p) => { %><option value="<%= p.id %>"<%= settings.defaultPlaylistId === p.id ? ' selected' : '' %>><%= p.name %></option><% }) %></select></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbm-card">Show the song on the player page</label><p class="cf-row-desc">A small card in the browser source. Off: audio only.</p></div>
+            <div class="cf-row-control"><input type="checkbox" id="sbm-card" name="card"<%= _on(settings.card) %>></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbm-spdirect">Play Spotify requests with my Spotify</label><p class="cf-row-desc">Real Spotify audio from your linked account. Off: the YouTube Music match.</p></div>
+            <div class="cf-row-control"><input type="checkbox" id="sbm-spdirect" name="spotifyDirect"<%= _on(settings.spotifyDirect) %>></div></div>
+        <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbm-mention">Start replies with @viewer</label></div>
+            <div class="cf-row-control"><input type="checkbox" id="sbm-mention" name="mention"<%= _on(settings.mention) %>></div></div>
+        <details class="cf-expand">
+            <summary>Replies in chat</summary>
+            <div class="cf-expand-body">
+                <p class="cf-list-body">Leave a box empty to use the text shown in it. Placeholders: <%= messageVars.map((v) => v[0]).join(' ') %></p>
+                <% Object.keys(defaults).forEach((k) => { %>
+                <div class="sb-field is-wide"><label for="sbm-msg-<%= k %>"><%= k.replace(/_/g, ' ') %></label>
+                    <input type="text" id="sbm-msg-<%= k %>" data-message="<%= k %>" maxlength="300" placeholder="<%= defaults[k] %>" value="<%= settings.messages[k] || '' %>"></div>
+                <% }) %>
+            </div>
+        </details>
+        <div class="cf-section-foot"><span class="cf-status-line" id="sbm-set-status" role="status" aria-live="polite"></span><button type="submit" class="btn btn-primary btn-sm">Save</button></div>
+    </form>
+</section>
+
+<section class="cf-section" aria-labelledby="sbm-ban-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbm-ban-title">Banned</h2>
+        <p class="cf-section-desc">Banned songs and artists can't be requested. !banSong bans the song playing.</p></div></header>
+    <div class="cf-rows">
+        <% if (!bans.length) { %><div class="cf-state cf-state--compact"><p class="cf-state-title">Nothing is banned.</p></div><% } else { %>
+        <div class="cf-list"><% bans.forEach((b) => { %>
+            <div class="cf-list-item"><div class="cf-list-main"><p class="cf-list-title"><%= b.kind === 'artist' ? b.artist : b.title %></p>
+                <p class="cf-list-meta"><span><%= b.kind === 'artist' ? 'Artist' : (b.artist || 'Song') %></span><% if (b.createdBy) { %><span>by <%= b.createdBy %></span><% } %></p></div>
+                <div class="cf-list-actions"><button type="button" class="btn btn-secondary btn-sm" data-unban="<%= b.id %>">Unban</button></div></div>
+        <% }) %></div><% } %>
+        <form id="sbm-ban-form" class="cf-row" novalidate>
+            <div class="cf-row-text"><label class="cf-row-label" for="sbm-ban">Ban</label><p class="cf-row-desc">A song link or name, or an artist's name.</p></div>
+            <div class="cf-row-control"><select id="sbm-ban-kind" aria-label="What to ban"><option value="track">Song</option><option value="artist">Artist</option></select> <input type="text" id="sbm-ban" maxlength="400" autocomplete="off"> <button type="submit" class="btn btn-secondary btn-sm">Ban</button></div>
+        </form>
+    </div>
+</section>
+
+<section class="cf-section" aria-labelledby="sbm-pl-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbm-pl-title">Playlists</h2>
+        <p class="cf-section-desc">Your playlists for !playPlaylist, the empty-queue music and !addSong. "Liked songs" is filled by !addToLikedSongs.</p></div></header>
+    <div class="cf-rows">
+        <% if (!playlists.length) { %><div class="cf-state cf-state--compact"><p class="cf-state-title">No playlists yet.</p></div><% } else { %>
+        <div class="cf-list"><% playlists.forEach((p) => { %>
+            <div class="cf-list-item cf-list-item--multi"><div class="cf-list-main"><p class="cf-list-title"><%= p.name %></p>
+                <p class="cf-list-meta"><span><%= p.items %> songs</span><% if (settings.fallbackPlaylistId === p.id) { %><span>Plays when the queue is empty</span><% } %><% if (p.sourceUrl) { %><span class="sb-wrap"><%= p.sourceUrl %></span><% } %></p>
+                <div class="cf-list" data-items-for="<%= p.id %>" hidden></div></div>
+                <div class="cf-list-actions"><button type="button" class="btn btn-secondary btn-sm" data-show-items="<%= p.id %>">Songs</button><% if (p.kind !== 'liked') { %> <button type="button" class="btn btn-secondary btn-sm" data-delete-playlist="<%= p.id %>" data-name="<%= p.name %>">Delete</button><% } %></div></div>
+        <% }) %></div><% } %>
+        <form id="sbm-import-form" novalidate>
+            <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbm-import-url">Import a playlist</label><p class="cf-row-desc">A public Spotify playlist or album, YouTube playlist or SoundCloud set. Up to 2000 songs.</p></div>
+                <div class="cf-row-control"><input type="url" id="sbm-import-url" maxlength="600" autocomplete="off"></div></div>
+            <div class="cf-row"><div class="cf-row-text"><label class="cf-row-label" for="sbm-import-name">Name</label><p class="cf-row-desc">Empty: the playlist's own name.</p></div>
+                <div class="cf-row-control"><input type="text" id="sbm-import-name" maxlength="100" autocomplete="off"></div></div>
+            <div class="cf-section-foot"><span class="cf-status-line" id="sbm-import-status" role="status" aria-live="polite"></span><button type="submit" class="btn btn-secondary btn-sm">Import</button></div>
+        </form>
+    </div>
+</section>
+
+<section class="cf-section" aria-labelledby="sbm-hist-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbm-hist-title">Request history</h2>
+        <p class="cf-section-desc">The last 50 requests. Kept for a year; !topSongs and !myTopSongs count from it.</p></div></header>
+    <div class="cf-rows">
+        <% if (!history.length) { %><div class="cf-state cf-state--compact"><p class="cf-state-title">No requests yet.</p></div><% } else { %>
+        <div class="cf-table-wrap"><table class="cf-table"><thead><tr><th scope="col">Song</th><th scope="col">Requested by</th><th scope="col">What happened</th><th scope="col">When</th></tr></thead><tbody>
+        <% history.forEach((h) => { %><tr><td class="sb-wrap"><%= h.title %><% if (h.artist) { %> · <%= h.artist %><% } %></td><td><%= h.viewer %></td><td><%= _status[h.status] || h.status %><% if (h.reason && ['failed', 'skipped'].includes(h.status)) { %> (<%= h.reason %>)<% } %></td><td><time datetime="<%= h.createdAt %>"><%= _when(h.createdAt) %></time></td></tr><% }) %>
+        </tbody></table></div><% } %>
+    </div>
+</section>
+
+<script type="application/json" id="sbm-data"><%- musicData %></script>
+<script src="/js/stream-bot-music.js" defer></script>
+<% } %>
+<%- include('_foot') %>

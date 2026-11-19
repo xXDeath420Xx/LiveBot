@@ -1,3 +1,19 @@
+<%#
+  Bot commands: every slash command by category with its access level (Everyone / Mod only /
+  Disabled, PUT /api/guilds/:id/commands/restrictions), and prefix command aliases
+  (POST/DELETE /api/guilds/:id/prefix-commands/aliases). Built on the settings-row kit
+  (cf-settings.css); ids, data attributes and the onclick handlers are unchanged.
+  Each command, subcommand group and plain subcommand has a Settings drawer (#cmdDrawer): who can
+  use it (access, allowed/blocked roles), where (allowed/blocked channels), cooldown, private
+  replies, delete-the-reply-after and a refusal message. It saves one guild_command_restrictions
+  row per key ('command' or 'command:sub') through PUT/DELETE /api/guilds/:id/commands/settings/:key;
+  core/command-restrictions.js applies it to slash and chat commands. ?cmd=<key> opens a drawer
+  (the generated feature pages and the Permissions page link here).
+  Slash / Text (2026-11-18): each command shows whether it is a registered slash command or a text command
+  typed as a message starting with "/" (core/command-registration.js), and the exact form to type
+  (command.form / sub.form from core/universal-commands.js describePath). Usage: GET .../commands/usage
+  fills uses in 30 days per row; the drawer draws 90 days from GET .../commands/usage/series.
+%>
 <%
 const groupedCommands = commands.reduce((acc, cmd) => {
     const category = cmd.category || 'General';
@@ -33,570 +49,555 @@ function getRestrictionState(cmdName) {
     return 'everyone';
 }
 
-const disabledCount = Object.values(restrictions).filter(r => !r.allowed).length;
+// What a command is with no row: Mod only for the admin categories, otherwise Everyone.
+function defaultState(cmdName) {
+    return ADMIN_CATEGORIES.has(commandCategoryMap[cmdName] || 'General') ? 'mod_only' : 'everyone';
+}
 
-const categoryIcons = {
-    'Streamer': 'fas fa-stream',
-    'Team': 'fas fa-users',
-    'Admin': 'fas fa-shield-alt',
-    'Moderation': 'fas fa-gavel',
-    'Utility': 'fas fa-tools',
-    'Fun': 'fas fa-gamepad',
-    'Music': 'fas fa-music',
-    'Economy': 'fas fa-coins',
-    'RPG': 'fas fa-dragon',
-    'General': 'fas fa-terminal',
-    'Ticket': 'fas fa-ticket-alt',
-    'Form': 'fas fa-file-alt',
-    'Birthday': 'fas fa-birthday-cake',
-    'Weather': 'fas fa-cloud-sun',
-    'Rank': 'fas fa-chart-line',
-    'Suggestion': 'fas fa-lightbulb',
-    'Events': 'fas fa-calendar-alt',
-    'Feeds': 'fas fa-rss',
-    'Config': 'fas fa-cog'
-};
+// Pickers for the settings drawer: roles in Discord's order with their colour, channels with their kind.
+const cmdRoles = (typeof roles !== 'undefined' ? roles : []).slice().sort((a, b) => (b.position || 0) - (a.position || 0));
+const cmdVoiceIds = new Set((typeof voiceChannels !== 'undefined' ? voiceChannels : []).map(c => c.id));
+const cmdChannels = (typeof channels !== 'undefined' ? channels : []).concat((typeof voiceChannels !== 'undefined' ? voiceChannels : []).filter(v => !(typeof channels !== 'undefined' ? channels : []).some(c => c.id === v.id)));
+const roleColour = (r) => { const h = r.hexColor || (r.color ? '#' + Number(r.color).toString(16).padStart(6, '0') : ''); return h && h !== '#000000' ? h : ''; };
+// Only the drawer's own fields, keyed by command key; '<' escaped so a value cannot close the script.
+const drawerData = JSON.stringify(restrictions).replace(/</g, '\\u003c');
+
+const disabledCount = Object.values(restrictions).filter(r => !r.allowed).length;
 
 const totalCommands = Object.values(groupedCommands).reduce((sum, cmds) => sum + cmds.length, 0);
 const categoryCount = Object.keys(groupedCommands).length;
+
+// Slash or text. A text command's label is what members type: its own form, or the first word its
+// subcommands share ("/owo" for "/owo hunt", "/owo shards").
+const typeOf = (cmd) => cmd.type || 'slash';
+const textCount = commands.filter(c => typeOf(c) === 'text').length;
+const mixedCount = commands.filter(c => typeOf(c) === 'mixed').length;
+function subForms(cmd) {
+    const out = [];
+    (cmd.subcommands || []).forEach(s => { if (s.type === 'group') (s.subcommands || []).forEach(sc => out.push(sc.form)); else out.push(s.form); });
+    return out.filter(Boolean);
+}
+function textLabel(cmd) {
+    if (cmd.form && cmd.form.text) return cmd.form.text;
+    const firsts = [...new Set(subForms(cmd).map(f => f.text && f.text.split(' ')[0]).filter(Boolean))];
+    return firsts.length === 1 ? firsts[0] : '/' + (cmd.slash || cmd.name);
+}
+const TYPE_LABEL = { slash: 'Slash', text: 'Text', mixed: 'Slash and text' };
+const TYPE_PILL = { slash: 'cf-pill', text: 'cf-pill is-info', mixed: 'cf-pill is-warn' };
+function runHow(form, fallback) {
+    if (form && form.slash) return 'Slash command: pick ' + form.slash + ' from the / menu.';
+    if (form && form.text) return 'Text command: type ' + form.text + ' as a message (any prefix works too).';
+    return fallback || '';
+}
+function commandRunHow(cmd, shown) {
+    const t = typeOf(cmd);
+    if (t === 'text') return 'Text command: type ' + textLabel(cmd) + ' as a message, followed by the subcommand. It is not in the / menu.';
+    if (t === 'mixed') return 'Some parts are slash commands under /' + shown + ', the rest are typed as messages; each part below shows which.';
+    return 'Slash command: pick /' + shown + ' from the / menu.';
+}
+function groupRunHow(cmd, group) {
+    const f = (group.subcommands || []).map(sc => sc.form).find(Boolean);
+    if (!f) return '';
+    if (f.slash) return 'Slash command: pick ' + f.slash.split(' ').slice(0, -1).join(' ') + ' from the / menu.';
+    if (f.text) return 'Text command: type ' + f.text.split(' ').slice(0, -1).join(' ') + ' and the subcommand as a message.';
+    return '';
+}
 %>
+<style>
+    .cmd-search.cf-search { width: 100%; margin: 0 0 var(--cf-6); }
+    #commandSaveBar { position: sticky; bottom: var(--cf-4); z-index: 100; margin: 0 0 var(--cf-6); padding: var(--cf-3) var(--cf-4); background: var(--cf-surface); border: 1px solid var(--cf-accent); border-radius: var(--cf-radius-lg); }
+    .cmd-savebar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--cf-2) var(--cf-4); }
+    .cmd-savebar-text { font-size: var(--cf-text-sm); color: var(--cf-text-2); }
+    .cmd-savebar-actions { display: flex; flex-wrap: wrap; gap: var(--cf-2); }
+    .category-commands.collapsed { display: none; }
+    .category-toggle-icon { transition: transform var(--cf-fast, 0.15s) ease; }
+    .category-toggle-icon.rotated { transform: rotate(-90deg); }
+    .cmd-count { font-variant-numeric: tabular-nums; }
+    .cmd-tree-header { display: flex; align-items: center; justify-content: space-between; gap: var(--cf-3); padding: var(--cf-3) var(--cf-5); }
+    .cmd-tree-left { display: flex; align-items: center; gap: var(--cf-2); flex: 1 1 auto; min-width: 0; }
+    .cmd-tree-right { flex: none; }
+    .cmd-tree-toggle { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0; border: 0; border-radius: var(--cf-radius-sm); background: none; color: var(--cf-text-3); font-size: 11px; cursor: pointer; }
+    .cmd-tree-toggle:hover { color: var(--cf-text); background: var(--cf-surface-2); }
+    .cmd-tree-toggle:focus-visible { outline: 2px solid var(--cf-accent); outline-offset: 1px; }
+    .cmd-tree-toggle i { transition: transform var(--cf-fast, 0.15s) ease; }
+    .cmd-tree-toggle.expanded i { transform: rotate(90deg); }
+    .cmd-tree-toggle-spacer { flex: none; width: 24px; }
+    .cmd-name-badge { flex: none; font-family: var(--cf-mono); font-size: var(--cf-text-sm); font-weight: 600; color: var(--cf-text); white-space: nowrap; }
+    .cmd-desc-inline { min-width: 0; font-size: var(--cf-text-sm); color: var(--cf-text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .cmd-sub-count { flex: none; font-size: var(--cf-text-xs); color: var(--cf-text-3); white-space: nowrap; }
+    .cmd-access-select { width: 9.5rem; font-size: var(--cf-text-sm); }
+    .cmd-access-select[data-current="everyone"] { border-color: color-mix(in srgb, var(--cf-success) 45%, var(--cf-border)); color: var(--cf-success); }
+    .cmd-access-select[data-current="mod_only"] { border-color: color-mix(in srgb, var(--cf-warning) 45%, var(--cf-border)); color: var(--cf-warning); }
+    .cmd-access-select[data-current="disabled"] { border-color: color-mix(in srgb, var(--cf-danger) 45%, var(--cf-border)); color: var(--cf-danger); }
+    .cmd-access-select option { background: var(--cf-surface); color: var(--cf-text); }
+    .cmd-tree-children { padding: var(--cf-2) var(--cf-5) var(--cf-3) calc(var(--cf-5) + 32px); border-top: 1px solid var(--cf-border); background: color-mix(in srgb, var(--cf-surface-2) 50%, var(--cf-surface)); }
+    .cmd-tree-group + .cmd-tree-group, .cmd-tree-group + .cmd-tree-sub, .cmd-tree-sub + .cmd-tree-group { margin-top: var(--cf-2); }
+    .cmd-tree-group-header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; padding: 4px 0; }
+    .cmd-group-name { font-size: var(--cf-text-xs); font-weight: 600; color: var(--cf-text-2); }
+    .cmd-group-desc { font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+    .cmd-tree-sub { display: flex; flex-wrap: wrap; align-items: center; gap: 4px var(--cf-2); padding: 4px 0; }
+    .cmd-sub-path { font-family: var(--cf-mono); font-size: var(--cf-text-xs); color: var(--cf-text-2); overflow-wrap: anywhere; }
+    .cmd-sub-path strong { font-weight: 600; color: var(--cf-text); }
+    .cmd-sub-desc { flex: 1 1 12rem; min-width: 0; font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+    .cmd-sub-args { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+    .cmd-arg { display: inline-flex; align-items: center; height: 18px; padding: 0 6px; border-radius: var(--cf-radius-sm); font-family: var(--cf-mono); font-size: 11px; border: 1px solid var(--cf-border); color: var(--cf-text-3); background: var(--cf-surface); }
+    .cmd-arg.required { color: var(--cf-warning); border-color: color-mix(in srgb, var(--cf-warning) 35%, var(--cf-border)); }
+    .cmd-alias, .cmd-alias-target { font-family: var(--cf-mono); font-size: var(--cf-text-sm); overflow-wrap: anywhere; }
+    .cmd-alias { font-weight: 600; color: var(--cf-text); }
+    .cmd-alias-target { color: var(--cf-text-2); }
+    .cmd-alias-by { font-size: var(--cf-text-sm); color: var(--cf-text-2); }
+    .cmd-alias-empty { text-align: center; color: var(--cf-text-3); padding: var(--cf-6) var(--cf-5) !important; }
+    .cmd-mono { font-family: var(--cf-mono); }
+    .cmd-levels .cf-list-main { display: flex; flex-wrap: wrap; align-items: center; gap: var(--cf-2) var(--cf-3); }
+    .cmd-levels .cf-pill { min-width: 6.5rem; justify-content: center; }
+    .cmd-tree-right { display: flex; align-items: center; gap: var(--cf-2); }
+    .cmd-summary { margin: -4px 0 0; padding: 0 var(--cf-5) var(--cf-3) calc(var(--cf-5) + 32px); font-size: var(--cf-text-xs); line-height: 1.5; color: var(--cf-text-3); overflow-wrap: anywhere; }
+    .cmd-summary:empty { display: none; }
+    .cmd-sub-settings { margin-left: auto; }
+    .cmd-tree-group-header .cmd-sub-settings, .cmd-tree-sub .cmd-sub-settings { flex: none; }
+    .cmd-tree-group-header { align-items: center; }
+    .cmd-link-btn { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border: 1px solid var(--cf-border); border-radius: var(--cf-radius-sm); background: var(--cf-surface); color: var(--cf-text-2); font-size: var(--cf-text-xs); cursor: pointer; }
+    .cmd-link-btn:hover { color: var(--cf-text); border-color: var(--cf-border-strong); }
+    .cmd-link-btn:focus-visible { outline: 2px solid var(--cf-accent); outline-offset: 1px; }
+    .cmd-link-btn.is-set { color: var(--cf-accent-fg); border-color: color-mix(in srgb, var(--cf-accent) 45%, var(--cf-border)); }
+    .command-row.is-target { box-shadow: inset 3px 0 0 var(--cf-accent); }
+    .cmd-type { flex: none; font-size: 11px; }
+    .cmd-usage { flex: none; font-size: var(--cf-text-xs); color: var(--cf-text-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .cmd-sub-text { color: var(--cf-text-2); }
+    .cmd-drawer .cmd-spark { display: block; width: 100%; height: 44px; }
+    .cmd-drawer .cmd-spark polyline { fill: none; stroke: var(--cf-accent); stroke-width: 1.5; vector-effect: non-scaling-stroke; }
+    .cmd-drawer .cmd-spark line { stroke: var(--cf-border); stroke-width: 1; vector-effect: non-scaling-stroke; }
+
+    /* Settings drawer: the kit's modal shell, docked to the right edge. */
+    .cmd-drawer[hidden] { display: none; }
+    .cmd-drawer { justify-content: flex-end; align-items: stretch; padding: 0; }
+    .cmd-drawer .cmd-drawer-panel { width: min(100%, 34rem); height: 100%; max-height: none; border-width: 0 0 0 1px; border-radius: 0; }
+    .cmd-drawer .cf-modal-foot { border-radius: 0; }
+    .cmd-drawer .cf-modal-body { padding: var(--cf-4); }
+    .cmd-drawer .cf-rows .cf-row { padding-left: var(--cf-4); padding-right: var(--cf-4); }
+    .cmd-drawer .cf-rows .cf-rows-head { padding-left: var(--cf-4); padding-right: var(--cf-4); }
+    .cmd-drawer .cmd-unit { display: flex; align-items: stretch; gap: var(--cf-2); flex-wrap: wrap; }
+    .cmd-drawer .cmd-unit .cf-input-unit { flex: 1 1 9rem; width: auto; }
+    .cmd-drawer .cmd-unit select { flex: 1 1 9rem; width: auto; }
+    .cmd-drawer .cmd-key { font-family: var(--cf-mono); }
+    .cmd-drawer #cmdOwnSettings > .cf-rows + .cf-rows { margin-top: var(--cf-4); }
+    .cmd-drawer #cmdDrawerStatus.is-bad { color: var(--cf-danger); }
+    .cmd-drawer #cmdDrawerStatus.is-ok { color: var(--cf-success); }
+    @media (max-width: 640px) {
+        .cmd-tree-right .cmd-access-select { flex: 1 1 auto; }
+        .cmd-tree-header { flex-wrap: wrap; padding: var(--cf-3) var(--cf-4); }
+        .cmd-tree-left { flex-wrap: wrap; flex-basis: 100%; }
+        .cmd-desc-inline { flex-basis: calc(100% - 32px); margin-left: 32px; white-space: normal; order: 5; }
+        .cmd-tree-right { flex-basis: 100%; }
+        .cmd-access-select { width: 100%; min-height: 44px; }
+        .cmd-tree-toggle { width: 32px; height: 32px; }
+        .cmd-tree-children { padding: var(--cf-2) var(--cf-4) var(--cf-3); }
+        .cmd-summary { padding-left: var(--cf-4); padding-right: var(--cf-4); }
+        .cmd-savebar-actions { width: 100%; }
+        .cmd-savebar-actions .btn { flex: 1 1 auto; justify-content: center; min-height: 44px; }
+    }
+</style>
 
 <div class="page-section">
     <div class="page-section-header">
         <div>
             <div class="page-section-title">
                 <i class="fas fa-terminal"></i>
-                <span>Bot Commands</span>
+                <span>Bot commands</span>
             </div>
-            <div class="page-section-subtitle">
-                Browse and manage all available slash commands
+            <div class="page-section-subtitle">Settings on each command set roles, channels, cooldown and how it replies.</div>
+        </div>
+    </div>
+
+    <%- include('../kit/_kpis', { label: 'Commands at a glance', items: [
+        { label: 'Total commands', value: totalCommands },
+        { label: 'Categories', value: categoryCount },
+        { label: 'Typed as text', value: textCount + (mixedCount ? ' + ' + mixedCount + ' mixed' : ''), small: true },
+        { label: 'Disabled', value: disabledCount }
+    ] }) %>
+
+    <div class="cmd-search cf-search">
+        <i class="fas fa-search" aria-hidden="true"></i>
+        <label class="visually-hidden" for="commandSearch">Search commands</label>
+        <input type="text" id="commandSearch" class="form-control" placeholder="Search commands by name or description..." autocomplete="off">
+    </div>
+
+    <%# Save bar: shown (sticky) while an access level differs from what is saved. %>
+    <div id="commandSaveBar" role="region" aria-label="Unsaved changes" style="display: none">
+        <div class="cmd-savebar">
+            <span class="cmd-savebar-text">You have unsaved changes to command access.</span>
+            <div class="cmd-savebar-actions">
+                <button type="button" class="btn btn-sm btn-secondary" onclick="resetAllRestrictions()">Reset all to defaults</button>
+                <button type="button" class="btn btn-sm btn-primary" onclick="saveCommandRestrictions()">Save changes</button>
             </div>
         </div>
     </div>
 
-    <!-- Stats Overview -->
-    <div class="grid grid-cols-4" style="margin-bottom: var(--spacing-6);">
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Total Commands</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary);"><%= totalCommands %></div>
-        </div>
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Categories</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-primary-400);"><%= categoryCount %></div>
-        </div>
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Command Type</div>
-            <div style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-accent-purple); margin-top: var(--spacing-1);">
-                <i class="fas fa-slash"></i> Slash Commands
+    <% for (const category in groupedCommands) { const catSlug = category.replace(/\s+/g, '-'); %>
+    <section class="cf-section command-category" aria-labelledby="category-<%= catSlug %>-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="category-<%= catSlug %>-title"><%= category %></h2>
+                <p class="cf-section-desc cmd-count"><%= groupedCommands[category].length %> command<%= groupedCommands[category].length !== 1 ? 's' : '' %></p>
             </div>
-        </div>
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Disabled</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: <%= disabledCount > 0 ? 'var(--color-warning)' : 'var(--color-success)' %>;"><%= disabledCount %></div>
-        </div>
-    </div>
-
-    <!-- Search Bar -->
-    <div style="margin-bottom: var(--spacing-6);">
-        <div class="input-group">
-            <span class="input-group-icon">
-                <i class="fas fa-search"></i>
-            </span>
-            <input type="text" id="commandSearch" class="form-control" placeholder="Search commands by name or description...">
-        </div>
-    </div>
-
-    <!-- Save Bar (sticky when changes exist) -->
-    <div id="commandSaveBar" style="display: none;">
-        <div style="display: flex; align-items: center; justify-content: space-between;">
-            <div style="display: flex; align-items: center; gap: var(--spacing-3);">
-                <i class="fas fa-exclamation-triangle" style="color: var(--color-primary-400);"></i>
-                <span style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">You have unsaved changes to command permissions</span>
-            </div>
-            <div style="display: flex; gap: var(--spacing-2);">
-                <button type="button" class="btn btn-sm btn-secondary" onclick="resetAllRestrictions()">
-                    <i class="fas fa-undo"></i> Reset All
-                </button>
-                <button type="button" class="btn btn-sm btn-primary" onclick="saveCommandRestrictions()">
-                    <i class="fas fa-save"></i> Save Changes
-                </button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Command Categories -->
-    <% for (const category in groupedCommands) { %>
-        <div class="command-category" style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6); margin-bottom: var(--spacing-6);">
-            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--spacing-4);">
-                <div style="display: flex; align-items: center; gap: var(--spacing-3);">
-                    <div style="width: 48px; height: 48px; background: linear-gradient(135deg, var(--color-primary-500), var(--color-primary-600)); border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                        <i class="<%= categoryIcons[category] || 'fas fa-terminal' %>" style="color: white; font-size: 1.25rem;"></i>
-                    </div>
-                    <div>
-                        <h4 style="margin: 0; font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary);"><%= category %></h4>
-                        <p style="margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted);"><%= groupedCommands[category].length %> command<%= groupedCommands[category].length !== 1 ? 's' : '' %></p>
-                    </div>
-                </div>
-                <button class="btn btn-sm btn-secondary" onclick="toggleCategory('<%= category.replace(/'/g, "\\'") %>')">
-                    <i class="fas fa-chevron-down category-toggle-icon" id="toggle-<%= category.replace(/\s+/g, '-') %>"></i>
+            <div class="cf-section-actions">
+                <button type="button" class="btn btn-sm btn-secondary" onclick="toggleCategory('<%= category.replace(/'/g, "\\'") %>')">
+                    <i class="fas fa-chevron-down category-toggle-icon" id="toggle-<%= catSlug %>" aria-hidden="true"></i>
                     <span>Collapse</span>
                 </button>
             </div>
+        </header>
 
-            <div class="category-commands" id="category-<%= category.replace(/\s+/g, '-') %>">
-                <% groupedCommands[category].forEach(command => {
-                    const hasSubs = command.subcommands && command.subcommands.length > 0;
-                    const totalSubs = hasSubs ? command.subcommands.reduce((sum, s) => sum + (s.type === 'group' ? s.subcommands.length : 1), 0) : 0;
-                %>
-                    <div class="cmd-tree-item command-row" data-command-name="<%= command.name.toLowerCase() %>" data-description="<%= (command.description + ' ' + (command.subcommands || []).map(s => s.type === 'group' ? s.subcommands.map(sc => sc.name + ' ' + sc.description).join(' ') : s.name + ' ' + s.description).join(' ')).toLowerCase() %>" data-category="<%= category.toLowerCase() %>">
-                        <!-- Top-level command header -->
-                        <div class="cmd-tree-header">
-                            <div class="cmd-tree-left">
-                                <% if (hasSubs) { %>
-                                    <button class="cmd-tree-toggle" onclick="toggleCommandTree(this)" title="Expand/Collapse">
-                                        <i class="fas fa-chevron-right"></i>
-                                    </button>
+        <div class="cf-rows category-commands" id="category-<%= catSlug %>">
+            <% groupedCommands[category].forEach(command => {
+                const hasSubs = command.subcommands && command.subcommands.length > 0;
+                const totalSubs = hasSubs ? command.subcommands.reduce((sum, s) => sum + (s.type === 'group' ? s.subcommands.length : 1), 0) : 0;
+                const state = getRestrictionState(command.name);
+                // What a member types (`fun owoify` for a moved command); command.name stays the saved key.
+                const shown = command.slash || command.name;
+                const ctype = typeOf(command);
+                const label = ctype === 'text' ? textLabel(command) : '/' + shown;
+            %>
+            <div class="cmd-tree-item command-row" data-command-name="<%= (command.name + (shown !== command.name ? ' ' + shown : '')).toLowerCase() %>" data-description="<%= (command.description + ' ' + (command.subcommands || []).map(s => s.type === 'group' ? s.subcommands.map(sc => sc.name + ' ' + sc.description).join(' ') : s.name + ' ' + s.description).join(' ')).toLowerCase() %>" data-category="<%= category.toLowerCase() %>">
+                <div class="cmd-tree-header">
+                    <div class="cmd-tree-left">
+                        <% if (hasSubs) { %>
+                        <button type="button" class="cmd-tree-toggle" onclick="toggleCommandTree(this)" title="Show or hide subcommands" aria-label="Show or hide subcommands of /<%= shown %>">
+                            <i class="fas fa-chevron-right" aria-hidden="true"></i>
+                        </button>
+                        <% } else { %>
+                        <span class="cmd-tree-toggle-spacer"></span>
+                        <% } %>
+                        <span class="cmd-name-badge"><%= label %></span>
+                        <span class="<%= TYPE_PILL[ctype] || 'cf-pill' %> cmd-type" title="<%= commandRunHow(command, shown) %>"><%= TYPE_LABEL[ctype] || 'Slash' %></span>
+                        <% if (hasSubs) { %>
+                        <span class="cmd-sub-count"><%= totalSubs %> subcommand<%= totalSubs !== 1 ? 's' : '' %></span>
+                        <% } %>
+                        <span class="cmd-desc-inline cmd-desc-col"><%= command.description %></span>
+                    </div>
+                    <div class="cmd-tree-right">
+                        <span class="cmd-usage" data-usage-for="<%= command.name %>"></span>
+                        <select class="form-select cmd-access-select" aria-label="Who can use /<%= shown %>"
+                                data-command="<%= command.name %>"
+                                data-original="<%= state %>"
+                                data-current="<%= state %>"
+                                data-default="<%= defaultState(command.name) %>">
+                            <option value="everyone" <%= state === 'everyone' ? 'selected' : '' %>>Everyone</option>
+                            <option value="mod_only" <%= state === 'mod_only' ? 'selected' : '' %>>Mod only</option>
+                            <option value="disabled" <%= state === 'disabled' ? 'selected' : '' %>>Disabled</option>
+                        </select>
+                        <button type="button" class="btn btn-sm btn-secondary cmd-open-settings"
+                                data-cmd-key="<%= command.name %>" data-cmd-label="<%= label %>"
+                                data-cmd-run="<%= commandRunHow(command, shown) %>"
+                                data-cmd-desc="<%= command.description %>" aria-label="Settings for <%= label %>">Settings</button>
+                    </div>
+                </div>
+                <%# What this command's settings narrow, in words (filled from CMD_SETTINGS). %>
+                <p class="cmd-summary" data-summary-for="<%= command.name %>"></p>
+                <% if (hasSubs) { %>
+                <div class="cmd-tree-children" style="display: none">
+                    <% command.subcommands.forEach(sub => { %>
+                        <% if (sub.type === 'group') { %>
+                        <div class="cmd-tree-group">
+                            <div class="cmd-tree-group-header">
+                                <span class="cmd-group-name"><%= sub.name %></span>
+                                <span class="cmd-group-desc"><%= sub.description %></span>
+                                <button type="button" class="cmd-link-btn cmd-sub-settings cmd-open-settings"
+                                        data-cmd-key="<%= command.name %>:<%= sub.name %>" data-cmd-label="/<%= shown %> <%= sub.name %>"
+                                        data-cmd-run="<%= groupRunHow(command, sub) %>"
+                                        data-cmd-desc="<%= sub.description %>" data-cmd-parent="<%= command.name %>"
+                                        aria-label="Settings for /<%= shown %> <%= sub.name %>">Settings</button>
+                            </div>
+                            <% sub.subcommands.forEach(sc => { const f = sc.form; %>
+                            <div class="cmd-tree-sub">
+                                <% if (f && !f.slash && f.text) { %>
+                                <span class="cmd-sub-path cmd-sub-text" title="<%= runHow(f) %>"><strong><%= f.text %></strong></span>
+                                <% if (ctype !== 'text') { %><span class="cf-pill is-info cmd-type">Text</span><% } %>
                                 <% } else { %>
-                                    <span class="cmd-tree-toggle-spacer"></span>
+                                <span class="cmd-sub-path"<% if (f && f.slash) { %> title="<%= runHow(f) %>"<% } %>><%= f && f.slash ? f.slash.split(' ').slice(0, -1).join(' ') : '/' + shown + ' ' + sub.name %> <strong><%= sc.name %></strong></span>
+                                <% if (ctype === 'mixed' && f && f.slash) { %><span class="cf-pill cmd-type">Slash</span><% } %>
                                 <% } %>
-                                <span class="cmd-name-badge">/<%= command.name %></span>
-                                <span class="cmd-desc-inline cmd-desc-col"><%= command.description %></span>
-                                <% if (hasSubs) { %>
-                                    <span class="cmd-sub-count"><%= totalSubs %> subcommand<%= totalSubs !== 1 ? 's' : '' %></span>
+                                <span class="cmd-sub-desc"><%= sc.description %></span>
+                                <% if (sc.options && sc.options.length > 0) { %>
+                                <span class="cmd-sub-args"><% sc.options.forEach(o => { %><span class="cmd-arg <%= o.required ? 'required' : 'optional' %>" title="<%= o.required ? 'Required' : 'Optional' %>"><%= o.name %></span> <% }); %></span>
                                 <% } %>
                             </div>
-                            <div class="cmd-tree-right">
-                                <select class="form-select cmd-access-select"
-                                        data-command="<%= command.name %>"
-                                        data-original="<%= getRestrictionState(command.name) %>"
-                                        data-current="<%= getRestrictionState(command.name) %>"
-                                        style="font-size: var(--font-size-sm); width: 140px;">
-                                    <option value="everyone" <%= getRestrictionState(command.name) === 'everyone' ? 'selected' : '' %>>Everyone</option>
-                                    <option value="mod_only" <%= getRestrictionState(command.name) === 'mod_only' ? 'selected' : '' %>>Mod Only</option>
-                                    <option value="disabled" <%= getRestrictionState(command.name) === 'disabled' ? 'selected' : '' %>>Disabled</option>
+                            <% }); %>
+                        </div>
+                        <% } else { const f = sub.form; %>
+                        <div class="cmd-tree-sub">
+                            <% if (f && !f.slash && f.text) { %>
+                            <span class="cmd-sub-path cmd-sub-text" title="<%= runHow(f) %>"><strong><%= f.text %></strong></span>
+                            <% if (ctype !== 'text') { %><span class="cf-pill is-info cmd-type">Text</span><% } %>
+                            <% } else { %>
+                            <span class="cmd-sub-path"<% if (f && f.slash) { %> title="<%= runHow(f) %>"<% } %>><%= f && f.slash ? f.slash.split(' ').slice(0, -1).join(' ') : '/' + shown %> <strong><%= sub.name %></strong></span>
+                            <% if (ctype === 'mixed' && f && f.slash) { %><span class="cf-pill cmd-type">Slash</span><% } %>
+                            <% } %>
+                            <span class="cmd-sub-desc"><%= sub.description %></span>
+                            <% if (sub.options && sub.options.length > 0) { %>
+                            <span class="cmd-sub-args"><% sub.options.forEach(o => { %><span class="cmd-arg <%= o.required ? 'required' : 'optional' %>" title="<%= o.required ? 'Required' : 'Optional' %>"><%= o.name %></span> <% }); %></span>
+                            <% } %>
+                            <button type="button" class="cmd-link-btn cmd-sub-settings cmd-open-settings"
+                                    data-cmd-key="<%= command.name %>:<%= sub.name %>" data-cmd-label="<%= f && !f.slash && f.text ? f.text : '/' + shown + ' ' + sub.name %>"
+                                    data-cmd-run="<%= runHow(f) %>"
+                                    data-cmd-desc="<%= sub.description %>" data-cmd-parent="<%= command.name %>"
+                                    aria-label="Settings for /<%= shown %> <%= sub.name %>">Settings</button>
+                        </div>
+                        <% } %>
+                    <% }); %>
+                </div>
+                <% } %>
+            </div>
+            <% }); %>
+        </div>
+    </section>
+    <% } %>
+
+    <section class="cf-section command-category" id="prefixAliasSection" aria-labelledby="prefixAliasSection-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="prefixAliasSection-title">Prefix command aliases</h2>
+                <p class="cf-section-desc">Short names that run an existing command from chat. Members type the prefix and then the alias, for example <code class="cmd-mono"><%= currentPrefix %>b</code>.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-table-wrap" id="aliasTableContainer">
+                <table class="cf-table cf-table--stack" id="aliasTable">
+                    <thead>
+                        <tr>
+                            <th scope="col">Alias</th>
+                            <th scope="col">Runs</th>
+                            <th scope="col" class="alias-created-col">Created by</th>
+                            <th scope="col" class="cf-cell-end"><span class="visually-hidden">Actions</span></th>
+                        </tr>
+                    </thead>
+                    <tbody id="aliasTableBody">
+                        <% if (pAliases.length === 0) { %>
+                        <tr id="aliasEmptyRow">
+                            <td colspan="4" class="cmd-alias-empty">No aliases yet. Add one below.</td>
+                        </tr>
+                        <% } else { %>
+                            <% pAliases.forEach(a => { %>
+                            <tr class="alias-row" data-alias="<%= a.alias %>">
+                                <td data-label="Alias"><span class="cmd-alias"><%= currentPrefix %><%= a.alias %></span></td>
+                                <td data-label="Runs"><span class="cmd-alias-target">/<%= a.command_name %></span></td>
+                                <td data-label="Created by" class="alias-created-col cmd-alias-by">
+                                    <% if (/^\d{15,25}$/.test(String(a.created_by || ''))) { %><%- include('_user-cell', { cfUser: null, cfUserId: a.created_by, cfUserName: null, cfUserSize: 'sm' }) %><% } else { %><%= a.created_by || 'Unknown' %><% } %>
+                                </td>
+                                <td class="cf-cell-end">
+                                    <button type="button" class="btn btn-sm btn-danger" onclick="deleteAlias(<%= JSON.stringify(String(a.alias)) %>)" title="Delete alias">Delete</button>
+                                </td>
+                            </tr>
+                            <% }); %>
+                        <% } %>
+                    </tbody>
+                </table>
+            </div>
+            <div class="cf-rows-head" id="alias-add-head">Add an alias</div>
+            <div class="cf-row cf-row--stack">
+                <div class="cf-fields">
+                    <div class="cf-field">
+                        <label for="aliasInput">Alias, without the prefix</label>
+                        <input type="text" id="aliasInput" class="form-control cmd-mono" placeholder="b">
+                    </div>
+                    <div class="cf-field">
+                        <label for="aliasCommandInput">Runs command</label>
+                        <input type="text" id="aliasCommandInput" class="form-control cmd-mono" placeholder="balance">
+                    </div>
+                </div>
+            </div>
+            <div class="cf-section-foot">
+                <button type="button" class="btn btn-primary" onclick="addAlias()">Add alias</button>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="cmd-levels-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="cmd-levels-title">Access levels</h2>
+                <p class="cf-section-desc">What each choice in the lists above means.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-list cmd-levels">
+                <div class="cf-list-item"><div class="cf-list-main"><span class="cf-pill is-ok">Everyone</span> The bot adds no check of its own. The default for every command except admin commands.</div></div>
+                <div class="cf-list-item"><div class="cf-list-main"><span class="cf-pill is-warn">Mod only</span> Members also need the Manage Server permission. Admin commands show this until you change them; until then only the Discord permission each one asks for applies, such as Administrator or Kick Members.</div></div>
+                <div class="cf-list-item"><div class="cf-list-main"><span class="cf-pill">Discord permissions</span> Most admin commands also ask Discord for a permission, and Discord checks it whatever you pick here. Server Settings, Integrations in Discord changes who passes that check.</div></div>
+                <div class="cf-list-item"><div class="cf-list-main"><span class="cf-pill is-bad">Disabled</span> Nobody can use the command in this server.</div></div>
+                <div class="cf-list-item"><div class="cf-list-main"><span class="cf-pill is-info">Settings</span> Narrows the level further: roles and channels, a cooldown, private replies, and deleting the reply after a while.</div></div>
+            </div>
+        </div>
+    </section>
+</div>
+
+<%# Per-command settings drawer. Filled by openCommandSettings() from CMD_SETTINGS for the key it opens. %>
+<div class="cf-modal cmd-drawer" id="cmdDrawer" hidden>
+    <div class="cf-modal-dialog cmd-drawer-panel" role="dialog" aria-modal="true" aria-labelledby="cmdDrawerTitle" aria-describedby="cmdDrawerDesc">
+        <header class="cf-modal-head">
+            <div>
+                <h2 class="cf-modal-title cmd-key" id="cmdDrawerTitle">Command</h2>
+                <p class="cf-modal-desc" id="cmdDrawerDesc"></p>
+            </div>
+            <button type="button" class="cf-modal-close" id="cmdDrawerClose" aria-label="Close"><i class="fas fa-xmark" aria-hidden="true"></i></button>
+        </header>
+        <div class="cf-modal-body">
+            <div class="cf-rows" id="cmdUsageBox">
+                <div class="cf-rows-head">How it is run, and how much</div>
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-row-text">
+                        <span class="cf-row-label">How members run it</span>
+                        <p class="cf-row-desc" id="cmdRunHow"></p>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-row-text">
+                        <span class="cf-row-label" id="cmdUsageLabel">Uses in the last 90 days</span>
+                        <p class="cf-row-desc" id="cmdUsageText" aria-live="polite"></p>
+                    </div>
+                    <div class="cf-row-control">
+                        <svg id="cmdSpark" class="cmd-spark" viewBox="0 0 89 40" preserveAspectRatio="none" role="img" aria-labelledby="cmdUsageLabel cmdUsageText"></svg>
+                    </div>
+                </div>
+            </div>
+            <div class="cf-rows" id="cmdInheritBox" hidden>
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="cmdInherit">Same as <span id="cmdParentLabel" class="cmd-key"></span></label>
+                        <p class="cf-row-desc" id="cmdInherit-desc">Turn off to give this part its own settings. They replace the command's settings here; they are not added to them.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="checkbox" class="cf-switch" role="switch" id="cmdInherit" aria-describedby="cmdInherit-desc">
+                    </div>
+                </div>
+            </div>
+
+            <div id="cmdOwnSettings">
+                <div class="cf-rows">
+                    <div class="cf-rows-head">Who can use it</div>
+                    <div class="cf-row cf-row--stack">
+                        <div class="cf-row-text">
+                            <label class="cf-row-label" for="cmdAccess">Access</label>
+                        </div>
+                        <div class="cf-row-control">
+                            <select class="form-select" id="cmdAccess">
+                                <option value="everyone">Everyone</option>
+                                <option value="mod_only">Mod only (Manage Server)</option>
+                                <option value="disabled">Disabled</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="cf-row cf-row--stack">
+                        <div class="cf-row-text">
+                            <label class="cf-row-label" for="cmdAllowedRoles">Allowed roles</label>
+                            <p class="cf-row-desc" id="cmdAllowedRoles-desc">Only members with one of these roles. Leave empty for everyone.</p>
+                        </div>
+                        <div class="cf-row-control">
+                            <select class="form-select" id="cmdAllowedRoles" multiple aria-describedby="cmdAllowedRoles-desc">
+                                <% cmdRoles.forEach(r => { %><option value="<%= r.id %>" data-kind="role"<% if (roleColour(r)) { %> data-color="<%= roleColour(r) %>"<% } %>><%= r.name %></option><% }); %>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="cf-row cf-row--stack">
+                        <div class="cf-row-text">
+                            <label class="cf-row-label" for="cmdDeniedRoles">Blocked roles</label>
+                            <p class="cf-row-desc" id="cmdDeniedRoles-desc">Members with any of these roles cannot use it, even if they also have an allowed role.</p>
+                        </div>
+                        <div class="cf-row-control">
+                            <select class="form-select" id="cmdDeniedRoles" multiple aria-describedby="cmdDeniedRoles-desc">
+                                <% cmdRoles.forEach(r => { %><option value="<%= r.id %>" data-kind="role"<% if (roleColour(r)) { %> data-color="<%= roleColour(r) %>"<% } %>><%= r.name %></option><% }); %>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="cf-rows">
+                    <div class="cf-rows-head">Where it works</div>
+                    <div class="cf-row cf-row--stack">
+                        <div class="cf-row-text">
+                            <label class="cf-row-label" for="cmdAllowedChannels">Allowed channels</label>
+                            <p class="cf-row-desc" id="cmdAllowedChannels-desc">Only in these channels. Leave empty for every channel.</p>
+                        </div>
+                        <div class="cf-row-control">
+                            <select class="form-select" id="cmdAllowedChannels" multiple aria-describedby="cmdAllowedChannels-desc">
+                                <% cmdChannels.forEach(c => { const v = cmdVoiceIds.has(c.id); %><option value="<%= c.id %>" data-kind="<%= v ? 'voice' : 'text' %>"><%= v ? '' : '#' %><%= c.name %></option><% }); %>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="cf-row cf-row--stack">
+                        <div class="cf-row-text">
+                            <label class="cf-row-label" for="cmdDeniedChannels">Blocked channels</label>
+                            <p class="cf-row-desc" id="cmdDeniedChannels-desc">Never in these channels.</p>
+                        </div>
+                        <div class="cf-row-control">
+                            <select class="form-select" id="cmdDeniedChannels" multiple aria-describedby="cmdDeniedChannels-desc">
+                                <% cmdChannels.forEach(c => { const v = cmdVoiceIds.has(c.id); %><option value="<%= c.id %>" data-kind="<%= v ? 'voice' : 'text' %>"><%= v ? '' : '#' %><%= c.name %></option><% }); %>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="cf-rows">
+                    <div class="cf-rows-head">Limits and replies</div>
+                    <div class="cf-row cf-row--stack">
+                        <div class="cf-row-text">
+                            <label class="cf-row-label" for="cmdCooldown">Cooldown</label>
+                            <p class="cf-row-desc" id="cmdCooldown-desc">How long before it can be used again. 0 for no extra cooldown.</p>
+                        </div>
+                        <div class="cf-row-control">
+                            <div class="cmd-unit">
+                                <div class="cf-input-unit">
+                                    <input type="number" class="form-control" id="cmdCooldown" min="0" max="86400" step="1" inputmode="numeric" aria-describedby="cmdCooldown-desc">
+                                    <span class="cf-unit" aria-hidden="true">seconds</span>
+                                </div>
+                                <select class="form-select" id="cmdCooldownScope" aria-label="Cooldown applies to">
+                                    <option value="user">For each member</option>
+                                    <option value="channel">For each channel</option>
+                                    <option value="guild">For the whole server</option>
                                 </select>
                             </div>
                         </div>
-                        <!-- Subcommand tree (collapsed by default) -->
-                        <% if (hasSubs) { %>
-                            <div class="cmd-tree-children" style="display: none;">
-                                <% command.subcommands.forEach(sub => { %>
-                                    <% if (sub.type === 'group') { %>
-                                        <div class="cmd-tree-group">
-                                            <div class="cmd-tree-group-header">
-                                                <i class="fas fa-folder" style="color: rgba(167, 139, 250, 0.5); font-size: 0.7rem;"></i>
-                                                <span class="cmd-group-name"><%= sub.name %></span>
-                                                <span class="cmd-group-desc"><%= sub.description %></span>
-                                            </div>
-                                            <% sub.subcommands.forEach(sc => { %>
-                                                <div class="cmd-tree-sub">
-                                                    <span class="cmd-sub-path">/<%= command.name %> <%= sub.name %> <strong><%= sc.name %></strong></span>
-                                                    <span class="cmd-sub-desc"><%= sc.description %></span>
-                                                    <% if (sc.options && sc.options.length > 0) { %>
-                                                        <span class="cmd-sub-args"><% sc.options.forEach(o => { %><span class="cmd-arg <%= o.required ? 'required' : 'optional' %>"><%= o.name %></span> <% }); %></span>
-                                                    <% } %>
-                                                </div>
-                                            <% }); %>
-                                        </div>
-                                    <% } else { %>
-                                        <div class="cmd-tree-sub">
-                                            <span class="cmd-sub-path">/<%= command.name %> <strong><%= sub.name %></strong></span>
-                                            <span class="cmd-sub-desc"><%= sub.description %></span>
-                                            <% if (sub.options && sub.options.length > 0) { %>
-                                                <span class="cmd-sub-args"><% sub.options.forEach(o => { %><span class="cmd-arg <%= o.required ? 'required' : 'optional' %>"><%= o.name %></span> <% }); %></span>
-                                            <% } %>
-                                        </div>
-                                    <% } %>
-                                <% }); %>
+                    </div>
+                    <div class="cf-row cf-row--switch">
+                        <div class="cf-row-text">
+                            <label class="cf-row-label" for="cmdEphemeral">Private replies</label>
+                            <p class="cf-row-desc" id="cmdEphemeral-desc">Only the person who used it sees the reply. Off leaves it to the command. Slash commands only; a reply in chat is always public.</p>
+                        </div>
+                        <div class="cf-row-control">
+                            <input type="checkbox" class="cf-switch" role="switch" id="cmdEphemeral" aria-describedby="cmdEphemeral-desc">
+                        </div>
+                    </div>
+                    <div class="cf-row cf-row--stack">
+                        <div class="cf-row-text">
+                            <label class="cf-row-label" for="cmdAutodelete">Delete the reply after</label>
+                            <p class="cf-row-desc" id="cmdAutodelete-desc">0 keeps it. Up to 600 seconds.</p>
+                        </div>
+                        <div class="cf-row-control">
+                            <div class="cf-input-unit">
+                                <input type="number" class="form-control" id="cmdAutodelete" min="0" max="600" step="1" inputmode="numeric" aria-describedby="cmdAutodelete-desc">
+                                <span class="cf-unit" aria-hidden="true">seconds</span>
                             </div>
-                        <% } %>
+                        </div>
                     </div>
-                <% }); %>
-            </div>
-        </div>
-    <% } %>
-
-    <!-- Prefix Command Aliases Section -->
-    <div class="command-category" id="prefixAliasSection" style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6); margin-bottom: var(--spacing-6);">
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--spacing-4);">
-            <div style="display: flex; align-items: center; gap: var(--spacing-3);">
-                <div style="width: 48px; height: 48px; background: linear-gradient(135deg, #f59e0b, #d97706); border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                    <i class="fas fa-exchange-alt" style="color: white; font-size: 1.25rem;"></i>
-                </div>
-                <div>
-                    <h4 style="margin: 0; font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary);">Prefix Command Aliases</h4>
-                    <p style="margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted);">
-                        Current prefix: <code style="background: var(--color-dark-700); padding: 2px 8px; border-radius: var(--radius-sm); color: #fbbf24; font-weight: var(--font-weight-bold);"><%= currentPrefix %></code>
-                        &mdash; Create custom aliases that map to existing commands
-                    </p>
-                </div>
-            </div>
-        </div>
-
-        <!-- Add Alias Form -->
-        <div style="background: var(--color-dark-700); border: 1px solid var(--color-dark-400); border-radius: var(--radius-md); padding: var(--spacing-4); margin-bottom: var(--spacing-4);">
-            <div style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-3);">
-                <i class="fas fa-plus-circle" style="color: var(--color-primary-400);"></i> Add New Alias
-            </div>
-            <div style="display: flex; gap: var(--spacing-3); align-items: flex-end; flex-wrap: wrap;">
-                <div style="flex: 1; min-width: 160px;">
-                    <label style="display: block; font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1); text-transform: uppercase; letter-spacing: 0.05em;">Alias</label>
-                    <div style="display: flex; align-items: center;">
-                        <span style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-right: none; border-radius: var(--radius-md) 0 0 var(--radius-md); padding: 8px 10px; color: #fbbf24; font-weight: var(--font-weight-bold); font-family: 'Courier New', monospace;"><%= currentPrefix %></span>
-                        <input type="text" id="aliasInput" class="form-control" placeholder="e.g. b" style="border-radius: 0 var(--radius-md) var(--radius-md) 0; font-family: 'Courier New', monospace;">
+                    <div class="cf-row cf-row--stack">
+                        <div class="cf-row-text">
+                            <label class="cf-row-label" for="cmdDenial">Refusal message</label>
+                            <p class="cf-row-desc" id="cmdDenial-desc">Shown instead of the usual message when someone is not allowed to use it here. Leave empty for the usual one.</p>
+                        </div>
+                        <div class="cf-row-control">
+                            <textarea class="form-control" id="cmdDenial" rows="2" maxlength="500" aria-describedby="cmdDenial-desc"></textarea>
+                        </div>
                     </div>
                 </div>
-                <div style="flex: 1; min-width: 160px;">
-                    <label style="display: block; font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1); text-transform: uppercase; letter-spacing: 0.05em;">Maps To Command</label>
-                    <input type="text" id="aliasCommandInput" class="form-control" placeholder="e.g. balance" style="font-family: 'Courier New', monospace;">
-                </div>
-                <div>
-                    <button type="button" class="btn btn-sm btn-primary" onclick="addAlias()" style="min-height: 38px;">
-                        <i class="fas fa-plus"></i> Add
-                    </button>
-                </div>
             </div>
         </div>
-
-        <!-- Aliases Table -->
-        <div class="table-container" id="aliasTableContainer">
-            <table class="data-table" id="aliasTable">
-                <thead>
-                    <tr>
-                        <th style="width: 200px;">Alias</th>
-                        <th>Maps To</th>
-                        <th class="alias-created-col" style="width: 180px;">Created By</th>
-                        <th style="width: 100px;">Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="aliasTableBody">
-                    <% if (pAliases.length === 0) { %>
-                        <tr id="aliasEmptyRow">
-                            <td colspan="4" style="text-align: center; padding: var(--spacing-6); color: var(--color-text-muted);">
-                                <i class="fas fa-inbox" style="font-size: 1.5rem; display: block; margin-bottom: var(--spacing-2);"></i>
-                                No aliases configured. Add one above to get started.
-                            </td>
-                        </tr>
-                    <% } else { %>
-                        <% pAliases.forEach(a => { %>
-                            <tr class="alias-row" data-alias="<%= a.alias %>">
-                                <td>
-                                    <span style="background: var(--color-dark-700); padding: var(--spacing-2) var(--spacing-3); border-radius: var(--radius-sm); font-family: 'Courier New', monospace; font-weight: var(--font-weight-bold); color: #fbbf24;">
-                                        <%= currentPrefix %><%= a.alias %>
-                                    </span>
-                                </td>
-                                <td>
-                                    <span style="background: var(--color-dark-700); padding: var(--spacing-2) var(--spacing-3); border-radius: var(--radius-sm); font-family: 'Courier New', monospace; color: var(--color-primary-400);">
-                                        /<%= a.command_name %>
-                                    </span>
-                                </td>
-                                <td class="alias-created-col" style="color: var(--color-text-secondary); font-size: var(--font-size-sm);">
-                                    <%= a.created_by || 'Unknown' %>
-                                </td>
-                                <td>
-                                    <button type="button" class="btn btn-sm btn-danger" onclick="deleteAlias('<%= a.alias %>')" title="Delete alias">
-                                        <i class="fas fa-trash"></i>
-                                    </button>
-                                </td>
-                            </tr>
-                        <% }); %>
-                    <% } %>
-                </tbody>
-            </table>
-        </div>
-    </div>
-
-    <!-- Info Banner -->
-    <div style="background: linear-gradient(135deg, rgba(167, 139, 250, 0.1), rgba(167, 139, 250, 0.05)); border: 1px solid rgba(167, 139, 250, 0.3); border-radius: var(--radius-lg); padding: var(--spacing-4);">
-        <div style="display: flex; gap: var(--spacing-3);">
-            <i class="fas fa-info-circle" style="color: var(--color-primary-400); font-size: 1.25rem; margin-top: 2px;"></i>
-            <div>
-                <div style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-2);">
-                    Command Access Levels
-                </div>
-                <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">
-                    <ul style="margin: 0; padding-left: var(--spacing-4); list-style: disc;">
-                        <li><span style="color: var(--color-success); font-weight: var(--font-weight-medium);">Everyone</span> &mdash; All members can use this command (default)</li>
-                        <li><span style="color: var(--color-warning); font-weight: var(--font-weight-medium);">Mod Only</span> &mdash; Only members with Manage Server permission</li>
-                        <li><span style="color: var(--color-danger); font-weight: var(--font-weight-medium);">Disabled</span> &mdash; Nobody can use this command in this server</li>
-                    </ul>
-                </div>
-            </div>
-        </div>
+        <footer class="cf-modal-foot">
+            <span class="cf-foot-note" id="cmdDrawerStatus" role="status" aria-live="polite"></span>
+            <button type="button" class="btn btn-secondary" id="cmdDrawerReset">Reset to defaults</button>
+            <button type="button" class="btn btn-primary" id="cmdDrawerSave">Save</button>
+        </footer>
     </div>
 </div>
-
-<style>
-.table-container {
-    overflow-x: auto;
-    border: 1px solid var(--color-dark-400);
-    border-radius: var(--radius-lg);
-}
-
-.data-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-.data-table thead {
-    background: var(--color-dark-700);
-    border-bottom: 2px solid var(--color-dark-400);
-}
-
-.data-table th {
-    padding: var(--spacing-3);
-    text-align: left;
-    font-size: var(--font-size-xs);
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-
-.data-table td {
-    padding: var(--spacing-3);
-    border-bottom: 1px solid var(--color-dark-500);
-}
-
-.data-table tbody tr {
-    transition: background var(--transition-base);
-}
-
-.data-table tbody tr:hover {
-    background: var(--color-dark-700);
-}
-
-.data-table tbody tr:last-child td {
-    border-bottom: none;
-}
-
-.input-group {
-    display: flex;
-    align-items: stretch;
-}
-
-.input-group-icon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0 var(--spacing-3);
-    background: var(--color-dark-700);
-    border: 1px solid var(--color-dark-400);
-    border-right: none;
-    border-radius: var(--radius-md) 0 0 var(--radius-md);
-    color: var(--color-text-muted);
-}
-
-.category-commands {
-    transition: all 0.3s ease;
-    overflow: hidden;
-}
-
-.category-commands.collapsed {
-    max-height: 0;
-    opacity: 0;
-}
-
-.category-toggle-icon {
-    transition: transform 0.3s ease;
-}
-
-.category-toggle-icon.rotated {
-    transform: rotate(-90deg);
-}
-
-/* Command tree styles */
-.cmd-tree-item {
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 8px;
-    margin-bottom: 6px;
-    background: rgba(0, 0, 0, 0.15);
-    overflow: hidden;
-}
-.cmd-tree-item:hover { border-color: rgba(167, 139, 250, 0.2); }
-.cmd-tree-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 10px 14px;
-    gap: 12px;
-}
-.cmd-tree-left {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    flex: 1;
-    min-width: 0;
-    overflow: hidden;
-}
-.cmd-tree-right { flex-shrink: 0; }
-.cmd-tree-toggle {
-    background: none; border: none;
-    color: rgba(255, 255, 255, 0.4);
-    cursor: pointer; padding: 4px;
-    font-size: 0.7rem;
-    transition: transform 0.2s, color 0.2s;
-    width: 20px; text-align: center; flex-shrink: 0;
-}
-.cmd-tree-toggle:hover { color: #a78bfa; }
-.cmd-tree-toggle.expanded i { transform: rotate(90deg); }
-.cmd-tree-toggle-spacer { width: 20px; flex-shrink: 0; }
-.cmd-name-badge {
-    background: rgba(167, 139, 250, 0.15);
-    border: 1px solid rgba(167, 139, 250, 0.25);
-    padding: 3px 10px; border-radius: 5px;
-    font-family: 'Courier New', monospace;
-    font-weight: 700; font-size: 0.82rem;
-    color: #a78bfa; white-space: nowrap; flex-shrink: 0;
-}
-.cmd-desc-inline {
-    color: rgba(255, 255, 255, 0.5);
-    font-size: 0.8rem;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.cmd-sub-count {
-    background: rgba(255, 255, 255, 0.06);
-    padding: 2px 8px; border-radius: 4px;
-    font-size: 0.7rem; color: rgba(255, 255, 255, 0.4);
-    white-space: nowrap; flex-shrink: 0;
-}
-.cmd-tree-children {
-    border-top: 1px solid rgba(255, 255, 255, 0.06);
-    padding: 8px 14px 8px 46px;
-    background: rgba(0, 0, 0, 0.1);
-}
-.cmd-tree-group { margin-bottom: 8px; }
-.cmd-tree-group:last-child { margin-bottom: 0; }
-.cmd-tree-group-header {
-    display: flex; align-items: center; gap: 6px;
-    padding: 4px 0; margin-bottom: 4px;
-}
-.cmd-group-name {
-    font-size: 0.75rem; font-weight: 700;
-    color: rgba(167, 139, 250, 0.7);
-    text-transform: uppercase; letter-spacing: 0.04em;
-}
-.cmd-group-desc { font-size: 0.7rem; color: rgba(255, 255, 255, 0.3); }
-.cmd-tree-sub {
-    display: flex; align-items: center; gap: 8px;
-    padding: 5px 8px; border-radius: 5px;
-    margin-bottom: 2px; flex-wrap: wrap;
-}
-.cmd-tree-sub:hover { background: rgba(167, 139, 250, 0.06); }
-.cmd-sub-path {
-    font-family: 'Courier New', monospace;
-    font-size: 0.78rem; color: rgba(255, 255, 255, 0.6); white-space: nowrap;
-}
-.cmd-sub-path strong { color: #a78bfa; }
-.cmd-sub-desc {
-    font-size: 0.75rem; color: rgba(255, 255, 255, 0.35);
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;
-}
-.cmd-sub-args { display: flex; gap: 4px; flex-shrink: 0; }
-.cmd-arg {
-    font-size: 0.65rem; padding: 1px 6px;
-    border-radius: 3px; font-family: monospace;
-}
-.cmd-arg.required {
-    background: rgba(248, 113, 113, 0.15); color: #f87171;
-    border: 1px solid rgba(248, 113, 113, 0.2);
-}
-.cmd-arg.optional {
-    background: rgba(255, 255, 255, 0.05); color: rgba(255, 255, 255, 0.4);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-/* Color-coded access level selects */
-.cmd-access-select[data-current="everyone"] {
-    border-color: rgba(35, 245, 107, 0.3);
-    color: #23f56b;
-}
-
-.cmd-access-select[data-current="mod_only"] {
-    border-color: rgba(251, 191, 36, 0.3);
-    color: #fbbf24;
-}
-
-.cmd-access-select[data-current="disabled"] {
-    border-color: rgba(248, 113, 113, 0.3);
-    color: #f87171;
-}
-
-/* Color the options inside the select for readability */
-.cmd-access-select option {
-    background: var(--color-dark-700);
-    color: var(--color-text-primary);
-}
-
-/* Sticky save bar */
-#commandSaveBar {
-    position: sticky;
-    bottom: 20px;
-    z-index: 100;
-    background: var(--color-dark-700);
-    border: 1px solid rgba(167, 139, 250, 0.5);
-    border-radius: var(--radius-lg);
-    padding: var(--spacing-4);
-    margin-bottom: var(--spacing-6);
-    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.3);
-}
-
-/* Mobile Responsiveness */
-@media (max-width: 768px) {
-    /* Remove fixed widths on table headers */
-    .data-table th { width: auto !important; }
-
-    /* Hide description on mobile */
-    .cmd-desc-col, .cmd-desc-inline { display: none !important; }
-
-    /* Stack tree header on mobile */
-    .cmd-tree-header { flex-direction: column; align-items: flex-start; gap: 8px; }
-    .cmd-tree-right { align-self: flex-end; }
-    .cmd-tree-children { padding-left: 20px; }
-    .cmd-sub-desc { display: none; }
-
-    /* Hide Created By column on mobile */
-    .alias-created-col { display: none !important; }
-
-    /* Touch-friendly selects and buttons */
-    .cmd-access-select,
-    select, button { min-height: 44px; }
-
-    /* Reduce table cell padding */
-    .data-table th,
-    .data-table td { padding: var(--spacing-2) !important; }
-
-    /* Table font size */
-    .data-table { font-size: 0.875rem; }
-
-    /* Stack save bar buttons */
-    #commandSaveBar > div {
-        flex-direction: column;
-        gap: var(--spacing-3);
-    }
-
-    #commandSaveBar > div > div:last-child {
-        width: 100%;
-        display: flex;
-        flex-direction: column;
-    }
-
-    #commandSaveBar .btn { width: 100%; justify-content: center; }
-
-    /* Category header - stack on small screens */
-    .command-category > div:first-child {
-        flex-direction: column;
-        align-items: flex-start !important;
-        gap: var(--spacing-2) !important;
-    }
-
-    /* Command name badge smaller */
-    .command-row td:first-child span {
-        font-size: var(--font-size-sm);
-        padding: var(--spacing-1) var(--spacing-2);
-    }
-}
-</style>
 
 <script>
 const CMD_GUILD_ID = '<%= currentGuildId %>';
@@ -671,6 +672,7 @@ function toggleCommandTree(btn) {
     const isOpen = children.style.display !== 'none';
     children.style.display = isOpen ? 'none' : '';
     btn.classList.toggle('expanded', !isOpen);
+    btn.setAttribute('aria-expanded', String(!isOpen));
 }
 
 function toggleCategory(category) {
@@ -737,12 +739,295 @@ async function saveCommandRestrictions() {
 }
 
 function resetAllRestrictions() {
+    // Each command back to what it is with no setting: Everyone, or Mod only for admin commands.
     document.querySelectorAll('.cmd-access-select').forEach(select => {
-        select.value = 'everyone';
-        select.setAttribute('data-current', 'everyone');
+        select.value = select.dataset.default || 'everyone';
+        select.setAttribute('data-current', select.value);
     });
     checkForChanges();
 }
+
+// --- Per-command settings drawer ---
+(function () {
+    // key ('command' or 'command:sub') -> saved settings, as the API returns them (no key = defaults).
+    var CMD_SETTINGS = <%- drawerData %>;
+    var drawer = document.getElementById('cmdDrawer');
+    if (!drawer) return;
+    var $ = function (id) { return document.getElementById(id); };
+    var current = null;        // { key, label, parent, opener }
+    var dirty = false;
+
+    function list(v) { return Array.isArray(v) ? v.map(String) : []; }
+    function accessOf(s) { return !s ? null : (!Number(s.allowed) ? 'disabled' : (Number(s.admin_only) ? 'mod_only' : 'everyone')); }
+    function rowSelect(key) { return document.querySelector('.cmd-access-select[data-command="' + key.replace(/"/g, '') + '"]'); }
+    function setMulti(select, ids) {
+        Array.prototype.forEach.call(select.options, function (o) { o.selected = ids.indexOf(o.value) !== -1; });
+        select.dispatchEvent(new Event('change'));   // redraws the chip picker
+    }
+    function getMulti(select) { return Array.prototype.map.call(select.selectedOptions, function (o) { return o.value; }); }
+    function status(text, kind) { var s = $('cmdDrawerStatus'); s.textContent = text || ''; s.className = 'cf-foot-note' + (kind ? ' ' + kind : ''); }
+
+    // One line under a command: what its settings narrow, with role and channel names taken from the
+    // drawer's own pickers. textContent only.
+    function nameOf(selectId, id) {
+        var opt = Array.prototype.find.call($(selectId).options, function (o) { return o.value === id; });
+        return opt ? opt.textContent.trim() : (selectId.indexOf('Channels') !== -1 ? '#deleted-channel' : '@deleted-role');
+    }
+    function names(selectId, ids, at) {
+        var shown = ids.slice(0, 3).map(function (id) { var n = nameOf(selectId, id); return at && n.charAt(0) !== '@' && n.charAt(0) !== '#' ? at + n : n; });
+        return shown.join(', ') + (ids.length > 3 ? ' and ' + (ids.length - 3) + ' more' : '');
+    }
+    function summaryText(s) {
+        if (!s) return '';
+        var parts = [];
+        var ar = list(s.allowed_roles), dr = list(s.denied_roles), ac = list(s.allowed_channels), dc = list(s.denied_channels);
+        if (ar.length) parts.push('Only ' + names('cmdAllowedRoles', ar, '@'));
+        if (dr.length) parts.push('Not ' + names('cmdDeniedRoles', dr, '@'));
+        if (ac.length) parts.push('In ' + names('cmdAllowedChannels', ac));
+        if (dc.length) parts.push('Not in ' + names('cmdDeniedChannels', dc));
+        if (Number(s.cooldown_seconds) > 0) parts.push(s.cooldown_seconds + 's cooldown' + (s.cooldown_scope === 'guild' ? ' for the server' : s.cooldown_scope === 'channel' ? ' per channel' : ''));
+        if (s.ephemeral) parts.push('Private replies');
+        if (Number(s.autodelete_reply_seconds) > 0) parts.push('Reply deleted after ' + s.autodelete_reply_seconds + 's');
+        if (s.denial_message) parts.push('Own refusal message');
+        return parts.join(' \u00b7 ');
+    }
+    function paintSummaries() {
+        document.querySelectorAll('.cmd-summary[data-summary-for]').forEach(function (box) {
+            box.textContent = summaryText(CMD_SETTINGS[box.getAttribute('data-summary-for')]);
+        });
+        document.querySelectorAll('.cmd-sub-settings').forEach(function (btn) {
+            var set = !!CMD_SETTINGS[btn.getAttribute('data-cmd-key')];
+            btn.classList.toggle('is-set', set);
+            btn.textContent = set ? 'Own settings' : 'Settings';
+        });
+    }
+
+    function fill(s, access) {
+        $('cmdAccess').value = access;
+        setMulti($('cmdAllowedRoles'), list(s && s.allowed_roles));
+        setMulti($('cmdDeniedRoles'), list(s && s.denied_roles));
+        setMulti($('cmdAllowedChannels'), list(s && s.allowed_channels));
+        setMulti($('cmdDeniedChannels'), list(s && s.denied_channels));
+        $('cmdCooldown').value = String((s && Number(s.cooldown_seconds)) || 0);
+        $('cmdCooldownScope').value = (s && s.cooldown_scope) || 'user';
+        $('cmdEphemeral').checked = !!(s && s.ephemeral);
+        $('cmdAutodelete').value = String((s && Number(s.autodelete_reply_seconds)) || 0);
+        $('cmdDenial').value = (s && s.denial_message) || '';
+        $('cmdDenial').dispatchEvent(new Event('input'));   // character counter
+    }
+    function showOwn() { $('cmdOwnSettings').hidden = !!(current && current.parent && $('cmdInherit').checked); }
+
+    function parentAccess(parent) {
+        var sel = rowSelect(parent);
+        return sel ? sel.value : 'everyone';
+    }
+
+    window.openCommandSettings = function (key, opener) {
+        var btn = document.querySelector('.cmd-open-settings[data-cmd-key="' + String(key).replace(/"/g, '') + '"]');
+        if (!btn) return false;
+        current = { key: key, label: btn.dataset.cmdLabel, parent: btn.dataset.cmdParent || null, opener: opener || btn };
+        $('cmdDrawerTitle').textContent = current.label;
+        $('cmdDrawerDesc').textContent = btn.dataset.cmdDesc || '';
+        $('cmdRunHow').textContent = btn.dataset.cmdRun || '';
+        loadSeries(key);
+        var s = CMD_SETTINGS[key] || null;
+        if (current.parent) {
+            $('cmdInheritBox').hidden = false;
+            $('cmdParentLabel').textContent = '/' + (rowSelect(current.parent) ? (rowSelect(current.parent).closest('.command-row').querySelector('.cmd-name-badge').textContent.replace(/^\//, '')) : current.parent);
+            $('cmdInherit').checked = !s;
+            fill(s, s ? accessOf(s) : parentAccess(current.parent));
+        } else {
+            $('cmdInheritBox').hidden = true;
+            var sel = rowSelect(key);
+            fill(s, sel ? sel.value : (accessOf(s) || 'everyone'));
+        }
+        showOwn();
+        status('');
+        dirty = false;
+        drawer.hidden = false;
+        document.body.style.overflow = 'hidden';
+        $('cmdDrawerClose').focus();
+        return true;
+    };
+
+    function close(force) {
+        if (!force && dirty && !confirm('Close without saving these changes?')) return;
+        drawer.hidden = true;
+        document.body.style.overflow = '';
+        if (current && current.opener && current.opener.focus) current.opener.focus();
+        current = null;
+    }
+
+    function applySaved(key, settings, access) {
+        if (settings) CMD_SETTINGS[key] = settings; else delete CMD_SETTINGS[key];
+        var sel = rowSelect(key);
+        if (sel && access) {
+            sel.value = access;
+            sel.dataset.original = access;
+            sel.setAttribute('data-current', access);
+            checkForChanges();
+        }
+        paintSummaries();
+    }
+
+    async function send(method, body) {
+        var res = await fetch('/api/guilds/' + CMD_GUILD_ID + '/commands/settings/' + encodeURIComponent(current.key), {
+            method: method,
+            headers: { 'Content-Type': 'application/json' },
+            body: body ? JSON.stringify(body) : undefined
+        });
+        var data = await res.json().catch(function () { return {}; });
+        if (!res.ok || !data.success) throw new Error(data.error || 'Could not save');
+        return data;
+    }
+
+    $('cmdDrawerSave').addEventListener('click', async function () {
+        if (!current) return;
+        var btn = this;
+        var key = current.key;
+        btn.disabled = true;
+        status('Saving...');
+        try {
+            if (current.parent && $('cmdInherit').checked) {
+                await send('DELETE');
+                applySaved(key, null, null);
+            } else {
+                var cooldown = parseInt($('cmdCooldown').value || '0', 10);
+                var after = parseInt($('cmdAutodelete').value || '0', 10);
+                if (!(cooldown >= 0 && cooldown <= 86400)) throw new Error('Cooldown must be 0 to 86400 seconds.');
+                if (!(after >= 0 && after <= 600)) throw new Error('Delete after must be 0 to 600 seconds.');
+                var body = {
+                    access: $('cmdAccess').value,
+                    allowed_roles: getMulti($('cmdAllowedRoles')),
+                    denied_roles: getMulti($('cmdDeniedRoles')),
+                    allowed_channels: getMulti($('cmdAllowedChannels')),
+                    denied_channels: getMulti($('cmdDeniedChannels')),
+                    cooldown_seconds: cooldown,
+                    cooldown_scope: $('cmdCooldownScope').value,
+                    ephemeral: $('cmdEphemeral').checked,
+                    autodelete_reply_seconds: after,
+                    denial_message: $('cmdDenial').value.trim()
+                };
+                var data = await send('PUT', body);
+                applySaved(key, data.settings, current.parent ? null : body.access);
+            }
+            dirty = false;
+            status('Saved', 'is-ok');
+            if (typeof showToast === 'function') showToast('success', 'Saved settings for ' + current.label);
+        } catch (err) {
+            status(err.message, 'is-bad');
+        }
+        btn.disabled = false;
+    });
+
+    $('cmdDrawerReset').addEventListener('click', async function () {
+        if (!current) return;
+        if (!confirm('Reset ' + current.label + ' to its defaults?')) return;
+        var key = current.key;
+        var btn = this;
+        btn.disabled = true;
+        status('Resetting...');
+        try {
+            await send('DELETE');
+            var sel = rowSelect(key);
+            applySaved(key, null, sel ? (sel.dataset.default || 'everyone') : null);
+            if (current.parent) $('cmdInherit').checked = true;
+            fill(null, current.parent ? parentAccess(current.parent) : (sel ? sel.value : 'everyone'));
+            showOwn();
+            dirty = false;
+            status('Reset', 'is-ok');
+        } catch (err) {
+            status(err.message, 'is-bad');
+        }
+        btn.disabled = false;
+    });
+
+    // --- Usage (command_usage_daily): uses in 30 days per row, 90-day sparkline in the drawer ---
+    var USAGE = null;   // command -> { uses30, last }
+    var fmtDay = function (d) {
+        try { return new Date(d + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); } catch (e) { return d; }
+    };
+    function paintUsage() {
+        document.querySelectorAll('.cmd-usage[data-usage-for]').forEach(function (el) {
+            var u = USAGE && USAGE[el.getAttribute('data-usage-for')];
+            if (!USAGE) { el.textContent = ''; el.removeAttribute('title'); return; }
+            el.textContent = u && u.uses30 ? (u.uses30 + (u.uses30 === 1 ? ' use' : ' uses') + ' in 30 days') : 'No uses in 30 days';
+            if (u && u.last) el.title = 'Last used ' + fmtDay(u.last); else el.title = 'No use recorded';
+        });
+    }
+    fetch('/api/guilds/' + CMD_GUILD_ID + '/commands/usage', { headers: { accept: 'application/json' } })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (d) { if (d && d.success && d.available) { USAGE = d.commands || {}; paintUsage(); } })
+        .catch(function () { /* usage is extra information; the page works without it */ });
+
+    var seriesFor = null;
+    function drawSpark(days) {
+        var svg = $('cmdSpark');
+        while (svg.firstChild) svg.removeChild(svg.firstChild);
+        var NS = 'http://www.w3.org/2000/svg';
+        var max = Math.max.apply(null, days.map(function (d) { return d.uses; }).concat([1]));
+        var base = document.createElementNS(NS, 'line');
+        base.setAttribute('x1', '0'); base.setAttribute('x2', String(days.length - 1));
+        base.setAttribute('y1', '39'); base.setAttribute('y2', '39');
+        svg.appendChild(base);
+        var line = document.createElementNS(NS, 'polyline');
+        line.setAttribute('points', days.map(function (d, i) { return i + ',' + (39 - (d.uses / max) * 36).toFixed(2); }).join(' '));
+        svg.setAttribute('viewBox', '0 0 ' + Math.max(1, days.length - 1) + ' 40');
+        svg.appendChild(line);
+    }
+    function loadSeries(key) {
+        seriesFor = key;
+        $('cmdUsageText').textContent = 'Loading...';
+        drawSpark([]);
+        fetch('/api/guilds/' + CMD_GUILD_ID + '/commands/usage/series?key=' + encodeURIComponent(key), { headers: { accept: 'application/json' } })
+            .then(function (r) { return r.ok ? r.json() : null; })
+            .then(function (d) {
+                if (seriesFor !== key) return;
+                if (!d || !d.success) { $('cmdUsageText').textContent = 'Could not load usage.'; return; }
+                if (!d.available) { $('cmdUsageText').textContent = 'Usage tracking starts after the next bot update.'; return; }
+                var days = d.days || [];
+                var total = days.reduce(function (s, x) { return s + x.uses; }, 0);
+                var last30 = days.slice(-30).reduce(function (s, x) { return s + x.uses; }, 0);
+                var lastDay = null;
+                for (var i = days.length - 1; i >= 0; i--) { if (days[i].uses) { lastDay = days[i].day; break; } }
+                $('cmdUsageText').textContent = total
+                    ? total + (total === 1 ? ' use' : ' uses') + ' in 90 days, ' + last30 + ' in the last 30. Last used ' + fmtDay(lastDay) + '.'
+                    : 'No uses in the last 90 days.';
+                drawSpark(days);
+            })
+            .catch(function () { if (seriesFor === key) $('cmdUsageText').textContent = 'Could not load usage.'; });
+    }
+
+    $('cmdInherit').addEventListener('change', showOwn);
+    drawer.addEventListener('input', function () { dirty = true; });
+    drawer.addEventListener('change', function (e) { if (e.isTrusted) dirty = true; });
+    $('cmdDrawerClose').addEventListener('click', function () { close(false); });
+    drawer.addEventListener('mousedown', function (e) { if (e.target === drawer) close(false); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !drawer.hidden) close(false); });
+
+    document.querySelectorAll('.cmd-open-settings').forEach(function (btn) {
+        btn.addEventListener('click', function () { window.openCommandSettings(btn.dataset.cmdKey, btn); });
+    });
+    paintSummaries();
+
+    // ?cmd=<key> (from a feature page or the Permissions page): show that command and open its settings.
+    var wanted = new URLSearchParams(location.search).get('cmd');
+    if (wanted) {
+        var key = String(wanted).trim().toLowerCase().replace(/^\//, '');
+        var btn = document.querySelector('.cmd-open-settings[data-cmd-key="' + key.replace(/"/g, '') + '"]');
+        if (btn) {
+            var row = btn.closest('.command-row');
+            var tree = row && row.querySelector('.cmd-tree-children');
+            if (tree && btn.dataset.cmdParent) {
+                tree.style.display = '';
+                var toggle = row.querySelector('.cmd-tree-toggle');
+                if (toggle) { toggle.classList.add('expanded'); toggle.setAttribute('aria-expanded', 'true'); }
+            }
+            if (row) { row.classList.add('is-target'); row.scrollIntoView({ block: 'center' }); }
+            window.openCommandSettings(key, btn);
+        }
+    }
+})();
 
 // --- Prefix Command Aliases ---
 
@@ -752,31 +1037,32 @@ function createAliasRow(alias, commandName, createdBy) {
     tr.dataset.alias = alias;
 
     var tdAlias = document.createElement('td');
+    tdAlias.dataset.label = 'Alias';
     var spanAlias = document.createElement('span');
-    spanAlias.style.cssText = 'background: var(--color-dark-700); padding: var(--spacing-2) var(--spacing-3); border-radius: var(--radius-sm); font-family: "Courier New", monospace; font-weight: var(--font-weight-bold); color: #fbbf24;';
+    spanAlias.className = 'cmd-alias';
     spanAlias.textContent = CURRENT_PREFIX + alias;
     tdAlias.appendChild(spanAlias);
 
     var tdCommand = document.createElement('td');
+    tdCommand.dataset.label = 'Runs';
     var spanCmd = document.createElement('span');
-    spanCmd.style.cssText = 'background: var(--color-dark-700); padding: var(--spacing-2) var(--spacing-3); border-radius: var(--radius-sm); font-family: "Courier New", monospace; color: var(--color-primary-400);';
+    spanCmd.className = 'cmd-alias-target';
     spanCmd.textContent = '/' + commandName;
     tdCommand.appendChild(spanCmd);
 
     var tdCreated = document.createElement('td');
-    tdCreated.className = 'alias-created-col';
-    tdCreated.style.cssText = 'color: var(--color-text-secondary); font-size: var(--font-size-sm);';
+    tdCreated.className = 'alias-created-col cmd-alias-by';
+    tdCreated.dataset.label = 'Created by';
     tdCreated.textContent = createdBy;
 
     var tdActions = document.createElement('td');
+    tdActions.className = 'cf-cell-end';
     var btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'btn btn-sm btn-danger';
     btn.title = 'Delete alias';
     btn.onclick = function() { deleteAlias(alias); };
-    var icon = document.createElement('i');
-    icon.className = 'fas fa-trash';
-    btn.appendChild(icon);
+    btn.textContent = 'Delete';
     tdActions.appendChild(btn);
 
     tr.appendChild(tdAlias);
@@ -792,12 +1078,8 @@ function createEmptyAliasRow() {
     tr.id = 'aliasEmptyRow';
     var td = document.createElement('td');
     td.colSpan = 4;
-    td.style.cssText = 'text-align: center; padding: var(--spacing-6); color: var(--color-text-muted);';
-    var icon = document.createElement('i');
-    icon.className = 'fas fa-inbox';
-    icon.style.cssText = 'font-size: 1.5rem; display: block; margin-bottom: var(--spacing-2);';
-    td.appendChild(icon);
-    td.appendChild(document.createTextNode('No aliases configured. Add one above to get started.'));
+    td.className = 'cmd-alias-empty';
+    td.textContent = 'No aliases yet. Add one below.';
     tr.appendChild(td);
     return tr;
 }
@@ -809,12 +1091,12 @@ async function addAlias() {
     var commandName = commandInput.value.trim().toLowerCase();
 
     if (!alias) {
-        if (typeof showToast === 'function') showToast('error', 'Please enter an alias name');
+        if (typeof showToast === 'function') showToast('error', 'Enter an alias name');
         aliasInput.focus();
         return;
     }
     if (!commandName) {
-        if (typeof showToast === 'function') showToast('error', 'Please enter a command name to map to');
+        if (typeof showToast === 'function') showToast('error', 'Enter the command the alias runs');
         commandInput.focus();
         return;
     }

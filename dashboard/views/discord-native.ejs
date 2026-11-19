@@ -1,0 +1,500 @@
+<%#
+  /manage/:guildId/discord-native?tab= — Discord's own server features (dashboard/routes/discord-native-page.js).
+  Each tab loads its /api/guilds/:id/... endpoint; app emojis use /api/app-emojis (super-admin only).
+  Locals: guildId, guildName, tabs, activeTab, isSuperAdmin, channels [{ id, name, kind, parent }] (optional), user.
+%>
+<%
+const js = (v) => JSON.stringify(v).replace(/</g, '\\u003c');
+const _channels = locals.channels || [];
+const _tabs = tabs.filter(t => t.key !== 'app-emojis' || isSuperAdmin);
+const _active = _tabs.some(t => t.key === activeTab) ? activeTab : _tabs[0].key;
+const _labels = { 'welcome-screen': 'Welcome screen', 'onboarding': 'Onboarding', 'soundboard': 'Soundboard', 'events': 'Scheduled events', 'app-emojis': 'App emojis' };
+%>
+<!DOCTYPE html>
+<html data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>" lang="en">
+<head>
+<%- include('partials/site-head', { title: ('Discord features · ' + guildName) + ' · CertiFried', noindex: true }) %>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="/css/cf-settings.css">
+    <link rel="stylesheet" href="/css/cf-picker.css">
+</head>
+<body class="cfs-body cf-site">
+<%- include('partials/site-header', { user: locals.user || null }) %>
+<main id="main-content" class="cf-main" tabindex="-1">
+<div class="cf-page">
+    <a class="cf-back" href="/manage/<%= guildId %>"><i class="fas fa-arrow-left" aria-hidden="true"></i> <%= guildName %></a>
+    <div class="cf-page-head">
+        <div class="cf-page-icon"><i class="fab fa-discord" aria-hidden="true"></i></div>
+        <div>
+            <h1 class="cf-page-title">Discord features</h1>
+            <p class="cf-page-sub">Settings that live in Discord itself, changed here through the bot.</p>
+        </div>
+    </div>
+
+    <div class="cf-tabs" role="tablist" aria-label="Discord features">
+        <% _tabs.forEach(function (t) { %>
+        <button type="button" class="cf-tab dn-tab<%= t.key === _active ? ' active' : '' %>" role="tab" id="tab-<%= t.key %>" aria-controls="panel-<%= t.key %>" aria-selected="<%= t.key === _active %>" data-tab="<%= t.key %>"><i class="fas <%= t.icon %>" aria-hidden="true"></i><%= _labels[t.key] || t.label %></button>
+        <% }); %>
+    </div>
+
+    <!-- Welcome screen -->
+    <section class="cf-section dn-panel" id="panel-welcome-screen" role="tabpanel" aria-labelledby="tab-welcome-screen"<% if (_active !== 'welcome-screen') { %> hidden<% } %>>
+        <header class="cf-section-head"><div>
+            <h2 class="cf-section-title">Welcome screen</h2>
+            <p class="cf-section-desc">What people see when they open an invite: a short description and up to five channels. Community servers only.</p>
+        </div></header>
+        <div class="cf-rows" id="ws-body"><div class="cf-state cf-state--loading cf-state--compact"><span class="cf-spinner" aria-hidden="true"></span><p class="cf-state-title">Loading</p></div></div>
+    </section>
+
+    <!-- Onboarding -->
+    <section class="cf-section dn-panel" id="panel-onboarding" role="tabpanel" aria-labelledby="tab-onboarding"<% if (_active !== 'onboarding') { %> hidden<% } %>>
+        <header class="cf-section-head"><div>
+            <h2 class="cf-section-title">Onboarding</h2>
+            <p class="cf-section-desc">The questions and default channels new members get. Questions are edited in Discord; the switches are here.</p>
+        </div></header>
+        <div class="cf-rows" id="ob-body"><div class="cf-state cf-state--loading cf-state--compact"><span class="cf-spinner" aria-hidden="true"></span><p class="cf-state-title">Loading</p></div></div>
+    </section>
+
+    <!-- Soundboard -->
+    <section class="cf-section dn-panel" id="panel-soundboard" role="tabpanel" aria-labelledby="tab-soundboard"<% if (_active !== 'soundboard') { %> hidden<% } %>>
+        <header class="cf-section-head"><div>
+            <h2 class="cf-section-title">Soundboard<span class="cf-count" id="sb-count"></span></h2>
+            <p class="cf-section-desc">The server's own Discord soundboard. MP3 or OGG, up to 512 KB and 5.2 seconds.</p>
+        </div></header>
+        <div class="cf-rows">
+            <form class="cf-row cf-row--stack" id="sb-form">
+                <div class="cf-row-text"><span class="cf-row-label">Add a sound</span></div>
+                <div class="cf-row-control">
+                    <div class="cf-input-group dn-wrap">
+                        <input type="file" id="sb-upload" accept="audio/mpeg,audio/ogg" aria-label="Sound file" required>
+                        <input type="text" id="sb-name" minlength="2" maxlength="32" placeholder="Name" aria-label="Sound name" required>
+                        <button type="submit" class="btn btn-primary btn-sm">Upload</button>
+                    </div>
+                </div>
+            </form>
+            <div class="cf-list" id="sb-body"><div class="cf-state cf-state--loading cf-state--compact"><span class="cf-spinner" aria-hidden="true"></span><p class="cf-state-title">Loading</p></div></div>
+        </div>
+    </section>
+
+    <!-- Scheduled events -->
+    <section class="cf-section dn-panel" id="panel-events" role="tabpanel" aria-labelledby="tab-events"<% if (_active !== 'events') { %> hidden<% } %>>
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title">Scheduled events<span class="cf-count" id="ev-count"></span></h2>
+                <p class="cf-section-desc">Events shown in the server's Events list. Repeating events keep their schedule; change repeats in Discord.</p>
+            </div>
+            <div class="cf-section-actions"><button type="button" class="btn btn-primary btn-sm" id="ev-new-btn"><i class="fas fa-plus" aria-hidden="true"></i> New event</button></div>
+        </header>
+        <div class="cf-rows">
+            <form id="ev-form" hidden>
+                <div class="cf-row">
+                    <div class="cf-row-text"><label class="cf-row-label" for="ev-name">Name</label></div>
+                    <div class="cf-row-control"><input type="text" id="ev-name" maxlength="100" required></div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text"><label class="cf-row-label" for="ev-type">Where</label></div>
+                    <div class="cf-row-control"><select id="ev-type">
+                        <option value="2">Voice channel</option>
+                        <option value="1">Stage channel</option>
+                        <option value="3">Somewhere else (a link or place)</option>
+                    </select></div>
+                </div>
+                <div class="cf-row" id="ev-channel-row">
+                    <div class="cf-row-text"><label class="cf-row-label" for="ev-channel">Channel</label></div>
+                    <div class="cf-row-control"><select id="ev-channel"></select></div>
+                </div>
+                <div class="cf-row" id="ev-location-row" hidden>
+                    <div class="cf-row-text"><label class="cf-row-label" for="ev-location">Location</label><p class="cf-row-desc">A link or an address.</p></div>
+                    <div class="cf-row-control"><input type="text" id="ev-location" maxlength="100"></div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text"><label class="cf-row-label" for="ev-start">Starts</label><p class="cf-row-desc">Your local time.</p></div>
+                    <div class="cf-row-control"><input type="datetime-local" id="ev-start" required></div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text"><label class="cf-row-label" for="ev-end">Ends</label><p class="cf-row-desc" id="ev-end-desc">Optional for voice and stage events.</p></div>
+                    <div class="cf-row-control"><input type="datetime-local" id="ev-end"></div>
+                </div>
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-row-text"><label class="cf-row-label" for="ev-desc">Description</label></div>
+                    <div class="cf-row-control"><textarea id="ev-desc" maxlength="1000" rows="3"></textarea></div>
+                </div>
+                <div class="cf-section-foot dn-foot">
+                    <span class="cf-status-line" id="ev-status" aria-live="polite"></span>
+                    <button type="button" class="btn btn-secondary btn-sm" id="ev-cancel">Cancel</button>
+                    <button type="submit" class="btn btn-primary btn-sm">Create event</button>
+                </div>
+            </form>
+            <div class="cf-list" id="ev-body"><div class="cf-state cf-state--loading cf-state--compact"><span class="cf-spinner" aria-hidden="true"></span><p class="cf-state-title">Loading</p></div></div>
+        </div>
+    </section>
+
+    <% if (isSuperAdmin) { %>
+    <!-- Application emojis -->
+    <section class="cf-section dn-panel" id="panel-app-emojis" role="tabpanel" aria-labelledby="tab-app-emojis"<% if (_active !== 'app-emojis') { %> hidden<% } %>>
+        <header class="cf-section-head"><div>
+            <h2 class="cf-section-title">App emojis<span class="cf-count" id="ae-count"></span></h2>
+            <p class="cf-section-desc">Emojis that belong to the CertiFried application and work in every server. Discord allows 2,000. Super-admins only.</p>
+        </div></header>
+        <div class="cf-rows">
+            <form class="cf-row cf-row--stack" id="ae-form">
+                <div class="cf-row-text"><span class="cf-row-label">Add an emoji</span><p class="cf-row-desc">PNG, GIF, JPEG or WebP up to 256 KB. Name: letters, digits and underscores.</p></div>
+                <div class="cf-row-control">
+                    <div class="cf-input-group dn-wrap">
+                        <input type="file" id="ae-upload" accept="image/png,image/gif,image/jpeg,image/webp" aria-label="Emoji image" required>
+                        <input type="text" id="ae-name" minlength="2" maxlength="32" pattern="[A-Za-z0-9_]{2,32}" placeholder="name" aria-label="Emoji name" required>
+                        <button type="submit" class="btn btn-primary btn-sm">Upload</button>
+                    </div>
+                </div>
+            </form>
+            <div id="ae-body"><div class="cf-state cf-state--loading cf-state--compact"><span class="cf-spinner" aria-hidden="true"></span><p class="cf-state-title">Loading</p></div></div>
+        </div>
+    </section>
+    <% } %>
+</div>
+</main>
+
+<div class="cf-modal" id="dn-confirm" hidden>
+    <div class="cf-modal-dialog" role="alertdialog" aria-modal="true" aria-labelledby="dn-confirm-title">
+        <header class="cf-modal-head"><div><h2 class="cf-modal-title" id="dn-confirm-title">Are you sure?</h2><p class="cf-modal-desc" id="dn-confirm-text"></p></div></header>
+        <footer class="cf-modal-foot">
+            <button type="button" class="btn btn-secondary btn-sm" data-close>Cancel</button>
+            <button type="button" class="btn btn-danger btn-sm" id="dn-confirm-ok">Delete</button>
+        </footer>
+    </div>
+</div>
+
+<style>
+    .cf-tabs .cf-tab i { font-size: 12px; color: var(--cf-text-3); }
+    .cf-rows .dn-foot { display: flex; align-items: center; justify-content: flex-end; gap: var(--cf-2); flex-wrap: wrap; }
+    .cf-rows .dn-foot .cf-status-line { margin-right: auto; }
+    .dn-wrap { flex-wrap: wrap; }
+    .dn-wrap input[type="file"] { flex: 1 1 14rem; min-height: 34px; color: var(--cf-text-2); font-size: var(--cf-text-sm); }
+    .dn-feat { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto; gap: var(--cf-2); align-items: center; }
+    .dn-feat + .dn-feat { margin-top: var(--cf-2); }
+    .dn-grid { --cf-gallery-min: 7.5rem; }
+    .dn-grid .cf-gallery-item > img { object-fit: contain; padding: var(--cf-3); }
+    @media (max-width: 640px) { .dn-feat { grid-template-columns: 1fr; } }
+</style>
+<script src="/js/cf-picker.js"></script>
+<script src="/js/cf-fields.js"></script>
+<script>
+(function () {
+    'use strict';
+    var GUILD_ID = <%- js(guildId) %>;
+    var IS_SUPER_ADMIN = <%- js(!!isSuperAdmin) %>;
+    var CHANNELS = <%- js(_channels) %>;
+
+    function el(tag, attrs, children) {
+        var n = document.createElement(tag);
+        Object.keys(attrs || {}).forEach(function (k) {
+            var v = attrs[k];
+            if (v == null || v === false) return;
+            if (k === 'class') n.className = v;
+            else if (k === 'text') n.textContent = v;
+            else n.setAttribute(k, v === true ? '' : v);
+        });
+        (children || []).forEach(function (c) { if (c != null && c !== false) n.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
+        return n;
+    }
+    function toast(msg, tone) { if (window.cfSite) window.cfSite.toast(msg, tone === 'err' ? 'bad' : tone || 'ok'); }
+    function state(kind, title, text) {
+        return el('div', { class: 'cf-state cf-state--compact' + (kind === 'error' ? ' cf-state--error' : '') }, [el('p', { class: 'cf-state-title', text: title }), text ? el('p', { class: 'cf-state-text', text: text }) : null]);
+    }
+    async function api(method, path, body) {
+        var opts = { method: method, credentials: 'include', headers: { 'Accept': 'application/json' } };
+        if (body !== undefined) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
+        var res = await fetch(path, opts);
+        var data = null;
+        try { data = await res.json(); } catch (e) { /* not JSON */ }
+        if (!res.ok) throw new Error((data && data.error) || ('HTTP ' + res.status));
+        return data;
+    }
+    function channelOptions(select, kinds, selected) {
+        var sel = new Set(selected || []);
+        CHANNELS.filter(function (c) { return !kinds || kinds.indexOf(c.kind) !== -1; }).forEach(function (c) {
+            var o = el('option', { value: c.id, 'data-kind': c.kind === 'stage' ? 'voice' : c.kind }, [(c.kind === 'text' || c.kind === 'forum' ? '#' : '') + c.name + (c.parent ? ' · ' + c.parent : '')]);
+            if (sel.has(c.id)) o.selected = true;
+            select.appendChild(o);
+        });
+        // Saved channels the bot cannot see any more still show, so a save does not drop them silently.
+        sel.forEach(function (id) { if (!CHANNELS.some(function (c) { return c.id === id; })) select.appendChild(el('option', { value: id, selected: true, text: 'Unknown channel ' + id })); });
+    }
+    function row(label, control, desc, stack) {
+        return el('div', { class: 'cf-row' + (stack ? ' cf-row--stack' : '') }, [
+            el('div', { class: 'cf-row-text' }, [el('span', { class: 'cf-row-label', text: label }), desc ? el('p', { class: 'cf-row-desc', text: desc }) : null]),
+            el('div', { class: 'cf-row-control' }, [control]),
+        ]);
+    }
+    function foot(statusId, button) { return el('div', { class: 'cf-section-foot dn-foot' }, [el('span', { class: 'cf-status-line', id: statusId, 'aria-live': 'polite' }), button]); }
+    function setStatus(id, text, tone) { var s = document.getElementById(id); if (!s) return; s.className = 'cf-status-line' + (tone ? ' is-' + tone : ''); s.textContent = text; }
+
+    var confirmEl = document.getElementById('dn-confirm'), confirmCb = null;
+    function ask(title, text, cb) { document.getElementById('dn-confirm-title').textContent = title; document.getElementById('dn-confirm-text').textContent = text; confirmCb = cb; confirmEl.hidden = false; document.getElementById('dn-confirm-ok').focus(); }
+    confirmEl.addEventListener('click', function (e) { if (e.target === confirmEl || e.target.closest('[data-close]')) confirmEl.hidden = true; });
+    confirmEl.addEventListener('keydown', function (e) { if (e.key === 'Escape') confirmEl.hidden = true; });
+    document.getElementById('dn-confirm-ok').addEventListener('click', function () { confirmEl.hidden = true; var cb = confirmCb; confirmCb = null; if (cb) cb(); });
+
+    var loaders = {};
+
+    // ---------- Tabs ----------
+    document.querySelectorAll('.dn-tab').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            document.querySelectorAll('.dn-tab').forEach(function (b) { var on = b === btn; b.classList.toggle('active', on); b.setAttribute('aria-selected', on ? 'true' : 'false'); });
+            var k = btn.dataset.tab;
+            document.querySelectorAll('.dn-panel').forEach(function (p) { p.hidden = p.id !== 'panel-' + k; });
+            history.replaceState(null, '', '?tab=' + k);
+            if (!btn.dataset.loaded) { btn.dataset.loaded = '1'; if (loaders[k]) loaders[k](); }
+        });
+    });
+
+    // ---------- Welcome screen ----------
+    loaders['welcome-screen'] = async function () {
+        var body = document.getElementById('ws-body');
+        try {
+            var data = await api('GET', '/api/guilds/' + GUILD_ID + '/welcome-screen');
+            var ws = data.welcomeScreen;
+            var enabled = el('input', { type: 'checkbox', class: 'cf-switch', role: 'switch', id: 'ws-enabled', 'aria-label': 'Welcome screen on' });
+            enabled.checked = !!ws.enabled;
+            var desc = el('textarea', { id: 'ws-desc', maxlength: '384', rows: '3', 'aria-label': 'Description' });
+            desc.value = ws.description || '';
+            var list = el('div', { id: 'ws-channels' });
+            function addFeat(c) {
+                if (list.children.length >= 5) return;
+                var s = el('select', { 'aria-label': 'Channel' }, [el('option', { value: '', text: 'Choose a channel' })]);
+                channelOptions(s, ['text', 'forum'], c ? [c.channelId] : []);
+                var d = el('input', { type: 'text', maxlength: '50', placeholder: 'Short description', 'aria-label': 'Channel description' });
+                d.value = (c && c.description) || '';
+                var rm = el('button', { type: 'button', class: 'btn btn-secondary btn-sm', text: 'Remove' });
+                var wrap = el('div', { class: 'dn-feat' }, [s, d, rm]);
+                rm.addEventListener('click', function () { wrap.remove(); addBtn.disabled = list.children.length >= 5; });
+                list.appendChild(wrap);
+                addBtn.disabled = list.children.length >= 5;
+            }
+            var addBtn = el('button', { type: 'button', class: 'btn btn-secondary btn-sm', text: 'Add a channel' });
+            addBtn.addEventListener('click', function () { addFeat(null); });
+            (ws.channels || []).forEach(addFeat);
+            var save = el('button', { type: 'button', class: 'btn btn-primary btn-sm', text: 'Save' });
+            save.addEventListener('click', async function () {
+                var channels = Array.prototype.map.call(list.children, function (w) {
+                    var id = w.querySelector('select').value;
+                    return id ? { channelId: id, description: w.querySelector('input').value.trim() } : null;
+                }).filter(Boolean);
+                save.disabled = true; setStatus('ws-status', 'Saving…', 'busy');
+                try {
+                    await api('PATCH', '/api/guilds/' + GUILD_ID + '/welcome-screen', { enabled: enabled.checked, description: desc.value, channels: channels });
+                    setStatus('ws-status', 'Saved', 'ok');
+                } catch (e) { setStatus('ws-status', e.message, 'bad'); }
+                finally { save.disabled = false; }
+            });
+            var featured = el('div', {}, [list, el('div', { class: 'dn-feat-add' }, [addBtn])]);
+            body.replaceChildren(
+                el('div', { class: 'cf-row cf-row--switch' }, [el('div', { class: 'cf-row-text' }, [el('label', { class: 'cf-row-label', for: 'ws-enabled', text: 'Show the welcome screen' })]), el('div', { class: 'cf-row-control' }, [enabled])]),
+                row('Description', desc, 'Up to 384 characters.', true),
+                row('Featured channels', featured, 'Up to five, each with a description of up to 50 characters.', true),
+                foot('ws-status', save)
+            );
+            if (window.CFFields && window.CFFields.scan) window.CFFields.scan(body);
+        } catch (e) { body.replaceChildren(state('error', 'Could not load the welcome screen', e.message)); }
+    };
+
+    // ---------- Onboarding ----------
+    loaders['onboarding'] = async function () {
+        var body = document.getElementById('ob-body');
+        try {
+            var data = await api('GET', '/api/guilds/' + GUILD_ID + '/onboarding');
+            var ob = data.onboarding;
+            var enabled = el('input', { type: 'checkbox', class: 'cf-switch', role: 'switch', id: 'ob-enabled', 'aria-label': 'Onboarding on' });
+            enabled.checked = !!ob.enabled;
+            var mode = el('select', { id: 'ob-mode', 'aria-label': 'Mode' }, [
+                el('option', { value: '0', text: 'Default: only default channels count towards the requirements' }),
+                el('option', { value: '1', text: 'Advanced: default channels and questions both count' }),
+            ]);
+            mode.value = String(ob.mode);
+            var chans = el('select', { id: 'ob-channels', multiple: true, 'aria-label': 'Default channels' });
+            channelOptions(chans, null, ob.defaultChannelIds || []);
+            var prompts = ob.prompts.length
+                ? el('div', { class: 'cf-chips' }, ob.prompts.map(function (p) { return el('span', { class: 'cf-chip', text: p.title + ' · ' + p.options.length + ' options' }); }))
+                : el('p', { class: 'cf-muted', text: 'No questions yet. Add them in Discord: Server Settings, Onboarding.' });
+            var save = el('button', { type: 'button', class: 'btn btn-primary btn-sm', text: 'Save' });
+            save.addEventListener('click', async function () {
+                var ids = Array.prototype.filter.call(chans.options, function (o) { return o.selected; }).map(function (o) { return o.value; });
+                save.disabled = true; setStatus('ob-status', 'Saving…', 'busy');
+                try {
+                    await api('PATCH', '/api/guilds/' + GUILD_ID + '/onboarding', { enabled: enabled.checked, mode: Number(mode.value), defaultChannelIds: ids });
+                    setStatus('ob-status', 'Saved', 'ok');
+                } catch (e) { setStatus('ob-status', e.message, 'bad'); }
+                finally { save.disabled = false; }
+            });
+            body.replaceChildren(
+                el('div', { class: 'cf-row cf-row--switch' }, [el('div', { class: 'cf-row-text' }, [el('label', { class: 'cf-row-label', for: 'ob-enabled', text: 'Onboarding' }), el('p', { class: 'cf-row-desc', text: 'Discord needs at least 7 default channels, 5 of which members can talk in, before it turns on.' })]), el('div', { class: 'cf-row-control' }, [enabled])]),
+                row('Mode', mode),
+                row('Default channels', chans, 'New members can see these straight away. Up to 50.', true),
+                row('Questions (' + ob.prompts.length + ')', prompts, null, true),
+                foot('ob-status', save)
+            );
+            if (window.CFPicker && window.CFPicker.enhance) window.CFPicker.enhance(chans);
+        } catch (e) { body.replaceChildren(state('error', 'Could not load onboarding', e.message)); }
+    };
+
+    // ---------- Soundboard ----------
+    loaders['soundboard'] = async function () {
+        var body = document.getElementById('sb-body');
+        try {
+            var data = await api('GET', '/api/guilds/' + GUILD_ID + '/discord-soundboard');
+            document.getElementById('sb-count').textContent = data.sounds.length ? String(data.sounds.length) : '';
+            if (!data.sounds.length) { body.replaceChildren(state('empty', 'No sounds yet.', 'Upload an MP3 or OGG above.')); return; }
+            body.replaceChildren.apply(body, data.sounds.map(function (s) {
+                var del = el('button', { type: 'button', class: 'btn btn-danger btn-sm', text: 'Delete' });
+                del.addEventListener('click', function () {
+                    ask('Delete "' + s.name + '"?', 'It is removed from the server\'s soundboard.', async function () {
+                        try { await api('DELETE', '/api/guilds/' + GUILD_ID + '/discord-soundboard/' + s.id); toast('Deleted'); loaders['soundboard'](); }
+                        catch (e) { toast(e.message, 'err'); }
+                    });
+                });
+                return el('div', { class: 'cf-list-item' }, [
+                    el('div', { class: 'cf-list-main' }, [
+                        el('span', { class: 'cf-em', text: ((s.emoji && s.emoji.name && !s.emoji.id) ? s.emoji.name + ' ' : '') + (s.name || '') }),
+                        el('span', { class: 'cf-muted', text: ' · volume ' + Math.round((s.volume == null ? 1 : s.volume) * 100) + '%' }),
+                    ]),
+                    el('div', { class: 'cf-list-actions' }, [del]),
+                ]);
+            }));
+        } catch (e) { body.replaceChildren(state('error', 'Could not load the soundboard', e.message)); }
+    };
+    function readAsDataUrl(file) { return new Promise(function (res, rej) { var r = new FileReader(); r.onload = function () { res(r.result); }; r.onerror = rej; r.readAsDataURL(file); }); }
+    document.getElementById('sb-upload').addEventListener('change', function () {
+        var f = this.files[0], n = document.getElementById('sb-name');
+        if (f && !n.value) n.value = f.name.replace(/\.[^.]+$/, '').slice(0, 32);
+    });
+    document.getElementById('sb-form').addEventListener('submit', async function (e) {
+        e.preventDefault();
+        var file = document.getElementById('sb-upload').files[0];
+        if (!file) return;
+        if (file.size > 512 * 1024) return toast('That file is over 512 KB.', 'err');
+        try {
+            await api('POST', '/api/guilds/' + GUILD_ID + '/discord-soundboard', { name: document.getElementById('sb-name').value.trim(), sound: await readAsDataUrl(file) });
+            toast('Uploaded'); this.reset(); loaders['soundboard']();
+        } catch (err) { toast(err.message, 'err'); }
+    });
+
+    // ---------- Scheduled events ----------
+    var TYPE_KIND = { 1: 'stage', 2: 'voice' };
+    function fillEventChannels() {
+        var t = Number(document.getElementById('ev-type').value), sel = document.getElementById('ev-channel');
+        sel.replaceChildren();
+        if (TYPE_KIND[t]) channelOptions(sel, [TYPE_KIND[t]], []);
+        if (!sel.options.length && TYPE_KIND[t]) sel.appendChild(el('option', { value: '', text: 'This server has no ' + TYPE_KIND[t] + ' channels' }));
+        document.getElementById('ev-channel-row').hidden = t === 3;
+        document.getElementById('ev-location-row').hidden = t !== 3;
+        document.getElementById('ev-end').required = t === 3;
+        document.getElementById('ev-end-desc').textContent = t === 3 ? 'Required for events outside Discord.' : 'Optional for voice and stage events.';
+    }
+    document.getElementById('ev-type').addEventListener('change', fillEventChannels);
+    var evForm = document.getElementById('ev-form');
+    document.getElementById('ev-new-btn').addEventListener('click', function () { evForm.hidden = false; fillEventChannels(); document.getElementById('ev-name').focus(); });
+    document.getElementById('ev-cancel').addEventListener('click', function () { evForm.reset(); evForm.hidden = true; setStatus('ev-status', ''); });
+    evForm.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        var t = Number(document.getElementById('ev-type').value);
+        var start = new Date(document.getElementById('ev-start').value);
+        var endV = document.getElementById('ev-end').value, end = endV ? new Date(endV) : null;
+        if (Number.isNaN(start.getTime()) || start.getTime() < Date.now()) return setStatus('ev-status', 'Pick a start time in the future.', 'bad');
+        if (end && end <= start) return setStatus('ev-status', 'The end must be after the start.', 'bad');
+        // Discord refuses an event outside Discord without an end time; the old prompts never asked for one.
+        if (t === 3 && !end) return setStatus('ev-status', 'Events outside Discord need an end time.', 'bad');
+        var body = { name: document.getElementById('ev-name').value.trim(), scheduledStartTime: start.toISOString(), entityType: t, channelId: null };
+        if (end) body.scheduledEndTime = end.toISOString();
+        var d = document.getElementById('ev-desc').value.trim(); if (d) body.description = d;
+        if (t === 3) {
+            var loc = document.getElementById('ev-location').value.trim();
+            if (!loc) return setStatus('ev-status', 'Enter a location.', 'bad');
+            body.entityMetadata = { location: loc };
+        } else {
+            body.channelId = document.getElementById('ev-channel').value || null;
+            if (!body.channelId) return setStatus('ev-status', 'Choose a channel.', 'bad');
+        }
+        setStatus('ev-status', 'Creating…', 'busy');
+        try { await api('POST', '/api/guilds/' + GUILD_ID + '/scheduled-events', body); toast('Event created'); evForm.reset(); evForm.hidden = true; setStatus('ev-status', ''); loaders['events'](); }
+        catch (err) { setStatus('ev-status', err.message, 'bad'); }
+    });
+    loaders['events'] = async function () {
+        var body = document.getElementById('ev-body');
+        try {
+            var data = await api('GET', '/api/guilds/' + GUILD_ID + '/scheduled-events');
+            document.getElementById('ev-count').textContent = data.events.length ? String(data.events.length) : '';
+            if (!data.events.length) { body.replaceChildren(state('empty', 'No events scheduled.', 'Create one with New event.')); return; }
+            body.replaceChildren.apply(body, data.events.map(function (ev) {
+                var del = el('button', { type: 'button', class: 'btn btn-danger btn-sm', text: 'Delete' });
+                del.addEventListener('click', function () {
+                    ask('Delete "' + ev.name + '"?', 'Everyone interested loses it. This cannot be undone.', async function () {
+                        try { await api('DELETE', '/api/guilds/' + GUILD_ID + '/scheduled-events/' + ev.id); toast('Deleted'); loaders['events'](); }
+                        catch (e) { toast(e.message, 'err'); }
+                    });
+                });
+                return el('div', { class: 'cf-list-item cf-list-item--multi' }, [
+                    el('div', { class: 'cf-list-main' }, [
+                        el('p', { class: 'cf-list-title' }, [el('span', { text: ev.name || '' }), el('span', { class: 'cf-pill' + (ev.statusName === 'ACTIVE' ? ' is-ok' : ''), text: String(ev.statusName || '').toLowerCase() })]),
+                        el('p', { class: 'cf-list-meta' }, [
+                            el('span', { text: new Date(ev.scheduledStart).toLocaleString() }),
+                            el('span', { text: String(ev.entityTypeName || '').toLowerCase() }),
+                            el('span', { text: (ev.userCount || 0) + ' interested' }),
+                        ]),
+                    ]),
+                    el('div', { class: 'cf-list-actions' }, [del]),
+                ]);
+            }));
+        } catch (e) { body.replaceChildren(state('error', 'Could not load events', e.message)); }
+    };
+
+    // ---------- App emojis (super-admin) ----------
+    if (IS_SUPER_ADMIN) {
+        loaders['app-emojis'] = async function () {
+            var body = document.getElementById('ae-body');
+            try {
+                var data = await api('GET', '/api/app-emojis');
+                document.getElementById('ae-count').textContent = data.count + ' of 2,000';
+                if (!data.emojis.length) { body.replaceChildren(state('empty', 'No app emojis yet.')); return; }
+                var grid = el('div', { class: 'cf-gallery dn-grid' });
+                data.emojis.forEach(function (em) {
+                    var kids = [];
+                    if (em.id) kids.push(el('img', { alt: em.name, loading: 'lazy', src: 'https://cdn.discordapp.com/emojis/' + em.id + '.' + (em.animated ? 'gif' : 'png') + '?size=96' }));
+                    var meta = [el('span', { class: 'cf-gallery-name', text: ':' + em.name + ':' })];
+                    if (em.id) {
+                        var del = el('button', { type: 'button', class: 'btn btn-danger btn-sm', text: 'Delete' });
+                        del.addEventListener('click', function () {
+                            ask('Delete :' + em.name + ':?', 'It disappears from every server that uses it.', async function () {
+                                try { await api('DELETE', '/api/app-emojis/' + em.id); toast('Deleted'); loaders['app-emojis'](); }
+                                catch (e) { toast(e.message, 'err'); }
+                            });
+                        });
+                        meta.push(el('div', { class: 'cf-gallery-actions' }, [del]));
+                    }
+                    kids.push(el('div', { class: 'cf-gallery-body' }, meta));
+                    grid.appendChild(el('div', { class: 'cf-gallery-item is-contain' }, kids));
+                });
+                body.replaceChildren(grid);
+            } catch (e) { body.replaceChildren(state('error', 'Could not load app emojis', e.message)); }
+        };
+        document.getElementById('ae-upload').addEventListener('change', function () {
+            var f = this.files[0], n = document.getElementById('ae-name');
+            if (f && !n.value) n.value = f.name.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9_]/g, '').slice(0, 32);
+        });
+        document.getElementById('ae-form').addEventListener('submit', async function (e) {
+            e.preventDefault();
+            var file = document.getElementById('ae-upload').files[0];
+            if (!file) return;
+            if (file.size > 256 * 1024) return toast('That image is over 256 KB.', 'err');
+            try { await api('POST', '/api/app-emojis', { name: document.getElementById('ae-name').value.trim(), image: await readAsDataUrl(file) }); toast('Uploaded'); this.reset(); loaders['app-emojis'](); }
+            catch (err) { toast(err.message, 'err'); }
+        });
+    }
+
+    var first = document.querySelector('.dn-tab.active');
+    if (first) { first.dataset.loaded = '1'; if (loaders[first.dataset.tab]) loaders[first.dataset.tab](); }
+})();
+</script>
+<%- include('partials/site-footer') %>
+<script src="/js/csrf.js"></script>
+</body>
+</html>

@@ -1,6 +1,8 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType } from 'discord.js';
 import pool from '../utils/db.js';
 import logger from '../utils/logger.js';
+import { getTagsForSuggestion } from './suggestion-tags.js';
+import { formatTagList } from './suggestion-tag-helpers.js';
 
 /**
  * Suggestion Manager
@@ -304,16 +306,74 @@ class SuggestionManager {
 
             await message.edit({ embeds: [embed] });
 
-            // Update forum thread tags if this is a forum post
+            // Update forum thread tags if this is a forum post (status tag + any suggestion tags
+            // that have a forum tag of the same name)
             if (channel.isThread() && channel.parent?.type === ChannelType.GuildForum) {
-                const statusTag = this.getForumTagByStatus(channel.parent, newStatus);
-                if (statusTag) {
-                    await channel.setAppliedTags([statusTag.id]).catch(() => {});
-                }
+                const tags = await getTagsForSuggestion(suggestion.id).catch(() => []);
+                await this.applyForumTags(channel, newStatus, tags);
             }
         } catch (error) {
             logger.error('[SuggestionManager] Error updating embed:', error);
         }
+    }
+
+    /**
+     * Rebuild the "Tags" field on a suggestion's message (and its forum tags) from the database.
+     * Called after tags are added/removed/renamed from Discord or the dashboard.
+     */
+    async refreshTags(guild, suggestionId) {
+        try {
+            const [rows] = await pool.execute(
+                'SELECT id, status, message_id, channel_id FROM suggestions WHERE id = ? AND guild_id = ?',
+                [suggestionId, guild.id]
+            );
+            const suggestion = rows[0];
+            if (!suggestion?.message_id || !suggestion.channel_id) return false;
+
+            const tags = await getTagsForSuggestion(suggestion.id);
+            const channel = await guild.channels.fetch(suggestion.channel_id).catch(() => null);
+            if (!channel?.messages) return false;
+            const message = await channel.messages.fetch(suggestion.message_id).catch(() => null);
+            if (!message?.embeds?.[0]) return false;
+
+            const embed = this.withTagsField(EmbedBuilder.from(message.embeds[0]), tags);
+            await message.edit({ embeds: [embed] });
+
+            if (channel.isThread() && channel.parent?.type === ChannelType.GuildForum) {
+                await this.applyForumTags(channel, suggestion.status, tags);
+            }
+            return true;
+        } catch (error) {
+            logger.error('[SuggestionManager] Error refreshing tags on suggestion message', {
+                guildId: guild?.id, suggestionId, error: error.message
+            });
+            return false;
+        }
+    }
+
+    /** Replace (or drop) the embed's "Tags" field. */
+    withTagsField(embed, tags) {
+        const fields = (embed.data.fields || []).filter(f => f.name !== 'Tags');
+        if (tags?.length) fields.push({ name: 'Tags', value: formatTagList(tags), inline: false });
+        embed.setFields(fields);
+        return embed;
+    }
+
+    /** Forum posts: the status tag plus forum tags whose names match the suggestion's tags (max 5). */
+    async applyForumTags(thread, status, tags = []) {
+        const forum = thread.parent;
+        if (!forum?.availableTags) return;
+        const ids = [];
+        const statusTag = this.getForumTagByStatus(forum, status);
+        if (statusTag) ids.push(statusTag.id);
+        for (const tag of tags) {
+            const match = forum.availableTags.find(a => a.name.toLowerCase() === String(tag.tag_name).toLowerCase());
+            if (match && !ids.includes(match.id)) ids.push(match.id);
+        }
+        if (!ids.length) return;
+        await thread.setAppliedTags(ids.slice(0, 5)).catch(err => {
+            logger.warn('[SuggestionManager] Could not set forum tags', { threadId: thread.id, error: err.message });
+        });
     }
 
     /**

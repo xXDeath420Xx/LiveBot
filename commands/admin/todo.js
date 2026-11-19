@@ -1,6 +1,7 @@
 import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 import pool from '../../utils/db.js';
 import logger from '../../utils/logger.js';
+import { TODO_LIMITS } from '../../core/todo-limits.js';
 
 /**
  * Build the task list embed from DB data
@@ -70,12 +71,12 @@ export default {
         .addSubcommand(sub => sub
             .setName('create')
             .setDescription('Create a new task list in this channel')
-            .addStringOption(opt => opt.setName('title').setDescription('Title for the task list').setRequired(false))
+            .addStringOption(opt => opt.setName('title').setDescription('Title for the task list').setRequired(false).setMaxLength(TODO_LIMITS.title))
         )
         .addSubcommand(sub => sub
             .setName('add')
             .setDescription('Add a task to the list')
-            .addStringOption(opt => opt.setName('task').setDescription('The task to add').setRequired(true))
+            .addStringOption(opt => opt.setName('task').setDescription('The task to add').setRequired(true).setMaxLength(TODO_LIMITS.task))
         )
         .addSubcommand(sub => sub
             .setName('done')
@@ -140,6 +141,12 @@ export default {
 
         if (sub === 'add') {
             const task = interaction.options.getString('task');
+
+            // Same cap as the Task lists page (dashboard/routes/api/features/todo.js): one embed holds the list.
+            const [[{ n }]] = await pool.execute('SELECT COUNT(*) AS n FROM todo_items WHERE list_id = ?', [list.id]);
+            if (Number(n) >= TODO_LIMITS.items) {
+                return interaction.reply({ content: `A list holds up to ${TODO_LIMITS.items} tasks. Remove some first with \`/todo remove\`.`, ephemeral: true });
+            }
 
             // Get next position
             const [maxPos] = await pool.execute(

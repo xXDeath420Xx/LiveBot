@@ -44,14 +44,33 @@ const ALIASES = new Map(Object.entries({
   lootbox: 'lootbox', lb: 'lootbox', lootboxes: 'lootbox', box: 'lootbox',
   gem: 'gems', gems: 'gems',
   use: 'use',
+  // friendly battles: answer from chat, display settings
+  ab: 'ab', acceptbattle: 'ab',
+  db: 'db', declinebattle: 'db',
+  battlesetting: 'battlesetting', battlesettings: 'battlesetting', bs: 'battlesetting',
   // economy
   balance: 'balance', bal: 'balance', money: 'balance', cowoncy: 'balance',
   currency: 'balance', cash: 'balance', credit: 'balance',
   daily: 'daily',
   give: 'give', send: 'give', gift: 'give', trade: 'give', tr: 'give',
+  limits: 'limits', limit: 'limits', givelimit: 'limits',
+  transactions: 'transactions', transaction: 'transactions',
   quest: 'quest', quests: 'quest', q: 'quest',
-  // social / meta
-  stats: 'stats', profile: 'stats', me: 'stats', my: 'stats',
+  lottery: 'lottery', lotto: 'lottery', bet: 'lottery',
+  drop: 'drop', pickup: 'pickup',
+  shop: 'shop', market: 'shop', buy: 'buy',
+  // social (upstream social/*): luck, cookies, marriage, wallpapers
+  pray: 'pray', curse: 'curse',
+  cookie: 'cookie', rep: 'cookie',
+  marry: 'marry', propose: 'marry', marriage: 'marry', wife: 'marry', husband: 'marry',
+  acceptmarriage: 'acceptmarriage', am: 'acceptmarriage',
+  declinemarriage: 'declinemarriage', dm: 'declinemarriage',
+  divorce: 'divorce',
+  ring: 'ring', rings: 'ring',
+  wallpaper: 'wallpaper', wallpapers: 'wallpaper', wp: 'wallpaper', background: 'wallpaper', backgrounds: 'wallpaper',
+  // social / meta — `owo profile` is the profile card (upstream), `owo me` stays the stats view
+  profile: 'profile',
+  stats: 'stats', me: 'stats', my: 'stats',
   level: 'stats', lvl: 'stats', levels: 'stats', xp: 'stats',
   leaderboard: 'leaderboard', top: 'leaderboard', rank: 'leaderboard', ranking: 'leaderboard',
   owoify: 'owoify', ify: 'owoify',
@@ -77,6 +96,9 @@ function buildArgs(subcommand, rest) {
 
   return {
     subcommand,
+    // Tells handlers/owo-prefix.js that `text` is the whole argument string (the `!owo` registry
+    // path splits it positionally instead).
+    natural: '1',
     // positional-ish names
     rank: t0, animal: t0, action: t0, pos: t0,
     slot: t1, uwid: t1,

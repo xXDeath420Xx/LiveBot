@@ -138,7 +138,10 @@ async function pageThrough(firstPath) {
     let data = await spGet(firstPath);
     const collect = (d) => {
         const arr = d.items || d.tracks?.items || [];
-        for (const it of arr) items.push(it.track ? it.track : it); // playlist items wrap in .track
+        // Playlist entries wrap the track: in `item` since the February 2026 Web API change, in `track` before it.
+        // A wrapper with nothing in it (a track removed from Spotify) is dropped; a bare track (album) is kept.
+        const wrapped = (it) => it && (typeof it.item === 'object' || typeof it.track === 'object');
+        for (const it of arr) items.push(wrapped(it) ? (it.item || it.track || null) : it);
     };
     collect(data);
     let next = data.next || data.tracks?.next;
@@ -149,6 +152,43 @@ async function pageThrough(firstPath) {
         next = r.data.next;
     }
     return items;
+}
+
+// Spotify's February 2026 Web API change (developer.spotify.com/documentation/web-api/tutorials/
+// february-2026-migration-guide): GET /playlists/{id}/tracks became GET /playlists/{id}/items, and each
+// entry's `track` became `item`. Read /items; fall back to /tracks only when /items itself is refused
+// (an app still on the old API), so either generation of app keeps reading playlists. `popularity` was
+// removed from track objects too; nothing here reads it.
+const TRACK_FIELDS = 'name,duration_ms,explicit,artists(name),external_urls,album(images)';
+const ENDPOINT_GONE = new Set([400, 403, 404, 410]);
+const statusOf = (err) => err?.response?.status || 0;
+
+async function playlistEntries(id) {
+    try {
+        return await pageThrough(`/playlists/${id}/items?limit=100&fields=items(item(${TRACK_FIELDS})),next`);
+    } catch (err) {
+        if (!ENDPOINT_GONE.has(statusOf(err))) throw err;
+        logger.warn(`[SpotifyResolver] playlist/${id}: /items answered ${statusOf(err)}, reading /tracks instead`);
+        return pageThrough(`/playlists/${id}/tracks?limit=100&fields=items(track(${TRACK_FIELDS})),next`);
+    }
+}
+
+// GET /artists/{id}/top-tracks was removed for Development Mode apps in the same change. When it is
+// refused, the artist's tracks come from search instead (at most 10 per request now), keeping only
+// tracks the artist is credited on.
+async function artistTracks(id, name) {
+    try {
+        const top = await spGet(`/artists/${id}/top-tracks?market=US`);
+        return (top.tracks || []).map(mapTrack).filter(Boolean);
+    } catch (err) {
+        if (!ENDPOINT_GONE.has(statusOf(err)) || !name) throw err;
+        logger.warn(`[SpotifyResolver] artist/${id}: top-tracks answered ${statusOf(err)}, using search instead`);
+        const q = `artist:"${String(name).replace(/"/g, '')}"`;
+        const data = await spGet(`/search?q=${encodeURIComponent(q)}&type=track&limit=10`);
+        return (data?.tracks?.items || [])
+            .filter((t) => (t?.artists || []).some((a) => a.id === id))
+            .map(mapTrack).filter(Boolean);
+    }
 }
 
 // Returns { name, type, tracks: [{title, artist, durationMs, explicit, url, thumbnail}] }
@@ -165,10 +205,9 @@ export async function resolveSpotify(url) {
         }
         if (type === 'playlist') {
             const meta = await spGet(`/playlists/${id}?fields=name`);
-            const raw = await pageThrough(
-                `/playlists/${id}/tracks?limit=100&fields=items(track(name,duration_ms,explicit,artists(name),external_urls,album(images))),next`
-            );
+            const raw = await playlistEntries(id);
             const tracks = raw.map(mapTrack).filter(Boolean);
+            if (!tracks.length) logger.warn(`[SpotifyResolver] playlist/${id}: Spotify returned no tracks (a Development Mode app only gets the items of playlists its user owns)`);
             return tracks.length ? { name: meta.name, type, tracks } : null;
         }
         if (type === 'album') {
@@ -184,9 +223,8 @@ export async function resolveSpotify(url) {
             return tracks.length ? { name: album.name, type, tracks } : null;
         }
         if (type === 'artist') {
-            const top = await spGet(`/artists/${id}/top-tracks?market=US`);
-            const tracks = (top.tracks || []).map(mapTrack).filter(Boolean);
             const artist = await spGet(`/artists/${id}`);
+            const tracks = await artistTracks(id, artist.name);
             return tracks.length ? { name: `${artist.name} — Top Tracks`, type, tracks } : null;
         }
     } catch (err) {

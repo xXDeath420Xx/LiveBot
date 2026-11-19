@@ -18,7 +18,7 @@ const BLOCKED_PATHS = new Set([
 const PLATFORM_PATTERNS = [
     {
         platform: 'twitch',
-        regex: /(?:www\.)?twitch\.tv\/([a-zA-Z0-9_]{2,25})(?:\/|$|\?)/,
+        regex: /(?:www\.)?twitch\.tv\/([a-zA-Z0-9_]{2,25})(?:\/||\?)/,
     },
     {
         platform: 'kick',
@@ -37,10 +37,6 @@ const PLATFORM_PATTERNS = [
     {
         platform: 'tiktok',
         regex: /(?:www\.)?tiktok\.com\/@([a-zA-Z0-9_.]+)(?:\/|$|\?)/,
-    },
-    {
-        platform: 'trovo',
-        regex: /(?:www\.)?trovo\.live\/s\/([a-zA-Z0-9_]+)(?:\/|$|\?)/,
     },
     {
         platform: 'rumble',

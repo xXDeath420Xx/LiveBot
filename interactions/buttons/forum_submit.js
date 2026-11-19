@@ -1,5 +1,6 @@
 import { ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } from 'discord.js';
 import logger from '../../utils/logger.js';
+import { getBugReportSettings, BUG_REPORTS_OFF } from '../../core/bug-report-settings.js';
 
 export async function handleSuggestionFormButton(interaction) {
     try {
@@ -57,6 +58,9 @@ export async function handleSuggestionFormButton(interaction) {
 
 export async function handleBugReportFormButton(interaction) {
     try {
+        if (interaction.guildId && !(await getBugReportSettings(interaction.guildId)).accepting) {
+            return interaction.reply({ content: BUG_REPORTS_OFF, ephemeral: true });
+        }
         const modal = new ModalBuilder()
             .setCustomId('forum_bug_report_submit')
             .setTitle('Report a Bug');

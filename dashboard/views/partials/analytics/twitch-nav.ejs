@@ -1,0 +1,21 @@
+<%# Page switcher shared by every Twitch analytics page. Locals: guildId (absent on the super-admin
+    pages), active ('overview' | 'integrity' | 'known-bots' | 'mod-queue' | 'audit' | 'compare' | 'ai-usage'),
+    isSuperAdmin. %>
+<%
+    const _nvG = locals.guildId ? String(locals.guildId).replace(/[^\d]/g, '') : '';
+    const _nvBase = _nvG ? `/manage/${_nvG}/twitch-analytics` : '';
+    const _nvItems = [];
+    if (_nvBase) {
+        _nvItems.push(['overview', 'Overview', _nvBase]);
+        _nvItems.push(['integrity', 'Channel audit', `${_nvBase}/integrity`]);
+        _nvItems.push(['known-bots', 'Known bots', `${_nvBase}/integrity/known-bots`]);
+        _nvItems.push(['mod-queue', 'AI mod queue', `${_nvBase}/mod-queue`]);
+        _nvItems.push(['audit', 'Action log', `${_nvBase}/audit`]);
+    }
+    const _nvAdmin = locals.isSuperAdmin ? [['compare', 'All channels', '/admin/twitch-analytics/compare'], ['ai-usage', 'AI usage', '/admin/twitch-analytics/ai-usage']] : [];
+%>
+    <nav class="cf-tabs cf-an-nav" aria-label="Twitch analytics pages">
+        <% _nvItems.forEach(([key, label, href]) => { %><a class="cf-tab" href="<%= href %>"<%- locals.active === key ? ' aria-current="page"' : '' %>><%= label %></a><% }) %>
+        <% if (_nvItems.length && _nvAdmin.length) { %><span class="cf-an-nav-sep" aria-hidden="true"></span><% } %>
+        <% _nvAdmin.forEach(([key, label, href]) => { %><a class="cf-tab" href="<%= href %>"<%- locals.active === key ? ' aria-current="page"' : '' %>><%= label %></a><% }) %>
+    </nav>

@@ -1,9 +1,13 @@
 import { Events, ActivityType } from 'discord.js';
 import logger from '../utils/logger.js';
+import { startTheaterUpdater } from '../core/theater-panel.js';
 import pool from '../utils/db.js';
 import { scanForActiveStreamers } from './presenceUpdate.js';
 import { seedMessageCache } from '../utils/message-cache.js';
 import { setPrimaryClient } from '../utils/cookie-health-monitor.js';
+import { startMusicHealthMonitor } from '../core/music-health-monitor.js';
+import { drainInstallDmBackfillQueue } from '../utils/owner-install-notifier.js';
+import { startHolidayPinUpdater } from '../core/holiday-manager.js';
 
 const DELETE_DELAY_MS = 1200; // ~1.2s between individual deletes to respect rate limits
 
@@ -155,6 +159,7 @@ export default {
   async execute(client) {
     logger.info('═══════════════════════════════════════════════');
     logger.info(`  ✓ Bot is online as ${client.user.tag}`);
+    try { startTheaterUpdater(client); } catch (e) { logger.warn?.(`[TheaterPanel] updater start failed: ${e.message}`); }
     logger.info(`  ✓ Serving ${client.guilds.cache.size} guild(s)`);
     logger.info(`  ✓ Total users: ${client.users.cache.size}`);
     logger.info('═══════════════════════════════════════════════');
@@ -189,6 +194,21 @@ export default {
         logger.error(`[MessageCache Seed] Unhandled error: ${err.message}`);
       });
       setPrimaryClient(client);
+      startMusicHealthMonitor(client);
+
+      // Drain any queued install-DM backfills. Delayed so member caches have a
+      // moment to populate — overlap/ecosystem are cache-only reads and would
+      // otherwise come up empty on a cold boot.
+      setTimeout(() => {
+        drainInstallDmBackfillQueue().catch(err => {
+          logger.error(`[OwnerInstallDM] drain failed: ${err.message}`);
+        });
+      }, 15000);
+
+      // Holiday countdown pin updater — edits live pinned "days until X"
+      // messages. Internal timer schedules a boot refresh after 30s and a
+      // 6-hour interval after that; see core/holiday-manager.js.
+      startHolidayPinUpdater(client);
     }
 
     // Scan for members already streaming (catches transitions missed during restart)

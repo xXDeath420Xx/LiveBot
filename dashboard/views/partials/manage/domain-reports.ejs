@@ -1,0 +1,285 @@
+<%# Domain reports: report a phishing link or dispute a blocked domain, this server's reports with status and history, and (bot owner only) the global review queue and override lists (core/domain-reports.js). API-driven (dashboard/routes/api/features/domain-reports.js); needs `guild` in locals. Built on the settings-row kit (cf-settings.css); ids are the ones the page script uses. %>
+<div class="page-section" id="domainReportsPage" data-guild-id="<%= guild.id %>">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-flag"></i>
+                <span>Domain reports</span>
+            </div>
+            <div class="page-section-subtitle">Check a link, send it to the reviewers, and follow what happened to it.</div>
+        </div>
+    </div>
+
+    <dl class="cf-kpis" id="cfk-dr-kpis" aria-label="Reports from this server" hidden></dl>
+
+    <div id="drError" class="cf-notice is-bad" role="alert" hidden></div>
+    <div id="drNotice" class="cf-notice is-info" role="status" hidden></div>
+
+    <section class="cf-section" aria-labelledby="dr-submit-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="dr-submit-title">Report or dispute a domain</h2>
+                <p class="cf-section-desc">An approved report blocks the domain in every server the bot protects; an approved dispute lifts the block everywhere. The sender is told the outcome by DM. Members can do the same from <code>/tools checkurl</code>.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--stack">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="drUrl">Link or domain</label>
+                    <p class="cf-row-desc" id="drUrl-desc">Check it first to see whether the bot already blocks it and why.</p>
+                </div>
+                <div class="cf-input-group">
+                    <input id="drUrl" class="form-control" placeholder="https://example.com/login" maxlength="500" aria-describedby="drUrl-desc">
+                    <button type="button" class="btn btn-secondary" id="drCheck">Check</button>
+                </div>
+                <div id="drCheckResult" class="dr-check" aria-live="polite"></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="drKind">What you are sending</label>
+                    <p class="cf-row-desc">A report asks for a block; a dispute asks for a block to be lifted.</p>
+                </div>
+                <div class="cf-row-control">
+                    <select id="drKind" class="form-select">
+                        <option value="report">Report: this is phishing</option>
+                        <option value="dispute">Dispute: this block is wrong</option>
+                    </select>
+                </div>
+            </div>
+            <div class="cf-row cf-row--stack">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="drReason">Reason</label>
+                    <p class="cf-row-desc" id="drReason-desc">What it pretends to be or what the site really is, and where you saw it. At least 10 characters.</p>
+                </div>
+                <textarea id="drReason" class="form-control" rows="3" maxlength="1000" aria-describedby="drReason-desc"></textarea>
+            </div>
+            <div class="cf-section-foot">
+                <button type="button" class="btn btn-primary" id="drSubmit">Send to the reviewers</button>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="dr-mine-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="dr-mine-title">Sent from this server</h2>
+                <p class="cf-section-desc">Blocked means a report was approved, Resolved means a dispute was approved. Each entry keeps its history.</p>
+            </div>
+            <div class="cf-section-actions"><span id="drMineCounts" class="cf-pill"></span></div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--stack" id="cfk-dr-mine-search-row" hidden>
+                <div class="cf-search">
+                    <i class="fas fa-magnifying-glass" aria-hidden="true"></i>
+                    <label class="visually-hidden" for="cfk-dr-mine-search">Search reports</label>
+                    <input type="search" id="cfk-dr-mine-search" class="form-control" placeholder="Search by domain or reason">
+                </div>
+            </div>
+            <div id="drMine" class="cf-list dr-scroll">
+                <%- include('../kit/_state', { kind: 'loading', title: 'Loading reports', compact: true }) %>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" id="drReviewCard" aria-labelledby="dr-review-title" hidden>
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="dr-review-title">Review queue</h2>
+                <p class="cf-section-desc">Reports and disputes from every server. Only the bot owner sees this.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div id="drTabs" class="cf-segmented" role="group" aria-label="Filter by status"></div>
+            <div id="drQueue" class="cf-list dr-scroll"></div>
+        </div>
+    </section>
+
+    <div class="dr-cols" id="drOverridesCard" hidden>
+        <section class="cf-section" aria-labelledby="dr-blocks-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="dr-blocks-title">Manual blocks</h2>
+                    <p class="cf-section-desc">Blocked in every server, kept even when the community feeds drop them.</p>
+                </div>
+                <div class="cf-section-actions"><span id="drBlockCount" class="cf-pill"></span></div>
+            </header>
+            <div class="cf-rows">
+                <div id="drBlocks" class="cf-list dr-scroll"></div>
+            </div>
+        </section>
+        <section class="cf-section" aria-labelledby="dr-allows-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="dr-allows-title">Global allow list</h2>
+                    <p class="cf-section-desc">Never flagged in any server, even when a feed lists them (approved disputes).</p>
+                </div>
+                <div class="cf-section-actions"><span id="drAllowCount" class="cf-pill"></span></div>
+            </header>
+            <div class="cf-rows">
+                <div id="drAllows" class="cf-list dr-scroll"></div>
+            </div>
+        </section>
+    </div>
+</div>
+
+<style>
+  #domainReportsPage .dr-check { font-size: var(--cf-text-sm); color: var(--cf-text-2); overflow-wrap: anywhere; }
+  #domainReportsPage .dr-check:empty { display: none; }
+  #domainReportsPage .dr-check ul { margin: 4px 0 0; padding-left: 1.1rem; color: var(--cf-text-3); }
+  #domainReportsPage .dr-scroll { max-height: 36rem; overflow-y: auto; }
+  #domainReportsPage .dr-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 0 var(--cf-6); }
+  #domainReportsPage .dr-cols > .cf-section { margin-bottom: var(--cf-8); }
+  @media (max-width: 1000px) { #domainReportsPage .dr-cols { grid-template-columns: minmax(0, 1fr); } }
+  #domainReportsPage .dr-entry-name { min-width: 0; }
+  #domainReportsPage .dr-meta { font-size: var(--cf-text-xs); font-weight: 400; color: var(--cf-text-3); font-variant-numeric: tabular-nums; }
+  #domainReportsPage .dr-history { margin: 2px 0 0; padding-left: 1.1rem; font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+  #domainReportsPage .dr-history:empty { display: none; }
+  #domainReportsPage .dr-decide { margin-top: var(--cf-2); }
+  #domainReportsPage .dr-override-name { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; font-family: var(--cf-mono); font-size: var(--cf-text-sm); color: var(--cf-text); }
+</style>
+
+<script>
+(function () {
+  const root = document.getElementById('domainReportsPage');
+  if (!root) return;
+  const guildId = root.dataset.guildId;
+  const api = (p) => `/api/guilds/${guildId}/domain-reports${p}`;
+  const $ = (id) => document.getElementById(id);
+  let state = null;
+  let reviewStatus = 'pending';
+
+  // DOM builder: every server value goes in through textContent / attributes, never markup.
+  function el(tag, attrs = {}, ...kids) {
+    const n = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (v == null || v === false) continue;
+      if (k === 'class') n.className = v;
+      else if (k === 'text') n.textContent = v;
+      else if (k.startsWith('on')) n.addEventListener(k.slice(2), v);
+      else n.setAttribute(k, v === true ? '' : v);
+    }
+    for (const kid of kids.flat()) if (kid != null) n.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
+    return n;
+  }
+  const empty = (title) => el('div', { class: 'cf-state cf-state--empty cf-state--compact' }, el('p', { class: 'cf-state-title', text: title }));
+  const tone = { pending: 'is-warn', blocked: 'is-bad', resolved: 'is-ok', rejected: '' };
+  const when = (t) => (t ? new Date(t).toLocaleString() : '');
+  async function req(url, options = {}) {
+    const res = await fetch(url, { credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, ...options });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
+    return body;
+  }
+  const showError = (m) => { const e = $('drError'); e.hidden = !m; e.textContent = m || ''; if (m) e.scrollIntoView({ block: 'nearest' }); };
+  const notice = (m) => { const e = $('drNotice'); e.hidden = !m; e.textContent = m || ''; };
+
+  function item(r, review) {
+    const top = el('div', { class: 'cf-list-title' },
+      el('span', { class: 'dr-entry-name', text: `#${r.id} ${r.domain}` }),
+      el('span', { class: `cf-pill ${tone[r.status] || ''}`, text: state.statusLabels[r.status] || r.status }),
+      el('span', { class: 'dr-meta', text: state.kindLabels[r.kind] || r.kind }),
+      el('span', { class: 'dr-meta', text: when(r.createdAt) }));
+    const body = el('p', { class: 'cf-list-body' }, `Reason: ${r.reason}`);
+    const meta = el('p', { class: 'cf-list-meta', text: [r.url && r.url !== r.domain ? `Link: ${r.url}` : null,
+      review ? `From: ${r.guildName || r.guildId} · by ${r.reporterName || r.reporterId} (${r.reporterId})` : `By ${r.reporterName || r.reporterId}`,
+      r.note ? `Reviewer note: ${r.note}` : null, r.status !== 'pending' ? (r.notified ? 'Reporter told by DM' : 'Reporter not reached by DM') : null].filter(Boolean).join(' · ') });
+    const hist = el('ul', { class: 'dr-history' }, ...(r.history || []).map(h => el('li', { text: `${when(h.at)} · ${h.action}${h.note ? `: ${h.note}` : ''}` })));
+    const main = el('div', { class: 'cf-list-main' }, top, body, meta, hist);
+    const box = el('div', { class: 'cf-list-item cf-list-item--multi dr-entry' }, main);
+    box.dataset.search = `${r.domain} ${r.url || ''} ${r.reason || ''}`.toLowerCase();
+    if (review && r.status === 'pending') {
+      const note = el('input', { class: 'form-control form-control-sm', placeholder: 'Note for the reporter (optional)', maxlength: '500', 'aria-label': `Note for the reporter of #${r.id}` });
+      const decide = (decision) => {
+        const what = decision === 'approve'
+          ? (r.kind === 'domain_dispute' ? `Lift the block on ${r.domain} in every server?` : `Block ${r.domain} in every server?`)
+          : `Reject #${r.id}?`;
+        if (!confirm(`${what} Every other pending entry for this domain is decided the same way, and the reporters are told.`)) return;
+        run(() => req(api(`/${r.id}/decide`), { method: 'POST', body: JSON.stringify({ decision, note: note.value.trim() || null }) }),
+          (o) => `#${r.id} ${o.status}: ${o.decided} entr${o.decided === 1 ? 'y' : 'ies'} decided, ${o.notified} reporter(s) told by DM.`);
+      };
+      main.append(el('div', { class: 'cf-input-group dr-decide' }, note,
+        el('button', { type: 'button', class: 'btn btn-sm btn-primary', onclick: () => decide('approve') }, r.kind === 'domain_dispute' ? 'Approve: lift block' : 'Approve: block'),
+        el('button', { type: 'button', class: 'btn btn-sm btn-secondary', onclick: () => decide('reject') }, 'Reject')));
+    }
+    return box;
+  }
+
+  async function run(fn, done) {
+    showError('');
+    try { const out = await fn(); if (done) notice(typeof done === 'function' ? done(out) : done); await load(); return out; } catch (err) { showError(err.message); return null; }
+  }
+
+  function render() {
+    const c = state.mineCounts || {};
+    $('drMineCounts').textContent = String(state.mine.length);
+    const kpis = $('cfk-dr-kpis');
+    kpis.replaceChildren(...state.statuses.map(s => el('div', { class: 'cf-kpi' },
+      el('dt', { text: state.statusLabels[s] || s }), el('dd', { class: 'cf-kpi-value', text: String(c[s] || 0) }))));
+    kpis.hidden = !state.statuses.length;
+    $('drMine').replaceChildren(...(state.mine.length ? state.mine.map(r => item(r, false))
+      : [el('div', { class: 'cf-state cf-state--empty' }, el('p', { class: 'cf-state-title', text: 'Nothing sent from this server yet' }),
+          el('p', { class: 'cf-state-text', text: 'Check a link above, then send it to the reviewers.' }))]));
+    $('cfk-dr-mine-search-row').hidden = state.mine.length <= 15;
+    filterMine();
+    $('drSubmit').disabled = !state.actor.canSubmit;
+    if (!state.actor.canSubmit) notice('Viewing only: reporting from the dashboard needs Manage Server, Administrator or a bot-manager role. Members can use /tools checkurl.');
+    const rv = state.review;
+    $('drReviewCard').hidden = !rv;
+    $('drOverridesCard').hidden = !rv;
+    if (!rv) return;
+    const tabs = [...state.statuses, 'all'];
+    $('drTabs').replaceChildren(...tabs.map(s => el('button', { type: 'button', class: 'cf-segment', 'aria-pressed': s === rv.status ? 'true' : 'false',
+      onclick: () => { reviewStatus = s; load(); } }, `${s === 'all' ? 'All' : state.statusLabels[s]} (${s === 'all' ? Object.values(rv.counts).reduce((a, b) => a + b, 0) : rv.counts[s] || 0})`)));
+    $('drQueue').replaceChildren(...(rv.rows.length ? rv.rows.map(r => item(r, true)) : [empty('Nothing here.')]));
+    const line = (kind, d, extra) => el('div', { class: 'cf-list-item' },
+      el('div', { class: 'cf-list-main dr-override-name' }, el('div', { text: d.domain }), el('div', { class: 'dr-meta', text: extra })),
+      el('div', { class: 'cf-list-actions' }, el('button', { type: 'button', class: 'btn btn-sm btn-secondary', 'aria-label': `Remove ${d.domain}`, onclick: () => {
+        if (!confirm(kind === 'block' ? `Stop blocking ${d.domain} everywhere?` : `Take ${d.domain} off the global allow list (the feeds may block it again)?`)) return;
+        run(() => req(api(`/overrides/${kind}/${encodeURIComponent(d.domain)}`), { method: 'DELETE' }), `${d.domain} removed.`);
+      } }, 'Remove')));
+    $('drBlockCount').textContent = String(rv.overrides.blocks.length);
+    $('drAllowCount').textContent = String(rv.overrides.allows.length);
+    $('drBlocks').replaceChildren(...(rv.overrides.blocks.length ? rv.overrides.blocks.map(d => line('block', d, when(d.addedAt))) : [empty('No manual blocks.')]));
+    $('drAllows').replaceChildren(...(rv.overrides.allows.length ? rv.overrides.allows.map(d => line('allow', d, d.note || when(d.addedAt))) : [empty('Nothing on the allow list.')]));
+  }
+
+  function filterMine() {
+    const q = $('cfk-dr-mine-search').value.trim().toLowerCase();
+    for (const n of $('drMine').children) if (n.dataset.search != null) n.hidden = !!q && !n.dataset.search.includes(q);
+  }
+  $('cfk-dr-mine-search').addEventListener('input', filterMine);
+
+  $('drCheck').addEventListener('click', async () => {
+    const url = $('drUrl').value.trim();
+    if (!url) return;
+    $('drCheckResult').textContent = 'Checking...';
+    try {
+      const r = await req(api(`/check?url=${encodeURIComponent(url)}`));
+      $('drCheckResult').replaceChildren(el('strong', { text: r.title }), el('ul', {}, ...(r.reasons || []).map(x => el('li', { text: x }))));
+      $('drKind').value = r.verdict === 'malicious' && r.listed ? 'dispute' : 'report';
+    } catch (err) { $('drCheckResult').textContent = err.message; }
+  });
+  $('drSubmit').addEventListener('click', () => {
+    const body = { kind: $('drKind').value, url: $('drUrl').value.trim(), reason: $('drReason').value.trim() };
+    run(() => req(api('/submit'), { method: 'POST', body: JSON.stringify(body) }), (o) => {
+      $('drReason').value = '';
+      return `Sent as #${o.id} (${o.host}). You will see the outcome here; whoever sends a report is also told by DM.`;
+    });
+  });
+
+  async function load() {
+    try {
+      state = await req(api(`/?status=${encodeURIComponent(reviewStatus)}`));
+      render();
+    } catch (err) {
+      showError(err.message);
+      if (!state) $('drMine').replaceChildren(el('div', { class: 'cf-state cf-state--error cf-state--compact', role: 'alert' }, el('p', { class: 'cf-state-title', text: 'Could not load reports' })));
+    }
+  }
+  // Pre-fill from the Message Threats URL checker (?page=domain-reports&url=…&kind=…).
+  const qs = new URLSearchParams(location.search);
+  if (qs.get('url')) $('drUrl').value = qs.get('url').slice(0, 500);
+  if (qs.get('kind') === 'dispute' || qs.get('kind') === 'report') $('drKind').value = qs.get('kind');
+  load();
+})();
+</script>

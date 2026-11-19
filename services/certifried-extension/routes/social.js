@@ -6,90 +6,79 @@
 import { Router } from 'express';
 import pool from '../../../utils/db.js';
 import logger from '../../../utils/logger.js';
+import { getActiveSeason, getLiveStandings } from '../game/season-system.js';
 
 const router = Router();
 
 /**
- * GET /social/leaderboard
- * Get leaderboard data (filtered by player's platform)
+ * GET /social/leaderboard?type=cash|level|prestige|sales|earnings|season
+ * One board for every real player whatever they signed in with (each row says
+ * where they play); test ('dev') and banned accounts are left out (H-410).
+ * type=season ranks the running season by season XP (game/season-system.js).
  */
+const LEADERBOARD_TYPES = {
+    cash: { order: 'cash DESC, id ASC', col: 'cash' },
+    level: { order: 'level DESC, xp DESC, id ASC', col: 'level' },
+    prestige: { order: 'prestige_level DESC, level DESC, id ASC', col: 'prestige_level' },
+    sales: { order: 'lifetime_sales DESC, id ASC', col: 'lifetime_sales' },
+    earnings: { order: 'lifetime_earnings DESC, id ASC', col: 'lifetime_earnings' }
+};
+
 router.get('/leaderboard', async (req, res) => {
     try {
-        const { type = 'cash', limit = 50 } = req.query;
+        const type = String(req.query.type || 'cash');
+        const limit = Math.max(1, Math.min(100, parseInt(req.query.limit, 10) || 50));
 
-        // Get current player's platform to filter leaderboard
-        const platform = req.player?.platform || 'twitch';
-
-        logger.info('[Leaderboard] Request', {
-            playerId: req.player?.id,
-            playerPlatform: req.player?.platform,
-            filterPlatform: platform
-        });
-
-        let orderBy;
-        switch (type) {
-            case 'level':
-                orderBy = 'level DESC, xp DESC';
-                break;
-            case 'prestige':
-                orderBy = 'prestige_level DESC, level DESC';
-                break;
-            case 'sales':
-                orderBy = 'lifetime_sales DESC';
-                break;
-            case 'earnings':
-                orderBy = 'lifetime_earnings DESC';
-                break;
-            case 'cash':
-            default:
-                orderBy = 'cash DESC';
+        if (type === 'season') {
+            const season = await getActiveSeason();
+            if (!season) return res.json({ success: true, type, season: null, leaderboard: [], playerRank: null });
+            const live = await getLiveStandings(season.id, { limit, playerId: req.player?.id });
+            return res.json({
+                success: true,
+                type,
+                season,
+                leaderboard: live.standings,
+                playerRank: live.me?.rank ?? null
+            });
         }
 
-        // Filter by platform - only show users from the same platform
-        const [players] = await pool.execute(
-            `SELECT id, display_name, avatar_url, cash, level, prestige_level,
+        const spec = LEADERBOARD_TYPES[type] || LEADERBOARD_TYPES.cash;
+        const where = `platform <> 'dev' AND COALESCE(is_banned, 0) = 0`;
+        const [players] = await pool.query(
+            `SELECT id, display_name, avatar_url, platform, cash, level, prestige_level,
                     lifetime_earnings, lifetime_sales, facility_name
              FROM cfx_players
-             WHERE platform = ?
-             ORDER BY ${orderBy}
+             WHERE ${where}
+             ORDER BY ${spec.order}
              LIMIT ?`,
-            [platform, parseInt(limit)]
+            [limit]
         );
 
-        // Get requester's rank within their platform
         let playerRank = null;
-        if (req.player) {
-            const [[rankData]] = await pool.execute(
-                `SELECT COUNT(*) + 1 as rank FROM cfx_players
-                 WHERE platform = ? AND ${type === 'level' ? 'level > ?' :
-                       type === 'prestige' ? 'prestige_level > ?' :
-                       type === 'sales' ? 'lifetime_sales > ?' :
-                       type === 'earnings' ? 'lifetime_earnings > ?' : 'cash > ?'}`,
-                [platform,
-                 type === 'level' ? req.player.level :
-                 type === 'prestige' ? req.player.prestige_level :
-                 type === 'sales' ? req.player.lifetime_sales :
-                 type === 'earnings' ? req.player.lifetime_earnings : req.player.cash]
+        if (req.player && req.player.platform !== 'dev' && !req.player.is_banned) {
+            const [[rankData]] = await pool.query(
+                `SELECT COUNT(*) + 1 AS \`rank\` FROM cfx_players WHERE ${where} AND ${spec.col} > ?`,
+                [req.player[spec.col] ?? 0]
             );
-            playerRank = rankData.rank;
+            playerRank = Number(rankData.rank);
         }
 
         res.json({
             success: true,
-            type,
-            platform,
+            type: LEADERBOARD_TYPES[type] ? type : 'cash',
             leaderboard: players.map((p, i) => ({
                 rank: i + 1,
                 id: p.id,
                 displayName: p.display_name,
                 avatarUrl: p.avatar_url,
+                platform: p.platform,
                 cash: p.cash,
                 level: p.level,
                 prestigeLevel: p.prestige_level,
                 lifetimeEarnings: p.lifetime_earnings,
                 lifetimeSales: p.lifetime_sales,
                 facilityName: p.facility_name,
-                isYou: req.player && p.id === req.player.id
+                isYou: !!req.player && p.id === req.player.id
             })),
             playerRank
         });

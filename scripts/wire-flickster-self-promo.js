@@ -10,16 +10,16 @@ import {
     Client, GatewayIntentBits, PermissionFlagsBits, EmbedBuilder,
 } from 'discord.js';
 import pool from '../utils/db.js';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 
 const GUILD_ID = '1500965606659194982';
-const BOT_ID = '1502798840124670133';
+// The acting bot comes from guild_bot_mapping — never pinned here.
 const SELF_PROMO_CH = '1502814404608004288';
 const LIVE_ANNOUNCE_CH = '1501760277476278442';
 
 async function main() {
-    const [bots] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id = ?', [BOT_ID]);
-    const token = encryption.decrypt(JSON.parse(bots[0].bot_token));
+    const bot = await resolveBotForGuild(GUILD_ID, { db: pool });
+    const token = bot.token;
     const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers, GatewayIntentBits.GuildMessages] });
     await client.login(token);
     await new Promise(r => client.once('ready', r));

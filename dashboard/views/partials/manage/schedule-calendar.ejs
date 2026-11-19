@@ -1,0 +1,362 @@
+<%#
+  The calendar an owner fills in for a schedule post. Days, preview and posting all live here; the
+  routes are in dashboard/server.js under /manage/:guildId/twitch-schedules/:syncId/. Colours and
+  spacing come from the settings kit tokens (cf-settings.css).
+%>
+<%
+const calSyncs = typeof syncs !== 'undefined' ? (syncs || []) : [];
+%>
+<style>
+    .sc-picker { display: flex; align-items: center; gap: var(--cf-2); margin-bottom: var(--cf-4); flex-wrap: wrap; }
+    .sc-picker .form-select { max-width: 20rem; }
+    .sc-layout { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: var(--cf-4); align-items: start; }
+    .sc-side { display: flex; flex-direction: column; gap: var(--cf-4); min-width: 0; }
+    .sc-bar { display: flex; align-items: center; gap: var(--cf-2); padding: var(--cf-3) var(--cf-4); }
+    .sc-bar strong { min-width: 9.5rem; text-align: center; color: var(--cf-text); }
+    .sc-bar strong.sc-bar-title { min-width: 0; text-align: left; }
+    .sc-spacer { flex: 1; }
+    .sc-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; padding: 0 var(--cf-4) var(--cf-4); }
+    .sc-dow { font-size: var(--cf-text-xs); color: var(--cf-text-3); text-align: center; padding: 4px 0; }
+    .sc-day { min-height: 92px; padding: 6px; text-align: left; font: inherit; color: var(--cf-text); cursor: pointer;
+        background: var(--cf-surface-2); border: 1px solid var(--cf-border); border-radius: var(--cf-radius-sm); overflow: hidden; }
+    .sc-day:hover, .sc-day:focus-visible { border-color: var(--cf-border-strong); outline: none; }
+    .sc-day:focus-visible { box-shadow: 0 0 0 2px var(--cf-accent); }
+    .sc-day.is-custom { border-color: color-mix(in srgb, #9146ff 60%, var(--cf-border)); }
+    .sc-day.is-selected { border-color: var(--cf-accent); }
+    .sc-num { font-size: var(--cf-text-xs); color: var(--cf-text-3); display: block; }
+    .sc-text { font-size: var(--cf-text-xs); line-height: 1.25; display: block; overflow-wrap: anywhere; }
+    .sc-time { font-size: 0.7rem; color: var(--cf-text-3); display: block; }
+    .sc-empty { color: var(--cf-text-3); opacity: .6; }
+    .sc-preview { display: block; width: 100%; height: auto; border-radius: var(--cf-radius-sm); }
+    .sc-preview-wrap { padding: 0 var(--cf-4) var(--cf-4); min-height: 120px; }
+    .sc-hint { padding: var(--cf-4); margin: 0; color: var(--cf-text-3); font-size: var(--cf-text-sm); }
+    .sc-day-form { padding: var(--cf-4); }
+    .sc-settings { margin-top: var(--cf-4); }
+    .sc-empty-action { margin-top: var(--cf-3); }
+    @media (max-width: 1100px) { .sc-layout { grid-template-columns: minmax(0, 1fr); } }
+    @media (max-width: 640px) {
+        .sc-day { min-height: 56px; padding: 3px; }
+        .sc-text, .sc-time { font-size: .625rem; }
+        .sc-grid { padding: 0 var(--cf-2) var(--cf-2); gap: 2px; }
+    }
+</style>
+
+<div class="page-section">
+<div class="page-section-header">
+    <div>
+        <div class="page-section-title">
+            <i class="fas fa-calendar-days"></i>
+            <span>Schedule calendar</span>
+        </div>
+    </div>
+</div>
+
+<% if (!calSyncs.length) { %>
+    <%- include('../kit/_state', { kind: 'empty', title: 'No schedule to fill in yet', text: 'Add a schedule on the Twitch Schedules page first. It sets which channel the calendar posts in.', id: null, boxed: true, compact: false }) %>
+    <p class="sc-empty-action"><a class="btn btn-primary" href="/manage/<%= guild.id %>?page=twitch-schedules">Go to Twitch schedules</a></p>
+<% } else { %>
+    <% if (calSyncs.length > 1) { %>
+    <div class="sc-picker">
+        <label for="sc-pick">Schedule</label>
+        <select id="sc-pick" class="form-select">
+            <% calSyncs.forEach((sync) => { %><option value="<%= sync.id %>"><%= sync.twitch_username || 'Schedule ' + sync.id %></option><% }) %>
+        </select>
+    </div>
+    <% } %>
+
+    <% calSyncs.forEach((sync, i) => { %>
+    <div class="sc-root" data-sync="<%= sync.id %>" data-guild="<%= guild.id %>" <%= i ? 'hidden' : '' %>>
+        <div class="sc-layout">
+            <section class="cf-section" aria-labelledby="sc-month-<%= sync.id %>">
+                <div class="sc-bar">
+                    <button type="button" class="btn btn-sm btn-secondary" data-prev aria-label="Previous month"><i class="fas fa-chevron-left" aria-hidden="true"></i></button>
+                    <strong id="sc-month-<%= sync.id %>" data-title aria-live="polite"></strong>
+                    <button type="button" class="btn btn-sm btn-secondary" data-next aria-label="Next month"><i class="fas fa-chevron-right" aria-hidden="true"></i></button>
+                </div>
+                <div class="sc-grid" data-grid></div>
+            </section>
+
+            <div class="sc-side">
+                <section class="cf-section" aria-labelledby="sc-prev-<%= sync.id %>">
+                    <div class="sc-bar">
+                        <strong id="sc-prev-<%= sync.id %>" class="sc-bar-title">Poster preview</strong>
+                        <span class="sc-spacer"></span>
+                        <button type="button" class="btn btn-sm btn-primary" data-post>Post now</button>
+                    </div>
+                    <div class="sc-preview-wrap">
+                        <a data-preview-link target="_blank" rel="noopener"><img class="sc-preview" data-preview alt="Preview of this month's schedule poster"></a>
+                        <p class="cf-status-line" data-post-status role="status"></p>
+                    </div>
+                </section>
+
+                <section class="cf-section">
+                    <p class="sc-hint" data-hint>Pick a day to fill it in.</p>
+                    <form data-form hidden class="sc-day-form">
+                        <h3 class="cf-section-title" data-form-title></h3>
+                        <div class="cf-fields">
+                            <div class="cf-field">
+                                <label for="sc-kind-<%= sync.id %>">This day is</label>
+                                <select class="form-select" name="kind" id="sc-kind-<%= sync.id %>">
+                                    <option value="stream">A stream</option>
+                                    <option value="off">No stream</option>
+                                </select>
+                            </div>
+                            <div class="cf-field">
+                                <label for="sc-title-<%= sync.id %>">Title</label>
+                                <input class="form-control" type="text" name="title" id="sc-title-<%= sync.id %>" maxlength="120">
+                            </div>
+                            <div class="cf-field" data-times>
+                                <label for="sc-start-<%= sync.id %>">Starts</label>
+                                <input class="form-control" type="time" name="start_time" id="sc-start-<%= sync.id %>">
+                            </div>
+                            <div class="cf-field" data-times>
+                                <label for="sc-end-<%= sync.id %>">Ends</label>
+                                <input class="form-control" type="time" name="end_time" id="sc-end-<%= sync.id %>">
+                            </div>
+                            <div class="cf-field">
+                                <label for="sc-note-<%= sync.id %>">Extra line</label>
+                                <input class="form-control" type="text" name="note" id="sc-note-<%= sync.id %>" maxlength="160">
+                            </div>
+                            <div class="cf-field">
+                                <label for="sc-color-<%= sync.id %>">Title colour</label>
+                                <input class="form-control form-control-color" type="color" name="title_color" id="sc-color-<%= sync.id %>">
+                            </div>
+                            <div class="cf-field">
+                                <label><input type="checkbox" name="fade"> Fade to a second colour</label>
+                                <input class="form-control form-control-color" type="color" name="title_color2" aria-label="Second title colour">
+                            </div>
+                            <div class="cf-field">
+                                <label for="sc-notecolor-<%= sync.id %>">Extra line colour</label>
+                                <input class="form-control form-control-color" type="color" name="note_color" id="sc-notecolor-<%= sync.id %>">
+                            </div>
+                        </div>
+                        <div class="cf-section-foot">
+                            <button type="button" class="btn btn-danger" data-clear>Clear this day</button>
+                            <button type="button" class="btn btn-secondary" data-cancel>Cancel</button>
+                            <button type="submit" class="btn btn-primary">Save day</button>
+                        </div>
+                        <p class="cf-status-line" data-status role="status"></p>
+                    </form>
+                </section>
+            </div>
+        </div>
+
+        <form data-settings enctype="multipart/form-data">
+            <section class="cf-section sc-settings" aria-labelledby="sc-set-<%= sync.id %>">
+                <header class="cf-section-head">
+                    <div><h2 class="cf-section-title" id="sc-set-<%= sync.id %>">Calendar settings</h2></div>
+                </header>
+                <div class="cf-rows">
+                    <div class="cf-row">
+                        <div class="cf-row-text">
+                            <label class="cf-row-label" for="sc-source-<%= sync.id %>">Where the schedule comes from</label>
+                            <p class="cf-row-desc">With "Twitch plus my changes", any day you fill in replaces Twitch for that day.</p>
+                        </div>
+                        <div class="cf-row-control">
+                            <select id="sc-source-<%= sync.id %>" class="form-select" name="schedule_source">
+                                <option value="twitch" <%= (sync.schedule_source || 'twitch') === 'twitch' ? 'selected' : '' %>>Twitch schedule</option>
+                                <option value="mixed"  <%= sync.schedule_source === 'mixed' ? 'selected' : '' %>>Twitch plus my changes</option>
+                                <option value="custom" <%= sync.schedule_source === 'custom' ? 'selected' : '' %>>Only my calendar</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="cf-row cf-row--switch">
+                        <div class="cf-row-text">
+                            <label class="cf-row-label" for="sc-poster-<%= sync.id %>">Post it as the month poster</label>
+                            <p class="cf-row-desc">Turn this off to go back to the calendar grid. The other layouts are chosen on the Twitch schedules page.</p>
+                        </div>
+                        <div class="cf-row-control">
+                            <input type="checkbox" class="cf-switch" role="switch" name="use_poster" id="sc-poster-<%= sync.id %>" <%= sync.layout === 'calendar' ? 'checked' : '' %>>
+                        </div>
+                    </div>
+                    <div class="cf-row">
+                        <div class="cf-row-text">
+                            <label class="cf-row-label" for="sc-heading-<%= sync.id %>">Heading</label>
+                        </div>
+                        <div class="cf-row-control">
+                            <input id="sc-heading-<%= sync.id %>" class="form-control" type="text" name="card_title" maxlength="80" value="<%= sync.card_title || '' %>" placeholder="Stream Schedule">
+                        </div>
+                    </div>
+                    <div class="cf-row">
+                        <div class="cf-row-text">
+                            <label class="cf-row-label" for="sc-art-<%= sync.id %>">Art down the left side</label>
+                            <p class="cf-row-desc">A tall image works best, about 216 by 1080 pixels.<% if (sync.side_art_url) { %> <a href="<%= sync.side_art_url %>" target="_blank" rel="noopener">See the current art</a><% } %></p>
+                        </div>
+                        <div class="cf-row-control">
+                            <input id="sc-art-<%= sync.id %>" class="form-control" type="file" name="side_art_file" accept=".png,.jpg,.jpeg,.webp">
+                            <% if (sync.side_art_url) { %><label class="cf-row-desc"><input type="checkbox" name="remove_side_art"> Remove the art</label><% } %>
+                        </div>
+                    </div>
+                    <div class="cf-row cf-row--stack">
+                        <div class="cf-row-text">
+                            <label class="cf-row-label" for="sc-small-<%= sync.id %>">Small print</label>
+                            <p class="cf-row-desc">Put [[double brackets]] around words to make them red and underlined.</p>
+                        </div>
+                        <div class="cf-row-control">
+                            <textarea id="sc-small-<%= sync.id %>" class="form-control" name="card_disclaimer" rows="3" maxlength="600"><%= sync.card_disclaimer || '' %></textarea>
+                        </div>
+                    </div>
+                    <div class="cf-section-foot">
+                        <span class="cf-status-line" data-settings-status role="status"></span>
+                        <button type="submit" class="btn btn-primary">Save settings</button>
+                    </div>
+                </div>
+            </section>
+        </form>
+    </div>
+    <% }) %>
+
+    <script>
+    (function () {
+        function pad(n) { return String(n).padStart(2, '0'); }
+        function el(tag, cls, text) { var e = document.createElement(tag); if (cls) e.className = cls; if (text) e.textContent = text; return e; }
+
+        function start(root) {
+            if (root.dataset.ready) return;
+            root.dataset.ready = '1';
+            var base = '/manage/' + root.dataset.guild + '/twitch-schedules/' + root.dataset.sync;
+            var grid = root.querySelector('[data-grid]');
+            var form = root.querySelector('[data-form]');
+            var hint = root.querySelector('[data-hint]');
+            var status = root.querySelector('[data-status]');
+            var data = null, current = '', editing = null;
+
+            function refreshPreview() {
+                var url = base + '/preview.png?month=' + current;
+                root.querySelector('[data-preview]').src = url + '&t=' + Date.now();
+                root.querySelector('[data-preview-link]').href = url;
+            }
+
+            function draw() {
+                root.querySelector('[data-title]').textContent = data.monthName + ' ' + data.year;
+                grid.textContent = '';
+                ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].forEach(function (d) { grid.appendChild(el('div', 'sc-dow', d)); });
+                for (var i = 0; i < data.firstWeekday; i++) grid.appendChild(el('div'));
+                data.days.forEach(function (day) {
+                    var selected = editing && editing.key === day.key;
+                    var b = el('button', 'sc-day' + (day.origin === 'custom' ? ' is-custom' : '') + (selected ? ' is-selected' : ''));
+                    b.type = 'button';
+                    b.appendChild(el('span', 'sc-num', String(day.date)));
+                    if (day.origin === 'none') b.appendChild(el('span', 'sc-text sc-empty', 'No stream'));
+                    else {
+                        b.appendChild(el('span', 'sc-text', day.title));
+                        if (day.time) b.appendChild(el('span', 'sc-time', day.time));
+                        if (day.note) b.appendChild(el('span', 'sc-time', day.note));
+                    }
+                    b.setAttribute('aria-label', data.monthName + ' ' + day.date + ': ' + day.title);
+                    b.addEventListener('click', function () { edit(day); });
+                    grid.appendChild(b);
+                });
+            }
+
+            function load() {
+                return fetch(base + '/calendar?month=' + encodeURIComponent(current), { credentials: 'same-origin' })
+                    .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
+                    .then(function (j) { data = j; current = j.year + '-' + pad(j.month + 1); draw(); refreshPreview(); })
+                    .catch(function () { grid.textContent = 'This calendar could not be loaded. Reload the page to try again.'; });
+            }
+
+            function toggleTimes() {
+                var off = form.kind.value === 'off';
+                root.querySelectorAll('[data-times]').forEach(function (f) { f.hidden = off; });
+            }
+
+            function closeForm() { editing = null; form.hidden = true; hint.hidden = false; }
+
+            function edit(day) {
+                editing = day;
+                var saved = (data.saved || []).find(function (s) { return s.day === day.key; }) || {};
+                root.querySelector('[data-form-title]').textContent = data.monthName + ' ' + day.date;
+                form.kind.value = saved.kind || 'stream';
+                form.title.value = saved.title || (day.origin === 'twitch' ? day.title : '');
+                form.start_time.value = (saved.start_time || '').slice(0, 5);
+                form.end_time.value = (saved.end_time || '').slice(0, 5);
+                form.note.value = saved.note || '';
+                form.title_color.value = saved.title_color || (day.origin === 'none' ? '#B8692E' : day.color);
+                form.fade.checked = !!saved.title_color2;
+                form.title_color2.value = saved.title_color2 || '#5A1E6E';
+                form.note_color.value = saved.note_color || '#25249C';
+                status.textContent = '';
+                toggleTimes();
+                hint.hidden = true;
+                form.hidden = false;
+                draw();
+                form.title.focus();
+            }
+
+            function post(path, body) {
+                return fetch(base + path, { method: 'POST', credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) })
+                    .then(function (r) { if (!r.ok) throw new Error(); });
+            }
+
+            function move(by) {
+                if (!data) return;
+                var d = new Date(Date.UTC(data.year, data.month + by, 1));
+                current = d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1);
+                closeForm();
+                load();
+            }
+
+            form.kind.addEventListener('change', function () {
+                toggleTimes();
+                // A new day off starts in the poster's red; nothing typed in yet is lost.
+                if (form.kind.value === 'off' && !form.title.value) form.title_color.value = '#C0141C';
+            });
+            form.addEventListener('submit', function (e) {
+                e.preventDefault();
+                post('/day', { day: editing.key, kind: form.kind.value, title: form.title.value,
+                    start_time: form.start_time.value, end_time: form.end_time.value, note: form.note.value,
+                    title_color: form.title_color.value, title_color2: form.fade.checked ? form.title_color2.value : '',
+                    note_color: form.note.value ? form.note_color.value : '' })
+                    .then(function () { closeForm(); return load(); })
+                    .catch(function () { status.textContent = 'That day was not saved. Try again.'; });
+            });
+            root.querySelector('[data-clear]').addEventListener('click', function () {
+                post('/day/clear', { day: editing.key })
+                    .then(function () { closeForm(); return load(); })
+                    .catch(function () { status.textContent = 'That day was not cleared. Try again.'; });
+            });
+            root.querySelector('[data-cancel]').addEventListener('click', function () { closeForm(); draw(); });
+            root.querySelector('[data-prev]').addEventListener('click', function () { move(-1); });
+            root.querySelector('[data-next]').addEventListener('click', function () { move(1); });
+
+            root.querySelector('[data-post]').addEventListener('click', function () {
+                var note = root.querySelector('[data-post-status]');
+                note.textContent = 'Posting…';
+                if (!confirm('Post this month’s schedule to its channel now?')) { note.textContent = ''; return; }
+                post('/post')
+                    .then(function () { note.textContent = 'Posted. It can take a few seconds to show in Discord.'; })
+                    .catch(function () { note.textContent = 'That did not post. Try again.'; });
+            });
+
+            var settings = root.querySelector('[data-settings]');
+            settings.addEventListener('submit', function (e) {
+                e.preventDefault();
+                var note = root.querySelector('[data-settings-status]');
+                note.textContent = 'Saving…';
+                fetch(base + '/calendar-settings', { method: 'POST', credentials: 'same-origin', body: new FormData(settings) })
+                    .then(function (r) { return r.json().then(function (j) { if (!r.ok) throw new Error(j.error); }); })
+                    .then(function () { note.textContent = 'Saved'; note.className = 'cf-status-line is-ok'; return load(); })
+                    .catch(function (err) {
+                        note.textContent = err.message === 'bad_image' ? 'That image must be a PNG, JPG or WEBP.' : 'Those settings were not saved. Try again.';
+                    });
+            });
+
+            load();
+        }
+
+        var roots = document.querySelectorAll('.sc-root');
+        var pick = document.getElementById('sc-pick');
+        if (pick) pick.addEventListener('change', function () {
+            roots.forEach(function (r) {
+                var on = r.dataset.sync === pick.value;
+                r.hidden = !on;
+                if (on) start(r);
+            });
+        });
+        if (roots[0]) start(roots[0]);
+    })();
+    </script>
+<% } %>
+</div>

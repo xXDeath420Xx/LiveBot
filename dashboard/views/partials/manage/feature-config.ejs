@@ -1,0 +1,880 @@
+<%#
+  Generic settings page. Renders whichever feature `?page=` selected, from the spec served by
+  /api/guilds/:id/feature-config/:feature (core/feature-config-spec.js). One partial covers every
+  generated page (~50 features); adding a control is a line in the spec, with no markup to keep in
+  sync. Built on the settings-row kit (dashboard/public/css/cf-settings.css): the page title comes
+  from the spec on the server, so "What this does" sits under it like on every other kit page;
+  the settings and the feature's list are drawn by the script below with createElement and
+  textContent only.
+  Hooks other code relies on: #fc-root, #fc-save, #fc-status, and one control per field with
+  id fc-f-<field key>, data-key and data-type (the "Recommended settings" fill in cf-settings.js
+  and core/page-help.js address fields as fc-f-<key>).
+  Voice fields (type 'voice', e.g. Text to Speech and Voice Chat Reader) are a select grouped by
+  engine and language from spec.voices (Piper first, the default engine; then Kokoro) with a preview
+  button that plays GET /api/voice-preview/<id>.
+  Channel fields list channels by their real Discord type (ChannelType, passed as `type`): channelKind
+  'text' = text and announcement channels, 'voice' = voice and stage channels, 'category' =
+  categories; no channelKind = text, announcement, voice and stage. discord.js counts voice channels
+  as text-based, so the `channels` local alone cannot tell them apart.
+  Layout, all from the spec (no per-feature markup):
+    - Sections: a field's `group` names its section (spec `groups: [{ title, desc }]` orders them and
+      adds a line under the title). With no groups, a page of six or more fields is split by kind:
+      General, Channels and roles, Schedule, Messages, Voice. One sticky Save covers every section.
+    - `showIf` / `hideIf` hide a field while another field has (or lacks) a value; hidden fields are
+      still saved unchanged.
+    - Numbers show their unit after the box: `unit`, or a trailing "(minutes)" in the label (the
+      label's text is unchanged for screen readers; the brackets are only hidden visually).
+    - `message` fields (text the bot posts) get a live preview under them: {variables} filled with
+      sample values (`vars`, an object of name: sample, adds or overrides samples), <#id>/<@&id>
+      mentions as names, and **bold**, *italic*, `code`, ~~strike~~. `preview: 'embed'` draws it
+      as an embed description. `placeholder` is the text the bot uses when the field is empty.
+      `maxLength` sets the limit (default 2000, Discord's message limit).
+    - The spec's commands are listed at the end with their descriptions (from the bot), each with
+      a Settings link to that command's drawer on the Commands page (?page=commands&cmd=<key>).
+%>
+<%
+const fcChannels = typeof channels !== 'undefined' ? channels : [];
+const fcRoles = typeof roles !== 'undefined' ? roles : [];
+const fcVoice = typeof voiceChannels !== 'undefined' ? voiceChannels : [];
+const fcCategoryList = typeof categories !== 'undefined' ? categories : [];
+const fcFeature = typeof featureKey !== 'undefined' ? featureKey : '';
+const fcSpec = (typeof featureConfigSpecs !== 'undefined' && featureConfigSpecs && featureConfigSpecs[fcFeature]) || null;
+// Sample values for message previews. JSON with '<' escaped, so a server name cannot close the script.
+const fcSample = JSON.stringify({
+    server: (guild && guild.name) || 'Your server',
+    members: Number(guild && guild.memberCount) || 100,
+}).replace(/</g, '\\u003c');
+%>
+
+<style>
+    .fc-page .cf-row-text .cf-pill { margin-top: 4px; }
+    .fc-page .fc-row-color input[type="color"] { width: 4.5rem; height: 2.25rem; padding: 2px; }
+    .fc-page #fc-status { margin-right: auto; }
+    .fc-page .fc-yes { color: var(--cf-success); }
+    .fc-page .fc-no, .fc-page .fc-missing { color: var(--cf-text-3); }
+    .fc-page .cf-table td { overflow-wrap: anywhere; }
+    .fc-page .fc-voice-preview { margin-top: var(--cf-2); }
+    .fc-page .fc-days { display: flex; flex-wrap: wrap; gap: 6px; }
+    .fc-page .fc-day { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border: 1px solid var(--cf-border); border-radius: 6px; font-size: var(--cf-text-sm); cursor: pointer; user-select: none; }
+    .fc-page .fc-day:has(input:checked) { border-color: var(--cf-accent); color: var(--cf-text); background: var(--cf-accent-soft); }
+    .fc-page .fc-day input { margin: 0; }
+    .fc-page .fc-entry + .fc-entry { border-top: 1px solid var(--cf-border); }
+    .fc-page .fc-entry-head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--cf-2); padding: var(--cf-3) 0 var(--cf-1); }
+    .fc-page .fc-entry-name { font-weight: 600; }
+    .fc-page .fc-entry-meta { font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+    .fc-page .fc-add { display: flex; gap: var(--cf-2); align-items: center; flex-wrap: wrap; }
+    .fc-page .fc-add select { max-width: 22rem; }
+
+    /* One Save for every settings section, kept in view while scrolling. */
+    .fc-page .fc-savebar { position: static; z-index: 20; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--cf-2) var(--cf-4); margin: 0 0 var(--cf-8); padding: var(--cf-3) var(--cf-4); background: var(--cf-surface); border: 1px solid var(--cf-border); border-radius: var(--cf-radius-lg); box-shadow: var(--cf-shadow-pop, none); }
+    .fc-page .fc-savebar.is-dirty { position: sticky; bottom: var(--cf-4); border-color: var(--cf-accent); }
+
+    /* A number with its unit after the box (the input stays a direct child of .cf-row-control). */
+    .fc-page .cf-rows .cf-row-control:has(> .fc-unit) { flex-direction: row; align-items: stretch; gap: 0; }
+    .fc-page .cf-rows .cf-row-control:has(> .fc-unit) > input { flex: 1 1 auto; min-width: 0; border-top-right-radius: 0 !important; border-bottom-right-radius: 0 !important; }
+    .fc-page .fc-unit { display: inline-flex; align-items: center; flex: none; padding: 0 10px; white-space: nowrap; font-size: var(--cf-text-sm); color: var(--cf-text-2); background: var(--cf-surface-2); border: 1px solid var(--cf-border-strong); border-left: 0; border-radius: 0 var(--cf-radius) var(--cf-radius) 0; }
+
+    /* Message previews are the shared Discord preview (/css/cf-msgpreview.css, .cf-dc). */
+
+    /* A feature's own part (qotd, vc-sounds) and the Commands list keep the section spacing after #fc-root. */
+    .fc-page #fc-root ~ * { margin-top: var(--cf-8); }
+    .fc-page #fc-commands:empty { display: none; }
+
+    /* Lists */
+    .fc-page .fc-list-search { max-width: 22rem; }
+    .fc-page .fc-cmd-list .cf-list-item { display: flex; align-items: center; justify-content: space-between; gap: var(--cf-3); }
+    .fc-page .fc-cmd-main { min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px var(--cf-3); }
+    .fc-page .fc-cmd-main code { font-family: var(--cf-mono); font-size: var(--cf-text-sm); font-weight: 600; color: var(--cf-text); }
+    .fc-page .fc-cmd-desc { font-size: var(--cf-text-sm); color: var(--cf-text-3); }
+    @media (max-width: 640px) {
+        .fc-page #fc-status { flex-basis: 100%; }
+        .fc-page .fc-savebar .btn { flex: 1 1 auto; min-height: 44px; }
+        .fc-page .fc-cmd-list .cf-list-item { flex-wrap: wrap; }
+    }
+</style>
+
+<div class="page-section fc-page" id="fc-page" data-feature="<%= fcFeature %>">
+    <% if (fcSpec) { %>
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="<%= fcSpec.iconPack || 'fas' %> <%= fcSpec.icon %>" aria-hidden="true"></i>
+                <span><%= fcSpec.label %></span>
+            </div>
+            <div class="page-section-subtitle"><%= fcSpec.blurb %></div>
+        </div>
+    </div>
+    <% } %>
+
+    <div id="fc-root">
+        <section class="cf-section">
+            <div class="cf-rows">
+                <%- include('../kit/_state', { kind: 'loading', title: 'Loading settings', text: null, id: null, boxed: false, compact: false }) %>
+            </div>
+        </section>
+    </div>
+    <%# Pages with more than settings and one list add their own part here. %>
+    <% if (fcFeature === 'qotd') { %><%- include('_qotd-review', { guild: guild, channels: fcChannels }) %><% } %>
+    <% if (fcFeature === 'vc-sounds') { %><%- include('_vc-sounds', { guild: guild }) %><% } %>
+    <div id="fc-commands"></div>
+</div>
+
+<script src="/js/cf-msgpreview.js"></script>
+<script>
+(function() {
+    var fcGuildId = '<%= guild.id %>';
+    var fcFeature = '<%= fcFeature %>';
+    var fcApi = '/api/guilds/' + fcGuildId + '/feature-config/' + fcFeature;
+
+    // Discord entities are rendered server-side into the page so every picker is a real
+    // dropdown of this guild's channels/roles rather than a box you paste a snowflake into.
+    var fcChannels = <%- JSON.stringify(fcChannels.map(function(c){ return { id: c.id, name: c.name, type: c.type }; })).replace(/</g, '\\u003c') %>;
+    var fcVoice = <%- JSON.stringify(fcVoice.map(function(c){ return { id: c.id, name: c.name, type: c.type }; })).replace(/</g, '\\u003c') %>;
+    var fcCategories = <%- JSON.stringify(fcCategoryList.map(function(c){ return { id: c.id, name: c.name, type: c.type }; })).replace(/</g, '\\u003c') %>;
+    // ChannelType: 0 text, 5 announcement; 2 voice, 13 stage; 4 category. A channel with no type
+    // (page tests' fixtures) counts as text.
+    var FC_TEXT_TYPES = [0, 5], FC_VOICE_TYPES = [2, 13], FC_CATEGORY_TYPE = 4;
+    function fcIsText(c) { return c.type == null || FC_TEXT_TYPES.indexOf(c.type) !== -1; }
+    var fcTextOnly = fcChannels.filter(fcIsText);
+    var fcVoiceOnly = fcVoice.filter(function(c) { return c.type == null || FC_VOICE_TYPES.indexOf(c.type) !== -1; });
+    var fcCategoryOnly = fcCategories.filter(function(c) { return c.type == null || c.type === FC_CATEGORY_TYPE; });
+    var fcRoles = <%- JSON.stringify(fcRoles.map(function(r){ return { id: r.id, name: r.name, color: r.hexColor || (r.color ? '#' + Number(r.color).toString(16).padStart(6, '0') : null) }; })).replace(/</g, '\\u003c') %>;
+
+    /** createElement with properties (attributes for data-* / aria-* / role / for) and children. */
+    function el(tag, props) {
+        var node = document.createElement(tag);
+        Object.keys(props || {}).forEach(function(k) {
+            var v = props[k];
+            if (v == null || v === false) return;
+            if (k === 'text') node.textContent = v;
+            else if (k === 'className') node.className = v;
+            else if (/^(data-|aria-)/.test(k) || k === 'role' || k === 'for' || k === 'title' || k === 'scope') node.setAttribute(k, v === true ? '' : v);
+            else node[k] = v;
+        });
+        for (var i = 2; i < arguments.length; i++) {
+            var kid = arguments[i];
+            if (kid == null || kid === false) continue;
+            node.appendChild(typeof kid === 'string' ? document.createTextNode(kid) : kid);
+        }
+        return node;
+    }
+
+    // Stored as a JSON array, but tolerate a legacy comma-separated string.
+    function toList(v) {
+        if (!v) return [];
+        if (Array.isArray(v)) return v.map(String);
+        var s = String(v).trim();
+        if (s.charAt(0) === '[') { try { return JSON.parse(s).map(String); } catch (e) { return []; } }
+        return s.split(',').map(function(x) { return x.trim(); }).filter(Boolean);
+    }
+
+    var FC_DAYS = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+    var fcZoneList = null;
+    function fcZones() {
+        if (!fcZoneList) {
+            try { fcZoneList = Intl.supportedValuesOf('timeZone').slice(); } catch (e) { fcZoneList = []; }
+            if (fcZoneList.indexOf('UTC') === -1) fcZoneList.unshift('UTC');
+        }
+        return fcZoneList.slice();
+    }
+
+    /** A control's value as the API expects it (what collect() and the row editors send). */
+    function readControl(node) {
+        var type = node.getAttribute('data-type');
+        if (type === 'toggle') return node.checked;
+        if (type === 'channels' || type === 'roles') return Array.prototype.slice.call(node.selectedOptions).map(function(o) { return o.value; });
+        if (type === 'days') {
+            // Each child is a <label> whose first element is its checkbox.
+            var out = [];
+            Array.prototype.forEach.call(node.children, function(lab) { var b = lab.children[0]; if (b && b.checked) out.push(b.value); });
+            return out;
+        }
+        return node.value;
+    }
+
+    function options(select, items, chosen, prefix) {
+        items.forEach(function(i) {
+            var voice = fcVoice.some(function(v) { return v.id === i.id; });
+            var category = !voice && fcCategories.some(function(v) { return v.id === i.id; });
+            var o = el('option', { value: String(i.id), text: (voice || category ? '' : (prefix || '')) + i.name });
+            // setAttribute rather than dataset: the same markup cf-picker.js reads, and it also
+            // works in the page tests' minimal DOM (tests/kit-rollout-a.test.js).
+            o.setAttribute('data-kind', prefix === '#' ? (voice ? 'voice' : category ? 'category' : 'text') : 'role');
+            if (i.color && i.color !== '#000000') o.setAttribute('data-color', i.color);
+            if (chosen.indexOf(String(i.id)) !== -1) o.selected = true;
+            select.appendChild(o);
+        });
+        return select;
+    }
+    /**
+     * Channels for a field by channelKind (see the header): text, voice, category, or text and voice.
+     * A channel already saved that is not of that kind stays listed, so saving other settings never
+     * clears it silently.
+     */
+    function channelsFor(f, chosen) {
+        var list = f.channelKind === 'voice' ? fcVoiceOnly
+            : f.channelKind === 'text' ? fcTextOnly
+            : f.channelKind === 'category' ? fcCategoryOnly
+            : fcTextOnly.concat(fcVoiceOnly);
+        var extra = fcChannels.concat(fcVoice, fcCategories).filter(function(c, i, all) {
+            return (chosen || []).indexOf(String(c.id)) !== -1
+                && !list.some(function(l) { return l.id === c.id; })
+                && all.findIndex(function(o) { return o.id === c.id; }) === i;
+        });
+        return extra.length ? list.concat(extra) : list;
+    }
+
+    // Voice picker groups from the spec (GET .../feature-config/:feature), set by render().
+    var fcVoiceGroups = [];
+    var fcAudio = null;
+
+    /** Play the selected voice's preview clip (Kokoro clips are made on first use, so allow a moment). */
+    function previewVoice(select, btn, status) {
+        if (!select.value) { status.textContent = 'Pick a voice to preview.'; status.className = 'cf-status-line is-bad'; return; }
+        if (fcAudio) { fcAudio.pause(); fcAudio = null; }
+        btn.disabled = true;
+        status.className = 'cf-status-line is-busy';
+        status.textContent = 'Loading preview...';
+        var done = function(text, kind) { btn.disabled = false; status.className = 'cf-status-line' + (kind ? ' ' + kind : ''); status.textContent = text; };
+        fetch('/api/voice-preview/' + encodeURIComponent(select.value))
+            .then(function(res) {
+                if (!res.ok) return res.json().catch(function() { return {}; }).then(function(d) { throw new Error(d.error || 'No preview for this voice'); });
+                return res.blob();
+            })
+            .then(function(blob) {
+                var url = URL.createObjectURL(blob);
+                fcAudio = new Audio(url);
+                fcAudio.onplay = function() { status.className = 'cf-status-line is-ok'; status.textContent = 'Playing'; };
+                fcAudio.onended = function() { URL.revokeObjectURL(url); fcAudio = null; done('', null); };
+                fcAudio.onerror = function() { URL.revokeObjectURL(url); fcAudio = null; done('Could not play the preview.', 'is-bad'); };
+                return fcAudio.play();
+            })
+            .catch(function(err) { done(err.message, 'is-bad'); });
+    }
+
+    function stateBlock(kind, title, text) {
+        var box = el('div', { className: 'cf-state cf-state--' + kind, role: kind === 'error' ? 'alert' : null });
+        box.appendChild(el('p', { className: 'cf-state-title', text: title }));
+        if (text) box.appendChild(el('p', { className: 'cf-state-text', text: text }));
+        return box;
+    }
+
+    /** The control for one spec field: id fc-f-<key>, data-key, data-type (what collect() reads). */
+    // Row editors pass a scope so their controls carry data-rkey, not data-key: collect() reads
+    // every [data-key] under #fc-root for the main Save, and row values must not leak into it.
+    function control(f, value, scope) {
+        var prefix = scope ? scope.prefix : 'fc-f-';
+        var common = { id: prefix + f.key, 'data-type': f.type };
+        common[scope ? 'data-rkey' : 'data-key'] = f.key;
+        if (f.hint) common['aria-describedby'] = prefix + f.key + '-desc';
+        switch (f.type) {
+            case 'toggle': {
+                var box = el('input', Object.assign({ type: 'checkbox', className: 'cf-switch', role: 'switch' }, common));
+                box.checked = value === true || value === 1 || value === '1';
+                if (f.key === 'enabled') box.setAttribute('data-feature-switch', '');   // shown in the page header (cf-pagehead.js)
+                return box;
+            }
+            case 'number': {
+                var n = el('input', Object.assign({ type: 'number', className: 'form-control' }, common));
+                if (f.min !== undefined) n.min = String(f.min);
+                if (f.max !== undefined) n.max = String(f.max);
+                n.value = value == null ? '' : String(value);
+                return n;
+            }
+            case 'select': {
+                var s = el('select', Object.assign({ className: 'form-select' }, common));
+                (f.options || []).forEach(function(o) {
+                    var opt = el('option', { value: String(o.value), text: o.label });
+                    if (String(value) === String(o.value)) opt.selected = true;
+                    s.appendChild(opt);
+                });
+                return s;
+            }
+            case 'color': {
+                var c = el('input', Object.assign({ type: 'color', className: 'form-control form-control-color' }, common));
+                c.value = value || '#5865F2';
+                return c;
+            }
+            case 'channel':
+            case 'role': {
+                var one = el('select', Object.assign({ className: 'form-select' }, common), el('option', { value: '', text: f.type === 'channel' ? 'No channel' : 'No role' }));
+                return options(one, f.type === 'channel' ? channelsFor(f, value == null || value === '' ? [] : [String(value)]) : fcRoles, value == null || value === '' ? [] : [String(value)], f.type === 'channel' ? '#' : '');
+            }
+            case 'channels':
+            case 'roles': {
+                var many = el('select', Object.assign({ className: 'form-select', multiple: true }, common));
+                return options(many, f.type === 'channels' ? channelsFor(f, toList(value)) : fcRoles, toList(value), f.type === 'channels' ? '#' : '');
+            }
+            case 'voice': {
+                var v = el('select', Object.assign({ className: 'form-select' }, common), el('option', { value: '', text: 'Default' }));
+                var chosen = value == null ? '' : String(value);
+                var listed = fcVoiceGroups.some(function(g) { return g.voices.some(function(o) { return o.value === chosen; }); });
+                // A saved voice that is not installed stays selected, so saving never changes it silently.
+                if (chosen && !listed) {
+                    var cur = el('option', { value: chosen, text: 'Current: ' + chosen + ' (not an installed voice)' });
+                    cur.selected = true;
+                    v.appendChild(cur);
+                }
+                fcVoiceGroups.forEach(function(g) {
+                    var group = el('optgroup', { label: g.label });
+                    g.voices.forEach(function(o) {
+                        var opt = el('option', { value: o.value, text: o.label });
+                        if (o.value === chosen) opt.selected = true;
+                        group.appendChild(opt);
+                    });
+                    v.appendChild(group);
+                });
+                return v;
+            }
+            case 'days': {
+                delete common['aria-describedby'];
+                var group = el('div', Object.assign({ className: 'fc-days', role: 'group', 'aria-label': f.label }, common));
+                var picked = toList(value);
+                FC_DAYS.forEach(function(d) {
+                    var box = el('input', { type: 'checkbox', id: common.id + '-' + d, value: d });
+                    box.checked = picked.indexOf(d) !== -1;
+                    group.appendChild(el('label', { className: 'fc-day', 'for': box.id }, box, d.charAt(0).toUpperCase() + d.slice(1, 3)));
+                });
+                return group;
+            }
+            case 'time': {
+                var tm = el('input', Object.assign({ type: 'time', className: 'form-control', step: 60 }, common));
+                tm.value = value ? String(value).slice(0, 5) : '';
+                return tm;
+            }
+            case 'timezone': {
+                var tz = el('select', Object.assign({ className: 'form-select' }, common));
+                var current = value ? String(value) : 'UTC';
+                var zones = fcZones();
+                if (zones.indexOf(current) === -1) zones = [current].concat(zones);
+                zones.forEach(function(z) {
+                    var o = el('option', { value: z, text: z.replace(/_/g, ' ') });
+                    if (z === current) o.selected = true;
+                    tz.appendChild(o);
+                });
+                return tz;
+            }
+            case 'multiline':
+            case 'message': {
+                // The limits match what the API keeps (feature-config.js coerce()); cf-fields.js
+                // draws the character counter and the {variable} chips from them and the hint.
+                var limit = f.maxLength || (f.type === 'message' ? 2000 : 4000);
+                var t = el('textarea', Object.assign({ className: 'form-control', rows: f.type === 'message' ? 3 : 4, maxLength: limit, placeholder: f.placeholder || null }, common));
+                var names = varNames(f);
+                if (names.length) t.setAttribute('data-vars', names.join(','));
+                t.value = value == null ? '' : String(value);
+                return t;
+            }
+            default: {
+                common['data-type'] = 'text';
+                // Short fields get no counter: the API keeps 500 characters unless the spec sets maxLength.
+                var i = el('input', Object.assign({ type: 'text', className: 'form-control', maxLength: f.maxLength || null, placeholder: f.placeholder || null }, common));
+                i.value = value == null ? '' : String(value);
+                return i;
+            }
+        }
+    }
+
+    // "Minimum gap (minutes)" -> unit "minutes". Ranges like "(0-23)" and notes like "(0 = none)" are not units.
+    var UNIT_IN_LABEL = /\s*\(([A-Za-z%][A-Za-z ]{0,11})\)\s*$/;
+    function unitOf(f) {
+        if (f.type !== 'number') return null;
+        if (f.unit) return { unit: String(f.unit), inLabel: null };
+        var m = String(f.label || '').match(UNIT_IN_LABEL);
+        return m ? { unit: m[1], inLabel: m[0] } : null;
+    }
+
+    /** The row label. A unit written in the label stays in its text (screen readers, search) but is hidden visually. */
+    function labelNode(f, ctl, unit) {
+        if (f.type === 'days') return el('span', { className: 'cf-row-label', text: f.label });
+        if (!unit || !unit.inLabel) return el('label', { className: 'cf-row-label', 'for': ctl.id, text: f.label });
+        var shown = String(f.label).slice(0, String(f.label).length - unit.inLabel.length);
+        return el('label', { className: 'cf-row-label', 'for': ctl.id, text: shown }, el('span', { className: 'visually-hidden', text: unit.inLabel }));
+    }
+
+    function fieldRow(f, value, scope) {
+        var ctl = control(f, value, scope);
+        var unit = unitOf(f);
+        var kind = f.type === 'toggle' ? ' cf-row--switch' : (f.type === 'multiline' || f.type === 'message') ? ' cf-row--stack' : (f.type === 'channels' || f.type === 'roles' || f.type === 'days') ? ' cf-row--wide' : '';
+        var text = el('div', { className: 'cf-row-text' },
+            labelNode(f, ctl, unit),
+            f.wired === false ? el('span', { className: 'cf-pill is-warn', title: 'Saved, but the bot does not act on it yet', text: 'Not yet enforced' }) : null,
+            f.hint ? el('p', { className: 'cf-row-desc', id: ctl.id + '-desc', text: f.hint }) : null);
+        var extra = null;
+        if (f.type === 'voice') {
+            var pbtn = el('button', { type: 'button', className: 'btn btn-secondary btn-sm', id: ctl.id + '-preview', text: 'Preview voice' });
+            var pstatus = el('span', { className: 'cf-status-line', role: 'status', 'aria-live': 'polite' });
+            pbtn.addEventListener('click', function() { previewVoice(ctl, pbtn, pstatus); });
+            extra = el('div', { className: 'cf-inline fc-voice-preview' }, pbtn, pstatus);
+        } else if (unit) {
+            extra = el('span', { className: 'fc-unit', 'aria-hidden': 'true', text: unit.unit });
+        }
+        var rowNode = el('div', { className: 'cf-row' + kind + (f.type === 'color' ? ' fc-row-color' : '') }, text, el('div', { className: 'cf-row-control' }, ctl, extra));
+        rowNode.fcControl = ctl;
+        // A message gets its preview as the next row, redrawn as it is typed.
+        if (f.type === 'message') rowNode.fcAfter = previewRow(f, ctl);
+        return rowNode;
+    }
+
+    // ── Message previews ───────────────────────────────────────────────────────────────────────
+    var FC_SAMPLE = <%- fcSample %>;
+    var MENTION = {};   // marks a sample value that Discord shows as a mention
+    var SAMPLE_VALUES = {
+        user: 'newmember', username: 'newmember', 'user.name': 'newmember', 'user.tag': 'newmember',
+        'user.display': 'New Member', displayname: 'New Member', 'user.id': '123456789012345678',
+        mention: MENTION, 'user.mention': MENTION,
+        server: FC_SAMPLE.server, guild: FC_SAMPLE.server, 'server.name': FC_SAMPLE.server,
+        memberCount: String(FC_SAMPLE.members), member_count: String(FC_SAMPLE.members), 'server.members': String(FC_SAMPLE.members), count: String(FC_SAMPLE.members),
+        streamer: 'StreamerName', url: 'https://twitch.tv/streamername', game: 'Just Chatting', title: 'Late night chill stream',
+        channel: '#general', role: '@Members', level: '5', reason: 'Breaking rule 3', moderator: 'ModName'
+    };
+    /** Variable names a field documents: its `vars`, then any {name} in its hint. */
+    function varNames(f) {
+        var out = [];
+        var add = function(n) { n = String(n).replace(/[{}]/g, ''); if (n && out.indexOf(n) === -1) out.push(n); };
+        if (Array.isArray(f.vars)) f.vars.forEach(add);
+        else if (f.vars && typeof f.vars === 'object') Object.keys(f.vars).forEach(add);
+        String(f.hint || '').replace(/\{([a-zA-Z_][\w.]*)\}/g, function(m, n) { add(n); return m; });
+        return out;
+    }
+    function sampleFor(f, name) {
+        if (f.vars && !Array.isArray(f.vars) && typeof f.vars === 'object' && Object.prototype.hasOwnProperty.call(f.vars, name)) return String(f.vars[name]);
+        return Object.prototype.hasOwnProperty.call(SAMPLE_VALUES, name) ? SAMPLE_VALUES[name] : null;
+    }
+    /** Sample values for every {variable} the preview may meet (mentions drawn as mention pills). */
+    function sampleVars(f, P) {
+        var keys = Object.keys(SAMPLE_VALUES);
+        if (f.vars && !Array.isArray(f.vars) && typeof f.vars === 'object') keys = keys.concat(Object.keys(f.vars));
+        var out = {};
+        keys.forEach(function(k) {
+            var v = sampleFor(f, k);
+            if (v === MENTION) out[k] = P.mention('@New Member');
+            else if (v != null) out[k] = v;
+        });
+        return out;
+    }
+
+    function previewRow(f, ctl) {
+        // The shared Discord message preview (/js/cf-msgpreview.js): {variables} filled with samples,
+        // mentions shown as this server's channel and role names, built with textContent only.
+        var box = el('div', { className: 'cf-dc-frame', id: ctl.id + '-pv', 'aria-live': 'polite' });
+        var names = { channels: fcChannels.concat(fcVoice, fcCategories), roles: fcRoles };
+        function draw() {
+            var P = window.CFMsgPreview;
+            if (!P) return;
+            var raw = String(ctl.value || '');
+            var text = raw.trim() ? raw : (f.placeholder || '');
+            P.render(box, {
+                content: f.preview === 'embed' ? '' : text,
+                embeds: f.preview === 'embed' && text ? [{ description: text }] : [],
+                vars: sampleVars(f, P),
+                emptyText: 'Nothing is posted while this is empty.'
+            }, names);
+        }
+        ctl.addEventListener('input', draw);
+        draw();
+        var vars = varNames(f);
+        var desc = 'With sample values' + (vars.length ? ' for ' + vars.map(function(n) { return '{' + n + '}'; }).join(', ') : '') + '.' +
+            (f.placeholder ? ' While the box is empty the bot uses the text shown here.' : '');
+        return el('div', { className: 'cf-row cf-row--stack' },
+            el('div', { className: 'cf-row-text' },
+                el('span', { className: 'cf-row-label', id: ctl.id + '-pv-title', text: 'Preview' }),
+                el('p', { className: 'cf-row-desc', text: desc })),
+            el('div', { className: 'cf-row-control' }, box));
+    }
+
+    // Channel/role/user columns show the NAME (linked where possible), not the raw id: the same
+    // rules as Discord.auto() in discord-mentions.js (the column name says which kind, and every
+    // value must be a snowflake), drawn as nodes rather than markup.
+    var byId = {};
+    fcChannels.concat(fcVoice, fcCategories).forEach(function(c) { byId['c' + c.id] = c.name; });
+    fcRoles.forEach(function(r) { byId['r' + r.id] = r.name; });
+    function entityNodes(column, value) {
+        if (value === null || value === undefined || value === '') return null;
+        var name = String(column).toLowerCase();
+        var kind = /channel/.test(name) ? 'c' : /role/.test(name) ? 'r' : /user|member|created_by|updated_by|author|owner/.test(name) ? 'u' : null;
+        if (!kind) return null;
+        var ids = toList(Array.isArray(value) ? value : String(value));
+        if (!ids.length || !ids.every(function(x) { return /^\d{15,25}$/.test(x); })) return null;
+        return ids.map(function(id, i) {
+            var label = byId[kind + id];
+            var node;
+            if (kind === 'u') node = el('a', { className: 'dc-ref', href: 'https://discord.com/users/' + encodeURIComponent(id), target: '_blank', rel: 'noopener', text: id });
+            else if (!label) node = el('span', { className: 'dc-ref dc-missing fc-missing', title: id + ' — not found, it may have been deleted', text: kind === 'c' ? '#unknown-channel' : '@unknown-role' });
+            else if (kind === 'c') node = el('a', { className: 'dc-ref', href: 'https://discord.com/channels/' + encodeURIComponent(fcGuildId) + '/' + encodeURIComponent(id), target: '_blank', rel: 'noopener', title: id, text: '#' + label });
+            else node = el('span', { className: 'dc-ref dc-role', title: id, text: '@' + label });
+            return i ? [document.createTextNode(' '), node] : [node];
+        }).reduce(function(a, b) { return a.concat(b); }, []);
+    }
+
+    function cell(key, v, label) {
+        var td = el('td', { 'data-label': label || '' });
+        var entity = entityNodes(key, v);
+        if (entity) entity.forEach(function(n) { td.appendChild(n); });
+        else if (v === 1 || v === true) td.appendChild(el('span', { className: 'fc-yes', text: 'Yes' }));
+        else if (v === 0 || v === false) td.appendChild(el('span', { className: 'fc-no', text: 'No' }));
+        else td.textContent = v == null ? '—' : String(v);
+        return td;
+    }
+
+    /** "3 Nov, 14:05" in the viewer's own clock. */
+    function when(v) {
+        if (!v) return 'Not posted yet';
+        var d = new Date(v);
+        return isNaN(d) ? String(v) : 'Last posted ' + d.toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    }
+
+    /** The line beside an editable row's name: spec.listMeta's label for the row (context menus), else when it last posted. */
+    function entryMeta(spec, row) {
+        if (spec.listMeta) return (spec.listMeta.labels || {})[row[spec.listMeta.key]] || '';
+        return when(row.last_posted_at);
+    }
+
+    /** One editable row: its fields, shown or hidden by showIf/hideIf, with its own Save. */
+    function entryBlock(spec, row) {
+        var id = String(row[spec.listKey]);
+        // Row keys can be names with spaces (context menus); element ids cannot.
+        var scope = { prefix: 'fc-r-' + id.replace(/[^A-Za-z0-9_-]/g, '_') + '-' };
+        var name = entityNodes(spec.listKey, id) || [document.createTextNode(id)];
+        var nameBox = el('div', { className: 'fc-entry-name' });
+        name.forEach(function(n) { nameBox.appendChild(n); });
+        var box = el('div', { className: 'fc-entry', 'data-row': id },
+            el('div', { className: 'fc-entry-head' }, nameBox, el('span', { className: 'fc-entry-meta', text: entryMeta(spec, row) })));
+
+        var rowNodes = [];
+        spec.listEdit.forEach(function(f) {
+            var r = fieldRow(f, row[f.key], scope);
+            rowNodes.push({ f: f, node: r, ctl: r.fcControl });
+            box.appendChild(r);
+        });
+        function current(key) {
+            var hit = rowNodes.filter(function(x) { return x.f.key === key; })[0];
+            return hit ? readControl(hit.ctl) : row[key];
+        }
+        function applyVisibility() {
+            rowNodes.forEach(function(x) {
+                var show = true;
+                if (x.f.showIf) Object.keys(x.f.showIf).forEach(function(k) { if (String(current(k)) !== String(x.f.showIf[k])) show = false; });
+                if (x.f.hideIf) Object.keys(x.f.hideIf).forEach(function(k) { if (String(current(k)) === String(x.f.hideIf[k])) show = false; });
+                x.node.hidden = !show;
+            });
+        }
+        box.addEventListener('change', applyVisibility);
+        applyVisibility();
+
+        var status = el('span', { className: 'cf-status-line', role: 'status', 'aria-live': 'polite' });
+        var btn = el('button', { type: 'button', className: 'btn btn-secondary btn-sm', text: spec.listSaveLabel || 'Save channel' });
+        btn.addEventListener('click', async function() {
+            var body = {};
+            rowNodes.forEach(function(x) {
+                if (x.node.hidden) return; // hidden fields keep their stored value
+                body[x.f.key] = readControl(x.ctl);
+            });
+            btn.disabled = true;
+            status.className = 'cf-status-line is-busy';
+            status.textContent = 'Saving...';
+            try {
+                var res = await fetch(fcApi + '/rows/' + encodeURIComponent(id), {
+                    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+                });
+                var data = await res.json();
+                status.className = 'cf-status-line ' + (data.success ? 'is-ok' : 'is-bad');
+                status.textContent = data.success ? 'Saved' : (data.error || 'Failed to save');
+            } catch (err) {
+                status.className = 'cf-status-line is-bad';
+                status.textContent = 'Network error: ' + err.message;
+            }
+            btn.disabled = false;
+        });
+        box.appendChild(el('div', { className: 'cf-section-foot' }, status, btn));
+        return box;
+    }
+
+    /** Channel picker + Add, listing text channels that are not set up yet. */
+    function addBlock(spec, rows) {
+        var taken = rows.map(function(r) { return String(r[spec.listKey]); });
+        var pick = el('select', { className: 'form-select', id: 'fc-add-pick', 'aria-label': 'Channel to add' },
+            el('option', { value: '', text: 'Choose a channel' }));
+        fcTextOnly.forEach(function(c) {
+            if (taken.indexOf(String(c.id)) === -1) pick.appendChild(el('option', { value: String(c.id), text: '#' + c.name }));
+        });
+        var status = el('span', { className: 'cf-status-line', role: 'status', 'aria-live': 'polite' });
+        var btn = el('button', { type: 'button', className: 'btn btn-primary btn-sm', text: spec.listAddLabel });
+        btn.addEventListener('click', async function() {
+            if (!pick.value) { status.className = 'cf-status-line is-bad'; status.textContent = 'Choose a channel first.'; return; }
+            btn.disabled = true;
+            status.className = 'cf-status-line is-busy';
+            status.textContent = 'Adding...';
+            try {
+                var res = await fetch(fcApi + '/rows', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: pick.value }) });
+                var data = await res.json();
+                if (!data.success) throw new Error(data.error || 'Failed to add');
+                load(); // redraw with the new channel's editor in the list
+            } catch (err) {
+                status.className = 'cf-status-line is-bad';
+                status.textContent = err.message;
+                btn.disabled = false;
+            }
+        });
+        return el('div', { className: 'cf-section-foot fc-add' }, pick, btn, status);
+    }
+
+    function sectionHead(id, title, desc) {
+        return el('header', { className: 'cf-section-head' },
+            el('div', null,
+                el('h2', { className: 'cf-section-title', id: id, text: title }),
+                desc ? el('p', { className: 'cf-section-desc', text: desc }) : null));
+    }
+    function count(n, one, many) { return n + ' ' + (n === 1 ? one : many); }
+    function commandHint(spec) {
+        return (spec.commands || []).length ? ', or use ' + spec.commands.join(', ') + ' in Discord' : '';
+    }
+
+    function listSection(spec, rows) {
+        if (!spec.hasList) return null;
+        if (spec.listEdit) {
+            var entries = el('div', { className: 'cf-rows' });
+            var noun = spec.listNoun || ['channel', 'channels'];
+            if (rows.length) rows.forEach(function(r) { entries.appendChild(entryBlock(spec, r)); });
+            else entries.appendChild(stateBlock('empty', 'No ' + noun[1] + ' yet', spec.listAddLabel ? 'Add one below' + commandHint(spec) + '.' : 'Nothing to change here yet.'));
+            // Lists whose rows the bot creates (context menus) have no Add.
+            if (spec.listAddLabel) entries.appendChild(addBlock(spec, rows));
+            return el('section', { className: 'cf-section', 'aria-labelledby': 'fc-list-title' },
+                sectionHead('fc-list-title', spec.listTitle || 'Entries',
+                    rows.length ? count(rows.length, noun[0], noun[1]) + '. Each one saves on its own.' : null),
+                entries);
+        }
+        var labels = spec.listLabels || [];
+        var panel = el('div', { className: 'cf-rows' });
+        var desc = rows.length ? count(rows.length, 'entry', 'entries') + (rows.length >= 100 ? ', newest 100 shown' : '') : null;
+        if (rows.length) {
+            var head = el('tr');
+            labels.forEach(function(l) { head.appendChild(el('th', { scope: 'col', text: l })); });
+            var body = el('tbody');
+            var trs = [];
+            rows.forEach(function(r) {
+                var tr = el('tr');
+                Object.keys(r).forEach(function(k, i) { tr.appendChild(cell(k, r[k], labels[i])); });
+                body.appendChild(tr);
+                trs.push(tr);
+            });
+            // Long lists get a filter over every column's text.
+            if (rows.length > 15) {
+                var none = el('p', { className: 'cf-row-meta', text: 'Nothing matches.' });
+                none.hidden = true;
+                var search = el('input', { type: 'search', className: 'form-control fc-list-search', id: 'fc-list-search', placeholder: 'Filter ' + String(spec.listTitle || 'entries').toLowerCase(), autocomplete: 'off', 'aria-label': 'Filter the list' });
+                search.addEventListener('input', function() {
+                    var q = search.value.trim().toLowerCase();
+                    var shown = 0;
+                    trs.forEach(function(tr) { var hit = !q || tr.textContent.toLowerCase().indexOf(q) !== -1; tr.hidden = !hit; if (hit) shown++; });
+                    none.hidden = shown > 0;
+                });
+                panel.appendChild(el('div', { className: 'cf-row cf-row--stack' }, el('div', { className: 'cf-row-control' }, search, none)));
+            }
+            panel.appendChild(el('div', { className: 'cf-table-wrap' }, el('table', { className: 'cf-table cf-table--stack' }, el('thead', null, head), body)));
+        } else {
+            panel.appendChild(stateBlock('empty', 'Nothing here yet', (spec.commands || []).length ? 'Entries are added with ' + spec.commands.join(', ') + ' in Discord.' : 'Entries appear here once the feature is in use.'));
+        }
+        return el('section', { className: 'cf-section', 'aria-labelledby': 'fc-list-title' },
+            sectionHead('fc-list-title', spec.listTitle || 'Entries', desc),
+            panel);
+    }
+
+    /**
+     * The spec's commands with what each does, linking to that command's settings drawer on the
+     * Commands page. commandInfo comes from the API (resolved against the bot's commands); a spec
+     * served without it still lists the plain command names.
+     */
+    function commandsSection(spec) {
+        var info = Array.isArray(spec.commandInfo) && spec.commandInfo.length
+            ? spec.commandInfo
+            : (spec.commands || []).map(function(c) { return { path: c, description: null, key: null }; });
+        if (!info.length) return null;
+        var box = el('div', { className: 'cf-list fc-cmd-list' });
+        info.forEach(function(c) {
+            var main = el('div', { className: 'fc-cmd-main' },
+                el('code', { text: c.path }),
+                c.description ? el('span', { className: 'fc-cmd-desc', text: c.description }) : null);
+            var link = c.key ? el('a', {
+                className: 'btn btn-sm btn-secondary',
+                href: '/manage/' + encodeURIComponent(fcGuildId) + '?page=commands&cmd=' + encodeURIComponent(c.key),
+                'aria-label': 'Settings for ' + c.path, text: 'Settings'
+            }) : null;
+            box.appendChild(el('div', { className: 'cf-list-item' }, main, link ? el('div', { className: 'cf-list-actions' }, link) : null));
+        });
+        return el('section', { className: 'cf-section', 'aria-labelledby': 'fc-cmds-title' },
+            sectionHead('fc-cmds-title', 'Commands', 'Who can use each one, where, and how it replies is in its Settings.'),
+            el('div', { className: 'cf-rows' }, box));
+    }
+
+    // ── Sections ─────────────────────────────────────────────────────────────────────────────
+    // Without spec groups, a long page is split by kind of setting, in this order.
+    var AUTO_GROUPS = [
+        { title: 'General', desc: null },
+        { title: 'Channels and roles', desc: 'Where it works and who it applies to.' },
+        { title: 'Schedule', desc: null },
+        { title: 'Messages', desc: 'What the bot posts.' },
+        { title: 'Voice', desc: null }
+    ];
+    function autoGroup(f) {
+        switch (f.type) {
+            case 'channel': case 'channels': case 'role': case 'roles': return 'Channels and roles';
+            case 'days': case 'time': case 'timezone': return 'Schedule';
+            case 'message': return 'Messages';
+            case 'voice': return 'Voice';
+            default: return 'General';
+        }
+    }
+    function groupFields(spec) {
+        var fields = spec.fields || [];
+        var specGroups = Array.isArray(spec.groups) ? spec.groups : [];
+        var explicit = specGroups.length > 0 || fields.some(function(f) { return f.group; });
+        var auto = !explicit && fields.filter(function(f) { return f.key !== 'enabled'; }).length >= 6;
+        var order = [], byTitle = {};
+        function get(title, desc) {
+            if (!byTitle[title]) { byTitle[title] = { title: title, desc: desc || null, fields: [] }; order.push(byTitle[title]); }
+            else if (desc && !byTitle[title].desc) byTitle[title].desc = desc;
+            return byTitle[title];
+        }
+        specGroups.forEach(function(g) { if (g && g.title) get(String(g.title), g.desc || null); });
+        if (auto) AUTO_GROUPS.forEach(function(g) { get(g.title, g.desc); });
+        fields.forEach(function(f) {
+            get(f.group ? String(f.group) : auto ? autoGroup(f) : explicit ? 'General' : 'Settings').fields.push(f);
+        });
+        var groups = order.filter(function(g) { return g.fields.length; });
+        // The master switch sits in the page header, so a section holding only it would look empty:
+        // it joins the next section instead.
+        for (var i = 0; i < groups.length - 1; i++) {
+            if (groups[i].fields.every(function(f) { return f.key === 'enabled'; })) {
+                groups[i + 1].fields = groups[i].fields.concat(groups[i + 1].fields);
+                groups.splice(i, 1);
+                i--;
+            }
+        }
+        if (groups.length === 1 && !explicit) { groups[0].title = 'Settings'; groups[0].desc = null; }
+        return groups;
+    }
+
+    function render(spec, config, rows) {
+        fcVoiceGroups = Array.isArray(spec.voices) ? spec.voices : [];
+        var notices = [];
+        if (spec.unwired) {
+            notices.push(el('div', { className: 'fc-notice cf-notice is-warn', role: 'note' },
+                el('div', { className: 'cf-notice-body' },
+                    el('strong', { text: 'Not connected yet. ' }),
+                    'Nothing in the bot reads ', el('code', { text: spec.unwired }),
+                    ', so these settings are saved but have no effect until the feature is wired up.')));
+        }
+        if (spec.note) notices.push(el('div', { className: 'fc-notice cf-notice is-info', text: spec.note }));
+
+        var placed = [];   // { f, node, ctl } for showIf / hideIf
+        var sections = groupFields(spec).map(function(g, gi) {
+            var panel = el('div', { className: 'cf-rows' });
+            if (gi === 0) notices.forEach(function(n) { panel.appendChild(n); });
+            g.fields.forEach(function(f) {
+                var r = fieldRow(f, config[f.key]);
+                placed.push({ f: f, node: r, ctl: r.fcControl });
+                panel.appendChild(r);
+                if (r.fcAfter) panel.appendChild(r.fcAfter);
+            });
+            return el('section', { className: 'cf-section fc-group', 'aria-labelledby': 'fc-g' + gi + '-title' },
+                sectionHead('fc-g' + gi + '-title', g.title, g.desc), panel);
+        });
+
+        var status = el('span', { id: 'fc-status', className: 'fc-status cf-status-line', role: 'status', 'aria-live': 'polite', text: FC_IDLE });
+        var btn = el('button', { type: 'button', id: 'fc-save', className: 'btn btn-primary', text: 'Save' });
+        var bar = el('div', { className: 'fc-savebar', id: 'fc-savebar', role: 'region', 'aria-label': 'Save settings' }, status, btn);
+
+        // showIf / hideIf: a field shows only while another field has (or lacks) a value. Hidden
+        // fields keep their value and are still saved, so hiding never changes a setting.
+        function current(key) {
+            var hit = placed.filter(function(x) { return x.f.key === key; })[0];
+            return hit ? readControl(hit.ctl) : config[key];
+        }
+        function applyVisibility() {
+            placed.forEach(function(x) {
+                if (!x.f.showIf && !x.f.hideIf) return;
+                var show = true;
+                if (x.f.showIf) Object.keys(x.f.showIf).forEach(function(k) { if (String(current(k)) !== String(x.f.showIf[k])) show = false; });
+                if (x.f.hideIf) Object.keys(x.f.hideIf).forEach(function(k) { if (String(current(k)) === String(x.f.hideIf[k])) show = false; });
+                x.node.hidden = !show;
+                if (x.node.fcAfter) x.node.fcAfter.hidden = !show;
+            });
+        }
+        function markDirty() {
+            bar.className = 'fc-savebar is-dirty';
+            status.className = 'fc-status cf-status-line';
+            status.textContent = 'Unsaved changes';
+        }
+        sections.forEach(function(sec) {
+            sec.addEventListener('change', applyVisibility);
+            sec.addEventListener('input', markDirty);
+            sec.addEventListener('change', markDirty);
+        });
+        applyVisibility();
+
+        var root = document.getElementById('fc-root');
+        root.replaceChildren.apply(root, sections.concat([bar]));
+        var list = listSection(spec, rows);
+        if (list) root.appendChild(list);
+        btn.addEventListener('click', save);
+
+        // Commands go last on the page, after any feature-specific part below #fc-root.
+        var cmds = commandsSection(spec);
+        var cmdHost = document.getElementById('fc-commands');
+        if (cmdHost) cmdHost.replaceChildren.apply(cmdHost, cmds ? [cmds] : []);
+        else if (cmds) root.appendChild(cmds);
+    }
+
+    function collect() {
+        var payload = {};
+        document.querySelectorAll('#fc-root [data-key]').forEach(function(node) {
+            payload[node.getAttribute('data-key')] = readControl(node);
+        });
+        return payload;
+    }
+
+    var FC_IDLE = 'Changes apply when you press Save.';
+    var clearTimer = null;
+    async function save() {
+        var btn = document.getElementById('fc-save');
+        var status = document.getElementById('fc-status');
+        btn.disabled = true;
+        clearTimeout(clearTimer);
+        status.className = 'fc-status cf-status-line is-busy';
+        status.textContent = 'Saving...';
+        try {
+            var res = await fetch(fcApi, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(collect())
+            });
+            var data = await res.json();
+            status.textContent = data.success ? data.message : (data.error || 'Failed to save');
+            status.className = 'fc-status cf-status-line ' + (data.success ? 'is-ok' : 'is-bad');
+            if (data.success) {
+                var bar = document.getElementById('fc-savebar');
+                if (bar) bar.className = 'fc-savebar';
+                clearTimer = setTimeout(function() { status.className = 'fc-status cf-status-line'; status.textContent = FC_IDLE; }, 4000);
+            }
+        } catch (err) {
+            status.textContent = 'Network error: ' + err.message;
+            status.className = 'fc-status cf-status-line is-bad';
+        }
+        btn.disabled = false;
+    }
+
+    async function load() {
+        try {
+            var res = await fetch(fcApi);
+            var data = await res.json();
+            if (!data.success) throw new Error(data.error || 'Failed to load');
+            render(data.spec, data.config || {}, data.rows || []);
+        } catch (err) {
+            document.getElementById('fc-root').replaceChildren(
+                el('section', { className: 'cf-section' }, el('div', { className: 'cf-rows' }, stateBlock('error', 'Could not load settings', err.message))));
+        }
+    }
+    load();
+})();
+</script>

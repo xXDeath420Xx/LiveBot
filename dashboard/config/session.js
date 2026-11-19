@@ -337,9 +337,8 @@ export function sessionActivityMiddleware(req, res, next) {
                 if (err) {
                     logger.error('[Session] Failed to destroy timed-out session', { error: err.message });
                 }
-                // Redirect to login with message
-                const returnTo = encodeURIComponent(req.originalUrl);
-                return res.redirect(`/tokes-bot?error=session_timeout&returnTo=${returnTo}`);
+                // Back to /kick (the only page that signs in with this session) to log in again.
+                return res.redirect('/kick?error=session_timeout');
             });
         }
     }

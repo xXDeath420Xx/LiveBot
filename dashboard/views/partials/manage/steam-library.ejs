@@ -1,0 +1,507 @@
+<%#
+  Steam library: a "who owns what" tally for planning game nights. API-driven
+  (/api/guilds/:id/steam-library); needs `guild`, `channels`. Built on the settings-row kit
+  (cf-settings.css); ids are unchanged. Script-built rows use createElement/textContent.
+%>
+<%
+    const slChannels = (locals.channels || [])
+        .filter(c => c.type === 0 || c.type === 5)
+        .map(c => ({ id: c.id, name: c.name }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+%>
+<%- include('_game-kit') %>
+<div class="page-section" id="steamLibraryPage" data-guild-id="<%= guild.id %>">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fab fa-steam"></i>
+                <span>Steam library</span>
+            </div>
+            <div class="page-section-subtitle">Only the list of owned games is stored. SteamIDs are never shown to anyone, including you.</div>
+        </div>
+    </div>
+
+    <div id="slError" class="cf-notice is-bad" role="alert" hidden></div>
+    <div id="slKeyWarn" class="cf-notice is-warn" hidden>
+        <div class="cf-notice-body"><strong>STEAM_API_KEY is not set</strong> on the bot, so libraries cannot be read from Steam. Add it to <code>.env</code> and restart.</div>
+    </div>
+
+    <dl id="slStats" class="cf-kpis" aria-label="Steam library at a glance">
+        <div class="cf-kpi"><dt>Members linked</dt><dd class="cf-kpi-value" id="slStatMembers">–</dd></div>
+        <div class="cf-kpi"><dt>Verified with Steam</dt><dd class="cf-kpi-value" id="slStatVerified">–</dd></div>
+        <div class="cf-kpi"><dt>Game list private</dt><dd class="cf-kpi-value" id="slStatPrivate">–</dd></div>
+        <div class="cf-kpi"><dt>Different games</dt><dd class="cf-kpi-value" id="slStatGames">–</dd></div>
+    </dl>
+
+    <section class="cf-section" aria-labelledby="sl-board-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="sl-board-title">Live board</h2>
+                <p class="cf-section-desc">A message listing the most-owned games, with Link Steam, Refresh and Remove me buttons. It updates as people link; posting it again moves it and deletes the old one.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div id="slPanelNow" class="cf-notice is-ok" hidden></div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="slPanelChannel">Board channel</label>
+                    <p class="cf-row-desc">Where the board is posted.</p>
+                </div>
+                <div class="cf-row-control">
+                    <select id="slPanelChannel" class="form-select" data-no-savebar>
+                        <option value="">Choose a channel</option>
+                        <% slChannels.forEach(function (c) { %><option value="<%= c.id %>" data-kind="text">#<%= c.name %></option><% }) %>
+                    </select>
+                </div>
+            </div>
+            <div class="cf-row cf-row--wide">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="slLinkUrl">Direct sign-in link</label>
+                    <p class="cf-row-desc">Anyone in the server can open this to link with Steam sign-in. <code>/steam link</code> in Discord does the same.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-group">
+                        <input id="slLinkUrl" class="form-control" readonly data-no-savebar>
+                        <button class="btn btn-secondary" type="button" data-copy-from="slLinkUrl">Copy</button>
+                    </div>
+                </div>
+            </div>
+            <div class="gk-preview">
+                <p class="gk-preview-label">How the board looks</p>
+                <div class="cf-dc" aria-label="Preview of the board">
+                    <%- include('_gk-author') %>
+                    <div class="cf-dc-embed" style="--cf-dc-bar: #1b2838">
+                        <div class="cf-dc-title">🎮 Who Owns What</div>
+                        <div class="cf-dc-desc">Link your Steam so game nights can be planned around what people actually own.
+<span class="cf-dc-muted">Only the list of games you own is shared with this server. Never your Steam profile, playtime, or friends.</span>
+</div>
+                        <div class="cf-dc-desc" id="slPvList"></div>
+                        <div class="cf-dc-footer" id="slPvFooter"></div>
+                    </div>
+                    <div class="cf-dc-buttons">
+                        <span class="cf-dc-btn is-primary">🔗 Link Steam</span>
+                        <span class="cf-dc-btn">🔄 Refresh my games</span>
+                        <span class="cf-dc-btn">🚪 Remove me</span>
+                    </div>
+                </div>
+            </div>
+            <div class="cf-section-foot">
+                <button id="slPanelRefresh" class="btn btn-secondary" type="button" hidden>Refresh</button>
+                <button id="slPanelPost" class="btn btn-primary" type="button">Post board</button>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="sl-settings-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="sl-settings-title">Settings</h2>
+                <p class="cf-section-desc">What the board lists and how members may link.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="slBoardSize">Games on the board</label>
+                    <p class="cf-row-desc">From 5 to 30.</p>
+                </div>
+                <div class="cf-row-control">
+                    <input id="slBoardSize" type="number" min="5" max="30" class="form-control">
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="slMinOwners">Only list games owned by at least</label>
+                    <p class="cf-row-desc">From 1 to 50 members.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-unit">
+                        <input id="slMinOwners" type="number" min="1" max="50" class="form-control">
+                        <span class="cf-unit">members</span>
+                    </div>
+                </div>
+            </div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="slAllowUnverified">Allow pasted profile links</label>
+                    <p class="cf-row-desc">Unverified: anyone could paste someone else's. Turn off to require Steam sign-in.</p>
+                </div>
+                <div class="cf-row-control">
+                    <input id="slAllowUnverified" type="checkbox" class="cf-switch" role="switch">
+                </div>
+            </div>
+            <div class="cf-section-foot">
+                <span id="slSaved" class="cf-status-line" role="status" aria-live="polite"></span>
+                <button id="slSaveSettings" class="btn btn-primary" type="button">Save settings</button>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="sl-public-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="sl-public-title">Public page</h2>
+                <p class="cf-section-desc">A read-only web page of the full list that anyone with the link can open or embed (server website, Notion, OBS). It shows game names and counts; member names appear only if you turn that on.</p>
+            </div>
+            <div class="cf-section-actions"><span id="slPublicBadge" class="cf-pill">Off</span></div>
+        </header>
+        <div class="cf-rows">
+            <div id="slPublicOn" hidden>
+                <div class="cf-row cf-row--wide">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="slPublicUrl">Link</label>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="cf-input-group">
+                            <input id="slPublicUrl" class="form-control" readonly data-no-savebar>
+                            <button class="btn btn-secondary" type="button" data-copy-from="slPublicUrl">Copy</button>
+                            <a id="slPublicOpen" class="btn btn-secondary" target="_blank" rel="noopener">Open</a>
+                        </div>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--wide">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="slEmbed">Embed code</label>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="cf-input-group">
+                            <input id="slEmbed" class="form-control" readonly data-no-savebar>
+                            <button class="btn btn-secondary" type="button" data-copy-from="slEmbed">Copy</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="slPublicNames">Show member names under each game</label>
+                        <p class="cf-row-desc">Server display names only; never SteamIDs. Saves as soon as you change it.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input id="slPublicNames" type="checkbox" class="cf-switch" role="switch" data-no-savebar>
+                    </div>
+                </div>
+                <div class="cf-section-foot">
+                    <span class="cf-foot-note">A new link stops the old one and any embeds using it.</span>
+                    <button id="slPublicRotate" class="btn btn-secondary" type="button">New link</button>
+                    <button id="slPublicDisable" class="btn btn-danger" type="button">Turn off</button>
+                </div>
+            </div>
+            <div class="cf-section-foot sl-public-off">
+                <span class="cf-foot-note">Off. Create the page to get a link you can share.</span>
+                <button id="slPublicEnable" class="btn btn-primary" type="button">Create public page</button>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="sl-games-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="sl-games-title">Games</h2>
+                <p class="cf-section-desc">Select a game to see who owns it.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--stack">
+                <div class="cf-input-group sl-filter">
+                    <input id="slSearch" type="search" class="form-control" placeholder="Find a game" autocomplete="off" aria-label="Find a game" data-no-savebar>
+                    <select id="slMin" class="form-select" aria-label="Minimum owners" data-no-savebar>
+                        <option value="1">Everything</option><option value="2" selected>2+ owners</option>
+                        <option value="3">3+ owners</option><option value="5">5+ owners</option>
+                    </select>
+                </div>
+            </div>
+            <div class="cf-table-wrap">
+                <table class="cf-table sl-table">
+                    <thead><tr><th class="sl-num">#</th><th>Game</th><th class="sl-num">Owners</th><th aria-label="Details"></th></tr></thead>
+                    <tbody id="slGames"><tr><td colspan="4" class="sl-empty">Loading…</td></tr></tbody>
+                </table>
+            </div>
+            <div class="cf-section-foot sl-pager">
+                <span id="slPageInfo" class="cf-foot-note"></span>
+                <button id="slPrev" class="btn btn-secondary btn-sm" type="button" disabled>Previous</button>
+                <button id="slNext" class="btn btn-secondary btn-sm" type="button" disabled>Next</button>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="sl-members-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="sl-members-title">Linked members <span class="gk-cmd-count" id="slMemberCount"></span></h2>
+                <p class="cf-section-desc">Libraries are re-read from Steam about once a day, and when a member presses Refresh my games. A private game list counts as zero games until it is made public. Members who leave drop off the tally at once and are deleted after 30 days; Remove takes someone out of this server's tally only.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-table-wrap">
+                <table class="cf-table cf-table--stack sl-table">
+                    <thead><tr><th>Member</th><th>Link</th><th>Status</th><th class="sl-num">Games</th><th>Last read</th><th aria-label="Actions"></th></tr></thead>
+                    <tbody id="slMembers"><tr><td colspan="6" class="sl-empty">Loading…</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <%- include('_game-commands', { gkCommands: [{ cmd: 'steam' }] }) %>
+</div>
+<style>
+    #steamLibraryPage .sl-filter > .form-select { flex: 0 1 11rem; }
+    #steamLibraryPage .cf-rows:has(#slPublicOn:not([hidden])) .sl-public-off { display: none; }
+    #steamLibraryPage .cf-rows > .gk-preview { padding: var(--cf-4) var(--cf-5); }
+    .sl-muted { color: var(--cf-text-3); font-size: var(--cf-text-sm); }
+    .sl-table tr.sl-game { cursor: pointer; }
+    .sl-table tr.sl-game:hover td { background: var(--cf-surface-2); }
+    .sl-num { text-align: right !important; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .sl-bar-cell { position: relative; }
+    .sl-bar-fill { position: absolute; inset: 6px auto 6px 0; background: color-mix(in srgb, var(--cf-accent) 14%, transparent); border-radius: 2px; pointer-events: none; }
+    .sl-bar-cell a { position: relative; }
+    .sl-owners td { background: var(--cf-surface-2); }
+    .sl-owners .cf-chip > img { width: 18px; height: 18px; margin-left: -6px; border-radius: 50%; flex: none; }
+    .sl-av { width: 22px; height: 22px; border-radius: 50%; }
+    .sl-member { display: flex; align-items: center; gap: 8px; }
+    .sl-chev { color: var(--cf-text-3); display: inline-block; transition: transform .15s ease; }
+    tr[aria-expanded="true"] .sl-chev { transform: rotate(90deg); }
+    .sl-empty { padding: var(--cf-6) var(--cf-4) !important; text-align: center; color: var(--cf-text-3) !important; }
+    @media (max-width: 640px) {
+        #steamLibraryPage .sl-pager .btn { flex: 1 1 0; }
+        #steamLibraryPage .cf-rows > .gk-preview { padding: var(--cf-3) var(--cf-4); }
+    }
+</style>
+<script>
+(function () {
+    const root = document.getElementById('steamLibraryPage');
+    if (!root) return;
+    const base = `/api/guilds/${root.dataset.guildId}/steam-library`;
+    const $ = id => document.getElementById(id);
+    const num = v => Number(v ?? 0).toLocaleString();
+    const state = { page: 1, total: 0, pageSize: 50, config: null, stats: null };
+    const showErr = m => { $('slError').textContent = m || ''; $('slError').hidden = !m; };
+    const fmtAgo = iso => {
+        if (!iso) return 'never';
+        const m = Math.round((Date.now() - new Date(iso)) / 60000);
+        if (m < 1) return 'just now';
+        if (m < 60) return m + 'm ago';
+        if (m < 1440) return Math.round(m / 60) + 'h ago';
+        return Math.round(m / 1440) + 'd ago';
+    };
+    function h(tag, props, ...kids) {
+        const n = document.createElement(tag);
+        const p = props || {};
+        if (p.className) n.className = p.className;
+        if (p.text !== undefined) n.textContent = String(p.text);
+        for (const [k, v] of Object.entries(p.attrs || {})) if (v !== false && v != null) n.setAttribute(k, v === true ? '' : v);
+        for (const [k, v] of Object.entries(p.data || {})) n.dataset[k] = v;
+        for (const kid of kids) if (kid != null) n.append(kid);
+        return n;
+    }
+    const emptyRow = (cols, text) => h('tr', null, h('td', { className: 'sl-empty', attrs: { colspan: String(cols) }, text }));
+
+    async function api(path, opts) {
+        const res = await fetch(base + path, { headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', ...opts });
+        const json = await res.json().catch(() => ({ success: false, error: `HTTP ${res.status}` }));
+        if (!res.ok || json.success === false) throw new Error(json.error || `HTTP ${res.status}`);
+        return json;
+    }
+    const post = (path, body) => api(path, { method: 'POST', body: JSON.stringify(body || {}) });
+
+    function renderConfig(c) {
+        state.config = c;
+        $('slKeyWarn').hidden = c.steamKeyConfigured;
+        $('slLinkUrl').value = c.linkUrl;
+        $('slBoardSize').value = c.boardSize;
+        $('slMinOwners').value = c.minOwners;
+        $('slAllowUnverified').checked = c.allowUnverified;
+
+        const p = c.panel;
+        $('slPanelNow').hidden = !p;
+        if (p) {
+            const where = p.channelName ? '#' + p.channelName : 'a deleted channel';
+            const body = h('div', { className: 'cf-notice-body' });
+            if (p.url) body.append('The board is live in ' + where + '. ', h('a', { attrs: { href: p.url, target: '_blank', rel: 'noopener' }, text: 'Jump to it' }));
+            else body.append('The board in ' + where + ' was deleted. Post it again.');
+            $('slPanelNow').className = 'cf-notice ' + (p.url ? 'is-ok' : 'is-warn');
+            $('slPanelNow').replaceChildren(body);
+            if (p.channelId) $('slPanelChannel').value = p.channelId;
+        }
+        $('slPanelRefresh').hidden = !(p && p.url);
+        $('slPanelPost').textContent = p && p.url ? 'Move or post again' : 'Post board';
+
+        const on = !!c.publicUrl;
+        $('slPublicOn').hidden = !on;
+        $('slPublicEnable').hidden = on;
+        $('slPublicBadge').textContent = on ? 'On' : 'Off';
+        $('slPublicBadge').className = 'cf-pill' + (on ? ' is-ok' : '');
+        if (on) {
+            $('slPublicUrl').value = c.publicUrl;
+            $('slPublicOpen').href = c.publicUrl;
+            $('slEmbed').value = `<iframe src="${c.publicUrl}?compact=1" width="100%" height="600" style="border:0" loading="lazy" title="Who owns what"></iframe>`;
+            $('slPublicNames').checked = c.publicShowNames;
+        }
+    }
+
+    function renderStats(s) {
+        state.stats = s;
+        $('slStatMembers').textContent = num(s.members);
+        $('slStatVerified').textContent = num(s.verified);
+        $('slStatPrivate').textContent = num(s.private);
+        $('slStatGames').textContent = num(s.games);
+    }
+
+    // The board preview: the same list core/steam-library-manager.js posts, from the current settings.
+    async function drawBoard() {
+        const c = state.config, s = state.stats || { members: 0, games: 0 };
+        if (!c) return;
+        try {
+            const r = await api('/games?' + new URLSearchParams({ page: 1, min: c.minOwners }));
+            const games = r.games.slice(0, c.boardSize);
+            const text = games.length
+                ? games.map((g, i) => '`' + String(i + 1).padStart(2) + '` **' + String(g.name).replace(/[*_`~|]/g, '') + '** — ' + g.owners + ' own' + (g.owners === 1 ? 's' : '')).join('\n')
+                : (s.members ? 'No game is owned by ' + c.minOwners + '+ linked members yet.' : 'Nobody has linked yet. Be the first!');
+            GK.fill($('slPvList'), text);
+        } catch (e) { $('slPvList').textContent = ''; }
+        $('slPvFooter').textContent = `${s.members} linked · ${s.games} different games · /steam who · /steam common`;
+    }
+
+    async function loadOverview() {
+        const r = await api('/');
+        renderConfig(r.config);
+        renderStats(r.stats);
+        drawBoard();
+    }
+
+    let searchTimer = null;
+    async function loadGames() {
+        const p = new URLSearchParams({ page: state.page, min: $('slMin').value });
+        const q = $('slSearch').value.trim();
+        if (q) p.set('q', q);
+        try {
+            const r = await api('/games?' + p);
+            state.total = r.total; state.pageSize = r.pageSize;
+            const max = r.games.length ? Math.max(...r.games.map(g => g.owners)) : 1;
+            $('slGames').replaceChildren(...(r.games.length ? r.games.map((g, i) => {
+                const fill = h('span', { className: 'sl-bar-fill' });
+                fill.style.width = Math.max(2, Math.round(g.owners / max * 100)) + '%';
+                return h('tr', { className: 'sl-game', attrs: { 'aria-expanded': 'false', tabindex: '0' }, data: { app: String(g.appId) } },
+                    h('td', { className: 'sl-num', text: (state.page - 1) * state.pageSize + i + 1 }),
+                    h('td', { className: 'sl-bar-cell' }, fill, h('a', { attrs: { href: 'https://store.steampowered.com/app/' + encodeURIComponent(g.appId), target: '_blank', rel: 'noopener' }, text: g.name })),
+                    h('td', { className: 'sl-num' }, h('b', { text: num(g.owners) })),
+                    h('td', null, h('span', { className: 'sl-chev', text: '▸' })));
+            }) : [emptyRow(4, q ? 'No games match.' : 'No games yet. Once members link Steam, their games show up here.')]));
+            const pages = Math.max(1, Math.ceil(state.total / state.pageSize));
+            $('slPrev').disabled = state.page <= 1;
+            $('slNext').disabled = state.page >= pages;
+            $('slPageInfo').textContent = `Page ${state.page} of ${pages} · ${num(state.total)} games`;
+        } catch (e) { showErr(e.message); }
+    }
+
+    async function toggleOwners(tr) {
+        const open = tr.getAttribute('aria-expanded') === 'true';
+        const next = tr.nextElementSibling;
+        if (next && next.classList.contains('sl-owners')) next.remove();
+        tr.setAttribute('aria-expanded', String(!open));
+        if (open) return;
+        const cell = h('td', { className: 'sl-muted', attrs: { colspan: '3' }, text: 'Loading…' });
+        const row = h('tr', { className: 'sl-owners' }, h('td'), cell);
+        tr.after(row);
+        try {
+            const r = await api(`/games/${encodeURIComponent(tr.dataset.app)}/owners`);
+            cell.className = '';
+            cell.replaceChildren(h('div', { className: 'cf-chips' }, ...r.owners.map(o =>
+                h('span', { className: 'cf-chip' }, o.avatar ? h('img', { attrs: { src: o.avatar, alt: '' } }) : null, o.name || 'Left the server'))));
+        } catch (e) { cell.textContent = e.message; }
+    }
+
+    const STATUS = {
+        ok: ['Synced', 'is-ok'], private: ['Game list private', 'is-warn'],
+        pending: ['Waiting for Steam', ''], error: ['Steam did not answer', 'is-warn'],
+    };
+    async function loadMembers() {
+        try {
+            const r = await api('/members');
+            $('slMemberCount').textContent = r.members.length ? String(r.members.length) : '';
+            $('slMembers').replaceChildren(...(r.members.length ? r.members.map(m => {
+                const [label, cls] = STATUS[m.status] || [m.status, ''];
+                return h('tr', null,
+                    h('td', { attrs: { 'data-label': 'Member' } }, h('span', { className: 'sl-member' }, m.avatar ? h('img', { className: 'sl-av', attrs: { src: m.avatar, alt: '' } }) : null, m.name || 'Not in the server')),
+                    h('td', { attrs: { 'data-label': 'Link' } }, h('span', { className: 'cf-chip' + (m.verified ? ' is-ok' : ''), text: m.verified ? 'Steam sign-in' : 'Pasted link' })),
+                    h('td', { attrs: { 'data-label': 'Status' } }, h('span', { className: 'cf-chip ' + cls, text: label })),
+                    h('td', { className: 'sl-num', attrs: { 'data-label': 'Games' }, text: num(m.games) }),
+                    h('td', { className: 'sl-muted', attrs: { 'data-label': 'Last read' }, text: fmtAgo(m.syncedAt) }),
+                    h('td', { className: 'cf-cell-end' }, h('button', { className: 'btn btn-secondary btn-sm', text: 'Remove', attrs: { type: 'button' }, data: { remove: String(m.id), name: m.name || 'this member' } })));
+            }) : [emptyRow(6, 'Nobody has linked yet. Post the board, or share the sign-in link.')]));
+        } catch (e) { showErr(e.message); }
+    }
+
+    async function busy(btn, fn) {
+        btn.disabled = true; showErr('');
+        try { await fn(); } catch (e) { showErr(e.message); } finally { btn.disabled = false; }
+    }
+
+    $('slPanelPost').addEventListener('click', e => busy(e.currentTarget, async () => {
+        const channelId = $('slPanelChannel').value;
+        if (!channelId) throw new Error('Choose a channel first.');
+        const r = await post('/panel', { channelId });
+        renderConfig(r.config);
+    }));
+    $('slPanelRefresh').addEventListener('click', e => busy(e.currentTarget, () => post('/panel/refresh')));
+    $('slSaveSettings').addEventListener('click', e => busy(e.currentTarget, async () => {
+        const r = await post('/config', {
+            boardSize: $('slBoardSize').value, minOwners: $('slMinOwners').value,
+            allowUnverified: $('slAllowUnverified').checked,
+        });
+        renderConfig(r.config);
+        drawBoard();
+        const s = $('slSaved'); s.textContent = 'Saved.'; s.className = 'cf-status-line is-ok';
+        setTimeout(() => { s.textContent = ''; s.className = 'cf-status-line'; }, 2000);
+    }));
+    $('slPublicEnable').addEventListener('click', e => busy(e.currentTarget, async () => renderConfig((await post('/public', { action: 'enable' })).config)));
+    $('slPublicRotate').addEventListener('click', e => busy(e.currentTarget, async () => {
+        if (!confirm('Make a new link? The current link and any embeds using it stop working.')) return;
+        renderConfig((await post('/public', { action: 'rotate' })).config);
+    }));
+    $('slPublicDisable').addEventListener('click', e => busy(e.currentTarget, async () => {
+        if (!confirm('Turn off the public page? The link stops working.')) return;
+        renderConfig((await post('/public', { action: 'disable' })).config);
+    }));
+    $('slPublicNames').addEventListener('change', e => {
+        const box = e.currentTarget;
+        busy(box, async () => renderConfig((await post('/config', { publicShowNames: box.checked })).config));
+    });
+
+    root.addEventListener('click', e => {
+        const copy = e.target.closest('[data-copy-from]');
+        if (copy) {
+            const input = $(copy.dataset.copyFrom);
+            navigator.clipboard?.writeText(input.value).then(() => {
+                const was = copy.textContent; copy.textContent = 'Copied';
+                setTimeout(() => { copy.textContent = was; }, 1500);
+            }).catch(() => { input.select(); });
+            return;
+        }
+        const rm = e.target.closest('[data-remove]');
+        if (rm) {
+            if (!confirm(`Take ${rm.dataset.name} out of this server's tally? Their link stays for other servers.`)) return;
+            busy(rm, async () => {
+                await api(`/members/${encodeURIComponent(rm.dataset.remove)}`, { method: 'DELETE' });
+                await Promise.all([loadMembers(), loadGames(), loadOverview()]);
+            });
+            return;
+        }
+        const tr = e.target.closest('tr.sl-game');
+        if (tr && !e.target.closest('a')) toggleOwners(tr);
+    });
+    $('slGames').addEventListener('keydown', e => {
+        const tr = e.target.closest('tr.sl-game');
+        if (tr && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggleOwners(tr); }
+    });
+    $('slSearch').addEventListener('input', () => {
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => { state.page = 1; loadGames(); }, 250);
+    });
+    $('slMin').addEventListener('change', () => { state.page = 1; loadGames(); });
+    $('slPrev').addEventListener('click', () => { state.page--; loadGames(); });
+    $('slNext').addEventListener('click', () => { state.page++; loadGames(); });
+
+    loadOverview().catch(e => showErr(e.message));
+    loadGames();
+    loadMembers();
+})();
+</script>

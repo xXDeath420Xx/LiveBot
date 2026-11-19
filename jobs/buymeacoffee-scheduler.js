@@ -34,6 +34,18 @@ async function runCycle() {
              JOIN bmc_user_links l ON l.user_id = a.user_id
              WHERE a.enabled = 1`
         );
+        // Plus users who turned Buy Me a Coffee on as a stream bot tip source (core/stream-bot) without an announce target.
+        try {
+            const { streamBotBmacOwners } = await import('../core/stream-bot/index.js');
+            const extra = await streamBotBmacOwners();
+            if (extra.length) {
+                const [linked] = await pool.query('SELECT user_id FROM bmc_user_links WHERE user_id IN (?)', [extra]);
+                const have = new Set(rows.map((r) => String(r.user_id)));
+                for (const r of linked) if (!have.has(String(r.user_id))) rows.push({ user_id: r.user_id });
+            }
+        } catch (error) {
+            logger.debug(`${LOG_TAG} stream bot owners not read: ${error.message}`);
+        }
         if (rows.length === 0) return;
 
         let totalAnnounced = 0;

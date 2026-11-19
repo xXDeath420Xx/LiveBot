@@ -82,7 +82,7 @@ async function fixStreamSignup(ctx) {
             '• Reach **level 3** in the server — you\'ll get the **Shoutout Eligible** role automatically at lvl 3',
             '• Post a single supported link per message',
             '',
-            '**Supported platforms:** Twitch, Kick, YouTube, TikTok, Trovo, Facebook.',
+            '**Supported platforms:** Twitch, Kick, YouTube, TikTok, Rumble, Facebook.',
             '',
             '**Rules**',
             '• Non-link messages are removed automatically',

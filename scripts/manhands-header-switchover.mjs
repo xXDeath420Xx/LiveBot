@@ -14,7 +14,7 @@ import mysql from 'mysql2/promise';
 const GUILD     = '1485188364318539837';
 const CHANNEL   = '1485258135307292797';   // 🔴︱ᴛᴇᴀᴍ-ᴍᴀɴʜᴀɴᴅꜱ-ʟɪᴠᴇ
 const OLD_MSG   = '1486449556710228189';   // posted by old default bot 2026-03-25
-const NEW_BOT   = '1486807000854823155';   // ᴛᴇᴀᴍ ᴍᴀɴʜᴀɴᴅꜱ
+// The acting bot comes from guild_bot_mapping — never pinned here.
 const DRY       = process.argv.includes('--dry');
 const NO_DELETE = process.argv.includes('--no-delete');
 const PUBLISH   = process.argv.includes('--publish');
@@ -23,15 +23,9 @@ const pool = mysql.createPool({
     host: process.env.DB_HOST, user: process.env.DB_USER,
     password: process.env.DB_PASSWORD, database: process.env.DB_NAME,
 });
-const enc = (await import('/home/death/CertiFriedUtility/utils/encryption.js')).default;
-const [tokRow] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id = ?', [NEW_BOT]);
-if (!tokRow.length) {
-    console.error(`new bot ${NEW_BOT} not in custom_bots`);
-    await pool.end();
-    process.exit(1);
-}
-const NEW_TOK = enc.decrypt(JSON.parse(tokRow[0].bot_token));
-const H = { Authorization: 'Bot ' + NEW_TOK, 'Content-Type': 'application/json' };
+const { resolveBotForGuild } = await import('/home/death/CertiFriedUtility/utils/bot-resolver.js');
+const newBot = await resolveBotForGuild(GUILD, { db: pool });
+const H = { Authorization: newBot.auth, 'Content-Type': 'application/json' };
 
 async function rest(method, url, body) {
     for (let i = 0; i < 6; i++) {

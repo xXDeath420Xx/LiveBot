@@ -1,5 +1,10 @@
 import { EmbedBuilder } from 'discord.js';
 import pool from '../../utils/db.js';
+import { displayNameFor } from '../../utils/display-name.js';
+import { themeColor } from '../../core/guild-theme.js';
+import logger from '../../utils/logger.js';
+import tradeManager, { TradeError } from '../../core/trade-manager.js';
+import { postTrade } from '../economy/economy-trade-handler.js';
 
 // Helper function
 function pickRandom(array) {
@@ -150,6 +155,47 @@ function generateCard(rarityChoice) {
   };
 }
 
+const MAX_CARD_ENERGY = 10;
+
+/**
+ * A member's card-pull energy, after applying the refill (1 per whole hour since last_refill,
+ * capped at 10). Creates the row (full energy) on first use. Hours are measured in SQL so the
+ * clock never depends on the Node/DB timezone pairing; when the bar is not yet full the clock
+ * only advances by the hours actually credited, so partial hours are not lost.
+ */
+async function getCardEnergy(guildId, userId) {
+  await pool.execute(
+    'INSERT IGNORE INTO card_energy (guild_id, user_id, energy) VALUES (?, ?, ?)',
+    [guildId, userId, MAX_CARD_ENERGY]
+  );
+
+  const [[row]] = await pool.execute(
+    'SELECT energy, TIMESTAMPDIFF(HOUR, last_refill, NOW()) AS hours FROM card_energy WHERE guild_id = ? AND user_id = ?',
+    [guildId, userId]
+  );
+
+  let energy = Number(row?.energy ?? MAX_CARD_ENERGY);
+  const hours = Math.max(0, Number(row?.hours ?? 0));
+
+  if (energy < MAX_CARD_ENERGY && hours > 0) {
+    const refilled = Math.min(MAX_CARD_ENERGY, energy + hours);
+    if (refilled >= MAX_CARD_ENERGY) {
+      await pool.execute(
+        'UPDATE card_energy SET energy = ?, last_refill = NOW() WHERE guild_id = ? AND user_id = ?',
+        [MAX_CARD_ENERGY, guildId, userId]
+      );
+    } else {
+      await pool.execute(
+        'UPDATE card_energy SET energy = ?, last_refill = DATE_ADD(last_refill, INTERVAL ? HOUR) WHERE guild_id = ? AND user_id = ?',
+        [refilled, refilled - energy, guildId, userId]
+      );
+    }
+    energy = refilled;
+  }
+
+  return { energy };
+}
+
 // Trivia question getter
 function getTriviaQuestion(category) {
   const questions = {
@@ -294,7 +340,7 @@ export async function handleBattle(interaction) {
   await interaction.deferReply();
 
   const playerCount = interaction.options.getInteger('players') || 10;
-  const userName = interaction.user.username;
+  const userName = displayNameFor(interaction.user, interaction.guild);
 
   // Generate player names
   const names = ['Shadow', 'Phoenix', 'Blade', 'Storm', 'Raven', 'Ghost', 'Viper', 'Wolf',
@@ -378,57 +424,8 @@ export async function handleCardPull(interaction) {
   const guildId = interaction.guild.id;
 
   try {
-    // Create tables if they don't exist
-    await pool.execute(`
-      CREATE TABLE IF NOT EXISTS card_collection (
-        id INT AUTO_INCREMENT PRIMARY KEY,
-        guild_id VARCHAR(20) NOT NULL,
-        user_id VARCHAR(20) NOT NULL,
-        card_name VARCHAR(255) NOT NULL,
-        card_type VARCHAR(50) NOT NULL,
-        rarity VARCHAR(20) NOT NULL,
-        power INT NOT NULL,
-        description TEXT,
-        collected_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        INDEX idx_user_cards (guild_id, user_id)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    `);
-
-    await pool.execute(`
-      CREATE TABLE IF NOT EXISTS card_energy (
-        guild_id VARCHAR(20) NOT NULL,
-        user_id VARCHAR(20) NOT NULL,
-        energy INT DEFAULT 10,
-        last_refill TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (guild_id, user_id)
-      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    `);
-
-    // Get or create user energy
-    let [[energy]] = await pool.execute(
-      'SELECT energy, last_refill FROM card_energy WHERE guild_id = ? AND user_id = ?',
-      [guildId, userId]
-    );
-
-    if (!energy) {
-      await pool.execute(
-        'INSERT INTO card_energy (guild_id, user_id, energy) VALUES (?, ?, 10)',
-        [guildId, userId]
-      );
-      energy = { energy: 10, last_refill: new Date() };
-    } else {
-      // Refill energy (1 per hour, max 10)
-      const hoursSinceRefill = (Date.now() - new Date(energy.last_refill).getTime()) / (1000 * 60 * 60);
-      const refillAmount = Math.min(10 - energy.energy, Math.floor(hoursSinceRefill));
-
-      if (refillAmount > 0) {
-        energy.energy = Math.min(10, energy.energy + refillAmount);
-        await pool.execute(
-          'UPDATE card_energy SET energy = ?, last_refill = NOW() WHERE guild_id = ? AND user_id = ?',
-          [energy.energy, guildId, userId]
-        );
-      }
-    }
+    // Tables come from migration 262 (card_collection, card_energy).
+    const energy = await getCardEnergy(guildId, userId);
 
     // Check energy cost
     const energyCosts = { any: 1, rare: 3, epic: 5, legendary: 10 };
@@ -440,14 +437,24 @@ export async function handleCardPull(interaction) {
       });
     }
 
+    // Deduct energy first, guarded so two quick pulls can't spend the same energy twice.
+    // Spending from a full bar starts the refill clock now (an idle full bar banks no hours).
+    const [deducted] = await pool.execute(
+      `UPDATE card_energy
+          SET last_refill = IF(energy >= 10, NOW(), last_refill),
+              energy = energy - ?
+        WHERE guild_id = ? AND user_id = ? AND energy >= ?`,
+      [cost, guildId, userId, cost]
+    );
+
+    if (deducted.affectedRows === 0) {
+      return interaction.editReply({
+        content: `Not enough energy! You need ${cost}.\nEnergy refills 1 per hour (max 10).`
+      });
+    }
+
     // Generate card based on rarity choice
     const card = generateCard(rarityChoice);
-
-    // Deduct energy
-    await pool.execute(
-      'UPDATE card_energy SET energy = energy - ? WHERE guild_id = ? AND user_id = ?',
-      [cost, guildId, userId]
-    );
 
     // Add card to collection
     const [result] = await pool.execute(
@@ -490,7 +497,7 @@ export async function handleCardPull(interaction) {
     return interaction.editReply({ embeds: [embed] });
 
   } catch (error) {
-    console.error('[Card Pull Error]', error);
+    logger.error('[Cards] Card pull failed', { error: error.message, guildId, userId });
     return interaction.editReply({
       content: 'Failed to pull card. Please try again later.'
     });
@@ -504,33 +511,41 @@ export async function handleCollection(interaction) {
   const guildId = interaction.guild.id;
 
   try {
-    // Get user's cards
-    const [cards] = await pool.execute(
-      'SELECT id, card_name, card_type, rarity, power, collected_at FROM card_collection WHERE guild_id = ? AND user_id = ? ORDER BY power DESC, collected_at DESC LIMIT 20',
+    // Totals over the WHOLE collection (the list below only shows the top 10)
+    const [[totals]] = await pool.execute(
+      'SELECT COUNT(*) AS total_cards, COALESCE(SUM(power), 0) AS total_power FROM card_collection WHERE guild_id = ? AND user_id = ?',
       [guildId, userId]
     );
+    const totalCards = Number(totals?.total_cards || 0);
 
-    // Get energy
-    const [[energy]] = await pool.execute(
-      'SELECT energy FROM card_energy WHERE guild_id = ? AND user_id = ?',
-      [guildId, userId]
-    );
-
-    if (!cards || cards.length === 0) {
+    if (totalCards === 0) {
       return interaction.editReply({
         content: 'Your collection is empty! Use `/fun games cardpull` to start collecting cards.'
       });
     }
 
+    const [rarityRows] = await pool.execute(
+      'SELECT rarity, COUNT(*) AS count FROM card_collection WHERE guild_id = ? AND user_id = ? GROUP BY rarity',
+      [guildId, userId]
+    );
+
+    // Get user's best cards
+    const [cards] = await pool.execute(
+      'SELECT id, card_name, card_type, rarity, power, collected_at FROM card_collection WHERE guild_id = ? AND user_id = ? ORDER BY power DESC, collected_at DESC LIMIT 10',
+      [guildId, userId]
+    );
+
+    // Current energy, with any refill since the last pull applied
+    const energy = await getCardEnergy(guildId, userId);
+
     // Calculate stats
-    const totalCards = cards.length;
-    const totalPower = cards.reduce((sum, card) => sum + card.power, 0);
+    const totalPower = Number(totals.total_power);
     const avgPower = Math.round(totalPower / totalCards);
 
-    const rarityCounts = cards.reduce((acc, card) => {
-      acc[card.rarity] = (acc[card.rarity] || 0) + 1;
-      return acc;
-    }, {});
+    const rarityOrder = ['mythic', 'legendary', 'epic', 'rare', 'uncommon', 'common'];
+    const rarityCounts = Object.fromEntries(rarityRows
+      .sort((a, b) => rarityOrder.indexOf(a.rarity) - rarityOrder.indexOf(b.rarity))
+      .map(r => [r.rarity, Number(r.count)]));
 
     const rarityLabels = {
       common: 'Common',
@@ -542,26 +557,26 @@ export async function handleCollection(interaction) {
     };
 
     const embed = new EmbedBuilder()
-      .setColor('#3498DB')
-      .setTitle(`${interaction.user.username}'s Card Collection`)
+      .setColor(themeColor(interaction.guildId, 'primary'))
+      .setTitle(`${displayNameFor(interaction.user, interaction.guild)}'s Card Collection`)
       .setDescription(`You have collected ${totalCards} cards with a total power of ${totalPower}!`)
       .addFields(
         {
           name: 'Collection Stats',
-          value: `**Total Cards:** ${totalCards}\n**Average Power:** ${avgPower}\n**Energy:** ${energy?.energy || 0}/10`,
+          value: `**Total Cards:** ${totalCards}\n**Average Power:** ${avgPower}\n**Energy:** ${energy.energy}/10`,
           inline: true
         },
         {
           name: 'Rarity Breakdown',
           value: Object.entries(rarityCounts)
-            .map(([rarity, count]) => `${rarityLabels[rarity]}: ${count}`)
+            .map(([rarity, count]) => `${rarityLabels[rarity] || rarity}: ${count}`)
             .join('\n') || 'No cards yet',
           inline: true
         }
       );
 
     // Show top 10 cards
-    const topCards = cards.slice(0, 10);
+    const topCards = cards;
     embed.addFields({
       name: 'Your Best Cards',
       value: topCards.map(card =>
@@ -570,103 +585,66 @@ export async function handleCollection(interaction) {
       inline: false
     });
 
-    embed.setFooter({ text: 'Energy refills 1 per hour (max 10) - Use /fun games trade to trade cards' });
+    embed.setFooter({ text: 'Energy refills 1 per hour (max 10) - Use /fun games trade to trade or swap cards' });
     embed.setTimestamp();
 
     return interaction.editReply({ embeds: [embed] });
 
   } catch (error) {
-    console.error('[Collection Error]', error);
+    logger.error('[Cards] Collection lookup failed', { error: error.message, guildId, userId });
     return interaction.editReply({
       content: 'Failed to load collection. Please try again later.'
     });
   }
 }
 
+/**
+ * /fun games trade user:<member> cardid:<your card> [want:<their card>]
+ *
+ * Posts a real trade offer (core/trade-manager.js) with Accept / Counter / Decline / Cancel buttons.
+ * With `want` it is a swap; without it, a gift. On Accept both cards change owner in one
+ * transaction that locks the card rows and re-checks ownership, so a card that was traded,
+ * gifted or pulled into another deal in the meantime makes the trade fail cleanly instead of
+ * duplicating or losing a card. The counter-offer form can add more cards (and coins / shop items,
+ * where the server economy allows trading).
+ */
 export async function handleTrade(interaction) {
-  await interaction.deferReply();
-
   const targetUser = interaction.options.getUser('user');
   const cardId = interaction.options.getInteger('cardid');
+  const wantId = interaction.options.getInteger('want'); // optional (added to /fun games trade)
   const userId = interaction.user.id;
   const guildId = interaction.guild.id;
 
   if (targetUser.id === userId) {
-    return interaction.editReply({
-      content: 'You cannot trade with yourself!'
-    });
+    return interaction.reply({ content: 'You cannot trade with yourself!', ephemeral: true });
   }
 
   if (targetUser.bot) {
-    return interaction.editReply({
-      content: 'You cannot trade with bots!'
-    });
+    return interaction.reply({ content: 'You cannot trade with bots!', ephemeral: true });
+  }
+
+  if (wantId && wantId === cardId) {
+    return interaction.reply({ content: 'Pick a card of theirs to swap for — that ID is your own card.', ephemeral: true });
   }
 
   try {
-    // Get the card
-    const [[card]] = await pool.execute(
-      'SELECT id, card_name, card_type, rarity, power FROM card_collection WHERE id = ? AND guild_id = ? AND user_id = ?',
-      [cardId, guildId, userId]
-    );
-
-    if (!card) {
-      return interaction.editReply({
-        content: `Card #${cardId} not found in your collection. Use \`/fun games collection\` to see your cards.`
-      });
-    }
-
-    const rarityLabels = {
-      common: 'Common',
-      uncommon: 'Uncommon',
-      rare: 'Rare',
-      epic: 'Epic',
-      legendary: 'Legendary',
-      mythic: 'Mythic'
-    };
-
-    const embed = new EmbedBuilder()
-      .setColor('#E67E22')
-      .setTitle('Trade Request Sent!')
-      .setDescription(`You've offered to trade your card to ${targetUser}!`)
-      .addFields(
-        {
-          name: 'Card Offered',
-          value: `**${card.card_name}** (${rarityLabels[card.rarity]})\n${card.card_type} - Power: ${card.power}`,
-          inline: false
-        },
-        {
-          name: 'How Trading Works',
-          value: 'Trading is currently in preview mode. The recipient will see your offer, but automatic trades are not yet enabled. Consider coordinating trades in your server!',
-          inline: false
-        }
-      )
-      .setFooter({ text: 'Trade system coming soon with full functionality!' })
-      .setTimestamp();
-
-    // Notify the target user
-    try {
-      await targetUser.send({
-        content: `${interaction.user.username} wants to trade with you in ${interaction.guild.name}!`,
-        embeds: [embed]
-      });
-
-      return interaction.editReply({
-        content: `Trade offer sent to ${targetUser}!`,
-        embeds: [embed]
-      });
-    } catch (dmError) {
-      return interaction.editReply({
-        content: `Trade prepared, but ${targetUser} has DMs disabled. Coordinate the trade in the server!`,
-        embeds: [embed]
-      });
-    }
-
-  } catch (error) {
-    console.error('[Trade Error]', error);
-    return interaction.editReply({
-      content: 'Failed to process trade. Please try again later.'
+    const trade = await tradeManager.createTrade({
+      guildId,
+      channelId: interaction.channel.id,
+      initiatorId: userId,
+      recipientId: targetUser.id,
+      give: { cards: [cardId] },
+      want: wantId ? { cards: [wantId] } : {},
     });
+    await postTrade(interaction, trade);
+  } catch (error) {
+    if (error instanceof TradeError) {
+      const hint = /card #/i.test(error.message) ? '\nUse `/fun games collection` to see card IDs.' : '';
+      return interaction.reply({ content: `${error.message}${hint}`, ephemeral: true });
+    }
+    logger.error('[Cards] Trade offer failed', { error: error.message, guildId, userId });
+    const payload = { content: 'Failed to create the trade. Please try again later.', ephemeral: true };
+    return interaction.replied || interaction.deferred ? interaction.followUp(payload) : interaction.reply(payload);
   }
 }
 
@@ -675,7 +653,7 @@ export async function handleTrivia(interaction) {
   const question = getTriviaQuestion(category);
 
   const embed = new EmbedBuilder()
-    .setColor('#E74C3C')
+    .setColor(themeColor(interaction.guildId, 'danger'))
     .setTitle(`${question.category} Trivia`)
     .setDescription(question.question)
     .addFields(
@@ -690,7 +668,7 @@ export async function handleTrivia(interaction) {
   // Post answer after 30 seconds
   setTimeout(async () => {
     const answerEmbed = new EmbedBuilder()
-      .setColor('#2ECC71')
+      .setColor(themeColor(interaction.guildId, 'success'))
       .setTitle('Answer Revealed!')
       .setDescription(`**${question.answer}**`)
       .addFields({

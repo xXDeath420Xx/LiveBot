@@ -13,8 +13,9 @@
 import { PermissionFlagsBits } from 'discord.js';
 import pool from '../utils/db.js';
 import logger from '../utils/logger.js';
-import { KNOWN_BOTS, plan, resolveBotMeta } from './takeover-manager.js';
+import { plan, resolveBotMeta, featuresOf } from './takeover-manager.js';
 import { getTemplates, unattributedCount } from './guild-analyzer.js';
+import { classifyTemplate, asList } from './takeover-classifier.js';
 
 /** Hours our replacement must have been live before the incumbent may be removed. */
 export const DEFAULT_SOAK_HOURS = 24;
@@ -27,51 +28,21 @@ export const DATA_HOLDERS = Object.freeze({
     '159985870458322944': { name: 'MEE6', what: 'levels and XP', how: 'export via mee6.xyz leaderboard API before kicking' },
     '235148962103951360': { name: 'Carl-bot', what: 'reaction-role panels and tags', how: 'panels must be rebuilt by us first' },
     '172002275412279296': { name: 'Tatsu', what: 'levels and currency', how: 'no export API — accept the loss explicitly' },
+    '437808476106784770': { name: 'Arcane', what: 'levels and XP', how: 'no export API — members keep their level ROLE, but the XP totals are gone. Accept the loss explicitly.' },
+    '292953664492929025': { name: 'UnbelievaBoat', what: 'per-server balances', how: 'export the balance leaderboard from the UnbelievaBoat dashboard first — it is the only copy' },
+    '204255221017214977': { name: 'YAGPDB.xyz', what: 'custom command scripts', how: 'copy the command sources out of the YAGPDB control panel — they are not readable from Discord' },
 });
 
-/**
- * Message shapes we can attribute automatically, per feature. Anything not matched here is left
- * for a human to classify — deliberately. A regex that guesses is worse than a checkbox.
+/*
+ * Deciding what a message shape was FOR now lives in core/takeover-classifier.js.
  *
- * These are written against the REAL templates the incumbents posted in Kabster's guild (707 of
- * them, read out of the scan), not from imagination. The earlier set was guesswork and matched
- * almost nothing, which is why bots we fully replace were sitting at "0 attributed" and their
- * retirement gate refused — the evidence gate was reporting our ignorance, not their behaviour.
- * Measured coverage now: 702/707. What still needs a human is genuinely ambiguous (Carl-bot's
- * "bye bye loser", Dyno's poll/news webhook), which is exactly what the checkbox is for.
+ * It used to be a flat list of regexes here, one array per feature, matched against the bot's
+ * primary feature only. On an ordinary server that left 382 shapes for a human to tick — 179 of them
+ * the same stream announcement, 247 of them the same voice-join log. The classifier scores instead
+ * of matching, considers every job the bot does, recognises the things that are not a feature at all
+ * (a vendor's changelog, Discord's admin broadcasts), and reports its reasoning. Same server, same
+ * scan: 2 left for a human.
  */
-const FEATURE_SIGNATURES = {
-    counting: [/^\{n\}$/, /ruined it/i, /next number/i, /wrong number/i, /counting/i,
-        /two numbers in a row/i, /deleted their number/i, /maths is (dis|en)abled/i,
-        /\bsaves?\b/i, /c!channel/i],
-    // Dyno logged mostly ROLE GRANTS — 148 of its 252 shapes. The old single regex missed every one.
-    logging: [/message (sent by .* )?(deleted|edited)/i, /(joined|left) voice channel/i,
-        /nickname changed/i, /image sent by .* deleted/i, /member (joined|left)/i,
-        /\b(banned|unban|kicked|timeout|muted)\b/i, /bulk delete/i,
-        /was (given|removed from) the /i, /was given the roles/i, /Role .+ Changed:/i,
-        /has been timed out/i, /role (added|removed|updated)/i, /poll created/i],
-    timezone: [/time ?zone/i, /it is currently/i, /time format/i, /auto-?detect/i, /friend time/i,
-        /converted times/i, /^embed:(Server|User) - /i, /completed (user|server) setup/i,
-        /invalid language/i, /something went wrong/i, /permissions required/i],
-    catbot: [/\bcats?\b/i, /achievement get/i, /missing permissions/i, /caught/i],
-    growtree: [/tree/i, /water/i],
-    streams: [/\bis (now )?live\b/i, /is live over at/i, /went live/i, /^embed:.*(twitch|kick|youtube)/i],
-    kofi: [/ko-?fi/i, /supported us/i],
-    reaction_roles: [/^ui:/, /\{role\}/, /has been created/i, /\| case \{n\}/i, /^embed:Success!/i],
-    free_games: [/freestuffbot/i, /\*\*Free(?: to play)?\*\* until/i,
-        /open in (browser|steam client|epic games launcher)/i,
-        /(active|add) notifications/i, /prime gaming/i, /^### .+ > /],
-    throne: [/wishlist/i, /new gift/i, /has gifted/i, /has contributed/i, /partying_face/i],
-    owo: [/goes into battle/i, /leveled up/i, /hunt is empowered/i, /you found:/i, /lootbox/i,
-        /guild boss/i, /cowoncy/i, /weapon crate/i, /\bowo\b/i, /essence/i, /\bgems?\b/i,
-        /inventory/i, /[⁰¹²³⁴⁵⁶⁷⁸⁹]/],
-    cannabis: [/toke/i, /joint/i, /puff/i, /smoke circle/i, /takes a hit/i, /strain/i, /cheers/i],
-    emoji: [/emoji/i, /^\{emoji\}$/],
-    custom_commands: [/^WWW$/i, /loser/i, /inch pp/i, /made by tiz/i, /[⣿⡏⢸⠉]/, /commands overlays/i],
-    birthday: [/birthday/i, /🎂/],
-    moderation: [/\b(warn|mute|ban|kick)\b/i, /\| case \{n\}/i],
-    soundboard: [/sound|clip|soundboard/i],
-};
 
 /**
  * Attribute what we safely can; return how many remain for a human.
@@ -79,10 +50,15 @@ const FEATURE_SIGNATURES = {
  * `name` matters: a webhook persona is keyed `wh:<name>`, so without it a webhook can never be
  * matched to the bot that owns it. Callers that have the scanned name should pass it.
  */
-export async function autoAttribute(scanId, botId, name = null, selfId = null) {
+export async function autoAttribute(scanId, botId, name = null, selfId = null, guild = null) {
     const meta = resolveBotMeta(botId, name, selfId);
-    const sigs = meta?.feature ? FEATURE_SIGNATURES[meta.feature] : null;
-    if (!sigs) return { matched: 0, remaining: await unattributedCount(scanId, botId) };
+    const candidates = featuresOf(meta);
+
+    // Channel names only exist if we were handed a live guild. Without one the classifier simply
+    // loses a tiebreaker — it never depends on them, so this degrades rather than breaks.
+    const channelNames = (t) => guild
+        ? asList(t.channels).map(id => guild.channels?.cache?.get(id)?.name).filter(Boolean)
+        : [];
 
     const templates = await getTemplates(scanId, botId);
     let matched = 0;
@@ -90,11 +66,29 @@ export async function autoAttribute(scanId, botId, name = null, selfId = null) {
     for (const t of templates) {
         if (t.attributed) continue;
         if (t.template_hash === 'TRUNCATED000000') continue; // never auto-clear a truncation marker
-        if (!sigs.some(re => re.test(t.sample || ''))) continue;
+
+        // Read the message AND its context: which command produced it, and where it was posted.
+        // The command is the strongest evidence in the dataset — somebody typed `/leaderboard` and
+        // this came back — and ignoring it was why replies whose text says nothing recognisable
+        // ("He won't kill but he will hospitalize you for life") were being sent to a human.
+        //
+        // `unsure` is still a real answer and it still goes to a person. A confident wrong verdict
+        // here is the one failure mode that could get a bot retired on evidence nobody explained.
+        const v = classifyTemplate(t.sample, candidates, {
+            triggers: asList(t.triggers),
+            channelNames: channelNames(t),
+        });
+        if (v.confidence === 'unsure' || !v.feature) continue;
+
+        // A shape that is not one of our features is still EXPLAINED. A vendor's changelog, Discord's
+        // own admin broadcast, a posted meme — none of them are behaviour this server configured, and
+        // counting them as unexplained is what made a finished takeover look unfinished. The row
+        // records which kind, prefixed, so nothing later mistakes it for a feature we replaced.
+        const label = v.kind === 'feature' ? v.feature : `n/a:${v.feature}`;
 
         await pool.execute(
             `UPDATE guild_scan_templates SET attributed = 1, attributed_to = ?, attributed_by = 'auto'
-             WHERE id = ?`, [meta.feature, t.id]);
+             WHERE id = ?`, [label.slice(0, 64), t.id]);
         matched++;
     }
     return { matched, remaining: await unattributedCount(scanId, botId) };
@@ -125,7 +119,9 @@ const PARITY_STEPS = {
     owo: ['owo'],
     kofi: ['kofi'],
     reaction_roles: ['carlbot_panels'],                         // our button panels are posted
-    custom_commands: ['nightbot_commands', 'nightbot_autoresponses'],
+    // Three keys, because a custom-command system can be recovered by either route: the generic
+    // one (whatever the scan caught any bot answering) or the two profile-backed ones.
+    custom_commands: ['custom_commands', 'nightbot_commands', 'nightbot_autoresponses'],
     birthday: ['birthday'],
     streams: ['streams'],   // the subscription exists; the dry run + owner confirm ARE the by-hand review
     // The last four, so a takeover can be fully hands-off. Each has a real, checkable replacement:
@@ -134,6 +130,7 @@ const PARITY_STEPS = {
     moderation: ['protection'],   // our anti-nuke/raid/spam/phishing suite is switched on
     free_games: ['free_games'],   // a free-games subscription posts to the same channel FreeStuff used
     throne: ['throne'],           // the guild's Throne wishlist owner is configured
+    leveling: ['leveling'],       // XP tracking is switched on; level ROLES stay a human decision
 };
 
 /** Does the retirement gate have a machine check for this feature, or does it need a human? */
@@ -148,14 +145,32 @@ const gate = (id, label, pass, detail) => ({ id, label, pass, detail });
  * `pass: null` means "cannot determine", which is treated as a failure by `retire()`.
  */
 export async function evaluate(guild, botId, scanId, { soakHours = DEFAULT_SOAK_HOURS, overrideSoak = false } = {}) {
-    const meta = KNOWN_BOTS[botId] ?? null;
+    // Resolve, do not index. A bot whose id we never wrote down still resolves by name, and a bot
+    // that only ever posts through a webhook has no snowflake to index by at all.
+    const meta = resolveBotMeta(botId, null) ?? null;
     const member = await guild.members.fetch(botId).catch(() => null);
     const gates = [];
 
+    // Every job this bot does HERE.
+    //
+    // The gate has to clear all of them — retiring a bot that runs logging AND the welcome message on
+    // the strength of logging alone takes the other out with it, silently, on a live server. But it
+    // must only count jobs the bot is ACTUALLY DOING in this server. Requiring parity for a starboard
+    // this server has never had made every all-rounder permanently un-retirable: Dyno lists eight
+    // features, four of them need a human to choose a channel, and none of those four had ever posted
+    // a single message here.
+    const capable = featuresOf(meta);
+    const seen = scanId ? await observedFeatures(scanId, botId, member?.user?.username ?? null) : null;
+    const features = seen?.size ? capable.filter(f => seen.has(f)) : capable;
+    const unused = capable.filter(f => !features.includes(f));
+
     // 1. Do we even claim to replace it?
     gates.push(gate('known', 'We have a replacement feature',
-        !!meta?.feature,
-        meta ? (meta.feature ? `replaces our "${meta.feature}"` : `unreplaceable — ${meta.why}`)
+        features.length > 0,
+        meta ? (features.length
+            ? `replaces our "${features.join('", "')}"`
+              + (unused.length ? ` (it can also do ${unused.join(', ')}, but never has here)` : '')
+            : `unreplaceable — ${meta.why}`)
             : 'unrecognised bot — classify it before removing anything'));
 
     // 2. Still here?
@@ -163,12 +178,24 @@ export async function evaluate(guild, botId, scanId, { soakHours = DEFAULT_SOAK_
         member ? member.user.tag : 'already gone'));
 
     // 3. Parity: re-read live config, do not trust that `apply()` ran.
-    if (meta?.feature) {
-        const wanted = PARITY_STEPS[meta.feature] ?? [];
-        if (!wanted.length) {
+    if (features.length) {
+        const unverifiable = features.filter(f => !isAutoVerifiable(f));
+
+        // A feature we cannot machine-check is not a permanent refusal — it is a question for a
+        // person. Welcome messages and auto-roles need somebody to choose a channel and a role; no
+        // amount of waiting makes that checkable. So it becomes an acknowledgement, recorded against
+        // this bot with who said it and when, exactly like the data-extraction one.
+        const ack = unverifiable.length ? await parityAck(guild.id, botId) : null;
+
+        if (unverifiable.length && !ack) {
             gates.push(gate('parity', 'Feature parity verified', false,
-                `"${meta.feature}" cannot be verified automatically — confirm by hand, then remove manually`));
+                `${unverifiable.map(f => `"${f}"`).join(', ')} cannot be checked automatically — set `
+                + 'them up yourself, then confirm you have. Everything else about this bot is verified.'));
+        } else if (unverifiable.length) {
+            gates.push(gate('parity', 'Feature parity verified', true,
+                `${unverifiable.map(f => `"${f}"`).join(', ')} confirmed by hand (${ack.by}); the rest verified`));
         } else {
+            const wanted = features.flatMap(f => PARITY_STEPS[f]);
             const planned = await plan(guild);
             const steps = planned.steps.filter(s => wanted.includes(s.key));
             const undone = steps.filter(s => !s.done);
@@ -239,6 +266,7 @@ export async function evaluate(guild, botId, scanId, { soakHours = DEFAULT_SOAK_
         botId,
         name: meta?.name ?? member?.user?.username ?? botId,
         feature: meta?.feature ?? null,
+        features: featuresOf(meta),
         gates,
         ready: gates.every(g => g.pass === true),
         blockers: gates.filter(g => g.pass !== true).map(g => g.label),
@@ -281,6 +309,59 @@ const readSnapshot = (v) => {
 };
 
 /** Record that an admin exported a data-holding bot's data. Required before it may be removed. */
+/**
+ * Which of a bot's jobs it is ACTUALLY doing in this server, read from its own messages.
+ *
+ * Matched by resolved NAME rather than row id, so a bot that posts through a webhook (`wh:Dyno`)
+ * has that output counted as its own — which is most of it, for the big logging bots.
+ */
+async function observedFeatures(scanId, botId, name = null) {
+    const { summariseBot } = await import('./takeover-classifier.js');
+    const meta = resolveBotMeta(botId, name);
+    if (!meta) return new Set();
+
+    const [rows] = await pool.execute(
+        `SELECT id, bot_id, sample, occurrences, attributed, triggers, channels
+           FROM guild_scan_templates WHERE scan_id = ?`, [scanId]).catch(() => [[]]);
+
+    const key = (s) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const mine = rows.filter(r => {
+        if (r.bot_id === botId) return true;
+        const m = resolveBotMeta(r.bot_id, null);
+        return m && key(m.name) === key(meta.name);
+    });
+    if (!mine.length) return new Set();
+
+    return new Set(summariseBot(mine, featuresOf(meta)).families
+        .filter(f => f.kind === 'feature')
+        .map(f => f.feature));
+}
+
+/** The recorded "I have set up the parts you cannot check" statement, or null. */
+async function parityAck(guildId, botId) {
+    const [[state]] = await pool.execute(
+        'SELECT snapshot FROM guild_retire_state WHERE guild_id = ? AND bot_id = ?', [guildId, botId])
+        .catch(() => [[]]);
+    return readSnapshot(state?.snapshot)?.parity_ack ?? null;
+}
+
+/**
+ * Record that a human has set up the features we cannot machine-check.
+ *
+ * Deliberately a separate statement from the data-extraction one: they mean different things
+ * ("I saved what would be lost" vs "I stood the replacement up myself"), and collapsing them would
+ * let one click answer a question nobody asked.
+ */
+export async function acknowledgeParity(guildId, botId, userId, features = []) {
+    const ack = JSON.stringify({
+        parity_ack: { by: userId, at: new Date().toISOString(), features },
+    });
+    await pool.execute(
+        `INSERT INTO guild_retire_state (guild_id, bot_id, snapshot) VALUES (?, ?, ?)
+         ON DUPLICATE KEY UPDATE snapshot = JSON_MERGE_PATCH(COALESCE(snapshot, JSON_OBJECT()), ?)`,
+        [guildId, botId, ack, ack]);
+}
+
 export async function acknowledgeExtraction(guildId, botId, userId) {
     if (!DATA_HOLDERS[botId]) throw new Error('that bot holds no data we track');
     const ack = JSON.stringify({ extraction_ack: { by: userId, at: new Date().toISOString() } });

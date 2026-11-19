@@ -6,17 +6,16 @@
  *
  * Prints status + relevant headers + body. NEVER prints the token.
  */
-import enc from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 import pool from '../utils/db.js';
 
-const BOT_ID = '1498486251576229958';
+// The acting bot comes from guild_bot_mapping — never pinned here.
 const GUILD_ID = '1469931133981687873';
 
-const [[row]] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id=?', [BOT_ID]);
-if (!row) { console.error('no bot row'); process.exit(2); }
-const token = enc.decrypt(JSON.parse(row.bot_token));
+const bot = await resolveBotForGuild(GUILD_ID, { db: pool });
+const token = bot.token;
 
-const url = `https://discord.com/api/v10/applications/${BOT_ID}/guilds/${GUILD_ID}/commands`;
+const url = `https://discord.com/api/v10/applications/${bot.botId}/guilds/${GUILD_ID}/commands`;
 
 // Empty bulk PUT — Discord will validate auth + rate limit budget without us
 // burning a real command create. If this returns 200, we know our token works

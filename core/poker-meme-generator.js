@@ -1,7 +1,8 @@
-import { AttachmentBuilder, EmbedBuilder } from 'discord.js';
-import axios from 'axios';
-import pool from '../utils/db.js';
+import { EmbedBuilder } from 'discord.js';
 import logger from '../utils/logger.js';
+import { accessibleAttachment } from '../utils/accessible-attachment.js';
+import { themeColor } from './guild-theme.js';
+import { fetchSubredditPosts } from '../utils/reddit.js';
 
 let Canvas, loadImage;
 try {
@@ -161,6 +162,16 @@ const POKER_SCENARIOS = {
 };
 
 export default class PokerMemeGenerator {
+  // One warning per process, not one per scheduled post.
+  static warnedNsfwUnavailable = false;
+
+  static warnNsfwUnavailable() {
+    if (PokerMemeGenerator.warnedNsfwUnavailable) return;
+    PokerMemeGenerator.warnedNsfwUnavailable = true;
+    logger.warn('[PokerMemeGenerator] Skipping Reddit content: the public feed carries no NSFW flag. ' +
+      'Set REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET to re-enable.');
+  }
+
   constructor(client) {
     this.client = client;
   }
@@ -280,26 +291,31 @@ export default class PokerMemeGenerator {
     const subreddit = subreddits[Math.floor(Math.random() * subreddits.length)];
 
     try {
-      const response = await axios.get(`https://www.reddit.com/r/${subreddit}/hot.json?limit=50`, {
-        headers: { 'User-Agent': 'Discord Bot CertiFriedUtility/1.0' },
-        timeout: 10000
+      // Reddit 403s unauthenticated `hot.json` now — utils/reddit.js picks OAuth or
+      // the public Atom feed. Without OAuth there's no NSFW flag, and these titles get
+      // rendered onto images posted into guild channels, so decline rather than guess.
+      const { posts: fetched, nsfwKnown } = await fetchSubredditPosts(subreddit, {
+        sort: 'hot', limit: 50
       });
 
-      const posts = response.data.data.children
+      if (!nsfwKnown) {
+        PokerMemeGenerator.warnNsfwUnavailable();
+        return [];
+      }
+
+      return fetched
         .filter(post =>
-          !post.data.stickied &&
-          !post.data.over_18 &&
-          post.data.title.length > 10 &&
-          post.data.title.length < 200
+          !post.isStickied &&
+          !post.isNsfw &&
+          post.title.length > 10 &&
+          post.title.length < 200
         )
         .map(post => ({
-          title: post.data.title,
-          selftext: post.data.selftext,
-          score: post.data.ups,
-          id: post.data.id
+          title: post.title,
+          selftext: post.selftext,
+          score: post.score,
+          id: post.id
         }));
-
-      return posts;
     } catch (error) {
       logger.error('[PokerMemeGenerator] Error fetching poker content', { error: error.message });
       return [];
@@ -382,26 +398,24 @@ export default class PokerMemeGenerator {
         return await this.postRedditPokerMeme(guildId, channelId);
       }
 
-      const attachment = new AttachmentBuilder(meme.buffer, { name: 'poker-meme.png' });
+      // generateRandomPokerMeme hands back the exact caption lines it burned
+      // into the image, which is the only part a screen reader cannot reach.
+      const captions = (meme.texts || []).filter(Boolean).join(' — ');
+      const attachment = accessibleAttachment(meme.buffer, {
+        name: 'poker-meme.png',
+        description: captions
+          ? `Poker meme (${meme.templateName}): ${captions}`
+          : `Poker meme (${meme.templateName}).`,
+      });
 
       const embed = new EmbedBuilder()
-        .setColor('#2ECC71') // Poker green
+        .setColor(themeColor(guildId, 'success')) // Poker green
         .setTitle('Daily Poker Meme')
         .setImage('attachment://poker-meme.png')
         .setFooter({ text: 'Generated for Flying Sharks' })
         .setTimestamp();
 
       await channel.send({ embeds: [embed], files: [attachment] });
-
-      // Log the post
-      await pool.execute(
-        `INSERT INTO poker_meme_history (guild_id, channel_id, template_name, posted_at)
-         VALUES (?, ?, ?, NOW())
-         ON DUPLICATE KEY UPDATE posted_at = NOW(), template_name = VALUES(template_name)`,
-        [guildId, channelId, meme.templateName]
-      ).catch(() => {
-        // Table might not exist yet, that's okay
-      });
 
       logger.info(`[PokerMemeGenerator] Posted poker meme to guild ${guildId}, channel ${channelId}`);
       return true;
@@ -429,18 +443,17 @@ export default class PokerMemeGenerator {
       const subreddits = ['pokermemes', 'poker'];
       const subreddit = subreddits[Math.floor(Math.random() * subreddits.length)];
 
-      const response = await axios.get(`https://www.reddit.com/r/${subreddit}/hot.json?limit=50`, {
-        headers: { 'User-Agent': 'Discord Bot CertiFriedUtility/1.0' },
-        timeout: 10000
+      const { posts: fetched, nsfwKnown } = await fetchSubredditPosts(subreddit, {
+        sort: 'hot', limit: 50
       });
 
-      const posts = response.data.data.children
-        .filter(post =>
-          !post.data.stickied &&
-          !post.data.over_18 &&
-          (post.data.post_hint === 'image' || post.data.url.match(/\.(jpg|jpeg|png|gif)$/i))
-        )
-        .map(post => post.data);
+      // Same reasoning as fetchPokerContent: no NSFW flag means no posting.
+      if (!nsfwKnown) {
+        PokerMemeGenerator.warnNsfwUnavailable();
+        return false;
+      }
+
+      const posts = fetched.filter(post => !post.isStickied && !post.isNsfw && post.isImage);
 
       if (posts.length === 0) return false;
 
@@ -449,8 +462,8 @@ export default class PokerMemeGenerator {
       const embed = new EmbedBuilder()
         .setColor('#FF4500')
         .setTitle(meme.title.length > 256 ? meme.title.substring(0, 253) + '...' : meme.title)
-        .setURL(`https://reddit.com${meme.permalink}`)
-        .setImage(meme.url)
+        .setURL(meme.permalink)
+        .setImage(meme.mediaUrl)
         .setFooter({ text: `r/${subreddit} • Daily Poker Meme` })
         .setTimestamp();
 

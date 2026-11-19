@@ -1,7 +1,7 @@
 /**
  * "Add me to self-promo" button (customId: selfpromo_join).
  *
- * The manual path for streamers presence-detection can't catch (Kick/Trovo have
+ * The manual path for streamers presence-detection can't catch (Kick has
  * no Discord connection; users who haven't linked Twitch). Level-gated. A button
  * click only needs ViewChannel, so it works in a view-only channel. On click:
  * check the member's level; if they qualify, open the paste-your-links modal.

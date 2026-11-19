@@ -13,8 +13,10 @@ router.post('/internal/resolve-destinations', async (req, res) => {
   const streamKey = req.body && req.body.streamKey;
   if (!streamKey) return res.status(400).json({ error: 'streamKey required' });
   try {
-    const destinations = await resolveDestinations({}, streamKey);
-    res.json({ destinations });
+    const failed = [];
+    const destinations = await resolveDestinations({ failed }, streamKey);
+    // `failed`: destinations that could not be resolved; the relay records them per session.
+    res.json({ destinations, failed });
   } catch (err) {
     logger.error('[stream-internal] resolve failed: ' + err.message);
     res.status(500).json({ error: 'resolve_failed' });

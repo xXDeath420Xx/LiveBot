@@ -4,12 +4,17 @@
  * Weapon generation + persistence layer. Owns the per-user weapon inventory
  * (owo_user_weapon, owo_user_weapon_passive) and the crate inventory
  * (owo_crate). Independent of Discord.js — commands build on top.
+ *
+ * Takedown trackers (upstream WeaponInterface ttChance / saveTT): a weapon opened from a crate has a
+ * TT_CHANCE (10%) chance to carry a tracker — a row in owo_user_weapon_kills. Battles add every kill
+ * the weapon lands (recordWeaponKills); untracked weapons have no row and count nothing.
  */
 
 import pool from '../../utils/db.js';
 import logger from '../../utils/logger.js';
 import { WEAPON_CLASSES, getWeaponById } from './battle/weapons/index.js';
-import { PASSIVE_CLASSES } from './battle/passives/index.js';
+import { PASSIVE_CLASSES, getPassiveById } from './battle/passives/index.js';
+import { TT_CHANCE } from './social-math.js';
 
 // Rank roll weights matching upstream WeaponInterface.js.
 const RANK_WEIGHTS = [
@@ -61,6 +66,30 @@ function pickWeaponClass() {
 }
 
 /**
+ * The passive classes a weapon may roll. `availablePassives` is 'all' until
+ * WeaponInterface's async registry load finishes; after that the constructor
+ * rewrites 'all' into the registry's keys, which are numeric passive IDS
+ * ("1", "12", …) — not the class names PASSIVE_CLASSES is keyed by. Accept
+ * both, so passives roll no matter when the weapon was constructed.
+ */
+function resolvePassivePool(availablePassives) {
+    const all = Object.entries(PASSIVE_CLASSES); // [[className, Cls], ...]
+    if (availablePassives === 'all') return all;
+    if (!Array.isArray(availablePassives)) return [];
+    const seen = new Set();
+    const out = [];
+    for (const key of availablePassives) {
+        const Cls = PASSIVE_CLASSES[key] ?? getPassiveById(Number(key));
+        const entry = Cls && all.find(([, C]) => C === Cls);
+        if (entry && !seen.has(Cls)) {
+            seen.add(Cls);
+            out.push(entry);
+        }
+    }
+    return out;
+}
+
+/**
  * Build a fresh random weapon descriptor. No DB writes.
  * Returns { classKey, weaponId, rank, wear, wearId, stat, passives: [{name,id,quality}], emoji }
  */
@@ -79,19 +108,16 @@ export function generateWeapon(weaponId = null) {
     const [qMin, qMax] = inst.qualityList?.[0] || [10, 20];
     const stat = Math.floor(qMin + Math.random() * (qMax - qMin + 1));
 
-    // Pick 1 random passive from availablePassives (or all if 'all')
-    const availablePassiveNames = inst.availablePassives === 'all'
-        ? Object.keys(PASSIVE_CLASSES)
-        : (Array.isArray(inst.availablePassives) ? inst.availablePassives : []);
-
+    // Pick `passiveCount` distinct random passives from the weapon's pool (or all if 'all')
     const passives = [];
     const passiveCount = inst.passiveCount ?? 1;
-    const pool2 = [...availablePassiveNames];
+    const pool2 = resolvePassivePool(inst.availablePassives);
+    if (passiveCount > 0 && pool2.length === 0) {
+        logger.warn('[owo-weapons] no passive classes resolved for weapon', { weaponId: inst.id, availablePassives: inst.availablePassives });
+    }
     for (let i = 0; i < passiveCount && pool2.length > 0; i++) {
         const idx = Math.floor(Math.random() * pool2.length);
-        const pname = pool2.splice(idx, 1)[0];
-        const PCls = PASSIVE_CLASSES[pname];
-        if (!PCls) continue;
+        const [pname, PCls] = pool2.splice(idx, 1)[0];
         const pInst = new PCls(null, true);
         const [pqMin, pqMax] = pInst.qualityList?.[0] || [1, 5];
         const pq = Math.floor(pqMin + Math.random() * (pqMax - pqMin + 1));
@@ -129,12 +155,14 @@ export async function saveWeapon(guildId, userId, weapon) {
     );
     const uwid = result.insertId;
 
-    // Save passives
-    for (const p of weapon.passives) {
+    // Save passives. pcount is the passive's slot on the weapon and part of the
+    // PRIMARY KEY (guild_id, uwid, pcount), so multi-passive weapons (Orb rolls 2)
+    // need a distinct slot per passive — 0-based, as upstream numbers them.
+    for (const [slot, p] of weapon.passives.entries()) {
         await pool.execute(
             `INSERT INTO owo_user_weapon_passive (guild_id, uwid, wpid, pcount, stat)
              VALUES (?, ?, ?, ?, ?)`,
-            [guildId, uwid, p.id, 1, String(p.quality)]
+            [guildId, uwid, p.id, slot, String(p.quality)]
         );
     }
 
@@ -146,10 +174,12 @@ export async function saveWeapon(guildId, userId, weapon) {
  */
 export async function listWeapons(guildId, userId, { limit = 50, offset = 0 } = {}) {
     const [rows] = await pool.execute(
-        `SELECT uwid, wid, stat, wear, avg, rrcount, favorite, found
-         FROM owo_user_weapon
-         WHERE guild_id = ? AND uid = ?
-         ORDER BY uwid DESC
+        `SELECT w.uwid, w.wid, w.stat, w.wear, w.avg, w.rrcount, w.favorite, w.found,
+                k.uwid AS tt, k.kills
+         FROM owo_user_weapon w
+         LEFT JOIN owo_user_weapon_kills k ON k.guild_id = w.guild_id AND k.uwid = w.uwid
+         WHERE w.guild_id = ? AND w.uid = ?
+         ORDER BY w.uwid DESC
          LIMIT ? OFFSET ?`,
         [guildId, userId, limit, offset]
     );
@@ -168,6 +198,7 @@ export async function listWeapons(guildId, userId, { limit = 50, offset = 0 } = 
             wearId: Number(wearId) || Number(r.wear) || 1,
             favorite: r.favorite === 1,
             found: r.found,
+            tracker: r.tt != null ? { kills: Number(r.kills) || 0 } : null,
         };
     });
 }
@@ -189,6 +220,7 @@ export async function describeWeapon(guildId, userId, uwid) {
         `SELECT wpid, stat FROM owo_user_weapon_passive WHERE guild_id = ? AND uwid = ?`,
         [guildId, uwid]
     );
+    const tracker = await getTracker(guildId, uwid);
 
     const WeaponCls = getWeaponById(row.wid);
     const inst = WeaponCls ? new WeaponCls(null, null, true) : null;
@@ -219,7 +251,40 @@ export async function describeWeapon(guildId, userId, uwid) {
         favorite: row.favorite === 1,
         found: row.found,
         passives: passiveDetails,
+        tracker,
     };
+}
+
+// ── Takedown trackers ─────────────────────────────────────────────────
+
+/** @returns {Promise<{kills: number}|null>} null = this weapon has no tracker */
+export async function getTracker(guildId, uwid) {
+    const [[row]] = await pool.execute(
+        'SELECT kills FROM owo_user_weapon_kills WHERE guild_id = ? AND uwid = ?',
+        [guildId, uwid]
+    );
+    return row ? { kills: Number(row.kills) || 0 } : null;
+}
+
+/**
+ * Add battle kills to tracked weapons. `kills` is battle-engine's result.kills
+ * ([{uwid, count}]); the UPDATE only touches weapons that carry a tracker, exactly like upstream's
+ * `UPDATE IGNORE user_weapon_kills`. CPU weapons (uwid 0) are skipped.
+ */
+export async function recordWeaponKills(guildId, kills) {
+    for (const k of kills || []) {
+        const uwid = Number(k.uwid);
+        const n = Math.trunc(Number(k.count) || 0);
+        if (!uwid || n <= 0) continue;
+        try {
+            await pool.execute(
+                'UPDATE owo_user_weapon_kills SET kills = kills + ? WHERE guild_id = ? AND uwid = ?',
+                [n, guildId, uwid]
+            );
+        } catch (e) {
+            logger.warn('[owo-weapons] takedown tracker update failed', { guildId, uwid, err: e.message });
+        }
+    }
 }
 
 // ── Crates ────────────────────────────────────────────────────────────
@@ -249,18 +314,31 @@ export async function getCrateCount(guildId, userId, cratetype = 0) {
  * Throws if no crates available.
  */
 export async function openCrate(guildId, userId, cratetype = 0) {
-    const have = await getCrateCount(guildId, userId, cratetype);
-    if (have < 1) throw new Error('No crates to open.');
-
-    await pool.execute(
+    // Guarded decrement: two opens racing for the last crate cannot both get a weapon.
+    const [spent] = await pool.execute(
         `UPDATE owo_crate SET boxcount = boxcount - 1
          WHERE guild_id = ? AND uid = ? AND cratetype = ? AND boxcount > 0`,
         [guildId, userId, cratetype]
     );
+    if (spent.affectedRows !== 1) throw new Error('No crates to open.');
 
     const weapon = generateWeapon();
     const saved = await saveWeapon(guildId, userId, weapon);
-    return { weapon: saved, cratesLeft: have - 1 };
+
+    // Takedown tracker roll (upstream setRandomTT).
+    let tracker = null;
+    if (Math.random() <= TT_CHANCE) {
+        try {
+            await pool.execute(
+                'INSERT IGNORE INTO owo_user_weapon_kills (guild_id, uwid, kills) VALUES (?, ?, 0)',
+                [guildId, saved.uwid]
+            );
+            tracker = { kills: 0 };
+        } catch (e) {
+            logger.warn('[owo-weapons] could not attach takedown tracker', { guildId, uwid: saved.uwid, err: e.message });
+        }
+    }
+    return { weapon: { ...saved, tracker }, cratesLeft: await getCrateCount(guildId, userId, cratetype) };
 }
 
 /**
@@ -327,6 +405,11 @@ export async function dismantleWeapon(guildId, userId, uwid) {
 
     await pool.execute(
         'DELETE FROM owo_user_weapon_passive WHERE guild_id = ? AND uwid = ?',
+        [guildId, uwid]
+    );
+    // The tracker goes with the weapon (upstream deletes user_weapon_kills on dismantle).
+    await pool.execute(
+        'DELETE FROM owo_user_weapon_kills WHERE guild_id = ? AND uwid = ?',
         [guildId, uwid]
     );
     await pool.execute(

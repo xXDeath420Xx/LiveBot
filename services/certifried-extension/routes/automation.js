@@ -6,7 +6,8 @@
 import { Router } from 'express';
 import pool from '../../../utils/db.js';
 import logger from '../../../utils/logger.js';
-import { deductCash } from '../game/engine.js';
+import { deductCash, awardCash } from '../game/engine.js';
+import { SHOP_SEEDS } from './shop.js';
 
 const router = Router();
 
@@ -153,7 +154,7 @@ router.post('/settings', async (req, res) => {
              autoBuySeedsQuantity || 10, autoBuySeedsMaxPrice || 500]
         );
 
-        logger.info('[Automation] Settings updated', { playerId });
+        logger.debug('[Automation] Settings updated', { playerId });
 
         res.json({
             success: true,
@@ -214,7 +215,7 @@ router.post('/workflow', async (req, res) => {
 
         // If player settings row doesn't exist, insert it
         const [[exists]] = await pool.execute(
-            'SELECT id FROM cfx_player_settings WHERE player_id = ?',
+            'SELECT player_id FROM cfx_player_settings WHERE player_id = ?',
             [playerId]
         );
 
@@ -227,7 +228,7 @@ router.post('/workflow', async (req, res) => {
             );
         }
 
-        logger.info('[Automation] Workflow settings updated', { playerId, mode });
+        logger.debug('[Automation] Workflow settings updated', { playerId, mode });
 
         res.json({
             success: true,
@@ -276,7 +277,7 @@ router.post('/slot/:slotNumber', async (req, res) => {
             [preferredStrainId || null, useSlotPreference || false, playerId, slotNumber]
         );
 
-        logger.info('[Automation] Slot config updated', { playerId, slotNumber, preferredStrainId });
+        logger.debug('[Automation] Slot config updated', { playerId, slotNumber, preferredStrainId });
 
         res.json({
             success: true,
@@ -325,7 +326,7 @@ router.post('/bulk-slots', async (req, res) => {
             conn.release();
         }
 
-        logger.info('[Automation] Bulk slot config updated', { playerId, count: slotConfigs.length });
+        logger.debug('[Automation] Bulk slot config updated', { playerId, count: slotConfigs.length });
 
         res.json({
             success: true,
@@ -366,37 +367,31 @@ export async function autoBuySeeds(playerId, strainId) {
             return { purchased: false, reason: 'above threshold' };
         }
 
-        // Get cheapest strain seeds to buy
-        const [[strain]] = await pool.execute(
-            `SELECT s.id, s.name, sp.price_per_seed
-             FROM cfx_strains s
-             LEFT JOIN (
-                 SELECT strain_id, MIN(base_price / 3) as price_per_seed
-                 FROM cfx_strains GROUP BY strain_id
-             ) sp ON s.id = sp.strain_id
-             WHERE s.id = ? OR ? IS NULL
-             ORDER BY sp.price_per_seed ASC
-             LIMIT 1`,
-            [strainId, strainId]
-        );
+        // Buy from the seed shop's own catalogue at its pack prices, so auto-buy can never hand out
+        // a strain the shop doesn't sell (locked, player-bred). Prefer the strain the worker wanted
+        // to plant when the shop sells it within the max price; otherwise the cheapest seed per pack.
+        // (This used to group cfx_strains by a strain_id column it doesn't have, so it never bought.)
+        const perSeed = (slug) => SHOP_SEEDS[slug].price / SHOP_SEEDS[slug].pack;
+        const candidates = Object.keys(SHOP_SEEDS).sort((a, b) => perSeed(a) - perSeed(b));
+        if (strainId) {
+            const [[wanted]] = await pool.execute('SELECT slug FROM cfx_strains WHERE id = ?', [strainId]);
+            if (wanted && SHOP_SEEDS[wanted.slug]) candidates.unshift(wanted.slug);
+        }
+        const slug = candidates.find(s => perSeed(s) <= settings.auto_buy_seeds_max_price);
+        if (!slug) {
+            return { purchased: false, reason: 'price above max' };
+        }
 
+        const [[strain]] = await pool.execute('SELECT id, name FROM cfx_strains WHERE slug = ?', [slug]);
         if (!strain) {
             return { purchased: false, reason: 'no strain found' };
         }
 
-        // Calculate cost (use base_price / 3 as seed price estimation)
-        const [[strainData]] = await pool.execute(
-            'SELECT base_price FROM cfx_strains WHERE id = ?',
-            [strain.id || strainId]
-        );
-
-        const pricePerSeed = Math.floor((strainData?.base_price || 150) / 3);
-        const quantity = settings.auto_buy_seeds_quantity;
-        const totalCost = pricePerSeed * quantity;
-
-        if (pricePerSeed > settings.auto_buy_seeds_max_price) {
-            return { purchased: false, reason: 'price above max' };
-        }
+        // Whole packs, like the shop: enough to cover the configured number of seeds.
+        const item = SHOP_SEEDS[slug];
+        const packs = Math.max(1, Math.ceil(settings.auto_buy_seeds_quantity / item.pack));
+        const quantity = packs * item.pack;
+        const totalCost = packs * item.price;
 
         // Attempt purchase
         const cashResult = await deductCash(playerId, totalCost);
@@ -404,24 +399,34 @@ export async function autoBuySeeds(playerId, strainId) {
             return { purchased: false, reason: 'insufficient funds' };
         }
 
-        // Add seeds
-        await pool.execute(
-            `INSERT INTO cfx_seed_inventory (player_id, strain_id, quantity, total_purchased)
-             VALUES (?, ?, ?, ?)
-             ON DUPLICATE KEY UPDATE
-                quantity = quantity + VALUES(quantity),
-                total_purchased = total_purchased + VALUES(total_purchased)`,
-            [playerId, strain.id || strainId, quantity, quantity]
-        );
+        // Add seeds (and mark the strain discovered, as a shop purchase does); refund if that fails.
+        try {
+            await pool.execute(
+                `INSERT INTO cfx_seed_inventory (player_id, strain_id, quantity, total_purchased)
+                 VALUES (?, ?, ?, ?)
+                 ON DUPLICATE KEY UPDATE
+                    quantity = quantity + VALUES(quantity),
+                    total_purchased = total_purchased + VALUES(total_purchased)`,
+                [playerId, strain.id, quantity, quantity]
+            );
+            await pool.execute(
+                `INSERT IGNORE INTO cfx_strain_discoveries (player_id, strain_id, discovery_method)
+                 VALUES (?, ?, 'purchase')`,
+                [playerId, strain.id]
+            );
+        } catch (error) {
+            await awardCash(playerId, totalCost).catch(e => logger.error('[Automation] Auto-buy refund failed', { playerId, error: e.message }));
+            throw error;
+        }
 
-        logger.info('[Automation] Auto-bought seeds', {
+        logger.debug('[Automation] Auto-bought seeds', {
             playerId,
-            strainId: strain.id || strainId,
+            strain: strain.name,
             quantity,
             cost: totalCost
         });
 
-        return { purchased: true, quantity, cost: totalCost, strainId: strain.id || strainId };
+        return { purchased: true, quantity, cost: totalCost, strainId: strain.id };
 
     } catch (error) {
         logger.error('[Automation] Auto-buy seeds failed', { playerId, error: error.message });

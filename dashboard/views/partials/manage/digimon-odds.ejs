@@ -1,0 +1,173 @@
+<%#
+  Digimon quiz odds: every result /digimon today can give and how often, over the next year of quiz days.
+  Read-only. Data from /api/guilds/:id/digimon/quiz-odds (worked out in a worker thread, cached a day).
+  Needs `guild`. Rows are built with createElement and textContent.
+%>
+<%- include('_game-kit') %>
+<div class="page-section" id="digimonOddsPage" data-guild-id="<%= guild.id %>">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-dice"></i>
+                <span>Digimon quiz odds</span>
+            </div>
+            <div class="page-section-subtitle">The answers decide the stage, attribute, field and family of the result.</div>
+        </div>
+    </div>
+
+    <%- include('_digimon-nav', { dgNav: 'digimon-odds' }) %>
+
+    <div id="doError" class="cf-notice is-bad" role="alert" hidden></div>
+
+    <dl class="cf-kpis" aria-label="Quiz odds at a glance">
+        <div class="cf-kpi"><dt>Can come up</dt><dd class="cf-kpi-value" id="doReach">–</dd></div>
+        <div class="cf-kpi"><dt>Never comes up</dt><dd class="cf-kpi-value" id="doNever">–</dd></div>
+        <div class="cf-kpi"><dt>Most likely</dt><dd class="cf-kpi-value is-small" id="doTop">–</dd></div>
+        <div class="cf-kpi"><dt>Quiz runs counted</dt><dd class="cf-kpi-value" id="doTakes">–</dd></div>
+    </dl>
+
+    <section class="cf-section" aria-labelledby="do-stage-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="do-stage-title">Results by stage</h2>
+                <p class="cf-section-desc" id="doMethod">Working out the odds…</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--stack">
+                <div class="do-split" id="doSplit" role="img" aria-label="Share of quiz results by stage"></div>
+                <div class="do-legend" id="doLegend"></div>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="do-tier-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="do-tier-title">Rarity tiers</h2>
+                <p class="cf-section-desc">Odds are per quiz. A member gets the same result all day, and the questions change at midnight UTC. Wild spawns have their own tiers on the Digimon page.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--stack"><div class="do-tiers" id="doTiers"></div></div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="do-list-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="do-list-title">Every Digimon <span class="gk-cmd-count" id="doCount"></span></h2>
+                <p class="cf-section-desc">Names follow the Digimon data the bot uses, which keeps the Japanese names: Piyomon is Biyomon, Plotmon is Salamon, V-mon is Veemon.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--stack">
+                <div class="do-controls">
+                    <label class="cf-search"><i class="fas fa-search" aria-hidden="true"></i><input id="doSearch" type="search" class="form-control" placeholder="Search by name" aria-label="Search by name" autocomplete="off" data-no-savebar></label>
+                    <select id="doTierFilter" class="form-select" aria-label="Filter by tier" data-no-savebar><option value="">All tiers</option></select>
+                    <select id="doStageFilter" class="form-select" aria-label="Filter by stage" data-no-savebar><option value="">All stages</option></select>
+                </div>
+            </div>
+            <div class="cf-table-wrap do-tablewrap">
+                <table class="cf-table cf-table--stack do-table">
+                    <thead><tr><th>Digimon</th><th>Stage</th><th>Attribute</th><th class="do-num">Odds</th><th>Tier</th></tr></thead>
+                    <tbody id="doRows"><tr><td colspan="5" class="do-empty">Working out the odds…</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+</div>
+<style>
+    #digimonOddsPage { --do-common: #8a9bb0; --do-uncommon: #4fb37f; --do-rare: #a184e6; --do-legendary: #dca643; --do-never: #687587; }
+    :root:is([data-theme="light"], [data-theme="sand"]) #digimonOddsPage { --do-common: #56657a; --do-uncommon: #23784d; --do-rare: #6a4cc2; --do-legendary: #8f5e08; --do-never: #5d6878; }
+    #digimonOddsPage .do-tablewrap { overflow: auto; max-height: 640px; }
+    #digimonOddsPage .do-table thead th { position: sticky; top: 0; z-index: 1; background: var(--cf-surface) !important; }
+    .do-num { text-align: right !important; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .do-empty { padding: var(--cf-6) var(--cf-4) !important; text-align: center; color: var(--cf-text-3) !important; }
+    .do-muted { color: var(--cf-text-3); }
+    .do-split { display: flex; height: 12px; border-radius: var(--cf-radius-sm); overflow: hidden; background: var(--cf-border); }
+    .do-split span { height: 100%; background: var(--c); }
+    .do-legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 7.5rem), 1fr)); gap: var(--cf-3); margin-top: var(--cf-3); }
+    .do-legend div { display: grid; gap: 2px; padding-left: 10px; border-left: 3px solid var(--c); }
+    .do-legend small { color: var(--cf-text-3); }
+    .do-legend b { font-variant-numeric: tabular-nums; font-weight: 600; color: var(--cf-text); }
+    .do-tiers { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr)); gap: var(--cf-3); }
+    .do-tier { display: grid; gap: 2px; padding-left: 10px; border-left: 3px solid var(--c); }
+    .do-tier strong { color: var(--c); font-weight: 600; }
+    .do-tier b { font-size: var(--cf-text-xl); font-weight: 600; font-variant-numeric: tabular-nums; color: var(--cf-text); }
+    .do-tier small { color: var(--cf-text-3); }
+    .do-controls { display: flex; flex-wrap: wrap; gap: var(--cf-2); align-items: center; }
+    .do-controls .cf-search { flex: 1 1 14rem; width: auto; }
+    .do-controls select { width: auto; flex: 0 1 auto; }
+    .do-chip { display: inline-block; font-size: var(--cf-text-xs); font-weight: 600; padding: 1px 7px; border-radius: var(--cf-radius-sm); color: var(--c); border: 1px solid var(--c); white-space: nowrap; }
+    @media (max-width: 640px) { .do-controls select { flex: 1 1 100%; min-height: 44px; } }
+</style>
+<script>
+(function () {
+    const root = document.getElementById('digimonOddsPage');
+    if (!root) return;
+    const url = `/api/guilds/${root.dataset.guildId}/digimon/quiz-odds`;
+    const $ = id => document.getElementById(id);
+    const fmt = n => Math.round(n).toLocaleString();
+    const STAGE_COLOR = { 'Baby II': '#6c8aa8', 'Child': '#4aa3df', 'Adult': '#4fb37f', 'Perfect': '#a184e6', 'Ultimate': '#dca643' };
+    const tierColor = name => `var(--do-${name.toLowerCase()})`;
+    const odds = p => (p > 0 ? '1 in ' + fmt(1 / p) : 'Never');
+    function el(tag, props, ...kids) {
+        const node = document.createElement(tag);
+        const p = props || {};
+        if (p.className) node.className = p.className;
+        if (p.text !== undefined) node.textContent = String(p.text);
+        if (p.label) node.dataset.label = p.label;
+        for (const [k, v] of Object.entries(p.style || {})) node.style.setProperty(k, v);
+        for (const [k, v] of Object.entries(p.attrs || {})) node.setAttribute(k, v);
+        for (const kid of kids) if (kid !== null && kid !== undefined) node.append(kid);
+        return node;
+    }
+
+    let rows = [];
+    function render() {
+        const q = $('doSearch').value.trim().toLowerCase();
+        const tier = $('doTierFilter').value, stage = $('doStageFilter').value;
+        const shown = rows.filter(r => (!q || r.name.toLowerCase().includes(q)) && (!tier || r.tier === tier) && (!stage || r.stage === stage));
+        $('doRows').replaceChildren(...(shown.length ? shown.map(r => el('tr', null,
+            el('td', { label: 'Digimon', text: r.name }),
+            el('td', { label: 'Stage', className: 'do-muted', text: r.stage }),
+            el('td', { label: 'Attribute', className: 'do-muted', text: r.attribute }),
+            el('td', { label: 'Odds', className: 'do-num', text: odds(r.p) }),
+            el('td', { label: 'Tier' }, el('span', { className: 'do-chip', text: r.tier, style: { '--c': tierColor(r.tier) } }))))
+            : [el('tr', null, el('td', { className: 'do-empty', text: 'No Digimon match.', attrs: { colspan: '5' } }))]));
+        $('doCount').textContent = shown.length === rows.length ? fmt(rows.length) : `${fmt(shown.length)} of ${fmt(rows.length)}`;
+    }
+
+    async function load() {
+        const res = await fetch(url, { credentials: 'same-origin' });
+        const data = await res.json().catch(() => ({ success: false, error: `HTTP ${res.status}` }));
+        if (!res.ok || data.success === false) throw new Error(data.error || `HTTP ${res.status}`);
+        rows = data.list;
+        const reach = rows.filter(r => r.p > 0);
+        $('doReach').textContent = `${fmt(reach.length)} of ${fmt(rows.length)}`;
+        $('doNever').textContent = fmt(rows.length - reach.length);
+        $('doTop').textContent = reach.length ? `${reach[0].name} · ${(reach[0].p * 100).toFixed(1)}%` : '–';
+        $('doTakes').textContent = fmt(data.takes);
+        $('doMethod').textContent = `Every possible set of answers was run through ${data.ownQuestions ? "this server's questions" : 'the standard questions'} for each day from ${data.from} to ${data.to}. `
+            + 'This assumes every answer is picked equally often. Real players lean toward some answers, so treat the odds as a guide.';
+
+        const stages = Object.keys(data.stageShare);
+        $('doSplit').replaceChildren(...stages.map(s => el('span', { attrs: { title: s }, style: { width: (data.stageShare[s] * 100) + '%', '--c': STAGE_COLOR[s] || '#888' } })));
+        $('doLegend').replaceChildren(...stages.map(s => el('div', { style: { '--c': STAGE_COLOR[s] || '#888' } },
+            el('small', { text: s }), el('b', { text: (data.stageShare[s] * 100).toFixed(1) + '%' }))));
+        $('doTiers').replaceChildren(...data.tiers.map(t => el('div', { className: 'do-tier', style: { '--c': tierColor(t.name) } },
+            el('strong', { text: t.name }), el('b', { text: fmt(rows.filter(r => r.tier === t.name).length) }), el('small', { text: t.band }))));
+        for (const t of data.tiers) $('doTierFilter').append(el('option', { text: t.name, attrs: { value: t.name } }));
+        for (const s of stages) $('doStageFilter').append(el('option', { text: s, attrs: { value: s } }));
+        render();
+    }
+
+    ['doSearch', 'doTierFilter', 'doStageFilter'].forEach(id => $(id).addEventListener('input', render));
+    load().catch(err => {
+        $('doError').textContent = `Could not load the quiz odds: ${err.message}`;
+        $('doError').hidden = false;
+        $('doRows').replaceChildren(el('tr', null, el('td', { className: 'do-empty', text: 'Not loaded.', attrs: { colspan: '5' } })));
+    });
+})();
+</script>

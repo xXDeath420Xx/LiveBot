@@ -1,6 +1,7 @@
 import { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } from 'discord.js';
 import pool from '../../utils/db.js';
 import logger from '../../utils/logger.js';
+import { themeColor } from '../../core/guild-theme.js';
 
 export default {
     category: 'admin',
@@ -533,7 +534,7 @@ export default {
 
         const embed = new EmbedBuilder()
             .setTitle('🤖 Custom Bots Status')
-            .setColor(0x5865F2)
+            .setColor(themeColor(interaction.guildId, 'primary'))
             .setTimestamp();
 
         const dbList = dbBots.map(bot => {
@@ -558,7 +559,7 @@ export default {
 
         const statusEmbed = new EmbedBuilder()
             .setTitle('🔄 Reloading Custom Bots...')
-            .setColor(0xFFA500)
+            .setColor(themeColor(interaction.guildId, 'warning'))
             .setDescription('Loading custom bots from database...')
             .setTimestamp();
 
@@ -670,7 +671,7 @@ export default {
 
         const embed = new EmbedBuilder()
             .setTitle('✅ Bot Reloaded Successfully')
-            .setColor(0x00FF00)
+            .setColor(themeColor(interaction.guildId, 'success'))
             .setDescription(`**${botConfig.bot_name}** (${botId})`)
             .addFields(
                 { name: 'Assigned Guilds', value: guildIds.length.toString(), inline: true },

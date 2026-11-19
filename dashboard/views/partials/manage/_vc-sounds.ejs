@@ -1,0 +1,190 @@
+<%#
+  VC sound drop clips: upload, preview, switch off and remove, from the dashboard. Included by
+  feature-config.ejs on the vc-sounds page. API: dashboard/routes/api/features/vc-sounds.js. The
+  library is shared with the Soundboard page (vc_sound_files).
+%>
+<style>
+    #vcsClips .vcs-count { margin-left: 6px; font-size: var(--cf-text-sm); font-weight: 500; color: var(--cf-text-3); font-variant-numeric: tabular-nums; }
+    #vcsClips .cf-rows .cf-list-item.vcs-item { flex-direction: row; align-items: center; }
+    #vcsClips .vcs-item .cf-list-title { display: block; font-size: var(--cf-text-sm); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #vcsClips .vcs-item .cf-list-actions { align-items: center; flex-wrap: nowrap; }
+    #vcsClips .vcs-item.is-off .cf-list-main { opacity: .6; }
+    #vcsClips .vcs-play[aria-pressed="true"] { border-color: var(--cf-accent); color: var(--cf-accent-fg, var(--cf-accent)); }
+</style>
+
+<section class="cf-section" id="vcsClips" aria-labelledby="vcs-title">
+    <header class="cf-section-head">
+        <div>
+            <h2 class="cf-section-title" id="vcs-title">Clips <span class="vcs-count" id="vcs-count"></span></h2>
+            <p class="cf-section-desc">One is picked at random for each drop. The same library as the <a href="/manage/<%= guild.id %>?page=soundboard">Soundboard</a>.</p>
+        </div>
+    </header>
+    <div class="cf-notice is-warn" id="vcs-warn" hidden><span class="cf-notice-body">Drops are on but no clip is in rotation, so nothing will play until you add or switch one on.</span></div>
+    <div class="cf-rows">
+        <div class="cf-list" id="vcs-list"></div>
+        <%- include('../kit/_state', { kind: 'loading', title: 'Loading clips', text: null, id: 'vcs-loading', boxed: false, compact: true }) %>
+        <div class="cf-state cf-state--compact" id="vcs-empty" hidden><p class="cf-state-text">No clips yet. Add one below.</p></div>
+        <div class="cf-rows-head">Add a clip</div>
+        <div class="cf-row cf-row--stack">
+            <label class="cf-dropzone" id="vcs-drop">
+                <input type="file" id="vcs-file" accept=".mp3,.wav,.ogg,.flac,audio/mpeg,audio/wav,audio/ogg,audio/flac" aria-label="Audio file">
+                <span class="cf-dropzone-icon" aria-hidden="true"><i class="fas fa-upload"></i></span>
+                <span class="cf-dropzone-text" id="vcs-drop-text">Drop a clip here or click to browse</span>
+                <span class="cf-dropzone-hint">MP3, WAV, OGG or FLAC, up to 5 MB</span>
+            </label>
+        </div>
+        <div class="cf-row">
+            <div class="cf-row-text">
+                <label class="cf-row-label" for="vcs-name">Name</label>
+                <p class="cf-row-desc">Lower-case letters, numbers, - and _. A clip with the same name is replaced.</p>
+            </div>
+            <div class="cf-row-control">
+                <input type="text" id="vcs-name" class="form-control" maxlength="40" placeholder="airhorn" data-no-fieldkit>
+            </div>
+        </div>
+        <div class="cf-section-foot">
+            <span class="cf-foot-note cf-status-line" id="vcs-status" role="status" aria-live="polite"></span>
+            <button type="button" class="btn btn-primary" id="vcs-upload">Add clip</button>
+        </div>
+    </div>
+</section>
+
+<script>
+(function () {
+    const box = document.getElementById('vcsClips');
+    if (!box || box.dataset.init) return;
+    box.dataset.init = '1';
+    const GID = '<%= guild.id %>';
+    const API = '/api/guilds/' + GID + '/vc-sounds';
+    const $ = (id) => document.getElementById(id);
+    const list = $('vcs-list');
+    const fileIn = $('vcs-file');
+    const nameIn = $('vcs-name');
+    const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
+    const icon = (name) => { const i = el('i', 'fas ' + name); i.setAttribute('aria-hidden', 'true'); return i; };
+    const slug = (s) => String(s || '').toLowerCase().replace(/\.[a-z0-9]+$/, '').replace(/[^a-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40);
+    let audio = null, playing = null;
+
+    function status(text, kind) { const s = $('vcs-status'); s.textContent = text || ''; s.className = 'cf-foot-note cf-status-line' + (kind ? ' is-' + kind : ''); }
+    function stop() {
+        if (audio) { audio.pause(); audio = null; }
+        if (playing) { playing.setAttribute('aria-pressed', 'false'); playing.replaceChildren(icon('fa-play')); playing = null; }
+    }
+
+    async function load() {
+        try {
+            const r = await fetch(API, { credentials: 'same-origin' });
+            if (!r.ok) throw new Error();
+            render(await r.json());
+        } catch {
+            $('vcs-loading').hidden = true;
+            const failed = el('div', 'cf-state cf-state--compact cf-state--error');
+            failed.appendChild(el('p', 'cf-state-text', 'Could not load the clips. Refresh to try again.'));
+            list.replaceChildren(failed);
+        }
+    }
+
+    function render(j) {
+        stop();
+        const sounds = j.sounds || [];
+        $('vcs-loading').hidden = true;
+        $('vcs-empty').hidden = sounds.length > 0;
+        $('vcs-count').textContent = sounds.length;
+        $('vcs-warn').hidden = !(j.dropsEnabled && !sounds.some(s => s.enabled && !s.missing));
+        list.replaceChildren();
+        for (const s of sounds) {
+            const row = el('div', 'cf-list-item cf-list-item--multi vcs-item' + (s.enabled ? '' : ' is-off'));
+            const main = el('div', 'cf-list-main');
+            main.appendChild(el('div', 'cf-list-title', s.name));
+            const meta = el('div', 'cf-list-meta');
+            meta.appendChild(el('span', null, 'Played ' + s.plays + (s.plays === 1 ? ' time' : ' times')));
+            if (s.missing) meta.appendChild(el('span', 'cf-pill is-bad', 'File missing'));
+            else if (!s.enabled) meta.appendChild(el('span', 'cf-pill', 'Not in rotation'));
+            main.appendChild(meta);
+            row.appendChild(main);
+
+            const actions = el('div', 'cf-list-actions');
+            if (!s.missing) {
+                const play = el('button', 'btn btn-sm btn-secondary vcs-play'); play.type = 'button';
+                play.setAttribute('aria-pressed', 'false'); play.setAttribute('aria-label', 'Play ' + s.name); play.appendChild(icon('fa-play'));
+                play.addEventListener('click', () => {
+                    const same = playing === play;
+                    stop();
+                    if (same) return;
+                    audio = new Audio(API + '/' + encodeURIComponent(s.name) + '/audio');
+                    playing = play;
+                    play.setAttribute('aria-pressed', 'true');
+                    play.replaceChildren(icon('fa-stop'));
+                    audio.addEventListener('ended', stop);
+                    audio.addEventListener('error', () => { stop(); status('Could not play ' + s.name + '.', 'bad'); });
+                    audio.play().catch(stop);
+                });
+                actions.appendChild(play);
+            }
+            const sw = el('input', 'cf-switch');
+            sw.type = 'checkbox'; sw.setAttribute('role', 'switch'); sw.checked = !!s.enabled;
+            sw.setAttribute('aria-label', 'Play ' + s.name + ' in drops');
+            sw.title = 'In rotation';
+            sw.addEventListener('change', async () => {
+                sw.disabled = true;
+                const r = await fetch(API + '/' + encodeURIComponent(s.name), { method: 'PATCH', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ enabled: sw.checked }) }).catch(() => null);
+                if (!r || !r.ok) { sw.checked = !sw.checked; status('Could not update ' + s.name + '.', 'bad'); }
+                sw.disabled = false;
+                load();
+            });
+            actions.appendChild(sw);
+            const del = el('button', 'btn btn-sm btn-secondary'); del.type = 'button';
+            del.setAttribute('aria-label', 'Remove ' + s.name); del.appendChild(icon('fa-trash'));
+            del.addEventListener('click', async () => {
+                if (!confirm('Remove "' + s.name + '"? It is deleted from the Soundboard too.')) return;
+                del.disabled = true;
+                const r = await fetch(API + '/' + encodeURIComponent(s.name), { method: 'DELETE', credentials: 'same-origin' }).catch(() => null);
+                status(r && r.ok ? 'Removed ' + s.name + '.' : 'Could not remove ' + s.name + '.', r && r.ok ? 'ok' : 'bad');
+                load();
+            });
+            actions.appendChild(del);
+            row.appendChild(actions);
+            list.appendChild(row);
+        }
+    }
+
+    function pick(f) {
+        if (!f) return;
+        $('vcs-drop-text').textContent = f.name;
+        if (!nameIn.value) nameIn.value = slug(f.name);
+    }
+    const drop = $('vcs-drop');
+    drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('is-dragover'); });
+    drop.addEventListener('dragleave', () => drop.classList.remove('is-dragover'));
+    drop.addEventListener('drop', (e) => {
+        e.preventDefault(); drop.classList.remove('is-dragover');
+        if (e.dataTransfer.files[0]) { try { fileIn.files = e.dataTransfer.files; } catch { /* older browsers */ } pick(e.dataTransfer.files[0]); }
+    });
+    fileIn.addEventListener('change', () => pick(fileIn.files[0]));
+
+    $('vcs-upload').addEventListener('click', async () => {
+        const f = fileIn.files[0];
+        const name = slug(nameIn.value || (f && f.name));
+        if (!f) { status('Choose a file first.', 'bad'); return; }
+        if (!name) { status('Give the clip a name.', 'bad'); return; }
+        if (f.size > 5 * 1024 * 1024) { status('That file is over 5 MB.', 'bad'); return; }
+        const btn = $('vcs-upload');
+        btn.disabled = true;
+        status('Uploading…', 'busy');
+        try {
+            const r = await fetch(API + '/' + encodeURIComponent(name), { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/octet-stream' }, body: f });
+            const j = await r.json().catch(() => ({}));
+            if (!r.ok) throw new Error(j.error || 'Could not add the clip.');
+            status('Added ' + name + '.', 'ok');
+            fileIn.value = ''; nameIn.value = ''; $('vcs-drop-text').textContent = 'Drop a clip here or click to browse';
+            load();
+        } catch (err) {
+            status(err.message === 'Failed to fetch' ? 'Could not reach the server.' : err.message, 'bad');
+        } finally {
+            btn.disabled = false;
+        }
+    });
+
+    load();
+})();
+</script>

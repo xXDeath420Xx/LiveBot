@@ -8,6 +8,9 @@ import encryption from '../utils/encryption.js';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import fs from 'fs';
+// Same builder as the automatic deploy: mounts and only slash-registered commands.
+import { buildDeployJson } from '../core/command-mounts.js';
+import { fitCustomBotCommands } from '../core/custom-bot-commands.js';
 
 dotenv.config();
 
@@ -40,7 +43,7 @@ async function loadCommands() {
         const command = await import(`file://${filePath}`);
 
         if (command.default && command.default.data) {
-          commands.push(command.default.data.toJSON());
+          commands.push(command.default);
           logger.debug(`[Deploy] Added ${folder}/${file}`);
         }
       } catch (error) {
@@ -49,7 +52,7 @@ async function loadCommands() {
     }
   }
 
-  return commands;
+  return fitCustomBotCommands(buildDeployJson(commands)).commands;
 }
 
 /**

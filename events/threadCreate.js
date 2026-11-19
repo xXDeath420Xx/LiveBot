@@ -2,6 +2,7 @@ import { Events } from 'discord.js';
 import logger from '../utils/logger.js';
 import { logThreadCreate } from '../core/log-manager.js';
 import { checkAnnounceChannelGate } from '../core/self-promo-handler.js';
+import { applyToNewThread as applyForumRules } from '../core/forum-manager.js';
 
 export default {
   name: Events.ThreadCreate,
@@ -13,6 +14,17 @@ export default {
       if (botUserId && thread.ownerId === botUserId) {
         await logThreadCreate(thread);
         return;
+      }
+
+      // Forum rules (tag requirement, slowmode, auto-archive, default reaction). Runs before
+      // the self-promo gate because a post removed for having no tag should not also be
+      // evaluated for self-promo — and it returns true when it deleted the thread.
+      if (thread.guild) {
+        const removed = await applyForumRules(thread).catch(err => {
+          logger.warn('[ThreadCreate] Forum rules failed', { error: err.message, threadId: thread.id });
+          return false;
+        });
+        if (removed) return;
       }
 
       const parent = thread.parent;

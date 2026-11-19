@@ -10,6 +10,7 @@
 
 import pool from './db.js';
 import logger from './logger.js';
+import { getStreamEndDefaults } from '../core/stream-end-defaults.js';
 
 /**
  * Cross-pollinate a streamer to all guilds they're a member of.
@@ -101,9 +102,10 @@ export async function crossPollinateStreamer(streamerId, discordUserId, originGu
             );
 
             if (existingSub.length === 0) {
+                const streamEnd = await getStreamEndDefaults(guildConfig.guild_id);
                 await pool.execute(
-                    'INSERT INTO subscriptions (guild_id, streamer_id, announcement_channel_id) VALUES (?, ?, ?)',
-                    [guildConfig.guild_id, streamerId, guildConfig.announcement_channel_id]
+                    'INSERT INTO subscriptions (guild_id, streamer_id, announcement_channel_id, delete_on_end, edit_on_end) VALUES (?, ?, ?, ?, ?)',
+                    [guildConfig.guild_id, streamerId, guildConfig.announcement_channel_id, streamEnd.delete_on_end, streamEnd.edit_on_end]
                 );
 
                 added.push({
@@ -241,9 +243,10 @@ export async function crossPollinateGuild(guildId, channelId) {
                 );
 
                 if (existing.length === 0) {
+                    const streamEnd = await getStreamEndDefaults(guildId);
                     await pool.execute(
-                        'INSERT INTO subscriptions (guild_id, streamer_id, announcement_channel_id) VALUES (?, ?, ?)',
-                        [guildId, streamer.streamer_id, channelId]
+                        'INSERT INTO subscriptions (guild_id, streamer_id, announcement_channel_id, delete_on_end, edit_on_end) VALUES (?, ?, ?, ?, ?)',
+                        [guildId, streamer.streamer_id, channelId, streamEnd.delete_on_end, streamEnd.edit_on_end]
                     );
 
                     created++;

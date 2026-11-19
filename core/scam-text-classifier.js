@@ -9,6 +9,24 @@
 
 export const MATCH_THRESHOLD = 3;
 
+/*
+ * Two groups were added after the August 2026 wave in guild 961514092848382043 got through:
+ * `impersonation` and `handoff`.
+ *
+ * The six original groups were written against one campaign — a crypto casino — and read like it:
+ * gambling, promo codes, deposits, instant withdrawals. The reference images score five of six. But
+ * a giveaway image that only says "MrBeast is giving away $50,000" hits `giveaway` and `money` and
+ * stops at two, one short of the bar, so the whole family passes untouched.
+ *
+ * These are deliberately NOT bare brand names. "mrbeast" on its own appears in ordinary
+ * conversation, in screenshots of real posts, and in server names; a group that fires on it would
+ * turn every screenshot mentioning a creator into a scam. What the scams have that discussion of
+ * them does not is a HANDOFF — go to this address, enter this code, scan this, claim it before it
+ * expires — and a specific impersonation shape: a verified-looking account name attached to free
+ * currency. The patterns target those, so the classifier still needs three independent groups and
+ * a screenshot of a real announcement does not supply them.
+ */
+
 export const SIGNAL_GROUPS = {
     gambling: [
         /crypto\s*casino/i, /\bcasino\b/i, /\bbetting\b/i, /\bslots?\b/i,
@@ -30,6 +48,45 @@ export const SIGNAL_GROUPS = {
     ],
     money: [
         /\$\s?\d{2,}(?:[.,]\d{3})*/, /\b\d+\s?(?:usd|btc|eth|sol|dollars?)\b/i,
+    ],
+    // Impersonation TELLS, not brand names. "free nitro" and "steam gift code" are things a scam
+    // offers; "MrBeast" on its own is a thing people talk about.
+    impersonation: [
+        /free\s*(?:discord\s*)?nitro/i,
+        /nitro\s*(?:gift|drop|code)/i,
+        // "Steam gift card" on its own is a PRIZE, and real giveaways name their prize — a streamer
+        // raffling one reads as giveaway + money + this, three groups, and gets muted for running a
+        // giveaway. That is the double-count this file warns about below: naming the prize
+        // re-observes what `giveaway` already counted. What a scam adds is that the thing is FREE,
+        // or that a CODE is being handed to you. A card someone is raffling is neither.
+        /free\s*steam\s*(?:gift|wallet)\s*(?:code|card|balance)/i,
+        /steam\s*(?:gift|wallet)\s*code/i,
+        /(?:gift|prize)\s*card\s*code/i,
+        /\bverified\b[^.]{0,20}\bgiveaway\b/i,
+        // Brand names are deliberately ABSENT, including as part of a composite pattern.
+        //
+        // A "<creator> is giving away $<n>" regex was tried here and had to be removed: it fired on
+        // "MrBeast announced he is giving away $50,000 to subscribers in his new video", which is a
+        // sentence about a real giveaway. The reason is structural rather than a matter of tuning.
+        // scoreScamText counts DISTINCT groups on the assumption that each is independent evidence,
+        // and a pattern containing "giving away $50,000" re-observes what `giveaway` and `money`
+        // have already counted — one observation arriving as three, clearing a bar meant to need
+        // three separate ones. It is the same error as counting spaces to detect character spam:
+        // something ordinary content has for free, read as a signal.
+        //
+        // Nothing is lost by leaving them out. Real impersonation scams carry a handoff — an
+        // address to visit, a code to type, a QR to scan — so they reach the bar on `handoff` plus
+        // `giveaway` plus `urgency` without needing the brand named at all.
+    ],
+    // The handoff: where to go and what to type. Discussion of a giveaway describes it; a scam
+    // instructs you.
+    handoff: [
+        /\bgo\s*to\s*[a-z0-9-]+\.(?:com|net|org|io|xyz|top|vip|live|bet|casino)/i,
+        /(?:visit|open|click)\s*(?:the\s*)?(?:link|site|website)/i,
+        /scan\s*(?:the\s*)?qr/i,
+        /\benter\s*(?:the\s*)?(?:code|promo)/i,
+        /link\s*in\s*(?:bio|description|comments)/i,
+        /(?:dm|message)\s*me\s*(?:to|for)\s*(?:claim|receive|get)/i,
     ],
     lure: [
         /withdraw[^.]{0,30}instant/i, /instant[^.]{0,30}withdraw/i, /\bdeposit\b/i,

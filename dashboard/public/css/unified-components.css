@@ -30,7 +30,7 @@
     box-shadow: var(--shadow-lg);
 }
 
-[data-theme="light"] .page-header-hero {
+:root:is([data-theme="light"], [data-theme="sand"]) .page-header-hero {
     background: linear-gradient(135deg, var(--color-primary-500) 0%, var(--color-primary-600) 100%);
 }
 
@@ -353,7 +353,7 @@
     margin: var(--spacing-4) 0;
 }
 
-[data-theme="light"] .info-box {
+:root:is([data-theme="light"], [data-theme="sand"]) .info-box {
     background: var(--color-info-light);
 }
 

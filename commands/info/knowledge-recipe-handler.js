@@ -1,5 +1,6 @@
 import { EmbedBuilder } from 'discord.js';
 import axios from 'axios';
+import { themeColor } from '../../core/guild-theme.js';
 
 export async function handleSearch(interaction) {
   const query = interaction.options.getString('query');
@@ -98,7 +99,7 @@ async function handleCocktailResult(interaction, url) {
   }
 
   const embed = new EmbedBuilder()
-    .setColor('#8E44AD')
+    .setColor(themeColor(interaction.guildId, 'accent'))
     .setTitle(`🍸 ${drink.strDrink}`)
     .setThumbnail(drink.strDrinkThumb || null)
     .addFields(

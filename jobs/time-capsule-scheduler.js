@@ -36,7 +36,9 @@ export function startTimeCapsuleScheduler(client) {
 
       for (const capsule of capsules) {
         try {
-          const guild = client.guilds.cache.get(capsule.guild_id);
+          // The bot that serves this guild (a custom bot when one is mapped), else the default client.
+          const botClient = global.botManager?.getClientForGuild?.(capsule.guild_id) || client;
+          const guild = botClient.guilds.cache.get(capsule.guild_id);
           if (!guild) {
             logger.warn(`[TimeCapsuleScheduler] Guild ${capsule.guild_id} not found`);
             continue;
@@ -48,7 +50,7 @@ export function startTimeCapsuleScheduler(client) {
             continue;
           }
 
-          const user = await client.users.fetch(capsule.user_id).catch(() => null);
+          const user = await botClient.users.fetch(capsule.creator_id).catch(() => null);
 
           const embed = new EmbedBuilder()
             .setColor('#FFD700')
@@ -64,7 +66,7 @@ export function startTimeCapsuleScheduler(client) {
 
           // Mark as revealed
           await pool.execute(
-            'UPDATE time_capsules SET revealed = 1 WHERE id = ?',
+            'UPDATE time_capsules SET revealed = 1, revealed_at = NOW() WHERE id = ?',
             [capsule.id]
           );
 

@@ -1,0 +1,386 @@
+/*
+ * Unified dropdown and select styling.
+ *
+ * ## The actual problem
+ *
+ * 351 <select> elements across 128 views. Only 27 styled their <option>
+ * elements, and the surfaces they picked disagreed — #1a1d21, #1a1f25, #12141b,
+ * #1a1e23, #161b1f, #141a1e — six near-but-not-equal greys, none matching
+ * --bg-secondary (#0f1316). The other 324 selects had no option styling at all,
+ * so their popup rendered in the browser's default LIGHT palette: white list,
+ * black text, hanging off a dark control. That is the harsh contrast.
+ *
+ * A `dropdown-fix.css` already existed and was reasonable, but was linked in
+ * exactly ONE view (partials/modern-header.ejs) of the 128 with selects — so on
+ * nearly every page it was never loaded.
+ *
+ * ## `color-scheme` is the line that actually fixes it
+ *
+ * A <select>'s popup is drawn by the browser/OS, not the page. On Chrome
+ * (Windows/Linux) and Safari it ignores most author CSS and follows the used
+ * `color-scheme`. Styling `option { background }` alone gets a dark list in
+ * Firefox and a light one elsewhere — the exact inconsistency this is meant to
+ * remove. `color-scheme: dark` is what makes the popup, its scrollbar, and the
+ * native arrow render dark.
+ *
+ * It is set on :root as well as on controls, because a control inherits its used
+ * color-scheme from the nearest ancestor that declares one.
+ *
+ * ## Cascade discipline — why only *some* rules are !important
+ *
+ * This deliberately does NOT !important the control's own appearance. 38 view
+ * rules style select backgrounds intentionally, and 18 of those already use the
+ * right token; steamrolling them would replace one inconsistency with another
+ * and undo deliberate design work.
+ *
+ *   !important  — color-scheme, option/optgroup surfaces, focus ring.
+ *                 These are the bug, plus accessibility. Nothing in any view
+ *                 competes for them, and views' own <style> blocks appear both
+ *                 before AND after this file in <head>, so ordering alone can't
+ *                 be relied on.
+ *
+ *   normal      — control background, border, radius, arrow, padding.
+ *                 A default for the ~313 selects nobody styled, which any view
+ *                 with an opinion overrides for free.
+ *
+ * A view that sets `background:` shorthand will wipe the custom arrow. That is
+ * fine and intended: with color-scheme: dark the *native* arrow renders dark and
+ * looks correct, so those selects degrade to something that still matches.
+ *
+ * ## Theming
+ *
+ * Dark is the default. A [data-theme="light"] branch is included because
+ * topbar.ejs ships a real toggle writing that attribute. (unified-light-theme.css
+ * is currently linked in zero views, so light mode is inert today — but the
+ * dropdowns will follow correctly whenever that is wired up, rather than being
+ * hardcoded dark and needing a second pass.)
+ */
+
+/* ==========================================================================
+   Tokens
+   Fallbacks are the real design-token values, so this file is correct even when
+   it loads before the inline <style> that defines them — custom properties
+   resolve at use time, not parse time.
+   ========================================================================== */
+:root {
+    --dd-surface: var(--bg-secondary, #0f1316);
+    --dd-control: var(--bg-primary, #0b0f11);
+    --dd-text: var(--text-primary, #ffffff);
+    --dd-text-muted: var(--text-muted, rgba(255, 255, 255, 0.5));
+    /* Decorative dividers. */
+    --dd-border: var(--border-color, rgba(255, 255, 255, 0.10));
+    /* Form-control borders. WCAG treats these as UI components needing 3:1 —
+       a 1.3:1 divider is fine between cards but not as the only cue for where
+       an input begins. Falls back to --dd-border where a theme hasn't set it. */
+    --dd-border-control: var(--border-strong, var(--border-color, rgba(255, 255, 255, 0.34)));
+    --dd-accent: var(--accent-purple, #a78bfa);
+    --dd-accent-soft: rgba(167, 139, 250, 0.22);
+
+    /* Native popup, scrollbars and the native arrow follow this. */
+    color-scheme: dark;
+}
+
+/* ==========================================================================
+   THE FIX — popup rendering
+   These are !important because they are the defect being repaired.
+   ========================================================================== */
+select,
+.form-select,
+input[list] {
+    color-scheme: dark !important;
+}
+
+select option,
+select optgroup,
+.form-select option,
+.form-select optgroup {
+    background-color: var(--dd-surface) !important;
+    color: var(--dd-text) !important;
+}
+
+select optgroup {
+    font-weight: 700 !important;
+    color: var(--dd-text-muted) !important;
+}
+
+select option:checked,
+select option:hover,
+select option:focus {
+    background-color: var(--dd-accent-soft) !important;
+    color: var(--dd-text) !important;
+}
+
+select option:disabled {
+    color: var(--dd-text-muted) !important;
+}
+
+/* `<option value="">Choose a channel…</option>` is used throughout and is not a
+   real choice, so it reads as placeholder text — matching an empty input. */
+select option[value=""] {
+    color: var(--dd-text-muted) !important;
+}
+
+/* ==========================================================================
+   Default control appearance
+   NOT !important — a default for the selects nobody styled. Any view with an
+   opinion wins.
+   ========================================================================== */
+select,
+.form-select {
+    background-color: var(--dd-control);
+    color: var(--dd-text);
+    border: 1px solid var(--dd-border-control);
+    border-radius: 10px;
+
+    /* Custom arrow. appearance:none removes the native one; the three
+       background-* properties must all be set or the SVG tiles across the
+       control. Sizing is in em so a compact 0.75rem select gets proportional
+       room rather than a fixed 2.5rem gutter. */
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23a78bfa' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M2 5l6 6 6-6'/%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 0.7em center;
+    background-size: 1em 0.75em;
+    padding-right: 2.2em;
+
+    cursor: pointer;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+select:hover:not(:disabled) {
+    border-color: color-mix(in srgb, var(--dd-accent) 45%, var(--dd-border));
+}
+
+select:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    background-image: none;
+    padding-right: 0.75em;
+}
+
+/* Focus ring is !important: several views set `outline: none` on form controls,
+   and a keyboard user losing the focus indicator is an accessibility defect, not
+   a style preference. */
+select:focus-visible {
+    border-color: var(--dd-accent) !important;
+    box-shadow: 0 0 0 3px var(--dd-accent-soft) !important;
+    outline: none !important;
+}
+
+/* ==========================================================================
+   Multi-selects and sized selects
+
+   These render as an inline list, not a popup — the arrow is wrong and the
+   surface has to be styled directly. Used for ignored-channel and role pickers.
+   ========================================================================== */
+select[multiple],
+select[size]:not([size="1"]) {
+    background-image: none;
+    padding-right: 0.75em;
+    cursor: default;
+    background-color: var(--dd-surface) !important;
+}
+
+select[multiple] option,
+select[size]:not([size="1"]) option {
+    padding: 0.35em 0.5em !important;
+    border-radius: 6px;
+}
+
+select[multiple] option:checked,
+select[size]:not([size="1"]) option:checked {
+    /* Chrome ignores background-color on a checked option in a list-rendered
+       select; a gradient with identical stops is the standard way through. */
+    background: linear-gradient(var(--dd-accent-soft), var(--dd-accent-soft)) !important;
+    color: var(--dd-text) !important;
+}
+
+/* ==========================================================================
+   Scrollbars in list-rendered selects and custom menus
+   ========================================================================== */
+select[multiple]::-webkit-scrollbar,
+.dropdown-menu::-webkit-scrollbar {
+    width: 10px;
+}
+
+select[multiple]::-webkit-scrollbar-track,
+.dropdown-menu::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+select[multiple]::-webkit-scrollbar-thumb,
+.dropdown-menu::-webkit-scrollbar-thumb {
+    background: var(--dd-border);
+    border-radius: 999px;
+}
+
+select[multiple]::-webkit-scrollbar-thumb:hover,
+.dropdown-menu::-webkit-scrollbar-thumb:hover {
+    background: var(--dd-accent);
+}
+
+/* ==========================================================================
+   Non-native dropdown menus (Bootstrap-style, the topbar user menu)
+
+   Same surfaces as the native popup, so the two shapes of dropdown on this site
+   don't read as two different design systems.
+   ========================================================================== */
+.dropdown-menu,
+.select-menu,
+.custom-dropdown-menu {
+    background-color: var(--dd-surface);
+    border: 1px solid var(--dd-border);
+    border-radius: 12px;
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.55);
+    padding: 0.35rem;
+}
+
+.dropdown-item,
+.select-menu-item,
+.custom-dropdown-item {
+    color: var(--dd-text);
+    border-radius: 8px;
+    transition: background-color 0.12s ease;
+}
+
+.dropdown-item:hover,
+.dropdown-item:focus,
+.select-menu-item:hover,
+.custom-dropdown-item:hover {
+    background-color: var(--dd-accent-soft);
+    color: var(--dd-text);
+}
+
+.dropdown-item.active,
+.select-menu-item[aria-selected="true"] {
+    background-color: var(--dd-accent);
+    color: #0b0f11;
+}
+
+.dropdown-divider {
+    border-top-color: var(--dd-border);
+}
+
+.dropdown-header {
+    color: var(--dd-text-muted);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+/* ==========================================================================
+   Sibling native controls
+
+   These are here rather than in a separate file because they share the exact
+   root cause and the exact mechanism: their popups and chrome are OS-drawn and
+   follow `color-scheme`, which is declared on :root above. Setting it once
+   already fixed, as a side effect:
+
+     input[type=date|time|datetime-local]  (11) — calendar popup + its icon
+     input[type=color]                     (38) — the eyedropper/swatch popup
+     input[type=number]                   (200) — spinner arrows
+     input[type=search]                     (6) — the clear "x"
+     input[type=file]                      (16) — the "Choose file" button
+     input[type=checkbox|radio]           (227) — the box/dot itself
+     textarea                             (118) — its scrollbar
+     ...and every scrollbar on the page
+
+   What `color-scheme` does NOT set is the *fill* colour of a checked checkbox,
+   radio or range — that is `accent-color`, and it was set in only 22 places
+   across the site, in five different colours. So ~215 checkboxes render in the
+   browser's default blue, which is the one colour nowhere in this palette.
+
+   Deliberately NOT !important: six of those existing declarations are
+   context-specific on purpose (green for a success toggle, amber for a warning)
+   and should keep winning. This only supplies a brand default where nothing has
+   an opinion.
+   ========================================================================== */
+input[type="checkbox"],
+input[type="radio"],
+input[type="range"],
+progress {
+    accent-color: var(--dd-accent);
+}
+
+/* Chrome draws the file button as native chrome; color-scheme darkens it but
+   leaves it visually unrelated to our buttons. */
+input[type="file"]::file-selector-button {
+    background: var(--dd-control);
+    color: var(--dd-text);
+    border: 1px solid var(--dd-border);
+    border-radius: 8px;
+    padding: 0.4em 0.9em;
+    margin-right: 0.75em;
+    cursor: pointer;
+    font: inherit;
+}
+
+input[type="file"]::file-selector-button:hover {
+    border-color: var(--dd-accent);
+}
+
+/* Firefox has no ::file-selector-button equivalent for the wrapper, and
+   scrollbar-color is the only cross-browser scrollbar control it honours. */
+* {
+    scrollbar-color: var(--dd-border) transparent;
+}
+
+/* ==========================================================================
+   Light theme
+   ========================================================================== */
+/* Light and Sand (and Auto in a light OS, which sets data-theme="light"): the site's own tokens
+   (cf-ui.css), so the popup, arrow and accent match the rest of the page in both. */
+:root:is([data-theme="light"], [data-theme="sand"]) {
+    --dd-surface: var(--cf-surface, #ffffff);
+    --dd-control: var(--cf-inset, #ffffff);
+    --dd-text: var(--cf-text, #16181c);
+    --dd-text-muted: var(--cf-text-3, #5f646e);
+    --dd-border: var(--cf-border, #e1e3e7);
+    --dd-accent: var(--cf-accent, #4a7a10);
+    --dd-accent-soft: var(--cf-accent-soft, rgba(74, 122, 16, 0.10));
+
+    color-scheme: light;
+}
+
+:root:is([data-theme="light"], [data-theme="sand"]) :is(select, .form-select, input[list]) {
+    color-scheme: light !important;
+}
+
+:root:is([data-theme="light"], [data-theme="sand"]) :is(select, .form-select) {
+    background-image: var(--cf-select-arrow);
+}
+
+:root:is([data-theme="light"], [data-theme="sand"]) :is(.dropdown-item.active, .select-menu-item[aria-selected="true"]) {
+    color: var(--cf-on-accent, #ffffff);
+}
+
+/* ==========================================================================
+   Reduced motion — matches a11y.css rather than restating a duration.
+   ========================================================================== */
+@media (prefers-reduced-motion: reduce) {
+    select,
+    .dropdown-item,
+    .select-menu-item {
+        transition-duration: 0.01ms !important;
+    }
+}
+
+/* ==========================================================================
+   Forced colors (Windows High Contrast)
+   Drop the custom arrow — the OS supplies its own control chrome and the SVG
+   would sit on top of it.
+   ========================================================================== */
+@media (forced-colors: active) {
+    select,
+    .form-select {
+        background-image: none;
+        padding-right: 0.75em;
+        border: 1px solid ButtonBorder;
+    }
+
+    .dropdown-menu {
+        border: 1px solid ButtonBorder;
+    }
+}

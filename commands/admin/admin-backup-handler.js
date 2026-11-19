@@ -1,6 +1,8 @@
 import { EmbedBuilder } from 'discord.js';
 import pool from '../../utils/db.js';
 import logger from '../../utils/logger.js';
+import { logFeatureEvent, userLabel } from '../../core/feature-log.js';
+import { themeColor } from '../../core/guild-theme.js';
 
 export async function handleCreate(interaction) {
     await interaction.deferReply({ ephemeral: true });
@@ -132,7 +134,7 @@ export async function handleCreate(interaction) {
     );
 
     const embed = new EmbedBuilder()
-        .setColor(0x2ecc71)
+        .setColor(themeColor(interaction.guildId, 'success'))
         .setTitle('✅ Backup Created')
         .setDescription(`Server backup **${name}** has been created successfully!`)
         .addFields(
@@ -157,6 +159,21 @@ export async function handleCreate(interaction) {
         name,
         userId
     });
+
+    void logFeatureEvent(() => (guild), 'backup.created', () => ({
+        title: '💾 Backup Created',
+        description: `Server backup **${name}** was saved with \`/admin backup create\`.`,
+        fields: [
+            ['Name', name],
+            ['Backup ID', String(result.insertId)],
+            ['By', userLabel(interaction.user)],
+            ['Roles', snapshot.roles.length],
+            ['Channels', channels.size],
+            ['Categories', snapshot.categories.length],
+            ['Emoji', snapshot.emoji.length],
+            ['Member roles', snapshot.memberRoles.length],
+        ],
+    }));
 }
 
 export async function handleList(interaction) {
@@ -175,7 +192,7 @@ export async function handleList(interaction) {
     }
 
     const embed = new EmbedBuilder()
-        .setColor(0x3498db)
+        .setColor(themeColor(interaction.guildId, 'primary'))
         .setTitle('📦 Server Backups')
         .setDescription(`Found ${backups.length} backup${backups.length !== 1 ? 's' : ''} for this server:\n`);
 
@@ -227,6 +244,17 @@ export async function handleRestore(interaction) {
     let deletedRoles = 0;
     let createdChannels = 0;
     let createdRoles = 0;
+
+    // Sent before the deletes start: the restore deletes every channel, the log channel included.
+    void logFeatureEvent(() => (guild), 'backup.restoreStarted', () => ({
+        title: '⏳ Backup Restore Started',
+        description: `Restoring server backup **${backups[0].snapshot_name}** with \`/admin backup restore\`. All existing channels and roles are deleted and re-created from the backup.`,
+        fields: [
+            ['Name', backups[0].snapshot_name],
+            ['Backup ID', String(backupId)],
+            ['By', userLabel(interaction.user)],
+        ],
+    }));
 
     try {
         // Delete existing channels (except system channels)
@@ -430,7 +458,7 @@ export async function handleRestore(interaction) {
         }
 
         const embed = new EmbedBuilder()
-            .setColor(0x2ecc71)
+            .setColor(themeColor(interaction.guildId, 'success'))
             .setTitle('✅ Backup Restored')
             .setDescription(`Successfully restored backup **${backups[0].snapshot_name}**!`)
             .addFields(
@@ -459,8 +487,27 @@ export async function handleRestore(interaction) {
             createdRoles
         });
 
+        // The log channel was re-created with a new id, so this only lands if logging was re-pointed (or uses a channel the restore kept).
+        void logFeatureEvent(() => (guild), 'backup.restored', () => ({
+            title: '♻️ Backup Restored',
+            description: `Server backup **${backups[0].snapshot_name}** was restored with \`/admin backup restore\`.`,
+            fields: [
+                ['Name', backups[0].snapshot_name],
+                ['By', userLabel(interaction.user)],
+                ['Channels deleted / created', `${deletedChannels} / ${createdChannels}`],
+                ['Roles deleted / created', `${deletedRoles} / ${createdRoles}`],
+                ['Emoji', createdEmoji],
+                ['Member roles restored', restoredMemberRoles],
+            ],
+        }));
+
     } catch (error) {
         logger.error('[Backup] Restore failed', { error: error.message, stack: error.stack });
+        void logFeatureEvent(() => (guild), 'backup.failed', () => ({
+            title: '❌ Backup Failed',
+            description: `Restoring server backup **${backups[0].snapshot_name}** stopped with an error. Part of the backup may already have been applied.`,
+            fields: [['Action', 'Restore'], ['By', userLabel(interaction.user)], ['Why', String(error.message || 'Unknown error').slice(0, 300), false]],
+        }));
         throw new Error(`Restore failed: ${error.message}`);
     }
 }
@@ -470,6 +517,12 @@ export async function handleDelete(interaction) {
 
     const guildId = interaction.guild.id;
     const backupId = interaction.options.getInteger('backup_id');
+
+    // Name read first so the server log can say what was deleted (best-effort).
+    const [[doomed]] = await pool.execute(
+        `SELECT snapshot_name FROM server_backups WHERE id = ? AND guild_id = ?`,
+        [backupId, guildId]
+    ).catch(() => [[null]]);
 
     const [result] = await pool.execute(
         `DELETE FROM server_backups WHERE id = ? AND guild_id = ?`,
@@ -487,6 +540,12 @@ export async function handleDelete(interaction) {
     });
 
     logger.info('[Backup] Deleted backup', { guildId, backupId });
+
+    void logFeatureEvent(() => (interaction.guild), 'backup.deleted', () => ({
+        title: '🗑️ Backup Deleted',
+        description: `Server backup **${doomed?.snapshot_name || `#${backupId}`}** was deleted with \`/admin backup delete\`.`,
+        fields: [['Name', doomed?.snapshot_name], ['Backup ID', String(backupId)], ['By', userLabel(interaction.user)]],
+    }));
 }
 
 export async function handleInfo(interaction) {
@@ -514,7 +573,7 @@ export async function handleInfo(interaction) {
     const channelCount = snapshot.channels.length + snapshot.categories.reduce((sum, cat) => sum + cat.channels.length, 0);
 
     const embed = new EmbedBuilder()
-        .setColor(0x3498db)
+        .setColor(themeColor(interaction.guildId, 'primary'))
         .setTitle(`📦 Backup: ${backup.snapshot_name}`)
         .setDescription(`Detailed information about backup ID ${backupId}`)
         .addFields(

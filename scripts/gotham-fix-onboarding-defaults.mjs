@@ -11,15 +11,15 @@
 
 import 'dotenv/config';
 import pool from '../utils/db.js';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 
 const GUILD = '800157336458231848';
-const HARLEY_BOT_ID = '1503936879635202149';
+// The acting bot comes from guild_bot_mapping — never pinned here.
 const RULES_CH = '800256456997863434';
 const WELCOME_CH = '1503938671857106955';
 
-const [row] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id=?', [HARLEY_BOT_ID]);
-const token = encryption.decrypt(JSON.parse(row[0].bot_token));
+const actingBot = await resolveBotForGuild(GUILD, { db: pool });
+const token = actingBot.token;
 
 async function api(method, path, body) {
   const r = await fetch(`https://discord.com/api/v10${path}`, {

@@ -12,10 +12,10 @@
 // REST-only: safe to run while PM2 is up (no gateway session opened).
 
 import pool from '../utils/db.js';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 
 const GUILD_ID    = '1469931133981687873';
-const BOT_ID      = '1498486251576229958';
+// The acting bot comes from guild_bot_mapping — never pinned here.
 const PANEL_ID    = 128;                       // reaction_role_panels.id
 const PANEL_CH    = '1470817784471621868';     // channel holding the games-panel message
 const PANEL_MSG   = '1498512780498567330';
@@ -29,8 +29,8 @@ const TFD = {
   style:      2,          // secondary/gray — 5th button; the other 4 styles are each used once
 };
 
-const [bots] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id=?', [BOT_ID]);
-const token  = encryption.decrypt(JSON.parse(bots[0].bot_token));
+const bot    = await resolveBotForGuild(GUILD_ID, { db: pool });
+const token  = bot.token;
 
 async function api(method, path, body) {
   const r = await fetch(`https://discord.com/api/v10${path}`, {

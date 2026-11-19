@@ -44,13 +44,33 @@ async function recheckAffiliateStatuses() {
                 const canonicalUsername = user.login;
                 const twitchId = user.id;
 
-                // Update cache with current username and ID
+                // Correct every row for this account. Writing to a fixed 'api_lookup'
+                // discord_user_id used to put the verified answer in a single per-guild
+                // row that the next target immediately overwrote — and that row was
+                // shadowed anyway, since checkAffiliateStatus reads by twitch_username
+                // and the member's real row still said 0.
                 await pool.execute(
-                    `INSERT INTO community_twitch_links (guild_id, discord_user_id, twitch_username, twitch_user_id, is_affiliate, last_checked)
-                     VALUES (?, 'api_lookup', ?, ?, ?, NOW())
-                     ON DUPLICATE KEY UPDATE is_affiliate = ?, twitch_username = ?, twitch_user_id = ?, last_checked = NOW()`,
-                    [guild_id, canonicalUsername, twitchId, isAffiliate ? 1 : 0, isAffiliate ? 1 : 0, canonicalUsername, twitchId]
+                    `UPDATE community_twitch_links
+                     SET is_affiliate = ?, twitch_user_id = ?, twitch_username = ?, affiliate_checked_at = NOW(), last_checked = NOW()
+                     WHERE guild_id = ? AND (twitch_username IN (?, ?) OR twitch_user_id = ?)`,
+                    [isAffiliate ? 1 : 0, twitchId, canonicalUsername, guild_id, target_username, canonicalUsername, twitchId]
                 );
+
+                const [linked] = await pool.execute(
+                    `SELECT 1 FROM community_twitch_links
+                     WHERE guild_id = ? AND (twitch_username = ? OR twitch_user_id = ?) LIMIT 1`,
+                    [guild_id, canonicalUsername, twitchId]
+                );
+
+                if (linked.length === 0) {
+                    await pool.execute(
+                        `INSERT INTO community_twitch_links (guild_id, discord_user_id, twitch_username, twitch_user_id, is_affiliate, affiliate_checked_at, last_checked)
+                         VALUES (?, ?, ?, ?, ?, NOW(), NOW())
+                         ON DUPLICATE KEY UPDATE is_affiliate = ?, twitch_username = ?, twitch_user_id = ?, affiliate_checked_at = NOW(), last_checked = NOW()`,
+                        [guild_id, `tw:${twitchId}`, canonicalUsername, twitchId, isAffiliate ? 1 : 0,
+                         isAffiliate ? 1 : 0, canonicalUsername, twitchId]
+                    );
+                }
 
                 // Backfill: update entries with twitch ID and refresh username to canonical
                 if (twitchId) {

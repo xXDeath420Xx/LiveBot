@@ -87,6 +87,12 @@ class CFMore extends CFBaseComponent {
                 this.render();
             }
         });
+        // A request made before this view existed (first visit to More) is still waiting in the store
+        const pending = store.get('ui.moreSubview');
+        if (pending) {
+            this._activeSubview = pending;
+            store.set('ui.moreSubview', null);
+        }
     }
 
     onMount() {

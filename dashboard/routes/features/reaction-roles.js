@@ -5,39 +5,6 @@ import logger from '../../../utils/logger.js';
 
 const router = express.Router();
 
-// GET /api/guilds/:guildId/reaction-roles - Get all reaction role panels and mappings
-router.get('/:guildId/reaction-roles', ensureAuth, ensureGuildPerms, async (req, res) => {
-  try {
-    // Get all reaction role panels
-    const [panels] = await pool.execute(
-      'SELECT * FROM reaction_role_panels WHERE guild_id = ? ORDER BY created_at DESC',
-      [req.guildId]
-    );
-
-    // Get all reaction role mappings for each panel
-    const panelsWithRoles = await Promise.all(
-      panels.map(async (panel) => {
-        const [roles] = await pool.execute(
-          'SELECT * FROM reaction_role_mappings WHERE panel_id = ? ORDER BY created_at ASC',
-          [panel.id]
-        );
-        return {
-          ...panel,
-          roles
-        };
-      })
-    );
-
-    res.json({
-      panels: panelsWithRoles,
-      count: panelsWithRoles.length
-    });
-  } catch (error) {
-    logger.error('[ReactionRoles] Get reaction roles error', { error: error.message });
-    res.status(500).json({ error: 'Failed to fetch reaction roles' });
-  }
-});
-
 // POST /api/guilds/:guildId/reaction-roles - Create new reaction role panel
 router.post('/:guildId/reaction-roles', ensureAuth, ensureGuildPerms, async (req, res) => {
   try {
@@ -111,7 +78,7 @@ router.post('/:guildId/reaction-roles', ensureAuth, ensureGuildPerms, async (req
       [
         req.guildId,
         channel_id,
-        message_id || 'PENDING',
+        message_id || null,   // NULL = not posted; 'PENDING' collided on the UNIQUE message_id
         panel_name,
         description || null,
         embed_color || '#a78bfa',

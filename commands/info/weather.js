@@ -2,6 +2,7 @@ import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } from 'discord.
 import { execute as handleAir } from './weather/air.js';
 import { execute as handlePlant } from './weather/plant.js';
 import logger from '../../utils/logger.js';
+import { themeColor } from '../../core/guild-theme.js';
 
 export default {
     category: 'info',
@@ -108,7 +109,7 @@ async function handleWeatherCheck(interaction, subcommand) {
         const weather = await weatherManager.getCurrentWeather(location);
 
         const embed = new EmbedBuilder()
-            .setColor('#3498DB')
+            .setColor(themeColor(interaction.guildId, 'primary'))
             .setTitle(`Weather for ${weather.locationName}`)
             .addFields(
                 { name: 'Condition', value: weather.condition, inline: true },
@@ -134,7 +135,7 @@ async function handleWeatherCheck(interaction, subcommand) {
         const location = await weatherManager.setUserLocation(interaction.user.id, zipcode, interaction.guild.id);
 
         return interaction.editReply({
-            content: `📍 Your alert zone is now **${location.zoneId} (${location.city}, ${location.state})**.\n\nYou'll be mentioned when weather alerts affect your area. Make sure weather alerts are enabled in this server with \`/weather check config\`.`
+            content: `📍 Your alert zone is now **${location.zoneId} (${location.city}, ${location.state})**.\n\nYou'll get a direct message when a severe weather alert covers your area, as long as weather alerts are switched on for this server (\`/weather check config\` or the dashboard's Weather page).`
         });
 
     } else if (subcommand === 'location') {
@@ -148,7 +149,7 @@ async function handleWeatherCheck(interaction, subcommand) {
         }
 
         const embed = new EmbedBuilder()
-            .setColor('#3498DB')
+            .setColor(themeColor(interaction.guildId, 'primary'))
             .setTitle('📍 Your Weather Alert Location')
             .addFields(
                 { name: 'City', value: location.city_name || 'Unknown', inline: true },

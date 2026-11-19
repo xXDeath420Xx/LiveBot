@@ -30,7 +30,7 @@ export function buildAboutEmbed() {
             },
             {
                 name: '📢 Go-Live Stream Alerts',
-                value: 'Twitch • Kick • YouTube • Trovo • TikTok • Facebook — auto-tracked streamer roles, cancel-aware Twitch schedule images, per-guild live roster & auto-shoutouts',
+                value: 'Twitch • Kick • YouTube • Rumble • TikTok • Facebook — auto-tracked streamer roles, cancel-aware Twitch schedule images, per-guild live roster & auto-shoutouts',
             },
             {
                 name: '🌊 Against The Tide — the official CertiFried Twitch Team',

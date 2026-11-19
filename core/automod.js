@@ -1,9 +1,15 @@
 import { PermissionFlagsBits } from 'discord.js';
+import { isTicketChannel } from './ticket-channels.js';
 import pool from '../utils/db.js';
 import logger from '../utils/logger.js';
-import { logInfraction } from './moderation-manager.js';
-import { safeJsonArray, safeJsonObject } from '../utils/safeJson.js';
+import { logInfraction, sendModerationDm } from './moderation-manager.js';
+import { logAutomodAction } from './log-manager.js';
+import { safeJsonArray, safeJsonObject, safeJsonParse } from '../utils/safeJson.js';
 import { isProtectedFromBanCommands } from '../utils/owner-protection.js';
+import { protectionHold } from './protection-exempt.js';
+import { actOrReport } from './manual-action.js';
+import { foldConfusables } from '../utils/text-fold.js';
+import { effectiveContent } from '../utils/message-effective-content.js';
 
 // Memory limits to prevent unbounded growth
 const MAX_RULES_CACHE = 5000;
@@ -48,6 +54,12 @@ function enforceMaxSize(map, maxSize, mapName) {
 // Cooldown period before user is released from filter (1 minute)
 const FILTER_COOLDOWN_MS = 60 * 1000;
 
+// Every delete / timeout / kick / ban below goes through actOrReport (core/manual-action.js): when the bot
+// lacks the permission or sits below the member, staff get the shared "Manual action needed" alert naming
+// exactly what to fix (throttled per server and cause) instead of the step failing silently.
+const SPAM_SOURCE = 'Automod spam filter';
+const HEAT_SOURCE = 'Automod heat';
+
 // Escalating timeout durations in minutes based on violation count
 const ESCALATING_TIMEOUTS = [
     1,      // 1st violation: 1 minute
@@ -60,6 +72,29 @@ const ESCALATING_TIMEOUTS = [
     720,    // 8th violation: 12 hours
     1440,   // 9th+ violation: 24 hours
 ];
+
+/**
+ * What a Message spam rule does once it fires (register H-659). The repeated messages are always deleted,
+ * and the sender's messages keep being deleted until they stop for a minute; then:
+ *   ladder  time out for longer each time (ESCALATING_TIMEOUTS, counted over 24 hours), applied when the
+ *           burst stops. What every Delete / Warn / Mute spam rule did before; migration 443 moved them here.
+ *   delete  nothing more
+ *   warn    a warning (infraction + Moderation page DM), straight away
+ *   mute    a timeout of the rule's length, straight away
+ *   kick / ban  remove the sender straight away (the ladder runs if the bot cannot)
+ */
+export const SPAM_ACTIONS = Object.freeze(['ladder', 'delete', 'warn', 'mute', 'kick', 'ban']);
+export const spamRuleAction = (rule) => (SPAM_ACTIONS.includes(String(rule?.action)) ? String(rule.action) : 'ladder');
+
+/** The ladder's timeout for a member with `violations` earlier spam timeouts in the last 24 hours. */
+export const spamLadderMinutes = (violations) =>
+    ESCALATING_TIMEOUTS[Math.min(Math.max(Number(violations) || 0, 0), ESCALATING_TIMEOUTS.length - 1)];
+
+/** Drop a guild's cached rules and heat config (the dashboard calls this after saving a rule). */
+export function invalidateAutomodRules(guildId) {
+    rulesCache.delete(guildId);
+    heatConfigCache.delete(guildId);
+}
 
 // Clear config caches periodically (every 5 minutes)
 setInterval(() => {
@@ -110,15 +145,10 @@ setInterval(() => {
 function normalizeMessageContent(content) {
     if (!content) return '';
 
-    return content
-        .toLowerCase()
-        .trim()
-        // Collapse multiple spaces/newlines to single space
-        .replace(/\s+/g, ' ')
-        // Remove zero-width characters often used to bypass spam detection
-        .replace(/[\u200B-\u200D\uFEFF]/g, '')
-        // Normalize unicode characters (é -> e, etc.)
-        .normalize('NFKC');
+    // utils/text-fold.js: lower case, whitespace collapsed, zero-width and other invisible characters
+    // removed, accents / zalgo stripped and lookalike letters (Cyrillic, small caps, maths fonts...)
+    // folded, so a repeated message cannot dodge the duplicate check by restyling itself.
+    return foldConfusables(content);
 }
 
 /**
@@ -129,8 +159,8 @@ function areMessagesSimilar(msg1, msg2) {
     if (msg1 === msg2) return true;
     if (!msg1 || !msg2) return false;
 
-    // For very short messages (under 8 chars), require exact match
-    // This prevents "ok" "lol" "yes" "no" etc from matching each other
+    // For very short messages (under 8 chars), require exact match.
+    // This prevents "ok" "lol" "yes" "no" etc from matching each other.
     if (msg1.length < 8 || msg2.length < 8) {
         return msg1 === msg2;
     }
@@ -138,34 +168,129 @@ function areMessagesSimilar(msg1, msg2) {
     const shorter = msg1.length <= msg2.length ? msg1 : msg2;
     const longer = msg1.length > msg2.length ? msg1 : msg2;
 
-    // Repetition spam check: if shorter is contained in longer AND
-    // the shorter is at least 50% of the longer's length, it's likely spam
-    // This catches "😂😂😂" vs "😂😂😂😂😂" but not "lol" vs "lol I'm dying"
+    // Repetition spam: the shorter is contained in the longer and makes up most of it.
+    // Catches "😂😂😂" vs "😂😂😂😂😂" and a message resent with a word appended.
     if (longer.includes(shorter) && shorter.length >= longer.length * 0.5) {
         return true;
     }
 
-    // Calculate similarity using Sørensen–Dice coefficient on character bigrams
-    const getBigrams = (str) => {
-        const bigrams = new Set();
-        for (let i = 0; i < str.length - 1; i++) {
-            bigrams.add(str.substring(i, i + 2));
+    // WORD sequences, not character pairs.
+    //
+    // This used to be Sørensen–Dice over character bigrams, which measures shared VOCABULARY rather
+    // than repetition. Two long English sentences share almost every common character pair ("th",
+    // "he", "e ", "in", "er"…), so the score climbs with length and topic rather than with sameness:
+    // two genuinely different messages in one support conversation —
+    //   "Putting manually the dll file does have work the server don't automatically close…"
+    //   "the server does not automatically close and does not require steam to be running"
+    // — scored 81%, over the 80% line, and got somebody muted for answering their own ticket.
+    //
+    // Overlapping three-word shingles fix that. People re-explaining a problem reuse the words but
+    // not the word ORDER; somebody pasting the same message twice reproduces both. Unrelated English
+    // scores near zero here instead of the 40-50% the character measure gave it.
+    const shingles = (str) => {
+        const words = str.split(/\s+/).filter(Boolean);
+        const out = new Set();
+        if (words.length < 3) {
+            // Too short to shingle — fall back to the whole normalised string.
+            out.add(words.join(' '));
+            return out;
         }
-        return bigrams;
+        for (let i = 0; i <= words.length - 3; i++) out.add(words.slice(i, i + 3).join(' '));
+        return out;
     };
 
-    const bigrams1 = getBigrams(msg1);
-    const bigrams2 = getBigrams(msg2);
+    const s1 = shingles(msg1);
+    const s2 = shingles(msg2);
 
     let intersection = 0;
-    for (const bigram of bigrams1) {
-        if (bigrams2.has(bigram)) intersection++;
+    for (const sh of s1) {
+        if (s2.has(sh)) intersection++;
     }
 
-    const similarity = (2 * intersection) / (bigrams1.size + bigrams2.size);
+    // Dice over shingles. 0.6 is deliberately lower than the old 0.8 because the measure is far
+    // stricter: sharing 60% of three-word sequences means most of the sentence is literally the same
+    // run of words, which is repetition, not a coincidence of topic.
+    const similarity = (2 * intersection) / (s1.size + s2.size);
+    return similarity >= 0.6;
+}
 
-    // 80% similarity threshold - stricter to avoid false positives
-    return similarity >= 0.8;
+
+/**
+ * Rules are written by several producers that disagree on casing: the dashboard writes
+ * camelCase filter types, the setup scripts write snake_case. The switch below only ever
+ * matched camelCase, so every snake_case rule silently did nothing.
+ * The canonical stored values are the dashboard's: banned_words, mass_mentions, all_caps,
+ * anti_spam and discord_invites. Older writers stored 'spam' (guild setup scripts) and 'invite'
+ * (the takeover catalogue); those rows did nothing until they were mapped here (H-105).
+ */
+const FILTER_TYPE_ALIASES = {
+    anti_spam: 'antiSpam',
+    antispam: 'antiSpam',
+    spam: 'antiSpam',
+    invite: 'discordInvites',
+    banned_words: 'bannedWords',
+    bannedwords: 'bannedWords',
+    discord_invites: 'discordInvites',
+    discordinvites: 'discordInvites',
+    invites: 'discordInvites',
+    mass_mentions: 'massMention',
+    mass_mention: 'massMention',
+    massmentions: 'massMention',
+    all_caps: 'allCaps',
+    allcaps: 'allCaps',
+    caps: 'allCaps',
+};
+
+function canonicalFilterType(filterType) {
+    if (!filterType) return '';
+    return FILTER_TYPE_ALIASES[String(filterType).toLowerCase()] || filterType;
+}
+
+/**
+ * heat_values is keyed by short names ("banned_word", "invite", "mention", "caps") by the
+ * setup scripts but by violation type ("bannedWords", ...) elsewhere. Check both before
+ * falling back, otherwise every violation contributed 1 heat instead of its configured weight.
+ */
+const HEAT_VALUE_ALIASES = {
+    bannedWords: ['bannedWords', 'banned_words', 'banned_word'],
+    discordInvites: ['discordInvites', 'discord_invites', 'invite', 'invites'],
+    massMention: ['massMention', 'mass_mentions', 'mention', 'mentions'],
+    allCaps: ['allCaps', 'all_caps', 'caps'],
+};
+
+function heatValueFor(heatValues, violationType) {
+    for (const key of HEAT_VALUE_ALIASES[violationType] || [violationType]) {
+        if (typeof heatValues[key] === 'number') return heatValues[key];
+    }
+    return 1;
+}
+
+/**
+ * action_thresholds is stored either as an array of {type, threshold, duration} or as an
+ * object keyed by action name ({"warn":25,"mute_5min":50,"kick":100,"ban":150}). Only the
+ * array form was ever parsed, so object-form guilds never triggered a single heat action.
+ * Returns a normalised array sorted highest-threshold-first.
+ */
+function parseActionThresholds(raw) {
+    const parsed = safeJsonParse(raw, null, 'automod action_thresholds');
+    if (!parsed || typeof parsed !== 'object') return [];
+
+    let actions;
+    if (Array.isArray(parsed)) {
+        actions = parsed.filter(a => a && typeof a.threshold === 'number');
+    } else {
+        actions = Object.entries(parsed).map(([name, threshold]) => {
+            if (typeof threshold !== 'number') return null;
+            // "mute_5min" / "mute_30min" carry their duration in the key.
+            const muteMatch = /^mute[_-]?(\d+)\s*min/i.exec(name);
+            if (muteMatch) return { type: 'mute', threshold, duration: parseInt(muteMatch[1], 10) };
+            const type = String(name).toLowerCase().replace(/[_-].*$/, '');
+            if (!['warn', 'mute', 'kick', 'ban'].includes(type)) return null;
+            return { type, threshold, duration: type === 'mute' ? 10 : undefined };
+        }).filter(Boolean);
+    }
+
+    return actions.sort((a, b) => b.threshold - a.threshold);
 }
 
 export async function processMessage(message) {
@@ -176,6 +301,13 @@ export async function processMessage(message) {
     const isOwner = message.member.id === message.guild.ownerId;
     if (isAdmin || isOwner) return;
 
+    // A support ticket is never spam, and this check has to come BEFORE the filtered-user branch
+    // below — that branch deletes every message from a flagged member regardless of content, so
+    // somebody flagged elsewhere would have their answers to their OWN support ticket deleted as
+    // they typed them. Which is what happened: a member replying in their open ticket with a note
+    // about a DLL and Steam had it removed and was muted.
+    if (await isTicketChannel(message.channel)) return;
+
     const guildId = message.guild.id;
     const userKey = `${guildId}:${message.author.id}`;
 
@@ -185,7 +317,7 @@ export async function processMessage(message) {
         const now = Date.now();
 
         // Delete the message immediately
-        await message.delete().catch(() => {});
+        await actOrReport(message.guild, 'delete', { member: message.member, channel: message.channel, source: SPAM_SOURCE }, () => message.delete());
         filterData.messagesDeleted++;
         filterData.lastMessage = now;
 
@@ -215,22 +347,23 @@ export async function processMessage(message) {
 
     if (rules.length === 0) return;
 
-    // Check for ignored roles
-    const ignoredRoles = rules.flatMap(r => safeJsonArray(r.ignored_roles, 'automod ignored_roles'));
-    if (message.member.roles.cache.some(role => ignoredRoles.includes(role.id))) return;
+    // Ignored roles and channels belong to each rule (set per rule on the AutoMod page). They used to be
+    // pooled, so a role ignored by one rule silently skipped every rule.
 
     // First, check antiSpam rules (these work independently of heat config)
     for (const rule of rules) {
-        if (rule.filter_type !== 'anti_spam' && rule.filter_type !== 'antiSpam') continue;
-
-        const ruleIgnoredChannels = safeJsonArray(rule.ignored_channels, 'automod ignored_channels');
-        if (ruleIgnoredChannels.includes(message.channel.id)) continue;
+        if (canonicalFilterType(rule.filter_type) !== 'antiSpam') continue;
+        if (ruleSkips(rule, message)) continue;
 
         const config = safeJsonObject(rule.config, 'automod rule config');
+        // Two writers produce this row with different key names: the dashboard writes
+        // message_limit/time_period, the setup scripts write duplicate_threshold/
+        // time_window_seconds. Reading only one spelling silently fell back to the
+        // defaults below, which are far tighter than anything a guild configured.
         // How many times the SAME message must be repeated to trigger (default 3)
-        const repeatLimit = config.message_limit || 3;
+        const repeatLimit = config.message_limit ?? config.duplicate_threshold ?? 3;
         // Time window in which to count repeated messages (default 30 seconds)
-        const timePeriod = (config.time_period || 30) * 1000;
+        const timePeriod = (config.time_period ?? config.time_window_seconds ?? 30) * 1000;
 
         const now = Date.now();
 
@@ -243,9 +376,10 @@ export async function processMessage(message) {
         // Remove messages outside the time window
         userData.messages = userData.messages.filter(msg => now - msg.timestamp < timePeriod);
 
-        // Normalize the current message content for comparison
-        // Remove extra whitespace, convert to lowercase, strip emoji variations
-        const normalizedContent = normalizeMessageContent(message.content);
+        // Normalize the current message content for comparison. Uses the
+        // forwarded-aware effective content so a forwarded scam link isn't
+        // silently exempt from spam detection.
+        const normalizedContent = normalizeMessageContent(effectiveContent(message));
 
         // Skip empty messages (just attachments, embeds, etc.)
         if (!normalizedContent) {
@@ -284,42 +418,162 @@ export async function processMessage(message) {
         heatConfigCache.set(guildId, heatConfig);
     }
 
-    // If heat system is disabled, skip heat-based rules
-    if (!heatConfig || !heatConfig.is_enabled) return;
-
-    const heatValues = safeJsonObject(heatConfig.heat_values, 'automod heat_values');
+    // With heat scoring on, a Delete / Warn / Mute rule adds heat and the heat ladder decides what happens
+    // (as before). Kick and Ban rules, and every rule when heat is off, apply their own action. Rules used to
+    // do nothing at all without heat, whatever action the dashboard showed.
+    const heatOn = !!(heatConfig && heatConfig.is_enabled);
+    const heatValues = heatOn ? safeJsonObject(heatConfig.heat_values, 'automod heat_values') : {};
 
     for (const rule of rules) {
         // Skip antiSpam rules (already handled above)
-        if (rule.filter_type === 'anti_spam' || rule.filter_type === 'antiSpam') continue;
-
-        const ruleIgnoredChannels = safeJsonArray(rule.ignored_channels, 'automod ignored_channels');
-        if (ruleIgnoredChannels.includes(message.channel.id)) continue;
+        if (canonicalFilterType(rule.filter_type) === 'antiSpam') continue;
+        if (ruleSkips(rule, message)) continue;
 
         let violationType = null;
         const config = safeJsonObject(rule.config, 'automod rule config');
 
-        switch (rule.filter_type) {
-            case 'bannedWords':
-                if ((config.banned_words || []).some((word) => message.content.toLowerCase().includes(word.toLowerCase()))) violationType = 'bannedWords';
+        switch (canonicalFilterType(rule.filter_type)) {
+            case 'bannedWords': {
+                const words = config.words ?? config.banned_words ?? [];
+                // `word` matches on word boundaries; `contains` is the old substring behaviour and
+                // stays the default so existing rules are untouched.
+                //
+                // Substring matching is why a filter cannot safely hold a short word: "spic" fires
+                // on "spicy", "fag" on "faggot" but also on nothing useful, and a moderation filter
+                // that punishes people for the word "class" gets switched off within the hour. The
+                // boundary form lets a list contain the short slurs it actually needs to.
+                const byWord = (config.match_type ?? 'contains') === 'word';
+                const haystack = effectiveContent(message).toLowerCase();
+                violationType = words.some((raw) => {
+                    const word = String(raw).toLowerCase().trim();
+                    if (!word) return false;
+                    if (!byWord) return haystack.includes(word);
+                    // Escaped, and bounded by anything that is not a letter/digit — so punctuation,
+                    // spacing and emoji all count as a boundary, but "damned" does not match "damn".
+                    const esc = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    return new RegExp(`(^|[^a-z0-9])${esc}([^a-z0-9]|$)`, 'i').test(haystack);
+                }) ? 'bannedWords' : null;
                 break;
+            }
             case 'discordInvites':
-                if (/(discord\.(gg|io|me|li)\/.+|discordapp\.com\/invite\/.+)/i.test(message.content)) violationType = 'discordInvites';
+                if (/(discord\.(gg|io|me|li)\/.+|discordapp\.com\/invite\/.+)/i.test(effectiveContent(message))) violationType = 'discordInvites';
                 break;
-            case 'massMention':
-                if (message.mentions.users.size >= (config.limit || 5)) violationType = 'massMention';
+            case 'massMention': {
+                const maxMentions = config.max_mentions ?? config.limit ?? 5;
+                const maxRoleMentions = config.max_role_mentions ?? Infinity;
+                if (message.mentions.users.size >= maxMentions || message.mentions.roles.size >= maxRoleMentions) violationType = 'massMention';
                 break;
-            case 'allCaps':
-                const content = message.content.replace(/<a?:.+?:\d+>|[^a-zA-Z]/g, '');
-                if (content.length >= 15 && ((content.match(/[A-Z]/g) || []).length / content.length) * 100 >= (config.limit || 70)) violationType = 'allCaps';
+            }
+            case 'allCaps': {
+                const content = effectiveContent(message).replace(/<a?:.+?:\d+>|[^a-zA-Z]/g, '');
+                const minLength = config.min_length ?? 15;
+                const capsPercent = config.caps_percentage ?? config.limit ?? 70;
+                if (content.length >= minLength && ((content.match(/[A-Z]/g) || []).length / content.length) * 100 >= capsPercent) violationType = 'allCaps';
                 break;
+            }
         }
 
         if (violationType) {
-            const heatToAdd = heatValues[violationType] || 1;
-            await addHeat(message, heatToAdd, `Triggered '${violationType}' rule.`);
+            const handled = await applyRuleAction(message, rule, violationType, heatOn);
+            if (heatOn && !handled) {
+                const heatToAdd = heatValueFor(heatValues, violationType);
+                await addHeat(message, heatToAdd, `Triggered '${violationType}' rule.`);
+            }
             return; // Stop processing after one violation
         }
+    }
+}
+
+/** True when this rule does not apply here: the channel (or its parent) or one of the member's roles is ignored by it. */
+function ruleSkips(rule, message) {
+    const channels = safeJsonArray(rule.ignored_channels, 'automod ignored_channels').map(String);
+    if (channels.length) {
+        const ch = message.channel;
+        if ([ch?.id, ch?.parentId, ch?.parent?.parentId].some(id => id && channels.includes(id))) return true;
+    }
+    const roles = safeJsonArray(rule.ignored_roles, 'automod ignored_roles').map(String);
+    return roles.length > 0 && !!message.member?.roles?.cache?.some(role => roles.includes(role.id));
+}
+
+const RULE_SOURCE = 'Automod rule';
+const RULE_ACTIONS = new Set(['delete', 'warn', 'mute', 'kick', 'ban']);
+const VIOLATION_LABELS = { bannedWords: 'Banned words', discordInvites: 'Invite links', massMention: 'Mass mentions', allCaps: 'All caps' };
+const MAX_RULE_MUTE_MINUTES = 40320; // Discord's 28-day timeout limit
+
+/**
+ * A rule's own action (automod_rules.action) on a matching message: the message is deleted, then the
+ * sender is warned, muted, kicked or banned as the rule says, with the member DM from the Moderation page.
+ * With heat scoring on only Kick and Ban act here; the rest return false so the caller adds heat.
+ * @returns {Promise<boolean>} whether the rule's action was applied (or deliberately held back)
+ */
+async function applyRuleAction(message, rule, violationType, heatOn) {
+    const action = RULE_ACTIONS.has(String(rule.action)) ? String(rule.action) : 'delete';
+    if (heatOn && action !== 'kick' && action !== 'ban') return false;
+    if (!message.guild || !message.member) return true;
+    const label = VIOLATION_LABELS[violationType] || violationType;
+    const ctx = { member: message.member, channel: message.channel, source: RULE_SOURCE };
+    // Unified allowlist / global pause: detected, nothing deleted, nobody punished.
+    if (await protectionHold(message.member, 'delete', RULE_SOURCE)) return true;
+    await actOrReport(message.guild, 'delete', ctx, () => message.delete());
+    if (action === 'delete') {
+        await logAutomodAction(message.guild, message.author, 'Delete', `${label} rule: message deleted.`,
+            { source: RULE_SOURCE, channel: message.channel }).catch(() => {});
+        return true;
+    }
+    const minutes = Math.min(Math.max(parseInt(rule.action_duration_minutes, 10) || 10, 1), MAX_RULE_MUTE_MINUTES);
+    await punishForRule(message, action, `Automod: ${label} rule.`, RULE_SOURCE, minutes);
+    return true;
+}
+
+/**
+ * Warn / mute / kick / ban the sender of a message for an AutoMod rule. Not the bot owner, not while the
+ * protections are paused or the member is allowlisted. The DM goes first for kick and ban (afterwards the
+ * bot usually shares no server with them). The infraction is only recorded when the action happened.
+ * @returns {Promise<boolean>} whether the action was taken
+ */
+async function punishForRule(message, action, reason, source, minutes = 10) {
+    const member = message.member;
+    if (!member || isProtectedFromBanCommands(message.author?.id)) return false;
+    const doing = action === 'mute' ? 'timeout' : action;
+    if (await protectionHold(member, doing, source)) return false;
+    const ctx = { member, channel: message.channel, source };
+    const automodUser = { tag: 'AutoMod', username: 'AutoMod', id: message.client.user.id, bot: true };
+    const stand = { guild: message.guild, client: message.client, user: automodUser };
+    const dm = { reason, moderator: automodUser };
+    try {
+        switch (action) {
+            case 'warn':
+                if (await logInfraction(stand, message.author, 'Warn', reason)) {
+                    await sendModerationDm(message.guild, message.author, 'warn', dm);
+                    await logAutomodAction(message.guild, message.author, 'Warn', reason, { source, channel: message.channel });
+                    return true;
+                }
+                return false;
+            case 'mute':
+                if (await actOrReport(message.guild, 'timeout', ctx, () => member.timeout(minutes * 60 * 1000, reason))) {
+                    await logInfraction(stand, message.author, 'Mute', reason, minutes);
+                    await sendModerationDm(message.guild, message.author, 'mute', { ...dm, durationMinutes: minutes, expiresAtMs: Date.now() + minutes * 60 * 1000 });
+                    await logAutomodAction(message.guild, message.author, 'Mute', reason, { source, channel: message.channel, durationMinutes: minutes });
+                    return true;
+                }
+                return false;
+            case 'kick':
+            case 'ban': {
+                await sendModerationDm(message.guild, message.author, action, action === 'ban' ? { ...dm, permanent: true } : dm);
+                const done = await actOrReport(message.guild, action, ctx,
+                    () => (action === 'kick' ? member.kick(reason) : member.ban({ reason })));
+                if (done) {
+                    await logInfraction(stand, message.author, action === 'kick' ? 'Kick' : 'Ban', reason);
+                    await logAutomodAction(message.guild, message.author, action === 'kick' ? 'Kick' : 'Ban', reason, { source, channel: message.channel });
+                }
+                return done;
+            }
+            default:
+                return false;
+        }
+    } catch (error) {
+        logger.error(`[Automod-Rule] Failed to ${action} ${message.author?.tag}`, { guildId: message.guild?.id, error: error.message });
+        return false;
     }
 }
 
@@ -329,22 +583,39 @@ export async function processMessage(message) {
  */
 async function enterFilteredMode(message, rule) {
     if (!message.guild || !message.member) return;
+    // Unified allowlist / global pause: detected (logged above), nothing deleted, no timeout.
+    if (await protectionHold(message.member, 'delete', 'Automod spam filter')) return;
 
     const guildId = message.guild.id;
     const userKey = `${guildId}:${message.author.id}`;
     const now = Date.now();
 
     // Delete the triggering message and clean up recent spam
-    await message.delete().catch(() => {});
+    const ctx = { member: message.member, channel: message.channel, source: SPAM_SOURCE };
+    await actOrReport(message.guild, 'delete', ctx, () => message.delete());
 
     try {
         const messages = await message.channel.messages.fetch({ limit: 50 });
         const userMessages = messages.filter(m => m.author.id === message.author.id);
         if (userMessages.size > 0 && message.channel.isTextBased() && 'bulkDelete' in message.channel) {
-            await message.channel.bulkDelete(userMessages).catch(() => {});
+            await actOrReport(message.guild, 'delete', ctx, () => message.channel.bulkDelete(userMessages));
         }
     } catch (cleanupError) {
         logger.debug(`[Automod-AntiSpam] Could not clean up messages: ${cleanupError.message}`);
+    }
+
+    // The rule's chosen action (spamRuleAction). Kick and Ban remove the sender; if the bot cannot, the
+    // ladder below still applies. Warn and Mute act now; the burst is still deleted until it stops.
+    let action = spamRuleAction(rule);
+    if (action === 'kick' || action === 'ban') {
+        if (await punishForRule(message, action, 'Automod: Message spam rule.', SPAM_SOURCE)) return;
+        action = 'ladder';
+    } else if (action === 'warn' || action === 'mute') {
+        const minutes = Math.min(Math.max(parseInt(rule?.action_duration_minutes, 10) || 10, 1), MAX_RULE_MUTE_MINUTES);
+        await punishForRule(message, action, 'Automod: Message spam rule.', SPAM_SOURCE, minutes);
+    } else if (action === 'delete') {
+        await logAutomodAction(message.guild, message.author, 'Delete', 'Message spam rule: repeated messages deleted.',
+            { source: SPAM_SOURCE, channel: message.channel }).catch(() => {});
     }
 
     // Set up filtered mode
@@ -353,6 +624,7 @@ async function enterFilteredMode(message, rule) {
         lastMessage: now,
         messagesDeleted: 1, // Count the triggering message
         rule: rule,
+        action,
         guildId: guildId,
         userId: message.author.id,
         userTag: message.author.tag,
@@ -386,6 +658,12 @@ async function releaseFilteredUser(userKey, client) {
 
     const { guildId, userId, userTag, messagesDeleted, channelId } = filterData;
 
+    // Only the ladder acts on release; the other actions were applied when the spam was caught.
+    if (filterData.action && filterData.action !== 'ladder') {
+        logger.info(`[Automod-AntiSpam] Released ${userTag} from filtered mode (${messagesDeleted} message(s) deleted, action: ${filterData.action})`, { guildId, userId });
+        return;
+    }
+
     logger.info(`[Automod-AntiSpam] Releasing ${userTag} from filtered mode after 1 minute cooldown`, {
         guildId,
         userId,
@@ -403,8 +681,12 @@ async function releaseFilteredUser(userKey, client) {
         const violationCount = violations[0]?.count || 0;
 
         // Determine timeout duration based on violation count
-        const timeoutIndex = Math.min(violationCount, ESCALATING_TIMEOUTS.length - 1);
-        const timeoutMinutes = ESCALATING_TIMEOUTS[timeoutIndex];
+        const timeoutMinutes = spamLadderMinutes(violationCount);
+
+        // Paused (or exempt since filtering began): no infraction, no timeout.
+        const guild = await client.guilds.fetch(guildId).catch(() => null);
+        const member = guild ? await guild.members.fetch(userId).catch(() => null) : null;
+        if (member && await protectionHold(member, 'timeout', 'Automod spam filter')) return;
 
         // Log infraction to database
         await pool.execute(
@@ -415,13 +697,11 @@ async function releaseFilteredUser(userKey, client) {
              timeoutMinutes]
         );
 
-        // Apply timeout
-        const guild = await client.guilds.fetch(guildId).catch(() => null);
+        // Apply timeout (when the bot cannot, "Manual action needed" says why and nothing claims it happened)
         if (guild) {
-            const member = await guild.members.fetch(userId).catch(() => null);
-            if (member && member.moderatable) {
-                const timeoutMs = timeoutMinutes * 60 * 1000;
-                await member.timeout(timeoutMs, `Automod: Spam filter - ${messagesDeleted} messages deleted. Violation #${violationCount + 1}`);
+            const timeoutMs = timeoutMinutes * 60 * 1000;
+            if (member && await actOrReport(guild, 'timeout', { member, source: SPAM_SOURCE },
+                () => member.timeout(timeoutMs, `Automod: Spam filter - ${messagesDeleted} messages deleted. Violation #${violationCount + 1}`))) {
 
                 logger.info(`[Automod-AntiSpam] Applied ${timeoutMinutes} minute timeout to ${userTag} (violation #${violationCount + 1})`, {
                     guildId,
@@ -432,6 +712,13 @@ async function releaseFilteredUser(userKey, client) {
 
                 // Notify user in channel
                 const channel = await guild.channels.fetch(channelId).catch(() => null);
+
+                // Post to the guild's log channel — the infraction row above is invisible
+                // to moderators on its own.
+                await logAutomodAction(guild, member.user, 'Mute',
+                    `Spam filter: ${messagesDeleted} message(s) deleted. Violation #${violationCount + 1} in 24h.`,
+                    { durationMinutes: timeoutMinutes, source: 'Anti-Spam Filter', channel }
+                ).catch(err => logger.warn('[Automod-AntiSpam] Failed to post automod log', { error: err.message, guildId }));
                 if (channel && channel.isTextBased()) {
                     const notifyMsg = await channel.send(
                         `⚠️ <@${userId}> has been timed out for **${timeoutMinutes} minute${timeoutMinutes > 1 ? 's' : ''}** for spamming. ` +
@@ -503,7 +790,7 @@ async function addHeat(message, heat, reason) {
     logger.info(`Added ${heat} heat to ${message.author.tag}. New score: ${userData.score}. Reason: ${reason}`, { guildId, category: 'automod-heat' });
 
     // Check for action thresholds
-    const actionThresholds = safeJsonArray(heatConfig.action_thresholds, 'automod action_thresholds').sort((a, b) => b.threshold - a.threshold);
+    const actionThresholds = parseActionThresholds(heatConfig.action_thresholds);
 
     for (const action of actionThresholds) {
         if (userData.score >= action.threshold) {
@@ -518,6 +805,9 @@ async function addHeat(message, heat, reason) {
 async function takeHeatAction(message, action) {
     if (!message.guild || !message.member) return;
     if (isProtectedFromBanCommands(message.author?.id)) return;
+    // Unified allowlist / global pause: no warning, timeout, kick, ban or clean-up.
+    const doing = action.type === 'mute' ? 'timeout' : ['warn', 'kick', 'ban'].includes(action.type) ? action.type : 'delete';
+    if (await protectionHold(message.member, doing, 'Automod heat')) return;
 
     const reason = `Automod: Reached heat threshold of ${action.threshold}.`;
     try {
@@ -527,35 +817,42 @@ async function takeHeatAction(message, action) {
             user: { tag: 'Automod', id: message.client.user.id }
         };
 
+        // The infraction is only recorded when the action really happened; when the bot cannot act,
+        // actOrReport has raised "Manual action needed" and the clean-up below still runs.
+        const member = message.member;
+        const ctx = { member, channel: message.channel, source: HEAT_SOURCE };
         switch (action.type) {
             case 'warn':
                 // Using logInfraction will DM the user and log it.
                 await logInfraction(mockInteraction, message.author, 'Warn', reason);
                 break;
             case 'mute':
-                if (message.member.moderatable) {
-                    await message.member.timeout((action.duration || 10) * 60 * 1000, reason);
+                if (await actOrReport(message.guild, 'timeout', ctx, () => member.timeout((action.duration || 10) * 60 * 1000, reason))) {
                     await logInfraction(mockInteraction, message.author, 'Mute', reason, action.duration);
                 }
                 break;
             case 'kick':
-                if (message.member.kickable) {
-                    await message.member.kick(reason);
+                if (await actOrReport(message.guild, 'kick', ctx, () => member.kick(reason))) {
                     await logInfraction(mockInteraction, message.author, 'Kick', reason);
                 }
                 break;
             case 'ban':
-                if (message.member.bannable) {
-                    await message.member.ban({ reason });
+                if (await actOrReport(message.guild, 'ban', ctx, () => member.ban({ reason }))) {
                     await logInfraction(mockInteraction, message.author, 'Ban', reason);
                 }
                 break;
         }
-        // Clean up user's recent messages that contributed to the heat
-        const messages = await message.channel.messages.fetch({ limit: 20 });
-        const userMessages = messages.filter(m => m.author.id === message.author.id);
-        if (message.channel.isTextBased() && 'bulkDelete' in message.channel) {
-            await message.channel.bulkDelete(userMessages).catch(() => {});
+        // Clean up the messages that contributed to the heat. A warning is the mildest
+        // rung on the ladder — wiping 20 of the member's recent messages for it is
+        // punishment out of all proportion, so only the triggering message goes.
+        if (action.type === 'warn') {
+            await actOrReport(message.guild, 'delete', ctx, () => message.delete());
+        } else {
+            const messages = await message.channel.messages.fetch({ limit: 20 });
+            const userMessages = messages.filter(m => m.author.id === message.author.id);
+            if (message.channel.isTextBased() && 'bulkDelete' in message.channel) {
+                await actOrReport(message.guild, 'delete', ctx, () => message.channel.bulkDelete(userMessages));
+            }
         }
 
     } catch (error) {

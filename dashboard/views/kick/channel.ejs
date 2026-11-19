@@ -1,514 +1,517 @@
-<%- include('_head', { pageTitle: channel.channel_name + ' — Control Center', csrfToken, kickUser: user }) %>
+<%- include('_head', { pageTitle: channel.channel_name + ' settings', csrfToken, kickUser: user }) %>
+<%
+  var feats = {};
+  try { feats = channel.features_enabled ? (typeof channel.features_enabled === 'string' ? JSON.parse(channel.features_enabled) : channel.features_enabled) : {}; } catch (e) { feats = {}; }
+  if (!feats || typeof feats !== 'object') feats = {};
+  var am = (feats.automod && typeof feats.automod === 'object') ? feats.automod : {};
+  var games = [
+    { key: 'tokes', label: 'Tokes', desc: '!lit tokes and XP for chatters.' },
+    { key: 'spark', label: 'Daily spark', desc: '!spark daily streaks.' },
+    { key: 'sessions', label: 'Smoke sessions', desc: '!sesh group smoke circles.' },
+    { key: 'trivia', label: 'Trivia', desc: '!trivia questions in chat.' }
+  ];
+  var cid = channel.channel_id;
+%>
 
-  <input id="chan" type="hidden" data-channel="<%= channel.channel_id %>" />
+  <input id="chan" type="hidden" data-channel="<%= cid %>">
+  <script type="application/json" id="feats-json"><%- JSON.stringify(feats).replace(/</g, '\\u003c') %></script>
 
   <div class="pagehead">
     <div>
-      <h1>⚙ <%= channel.channel_name %></h1>
-      <div class="sub">Full control center for this Kick channel.</div>
+      <div class="kick-eyebrow">Kick Defender</div>
+      <h1><%= channel.channel_name %></h1>
+      <p class="sub">Moderation, chat settings and automod for this channel.</p>
     </div>
-    <nav class="subnav">
-      <a href="/kick/channel/<%= channel.channel_id %>" class="active">Settings</a>
-      <a href="/kick/channel/<%= channel.channel_id %>/commands">Commands</a>
-      <a href="/kick">← All channels</a>
-    </nav>
-  </div>
-
-  <!-- ── Live moderation ─────────────────────────────────────── -->
-  <div class="card">
-    <h2>Live moderation</h2>
-    <div class="muted" style="margin-bottom:.6rem">Take action on a viewer right now — ban, timeout, or unban.</div>
-    <div class="srow">
-      <label>Username
-        <input id="mod-user" placeholder="username" />
-      </label>
-      <label>Action
-        <select id="mod-action">
-          <option value="ban">Ban</option>
-          <option value="timeout">Timeout</option>
-          <option value="unban">Unban</option>
-        </select>
-      </label>
-      <label>Timeout (min)
-        <input id="mod-mins" type="number" min="1" value="10" style="width:6rem" />
-      </label>
-      <label>Reason
-        <input id="mod-reason" placeholder="reason (optional)" />
-      </label>
-      <button id="mod-go">Apply</button>
+    <div class="pagehead-actions">
+      <a class="btn btn-secondary btn-sm" href="https://kick.com/<%= encodeURIComponent(channel.channel_name) %>" target="_blank" rel="noopener">Open on Kick</a>
     </div>
-    <div id="mod-result" class="muted" style="margin-top:.7rem"></div>
   </div>
+  <nav class="kick-tabs" aria-label="Channel">
+    <a href="/kick">All channels</a>
+    <a href="/kick/channel/<%= cid %>" aria-current="page">Settings</a>
+    <a href="/kick/channel/<%= cid %>/commands">Commands</a>
+  </nav>
 
-  <!-- ── Giveaway ────────────────────────────────────────────── -->
-  <div class="card">
-    <h2>🎉 Giveaway</h2>
-    <div id="gw-state">Loading…</div>
-    <div id="gw-form" style="display:none">
-      <div class="srow">
-        <label>Title
-          <input id="gw-title" placeholder="prize / title" />
-        </label>
-        <label>Keyword
-          <input id="gw-keyword" value="enter" style="width:8rem" />
-        </label>
-        <button id="gw-start">Start giveaway</button>
+  <!-- Live moderation -->
+  <section class="cf-section">
+    <header class="cf-section-head">
+      <div>
+        <h2 class="cf-section-title">Live moderation</h2>
+        <p class="cf-section-desc">Ban, time out or unban a viewer right now.</p>
+      </div>
+    </header>
+    <div class="cf-rows">
+      <div class="cf-row">
+        <div class="cf-row-text"><label class="cf-row-label" for="mod-user">Username</label></div>
+        <div class="cf-row-control"><input id="mod-user" maxlength="60" autocomplete="off" placeholder="username"></div>
+      </div>
+      <div class="cf-row">
+        <div class="cf-row-text"><label class="cf-row-label" for="mod-action">Action</label></div>
+        <div class="cf-row-control">
+          <select id="mod-action">
+            <option value="ban">Ban</option>
+            <option value="timeout">Timeout</option>
+            <option value="unban">Unban</option>
+          </select>
+        </div>
+      </div>
+      <div class="cf-row">
+        <div class="cf-row-text"><label class="cf-row-label" for="mod-mins">Timeout length</label><p class="cf-row-desc">Only used for a timeout.</p></div>
+        <div class="cf-row-control">
+          <div class="cf-input-unit"><input id="mod-mins" type="number" min="1" max="10080" value="10" disabled><span class="cf-unit">min</span></div>
+        </div>
+      </div>
+      <div class="cf-row">
+        <div class="cf-row-text"><label class="cf-row-label" for="mod-reason">Reason</label><p class="cf-row-desc">Optional. Kept in the activity log.</p></div>
+        <div class="cf-row-control"><input id="mod-reason" maxlength="100" autocomplete="off"></div>
+      </div>
+      <div class="cf-section-foot">
+        <span id="mod-result" class="kick-status cf-foot-note" role="status" aria-live="polite"></span>
+        <button type="button" id="mod-go" class="btn btn-primary btn-sm">Apply</button>
       </div>
     </div>
-  </div>
+  </section>
 
-  <!-- ── Alerts & events ─────────────────────────────────────── -->
-  <div class="card">
-    <h2>🔔 Alerts &amp; events</h2>
-    <div class="muted" style="margin-bottom:.6rem">Thank followers and subscribers automatically in chat. Requires event subscriptions to be enabled once.</div>
-    <div class="srow">
-      <button id="ev-sub" class="ghost">Enable event subscriptions</button>
-      <span id="ev-sub-msg" class="muted"></span>
+  <!-- Giveaway -->
+  <section class="cf-section">
+    <header class="cf-section-head">
+      <div>
+        <h2 class="cf-section-title">Giveaway</h2>
+        <p class="cf-section-desc">Viewers enter by typing the keyword in chat; you draw the winner here.</p>
+      </div>
+    </header>
+    <div class="cf-rows">
+      <div id="gw-state" class="cf-row cf-row--stack"><p class="muted">Loading…</p></div>
+      <div id="gw-form" hidden>
+        <div class="cf-row">
+          <div class="cf-row-text"><label class="cf-row-label" for="gw-title">Prize</label></div>
+          <div class="cf-row-control"><input id="gw-title" maxlength="200" placeholder="What are you giving away?"></div>
+        </div>
+        <div class="cf-row">
+          <div class="cf-row-text"><label class="cf-row-label" for="gw-keyword">Entry keyword</label><p class="cf-row-desc">Viewers type <code>!enter</code> (or your keyword) to join.</p></div>
+          <div class="cf-row-control"><input id="gw-keyword" maxlength="50" value="enter" pattern="[A-Za-z0-9_-]+"></div>
+        </div>
+        <div class="cf-section-foot">
+          <span id="gw-msg" class="kick-status cf-foot-note" role="status" aria-live="polite"></span>
+          <button type="button" id="gw-start" class="btn btn-primary btn-sm">Start giveaway</button>
+        </div>
+      </div>
     </div>
-    <textarea id="thank-follow" placeholder="Follow thank-you (blank = off) — supports {{username}}" style="width:100%;margin-top:.6rem"></textarea>
-    <textarea id="thank-sub" placeholder="Sub thank-you (blank = off) — supports {{username}}" style="width:100%;margin-top:.6rem"></textarea>
-    <button id="ev-save" style="margin-top:1.25rem">Save alert messages</button>
-    <div class="muted" style="margin-top:1.1rem;margin-bottom:.4rem">Recent events</div>
-    <div id="ev-feed" class="log-out">Loading…</div>
-    <button id="ev-refresh" class="ghost" style="margin-top:.75rem">Refresh</button>
-  </div>
+  </section>
 
-  <!-- ── Channel settings (preserved) ────────────────────────── -->
-  <div class="card">
-    <h2>Channel settings</h2>
-    <div class="srow">
-      <label>Command prefix
-        <input id="prefix" maxlength="5" value="<%= channel.command_prefix || '!' %>" style="width:5rem" />
-      </label>
-      <label>Global cooldown (s)
-        <input id="cg" type="number" min="0" max="60" value="<%= channel.cooldown_global || 0 %>" style="width:6rem" />
-      </label>
-      <label>Per-user cooldown (s)
-        <input id="cu" type="number" min="0" max="300" value="<%= channel.cooldown_user || 0 %>" style="width:6rem" />
-      </label>
+  <!-- Chat, alerts and events -->
+  <section class="cf-section">
+    <header class="cf-section-head">
+      <div>
+        <h2 class="cf-section-title">Chat connection and alerts</h2>
+        <p class="cf-section-desc">Kick delivers chat, follows, subs and stream status to the bot through webhooks.</p>
+      </div>
+    </header>
+    <div class="cf-rows">
+      <div class="cf-row">
+        <div class="cf-row-text">
+          <span class="cf-row-label">Kick events</span>
+          <p class="cf-row-desc">Needed once per channel. Without it the defender, automod, commands and thank-you messages see nothing.</p>
+        </div>
+        <div class="cf-row-control">
+          <div class="kick-inline"><span id="ev-state"><span class="muted">Checking…</span></span><button type="button" id="ev-sub" class="btn btn-secondary btn-sm">Connect</button></div>
+          <span id="ev-sub-msg" class="kick-status" role="status" aria-live="polite"></span>
+        </div>
+      </div>
+      <div class="cf-row cf-row--stack">
+        <div class="cf-row-text"><label class="cf-row-label" for="thank-follow">Follow thank-you</label><p class="cf-row-desc">Posted when someone follows. <code>{{username}}</code> is the follower. Empty = off.</p></div>
+        <div class="cf-row-control"><textarea id="thank-follow" rows="2" maxlength="500"></textarea></div>
+      </div>
+      <div class="cf-row cf-row--stack">
+        <div class="cf-row-text"><label class="cf-row-label" for="thank-sub">Sub thank-you</label><p class="cf-row-desc">Posted for new subs, renewals and gifted subs. <code>{{username}}</code> is the subscriber. Empty = off.</p></div>
+        <div class="cf-row-control"><textarea id="thank-sub" rows="2" maxlength="500"></textarea></div>
+      </div>
+      <div class="cf-section-foot">
+        <span id="ev-save-msg" class="kick-status cf-foot-note" role="status" aria-live="polite"></span>
+        <button type="button" id="ev-save" class="btn btn-primary btn-sm">Save alert messages</button>
+      </div>
+      <div class="cf-row cf-row--stack">
+        <div class="cf-row-text"><span class="cf-row-label">Recent events</span></div>
+        <div class="cf-row-control">
+          <div id="ev-feed"><p class="muted">Loading…</p></div>
+          <div><button type="button" id="ev-refresh" class="btn btn-secondary btn-sm">Refresh</button></div>
+        </div>
+      </div>
     </div>
+  </section>
 
-    <div class="muted" style="margin-top:1.1rem;margin-bottom:.4rem">Features</div>
-    <div id="feats" class="srow" data-json='<%= channel.features_enabled || "{}" %>'></div>
-
-    <div class="muted" style="margin-top:1.1rem;margin-bottom:.4rem">Welcome message for first-time chatters</div>
-    <textarea id="welcome-msg" placeholder="First-time chatter welcome (blank = off) — supports {{username}}" style="width:100%;margin-top:.6rem"></textarea>
-
-    <button id="save" style="margin-top:1.25rem">Save settings</button>
-  </div>
-
-  <!-- ── Automod filters ─────────────────────────────────────── -->
-  <div class="card">
-    <h2>Automod filters</h2>
-    <div class="muted" style="margin-bottom:.6rem">Auto-delete messages that break these rules. Mods and the broadcaster are exempt.</div>
-    <div class="srow">
-      <label style="flex-direction:row;gap:.35rem;align-items:center">
-        <input id="am-caps" type="checkbox" /> Block excessive caps
-      </label>
-      <label>% caps
-        <input id="am-caps-pct" type="number" min="10" max="100" value="70" style="width:5rem" />
-      </label>
+  <!-- Channel settings -->
+  <section class="cf-section">
+    <header class="cf-section-head">
+      <div>
+        <h2 class="cf-section-title">Chat settings</h2>
+        <p class="cf-section-desc">Command prefix, cooldowns, games and the first-time chatter welcome.</p>
+      </div>
+    </header>
+    <div class="cf-rows">
+      <div class="cf-row cf-row--switch">
+        <div class="cf-row-text">
+          <label class="cf-row-label" for="feat-commands">Chat commands</label>
+          <p class="cf-row-desc">Master switch for every built-in and custom command. Off by default, so the channel runs protection only.</p>
+        </div>
+        <div class="cf-row-control"><input type="checkbox" role="switch" class="cf-switch" id="feat-commands" <%= feats.commands === true ? 'checked' : '' %>></div>
+      </div>
+      <div class="cf-row">
+        <div class="cf-row-text"><label class="cf-row-label" for="prefix">Command prefix</label><p class="cf-row-desc">Up to 5 characters.</p></div>
+        <div class="cf-row-control"><input id="prefix" maxlength="5" value="<%= channel.command_prefix || '!' %>"></div>
+      </div>
+      <div class="cf-row">
+        <div class="cf-row-text">
+          <label class="cf-row-label" for="cg">Global cooldown</label>
+          <p class="cf-row-desc">After any chat command, the channel waits this long before the next one. 0 = off, up to 60.</p>
+        </div>
+        <div class="cf-row-control"><div class="cf-input-unit"><input id="cg" type="number" min="0" max="60" value="<%= channel.cooldown_global || 0 %>"><span class="cf-unit">s</span></div></div>
+      </div>
+      <div class="cf-row">
+        <div class="cf-row-text">
+          <label class="cf-row-label" for="cu">Per-user cooldown</label>
+          <p class="cf-row-desc">How long each viewer waits between their own commands. 0 = off, up to 300.</p>
+        </div>
+        <div class="cf-row-control"><div class="cf-input-unit"><input id="cu" type="number" min="0" max="300" value="<%= channel.cooldown_user || 0 %>"><span class="cf-unit">s</span></div></div>
+      </div>
+      <div class="cf-notice is-info"><div class="cf-notice-body">Each command's own cooldown still applies on top of these two. Mods and the broadcaster skip all three.</div></div>
+      <div class="cf-rows-head">Games</div>
+      <% games.forEach(function (g) { %>
+        <div class="cf-row cf-row--switch">
+          <div class="cf-row-text"><label class="cf-row-label" for="feat-<%= g.key %>"><%= g.label %></label><p class="cf-row-desc"><%= g.desc %> Needs chat commands on.</p></div>
+          <div class="cf-row-control"><input type="checkbox" role="switch" class="cf-switch feat" id="feat-<%= g.key %>" data-feat="<%= g.key %>" <%= feats[g.key] !== false ? 'checked' : '' %>></div>
+        </div>
+      <% }) %>
+      <div class="cf-row cf-row--switch">
+        <div class="cf-row-text"><label class="cf-row-label" for="feat-analytics">Chat analytics</label><p class="cf-row-desc">Counts chat messages per day for the chart further down. Off by default.</p></div>
+        <div class="cf-row-control"><input type="checkbox" role="switch" class="cf-switch" id="feat-analytics" <%= feats.analytics === true ? 'checked' : '' %>></div>
+      </div>
+      <div class="cf-row cf-row--stack">
+        <div class="cf-row-text"><label class="cf-row-label" for="welcome-msg">First-time chatter welcome</label><p class="cf-row-desc">Posted the first time someone chats in this channel. <code>{{username}}</code> is the chatter. Empty = off.</p></div>
+        <div class="cf-row-control"><textarea id="welcome-msg" rows="2" maxlength="500"></textarea></div>
+      </div>
+      <div class="cf-section-foot">
+        <span id="save-msg" class="kick-status cf-foot-note" role="status" aria-live="polite"></span>
+        <button type="button" id="save" class="btn btn-primary btn-sm">Save chat settings</button>
+      </div>
     </div>
-    <div class="srow">
-      <label style="flex-direction:row;gap:.35rem;align-items:center">
-        <input id="am-links" type="checkbox" /> Block links
-      </label>
-      <label style="flex-direction:row;gap:.35rem;align-items:center">
-        <input id="am-symbols" type="checkbox" /> Block symbol spam
-      </label>
+  </section>
+
+  <!-- Automod -->
+  <section class="cf-section">
+    <header class="cf-section-head">
+      <div>
+        <h2 class="cf-section-title">Automod</h2>
+        <p class="cf-section-desc">Removes messages that break these rules. Mods and the broadcaster are never filtered.</p>
+      </div>
+    </header>
+    <div class="cf-rows">
+      <div class="cf-row cf-row--switch">
+        <div class="cf-row-text"><label class="cf-row-label" for="am-caps">Excessive caps</label><p class="cf-row-desc">Remove messages that are mostly capital letters.</p></div>
+        <div class="cf-row-control"><input type="checkbox" role="switch" class="cf-switch" id="am-caps" <%= am.caps ? 'checked' : '' %>></div>
+      </div>
+      <div class="cf-row cf-row--sub">
+        <div class="cf-row-text"><label class="cf-row-label" for="am-caps-pct">Caps threshold</label><p class="cf-row-desc">Share of capital letters that counts as too many. 10 to 100.</p></div>
+        <div class="cf-row-control"><div class="cf-input-unit"><input id="am-caps-pct" type="number" min="10" max="100" value="<%= am.caps_pct || 70 %>"><span class="cf-unit">%</span></div></div>
+      </div>
+      <div class="cf-row cf-row--switch">
+        <div class="cf-row-text"><label class="cf-row-label" for="am-links">Links</label><p class="cf-row-desc">Remove any message with a link. Known scam links are removed by the defender while it is on.</p></div>
+        <div class="cf-row-control"><input type="checkbox" role="switch" class="cf-switch" id="am-links" <%= am.links ? 'checked' : '' %>></div>
+      </div>
+      <div class="cf-row cf-row--switch">
+        <div class="cf-row-text"><label class="cf-row-label" for="am-symbols">Symbol spam</label><p class="cf-row-desc">Remove messages that are mostly symbols.</p></div>
+        <div class="cf-row-control"><input type="checkbox" role="switch" class="cf-switch" id="am-symbols" <%= am.symbols ? 'checked' : '' %>></div>
+      </div>
+      <div class="cf-row">
+        <div class="cf-row-text"><label class="cf-row-label" for="am-maxlen">Longest message</label><p class="cf-row-desc">Remove messages longer than this. 0 = no limit, up to 500.</p></div>
+        <div class="cf-row-control"><div class="cf-input-unit"><input id="am-maxlen" type="number" min="0" max="500" value="<%= am.max_len || 0 %>"><span class="cf-unit">chars</span></div></div>
+      </div>
+      <div class="cf-row cf-row--stack">
+        <div class="cf-row-text"><label class="cf-row-label" for="am-words">Banned words and phrases</label><p class="cf-row-desc">Comma-separated. <code>*</code> is a wildcard, so <code>scam*</code> also matches "scammer".</p></div>
+        <div class="cf-row-control"><textarea id="am-words" rows="3" maxlength="4000"></textarea></div>
+      </div>
+      <div class="cf-section-foot">
+        <span id="am-msg" class="kick-status cf-foot-note" role="status" aria-live="polite"></span>
+        <button type="button" id="am-save" class="btn btn-primary btn-sm">Save automod</button>
+      </div>
     </div>
-    <div class="srow">
-      <label>Max message length (0 = off)
-        <input id="am-maxlen" type="number" min="0" max="500" value="0" style="width:6rem" />
-      </label>
+  </section>
+
+  <!-- Activity -->
+  <section class="cf-section">
+    <header class="cf-section-head">
+      <div>
+        <h2 class="cf-section-title">Activity</h2>
+        <p class="cf-section-desc">The last 14 days in this channel.</p>
+      </div>
+    </header>
+    <div class="cf-rows">
+      <div class="cf-row cf-row--stack">
+        <div class="cf-row-text">
+          <span class="cf-row-label">Defender actions</span>
+          <div class="kick-legend" aria-hidden="true"><span><i class="kick-sw-banned"></i>Banned</span><span><i class="kick-sw-removed"></i>Removed</span><span><i class="kick-sw-detected"></i>Detected</span></div>
+        </div>
+        <div id="ch-trend" class="kick-chart"><p class="muted">Loading…</p></div>
+      </div>
+      <div class="cf-row cf-row--stack">
+        <div class="cf-row-text"><span class="cf-row-label">Chat messages per day</span></div>
+        <div id="chat-trend" class="kick-chart"><p class="muted">Loading…</p></div>
+      </div>
+      <div class="cf-row cf-row--stack">
+        <div class="cf-row-text"><span class="cf-row-label">Recent defender actions</span></div>
+        <div class="cf-row-control">
+          <div id="feed"><p class="muted">Loading…</p></div>
+          <div><button type="button" id="feed-refresh" class="btn btn-secondary btn-sm">Refresh</button></div>
+        </div>
+      </div>
     </div>
-    <textarea id="am-words" placeholder="Banned words/phrases — comma-separated; use * as a wildcard (e.g. scam*)" style="width:100%;margin-top:.6rem"></textarea>
-    <button id="am-save" style="margin-top:1.25rem">Save automod</button>
-  </div>
+  </section>
 
-  <!-- ── Copy configuration ──────────────────────────────────── -->
-  <div class="card" id="cp-card">
-    <h2>Copy configuration</h2>
-    <div class="muted" style="margin-bottom:.6rem">Copies commands, responders, timers, automod &amp; settings FROM another of your channels — overwriting this channel's current setup.</div>
-    <div class="srow">
-      <label>Copy from
-        <select id="cp-from"></select>
-      </label>
-      <button id="cp-go" class="danger">Copy here</button>
+  <!-- Copy configuration -->
+  <section class="cf-section cf-section--danger" id="cp-card">
+    <header class="cf-section-head">
+      <div>
+        <h2 class="cf-section-title">Copy from another channel</h2>
+        <p class="cf-section-desc">Replaces this channel's commands, auto-responders, timers, automod and protection settings with another of your channels' setup.</p>
+      </div>
+    </header>
+    <div class="cf-rows">
+      <div class="cf-row" id="cp-row">
+        <div class="cf-row-text"><label class="cf-row-label" for="cp-from">Copy from</label></div>
+        <div class="cf-row-control"><select id="cp-from"><option value="">Loading…</option></select></div>
+      </div>
+      <div class="cf-section-foot">
+        <span id="cp-msg" class="kick-status cf-foot-note" role="status" aria-live="polite"></span>
+        <button type="button" id="cp-go" class="btn btn-danger btn-sm">Copy here</button>
+      </div>
     </div>
-  </div>
+  </section>
 
-  <!-- ── Activity — last 14 days ─────────────────────────────── -->
-  <div class="card">
-    <h2>Activity — last 14 days</h2>
-    <div class="muted" style="margin-bottom:.6rem">Daily enforcement volume on this channel.</div>
-    <div id="ch-trend">Loading…</div>
-    <div class="muted" style="margin-top:.7rem;display:flex;gap:1.1rem;flex-wrap:wrap;font-size:.82rem">
-      <span><span style="display:inline-block;width:.7rem;height:.7rem;border-radius:2px;background:#53FC18;vertical-align:middle;margin-right:.35rem"></span>Banned</span>
-      <span><span style="display:inline-block;width:.7rem;height:.7rem;border-radius:2px;background:#7c84ff;vertical-align:middle;margin-right:.35rem"></span>Removed</span>
-      <span><span style="display:inline-block;width:.7rem;height:.7rem;border-radius:2px;background:rgba(255,255,255,.25);vertical-align:middle;margin-right:.35rem"></span>Detected</span>
-    </div>
-    <div id="chat-trend" class="muted" style="margin-top:.9rem">Loading chat volume…</div>
-    <div class="muted" style="margin-top:.35rem;font-size:.82rem">Messages per day</div>
-  </div>
-
-  <!-- ── Recent activity ─────────────────────────────────────── -->
-  <div class="card">
-    <h2>Recent activity</h2>
-    <div class="muted" style="margin-bottom:.6rem">Latest enforcement actions on this channel.</div>
-    <div id="feed" class="log-out">Loading…</div>
-    <button id="feed-refresh" class="ghost" style="margin-top:.75rem">Refresh</button>
-  </div>
-
-  <!-- ── Quick links ─────────────────────────────────────────── -->
-  <div class="card">
-    <h2>Quick links</h2>
-    <ul class="clean">
-      <li><a href="/kick/channel/<%= channel.channel_id %>/commands">Manage commands →</a></li>
-      <li><a href="https://kick.com/<%= channel.channel_name %>" target="_blank" rel="noopener">View on Kick →</a></li>
-      <li><a href="/kick">All channels →</a></li>
-    </ul>
-  </div>
-
-<% var pageJs = `
   <script>
-    const CHANNEL = document.querySelector('[data-channel]').dataset.channel;
-    const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  (function () {
+    var K = window.KickDash;
+    var CHANNEL = document.getElementById('chan').dataset.channel;
+    var $ = function (id) { return document.getElementById(id); };
+    var base = '/kick/api/channel/' + encodeURIComponent(CHANNEL);
 
-    // ── Feature toggles from stored JSON (data-attr avoids EJS-in-JS quoting bugs) ──
-    const FEATURES = ['tokes','spark','sessions','trivia'];
-    let feats = {};
-    try { feats = JSON.parse(document.getElementById('feats').dataset.json || '{}') || {}; } catch (_) {}
-    document.getElementById('feats').innerHTML = FEATURES.map(f =>
-      '<label style="flex-direction:row;gap:.35rem;align-items:center">' +
-      '<input type="checkbox" class="feat" data-feat="' + f + '"' + (feats[f] !== false ? ' checked' : '') + '/> ' + f + '</label>').join('')
-      // Chat analytics + chat commands are OPT-IN (off unless explicitly true).
-      // "chat commands" is the master switch for ALL built-in + custom commands
-      // — most channels run us for protection only.
-      + '<label style="flex-direction:row;gap:.35rem;align-items:center">' +
-      '<input type="checkbox" id="feat-analytics"' + (feats.analytics === true ? ' checked' : '') + '/> chat analytics</label>'
-      + '<label style="flex-direction:row;gap:.35rem;align-items:center;font-weight:700">' +
-      '<input type="checkbox" id="feat-commands"' + (feats.commands === true ? ' checked' : '') + '/> chat commands (master switch)</label>';
+    // Saved feature JSON (games, automod, messages, plus any keys this page doesn't edit).
+    var saved = {};
+    try { saved = JSON.parse($('feats-json').textContent) || {}; } catch (_) { saved = {}; }
+    var am = (saved.automod && typeof saved.automod === 'object') ? saved.automod : {};
+    $('am-words').value = am.words || '';
+    $('welcome-msg').value = saved.welcome_message || '';
+    $('thank-follow').value = saved.thank_follow || '';
+    $('thank-sub').value = saved.thank_sub || '';
 
-    // ── Automod filters init (reuse the same parsed features object) ──
-    const am = (feats && feats.automod) || {};
-    document.getElementById('am-caps').checked = !!am.caps;
-    document.getElementById('am-caps-pct').value = am.caps_pct || 70;
-    document.getElementById('am-links').checked = !!am.links;
-    document.getElementById('am-symbols').checked = !!am.symbols;
-    document.getElementById('am-maxlen').value = am.max_len || 0;
-    document.getElementById('am-words').value = am.words || '';
-    document.getElementById('welcome-msg').value = feats.welcome_message || '';
-    document.getElementById('thank-follow').value = feats.thank_follow || '';
-    document.getElementById('thank-sub').value = feats.thank_sub || '';
-
-    // ── Single source of truth for features_enabled: BOTH save paths round-trip
-    //    game toggles + automod (incl. words) + welcome_message so neither clobbers ──
+    // One builder for every save, so no save clobbers another section's values.
+    // Starts from the saved object so keys this page doesn't show survive.
     function buildFeatures() {
-      const features = {};
-      document.querySelectorAll('.feat').forEach(c => { features[c.dataset.feat] = c.checked; });
-      features.automod = {
-        caps: document.getElementById('am-caps').checked,
-        caps_pct: Number(document.getElementById('am-caps-pct').value) || 70,
-        links: document.getElementById('am-links').checked,
-        symbols: document.getElementById('am-symbols').checked,
-        max_len: Number(document.getElementById('am-maxlen').value) || 0,
-        words: document.getElementById('am-words').value
-      };
-      features.welcome_message = document.getElementById('welcome-msg').value;
-      features.thank_follow = document.getElementById('thank-follow').value;
-      features.thank_sub = document.getElementById('thank-sub').value;
-      features.analytics = document.getElementById('feat-analytics').checked;
-      features.commands = document.getElementById('feat-commands').checked;
-      return features;
+      var f = Object.assign({}, saved);
+      document.querySelectorAll('.feat').forEach(function (c) { f[c.dataset.feat] = c.checked; });
+      f.automod = Object.assign({}, am, {
+        caps: $('am-caps').checked,
+        caps_pct: Math.min(100, Math.max(10, Number($('am-caps-pct').value) || 70)),
+        links: $('am-links').checked,
+        symbols: $('am-symbols').checked,
+        max_len: Math.min(500, Math.max(0, Number($('am-maxlen').value) || 0)),
+        words: $('am-words').value
+      });
+      f.welcome_message = $('welcome-msg').value;
+      f.thank_follow = $('thank-follow').value;
+      f.thank_sub = $('thank-sub').value;
+      f.analytics = $('feat-analytics').checked;
+      f.commands = $('feat-commands').checked;
+      return f;
     }
-
-    document.getElementById('am-save').addEventListener('click', async (e) => {
-      const btn = e.currentTarget; btn.disabled = true;
-      const features = buildFeatures();
+    async function saveWith(btn, out, extra) {
+      btn.disabled = true; K.status(out, 'Saving…');
+      var features = buildFeatures();
       try {
-        await KickDash.patch('/kick/api/channel/' + CHANNEL, { features_enabled: features });
-        btn.textContent = 'Saved ✓';
-      } catch (err) { alert(err.message || 'Save failed.'); }
-      finally { btn.disabled = false; setTimeout(() => { btn.textContent = 'Save automod'; }, 1500); }
+        await K.patch(base, Object.assign({ features_enabled: features }, extra || {}));
+        saved = features; am = features.automod;
+        K.status(out, 'Saved.', 'ok');
+      } catch (e) { K.status(out, e.message || 'Save failed.', 'bad'); }
+      finally { btn.disabled = false; }
+    }
+    $('am-save').addEventListener('click', function (e) { saveWith(e.currentTarget, $('am-msg')); });
+    $('ev-save').addEventListener('click', function (e) { saveWith(e.currentTarget, $('ev-save-msg')); });
+    $('save').addEventListener('click', function (e) {
+      saveWith(e.currentTarget, $('save-msg'), { command_prefix: $('prefix').value, cooldown_global: $('cg').value, cooldown_user: $('cu').value });
     });
 
-    // ── Channel settings save ──
-    document.getElementById('save').addEventListener('click', async (e) => {
-      const btn = e.currentTarget; btn.disabled = true;
-      const features = buildFeatures();
-      try {
-        await KickDash.patch('/kick/api/channel/' + CHANNEL, {
-          command_prefix: document.getElementById('prefix').value,
-          cooldown_global: document.getElementById('cg').value,
-          cooldown_user: document.getElementById('cu').value,
-          features_enabled: features
-        });
-        btn.textContent = 'Saved ✓';
-      } catch (err) { alert(err.message || 'Save failed.'); }
-      finally { btn.disabled = false; setTimeout(() => { btn.textContent = 'Save settings'; }, 1500); }
-    });
-
-    // ── Live moderation ──
-    document.getElementById('mod-go').addEventListener('click', async (e) => {
-      const btn = e.currentTarget;
-      const out = document.getElementById('mod-result');
-      const action = document.getElementById('mod-action').value;
-      const username = document.getElementById('mod-user').value.trim();
-      const reason = document.getElementById('mod-reason').value.trim();
-      const minutes = Number(document.getElementById('mod-mins').value) || 10;
-      if (!username) { out.textContent = 'Enter a username first.'; return; }
-      btn.disabled = true; out.textContent = 'Working…';
-      const body = { action, username };
-      if (action === 'timeout') body.minutes = minutes;
+    // Live moderation.
+    var syncMins = function () { $('mod-mins').disabled = $('mod-action').value !== 'timeout'; };
+    $('mod-action').addEventListener('change', syncMins); syncMins();
+    $('mod-go').addEventListener('click', async function (e) {
+      var btn = e.currentTarget, out = $('mod-result');
+      var action = $('mod-action').value;
+      var username = $('mod-user').value.trim();
+      var reason = $('mod-reason').value.trim();
+      if (!username) { K.status(out, 'Enter a username first.', 'bad'); return; }
+      var body = { action: action, username: username };
+      if (action === 'timeout') body.minutes = Number($('mod-mins').value) || 10;
       if (reason) body.reason = reason;
+      btn.disabled = true; K.status(out, 'Working…');
       try {
-        await KickDash.post('/kick/api/channel/' + CHANNEL + '/moderate', body);
-        const verb = action === 'ban' ? 'Banned' : action === 'timeout' ? 'Timed out' : 'Unbanned';
-        out.textContent = '✓ ' + verb + ' ' + username;
-        document.getElementById('mod-user').value = '';
-        document.getElementById('mod-reason').value = '';
+        await K.post(base + '/moderate', body);
+        var verb = action === 'ban' ? 'Banned' : action === 'timeout' ? 'Timed out' : 'Unbanned';
+        K.status(out, verb + ' ' + username + '.', 'ok');
+        $('mod-user').value = ''; $('mod-reason').value = '';
         loadFeed();
-      } catch (err) { out.textContent = err.message || 'Action failed.'; }
+      } catch (err) { K.status(out, err.message || 'Action failed.', 'bad'); }
       finally { btn.disabled = false; }
     });
 
-    // ── Activity feed ──
+    // Recent defender actions.
     async function loadFeed() {
-      const feed = document.getElementById('feed');
-      feed.textContent = 'Loading…';
+      var host = $('feed');
       try {
-        const res = await fetch('/kick/api/enforcement-log?channelId=' + encodeURIComponent(CHANNEL) + '&limit=30');
-        const j = await res.json();
-        if (!res.ok) throw new Error(j.error || 'Failed');
-        if (!j.events || !j.events.length) { feed.textContent = 'No actions recorded yet.'; return; }
-        feed.innerHTML = '<table>' + j.events.map(ev =>
-          '<tr><td>' + (ev.created_at ? new Date(ev.created_at).toISOString().slice(0,16).replace('T',' ') : '—') +
-          '</td><td>' + esc(ev.action) + (ev.success ? '' : ' (failed)') +
-          '</td><td>' + esc(ev.target_username) + '</td><td>' + esc(ev.reason) + '</td></tr>').join('') + '</table>';
-      } catch (err) { feed.textContent = err.message || 'Failed to load.'; }
+        var j = await K.get('/kick/api/enforcement-log?channelId=' + encodeURIComponent(CHANNEL) + '&limit=30');
+        K.table(host, ['Time', 'Action', 'User', 'Reason'], (j.events || []).map(function (ev) {
+          return [{ text: K.fmtTime(ev.created_at) || '—', cls: 'nowrap' }, ev.action + (ev.success ? '' : ' (failed)'), ev.target_username || '', ev.reason || ''];
+        }), 'No actions recorded yet.');
+      } catch (err) { host.replaceChildren(K.el('p', 'muted', err.message || 'Failed to load.')); }
     }
-    document.getElementById('feed-refresh').addEventListener('click', loadFeed);
+    $('feed-refresh').addEventListener('click', loadFeed);
 
-    // ── 14-day activity chart (self-contained SVG stacked bars) ──
     async function loadChTrend() {
-      const host = document.getElementById('ch-trend');
+      var host = $('ch-trend');
       try {
-        const res = await fetch('/kick/api/channel/' + CHANNEL + '/trend?days=14');
-        const j = await res.json();
-        if (!res.ok) throw new Error(j.error || 'Failed');
-        const series = (j && j.series) || [];
-        const totals = series.map(d => (Number(d.banned)||0) + (Number(d.deleted)||0) + (Number(d.dormant)||0));
-        const max = Math.max(0, ...totals);
-        if (!series.length || max === 0) { host.textContent = 'No activity in the last 14 days.'; return; }
-
-        const W = 560, H = 160, padL = 8, padR = 8, padT = 12, padB = 22;
-        const plotW = W - padL - padR, plotH = H - padT - padB;
-        const n = series.length;
-        const slot = plotW / n;
-        const barW = Math.min(22, slot * 0.62);
-
-        const bars = series.map((d, i) => {
-          const banned = Number(d.banned) || 0;
-          const deleted = Number(d.deleted) || 0;
-          const dormant = Number(d.dormant) || 0;
-          const total = banned + deleted + dormant;
-          const x = padL + i * slot + (slot - barW) / 2;
-          const baseY = padT + plotH;
-          const px = v => (v / max) * plotH;
-          let y = baseY;
-          const segs = [];
-          // stack bottom-up: banned, then deleted, then dormant
-          [['dormant', dormant, 'rgba(255,255,255,.25)'], ['deleted', deleted, '#7c84ff'], ['banned', banned, '#53FC18']].forEach(s => {
-            const h = px(s[1]);
-            if (h > 0) { y -= h; segs.push('<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + barW.toFixed(1) + '" height="' + h.toFixed(1) + '" fill="' + s[2] + '" rx="1.5"/>'); }
-          });
-          let lbl = '';
-          if (i % 3 === 0 && d.date) {
-            const parts = String(d.date).split('-');
-            const md = (parts[1] || '') + '/' + (parts[2] || '');
-            const cx = x + barW / 2;
-            lbl = '<text x="' + cx.toFixed(1) + '" y="' + (H - 7) + '" fill="var(--muted)" font-size="9" text-anchor="middle">' + md + '</text>';
-          }
-          return segs.join('') + lbl;
-        }).join('');
-
-        const baseline = '<line x1="' + padL + '" y1="' + (padT + plotH) + '" x2="' + (W - padR) + '" y2="' + (padT + plotH) + '" stroke="var(--line)" stroke-width="1"/>';
-        host.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" preserveAspectRatio="xMidYMid meet" role="img" aria-label="14-day activity chart">' + baseline + bars + '</svg>';
-      } catch (err) { host.textContent = 'Failed to load chart.'; }
+        var j = await K.get(base + '/trend?days=14');
+        K.bars(host, j.series || [], [
+          { key: 'banned', cls: 'banned', label: 'Banned' },
+          { key: 'deleted', cls: 'removed', label: 'Removed' },
+          { key: 'dormant', cls: 'detected', label: 'Detected' }
+        ], { label: 'Defender actions, last 14 days' });
+      } catch (_) { host.replaceChildren(K.el('p', 'muted', 'Failed to load the chart.')); }
+    }
+    async function loadChatTrend() {
+      var host = $('chat-trend');
+      try {
+        var j = await K.get(base + '/chat-trend?days=14');
+        K.bars(host, (j.series || []).map(function (d) { return { date: d.date, messages: d.messages }; }),
+          [{ key: 'messages', cls: 'chat', label: 'Messages' }],
+          { height: 100, barMax: 14, label: 'Chat messages per day, last 14 days', empty: 'No chat counted yet. Turn on chat analytics above to start counting.' });
+      } catch (_) { host.replaceChildren(K.el('p', 'muted', 'Failed to load chat volume.')); }
     }
 
-    // ── Giveaway ──
-    let gwTimer = null;
+    // Giveaway.
+    var gwTimer = null;
     async function loadGiveaway() {
-      const state = document.getElementById('gw-state');
-      const form = document.getElementById('gw-form');
+      var state = $('gw-state'), form = $('gw-form');
       if (gwTimer) { clearInterval(gwTimer); gwTimer = null; }
       try {
-        const res = await fetch('/kick/api/channel/' + CHANNEL + '/giveaway');
-        const j = await res.json();
-        if (!res.ok) throw new Error(j.error || 'Failed');
-        const g = j.giveaway;
+        var j = await K.get(base + '/giveaway');
+        var g = j.giveaway;
+        state.replaceChildren();
         if (!g || g.status !== 'active') {
-          state.innerHTML = (g && g.status === 'drawn')
-            ? '<div class="muted" style="margin-bottom:.6rem">Last winner: @' + esc(g.winner_username) + ' (' + esc(g.title) + ')</div>'
-            : '';
-          form.style.display = '';
+          state.appendChild(K.el('p', 'muted', (g && g.status === 'drawn')
+            ? 'Last winner: @' + (g.winner_username || 'unknown') + ' (' + (g.title || '') + ').'
+            : 'No giveaway running.'));
+          form.hidden = false;
           return;
         }
-        form.style.display = 'none';
-        state.innerHTML =
-          '<div style="margin-bottom:.35rem"><strong>' + esc(g.title) + '</strong></div>' +
-          '<div class="muted" style="margin-bottom:.7rem">type !' + esc(g.keyword) + ' to enter — <span id="gw-entries">' + (Number(g.entries) || 0) + '</span> entries</div>' +
-          '<div class="srow">' +
-          '<button id="gw-draw">Draw winner 🎲</button>' +
-          '<button id="gw-close" class="ghost">Close without drawing</button>' +
-          '</div>';
-        document.getElementById('gw-draw').addEventListener('click', async (e) => {
-          const btn = e.currentTarget; btn.disabled = true;
-          document.getElementById('gw-close').disabled = true;
-          try {
-            const r = await KickDash.post('/kick/api/channel/' + CHANNEL + '/giveaway/' + g.id + '/draw', {});
-            alert('Winner: @' + (r && r.winner ? r.winner : 'unknown'));
-          } catch (err) { alert(err.message || 'Draw failed.'); }
-          loadGiveaway();
+        form.hidden = true;
+        state.appendChild(K.el('div', 'kick-title-line', g.title || 'Giveaway'));
+        var line = K.el('p', 'cf-row-desc');
+        line.append('Viewers type !' + (g.keyword || 'enter') + ' to enter. ');
+        var n = K.el('strong', null, String(Number(g.entries) || 0)); n.id = 'gw-entries';
+        line.append(n, ' entries so far.');
+        state.appendChild(line);
+        var row = K.el('div', 'kick-inline');
+        var draw = K.el('button', 'btn btn-primary btn-sm', 'Draw winner'); draw.type = 'button';
+        var close = K.el('button', 'btn btn-secondary btn-sm', 'Close without drawing'); close.type = 'button';
+        var msg = K.el('span', 'kick-status'); msg.setAttribute('role', 'status');
+        row.append(draw, close, msg);
+        state.appendChild(row);
+        draw.addEventListener('click', async function () {
+          draw.disabled = close.disabled = true;
+          try { var r = await K.post(base + '/giveaway/' + g.id + '/draw', {}); K.status(msg, 'Winner: @' + (r && r.winner ? r.winner : 'unknown'), 'ok'); setTimeout(loadGiveaway, 2500); }
+          catch (err) { K.status(msg, err.message || 'Draw failed.', 'bad'); draw.disabled = close.disabled = false; }
         });
-        document.getElementById('gw-close').addEventListener('click', async (e) => {
+        close.addEventListener('click', async function () {
           if (!confirm('Close this giveaway without drawing a winner?')) return;
-          const btn = e.currentTarget; btn.disabled = true;
-          document.getElementById('gw-draw').disabled = true;
-          try {
-            await KickDash.post('/kick/api/channel/' + CHANNEL + '/giveaway/' + g.id + '/close', {});
-          } catch (err) { alert(err.message || 'Close failed.'); }
-          loadGiveaway();
+          draw.disabled = close.disabled = true;
+          try { await K.post(base + '/giveaway/' + g.id + '/close', {}); loadGiveaway(); }
+          catch (err) { K.status(msg, err.message || 'Close failed.', 'bad'); draw.disabled = close.disabled = false; }
         });
-        gwTimer = setInterval(async () => {
+        gwTimer = setInterval(async function () {
           try {
-            const r2 = await fetch('/kick/api/channel/' + CHANNEL + '/giveaway');
-            const j2 = await r2.json();
-            if (r2.ok && j2.giveaway && j2.giveaway.status === 'active') {
-              const el = document.getElementById('gw-entries');
-              if (el) el.textContent = Number(j2.giveaway.entries) || 0;
-            } else { loadGiveaway(); }
+            var j2 = await K.get(base + '/giveaway');
+            if (j2.giveaway && j2.giveaway.status === 'active') { var c = $('gw-entries'); if (c) c.textContent = String(Number(j2.giveaway.entries) || 0); }
+            else loadGiveaway();
           } catch (_) {}
         }, 15000);
-      } catch (err) { state.textContent = err.message || 'Failed to load giveaway.'; }
+      } catch (err) { state.replaceChildren(K.el('p', 'muted', err.message || 'Failed to load the giveaway.')); }
     }
-
-    document.getElementById('gw-start').addEventListener('click', async (e) => {
-      const btn = e.currentTarget;
-      const title = document.getElementById('gw-title').value.trim();
-      const keyword = document.getElementById('gw-keyword').value.trim() || 'enter';
-      if (!title) { alert('Enter a prize / title first.'); return; }
-      btn.disabled = true;
-      try {
-        await KickDash.post('/kick/api/channel/' + CHANNEL + '/giveaway', { title: title, keyword: keyword });
-        document.getElementById('gw-title').value = '';
-        loadGiveaway();
-      } catch (err) { alert(err.message || 'Failed to start giveaway.'); }
+    $('gw-start').addEventListener('click', async function (e) {
+      var btn = e.currentTarget, out = $('gw-msg');
+      var title = $('gw-title').value.trim();
+      var keyword = $('gw-keyword').value.trim() || 'enter';
+      if (!title) { K.status(out, 'Enter the prize first.', 'bad'); return; }
+      btn.disabled = true; K.status(out, '');
+      try { await K.post(base + '/giveaway', { title: title, keyword: keyword }); $('gw-title').value = ''; loadGiveaway(); }
+      catch (err) { K.status(out, err.message || 'Failed to start the giveaway.', 'bad'); }
       finally { btn.disabled = false; }
     });
 
-    // ── 14-day chat-volume chart (single-metric SVG bars) ──
-    async function loadChatTrend() {
-      const host = document.getElementById('chat-trend');
+    // Kick events (webhook subscription) status + connect.
+    async function loadEventState() {
+      var host = $('ev-state');
       try {
-        const res = await fetch('/kick/api/channel/' + CHANNEL + '/chat-trend?days=14');
-        const j = await res.json();
-        if (!res.ok) throw new Error(j.error || 'Failed');
-        const series = (j && j.series) || [];
-        const max = Math.max(0, ...series.map(d => Number(d.messages) || 0));
-        if (!series.length || max === 0) { host.textContent = 'No chat recorded yet — turn on "chat analytics" in Channel settings to start counting.'; return; }
-        const W = 560, H = 80, padL = 8, padR = 8, padT = 6, padB = 6;
-        const plotW = W - padL - padR, plotH = H - padT - padB;
-        const slot = plotW / series.length;
-        const barW = Math.min(14, slot * 0.55);
-        const bars = series.map((d, i) => {
-          const v = Number(d.messages) || 0;
-          if (v <= 0) return '';
-          const h = (v / max) * plotH;
-          const x = padL + i * slot + (slot - barW) / 2;
-          const y = padT + plotH - h;
-          return '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + barW.toFixed(1) + '" height="' + h.toFixed(1) + '" fill="var(--kick-dim)" fill-opacity=".55" rx="1.5"/>';
-        }).join('');
-        host.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" preserveAspectRatio="xMidYMid meet" role="img" aria-label="14-day chat volume chart">' + bars + '</svg>';
-      } catch (err) { host.textContent = 'Failed to load chat volume.'; }
+        var j = await K.get('/kick/api/bot-health');
+        var c = (j.channels || []).filter(function (x) { return String(x.channelId) === String(CHANNEL); })[0];
+        host.replaceChildren();
+        if (!c || c.chatSubscribed == null) { host.appendChild(K.el('span', 'pill off', 'Unknown')); $('ev-sub').textContent = 'Connect'; return; }
+        var full = c.chatSubscribed && !(c.missingEvents || []).length;
+        host.appendChild(K.el('span', full ? 'pill ok' : (c.chatSubscribed ? 'pill warn' : 'pill bad'), full ? 'Connected' : (c.chatSubscribed ? 'Partly connected' : 'Not connected')));
+        if (c.lastChatAt) host.appendChild(K.el('span', 'muted', ' Last chat ' + K.ago(c.lastChatAt) + '.'));
+        $('ev-sub').textContent = full ? 'Reconnect' : 'Connect';
+      } catch (_) { host.replaceChildren(K.el('span', 'pill off', 'Unknown')); }
     }
-
-    // ── Alerts & events ──
-    document.getElementById('ev-sub').addEventListener('click', async (e) => {
-      const btn = e.currentTarget;
-      const msg = document.getElementById('ev-sub-msg');
-      btn.disabled = true; msg.textContent = 'Working…';
-      try {
-        await KickDash.post('/kick/api/channel/' + CHANNEL + '/events/subscribe', {});
-        msg.textContent = '✓ Subscribed';
-      } catch (err) { msg.textContent = err.message || 'Subscribe failed.'; }
+    $('ev-sub').addEventListener('click', async function (e) {
+      var btn = e.currentTarget, msg = $('ev-sub-msg');
+      btn.disabled = true; K.status(msg, 'Connecting…');
+      try { await K.post(base + '/events/subscribe', {}); K.status(msg, 'Connected.', 'ok'); loadEventState(); }
+      catch (err) { K.status(msg, err.message || 'Kick did not accept the connection.', 'bad'); }
       finally { btn.disabled = false; }
     });
-
-    document.getElementById('ev-save').addEventListener('click', async (e) => {
-      const btn = e.currentTarget; btn.disabled = true;
-      try {
-        await KickDash.patch('/kick/api/channel/' + CHANNEL, { features_enabled: buildFeatures() });
-        btn.textContent = 'Saved ✓';
-      } catch (err) { alert(err.message || 'Save failed.'); }
-      finally { btn.disabled = false; setTimeout(() => { btn.textContent = 'Save alert messages'; }, 1500); }
-    });
-
     async function loadEvents() {
-      const feed = document.getElementById('ev-feed');
-      feed.textContent = 'Loading…';
+      var host = $('ev-feed');
       try {
-        const res = await fetch('/kick/api/channel/' + CHANNEL + '/events/recent');
-        const j = await res.json();
-        if (!res.ok) throw new Error(j.error || 'Failed');
-        if (!j.events || !j.events.length) { feed.textContent = 'No events received yet — enable subscriptions above.'; return; }
-        feed.innerHTML = '<table>' + j.events.map(ev =>
-          '<tr><td>' + (ev.created_at ? new Date(ev.created_at).toISOString().slice(0,16).replace('T',' ') : '—') +
-          '</td><td>' + esc(ev.event_type) + '</td><td>' + esc(ev.actor_username) + '</td></tr>').join('') + '</table>';
-      } catch (err) { feed.textContent = err.message || 'Failed to load.'; }
+        var j = await K.get(base + '/events/recent');
+        K.table(host, ['Time', 'Event', 'User'], (j.events || []).map(function (ev) {
+          return [{ text: K.fmtTime(ev.created_at) || '—', cls: 'nowrap' }, ev.event_type || '', ev.actor_username || ''];
+        }), 'No follows, subs or stream events received yet.');
+      } catch (err) { host.replaceChildren(K.el('p', 'muted', err.message || 'Failed to load.')); }
     }
-    document.getElementById('ev-refresh').addEventListener('click', loadEvents);
+    $('ev-refresh').addEventListener('click', loadEvents);
 
-    // ── Copy configuration ──
-    document.getElementById('cp-go').addEventListener('click', async (e) => {
-      const btn = e.currentTarget;
-      const from = document.getElementById('cp-from').value;
-      if (!from) { alert('Pick a source channel first.'); return; }
-      if (!confirm("This OVERWRITES this channel's commands, responders, timers and settings. Continue?")) return;
-      btn.disabled = true;
-      try {
-        await KickDash.post('/kick/api/channel/' + CHANNEL + '/copy-config', { from: from });
-        alert('Copied ✓');
-        location.reload();
-      } catch (err) { alert(err.message || 'Copy failed.'); btn.disabled = false; }
+    // Copy configuration.
+    $('cp-go').addEventListener('click', async function (e) {
+      var btn = e.currentTarget, out = $('cp-msg');
+      var from = $('cp-from').value;
+      if (!from) { K.status(out, 'Pick a channel to copy from.', 'bad'); return; }
+      if (!confirm("This replaces this channel's commands, responders, timers and settings. Continue?")) return;
+      btn.disabled = true; K.status(out, 'Copying…');
+      try { await K.post(base + '/copy-config', { from: from }); K.status(out, 'Copied. Reloading…', 'ok'); location.reload(); }
+      catch (err) { K.status(out, err.message || 'Copy failed.', 'bad'); btn.disabled = false; }
     });
-
     async function loadCopySources() {
-      const card = document.getElementById('cp-card');
-      const sel = document.getElementById('cp-from');
+      var sel = $('cp-from');
       try {
-        const res = await fetch('/kick/api/my-channels');
-        const j = await res.json();
-        if (!res.ok) throw new Error(j.error || 'Failed');
-        const others = ((j && j.channels) || []).filter(c => String(c.channel_id) !== String(CHANNEL));
-        if (!others.length) {
-          card.innerHTML = '<h2>Copy configuration</h2><div class="muted">You only have one channel.</div>';
-          return;
-        }
-        sel.innerHTML = others.map(c =>
-          '<option value="' + esc(c.channel_id) + '">' + esc(c.channel_name) + '</option>').join('');
+        var j = await K.get('/kick/api/my-channels');
+        var others = (j.channels || []).filter(function (c) { return String(c.channel_id) !== String(CHANNEL); });
+        if (!others.length) { $('cp-card').hidden = true; return; }
+        sel.replaceChildren();
+        others.forEach(function (c) { var o = K.el('option', null, c.channel_name); o.value = c.channel_id; sel.appendChild(o); });
       } catch (err) {
-        card.innerHTML = '<h2>Copy configuration</h2><div class="muted">' + esc(err.message || 'Failed to load your channels.') + '</div>';
+        sel.replaceChildren(K.el('option', null, 'Could not load your channels'));
+        $('cp-go').disabled = true;
       }
     }
 
-    loadFeed();
-    loadChTrend();
-    loadGiveaway();
-    loadChatTrend();
-    loadCopySources();
-    loadEvents();
-  </script>`; %>
-<%- include('_foot', { extraJs: pageJs }) %>
+    loadFeed(); loadChTrend(); loadGiveaway(); loadChatTrend(); loadCopySources(); loadEvents(); loadEventState();
+  })();
+  </script>
+<%- include('_foot') %>

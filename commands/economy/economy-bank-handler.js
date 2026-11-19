@@ -1,5 +1,7 @@
 import { EmbedBuilder } from 'discord.js';
 import economyManager from '../../core/economy-manager.js';
+import { displayNameFor } from '../../utils/display-name.js';
+import { themeColor } from '../../core/guild-theme.js';
 
 export async function handleBalance(interaction) {
     const targetUser = interaction.options.getUser('user') || interaction.user;
@@ -10,8 +12,8 @@ export async function handleBalance(interaction) {
     const bankUsage = ((economy.bank / economy.bank_capacity) * 100).toFixed(1);
 
     const embed = new EmbedBuilder()
-        .setColor('#FFD700')
-        .setTitle(`${targetUser.username}'s Balance`)
+        .setColor(themeColor(interaction.guildId, 'warning'))
+        .setTitle(`${displayNameFor(targetUser, interaction.guild)}'s Balance`)
         .setThumbnail(targetUser.displayAvatarURL())
         .addFields(
             { name: '\ud83d\udcb5 Wallet', value: economyManager.formatMoney(economy.wallet, config), inline: true },
@@ -38,7 +40,7 @@ export async function handleDeposit(interaction) {
     const result = await economyManager.deposit(interaction.guild.id, interaction.user.id, amount);
 
     const embed = new EmbedBuilder()
-        .setColor('#00FF00')
+        .setColor(themeColor(interaction.guildId, 'success'))
         .setTitle('\ud83c\udfe6 Deposit Successful')
         .setDescription(`Deposited ${economyManager.formatMoney(amount, config)} into your bank!`)
         .addFields(
@@ -55,7 +57,7 @@ export async function handleWithdraw(interaction) {
     const result = await economyManager.withdraw(interaction.guild.id, interaction.user.id, amount);
 
     const embed = new EmbedBuilder()
-        .setColor('#00FF00')
+        .setColor(themeColor(interaction.guildId, 'success'))
         .setTitle('\ud83c\udfe6 Withdrawal Successful')
         .setDescription(`Withdrew ${economyManager.formatMoney(amount, config)} from your bank!`)
         .addFields(
@@ -84,9 +86,9 @@ export async function handleTransfer(interaction) {
     await economyManager.transferCurrency(interaction.guild.id, interaction.user.id, target.id, amount);
 
     const embed = new EmbedBuilder()
-        .setColor('#00FF00')
+        .setColor(themeColor(interaction.guildId, 'success'))
         .setTitle('\ud83d\udcb8 Transfer Successful')
-        .setDescription(`Transferred ${economyManager.formatMoney(amount, config)} to ${target.username}!`);
+        .setDescription(`Transferred ${economyManager.formatMoney(amount, config)} to ${displayNameFor(target, interaction.guild)}!`);
 
     await interaction.reply({ embeds: [embed] });
 }

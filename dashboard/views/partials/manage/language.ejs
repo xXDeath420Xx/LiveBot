@@ -1,0 +1,112 @@
+<%#
+  Server language: the default locale the bot replies in (POST /manage/:id/language, sent as JSON
+  by the script below). Needs `guild`, `locales` (from allLocaleMeta) and `guildLocale` in locals.
+  Built on the settings-row kit (cf-settings.css); ids and the field name are unchanged.
+%>
+
+<div class="page-section" id="languagePage" data-guild-id="<%= guild.id %>">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-language" aria-hidden="true"></i>
+                <span>Language</span>
+            </div>
+            <div class="page-section-subtitle">A default: members can still pick their own with <code>/settings language scope:me</code>.</div>
+        </div>
+    </div>
+
+    <div id="langError" class="cf-notice is-bad" role="alert" hidden></div>
+
+    <section class="cf-section" aria-labelledby="lang-default-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="lang-default-title">Server language</h2>
+                <p class="cf-section-desc">Used for members who have not picked a language of their own.</p>
+            </div>
+        </header>
+        <form id="langForm" class="cf-rows" method="POST" action="/manage/<%= guild.id %>/language">
+            <div class="cf-row cf-row--wide">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="langSelect">Default language</label>
+                    <p class="cf-row-desc" id="langSelect-desc">Following Discord means each member sees their own client language where it is translated, and English otherwise.</p>
+                </div>
+                <div class="cf-row-control">
+                    <select id="langSelect" name="locale" class="form-select" aria-describedby="langSelect-desc">
+                        <option value="">Follow each member's Discord language</option>
+                        <%# allLocaleMeta() (utils/i18n-catalogue.js) names each item's code `locale`; `code` is accepted too. %>
+                        <% (locals.locales || []).forEach(l => { const code = l.locale || l.code; if (!code) return; %>
+                            <option value="<%= code %>" <%= locals.guildLocale === code ? 'selected' : '' %>><%= l.nativeName || l.name || code %><%= l.name && l.name !== (l.nativeName || l.name) ? ' (' + l.name + ')' : '' %></option>
+                        <% }) %>
+                    </select>
+                </div>
+            </div>
+            <div class="cf-section-foot">
+                <span class="cf-status-line cf-foot-note" id="langSuccess" role="status"></span>
+                <button type="submit" class="btn btn-primary">Save</button>
+            </div>
+        </form>
+    </section>
+
+    <section class="cf-section" aria-labelledby="lang-coverage-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="lang-coverage-title">What is translated</h2>
+                <p class="cf-section-desc">Coverage is partial and growing. Anything not yet translated falls back to English rather than appearing blank.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--stack">
+                <div class="cf-row-text">
+                    <div class="cf-row-label">Command names and descriptions</div>
+                    <p class="cf-row-desc">Discord shows each member the translated names in their own client language, where a translation exists, whatever this setting is.</p>
+                </div>
+            </div>
+            <div class="cf-row cf-row--stack">
+                <div class="cf-row-text">
+                    <div class="cf-row-label">Bot replies</div>
+                    <p class="cf-row-desc">The text the bot writes back (errors, confirmations, level-ups, welcomes) follows the language chosen above.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>
+
+<script>
+(function () {
+    const form = document.getElementById('langForm');
+    if (!form) return;
+
+    const err = document.getElementById('langError');
+    const ok = document.getElementById('langSuccess');
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        err.hidden = true;
+        ok.textContent = '';
+        ok.className = 'cf-status-line cf-foot-note is-busy';
+
+        const btn = form.querySelector('button[type=submit]');
+        btn.disabled = true;
+
+        try {
+            const res = await fetch(form.action, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                body: JSON.stringify({ locale: document.getElementById('langSelect').value }),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error || ('Request failed (' + res.status + ')'));
+
+            ok.textContent = data.message || 'Language saved.';
+            ok.className = 'cf-status-line cf-foot-note is-ok';
+        } catch (ex) {
+            ok.textContent = '';
+            ok.className = 'cf-status-line cf-foot-note';
+            err.textContent = ex.message;
+            err.hidden = false;
+        } finally {
+            btn.disabled = false;
+        }
+    });
+})();
+</script>

@@ -163,7 +163,7 @@ export async function claim(guildId, encounterId, userId, basket = null) {
   return { ok: true, kind: enc.kind, thing, coins, isNew };
 }
 
-/** Expire anything that timed out. Returns them so the message can be edited to say it got away. */
+/** Expire anything that timed out. Returns them so the message can be removed from the channel. */
 export async function reapExpired() {
   const [rows] = await pool.execute(
     `SELECT * FROM gat_encounters
@@ -175,6 +175,28 @@ export async function reapExpired() {
 /** Mark a reaped encounter handled, so the reaper does not keep finding it. */
 export async function markReaped(id) {
   await pool.execute("UPDATE gat_encounters SET caught_by = '0' WHERE id = ?", [id]);
+}
+
+/** The encounter's message is gone from the channel — stop tracking it. */
+export async function clearEncounterMessage(id) {
+  await pool.execute('UPDATE gat_encounters SET message_id = NULL WHERE id = ?', [id]);
+}
+
+/**
+ * Encounter messages that should no longer be in the channel but still are.
+ *
+ * A claim deletes its own message after a short linger, but that linger is an in-process timer: a
+ * restart in the middle of it would strand the message in the channel forever, which is exactly the
+ * clutter this is all meant to prevent. Anything resolved but still carrying a message_id after a
+ * couple of minutes is such an orphan, and the reaper deletes it.
+ */
+export async function staleEncounterMessages() {
+  const [rows] = await pool.execute(
+    `SELECT * FROM gat_encounters
+      WHERE caught_by IS NOT NULL AND message_id IS NOT NULL
+        AND spawned_at <= DATE_SUB(NOW(), INTERVAL 2 MINUTE)
+        AND spawned_at > DATE_SUB(NOW(), INTERVAL 1 DAY)`);
+  return rows;
 }
 
 // ── the sticker book ─────────────────────────────────────────────────────────
@@ -229,5 +251,6 @@ export function compostBonus(compost) {
 
 export default {
   BUGS, FRUITS, BASKETS, lookup, maybeSpawn, activeEncounter, setEncounterMessage,
+  clearEncounterMessage, staleEncounterMessages,
   claim, reapExpired, markReaped, getBook, getCoins, compost, compostBonus,
 };

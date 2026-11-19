@@ -1,6 +1,7 @@
 import express from 'express';
 import pool from '../../../utils/db.js';
 import logger from '../../../utils/logger.js';
+import { userBits } from '../../../core/user-display.js';
 
 const router = express.Router();
 
@@ -18,16 +19,29 @@ router.get('/manage/:guildId/serverstats', async (req, res) => {
     let dateCondition = `DATE(created_at) >= DATE_SUB(CURDATE(), INTERVAL ${days} DAY)`;
     let statDateCondition = `stat_date >= DATE_SUB(CURDATE(), INTERVAL ${days} DAY)`;
 
-    // Get current stats from latest snapshot or aggregate from message_stats
+    // Members who posted, and messages sent, in the period (message_stats: one row per channel,
+    // member and day). total_members is kept for older callers; it is the members who posted.
     const [[currentStats]] = await pool.execute(
       `SELECT
          COUNT(DISTINCT user_id) as total_members,
-         SUM(message_count) as total_messages,
-         (SELECT COUNT(*) FROM message_stats WHERE guild_id = ? AND ${dateCondition}) as members_joined,
-         0 as members_left
+         COALESCE(SUM(message_count), 0) as total_messages
        FROM message_stats
-       WHERE guild_id = ? AND ${dateCondition}`,
-      [guildId, guildId]
+       WHERE guild_id = ? AND ${statDateCondition}`,
+      [guildId]
+    );
+
+    // The same figures for the period just before (same length), for "vs previous" on the page.
+    const prevCondition = `stat_date >= DATE_SUB(CURDATE(), INTERVAL ${days * 2 + 1} DAY) AND stat_date < DATE_SUB(CURDATE(), INTERVAL ${days} DAY)`;
+    const [[prevMessages]] = await pool.execute(
+      `SELECT COUNT(DISTINCT user_id) as active_members, COALESCE(SUM(message_count), 0) as total_messages
+       FROM message_stats WHERE guild_id = ? AND ${prevCondition}`,
+      [guildId]
+    );
+    const [[prevActivity]] = await pool.execute(
+      `SELECT COALESCE(SUM(voice_minutes), 0) as voice_minutes, COALESCE(SUM(commands_used), 0) as commands_used,
+              COALESCE(SUM(members_joined), 0) as members_joined, COALESCE(SUM(members_left), 0) as members_left
+       FROM activity_stats WHERE guild_id = ? AND ${prevCondition}`,
+      [guildId]
     );
 
     // Get activity stats (voice, commands, reactions)
@@ -134,12 +148,25 @@ router.get('/manage/:guildId/serverstats', async (req, res) => {
       voice_minutes: activityStats?.total_voice_minutes || 0,
       commands_used: activityStats?.total_commands || 0,
       reactions_added: activityStats?.total_reactions || 0,
-      members_joined: activityStats?.members_joined || currentStats?.members_joined || 0,
-      members_left: activityStats?.members_left || 0
+      // (Joins used to fall back to the number of message_stats rows, which is not a join count.)
+      members_joined: activityStats?.members_joined || 0,
+      members_left: activityStats?.members_left || 0,
+      active_members: currentStats?.total_members || 0,
+      server_members: guild?.memberCount ?? null
+    };
+    const prevStats = {
+      total_messages: Number(prevMessages?.total_messages) || 0,
+      active_members: Number(prevMessages?.active_members) || 0,
+      voice_minutes: Number(prevActivity?.voice_minutes) || 0,
+      commands_used: Number(prevActivity?.commands_used) || 0,
+      members_joined: Number(prevActivity?.members_joined) || 0,
+      members_left: Number(prevActivity?.members_left) || 0
     };
 
     res.json({
       currentStats: mergedStats,
+      prevStats,
+      days,
       snapshots,
       topMessagers,
       channelActivity,
@@ -213,6 +240,37 @@ router.get('/manage/:guildId/emojistats', async (req, res) => {
       [guildId]
     );
 
+    // Totals for the whole period (the lists above are capped), the period before, and the
+    // server's own emoji nobody used in the period.
+    const statCond = dateCondition.replace('used_at', 'stat_date');
+    const days = period === '30d' ? 30 : period === '90d' ? 90 : 7;
+    const [[totals]] = await pool.execute(
+      `SELECT COALESCE(SUM(usage_count), 0) as total_uses, COUNT(DISTINCT emoji_id) as unique_emojis,
+              COUNT(DISTINCT user_id) as active_users
+       FROM emoji_usage WHERE guild_id = ? AND ${statCond}`,
+      [guildId]
+    );
+    const [[prevTotals]] = await pool.execute(
+      `SELECT COALESCE(SUM(usage_count), 0) as total_uses, COUNT(DISTINCT emoji_id) as unique_emojis,
+              COUNT(DISTINCT user_id) as active_users
+       FROM emoji_usage
+       WHERE guild_id = ? AND stat_date >= DATE_SUB(CURDATE(), INTERVAL ${days * 2 + 1} DAY)
+         AND stat_date < DATE_SUB(CURDATE(), INTERVAL ${days} DAY)`,
+      [guildId]
+    );
+    let unusedEmojis = null;
+    if (eGuild) {
+      const [usedCustom] = await pool.execute(
+        `SELECT DISTINCT emoji_id FROM emoji_usage WHERE guild_id = ? AND is_custom = 1 AND ${statCond}`,
+        [guildId]
+      );
+      const used = new Set(usedCustom.map(r => String(r.emoji_id)));
+      unusedEmojis = [...eGuild.emojis.cache.values()]
+        .filter(e => !used.has(e.id))
+        .map(e => ({ id: e.id, name: e.name, animated: !!e.animated }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+    }
+
     // Get custom vs unicode split
     const [emojiTypeSplit] = await pool.execute(
       `SELECT
@@ -229,6 +287,18 @@ router.get('/manage/:guildId/emojistats', async (req, res) => {
       topUsers,
       trends: dailyUsage,
       emojiTypeSplit,
+      totals: {
+        total_uses: Number(totals?.total_uses) || 0,
+        unique_emojis: Number(totals?.unique_emojis) || 0,
+        active_users: Number(totals?.active_users) || 0
+      },
+      prevTotals: {
+        total_uses: Number(prevTotals?.total_uses) || 0,
+        unique_emojis: Number(prevTotals?.unique_emojis) || 0,
+        active_users: Number(prevTotals?.active_users) || 0
+      },
+      unusedEmojis,
+      days,
       period
     });
   } catch (error) {
@@ -241,11 +311,15 @@ router.get('/manage/:guildId/emojistats', async (req, res) => {
 router.get('/manage/:guildId/audit-logs', async (req, res) => {
   try {
     const { guildId } = req.params;
-    const { page = 1, limit = 50, type, user } = req.query;
-    const offset = (Math.max(1, parseInt(page)) - 1) * parseInt(limit);
+    const { type, user } = req.query;
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 50));
+    const days = Math.min(3650, Math.max(0, parseInt(req.query.days, 10) || 0));
+    const offset = (page - 1) * limit;
 
     let where = 'WHERE guild_id = ?';
     const params = [guildId];
+    if (days) { where += ' AND timestamp >= DATE_SUB(NOW(), INTERVAL ? DAY)'; params.push(days); }
 
     if (type) { where += ' AND event_type = ?'; params.push(type); }
     if (user) { where += ' AND (user_id = ? OR target_id = ? OR moderator_id = ?)'; params.push(user, user, user); }
@@ -279,12 +353,19 @@ router.get('/manage/:guildId/audit-logs', async (req, res) => {
       return name;
     }
 
-    const enriched = await Promise.all(logs.map(async log => ({
-      ...log,
-      userName: await resolveName(log.user_id),
-      targetName: await resolveName(log.target_id),
-      moderatorName: await resolveName(log.moderator_id)
-    })));
+    const enriched = await Promise.all(logs.map(async log => {
+      const userName = await resolveName(log.user_id);
+      const targetName = await resolveName(log.target_id);
+      const moderatorName = await resolveName(log.moderator_id);
+      // Avatar + display name + @username for the page (core/user-display.js); the names above are the fallback.
+      const bits = (id, name) => (id ? userBits(guild, id, { storedName: name }) : null);
+      return {
+        ...log, userName, targetName, moderatorName,
+        user: bits(log.user_id, userName),
+        target: targetName ? bits(log.target_id, targetName) : null,
+        moderator: bits(log.moderator_id, moderatorName),
+      };
+    }));
 
     // Get available event types for filter dropdown
     const [types] = await pool.execute('SELECT DISTINCT event_type FROM audit_logs WHERE guild_id = ? ORDER BY event_type', [guildId]);

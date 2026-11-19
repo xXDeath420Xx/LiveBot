@@ -1,0 +1,71 @@
+<%#
+  GET /stream/bot/events. Locals: events [eventView], filters { q, type, platform, before }, types [{ type, label }],
+  platforms [{ id, label }], olderHref, newestHref, profile (storeChat). Search and paging are plain GET forms and links.
+%>
+<%- include('_head', { pageTitle: 'Events', active: 'events' }) %>
+<% const _when = (iso) => iso ? new Date(iso).toISOString().slice(0, 16).replace('T', ' ') + ' UTC' : ''; %>
+<div class="cf-page-head">
+    <div>
+        <h1 class="cf-page-title">Events</h1>
+        <p class="cf-page-sub">Everything your linked channels and tip services sent, newest first. Kept for 90 days.<% if (!profile.storeChat) { %> Chat is not kept; turn it on under <a href="/stream/bot/connections#sb-settings-title">Connections</a>.<% } %></p>
+    </div>
+</div>
+<%- include('_tabs', { active: 'events' }) %>
+
+<section class="cf-section" aria-labelledby="sb-ev-title">
+    <h2 class="sr-only" id="sb-ev-title">Event log</h2>
+    <div class="cf-rows">
+        <form class="sb-filters" method="get" action="/stream/bot/events" role="search" aria-label="Filter events">
+            <div class="sb-filter">
+                <label for="sb-ev-q">Name or text</label>
+                <input type="search" id="sb-ev-q" name="q" value="<%= filters.q %>" maxlength="100" placeholder="Search names and messages">
+            </div>
+            <div class="sb-filter">
+                <label for="sb-ev-type">Type</label>
+                <select id="sb-ev-type" name="type">
+                    <option value="">Any type</option>
+                    <% types.forEach((t) => { %><option value="<%= t.type %>"<% if (t.type === filters.type) { %> selected<% } %>><%= t.label %></option><% }) %>
+                </select>
+            </div>
+            <div class="sb-filter">
+                <label for="sb-ev-platform">From</label>
+                <select id="sb-ev-platform" name="platform">
+                    <option value="">Anywhere</option>
+                    <% platforms.forEach((p) => { %><option value="<%= p.id %>"<% if (p.id === filters.platform) { %> selected<% } %>><%= p.label %></option><% }) %>
+                </select>
+            </div>
+            <div class="sb-filter sb-filter-end">
+                <button type="submit" class="btn btn-primary btn-sm">Search</button>
+                <% if (filters.q || filters.type || filters.platform) { %><a class="btn btn-secondary btn-sm" href="/stream/bot/events">Clear</a><% } %>
+            </div>
+        </form>
+        <% if (!events.length) { %>
+        <div class="cf-state"><p class="cf-state-title"><%= filters.q || filters.type || filters.platform || filters.before ? 'No events match.' : 'No events yet.' %></p>
+            <p class="cf-state-text">Events arrive once a channel is linked on Connections. The Test button on an automation adds a test event.</p></div>
+        <% } else { %>
+        <div class="cf-table-wrap">
+            <table class="cf-table cf-table--stack">
+                <thead><tr><th scope="col">When</th><th scope="col">What happened</th><th scope="col">Type</th><th scope="col">From</th></tr></thead>
+                <tbody>
+                    <% events.forEach((e) => { %>
+                    <tr>
+                        <td class="cf-nowrap cf-cell-muted"><time datetime="<%= e.occurredAt %>"><%= _when(e.occurredAt) %></time></td>
+                        <td class="sb-wrap"><%= e.text %><% if (e.test) { %> <span class="cf-pill is-info">Test</span><% } %></td>
+                        <td><%= e.typeLabel %></td>
+                        <td><%= e.platformLabel %></td>
+                    </tr>
+                    <% }) %>
+                </tbody>
+            </table>
+        </div>
+        <% } %>
+        <% if (olderHref || newestHref) { %>
+        <div class="cf-section-foot">
+            <% if (newestHref) { %><a class="btn btn-secondary btn-sm" href="<%= newestHref %>">Newest</a><% } %>
+            <% if (olderHref) { %><a class="btn btn-secondary btn-sm" href="<%= olderHref %>">Older</a><% } %>
+        </div>
+        <% } %>
+    </div>
+</section>
+
+<%- include('_foot') %>

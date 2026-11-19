@@ -29,7 +29,7 @@ export default {
                     )
                     .setTimestamp();
 
-                await sendLogEmbed(thread.guild, 'threadMembersUpdate', embed);
+                await sendLogEmbed(thread.guild, 'threadMembersUpdate', embed, 'threadMembersUpdate.added');
             }
 
             if (removedMembers.size > 0) {
@@ -50,7 +50,7 @@ export default {
                     )
                     .setTimestamp();
 
-                await sendLogEmbed(thread.guild, 'threadMembersUpdate', embed);
+                await sendLogEmbed(thread.guild, 'threadMembersUpdate', embed, 'threadMembersUpdate.removed');
             }
         } catch (error) {
             logger.error('[Thread] Error logging thread members update:', { error: error.message });

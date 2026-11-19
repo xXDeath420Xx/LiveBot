@@ -115,6 +115,9 @@ class CFAppContainer extends CFBaseComponent {
             return;
         }
 
+        // Signed in since the last render: drop the signed-out placeholder (it stayed above every view)
+        this.querySelectorAll(':scope > .cf-empty').forEach(el => el.remove());
+
         // If tab hasn't changed, do nothing
         if (this._currentTab === activeTab && this._viewCache.has(activeTab)) {
             return;

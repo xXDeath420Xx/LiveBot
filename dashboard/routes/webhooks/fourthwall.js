@@ -77,6 +77,9 @@ router.post(
 
         res.status(204).end();
 
+        // Stream bot tip events (core/stream-bot) for streamers who added this server's Fourthwall as a tip source.
+        import('../../../core/stream-bot/index.js').then(({ onTip }) => onTip('fourthwall', payload, connRow.guild_id)).catch(() => {});
+
         setImmediate(async () => {
             const client = botManager.getClientForGuild(connRow.guild_id);
             if (!client?.fourthwallManager) {

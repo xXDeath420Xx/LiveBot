@@ -4,8 +4,11 @@ import {
   AttachmentBuilder
 } from 'discord.js';
 import pool from '../../utils/db.js';
+import { accessibleAttachment, rankCardAltText } from '../../utils/accessible-attachment.js';
 import { processBackgroundUpload, deleteCustomBackground } from '../../utils/image-processing.js';
 import logger from '../../utils/logger.js';
+import { themeColor } from '../../core/guild-theme.js';
+import { getRankCardPolicy, effectiveRankCardSettings, canCustomise } from '../../core/rankcard-policy.js';
 
 // ── Preset definitions ──────────────────────────────────────────────────────
 const PRESETS = {
@@ -279,6 +282,28 @@ export default {
     const subcommand = interaction.options.getSubcommand();
 
     try {
+      // Rank Cards page rules (core/rankcard-policy.js). Preview, presets and the two resets stay
+      // open to everyone: they change nothing, or only take a member back to the default.
+      const changesCard = subcommandGroup === 'background'
+        ? subcommand !== 'reset'
+        : ['overlay', 'border', 'color'].includes(subcommand);
+      if (changesCard) {
+        const policy = await getRankCardPolicy(interaction.guild.id);
+        let level = 0;
+        if (policy.minLevel > 0) {
+          const [[row]] = await pool.execute(
+            'SELECT level FROM user_levels WHERE guild_id = ? AND user_id = ?',
+            [interaction.guild.id, interaction.user.id]
+          );
+          level = Number(row?.level) || 0;
+        }
+        const action = subcommandGroup === 'background' && subcommand === 'upload' ? 'upload' : 'change';
+        const gate = await canCustomise(interaction.guild.id, level, action, policy);
+        if (!gate.allowed) {
+          return interaction.reply({ content: gate.reason, ephemeral: true });
+        }
+      }
+
       if (subcommandGroup === 'background') {
         switch (subcommand) {
           case 'upload': return await this.handleBackgroundUpload(interaction);
@@ -521,7 +546,7 @@ export default {
     await interaction.deferReply();
 
     const embed = new EmbedBuilder()
-      .setColor('#5865F2')
+      .setColor(themeColor(interaction.guildId, 'primary'))
       .setTitle('Rank Card Presets')
       .setDescription('Apply a preset with `/rankcard background preset name:<preset>`\n\nAvailable presets:');
 
@@ -549,7 +574,7 @@ export default {
     }
 
     const rankData = await levelingManager.getUserRank(interaction.guild.id, user.id);
-    const settings = await getSettings(interaction.guild.id, user.id);
+    const settings = await effectiveRankCardSettings(interaction.guild.id, await getSettings(interaction.guild.id, user.id));
     const member = await interaction.guild.members.fetch(user.id).catch(() => null);
 
     if (!rankData) {
@@ -560,7 +585,16 @@ export default {
 
     const { generateRankCard } = await import('../../utils/rank-card-generator.js');
     const buffer = await generateRankCard(user, rankData, member, settings);
-    const attachment = new AttachmentBuilder(buffer, { name: 'rank-card.png' });
+    const attachment = accessibleAttachment(buffer, {
+      name: 'rank-card.png',
+      description: rankCardAltText({
+        username: member?.displayName || user.username,
+        level: rankData.level,
+        xp: rankData.xp,
+        requiredXp: rankData.xpForNextLevel,
+        rank: rankData.rank,
+      }),
+    });
     return interaction.editReply({ content: successMessage, files: [attachment] });
   },
 

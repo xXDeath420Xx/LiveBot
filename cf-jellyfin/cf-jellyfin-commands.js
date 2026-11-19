@@ -17,6 +17,7 @@
 // AUTH-APP: callouts go through createAuthAppClient (HMAC-signed).
 // ============================================================================
 
+import { fileURLToPath } from 'url';
 import {
     SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder,
     MessageFlags, ChannelType
@@ -32,6 +33,24 @@ const GRAY   = 0x6b7280;
 // ---------------------------------------------------------------------------
 // Slash command schemas
 // ---------------------------------------------------------------------------
+
+/** The guild commands a bulk deploy has to carry for this guild: none unless Jellyfin is enabled here. */
+export function jellyfinGuildCommandData(guildId) {
+    const db = new Database(path.join(path.dirname(fileURLToPath(import.meta.url)), 'guild-config.db'), { readonly: true });
+    try {
+        const row = db.prepare('SELECT enabled FROM guild_jellyfin_settings WHERE guild_id = ?').get(guildId);
+        return row?.enabled ? buildPerGuildCommands() : [];
+    } finally {
+        db.close();
+    }
+}
+
+// A custom bot's guild list is replaced whole on deploy and that deploy carries /jellyfin, so changes go
+// through it. Adding one by one fails once the list is at Discord's limit of 100.
+async function redeployCustomBot(client) {
+    const { default: botManager } = await import('../core/bot-manager.js');
+    await botManager.deployCommandsForBot(client, client.user.id);
+}
 
 function buildPerGuildCommands() {
     return [
@@ -173,6 +192,14 @@ export function createJellyfinCommands(opts) {
     async function registerForGuild(client, guildId) {
         const guild = client.guilds.cache.get(guildId);
         if (!guild) throw new Error('Bot is not in guild ' + guildId);
+        if (client.isDefaultBot === false) {
+            await redeployCustomBot(client);
+            const present = await guild.commands.fetch();
+            if (!buildPerGuildCommands().every(cmd => present.some(c => c.name === cmd.name))) {
+                throw new Error('Discord does not have the Jellyfin commands for guild ' + guildId + ' after the deploy');
+            }
+            return;
+        }
         // Same reasoning as registerGlobalCommands() below — MUST NOT use .set()
         // because cf-jellyfin shares the main bot's application id, and .set()
         // does PUT /applications/{id}/guilds/{guildId}/commands which REPLACES
@@ -187,6 +214,7 @@ export function createJellyfinCommands(opts) {
     async function unregisterForGuild(client, guildId) {
         const guild = client.guilds.cache.get(guildId);
         if (!guild) return;
+        if (client.isDefaultBot === false) return redeployCustomBot(client);
         // Same reason — fetch current guild commands and delete ONLY the
         // jellyfin-owned ones, leaving the main bot's commands intact.
         const ours = new Set(buildPerGuildCommands().map(c => c.name));

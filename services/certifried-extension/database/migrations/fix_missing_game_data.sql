@@ -412,14 +412,11 @@ ALTER TABLE cfx_players ADD COLUMN last_online_at DATETIME DEFAULT NULL;
 -- ============================================
 -- 25. Ensure first active season exists
 -- ============================================
-INSERT IGNORE INTO cfx_seasons (id, name, start_date, end_date, is_active)
-VALUES (1, 'Season 1', CURDATE(), DATE_ADD(CURDATE(), INTERVAL 30 DAY), 1);
+INSERT IGNORE INTO cfx_seasons (id, name, starts_at, ends_at, status)
+VALUES (1, 'Season 1', NOW(), DATE_ADD(NOW(), INTERVAL 30 DAY), 'active');
 
 -- ============================================
--- 26. Ensure starter tournaments exist (tournament_tick job will auto-create more)
+-- 26. (removed 2026-11-18, H-409) This re-inserted tournaments 1-3 on every service start
+--     whenever those ids were free, whether anyone played or not. jobs/tournament-tick.js
+--     starts tournaments, and only when enough players are active.
 -- ============================================
-INSERT IGNORE INTO cfx_tournaments (id, tournament_type, name, starts_at, ends_at, prize_pool, status)
-VALUES
-    (1, 'harvest', 'Weekly Harvest Championship', NOW(), DATE_ADD(NOW(), INTERVAL 7 DAY), 50000, 'active'),
-    (2, 'sales', 'Weekly Sales Showdown', NOW(), DATE_ADD(NOW(), INTERVAL 7 DAY), 75000, 'active'),
-    (3, 'quality', 'Weekly Quality Cup', NOW(), DATE_ADD(NOW(), INTERVAL 7 DAY), 60000, 'active');

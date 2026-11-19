@@ -6,6 +6,7 @@ import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import { isEnabled as owoEnabled, OwoGateError, assertSubcommandAllowed } from '../../core/owo/manager.js';
 import { enable, disable, claim, status } from '../../core/owo/autohunt-service.js';
 import { getCurrencyMeta } from '../../core/owo/cowoncy.js';
+import { themeColor } from '../../core/guild-theme.js';
 
 const data = new SlashCommandBuilder()
     .setName('autohunt')
@@ -41,7 +42,7 @@ async function execute(interaction) {
     if (sub === 'enable') {
         await interaction.deferReply();
         const r = await enable(guildId, user.id);
-        return interaction.editReply(`🌅 Autohunt **enabled**. Every **${Math.round(r.intervalMs/60000)} min** an animal is queued (up to 24). Come back and \`/autohunt claim\`.`);
+        return interaction.editReply(`🌅 Autohunt **enabled**. Every **${Math.round(r.intervalMs/60000)} min** an animal is queued (up to 24). Come back and \`/owo autohunt claim\`.`);
     }
     if (sub === 'disable') {
         await interaction.deferReply();
@@ -51,7 +52,7 @@ async function execute(interaction) {
     if (sub === 'status') {
         await interaction.deferReply();
         const s = await status(guildId, user.id);
-        if (!s.enabled) return interaction.editReply('🌙 Autohunt is **disabled**. `/autohunt enable` to start.');
+        if (!s.enabled) return interaction.editReply('🌙 Autohunt is **disabled**. `/owo autohunt enable` to start.');
         return interaction.editReply(
             `🌅 Autohunt is **on**. Queued: **${s.queued}/${s.queuedCap}**. ` +
             `Next hunt in ~${s.nextInMinutes} min. Lifetime autohunted: **${s.totalLifetime.toLocaleString()}**.`
@@ -68,7 +69,7 @@ async function execute(interaction) {
             .map(([rank, n]) => `**${rank}** × ${n}`)
             .join(' · ');
         const embed = new EmbedBuilder()
-            .setColor(0xF0A500)
+            .setColor(themeColor(interaction.guildId, 'warning'))
             .setTitle(`🌅 Autohunt — collected ${r.claimed} animals`)
             .setDescription(rankLines || '—')
             .addFields(

@@ -1,6 +1,7 @@
 import { Events, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, EmbedBuilder } from 'discord.js';
 import logger from '../utils/logger.js';
 import pool from '../utils/db.js';
+import { themeColor } from '../core/guild-theme.js';
 
 export default {
     name: Events.InteractionCreate,
@@ -229,7 +230,7 @@ async function handleStaffModal(interaction) {
                 isAnonymous = anonInput === 'yes' || anonInput === 'y';
 
                 embed = new EmbedBuilder()
-                    .setColor(0xED4245)
+                    .setColor(themeColor(interaction.guildId, 'danger'))
                     .setTitle('🚨 User Report')
                     .addFields(
                         { name: 'Reported User', value: reportedUser, inline: true },
@@ -268,7 +269,7 @@ async function handleStaffModal(interaction) {
                 const wantsResponse = contactBack === 'yes' || contactBack === 'y';
 
                 embed = new EmbedBuilder()
-                    .setColor(0x5865F2)
+                    .setColor(themeColor(interaction.guildId, 'primary'))
                     .setTitle('💬 Staff Contact')
                     .addFields(
                         { name: 'From', value: `${interaction.user} (${interaction.user.tag})`, inline: true },
@@ -285,7 +286,7 @@ async function handleStaffModal(interaction) {
                 const details = interaction.fields.getTextInputValue('suggestion_details');
 
                 embed = new EmbedBuilder()
-                    .setColor(0x57F287)
+                    .setColor(themeColor(interaction.guildId, 'success'))
                     .setTitle('💡 Suggestion')
                     .addFields(
                         { name: 'From', value: `${interaction.user} (${interaction.user.tag})`, inline: true },

@@ -1,5 +1,15 @@
-import { EmbedBuilder, AttachmentBuilder } from 'discord.js';
+import { EmbedBuilder } from 'discord.js';
 import { createCanvas } from 'canvas';
+import { accessibleAttachment } from '../../utils/accessible-attachment.js';
+
+/**
+ * A switch on the Colour roles & AFK page (feature-config `colorroles`): colorrole_enabled or
+ * afk_enabled. Both default on, so only a stored off (false, 0, "0") turns the command off.
+ */
+export function colorrolesSwitchOn(cfg, key) {
+    const v = cfg ? cfg[key] : undefined;
+    return !(v === false || v === 0 || v === '0' || v === 'false');
+}
 
 // Color utility functions
 function normalizeHex(color) {
@@ -173,6 +183,26 @@ export async function handleColorRoleSet(interaction) {
     const roleName = `Color: ${hexColor.toUpperCase()}`;
     let colorRole = interaction.guild.roles.cache.find(r => r.name === roleName);
 
+    // Dashboard limits (Colour roles & AFK page, core/feature-config-spec.js `colorroles`).
+    const { getConfig } = await import('../../core/feature-config.js');
+    const cfg = await getConfig('colorroles', interaction.guildId).catch(() => ({}));
+    if (!colorrolesSwitchOn(cfg, 'colorrole_enabled')) {
+        return interaction.editReply({ content: 'Picking a name colour is turned off in this server.' });
+    }
+    const minLevel = Math.max(0, Number(cfg.colorrole_min_level) || 0);
+    if (minLevel > 0) {
+        const { default: pool } = await import('../../utils/db.js');
+        const [[row]] = await pool.execute('SELECT level FROM user_levels WHERE guild_id = ? AND user_id = ?', [interaction.guildId, interaction.user.id]).catch(() => [[null]]);
+        const level = Number(row?.level) || 0;
+        if (level < minLevel) {
+            return interaction.editReply({ content: `You need to reach level ${minLevel} to pick a colour (you are level ${level}).` });
+        }
+    }
+    const maxRoles = Math.max(1, Number(cfg.colorrole_max_per_guild) || 50);
+    if (!colorRole && interaction.guild.roles.cache.filter(r => r.name.startsWith('Color: ')).size >= maxRoles) {
+        return interaction.editReply({ content: `This server already has ${maxRoles} colour roles, the most it allows. Pick a colour someone already uses, or ask an admin to raise the limit.` });
+    }
+
     if (!colorRole) {
         colorRole = await interaction.guild.roles.create({
             name: roleName,
@@ -180,6 +210,11 @@ export async function handleColorRoleSet(interaction) {
             permissions: [],
             reason: 'Color role creation'
         });
+        // Listed under "Colour roles created" on the Colour roles & AFK page.
+        const { default: pool } = await import('../../utils/db.js');
+        await pool.execute(
+            'INSERT INTO color_roles (guild_id, role_id, color_hex, created_by) VALUES (?,?,?,?)',
+            [interaction.guildId, colorRole.id, hexColor.toUpperCase(), interaction.user.id]).catch(() => {});
     }
 
     const oldColorRoles = interaction.member.roles.cache.filter(r => r.name.startsWith('Color: '));
@@ -235,7 +270,10 @@ export async function handleColorConvert(interaction) {
     ctx.fillStyle = hex;
     ctx.fillRect(0, 0, 200, 200);
 
-    const attachment = new AttachmentBuilder(canvas.toBuffer(), { name: 'color.png' });
+    const attachment = accessibleAttachment(canvas.toBuffer(), {
+        name: 'color.png',
+        description: `Solid swatch of hex ${hex}. RGB ${rgb.r}, ${rgb.g}, ${rgb.b}. HSL ${hsl.h}, ${hsl.s}%, ${hsl.l}%.`,
+    });
 
     const embed = new EmbedBuilder()
         .setColor(hex)
@@ -274,7 +312,10 @@ export async function handleColorInfo(interaction) {
     ctx.fillStyle = hex;
     ctx.fillRect(0, 0, 400, 200);
 
-    const attachment = new AttachmentBuilder(canvas.toBuffer(), { name: 'color.png' });
+    const attachment = accessibleAttachment(canvas.toBuffer(), {
+        name: 'color.png',
+        description: `Solid swatch of ${colorName}, hex ${hex}, RGB ${rgb.r}, ${rgb.g}, ${rgb.b}.`,
+    });
 
     const embed = new EmbedBuilder()
         .setColor(hex)
@@ -313,7 +354,10 @@ export async function handleColorPalette(interaction) {
         ctx.fillRect(index * 100, 0, 100, 100);
     });
 
-    const attachment = new AttachmentBuilder(canvas.toBuffer(), { name: 'palette.png' });
+    const attachment = accessibleAttachment(canvas.toBuffer(), {
+        name: 'palette.png',
+        description: `${type} colour palette generated from ${hex}: ${palette.join(', ')}, shown left to right.`,
+    });
 
     const embed = new EmbedBuilder()
         .setColor(hex)
@@ -337,7 +381,10 @@ export async function handleColorRandom(interaction) {
     ctx.fillStyle = hex;
     ctx.fillRect(0, 0, 300, 300);
 
-    const attachment = new AttachmentBuilder(canvas.toBuffer(), { name: 'random-color.png' });
+    const attachment = accessibleAttachment(canvas.toBuffer(), {
+        name: 'random-color.png',
+        description: `Solid swatch of ${colorName}, hex ${hex}.`,
+    });
 
     const embed = new EmbedBuilder()
         .setColor(hex)
@@ -375,7 +422,10 @@ export async function handleColorGradient(interaction) {
         ctx.fillRect(index * 100, 0, 100, 100);
     });
 
-    const attachment = new AttachmentBuilder(canvas.toBuffer(), { name: 'gradient.png' });
+    const attachment = accessibleAttachment(canvas.toBuffer(), {
+        name: 'gradient.png',
+        description: `Gradient from ${hex1} to ${hex2} in ${steps} steps: ${gradient.join(', ')}, shown left to right.`,
+    });
 
     const embed = new EmbedBuilder()
         .setColor(hex1)

@@ -19,19 +19,17 @@ import {
     ensureDefaultTeam, addAnimalToTeam, removeAnimalFromTeam,
     equipWeapon, unequipWeapon, getTeamDetails, renameAnimal,
 } from '../core/owo/teams-service.js';
-import { simulateBattle, generateCpuTeam } from '../core/owo/battle-engine.js';
-import { renderHunt, renderCrateDrop } from '../core/owo/hunt-text.js';
+import { runBattle } from '../core/owo/battle-pvp.js';
+import { renderHunt } from '../core/owo/hunt-text.js';
+import * as owoSocial from './owo-social.js';
 import {
     spawnBoss, setBossMessage, getActiveBoss, fightBoss, getLeaderboard as getBossBoard, getBossStats,
     FIGHT_COOLDOWN_MS,
 } from '../core/owo/guildboss-service.js';
 import { renderBoss } from '../core/owo/guildboss-text.js';
-import { getLevel } from '../core/owo/pet-levels.js';
-import { rollDailyDrop } from '../core/owo/daily-drop.js';
 import * as lootbox from '../core/owo/lootbox-service.js';
 import { listOwned, getActive, use as useGems, gemName } from '../core/owo/gems-service.js';
 import { superscript, article } from '../core/owo/gems.js';
-import { addCowoncy } from '../core/owo/cowoncy.js';
 import {
     ensureQuests, listQuests, claimAllComplete, claimQuest, progressQuest,
 } from '../core/owo/quests-service.js';
@@ -190,7 +188,15 @@ export async function handleZoo(ctx) {
     await ctx.editReply({ embeds: [embed] });
 }
 
+const SOCIAL_TOPS = { cookie: 'cookies', cookies: 'cookies', rep: 'cookies', luck: 'luck', pray: 'luck', curse: 'curse', curses: 'curse' };
+
 export async function handleLeaderboard(ctx) {
+    // `owo top cookie|luck|curse` — upstream's social rankings ride on the same command.
+    const social = SOCIAL_TOPS[String(argTokens(ctx)[0] || '').toLowerCase()];
+    if (social) {
+        if (!(await gate(ctx, 'top'))) return;
+        return owoSocial.topSocialCmd(ctx, social);
+    }
     if (!(await gate(ctx, 'leaderboard'))) return;
     await ctx.deferReply();
     const rows = await getLeaderboard(ctx.guildId, 10);
@@ -216,6 +222,12 @@ export async function handleCatalog(ctx) {
 }
 
 export async function handleSell(ctx, rankArg) {
+    // `owo sell 3` sells a ring (upstream: ring ids are numbers, animal ranks are words).
+    const ringId = /^\d+$/.test(String(rankArg ?? ctx.options.getString('rank') ?? '')) ? Number(rankArg ?? ctx.options.getString('rank')) : null;
+    if (ringId != null) {
+        if (!(await gate(ctx, 'ring'))) return;
+        return owoSocial.sellRingCmd(ctx, ringId);
+    }
     if (!(await gate(ctx, 'sell'))) return;
     await ctx.deferReply();
     const rank = (rankArg || ctx.options.getString('rank') || '').toLowerCase();
@@ -250,14 +262,18 @@ export async function handleDaily(ctx) {
     const result = await claimDaily(ctx.guildId, ctx.user.id).catch(e => ({ error: e.message }));
     if (result.error) return ctx.editReply(`❌ ${result.error}`);
     if (result.cooldown) {
-        return ctx.editReply(`⏳ Already claimed your OwO daily — come back in **${result.remainingHours}h ${result.remainingMinutes}m**.`);
+        // Still on cooldown, but the partner's claim may just have unlocked today's marriage bonus.
+        return ctx.editReply({
+            content: `⏳ Already claimed your OwO daily — come back in **${result.remainingHours}h ${result.remainingMinutes}m**.${owoSocial.marriageDailyLine(result.marriage)}`,
+            allowedMentions: { parse: [] },
+        });
     }
     const econ = await getCurrencyMeta(ctx.guildId);
     const amount = result.totalAmount ?? result.reward ?? result.amount ?? 0;
     const streakLine = result.streak > 1
         ? `\n🔥 Streak: **${result.streak} days**${result.streakBonus ? ` (+${result.streakBonus.toLocaleString()} bonus)` : ''}`
         : '';
-    await ctx.editReply(`🎁 OwO daily claimed: ${formatMoney(amount, econ)}!${streakLine}`);
+    await ctx.editReply({ content: `🎁 OwO daily claimed: ${formatMoney(amount, econ)}!${streakLine}${owoSocial.marriageDailyLine(result.marriage)}`, allowedMentions: { parse: [] } });
 }
 
 export async function handleBalance(ctx) {
@@ -281,7 +297,7 @@ export async function handleGive(ctx, { user, amount } = {}) {
     if (recipient.id === ctx.user.id) return ctx.editReply('❌ You can\'t give currency to yourself.');
     if (recipient.bot) return ctx.editReply('❌ You can\'t gift currency to a bot.');
     try {
-        await transferCurrency(ctx.guildId, ctx.user.id, recipient.id, amt);
+        await transferCurrency(ctx.guildId, ctx.user.id, recipient.id, amt, { receiverName: recipient.username });
     } catch (e) { return ctx.editReply(`❌ ${e.message}`); }
     const econ = await getCurrencyMeta(ctx.guildId);
     await ctx.editReply(`💸 <@${ctx.user.id}> gave ${formatMoney(amt, econ)} to <@${recipient.id}>.`);
@@ -338,6 +354,7 @@ export async function handleWeapon(ctx, uwidArg) {
                 { name: 'Wear', value: WEAR_NAMES_P[w.wearId] || '?', inline: true },
                 { name: 'Favorite', value: w.favorite ? '⭐' : '—', inline: true }
             );
+        if (w.tracker) embed.addFields({ name: '🎯 Takedown Tracker', value: `**Kills:** \`${w.tracker.kills.toLocaleString()}\``, inline: true });
         if (w.passives?.length) {
             embed.addFields({
                 name: 'Passives',
@@ -349,7 +366,7 @@ export async function handleWeapon(ctx, uwidArg) {
     }
     const list = await listWeapons(ctx.guildId, ctx.user.id, { limit: 30 });
     if (!list.length) return ctx.editReply('🗡️ You don\'t own any weapons yet. Run `owo crate` to open one!');
-    const lines = list.map(w => `\`#${w.uwid}\` ${w.emoji} **${w.rank}** ${w.name} · stat ${w.stat} · ${WEAR_NAMES_P[w.wearId] || '?'}${w.favorite ? ' ⭐' : ''}`);
+    const lines = list.map(w => `\`#${w.uwid}\` ${w.emoji} **${w.rank}** ${w.name}${w.tracker ? ` [${w.tracker.kills.toLocaleString()}]` : ''} · stat ${w.stat} · ${WEAR_NAMES_P[w.wearId] || '?'}${w.favorite ? ' ⭐' : ''}`);
     const embed = new EmbedBuilder()
         .setColor(0xF0A500)
         .setAuthor({ name: `${ctx.user.username}'s Armory`, iconURL: ctx.user.displayAvatarURL() })
@@ -374,6 +391,7 @@ export async function handleCrate(ctx) {
                 { name: 'Wear', value: WEAR_NAMES_P[weapon.wearId] || 'Worn', inline: true },
                 { name: 'Rank', value: weapon.rank, inline: true }
             );
+        if (weapon.tracker) embed.addFields({ name: '🎯 Takedown Tracker', value: 'This weapon counts every kill it lands!' });
         if (weapon.passives?.length) {
             embed.addFields({
                 name: 'Passives',
@@ -411,6 +429,40 @@ function readArg(ctx, ...optionNames) {
         if (i != null) return String(i);
     }
     return null;
+}
+
+/**
+ * Everything typed after the subcommand, whichever prefix parsed it. The natural `owo` prefix
+ * (core/owo-natural-prefix.js) passes it whole as `text` and marks itself `natural`; the `!owo`
+ * registry path splits it positionally into rank / user / amount / text.
+ */
+function restText(ctx) {
+    if (ctx.options.getString?.('natural')) return ctx.options.getString('text') || '';
+    return ['rank', 'user', 'amount', 'text']
+        .map(n => ctx.options.getString?.(n))
+        .filter(v => v != null && String(v).length)
+        .join(' ');
+}
+
+function argTokens(ctx) {
+    return restText(ctx).split(/\s+/).filter(Boolean);
+}
+
+/** First plain number typed (1-15 digits — a 17+ digit token is a user id). */
+function firstInt(ctx) {
+    const t = argTokens(ctx).find(v => /^\d{1,15}$/.test(v));
+    return t == null ? null : parseInt(t, 10);
+}
+
+/** The member a command is aimed at: a mention or bare id among the arguments. */
+function targetUser(ctx) {
+    for (const t of argTokens(ctx)) {
+        const m = t.match(/^<@!?(\d{17,20})>$/) || t.match(/^(\d{17,20})$/);
+        if (!m) continue;
+        const u = ctx.message?.mentions?.users?.get(m[1]) ?? ctx.client?.users?.cache?.get(m[1]);
+        if (u) return u;
+    }
+    return ctx.options.getUser?.('user') || null;
 }
 
 function normAnimal(s) {
@@ -541,64 +593,16 @@ export async function handleQuestPrefix(ctx) {
     await ctx.editReply({ embeds: [embed] });
 }
 
+/**
+ * `owo battle` — vs a CPU team; `owo battle @user [bet]` — a friendly battle (they must accept),
+ * optionally betting cowoncy held in escrow. The whole flow is core/owo/battle-pvp.js runBattle(),
+ * shared with `/owo battle` and `/owo2 duel`.
+ */
 export async function handleBattlePrefix(ctx) {
     if (!(await gate(ctx, 'battle'))) return;
-    await ctx.deferReply();
-    const opponent = ctx.options.getUser?.('user') || ctx.options.getUser?.('opponent');
-    const player = await getTeamDetails(ctx.guildId, ctx.user.id);
-    if (!player || player.animals.length === 0) return ctx.editReply('🗡️ Build a team first with `owo team-add <animal>`.');
-    let enemy, isPvP = false;
-    if (opponent) {
-        if (opponent.id === ctx.user.id) return ctx.editReply('❌ You can\'t battle yourself.');
-        if (opponent.bot) return ctx.editReply('❌ Can\'t battle a bot.');
-        enemy = await getTeamDetails(ctx.guildId, opponent.id);
-        if (!enemy || enemy.animals.length === 0) return ctx.editReply(`❌ <@${opponent.id}> doesn't have a team yet.`);
-        isPvP = true;
-    } else {
-        enemy = await generateCpuTeam(player);
-    }
-    const result = simulateBattle(player, enemy);
-    const econ = await getCurrencyMeta(ctx.guildId);
-    const playerWon = result.winner === 'team1';
-    const playerLost = result.winner === 'team2';
-    try {
-        if (playerWon) await pool.execute('UPDATE owo_pet_team SET win = win + 1, streak = streak + 1, highest_streak = GREATEST(highest_streak, streak + 1) WHERE guild_id=? AND uid=? AND pgid=?', [ctx.guildId, ctx.user.id, player.pgid]);
-        else if (playerLost) await pool.execute('UPDATE owo_pet_team SET lose = lose + 1, streak = 0 WHERE guild_id=? AND uid=? AND pgid=?', [ctx.guildId, ctx.user.id, player.pgid]);
-    } catch { /* ignore */ }
-    let reward = 0;
-    if (playerWon) { reward = 25 + Math.floor(Math.random() * 50); try { await addCowoncy(ctx.guildId, ctx.user.id, reward, 'OwO battle win'); } catch {} }
-    const color = playerWon ? 0x4CAF50 : (playerLost ? 0xF44336 : 0x9E9E9E);
-    const resultLine = playerWon ? `🏆 **Victory!** +${reward} ${econ.currency_emoji || '💰'}` : (playerLost ? '💀 **Defeat.**' : '🤝 **Draw.**');
-    const logText = result.log.join('\n').slice(0, 3000);
-
-    // Team-vs-team, the way the bot we replace shows it: the two rosters as side-by-side fields
-    // under a "<name> goes into battle!" author line, rather than buried in the log text.
-    const embed = new EmbedBuilder()
-        .setColor(color)
-        .setAuthor({ name: `${ctx.user.username} goes into battle!`, iconURL: ctx.user.displayAvatarURL() })
-        .setDescription(resultLine + '\n\n' + logText)
-        .addFields(
-            { name: player.tname || `${ctx.user.username}'s Team`, value: rosterField(player), inline: true },
-            { name: enemy.tname || 'Enemy Team', value: rosterField(enemy), inline: true },
-        )
-        .setFooter({ text: `Turns: ${result.turns}` });
-
-    await ctx.editReply({ embeds: [embed] });
-
-    // A battle can drop a weapon crate — first one after midnight is guaranteed, then 5%, 3/day.
-    const crate = await rollDailyDrop('crate', ctx.guildId, ctx.user.id);
-    const crateText = renderCrateDrop(ctx.user.username, crate);
-    if (crateText) await ctx.followUp(crateText).catch(() => {});
-}
-
-/** One roster as an embed field: "🐊 Snappy — 120 HP". */
-function rosterField(team) {
-    const lines = (team.animals ?? []).map(a => {
-        const label = a.nickname || prettyName(a.name);
-        const lvl = getLevel(a.xp ?? 0).level;
-        return `L. ${lvl} ${a.emoji ?? ''} ${label}${a.hp ? ` — ${a.hp} HP` : ''}`.trim();
-    });
-    return lines.length ? lines.join('\n').slice(0, 1020) : '—';
+    const opponent = targetUser(ctx) || ctx.options.getUser?.('opponent') || null;
+    const bet = opponent ? (firstInt(ctx) ?? 0) : 0;
+    return runBattle(ctx, { opponent, bet });
 }
 
 export async function handleEquipPrefix(ctx) {
@@ -721,6 +725,12 @@ export async function handleOwoCount(ctx) {
     return ctx.reply({ embeds: [embed] });
 }
 
+/** Run `fn` only if the module/subcommand gate passes. */
+async function gated(ctx, name, fn) {
+    if (!(await gate(ctx, name))) return null;
+    return fn();
+}
+
 export async function handleOwoRouter(ctx) {
     const subcommand = (ctx.options.getString('subcommand') || 'hunt').toLowerCase();
     // Bump the 'owo' quest for every routed subcommand (mirror the slash
@@ -757,10 +767,53 @@ export async function handleOwoRouter(ctx) {
         case 'boss': case 'guildboss':                return handleBoss(ctx);
         case 'quest': case 'quests': case 'q':        return handleQuestPrefix(ctx);
         case 'count': case 'points':                  return handleOwoCount(ctx);
+        // ── social / economy ports (handlers/owo-social.js) ──
+        case 'profile':
+            return gated(ctx, 'profile', () => owoSocial.profileCmd(ctx, targetUser(ctx)));
+        case 'pray':                                  return gated(ctx, 'pray', () => owoSocial.prayCmd(ctx, 'pray', targetUser(ctx)));
+        case 'curse':                                 return gated(ctx, 'curse', () => owoSocial.prayCmd(ctx, 'curse', targetUser(ctx)));
+        case 'cookie': case 'rep':                    return gated(ctx, 'cookie', () => owoSocial.cookieCmd(ctx, targetUser(ctx)));
+        case 'lottery': case 'lotto': case 'bet': {
+            const all = argTokens(ctx).some(t => t.toLowerCase() === 'all');
+            return gated(ctx, 'lottery', () => owoSocial.lotteryCmd(ctx, all ? 'all' : firstInt(ctx)));
+        }
+        case 'drop':                                  return gated(ctx, 'drop', () => owoSocial.dropCmd(ctx, firstInt(ctx)));
+        case 'pickup':                                return gated(ctx, 'pickup', () => owoSocial.pickupCmd(ctx, firstInt(ctx)));
+        case 'limits': case 'limit': case 'givelimit': case 'give-limits':
+            return gated(ctx, 'give-limits', () => owoSocial.limitsCmd(ctx));
+        case 'transactions': case 'transaction': case 'tx': {
+            const all = argTokens(ctx).some(t => /^(all|server)$/i.test(t));
+            return gated(ctx, 'transactions', () => owoSocial.transactionsCmd(ctx, { target: targetUser(ctx), all }));
+        }
+        case 'battlesetting': case 'battlesettings': case 'bs': case 'battle-settings': {
+            const raw = restText(ctx).trim();
+            return gated(ctx, 'battle-settings', () => owoSocial.battleSettingsCmd(ctx, raw ? { raw } : {}));
+        }
+        case 'ab': case 'acceptbattle':               return gated(ctx, 'battle', () => owoSocial.answerBattleCmd(ctx, true));
+        case 'db': case 'declinebattle':              return gated(ctx, 'battle', () => owoSocial.answerBattleCmd(ctx, false));
+        case 'shop': case 'market':                   return gated(ctx, 'shop', () => owoSocial.shopCmd(ctx));
+        case 'buy': {
+            const id = firstInt(ctx);
+            const area = id != null && id > 200 ? 'wallpaper' : 'ring';
+            return gated(ctx, area, () => owoSocial.buyCmd(ctx, id));
+        }
+        case 'ring': case 'rings':                    return gated(ctx, 'ring', () => owoSocial.ringInventoryCmd(ctx));
+        case 'wallpaper': case 'wallpapers': case 'wp': case 'background': case 'backgrounds': {
+            const arg = argTokens(ctx)[0] ?? null;
+            return gated(ctx, 'wallpaper', () => owoSocial.wallpaperCmd(ctx, arg));
+        }
+        case 'marry': case 'propose': case 'marriage': case 'wife': case 'husband':
+            return gated(ctx, 'marry', () => owoSocial.marryCmd(ctx, targetUser(ctx), firstInt(ctx)));
+        case 'acceptmarriage': case 'am':             return gated(ctx, 'marry', () => owoSocial.acceptMarriageCmd(ctx));
+        case 'declinemarriage': case 'dm':            return gated(ctx, 'marry', () => owoSocial.declineMarriageCmd(ctx));
+        case 'divorce':                               return gated(ctx, 'marry', () => owoSocial.divorceCmd(ctx));
         case 'help':  // falls through to the command list
         default:
             return ctx.reply(
-                '**OwO subcommands:** `hunt`, `zoo`, `leaderboard`, `catalog`, `sell <rank>`, `sacrifice <rank>`, `daily`, `balance`, `give @user <amt>`, `stats`, `owoify <text>`, `weapon [id]`, `crate`, `grant-crate @user [n]`'
+                '**OwO subcommands:** `hunt`, `zoo`, `leaderboard`, `catalog`, `sell <rank>`, `sacrifice <rank>`, `daily`, `balance`, `give @user <amt>`, `stats`, `owoify <text>`, `weapon [id]`, `crate`, `grant-crate @user [n]`\n'
+                + '**Social:** `profile`, `pray [@user]`, `curse [@user]`, `cookie [@user]`, `top cookie|luck|curse`, `marry @user <ring>`, `am`, `dm`, `divorce`, `wallpaper [id]`\n'
+                + '**Economy:** `lottery [amount|all]`, `drop <amt>`, `pickup <amt>`, `shop`, `buy <id>`, `limits`, `transactions`\n'
+                + '**Battle:** `battle [@user] [bet]`, `ab` / `db`, `battlesetting [display=compact]`'
             );
     }
 }

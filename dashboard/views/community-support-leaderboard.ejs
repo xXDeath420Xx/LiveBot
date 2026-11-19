@@ -1,711 +1,348 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><%= title %></title>
-    <meta name="theme-color" content="#a78bfa">
-    <link rel="icon" type="image/png" href="/images/CertiFried.png">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/css/tokes-bot.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<%
+    const _guild = (typeof guild !== 'undefined' && guild) ? guild : null;
+    const _users = (typeof users !== 'undefined' && Array.isArray(users)) ? users : [];
+    const _pg = (typeof pagination !== 'undefined' && pagination) ? pagination : null;
+    const _err = (typeof error !== 'undefined' && error) ? error : null;
+    const _admin = (typeof isAdmin !== 'undefined' && isAdmin) ? true : false;
+    const _months = (typeof availableMonths !== 'undefined' && Array.isArray(availableMonths)) ? availableMonths : [];
+    const _month = (typeof monthKey !== 'undefined' && monthKey) ? monthKey : null;
+    const _entries = (typeof entriesByUser !== 'undefined' && entriesByUser) ? entriesByUser : {};
+    const _scoring = (typeof scoring !== 'undefined' && scoring) ? scoring : null;
+    const _monthLabel = (m) => { const [y, mo] = String(m).split('-'); const d = new Date(Date.UTC(parseInt(y, 10), parseInt(mo, 10) - 1, 1)); return isNaN(d) ? m : d.toLocaleString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' }); };
+    const _title = _guild ? _guild.name + ' supporters · CertiFried' : 'Supporters not found · CertiFried';
+%>
+<%- include('partials/site-head', { title: _title, description: _guild ? 'Monthly raid and support leaderboard for the ' + _guild.name + ' Discord server.' : 'Community supporters leaderboard.', path: _guild ? '/supporters/' + _guild.id : null, noindex: !_guild }) %>
     <style>
-        .rank-badge {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            font-weight: 700;
-            font-size: 0.85rem;
-            flex-shrink: 0;
-        }
-        .rank-1 { background: linear-gradient(135deg, #FFD700, #FFA500); color: #000; }
-        .rank-2 { background: linear-gradient(135deg, #C0C0C0, #A0A0A0); color: #000; }
-        .rank-3 { background: linear-gradient(135deg, #CD7F32, #8B4513); color: #fff; }
-        .rank-default { background: var(--ember-bg-elevated); color: var(--ember-text-muted); }
-
-        .guild-header {
-            display: flex;
-            align-items: center;
-            gap: 1.25rem;
-            margin-bottom: 0.5rem;
-        }
-        .guild-icon {
-            width: 64px;
-            height: 64px;
-            border-radius: 16px;
-            object-fit: cover;
-        }
-        .guild-meta {
-            color: var(--ember-text-muted);
-            font-size: 0.9rem;
-        }
-
-        .user-cell {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-        }
-        .user-avatar {
-            width: 36px;
-            height: 36px;
-            border-radius: 50%;
-            object-fit: cover;
-            flex-shrink: 0;
-        }
-        .user-info {
-            display: flex;
-            flex-direction: column;
-            min-width: 0;
-        }
-        .user-display-name {
-            font-weight: 600;
-            color: var(--ember-text-primary);
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        .user-username {
-            font-size: 0.75rem;
-            color: var(--ember-text-muted);
-        }
-
-        .points-value {
-            font-weight: 700;
-            font-size: 1.1rem;
-            color: var(--ember-primary);
-        }
-        .stat-value {
-            font-weight: 600;
-            color: var(--ember-text-primary);
-        }
-        .stat-label {
-            font-size: 0.75rem;
-            color: var(--ember-text-muted);
-        }
-        .raid-breakdown {
-            display: flex;
-            flex-direction: column;
-            gap: 2px;
-            font-size: 0.8rem;
-        }
-        .raid-aff {
-            color: var(--ember-primary);
-        }
-        .raid-non-aff {
-            color: var(--ember-text-primary);
-        }
-
-        .expandable-row {
-            cursor: pointer;
-            transition: background 0.15s;
-        }
-        .expandable-row:hover {
-            background: var(--ember-bg-elevated);
-        }
-        .expand-icon {
-            display: inline-block;
-            transition: transform 0.2s;
-            font-size: 0.7rem;
-            color: var(--ember-text-muted);
-            margin-left: 0.5rem;
-        }
-        .expand-icon.open {
-            transform: rotate(90deg);
-        }
-
-        .detail-row {
-            display: none;
-        }
-        .detail-row.open {
-            display: table-row;
-        }
-        .detail-cell {
-            padding: 0 !important;
-        }
-        .detail-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 0.82rem;
-            background: var(--ember-bg-elevated);
-        }
-        .detail-table th {
-            padding: 0.5rem 0.75rem;
-            text-align: left;
-            font-weight: 600;
-            color: var(--ember-text-muted);
-            font-size: 0.75rem;
-            text-transform: uppercase;
-            letter-spacing: 0.03em;
-            border-bottom: 1px solid var(--ember-border);
-        }
-        .detail-table td {
-            padding: 0.4rem 0.75rem;
-            border-bottom: 1px solid var(--ember-border);
-            color: var(--ember-text-primary);
-        }
-        .detail-table tr:last-child td {
-            border-bottom: none;
-        }
-        .entry-type {
-            display: inline-block;
-            padding: 0.15rem 0.4rem;
-            border-radius: 4px;
-            font-size: 0.75rem;
-            font-weight: 600;
-        }
-        .entry-type-raid {
-            background: rgba(145, 70, 255, 0.15);
-            color: #b794f6;
-        }
-        .entry-type-support {
-            background: rgba(0, 209, 102, 0.15);
-            color: #68d391;
-        }
-        .aff-badge {
-            font-size: 0.7rem;
-            padding: 0.1rem 0.35rem;
-            border-radius: 3px;
-            font-weight: 500;
-        }
-        .aff-badge-yes {
-            background: rgba(145, 70, 255, 0.15);
-            color: #b794f6;
-        }
-        .aff-badge-no {
-            background: rgba(255, 255, 255, 0.08);
-            color: var(--ember-text-muted);
-        }
-        .proof-link, .twitch-link {
-            color: var(--ember-primary);
-            text-decoration: none;
-            font-weight: 500;
-        }
-        .proof-link:hover, .twitch-link:hover {
-            text-decoration: underline;
-        }
-
-        .month-selector {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            margin-bottom: 1.5rem;
-        }
-        .month-selector label {
-            font-weight: 600;
-            color: var(--ember-text-primary);
-            font-size: 0.9rem;
-        }
-        .month-selector select {
-            padding: 0.5rem 0.75rem;
-            border-radius: 8px;
-            border: 1px solid var(--ember-border);
-            background: var(--ember-bg-card);
-            color: var(--ember-text-primary);
-            font-family: inherit;
-            font-size: 0.9rem;
-            cursor: pointer;
-        }
-        .month-selector select:focus {
-            outline: none;
-            border-color: var(--ember-primary);
-        }
-
-        .pagination {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 0.5rem;
-            margin-top: 1.5rem;
-            flex-wrap: wrap;
-        }
-        .pagination a, .pagination span {
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            min-width: 36px;
-            height: 36px;
-            padding: 0 0.5rem;
-            border-radius: 8px;
-            text-decoration: none;
-            font-weight: 500;
-            font-size: 0.875rem;
-            transition: all 0.2s;
-        }
-        .pagination a {
-            background: var(--ember-bg-card);
-            color: var(--ember-text-primary);
-            border: 1px solid var(--ember-border);
-        }
-        .pagination a:hover {
-            background: var(--ember-bg-elevated);
-            border-color: var(--ember-primary);
-        }
-        .pagination .current {
-            background: var(--ember-primary);
-            color: white;
-            border: 1px solid var(--ember-primary);
-        }
-        .pagination .disabled {
-            opacity: 0.4;
-            pointer-events: none;
-        }
-
-        .error-card {
-            text-align: center;
-            padding: 3rem 1.5rem;
-            color: var(--ember-text-muted);
-        }
-        .error-card h2 {
-            color: var(--ember-text-primary);
-            margin-bottom: 0.5rem;
-        }
-
-        @media (max-width: 640px) {
-            .guild-icon { width: 48px; height: 48px; border-radius: 12px; }
-            .ember-dashboard-title { font-size: 1.25rem; }
-            .user-avatar { width: 28px; height: 28px; }
-            .hide-mobile { display: none; }
-            .ember-table th, .ember-table td { padding: 0.5rem; font-size: 0.8rem; }
-            .rank-badge { width: 26px; height: 26px; font-size: 0.75rem; }
-            .points-value { font-size: 0.95rem; }
-        }
+        .lb-guild { display: flex; align-items: center; gap: var(--cf-4); }
+        .lb-guild img { width: 56px; height: 56px; border-radius: 14px; flex: none; background: var(--cf-surface-2); }
+        .lb-guild h1 { margin: 0; }
+        .lb-guild .cfs-meta { margin-top: 4px; }
+        .lb-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--cf-3); margin: 0 0 var(--cf-4); }
+        .lb-tools label { font-size: var(--cf-text-sm); color: var(--cf-text-2); margin-right: var(--cf-2); }
+        .lb-tools select { min-width: 180px; }
+        .lb-scoring { display: flex; flex-wrap: wrap; gap: 6px; font-size: var(--cf-text-xs); }
+        .lb-table-wrap { position: relative; overflow-x: auto; background: var(--cf-surface); border: 1px solid var(--cf-border); border-radius: var(--cf-radius-lg); }
+        .lb { width: 100%; border-collapse: collapse; font-size: var(--cf-text-sm); }
+        .lb th { padding: 9px 14px; font-size: var(--cf-text-xs); font-weight: 500; color: var(--cf-text-3); text-align: left; border-bottom: 1px solid var(--cf-border); white-space: nowrap; }
+        .lb td { padding: 10px 14px; border-bottom: 1px solid var(--cf-border); vertical-align: middle; }
+        .lb > tbody > tr:last-child > td { border-bottom: 0; }
+        .lb .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .lb .lb-rank-col { width: 56px; }
+        .lb-rank { display: inline-flex; align-items: center; justify-content: center; min-width: 28px; height: 28px; padding: 0 6px; border-radius: 999px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--cf-text-2); background: var(--cf-surface-2); }
+        .lb-rank.top { color: var(--cf-on-accent); background: var(--cf-accent); }
+        .lb-member { display: flex; align-items: center; gap: var(--cf-3); min-width: 0; }
+        .lb-member img { width: 32px; height: 32px; border-radius: 50%; flex: none; }
+        .lb-who { min-width: 0; }
+        .lb-name { display: block; font-weight: 500; color: var(--cf-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 28ch; }
+        .lb-handle { display: block; font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+        .lb-toggle { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+        .lb-toggle .chev { width: 14px; height: 14px; color: var(--cf-text-3); transition: transform var(--cf-fast) var(--cf-ease); flex: none; }
+        .lb-toggle[aria-expanded="true"] .chev { transform: rotate(90deg); }
+        .lb-sub { font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+        .lb-detail > td { padding: 0 14px 12px; background: var(--cf-inset); }
+        .lb-detail[hidden] { display: none; }
+        .lb-detail-scroll { overflow-x: auto; }
+        .lb-entries { width: 100%; border-collapse: collapse; font-size: var(--cf-text-xs); }
+        .lb-entries th, .lb-entries td { padding: 7px 8px; border-bottom: 1px solid var(--cf-border); text-align: left; white-space: nowrap; }
+        .lb-entries tr:last-child td { border-bottom: 0; }
+        .lb-entries a { color: var(--cf-accent-fg); }
+        .lb-actions { display: inline-flex; gap: 4px; }
+        .lb-pager { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 4px; margin-top: var(--cf-5); }
+        .lb-pager a, .lb-pager span { min-width: 40px; height: 40px; padding: 0 10px; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--cf-radius); font-size: var(--cf-text-sm); text-decoration: none; color: var(--cf-text-2); border: 1px solid var(--cf-border); background: var(--cf-surface); }
+        .lb-pager a:hover { color: var(--cf-text); border-color: var(--cf-border-strong); }
+        .lb-pager [aria-current="page"] { color: var(--cf-on-accent); background: var(--cf-accent); border-color: var(--cf-accent); font-weight: 600; }
+        .lb-pager .gap { border: 0; background: none; min-width: 0; padding: 0 4px; }
+        .lb-count { margin-top: var(--cf-3); text-align: center; font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+        /* Admin edit dialog */
+        .lb-dialog { width: min(420px, calc(100vw - 32px)); padding: 0; border: 1px solid var(--cf-border); border-radius: var(--cf-radius-lg); background: var(--cf-surface); color: var(--cf-text); box-shadow: var(--cf-shadow-pop); }
+        .lb-dialog::backdrop { background: rgba(0, 0, 0, 0.6); }
+        .lb-dialog form { padding: var(--cf-5); display: flex; flex-direction: column; gap: var(--cf-3); }
+        .lb-dialog h2 { margin: 0 0 var(--cf-1); font-size: var(--cf-text-lg); }
+        .lb-dialog label { display: block; margin-bottom: 4px; font-size: var(--cf-text-sm); font-weight: 500; }
+        .lb-dialog input, .lb-dialog select { width: 100%; }
+        .lb-dialog .row-actions { display: flex; justify-content: flex-end; gap: var(--cf-2); margin-top: var(--cf-2); }
+        .lb-toast { position: fixed; right: 16px; bottom: 16px; z-index: 10000; max-width: min(420px, calc(100vw - 32px)); padding: 10px 14px; border-radius: var(--cf-radius-lg); background: var(--cf-surface); border: 1px solid var(--cf-border-strong); box-shadow: var(--cf-shadow-pop); font-size: var(--cf-text-sm); }
+        .lb-toast[hidden] { display: none; }
+        .lb-toast.is-error { border-color: var(--cf-danger); }
+        @media (max-width: 640px) { .lb .hide-sm, .lb-entries .hide-sm { display: none; } .lb-name { max-width: 16ch; } .lb td, .lb th { padding-left: 10px; padding-right: 10px; } }
     </style>
 </head>
-<body class="ember-page">
-    <!-- Navigation -->
-    <nav class="ember-nav">
-        <div class="ember-container ember-nav-inner">
-            <a href="/" class="ember-nav-brand">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2z"/>
-                    <path d="M12 6v6l4 2"/>
-                </svg>
-                CertiFriedUtility
-            </a>
-        </div>
-    </nav>
-
-    <main class="ember-dashboard">
-        <div class="ember-container">
-            <% if (error && !guild) { %>
-                <!-- Full-page error -->
-                <div class="ember-card error-card">
-                    <h2>Supporters Not Found</h2>
-                    <p><%= error %></p>
-                </div>
-            <% } else if (guild) { %>
-                <!-- Guild Header -->
-                <div class="ember-dashboard-header">
-                    <div class="guild-header">
-                        <img src="<%= guild.icon ? `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png?size=128` : 'https://cdn.discordapp.com/embed/avatars/0.png' %>"
-                             alt="<%= guild.name %>"
-                             class="guild-icon">
-                        <div>
-                            <h1 class="ember-dashboard-title"><%= guild.name %></h1>
-                            <p class="guild-meta"><%= guild.memberCount %> members</p>
-                        </div>
+<body class="cfs-body">
+<%- include('partials/site-header', { active: '', user: locals.user || null, returnTo: _guild ? '/supporters/' + _guild.id : '/' }) %>
+    <main id="main-content" tabindex="-1" class="cfs-main">
+        <% if (!_guild) { %>
+            <div class="cfs-rows"><div class="cfs-empty">
+                <h1 class="cfs-h2">Supporters not found</h1>
+                <p><%= _err || 'This server could not be found.' %></p>
+            </div></div>
+        <% } else { %>
+            <div class="cfs-pagehead">
+                <div class="lb-guild">
+                    <img src="<%= _guild.icon ? 'https://cdn.discordapp.com/icons/' + _guild.id + '/' + _guild.icon + '.png?size=128' : 'https://cdn.discordapp.com/embed/avatars/0.png' %>" alt="" width="56" height="56">
+                    <div>
+                        <span class="cfs-eyebrow">Community supporters</span>
+                        <h1><%= _guild.name %></h1>
+                        <p class="cfs-meta"><%= Number(_guild.memberCount || 0).toLocaleString('en-US') %> members</p>
                     </div>
-                    <p class="ember-dashboard-subtitle">Community Supporters</p>
                 </div>
+            </div>
 
-                <% if (error) { %>
-                    <div class="ember-card error-card">
-                        <p><%= error %></p>
-                    </div>
-                <% } else { %>
-                    <!-- Month Selector -->
-                    <% if (availableMonths && availableMonths.length > 0) { %>
-                        <div class="month-selector">
-                            <label for="month-select">Month:</label>
-                            <select id="month-select" onchange="window.location.href='/supporters/<%= guild.id %>?month=' + this.value">
-                                <% availableMonths.forEach(m => { %>
-                                    <% const [y, mo] = m.split('-'); %>
-                                    <% const label = new Date(parseInt(y), parseInt(mo) - 1).toLocaleString('en-US', { month: 'long', year: 'numeric' }); %>
-                                    <option value="<%= m %>" <%= m === monthKey ? 'selected' : '' %>><%= label %></option>
-                                <% }); %>
-                            </select>
-                        </div>
+            <% if (_err) { %>
+                <div class="cfs-rows"><div class="cfs-empty"><p><%= _err %></p></div></div>
+            <% } else { %>
+                <div class="lb-tools">
+                    <% if (_months.length) { %>
+                    <form method="get" action="/supporters/<%= _guild.id %>" id="lb-month-form">
+                        <label for="month-select">Month</label>
+                        <select id="month-select" name="month" class="form-select">
+                            <% _months.forEach(function (m) { %><option value="<%= m %>"<%= m === _month ? ' selected' : '' %>><%= _monthLabel(m) %></option><% }) %>
+                        </select>
+                        <noscript><button type="submit" class="btn btn-secondary btn-sm">Show</button></noscript>
+                    </form>
                     <% } %>
+                    <% if (_scoring) { %>
+                    <div class="lb-scoring" aria-label="How points are earned">
+                        <span class="cfs-badge">Raid a non-affiliate: <%= _scoring.raidNonAffiliate %> pts</span>
+                        <span class="cfs-badge">Raid an affiliate: <%= _scoring.raidAffiliate %> pts</span>
+                        <span class="cfs-badge">Support: <%= _scoring.support %> pts</span>
+                    </div>
+                    <% } %>
+                </div>
 
-                    <!-- Scoring Info -->
-                    <div class="ember-card" style="padding: 1rem 1.25rem; margin-bottom: 1.5rem; font-size: 0.85rem; color: var(--ember-text-muted); display: flex; gap: 1.5rem; flex-wrap: wrap;">
-                        <span><strong style="color: var(--ember-text-primary);">Raid Non-Affiliate:</strong> +10 pts</span>
-                        <span><strong style="color: var(--ember-primary);">Raid Affiliate:</strong> +5 pts</span>
-                        <span><strong style="color: var(--ember-text-primary);">Support:</strong> +3 pts</span>
+                <% if (!_users.length) { %>
+                    <div class="cfs-rows"><div class="cfs-empty"><h2>No supporters this month yet</h2><p>Members earn points by raiding and supporting other streamers and posting it in the server's raid and support channels.</p></div></div>
+                <% } else { %>
+                    <div class="lb-table-wrap">
+                        <table class="lb">
+                            <thead>
+                                <tr>
+                                    <th scope="col" class="lb-rank-col">Rank</th>
+                                    <th scope="col">Member</th>
+                                    <th scope="col" class="num">Points</th>
+                                    <th scope="col" class="num hide-sm">Raids (affiliate / non-affiliate)</th>
+                                    <th scope="col" class="num hide-sm">Supports</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <% _users.forEach(function (u, idx) { const list = _entries[u.userId] || []; %>
+                                <tr>
+                                    <td><span class="lb-rank<%= u.rank <= 3 ? ' top' : '' %>"><%= u.rank %></span></td>
+                                    <td>
+                                        <div class="lb-member">
+                                            <img src="<%= u.avatarURL %>" alt="" width="32" height="32" loading="lazy" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
+                                            <span class="lb-who">
+                                                <% if (list.length) { %>
+                                                <button type="button" class="lb-toggle" aria-expanded="false" aria-controls="detail-<%= idx %>">
+                                                    <span class="lb-name"><%= u.displayName %></span>
+                                                    <svg class="chev" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m6 4 4 4-4 4"/></svg>
+                                                    <span class="visually-hidden">Show entries</span>
+                                                </button>
+                                                <% } else { %><span class="lb-name"><%= u.displayName %></span><% } %>
+                                                <% if (u.username && u.username !== u.displayName) { %><span class="lb-handle">@<%= u.username %></span><% } %>
+                                            </span>
+                                        </div>
+                                    </td>
+                                    <td class="num"><strong><%= Number(u.totalPoints).toLocaleString('en-US') %></strong></td>
+                                    <td class="num hide-sm"><%= u.raidCount %><% if (u.raidCount > 0) { %> <span class="lb-sub">(<%= u.raidAffiliateCount %> / <%= u.raidNonAffiliateCount %>)</span><% } %></td>
+                                    <td class="num hide-sm"><%= u.supportCount %></td>
+                                </tr>
+                                <% if (list.length) { %>
+                                <tr class="lb-detail" id="detail-<%= idx %>" hidden>
+                                    <td colspan="5">
+                                        <div class="lb-detail-scroll">
+                                        <table class="lb-entries">
+                                            <thead><tr><th scope="col">Date</th><th scope="col">Type</th><th scope="col">Streamer</th><th scope="col" class="hide-sm">Status</th><th scope="col">Points</th><th scope="col">Proof</th><% if (_admin) { %><th scope="col">Manage</th><% } %></tr></thead>
+                                            <tbody>
+                                                <% list.forEach(function (e) { %>
+                                                <tr>
+                                                    <td><%= new Date(e.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) %></td>
+                                                    <td><%= e.type === 'raid' ? 'Raid' : 'Support' %></td>
+                                                    <td><a href="<%= e.twitchLink %>" target="_blank" rel="noopener"><%= e.target %></a></td>
+                                                    <td class="hide-sm"><%= e.isAffiliate ? 'Affiliate' : 'Non-affiliate' %></td>
+                                                    <td>+<%= e.points %></td>
+                                                    <td><a href="<%= e.messageLink %>" target="_blank" rel="noopener">Message</a></td>
+                                                    <% if (_admin) { %>
+                                                    <td>
+                                                        <span class="lb-actions">
+                                                            <button type="button" class="btn btn-secondary btn-sm" data-act="edit" data-id="<%= e.id %>" data-target="<%= e.target %>" data-twitch-id="<%= e.targetTwitchId || '' %>" data-affiliate="<%= e.isAffiliate ? '1' : '0' %>" data-points="<%= e.points %>" data-type="<%= e.type %>">Edit</button>
+                                                            <button type="button" class="btn btn-secondary btn-sm" data-act="repost" data-id="<%= e.id %>" title="Post the bot's reply in Discord again">Repost</button>
+                                                            <button type="button" class="btn btn-danger btn-sm" data-act="delete" data-id="<%= e.id %>">Delete</button>
+                                                        </span>
+                                                    </td>
+                                                    <% } %>
+                                                </tr>
+                                                <% }) %>
+                                            </tbody>
+                                        </table>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <% } %>
+                                <% }) %>
+                            </tbody>
+                        </table>
                     </div>
 
-                    <% if (users.length === 0) { %>
-                        <div class="ember-card error-card">
-                            <h2>No Supporters Yet</h2>
-                            <p>Raid and support other streamers to earn points and appear on the leaderboard!</p>
-                        </div>
-                    <% } else { %>
-                        <!-- Leaderboard Table -->
-                        <div class="ember-card">
-                            <table class="ember-table">
-                                <thead>
-                                    <tr>
-                                        <th style="width: 50px;">Rank</th>
-                                        <th>Member</th>
-                                        <th style="text-align: center;">Points</th>
-                                        <th style="text-align: center;" class="hide-mobile">Raids (Aff / Non-Aff)</th>
-                                        <th style="text-align: center;" class="hide-mobile">Supports</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <% users.forEach((user, idx) => { %>
-                                        <% const entries = entriesByUser[user.userId] || []; %>
-                                        <tr class="expandable-row" onclick="toggleDetail('<%= idx %>')">
-                                            <td>
-                                                <span class="rank-badge <%= user.rank <= 3 ? 'rank-' + user.rank : 'rank-default' %>">
-                                                    <%= user.rank %>
-                                                </span>
-                                            </td>
-                                            <td>
-                                                <div class="user-cell">
-                                                    <img src="<%= user.avatarURL %>"
-                                                         alt=""
-                                                         class="user-avatar"
-                                                         loading="lazy"
-                                                         onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
-                                                    <div class="user-info">
-                                                        <span class="user-display-name">
-                                                            <%= user.displayName %>
-                                                            <span class="expand-icon" id="expand-icon-<%= idx %>">&#9654;</span>
-                                                        </span>
-                                                        <% if (user.username && user.username !== user.displayName) { %>
-                                                            <span class="user-username">@<%= user.username %></span>
-                                                        <% } %>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td style="text-align: center;">
-                                                <span class="points-value"><%= user.totalPoints.toLocaleString() %></span>
-                                            </td>
-                                            <td style="text-align: center;" class="hide-mobile">
-                                                <div class="raid-breakdown">
-                                                    <span class="stat-value"><%= user.raidCount %></span>
-                                                    <% if (user.raidCount > 0) { %>
-                                                        <span><span class="raid-aff"><%= user.raidAffiliateCount %> aff</span> / <span class="raid-non-aff"><%= user.raidNonAffiliateCount %> non</span></span>
-                                                    <% } %>
-                                                </div>
-                                            </td>
-                                            <td style="text-align: center;" class="hide-mobile">
-                                                <span class="stat-value"><%= user.supportCount %></span>
-                                            </td>
-                                        </tr>
-                                        <% if (entries.length > 0) { %>
-                                        <tr class="detail-row" id="detail-<%= idx %>">
-                                            <td colspan="5" class="detail-cell">
-                                                <table class="detail-table">
-                                                    <thead>
-                                                        <tr>
-                                                            <th>Date</th>
-                                                            <th>Type</th>
-                                                            <th>Streamer</th>
-                                                            <th class="hide-mobile">Status</th>
-                                                            <th>Pts</th>
-                                                            <th>Proof</th>
-                                                            <% if (typeof isAdmin !== 'undefined' && isAdmin) { %><th>Admin</th><% } %>
-                                                        </tr>
-                                                    </thead>
-                                                    <tbody>
-                                                        <% entries.forEach(e => { %>
-                                                        <tr>
-                                                            <td><%= new Date(e.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) %></td>
-                                                            <td>
-                                                                <span class="entry-type <%= e.type === 'raid' ? 'entry-type-raid' : 'entry-type-support' %>">
-                                                                    <%= e.type === 'raid' ? 'Raid' : 'Support' %>
-                                                                </span>
-                                                            </td>
-                                                            <td>
-                                                                <a href="<%= e.twitchLink %>" target="_blank" rel="noopener" class="twitch-link"><%= e.target %></a>
-                                                            </td>
-                                                            <td class="hide-mobile">
-                                                                <span class="aff-badge <%= e.isAffiliate ? 'aff-badge-yes' : 'aff-badge-no' %>">
-                                                                    <%= e.isAffiliate ? 'Affiliate' : 'Non-Affiliate' %>
-                                                                </span>
-                                                            </td>
-                                                            <td>+<%= e.points %></td>
-                                                            <td>
-                                                                <a href="<%= e.messageLink %>" target="_blank" rel="noopener" class="proof-link">View</a>
-                                                            </td>
-                                                            <% if (typeof isAdmin !== 'undefined' && isAdmin) { %>
-                                                            <td class="admin-actions">
-                                                                <button class="admin-btn admin-btn-edit" onclick="editEntry(<%= e.id %>, '<%= e.target %>', '<%= e.targetTwitchId %>', <%= e.isAffiliate %>, <%= e.points %>, '<%= e.type %>')" title="Edit">
-                                                                    <i class="fas fa-edit"></i>
-                                                                </button>
-                                                                <button class="admin-btn admin-btn-repost" onclick="repostEntry(<%= e.id %>)" title="Repost bot response in Discord">
-                                                                    <i class="fas fa-sync-alt"></i>
-                                                                </button>
-                                                                <button class="admin-btn admin-btn-delete" onclick="deleteEntry(<%= e.id %>)" title="Delete">
-                                                                    <i class="fas fa-trash"></i>
-                                                                </button>
-                                                            </td>
-                                                            <% } %>
-                                                        </tr>
-                                                        <% }); %>
-                                                    </tbody>
-                                                </table>
-                                            </td>
-                                        </tr>
-                                        <% } %>
-                                    <% }) %>
-                                </tbody>
-                            </table>
-                        </div>
-
-                        <% if (pagination && pagination.totalPages > 1) { %>
-                            <!-- Pagination -->
-                            <div class="pagination">
-                                <a href="/supporters/<%= guild.id %>?page=<%= pagination.page - 1 %>&month=<%= monthKey %>"
-                                   class="<%= pagination.page <= 1 ? 'disabled' : '' %>">
-                                    &laquo; Prev
-                                </a>
-
-                                <% for (let p = 1; p <= pagination.totalPages; p++) { %>
-                                    <% if (p === pagination.page) { %>
-                                        <span class="current"><%= p %></span>
-                                    <% } else if (Math.abs(p - pagination.page) <= 2 || p === 1 || p === pagination.totalPages) { %>
-                                        <a href="/supporters/<%= guild.id %>?page=<%= p %>&month=<%= monthKey %>"><%= p %></a>
-                                    <% } else if (Math.abs(p - pagination.page) === 3) { %>
-                                        <span style="color: var(--ember-text-muted);">...</span>
-                                    <% } %>
-                                <% } %>
-
-                                <a href="/supporters/<%= guild.id %>?page=<%= pagination.page + 1 %>&month=<%= monthKey %>"
-                                   class="<%= pagination.page >= pagination.totalPages ? 'disabled' : '' %>">
-                                    Next &raquo;
-                                </a>
-                            </div>
+                    <% if (_pg && _pg.totalPages > 1) { const base = '/supporters/' + _guild.id + '?month=' + encodeURIComponent(_month || '') + '&page='; %>
+                    <nav class="lb-pager" aria-label="Pages">
+                        <% if (_pg.page > 1) { %><a href="<%= base + (_pg.page - 1) %>" rel="prev">Previous</a><% } %>
+                        <% for (let p = 1; p <= _pg.totalPages; p++) { %>
+                            <% if (p === _pg.page) { %><span aria-current="page"><%= p %></span>
+                            <% } else if (Math.abs(p - _pg.page) <= 2 || p === 1 || p === _pg.totalPages) { %><a href="<%= base + p %>"><%= p %></a>
+                            <% } else if (Math.abs(p - _pg.page) === 3) { %><span class="gap" aria-hidden="true">&hellip;</span><% } %>
                         <% } %>
-
-                        <% if (pagination) { %>
-                            <p style="text-align: center; color: var(--ember-text-muted); margin-top: 0.75rem; font-size: 0.85rem;">
-                                Showing <%= (pagination.page - 1) * pagination.limit + 1 %>-<%= Math.min(pagination.page * pagination.limit, pagination.total) %> of <%= pagination.total %> supporters
-                            </p>
-                        <% } %>
+                        <% if (_pg.page < _pg.totalPages) { %><a href="<%= base + (_pg.page + 1) %>" rel="next">Next</a><% } %>
+                    </nav>
+                    <% } %>
+                    <% if (_pg) { %>
+                    <p class="lb-count">Showing <%= (_pg.page - 1) * _pg.limit + 1 %>&ndash;<%= Math.min(_pg.page * _pg.limit, _pg.total) %> of <%= Number(_pg.total).toLocaleString('en-US') %> supporters</p>
                     <% } %>
                 <% } %>
             <% } %>
-        </div>
+        <% } %>
     </main>
 
-    <style>
-    .admin-actions { white-space: nowrap; }
-    .admin-btn {
-        background: none; border: none; cursor: pointer; padding: 4px 6px;
-        border-radius: 4px; font-size: 0.75rem; transition: background 0.2s;
-    }
-    .admin-btn-edit { color: #a78bfa; }
-    .admin-btn-edit:hover { background: rgba(167,139,250,0.15); }
-    .admin-btn-repost { color: #22d3ee; }
-    .admin-btn-repost:hover { background: rgba(34,211,238,0.15); }
-    .admin-btn-delete { color: #f87171; }
-    .admin-btn-delete:hover { background: rgba(248,113,113,0.15); }
-    .edit-modal-overlay {
-        display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7);
-        z-index: 9999; align-items: center; justify-content: center;
-    }
-    .edit-modal-overlay.open { display: flex; }
-    .edit-modal {
-        background: #1a1d21; border: 1px solid rgba(167,139,250,0.3); border-radius: 12px;
-        padding: 24px; width: 400px; max-width: 90vw;
-    }
-    .edit-modal h3 { margin: 0 0 16px; color: #fff; font-size: 1.1rem; }
-    .edit-modal label { display: block; font-size: 0.8rem; color: rgba(255,255,255,0.7); margin: 8px 0 4px; }
-    .edit-modal input, .edit-modal select {
-        width: 100%; padding: 8px 12px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.15);
-        border-radius: 6px; color: #fff; font-size: 0.85rem;
-    }
-    .edit-modal-actions { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
-    .edit-modal-btn {
-        padding: 8px 16px; border-radius: 6px; border: none; font-weight: 600;
-        font-size: 0.85rem; cursor: pointer;
-    }
-    .edit-modal-save { background: #a78bfa; color: #fff; }
-    .edit-modal-cancel { background: rgba(255,255,255,0.1); color: #fff; }
-    .admin-status-msg {
-        position: fixed; top: 20px; right: 20px; padding: 10px 20px; border-radius: 8px;
-        font-size: 0.85rem; z-index: 10000; display: none;
-    }
-    .admin-status-msg.success { display: block; background: rgba(35,245,107,0.15); color: #23f56b; border: 1px solid rgba(35,245,107,0.3); }
-    .admin-status-msg.error { display: block; background: rgba(248,113,113,0.15); color: #f87171; border: 1px solid rgba(248,113,113,0.3); }
-    </style>
-
-    <div id="admin-status" class="admin-status-msg"></div>
-
-    <div id="edit-modal" class="edit-modal-overlay">
-        <div class="edit-modal">
-            <h3>Edit Support Entry</h3>
+    <% if (_guild && _admin) { %>
+    <dialog class="lb-dialog" id="edit-modal" aria-labelledby="edit-modal-title">
+        <form method="dialog" id="edit-form">
+            <h2 id="edit-modal-title">Edit entry</h2>
             <input type="hidden" id="edit-entry-id">
-            <label>Streamer Username</label>
-            <input type="text" id="edit-target-username">
-            <label>Twitch ID</label>
-            <input type="text" id="edit-target-twitch-id">
-            <label>Type</label>
-            <select id="edit-entry-type">
-                <option value="raid">Raid</option>
-                <option value="support">Support</option>
-            </select>
-            <label>Affiliate</label>
-            <select id="edit-is-affiliate">
-                <option value="1">Affiliate</option>
-                <option value="0">Non-Affiliate</option>
-            </select>
-            <label>Points</label>
-            <input type="number" id="edit-points" min="0">
-            <div class="edit-modal-actions">
-                <button class="edit-modal-btn edit-modal-cancel" onclick="closeEditModal()">Cancel</button>
-                <button class="edit-modal-btn edit-modal-save" onclick="saveEntry()">Save</button>
+            <div><label for="edit-target-username">Streamer username</label><input type="text" id="edit-target-username" class="form-control" maxlength="50" required></div>
+            <div><label for="edit-target-twitch-id">Twitch ID</label><input type="text" id="edit-target-twitch-id" class="form-control" inputmode="numeric" maxlength="20"></div>
+            <div><label for="edit-entry-type">Type</label><select id="edit-entry-type" class="form-select"><option value="raid">Raid</option><option value="support">Support</option></select></div>
+            <div><label for="edit-is-affiliate">Streamer status</label><select id="edit-is-affiliate" class="form-select"><option value="1">Affiliate</option><option value="0">Non-affiliate</option></select></div>
+            <div><label for="edit-points">Points</label><input type="number" id="edit-points" class="form-control" min="0" max="1000" required></div>
+            <div class="row-actions">
+                <button type="button" class="btn btn-secondary" id="edit-cancel">Cancel</button>
+                <button type="submit" class="btn btn-primary" id="edit-save">Save</button>
             </div>
-        </div>
-    </div>
+        </form>
+    </dialog>
+    <% } %>
+    <div class="lb-toast" id="admin-status" role="status" aria-live="polite" hidden></div>
 
-    <script>
-    const GUILD_ID = '<%= guild ? guild.id : "" %>';
+<%- include('partials/site-footer') %>
+<script>
+(function () {
+    var GUILD_ID = <%- JSON.stringify(_guild ? String(_guild.id) : '').replace(/</g, '\\u003c') %>;
 
-    function toggleDetail(idx) {
-        const row = document.getElementById('detail-' + idx);
-        const icon = document.getElementById('expand-icon-' + idx);
-        if (!row) return;
-        row.classList.toggle('open');
-        if (icon) icon.classList.toggle('open');
-    }
+    var monthSel = document.getElementById('month-select');
+    if (monthSel) monthSel.addEventListener('change', function () { document.getElementById('lb-month-form').submit(); });
 
+    document.querySelectorAll('.lb-toggle').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var row = document.getElementById(btn.getAttribute('aria-controls'));
+            if (!row) return;
+            var open = row.hasAttribute('hidden');
+            if (open) row.removeAttribute('hidden'); else row.setAttribute('hidden', '');
+            btn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        });
+    });
+
+    var toastTimer = null;
     function showStatus(msg, type) {
-        const el = document.getElementById('admin-status');
-        if (!el) return;
+        var el = document.getElementById('admin-status');
         el.textContent = msg;
-        el.className = 'admin-status-msg ' + type;
-        setTimeout(() => { el.className = 'admin-status-msg'; }, 4000);
+        el.className = 'lb-toast' + (type === 'error' ? ' is-error' : '');
+        el.removeAttribute('hidden');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(function () { el.setAttribute('hidden', ''); }, 4000);
+    }
+    function headers() {
+        var h = { 'Content-Type': 'application/json' };
+        var m = document.querySelector('meta[name="csrf-token"]');
+        if (m && m.content) h['X-CSRF-Token'] = m.content;
+        return h;
+    }
+    async function call(url, method, body) {
+        var res = await fetch(url, { method: method, headers: headers(), credentials: 'same-origin', body: body ? JSON.stringify(body) : undefined });
+        var data = {};
+        try { data = await res.json(); } catch (e) { /* non-JSON error page */ }
+        if (!res.ok && !data.error) data.error = 'Request failed (' + res.status + ')';
+        return data;
     }
 
-    var _originalUsername = '';
-    function editEntry(id, target, twitchId, isAffiliate, points, type) {
-        _originalUsername = target;
-        document.getElementById('edit-entry-id').value = id;
-        document.getElementById('edit-target-username').value = target;
-        document.getElementById('edit-target-twitch-id').value = twitchId || '';
-        document.getElementById('edit-entry-type').value = type;
-        document.getElementById('edit-is-affiliate').value = isAffiliate ? '1' : '0';
-        document.getElementById('edit-points').value = points;
-        document.getElementById('edit-modal').classList.add('open');
-    }
+    var dlg = document.getElementById('edit-modal');
+    if (!dlg) return;   // not an admin: nothing below applies
+    var originalUsername = '';
 
-    function closeEditModal() {
-        document.getElementById('edit-modal').classList.remove('open');
-    }
+    document.addEventListener('click', async function (ev) {
+        var b = ev.target.closest('button[data-act]');
+        if (!b) return;
+        var id = b.getAttribute('data-id');
+        var act = b.getAttribute('data-act');
+        if (act === 'edit') {
+            originalUsername = b.getAttribute('data-target') || '';
+            document.getElementById('edit-entry-id').value = id;
+            document.getElementById('edit-target-username').value = originalUsername;
+            document.getElementById('edit-target-twitch-id').value = b.getAttribute('data-twitch-id') || '';
+            document.getElementById('edit-entry-type').value = b.getAttribute('data-type') === 'support' ? 'support' : 'raid';
+            document.getElementById('edit-is-affiliate').value = b.getAttribute('data-affiliate') === '1' ? '1' : '0';
+            document.getElementById('edit-points').value = b.getAttribute('data-points') || '0';
+            if (typeof dlg.showModal === 'function') dlg.showModal(); else dlg.setAttribute('open', '');
+        } else if (act === 'repost') {
+            b.disabled = true;
+            try {
+                showStatus('Reposting…');
+                var r = await call('/api/guilds/' + GUILD_ID + '/community-support/entries/' + encodeURIComponent(id) + '/repost', 'POST');
+                showStatus(r.success ? (r.message || 'Reposted') : (r.error || 'Could not repost'), r.success ? 'ok' : 'error');
+            } catch (e) { showStatus('Network error', 'error'); }
+            b.disabled = false;
+        } else if (act === 'delete') {
+            if (!confirm('Delete this entry? This cannot be undone.')) return;
+            b.disabled = true;
+            try {
+                var d = await call('/api/guilds/' + GUILD_ID + '/community-support/entries/' + encodeURIComponent(id), 'DELETE');
+                if (d.success) { showStatus('Entry deleted. Refreshing…'); setTimeout(function () { location.reload(); }, 900); }
+                else { showStatus(d.error || 'Could not delete the entry', 'error'); b.disabled = false; }
+            } catch (e) { showStatus('Network error', 'error'); b.disabled = false; }
+        }
+    });
 
-    async function saveEntry() {
+    document.getElementById('edit-cancel').addEventListener('click', function () { dlg.close ? dlg.close() : dlg.removeAttribute('open'); });
+
+    document.getElementById('edit-form').addEventListener('submit', async function (ev) {
+        ev.preventDefault();
         var id = document.getElementById('edit-entry-id').value;
         var newUsername = document.getElementById('edit-target-username').value.trim();
-        var body = {
-            target_username: newUsername,
-            target_twitch_id: document.getElementById('edit-target-twitch-id').value,
-            entry_type: document.getElementById('edit-entry-type').value,
-            target_is_affiliate: document.getElementById('edit-is-affiliate').value === '1',
-            points_awarded: parseInt(document.getElementById('edit-points').value)
-        };
-
-        // Check if username changed — offer bulk rename
-        if (newUsername.toLowerCase() !== _originalUsername.toLowerCase()) {
-            var doRenameAll = confirm('Username changed from "' + _originalUsername + '" to "' + newUsername + '".\n\nRename ALL entries with "' + _originalUsername + '" to "' + newUsername + '"?\n(This will also edit Discord messages)\n\nClick OK to rename all, Cancel to update this entry only.');
-            if (doRenameAll) {
-                try {
-                    showStatus('Renaming all entries and editing Discord messages...', 'success');
-                    var resp = await fetch('/supporters/' + GUILD_ID + '/rename-streamer', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        credentials: 'include',
-                        body: JSON.stringify({
-                            old_username: _originalUsername,
-                            new_username: newUsername,
-                            new_twitch_id: document.getElementById('edit-target-twitch-id').value || null,
-                            new_is_affiliate: document.getElementById('edit-is-affiliate').value === '1'
-                        })
-                    });
-                    var data = await resp.json();
-                    if (data.success) {
-                        showStatus('Renamed ' + data.updated + ' entries, edited ' + (data.messagesEdited || 0) + ' Discord messages — refreshing...', 'success');
-                        closeEditModal();
-                        setTimeout(function() { location.reload(); }, 1500);
-                    } else {
-                        showStatus(data.error || 'Rename failed', 'error');
-                    }
-                } catch (err) {
-                    showStatus('Network error during rename', 'error');
-                }
+        var twitchId = document.getElementById('edit-target-twitch-id').value.trim();
+        var isAff = document.getElementById('edit-is-affiliate').value === '1';
+        var points = parseInt(document.getElementById('edit-points').value, 10);
+        if (!newUsername) { showStatus('Enter the streamer username', 'error'); return; }
+        if (!Number.isFinite(points) || points < 0) { showStatus('Points must be 0 or more', 'error'); return; }
+        var save = document.getElementById('edit-save');
+        save.disabled = true;
+        try {
+            if (newUsername.toLowerCase() !== originalUsername.toLowerCase() &&
+                confirm('Rename every entry for "' + originalUsername + '" to "' + newUsername + '"? The bot also edits its Discord messages.\n\nOK renames all of them. Cancel changes only this entry.')) {
+                showStatus('Renaming entries and editing Discord messages…');
+                var rn = await call('/supporters/' + GUILD_ID + '/rename-streamer', 'POST', {
+                    old_username: originalUsername, new_username: newUsername,
+                    new_twitch_id: twitchId || null, new_is_affiliate: isAff
+                });
+                if (rn.success) { showStatus('Renamed ' + rn.updated + ' entries and edited ' + (rn.messagesEdited || 0) + ' messages. Refreshing…'); dlg.close && dlg.close(); setTimeout(function () { location.reload(); }, 1200); }
+                else { showStatus(rn.error || 'Rename failed', 'error'); }
                 return;
             }
-        }
-
-        try {
-            var res2 = await fetch('/api/guilds/' + GUILD_ID + '/community-support/entries/' + id, {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body)
+            var up = await call('/api/guilds/' + GUILD_ID + '/community-support/entries/' + encodeURIComponent(id), 'PATCH', {
+                target_username: newUsername,
+                target_twitch_id: twitchId,
+                entry_type: document.getElementById('edit-entry-type').value,
+                target_is_affiliate: isAff,
+                points_awarded: points
             });
-            var data2 = await res2.json();
-            if (data2.success) {
-                showStatus('Entry updated — refreshing...', 'success');
-                closeEditModal();
-                setTimeout(function() { location.reload(); }, 1000);
-            } else {
-                showStatus(data2.error || 'Failed to update', 'error');
-            }
-        } catch (err) {
+            if (up.success) { showStatus('Entry updated. Refreshing…'); dlg.close && dlg.close(); setTimeout(function () { location.reload(); }, 900); }
+            else { showStatus(up.error || 'Could not update the entry', 'error'); }
+        } catch (e) {
             showStatus('Network error', 'error');
+        } finally {
+            save.disabled = false;
         }
-    }
-
-    async function repostEntry(id) {
-        try {
-            showStatus('Reposting...', 'success');
-            const res = await fetch('/api/guilds/' + GUILD_ID + '/community-support/entries/' + id + '/repost', {
-                method: 'POST'
-            });
-            const data = await res.json();
-            if (data.success) {
-                showStatus(data.message, 'success');
-            } else {
-                showStatus(data.error || 'Failed to repost', 'error');
-            }
-        } catch (err) {
-            showStatus('Network error', 'error');
-        }
-    }
-
-    async function deleteEntry(id) {
-        if (!confirm('Delete this support entry? This cannot be undone.')) return;
-        try {
-            const res = await fetch('/api/guilds/' + GUILD_ID + '/community-support/entries/' + id, {
-                method: 'DELETE'
-            });
-            const data = await res.json();
-            if (data.success) {
-                showStatus('Entry deleted — refreshing...', 'success');
-                setTimeout(() => location.reload(), 1000);
-            } else {
-                showStatus(data.error || 'Failed to delete', 'error');
-            }
-        } catch (err) {
-            showStatus('Network error', 'error');
-        }
-    }
-    </script>
-
-    <!-- Footer -->
-    <footer class="ember-footer">
-        <div class="ember-container ember-footer-inner">
-            <div class="ember-footer-copy">
-                Powered by <a href="/" style="color: var(--ember-primary); text-decoration: none;">CertiFriedUtility</a>
-            </div>
-        </div>
-    </footer>
+    });
+})();
+</script>
 </body>
 </html>

@@ -11,6 +11,7 @@ import pool from '../../../../utils/db.js';
 import logger from '../../../../utils/logger.js';
 import { generateRankCard } from '../../../../utils/rank-card-generator.js';
 import { processBackgroundUpload, deleteCustomBackground } from '../../../../utils/image-processing.js';
+import { effectiveRankCardSettings } from '../../../../core/rankcard-policy.js';
 
 const router = express.Router({ mergeParams: true });
 
@@ -343,7 +344,8 @@ router.get('/preview', async (req, res) => {
             'SELECT * FROM rank_card_settings WHERE guild_id = ? AND user_id = ?',
             [guildId, userId]
         );
-        const customization = settingsRows[0] || null;
+        // Drawn the way the bot draws it, with the Rank Cards page rules applied.
+        const customization = await effectiveRankCardSettings(guildId, settingsRows[0] || null);
 
         // Try to get the Discord user object from the bot client
         let discordUser = null;

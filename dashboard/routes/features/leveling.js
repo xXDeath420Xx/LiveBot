@@ -2,6 +2,7 @@ import express from 'express';
 import pool from '../../../utils/db.js';
 import { ensureAuth, ensureGuildPerms } from '../api.js';
 import logger from '../../../utils/logger.js';
+import { XP_COOLDOWN_MIN, XP_COOLDOWN_MAX, BOOST_MIN, BOOST_MAX } from '../../../core/leveling-settings.js';
 
 const router = express.Router();
 
@@ -27,6 +28,7 @@ router.get('/:guildId/leveling', ensureAuth, ensureGuildPerms, async (req, res) 
         xp_multiplier_events: 1.0,
         monthly_reset_enabled: false,
         reset_interval_days: 30,
+        reset_exempt_staff: 0,
         last_reset_at: null
       });
     }
@@ -51,7 +53,8 @@ router.patch('/:guildId/leveling', ensureAuth, ensureGuildPerms, async (req, res
       xp_multiplier_weekends,
       xp_multiplier_events,
       monthly_reset_enabled,
-      reset_interval_days
+      reset_interval_days,
+      reset_exempt_staff
     } = req.body;
 
     // Validate inputs
@@ -59,16 +62,17 @@ router.patch('/:guildId/leveling', ensureAuth, ensureGuildPerms, async (req, res
       return res.status(400).json({ error: 'XP per message must be between 1 and 100' });
     }
 
-    if (xp_cooldown_seconds !== undefined && (xp_cooldown_seconds < 0 || xp_cooldown_seconds > 600)) {
-      return res.status(400).json({ error: 'XP cooldown must be between 0 and 600 seconds' });
+    if (xp_cooldown_seconds !== undefined && (xp_cooldown_seconds < XP_COOLDOWN_MIN || xp_cooldown_seconds > XP_COOLDOWN_MAX)) {
+      return res.status(400).json({ error: `XP cooldown must be between ${XP_COOLDOWN_MIN} and ${XP_COOLDOWN_MAX} seconds` });
     }
 
-    if (xp_per_voice_minute !== undefined && (xp_per_voice_minute < 0 || xp_per_voice_minute > 50)) {
-      return res.status(400).json({ error: 'XP per voice minute must be between 0 and 50' });
+    // Same ranges as the Leveling page and its save (core/leveling-settings.js saveLevelingForm).
+    if (xp_per_voice_minute !== undefined && (xp_per_voice_minute < 1 || xp_per_voice_minute > 50)) {
+      return res.status(400).json({ error: 'XP per voice minute must be between 1 and 50' });
     }
 
-    if (xp_multiplier_weekends !== undefined && (xp_multiplier_weekends < 0.1 || xp_multiplier_weekends > 10)) {
-      return res.status(400).json({ error: 'Weekend multiplier must be between 0.1 and 10' });
+    if (xp_multiplier_weekends !== undefined && (xp_multiplier_weekends < BOOST_MIN || xp_multiplier_weekends > BOOST_MAX)) {
+      return res.status(400).json({ error: `Weekend multiplier must be between ${BOOST_MIN} and ${BOOST_MAX}` });
     }
 
     if (xp_multiplier_events !== undefined && (xp_multiplier_events < 0.1 || xp_multiplier_events > 10)) {
@@ -155,6 +159,10 @@ router.patch('/:guildId/leveling', ensureAuth, ensureGuildPerms, async (req, res
       if (reset_interval_days !== undefined) {
         updates.push('reset_interval_days = ?');
         values.push(Number(reset_interval_days));
+      }
+      if (reset_exempt_staff !== undefined) {
+        updates.push('reset_exempt_staff = ?');
+        values.push(reset_exempt_staff ? 1 : 0);
       }
 
       if (updates.length > 0) {

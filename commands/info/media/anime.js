@@ -1,5 +1,6 @@
 import { EmbedBuilder } from 'discord.js';
 import axios from 'axios';
+import { themeColor } from '../../../core/guild-theme.js';
 
 export async function execute(interaction) {
     await interaction.deferReply();
@@ -239,7 +240,7 @@ async function getTrending(interaction) {
     const trending = response.data.data.Page.media;
 
     const embed = new EmbedBuilder()
-        .setColor('#F39C12')
+        .setColor(themeColor(interaction.guildId, 'warning'))
         .setTitle('🔥 Trending Anime')
         .setDescription('Most trending anime right now on AniList')
         .setFooter({ text: 'Powered by AniList' })

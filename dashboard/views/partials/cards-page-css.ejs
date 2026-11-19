@@ -1,0 +1,11 @@
+<%# Head styles shared by the greeting-card tool pages (/cards, /cards/create,
+    /cards/my-cards, /card/:token/edit). The header is partials/site-header.ejs; tokens come
+    from /css/cf-ui.css, which the page links last. %>
+<style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: var(--cf-bg); color: var(--cf-text); min-height: 100vh; }
+    a { color: var(--cf-accent-fg); }
+    .page-head { margin: 0 0 20px; }
+    .page-head h1 { font-size: var(--cf-text-2xl); font-weight: 600; letter-spacing: -0.02em; line-height: 1.25; }
+    .page-head p { color: var(--cf-text-3); font-size: var(--cf-text-md); margin-top: 4px; }
+</style>

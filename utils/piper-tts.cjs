@@ -1,16 +1,23 @@
 /**
  * Piper TTS (Text-to-Speech) Utility
  * Uses locally installed Piper models for high-quality voice synthesis
+ *
+ * Also the voice list and router for the second engine, Kokoro (utils/kokoro-tts.js): ids
+ * `kokoro_<name>` are merged into every voice list here (only while the Kokoro model is installed)
+ * and synthesize() sends them to Kokoro, falling back to Piper's default voice — logged — when
+ * Kokoro is missing or fails. Piper stays the default everywhere.
  */
 
 const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const { logger } = require('./logger.cjs');
+const kokoroLogic = require('./kokoro-logic.cjs');
 
 const PIPER_BINARY = process.env.PIPER_PATH || '/home/death/.local/bin/piper';
 const MODELS_DIR = path.join(__dirname, '..', 'piper_models');
 const TEMP_AUDIO_DIR = path.join(__dirname, '..', 'temp_audio');
+const REPO_ROOT = path.join(__dirname, '..');
 
 // Ensure temp audio directory exists
 if (!fs.existsSync(TEMP_AUDIO_DIR)) {
@@ -170,6 +177,26 @@ let installedVoicesCache = null;
 let cacheTimestamp = 0;
 const CACHE_DURATION = 60 * 60 * 1000; // 1 hour
 
+// Is the Kokoro model installed? Checked at most once a minute (a few stat calls).
+let kokoroInstallCache = null;
+let kokoroInstallAt = 0;
+function isKokoroInstalled() {
+    if (!kokoroInstallCache || Date.now() - kokoroInstallAt > 60 * 1000) {
+        kokoroInstallCache = kokoroLogic.checkInstall(REPO_ROOT, { fs, resolve: (m) => require.resolve(m) });
+        kokoroInstallAt = Date.now();
+    }
+    return kokoroInstallCache.ready;
+}
+
+// Fallback notices: once per reason per 10 minutes, so a missing model can't flood the log.
+const fallbackLogged = new Map();
+function logFallback(message) {
+    const last = fallbackLogged.get(message) || 0;
+    if (Date.now() - last < 10 * 60 * 1000) return;
+    fallbackLogged.set(message, Date.now());
+    logger.warn(`[TTS] ${message}`);
+}
+
 /**
  * Get installed voices with caching
  * @returns {Object} Object with installed voices
@@ -217,6 +244,13 @@ function getVoicesByLanguage() {
  * @returns {Object|null} Voice metadata or null if not found
  */
 function getVoiceInfo(voiceName) {
+    // A Kokoro voice is always recognised, installed or not, so a saved choice stays valid and is
+    // spoken by the fallback voice (logged) while the model is missing. `installed` says which.
+    if (kokoroLogic.isKokoroVoiceId(voiceName)) {
+        const record = kokoroLogic.kokoroVoiceRecords()[voiceName];
+        return record ? { name: voiceName, ...record, installed: isKokoroInstalled() } : null;
+    }
+
     // First check dynamic installed voices
     const installed = getCachedInstalledVoices();
     if (installed[voiceName]) {
@@ -238,11 +272,20 @@ function getVoiceInfo(voiceName) {
 }
 
 /**
- * Get list of voices that have models installed
- * Dynamically scans the piper_models directory to find all .onnx files
+ * Get list of voices that have models installed: Piper's (engine 'piper') plus, while the Kokoro
+ * model is installed, the 28 Kokoro voices (engine 'kokoro', ids kokoro_<name>).
  * @returns {Object} Object with only installed voices
  */
 function getInstalledVoices() {
+    return kokoroLogic.mergeVoices(getPiperInstalledVoices(), isKokoroInstalled());
+}
+
+/**
+ * Piper voices with models on disk.
+ * Dynamically scans the piper_models directory to find all .onnx files
+ * @returns {Object} Object with only installed voices
+ */
+function getPiperInstalledVoices() {
     const installed = {};
 
     // Helper function to detect gender from voice name
@@ -316,10 +359,12 @@ function getInstalledVoices() {
                     if (fs.existsSync(modelPath)) {
                         // Try to read config for additional metadata
                         let speakerCount = null;
+                        let custom = null;   // "certifried" block of a voice we trained (utils/piper-worker.js voiceTuning)
                         try {
                             if (fs.existsSync(configPath)) {
                                 const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
                                 speakerCount = config.num_speakers || null;
+                                custom = config.certifried || null;
                             }
                         } catch (err) {
                             // Config read failed, continue without it
@@ -331,7 +376,7 @@ function getInstalledVoices() {
                         const voiceId = quality === 'medium' ? baseVoiceId : `${baseVoiceId}_${quality}`;
 
                         // Auto-detect gender
-                        const gender = detectGender(voiceName, speakerCount);
+                        const gender = ['male', 'female'].includes(custom?.gender) ? custom.gender : detectGender(voiceName, speakerCount);
 
                         // Add to installed voices
                         installed[voiceId] = {
@@ -340,7 +385,10 @@ function getInstalledVoices() {
                             gender: gender,
                             description: `${locale.replace('_', ' ')} ${voiceName} voice`,
                             flag: getFlag(locale),
-                            actualVoiceName: voiceName // Store the real filesystem voice name
+                            actualVoiceName: voiceName, // Store the real filesystem voice name
+                            // Discord id of the person a custom voice was trained on ("certifried".ownerId).
+                            // The chat reader says "I said" instead of "<name> says" when they write.
+                            ...(custom?.ownerId ? { ownerId: String(custom.ownerId) } : {})
                         };
                     }
                 }
@@ -361,8 +409,11 @@ function getInstalledVoices() {
  * @returns {string|null} Full path to the model file
  */
 function getModelPath(voiceName) {
+    // Kokoro voices have no Piper model; callers route them to utils/kokoro-tts.js first.
+    if (kokoroLogic.isKokoroVoiceId(voiceName)) return null;
+
     // First try to get from installed voices (dynamic discovery)
-    const installedVoices = getInstalledVoices();
+    const installedVoices = getPiperInstalledVoices();
     const voiceInfo = installedVoices[voiceName];
 
     if (voiceInfo) {
@@ -403,6 +454,11 @@ function getAllVoicesPaths() {
     const installedVoices = getInstalledVoices();
 
     Object.entries(installedVoices).forEach(([voiceId, data]) => {
+        // Kokoro voices: "kokoro:<name>", which core/dj-manager.cjs renders with Kokoro.
+        if (data.engine === 'kokoro') {
+            voicePaths[voiceId] = `kokoro:${data.kokoroVoice}`;
+            return;
+        }
         const locale = data.locale;
         const quality = data.quality;
         const actualName = data.actualVoiceName || voiceId;
@@ -414,13 +470,41 @@ function getAllVoicesPaths() {
 }
 
 /**
- * Synthesize text to speech using Piper
+ * Synthesize text to speech with whichever engine the voice belongs to. A Kokoro voice that can't
+ * be used (model missing, queue full, synthesis failed) is spoken by Piper's default voice instead,
+ * and the fallback is logged.
  * @param {string} text - Text to synthesize
  * @param {string} voiceName - Voice to use (default: 'ryan')
- * @param {Object} options - Synthesis options
+ * @param {Object} options - Synthesis options (Piper only)
  * @returns {Promise<string>} Path to generated audio file
  */
 async function synthesize(text, voiceName = 'ryan', options = {}) {
+    return (await synthesizeDetailed(text, voiceName, options)).path;
+}
+
+/**
+ * synthesize(), also saying which engine and voice actually spoke.
+ * @returns {Promise<{ path:string, engine:'piper'|'kokoro', voice:string, fellBack:boolean }>}
+ */
+async function synthesizeDetailed(text, voiceName = 'ryan', options = {}) {
+    const routed = await kokoroLogic.routeSynthesis({
+        voice: voiceName,
+        kokoro: async (name) => {
+            const sanitizedText = String(text).replace(/[<>]/g, '').replace(/\n+/g, ' ').trim();
+            if (sanitizedText.length === 0) throw new Error('Text is empty after sanitization');
+            if (sanitizedText.length > 1000) throw new Error('Text is too long (max 1000 characters)');
+            const { kokoroToFile } = await import('./kokoro-tts.js');
+            const outputFile = path.join(TEMP_AUDIO_DIR, `tts_${Date.now()}_${Math.random().toString(36).substring(7)}.wav`);
+            return kokoroToFile(sanitizedText, name, outputFile);
+        },
+        piper: (voice) => piperSynthesize(text, voice, options),
+        log: logFallback,
+    });
+    return { path: routed.result, engine: routed.engine, voice: routed.voice, fellBack: routed.fellBack };
+}
+
+/** Synthesize with a Piper voice (spawns Piper for this phrase). */
+async function piperSynthesize(text, voiceName = 'ryan', options = {}) {
     return new Promise((resolve, reject) => {
         try {
             // Validate voice
@@ -541,11 +625,25 @@ function cleanupTempFiles(maxAge = 5 * 60 * 1000) {
 // Auto-cleanup every 5 minutes
 setInterval(() => cleanupTempFiles(), 5 * 60 * 1000);
 
+/**
+ * Picker options for the dashboard, grouped by engine then language (Piper first, it is the
+ * default engine): [{ label, engine, voices:[{ value, label }] }].
+ */
+function getVoiceOptions() {
+    return kokoroLogic.voiceOptionGroups(getCachedInstalledVoices());
+}
+
 module.exports = {
     synthesize,
+    synthesizeDetailed,
+    getVoiceOptions,
+    isKokoroInstalled,
+    logFallback,
+    getPiperInstalledVoices,
     getAvailableVoices,
     getVoicesByLanguage,
     getVoiceInfo,
+    getModelPath,
     getInstalledVoices,
     cleanupTempFiles,
     getAllVoicesPaths,

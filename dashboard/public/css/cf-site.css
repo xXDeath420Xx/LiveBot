@@ -1,0 +1,416 @@
+/*
+ * cf-site.css — the frame for every standalone page (everything outside /manage except OBS
+ * overlays and embedded views), plus the small page kits those pages use.
+ *
+ * Load it after /css/cf-ui.css (partials/site-head.ejs does). Everything reads the --cf-* tokens
+ * from cf-ui.css, so the named themes, the light theme and the site styles work without anything
+ * here knowing about them. Class prefixes: cfs- for the frame and the public page kit, cf- for the
+ * app page kit (owner console, tools) that sits on top of cf-settings.css.
+ *
+ *   <head>  partials/site-head.ejs
+ *   body.cfs-body (.cf-site on app pages)
+ *     header.cfs-header                    partials/site-header.ejs  (behaviour: /js/cf-site.js)
+ *     nav.cf-section-tabs                  partials/section-tabs.ejs (cards, CAH; optional)
+ *     main  — public pages: .cfs-main > .cfs-pagehead, .cfs-section …
+ *           — app pages:    main#main-content.cf-main > .cf-page
+ *                             .cf-page-head > .cf-page-icon + div(h1.cf-page-title, p.cf-page-sub) + .cf-page-actions
+ *                             nav.cf-owner-nav   partials/site/_owner-nav.ejs (owner console pages)
+ *     footer.cfs-footer                    partials/site-footer.ejs
+ */
+
+/* Everything in the frame sizes by its border box. */
+.cfs-header, .cfs-header *, .cfs-footer, .cfs-footer *, .cfs-main, .cfs-main * { box-sizing: border-box; }
+/* Long button labels may wrap on phones instead of pushing the page sideways. */
+@media (max-width: 600px) { .cfs-body main .btn { white-space: normal; text-align: center; } }
+
+/* ---------- Header ---------- */
+.cfs-header {
+    position: sticky; top: 0; z-index: 1000;
+    background: color-mix(in srgb, var(--cf-bg) 92%, transparent);
+    -webkit-backdrop-filter: saturate(140%) blur(8px); backdrop-filter: saturate(140%) blur(8px);
+    border-bottom: 1px solid var(--cf-border);
+}
+.cfs-header-inner {
+    display: flex; align-items: center; gap: var(--cf-6);
+    max-width: 1200px; height: var(--cf-header-h); margin: 0 auto; padding: 0 var(--cf-5);
+}
+.cfs-brand {
+    display: inline-flex; align-items: center; gap: var(--cf-2); flex: none;
+    font-size: 15px; font-weight: 600; letter-spacing: -0.01em; color: var(--cf-text); text-decoration: none;
+}
+.cfs-brand:hover { color: var(--cf-text); }
+.cfs-brand img { width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--cf-border-strong); object-fit: cover; }
+.cfs-nav { display: flex; align-items: center; gap: 2px; margin-right: auto; min-width: 0; }
+.cfs-nav a {
+    display: inline-flex; align-items: center; height: 32px; padding: 0 10px; border-radius: var(--cf-radius);
+    font-size: var(--cf-text-sm); font-weight: 500; color: var(--cf-text-2); text-decoration: none; white-space: nowrap;
+    transition: color var(--cf-fast) var(--cf-ease), background-color var(--cf-fast) var(--cf-ease);
+}
+.cfs-nav a:hover, .cfs-nav a[aria-current="page"] { color: var(--cf-text); background: var(--cf-surface-2); }
+.cfs-actions { display: flex; align-items: center; gap: var(--cf-2); flex: none; margin-left: auto; }
+.cfs-nav + .cfs-actions { margin-left: 0; }
+
+/* Account menu (a <details> so it works without script) */
+.cfs-account { position: relative; }
+.cfs-account > summary {
+    list-style: none; display: inline-flex; align-items: center; gap: var(--cf-2);
+    height: 34px; padding: 0 10px 0 4px; border: 1px solid var(--cf-border); border-radius: 999px;
+    cursor: pointer; color: var(--cf-text); font-size: var(--cf-text-sm); font-weight: 500;
+}
+.cfs-account > summary::-webkit-details-marker { display: none; }
+.cfs-account > summary:hover { background: var(--cf-surface-2); border-color: var(--cf-border-strong); }
+.cfs-account > summary img { width: 26px; height: 26px; border-radius: 50%; }
+.cfs-account-menu {
+    position: absolute; right: 0; top: calc(100% + 6px); min-width: 200px; padding: var(--cf-1);
+    background: var(--cf-surface); border: 1px solid var(--cf-border); border-radius: var(--cf-radius-lg);
+    box-shadow: var(--cf-shadow-pop); display: flex; flex-direction: column;
+}
+.cfs-account-menu a {
+    padding: 7px var(--cf-3); border-radius: var(--cf-radius-sm); font-size: var(--cf-text-sm);
+    color: var(--cf-text-2); text-decoration: none;
+}
+.cfs-account-menu a:hover { background: var(--cf-surface-2); color: var(--cf-text); }
+.cfs-account-menu hr { margin: var(--cf-1) 0; border: 0; border-top: 1px solid var(--cf-border); opacity: 1; }
+.cfs-account-menu .cfs-signout { color: var(--cf-danger); }
+.cfs-account-who {
+    margin: 0 0 var(--cf-1); padding: 6px var(--cf-3) 8px; border-bottom: 1px solid var(--cf-border);
+    font-size: var(--cf-text-xs); color: var(--cf-text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 260px;
+}
+.cfs-account-who strong { color: var(--cf-text); font-weight: 600; }
+.cfs-drawer .cfs-signout { color: var(--cf-danger); }
+
+.cfs-menu-btn {
+    display: none; align-items: center; justify-content: center; width: 36px; height: 36px; padding: 0;
+    background: transparent; border: 1px solid var(--cf-border); border-radius: var(--cf-radius); color: var(--cf-text); cursor: pointer;
+}
+.cfs-menu-btn svg { width: 20px; height: 20px; }
+.cfs-menu-btn:hover { background: var(--cf-surface-2); }
+
+.cfs-drawer { border-top: 1px solid var(--cf-border); background: var(--cf-bg); padding: var(--cf-3) var(--cf-4) var(--cf-4); }
+.cfs-drawer[hidden] { display: none; }
+.cfs-drawer a {
+    display: block; padding: 10px var(--cf-3); border-radius: var(--cf-radius);
+    font-size: var(--cf-text-md); font-weight: 500; color: var(--cf-text); text-decoration: none;
+}
+.cfs-drawer a:hover, .cfs-drawer a[aria-current="page"] { background: var(--cf-surface-2); }
+.cfs-drawer hr { margin: var(--cf-2) 0; border: 0; border-top: 1px solid var(--cf-border); opacity: 1; }
+
+@media (max-width: 960px) {
+    .cfs-nav { display: none; }
+    .cfs-nav + .cfs-actions { margin-left: auto; } /* the hidden nav no longer pushes the actions right */
+    .cfs-menu-btn { display: inline-flex; }
+    .cfs-header-inner { gap: var(--cf-3); padding: 0 var(--cf-4); }
+}
+@media (max-width: 520px) {
+    .cfs-account > summary span, .cfs-actions .cfs-hide-sm { display: none; }
+    .cfs-account > summary { padding: 0 4px; }
+}
+@media (min-width: 961px) { .cfs-drawer { display: none !important; } }
+
+/* ---------- Footer ---------- */
+.cfs-footer { border-top: 1px solid var(--cf-border); margin-top: var(--cf-12); color: var(--cf-text-3); font-size: var(--cf-text-sm); }
+.cfs-footer-inner { max-width: 1200px; margin: 0 auto; padding: var(--cf-10) var(--cf-5) var(--cf-6); }
+.cfs-footer-grid { display: grid; grid-template-columns: 1.4fr repeat(4, 1fr); gap: var(--cf-8); }
+.cfs-footer-brand p { margin: var(--cf-3) 0 0; max-width: 32ch; line-height: 1.55; color: var(--cf-text-3); }
+.cfs-footer h2 {
+    margin: 0 0 var(--cf-3); font-size: var(--cf-text-xs); font-weight: 600; letter-spacing: 0.02em;
+    color: var(--cf-text-2); text-transform: none;
+}
+.cfs-footer ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.cfs-footer a { color: var(--cf-text-3); text-decoration: none; }
+.cfs-footer a:hover { color: var(--cf-text); }
+.cfs-footer-bottom {
+    display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--cf-2) var(--cf-6);
+    margin-top: var(--cf-8); padding-top: var(--cf-5); border-top: 1px solid var(--cf-border); font-size: var(--cf-text-xs);
+}
+/* Guide screenshots (/docs, /docs/guides, the home page) are dark pictures by design. On Light and Sand they
+   sit in a mat of the page's own surface with a firmer edge, so a dark rectangle does not float on a light
+   page; the picture keeps its own dark placeholder while it loads. */
+:root:is([data-theme="light"], [data-theme="sand"]) :is(.docs-fig img, .gd-figure img) {
+    padding: 6px; border-color: var(--cf-border-strong) !important; box-shadow: var(--cf-shadow);
+    background: linear-gradient(var(--cf-shot-bg), var(--cf-shot-bg)) content-box, var(--cf-surface-3) !important;
+}
+:root:is([data-theme="light"], [data-theme="sand"]) :is(.gd-thumb, .show .pic) { padding: 6px 6px 0; background: var(--cf-surface-3) !important; }
+:root:is([data-theme="light"], [data-theme="sand"]) :is(.gd-thumb, .show .pic) img { border-radius: 4px 4px 0 0; background: var(--cf-shot-bg); }
+
+/* Theme switch in the footer (signed-out visitors; signed-in users get a link to Settings). */
+.cfs-theme { display: inline-flex; align-items: center; gap: var(--cf-2); color: var(--cf-text-3); }
+.cfs-footer .cfs-theme select {
+    min-height: 28px; padding: 2px 28px 2px 8px; font: inherit; font-size: var(--cf-text-xs); color: var(--cf-text);
+    background: var(--cf-inset) var(--cf-select-arrow) no-repeat right 7px center / 12px 12px;
+    border: 1px solid var(--cf-border-strong); border-radius: var(--cf-radius); -webkit-appearance: none; appearance: none; cursor: pointer;
+}
+.cfs-footer .cfs-theme select:focus-visible { outline: 2px solid var(--cf-accent); outline-offset: 2px; }
+.cfs-footer .cfs-theme-link { color: var(--cf-text-3); text-decoration: underline; text-underline-offset: 2px; }
+@media (max-width: 900px) { .cfs-footer-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .cfs-footer-brand { grid-column: 1 / -1; } }
+@media (max-width: 420px) { .cfs-footer-grid { gap: var(--cf-6) var(--cf-4); } }
+
+/* ---------- Page kit ---------- */
+.cfs-body { margin: 0; min-height: 100vh; display: flex; flex-direction: column; background: var(--cf-bg); color: var(--cf-text); overflow-x: hidden; }
+.cfs-body > main { flex: 1 0 auto; min-width: 0; }
+.cfs-main { width: 100%; max-width: 1100px; margin: 0 auto; padding: var(--cf-10) var(--cf-5) var(--cf-8); }
+.cfs-main--narrow { max-width: 820px; }
+.cfs-main--wide { max-width: 1200px; }
+@media (max-width: 600px) { .cfs-main { padding: var(--cf-6) var(--cf-4) var(--cf-6); } }
+
+.cfs-pagehead { margin-bottom: var(--cf-8); }
+.cfs-pagehead h1 { margin: 0 0 var(--cf-2); font-size: clamp(1.625rem, 3.2vw, 2.125rem); font-weight: 600; letter-spacing: -0.02em; line-height: 1.2; color: var(--cf-text); }
+.cfs-pagehead .cfs-lede { margin: 0; max-width: 62ch; font-size: var(--cf-text-lg); line-height: 1.55; color: var(--cf-text-2); }
+.cfs-pagehead .cfs-meta { margin: var(--cf-3) 0 0; font-size: var(--cf-text-sm); color: var(--cf-text-3); }
+.cfs-pagehead .cfs-actions-row { display: flex; flex-wrap: wrap; gap: var(--cf-2); margin-top: var(--cf-5); }
+
+.cfs-eyebrow { display: block; margin-bottom: var(--cf-2); font-size: var(--cf-text-xs); font-weight: 500; color: var(--cf-text-3); }
+
+.cfs-section { margin-top: var(--cf-10); }
+.cfs-section:first-child { margin-top: 0; }
+.cfs-section > h2, .cfs-h2 { margin: 0 0 var(--cf-4); font-size: var(--cf-text-xl); font-weight: 600; letter-spacing: -0.015em; color: var(--cf-text); }
+.cfs-section > .cfs-section-desc { margin: calc(var(--cf-2) * -1) 0 var(--cf-4); color: var(--cf-text-2); max-width: 70ch; }
+
+.cfs-panel { background: var(--cf-surface); border: 1px solid var(--cf-border); border-radius: var(--cf-radius-lg); }
+.cfs-panel-pad { padding: var(--cf-5); }
+.cfs-grid { display: grid; gap: var(--cf-3); grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.cfs-tile {
+    display: flex; flex-direction: column; gap: 6px; padding: var(--cf-4) var(--cf-5);
+    background: var(--cf-surface); border: 1px solid var(--cf-border); border-radius: var(--cf-radius-lg);
+    color: var(--cf-text); text-decoration: none; transition: border-color var(--cf-fast) var(--cf-ease);
+}
+a.cfs-tile:hover { border-color: var(--cf-border-strong); color: var(--cf-text); }
+.cfs-tile h3 { margin: 0; font-size: var(--cf-text-md); font-weight: 600; color: var(--cf-text); }
+.cfs-tile p { margin: 0; font-size: var(--cf-text-sm); line-height: 1.55; color: var(--cf-text-2); }
+.cfs-tile .cfs-tile-foot { margin-top: auto; padding-top: 6px; font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+
+.cfs-badge {
+    display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 7px; border-radius: 999px;
+    font-size: 11.5px; font-weight: 500; line-height: 1; vertical-align: middle;
+    background: var(--cf-surface-2); border: 1px solid var(--cf-border); color: var(--cf-text-2);
+}
+.cfs-badge--off { color: var(--cf-text-3); }
+.cfs-badge--warn { color: var(--cf-warning); border-color: color-mix(in srgb, var(--cf-warning) 40%, var(--cf-border)); }
+.cfs-badge--ok { color: var(--cf-success); border-color: color-mix(in srgb, var(--cf-success) 40%, var(--cf-border)); }
+
+.cfs-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); background: var(--cf-surface); border: 1px solid var(--cf-border); border-radius: var(--cf-radius-lg); overflow: hidden; }
+.cfs-stat { padding: var(--cf-4) var(--cf-5); border-left: 1px solid var(--cf-border); min-width: 0; }
+.cfs-stat:first-child { border-left: 0; }
+.cfs-stat b { display: block; font-size: 1.5rem; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: var(--cf-text); }
+.cfs-stat span { display: block; font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+@media (max-width: 720px) {
+    .cfs-stats { grid-template-columns: 1fr 1fr; }
+    .cfs-stat:nth-child(3) { border-left: 0; }
+    .cfs-stat:nth-child(n+3) { border-top: 1px solid var(--cf-border); }
+}
+
+/* Status dots */
+.cfs-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--cf-text-3); flex: none; }
+.cfs-dot--ok { background: var(--cf-success); }
+.cfs-dot--warn { background: var(--cf-warning); }
+.cfs-dot--bad { background: var(--cf-danger); }
+
+/* Row lists (status services, leaderboards) */
+.cfs-rows { background: var(--cf-surface); border: 1px solid var(--cf-border); border-radius: var(--cf-radius-lg); overflow: hidden; }
+.cfs-row { display: flex; align-items: center; gap: var(--cf-3); padding: var(--cf-3) var(--cf-4); border-top: 1px solid var(--cf-border); min-width: 0; }
+.cfs-row:first-child { border-top: 0; }
+.cfs-row-main { flex: 1; min-width: 0; }
+.cfs-row-title { font-weight: 500; color: var(--cf-text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cfs-row-sub { font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+.cfs-row-end { flex: none; font-size: var(--cf-text-sm); color: var(--cf-text-2); font-variant-numeric: tabular-nums; text-align: right; }
+
+/* Notices */
+.cfs-note {
+    padding: var(--cf-3) var(--cf-4); border: 1px solid var(--cf-border); border-left: 3px solid var(--cf-accent-line);
+    border-radius: var(--cf-radius); background: var(--cf-surface); color: var(--cf-text-2); font-size: var(--cf-text-sm);
+}
+.cfs-note--warn { border-left-color: var(--cf-warning); }
+.cfs-note p:last-child { margin-bottom: 0; }
+
+/* Empty / error states */
+.cfs-empty { padding: var(--cf-10) var(--cf-5); text-align: center; color: var(--cf-text-2); }
+.cfs-empty h2 { margin: 0 0 var(--cf-2); font-size: var(--cf-text-lg); font-weight: 600; color: var(--cf-text); }
+.cfs-empty p { margin: 0 auto; max-width: 50ch; }
+
+/* ---------- Prose (docs and legal text) ---------- */
+.cfs-prose { color: var(--cf-text-2); font-size: var(--cf-text-md); line-height: 1.7; }
+.cfs-prose h2 { margin: var(--cf-10) 0 var(--cf-3); font-size: var(--cf-text-xl); font-weight: 600; letter-spacing: -0.015em; line-height: 1.3; color: var(--cf-text); scroll-margin-top: calc(var(--cf-header-h) + 16px); }
+.cfs-prose h2:first-child { margin-top: 0; }
+.cfs-prose h3 { margin: var(--cf-6) 0 var(--cf-2); font-size: var(--cf-text-lg); font-weight: 600; color: var(--cf-text); scroll-margin-top: calc(var(--cf-header-h) + 16px); }
+.cfs-prose h4 { margin: var(--cf-5) 0 var(--cf-2); font-size: var(--cf-text-md); font-weight: 600; color: var(--cf-text); }
+.cfs-prose p { margin: 0 0 var(--cf-4); }
+.cfs-prose ul, .cfs-prose ol { margin: 0 0 var(--cf-4); padding-left: 1.4em; }
+.cfs-prose li { margin-bottom: 6px; }
+.cfs-prose li::marker { color: var(--cf-text-3); }
+.cfs-prose strong { color: var(--cf-text); font-weight: 600; }
+.cfs-prose a { color: var(--cf-accent-fg); text-decoration: underline; text-underline-offset: 2px; text-decoration-color: var(--cf-accent-line); }
+.cfs-prose a:hover { text-decoration-color: currentColor; }
+.cfs-prose a.btn { text-decoration: none; }
+.cfs-prose code, .cfs-code {
+    font-family: var(--cf-mono); font-size: 0.86em; padding: 1px 6px; border-radius: var(--cf-radius-sm);
+    background: var(--cf-surface-2); border: 1px solid var(--cf-border); color: var(--cf-text); white-space: nowrap;
+}
+.cfs-prose table { width: 100%; border-collapse: collapse; margin: 0 0 var(--cf-5); font-size: var(--cf-text-sm); }
+.cfs-prose th, .cfs-prose td { padding: 9px 12px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--cf-border); }
+.cfs-prose th { font-size: var(--cf-text-xs); font-weight: 500; color: var(--cf-text-3); white-space: nowrap; }
+.cfs-prose td:first-child { color: var(--cf-text); }
+.cfs-table-wrap { position: relative; overflow-x: auto; margin: 0 0 var(--cf-5); border: 1px solid var(--cf-border); border-radius: var(--cf-radius-lg); background: var(--cf-surface); }
+.cfs-table-wrap table { margin: 0; }
+.cfs-table-wrap tr:last-child td { border-bottom: 0; }
+@media (max-width: 600px) {
+    .cfs-prose code { white-space: normal; word-break: break-word; }
+    .cfs-table-stack thead { display: none; }
+    .cfs-table-stack tr { display: block; padding: 8px 12px; border-bottom: 1px solid var(--cf-border); }
+    .cfs-table-stack tr:last-child { border-bottom: 0; }
+    .cfs-table-stack td { display: block; padding: 2px 0; border: 0; }
+    .cfs-table-stack td[data-label]::before { content: attr(data-label) ": "; color: var(--cf-text-3); font-size: var(--cf-text-xs); }
+}
+
+/* Docs layout: contents on the left, text on the right */
+.cfs-doc { display: grid; grid-template-columns: 220px minmax(0, 1fr); gap: var(--cf-10); align-items: start; }
+.cfs-toc { position: sticky; top: calc(var(--cf-header-h) + 24px); max-height: calc(100vh - var(--cf-header-h) - 48px); overflow-y: auto; font-size: var(--cf-text-sm); }
+.cfs-toc h2 { margin: 0 0 var(--cf-2); font-size: var(--cf-text-xs); font-weight: 600; color: var(--cf-text-3); }
+.cfs-toc ol, .cfs-toc ul { list-style: none; margin: 0 0 var(--cf-4); padding: 0; display: flex; flex-direction: column; gap: 1px; }
+.cfs-toc a { display: block; padding: 5px 10px; border-radius: var(--cf-radius); color: var(--cf-text-2); text-decoration: none; line-height: 1.35; }
+.cfs-toc a:hover, .cfs-toc a.is-current { color: var(--cf-text); background: var(--cf-surface-2); }
+.cfs-toc ul ul a { padding-left: 22px; font-size: var(--cf-text-xs); }
+@media (max-width: 960px) {
+    .cfs-doc { grid-template-columns: minmax(0, 1fr); gap: var(--cf-6); }
+    .cfs-toc { position: static; max-height: none; padding: var(--cf-3) var(--cf-4); background: var(--cf-surface); border: 1px solid var(--cf-border); border-radius: var(--cf-radius-lg); }
+}
+
+/* Keyboard focus */
+.cfs-header a:focus-visible, .cfs-header summary:focus-visible, .cfs-header button:focus-visible,
+.cfs-footer a:focus-visible, .cfs-toc a:focus-visible, .cfs-tile:focus-visible {
+    outline: 2px solid var(--cf-accent); outline-offset: 2px;
+}
+
+/* ================================================================ app page kit
+ * Owner console, tools and other signed-in pages: body.cfs-body.cf-site > main.cf-main > .cf-page.
+ * The header is sticky (in the flow), so .cf-main needs no offset for it. */
+body.cf-site {
+    margin: 0; min-height: 100vh; display: flex; flex-direction: column;
+    background: var(--cf-bg); color: var(--cf-text);
+    font-family: var(--cf-font); font-size: var(--cf-text-md); line-height: 1.5;
+    overflow-x: hidden;
+}
+body.cf-site *, body.cf-site *::before, body.cf-site *::after { box-sizing: border-box; }
+
+/* ---------------------------------------------------------------- page */
+.cf-main { flex: 1 0 auto; padding: var(--cf-8) 0 var(--cf-10); }
+.cf-main:focus { outline: none; }
+.cf-page { width: 100%; max-width: 1200px; margin: 0 auto; padding: 0 var(--cf-6); }
+.cf-page.is-narrow { max-width: 760px; }
+.cf-page.is-wide { max-width: 1440px; }
+
+.cf-page-head { display: flex; align-items: center; gap: var(--cf-4); margin: 0 0 var(--cf-6); flex-wrap: wrap; }
+.cf-page-icon {
+    flex: none; width: 40px; height: 40px; display: inline-flex; align-items: center; justify-content: center;
+    border-radius: var(--cf-radius-lg); background: var(--cf-accent-soft); color: var(--cf-accent-fg); font-size: 17px;
+}
+.cf-page-icon img { width: 40px; height: 40px; border-radius: var(--cf-radius-lg); object-fit: cover; }
+.cf-page-head > div:not(.cf-page-actions):not(.cf-page-icon) { min-width: 0; flex: 1 1 16rem; }
+.cf-page-title { margin: 0; font-size: var(--cf-text-2xl); font-weight: 600; letter-spacing: -0.015em; line-height: 1.2; color: var(--cf-text); overflow-wrap: anywhere; }
+.cf-page-sub { margin: 4px 0 0; font-size: var(--cf-text-sm); color: var(--cf-text-3); }
+.cf-page-sub a { color: var(--cf-text-2); }
+.cf-page-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--cf-2); margin-left: auto; }
+.cf-back { display: inline-flex; align-items: center; gap: 6px; margin: 0 0 var(--cf-3); font-size: var(--cf-text-sm); color: var(--cf-text-3); text-decoration: none; }
+.cf-back:hover { color: var(--cf-text); }
+
+/* Sections on a standalone page sit a little further apart than on manage pages. */
+.cf-site .cf-section + .cf-section { margin-top: var(--cf-8); }
+.cf-site .cf-section-head .cf-count { margin-left: 6px; font-size: var(--cf-text-sm); font-weight: 500; color: var(--cf-text-3); font-variant-numeric: tabular-nums; }
+.cf-mono { font-family: var(--cf-mono); font-size: 0.92em; }
+.cf-muted { color: var(--cf-text-3); }
+.cf-nowrap { white-space: nowrap; }
+
+/* ---------------------------------------------------------------- bare form controls
+   cf-ui.css draws bare inputs only inside .page-content / .modal (the manage pages). Standalone
+   pages get the same look inside .cf-main and the kit's .cf-modal, at zero specificity. */
+:where(.cf-main, .cf-modal) :where(input[type="text"], input[type="number"], input[type="url"], input[type="email"],
+    input[type="password"], input[type="search"], input[type="time"], input[type="date"], input[type="datetime-local"],
+    input:not([type]), textarea, select) {
+    min-height: 34px; padding: 6px 10px; font-family: var(--cf-font); font-size: var(--cf-text-md); line-height: 1.4;
+    color: var(--cf-text); background-color: var(--cf-inset); border: 1px solid var(--cf-border-strong); border-radius: var(--cf-radius); box-shadow: none;
+}
+:where(.cf-main, .cf-modal) :where(input, textarea, select):focus { border-color: var(--cf-accent); box-shadow: 0 0 0 3px var(--cf-accent-soft); outline: none; }
+:where(.cf-main, .cf-modal) :where(input, textarea)::placeholder { color: var(--cf-text-3); opacity: 1; }
+:where(.cf-main, .cf-modal) :where(input, select, textarea):disabled { opacity: 0.55; cursor: not-allowed; }
+:where(.cf-main, .cf-modal) select:not([multiple]):not([size]) {
+    -webkit-appearance: none; appearance: none; padding-right: 30px;
+    background-image: var(--cf-select-arrow); background-repeat: no-repeat; background-position: right 8px center; background-size: 14px 14px;
+}
+:where(.cf-main, .cf-modal) select option { background: var(--cf-surface); color: var(--cf-text); }
+:where(.cf-main, .cf-modal) textarea { min-height: 72px; resize: vertical; }
+:where(.cf-main, .cf-modal) input[type="checkbox"]:not(.cf-switch), :where(.cf-main, .cf-modal) input[type="radio"] { accent-color: var(--cf-accent); }
+
+/* ---------------------------------------------------------------- owner console navigation */
+.cf-owner-nav {
+    display: flex; align-items: center; gap: var(--cf-3); margin: 0 0 var(--cf-6); padding: 3px 3px 3px var(--cf-3);
+    background: var(--cf-surface); border: 1px solid var(--cf-border); border-radius: var(--cf-radius-lg); min-width: 0;
+}
+.cf-owner-nav-label { flex: none; font-size: var(--cf-text-xs); font-weight: 600; color: var(--cf-text-3); text-transform: uppercase; letter-spacing: 0.06em; }
+.cf-owner-nav-items { display: flex; flex-wrap: wrap; gap: 2px; min-width: 0; }
+.cf-owner-nav-items::-webkit-scrollbar { display: none; }
+.cf-owner-nav-item {
+    flex: none; display: inline-flex; align-items: center; gap: 7px; min-height: 34px; padding: 0 12px;
+    border-radius: var(--cf-radius); font-size: var(--cf-text-sm); font-weight: 500; color: var(--cf-text-2); text-decoration: none; white-space: nowrap;
+}
+.cf-owner-nav-item i { font-size: 12px; color: var(--cf-text-3); }
+.cf-owner-nav-item:hover { color: var(--cf-text); background: var(--cf-surface-2); }
+.cf-owner-nav-item.is-active { color: var(--cf-text); background: var(--cf-surface-3); }
+.cf-owner-nav-item.is-active i { color: var(--cf-accent-fg); }
+.cf-owner-nav-item:focus-visible { outline: 2px solid var(--cf-accent); outline-offset: 1px; }
+.cf-owner-nav-badge {
+    min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; display: inline-flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--cf-on-accent); background: var(--cf-warning);
+}
+.cf-owner-nav-badge[hidden] { display: none; }
+@media (max-width: 640px) {
+    .cf-owner-nav { padding: 3px; }
+    .cf-owner-nav-label { display: none; }
+    .cf-owner-nav-items { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+}
+
+/* ---------------------------------------------------------------- toasts */
+.cf-toasts { position: fixed; right: var(--cf-4); bottom: var(--cf-4); z-index: 2000; display: grid; gap: var(--cf-2); width: min(24rem, calc(100vw - 2 * var(--cf-4))); }
+.cf-toast {
+    --cf-tone: var(--cf-info);
+    padding: var(--cf-3) var(--cf-4); border-radius: var(--cf-radius-lg); font-size: var(--cf-text-sm); line-height: 1.45; color: var(--cf-text);
+    background: color-mix(in srgb, var(--cf-tone) 10%, var(--cf-surface)); border: 1px solid color-mix(in srgb, var(--cf-tone) 40%, var(--cf-border));
+    box-shadow: var(--cf-shadow-pop); overflow-wrap: anywhere; transition: opacity var(--cf-base) var(--cf-ease), transform var(--cf-base) var(--cf-ease);
+}
+.cf-toast.is-ok { --cf-tone: var(--cf-success); }
+.cf-toast.is-bad { --cf-tone: var(--cf-danger); }
+.cf-toast.is-leaving { opacity: 0; transform: translateY(4px); }
+
+/* ---------------------------------------------------------------- shared list bits */
+.cf-dot { display: inline-block; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--cf-text-3); }
+.cf-dot.is-ok { background: var(--cf-success); }
+.cf-dot.is-warn { background: var(--cf-warning); }
+.cf-dot.is-bad { background: var(--cf-danger); }
+.cf-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--cf-2) var(--cf-3); padding: var(--cf-3) var(--cf-5); border-bottom: 1px solid var(--cf-border); }
+.cf-toolbar .cf-search { flex: 1 1 14rem; width: auto; max-width: 22rem; }
+.cf-toolbar .cf-toolbar-end { margin-left: auto; display: flex; gap: var(--cf-2); align-items: center; }
+
+@media (max-width: 640px) {
+    .cf-page { padding: 0 var(--cf-4); }
+    .cf-main { padding-top: var(--cf-5); }
+    .cf-page-title { font-size: var(--cf-text-xl); }
+    .cf-page-actions { margin-left: 0; width: 100%; }
+    .cf-toolbar { padding: var(--cf-3) var(--cf-4); }
+    .cf-toolbar .cf-search { max-width: none; }
+    .cf-toolbar .cf-toolbar-end { margin-left: 0; }
+}
+.cf-main + .cfs-footer { margin-top: 0; }
+
+/* ---------------------------------------------------------------- touch targets
+   Phones and tablets: every control in the frame and the page kit is at least 40px tall, and the
+   footer and contents links get the same height instead of 20px lines (public site pass, 2026-11-19). */
+@media (max-width: 960px) {
+    .cfs-menu-btn { width: 40px; height: 40px; }
+    .cfs-brand { min-height: 40px; }
+    .cfs-header .cfs-actions .btn, .cfs-account > summary, .cfs-account-menu a { min-height: 40px; }
+    .cfs-account-menu a { display: flex; align-items: center; }
+    .cfs-toc a { display: flex; align-items: center; min-height: 40px; }
+}
+@media (max-width: 600px) {
+    .cfs-body main .btn { min-height: 40px; }
+    .cfs-footer ul { gap: 0; }
+    .cfs-footer li a { display: flex; align-items: center; min-height: 40px; }
+}

@@ -12,6 +12,18 @@ import {
   RODS_BY_ID, BAITS_BY_ID, LOCATIONS_BY_ID, PETS_BY_ID, FISH_INDEX,
   levelFromXp, xpForLevel,
 } from '../../core/fishing-manager.js';
+import { displayNameFor } from '../../utils/display-name.js';
+import { getConfig as getFeatureConfig } from '../../core/feature-config.js';
+import pool from '../../utils/db.js';
+
+/** A text channel in this guild the bot can post an embed in, or null. */
+function postableChannel(guild, channelId) {
+  if (!channelId) return null;
+  const ch = guild?.channels?.cache?.get(String(channelId));
+  if (!ch?.isTextBased?.() || !guild.members?.me) return null;
+  const perms = ch.permissionsFor(guild.members.me);
+  return perms?.has([PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks]) ? ch : null;
+}
 
 const COIN = '🪙';
 const n = (x) => Number(x).toLocaleString();
@@ -179,15 +191,31 @@ export default {
       if (sub === 'start') {
         if (!interaction.memberPermissions?.has(PermissionFlagsBits.ManageGuild))
           return interaction.reply({ content: '❌ You need **Manage Server** to start a tournament.', ephemeral: true });
-        const r = await startTournament(interaction.guildId, interaction.channelId, uid, {
+        // Fishing page: "Tournament announcements" channel and "Ping role for tournaments". The
+        // results are posted where the start was announced (jobs/fishing-tournament-scheduler.js).
+        const fcfg = await getFeatureConfig('fishing', interaction.guildId);
+        const target = postableChannel(interaction.guild, fcfg.tournament_channel_id) || interaction.channel;
+        const pingRole = fcfg.tournament_role_id && interaction.guild.roles.cache.has(String(fcfg.tournament_role_id))
+          ? String(fcfg.tournament_role_id) : null;
+        const r = await startTournament(interaction.guildId, target.id, uid, {
           type: interaction.options.getString('type') || 'biggest',
           minutes: interaction.options.getInteger('minutes') || 60,
           prize: interaction.options.getInteger('prize') ?? 10000,
         });
         if (!r.ok) return interaction.reply({ content: `❌ ${r.reason}`, ephemeral: true });
         const embed = new EmbedBuilder().setColor(0xf59e0b).setTitle('🏁 Fishing Tournament started!')
-          .setDescription(`**Win condition:** ${r.type === 'most' ? 'Most fish caught' : 'Biggest single catch'}\n**Prize:** ${n(r.prize)} ${COIN}\n**Ends:** <t:${Math.floor(r.endsAt.getTime() / 1000)}:R>\n\nJust \`/fish catch\` here — your catches are counted automatically!`);
-        return interaction.reply({ embeds: [embed] });
+          .setDescription(`**Win condition:** ${r.type === 'most' ? 'Most fish caught' : 'Biggest single catch'}\n**Prize:** ${n(r.prize)} ${COIN}\n**Ends:** <t:${Math.floor(r.endsAt.getTime() / 1000)}:R>\n\nEvery \`/fish catch\` in this server counts automatically — no sign-up needed.`);
+        const announcement = { embeds: [embed], allowedMentions: { roles: pingRole ? [pingRole] : [] } };
+        if (pingRole) announcement.content = `<@&${pingRole}>`;
+        if (target.id === interaction.channelId) return interaction.reply(announcement);
+        try {
+          await target.send(announcement);
+          return interaction.reply({ content: `Tournament started and announced in <#${target.id}>. The results will be posted there too.`, ephemeral: true });
+        } catch {
+          // Could not post there after all: announce here and send the results here as well.
+          await pool.execute('UPDATE fishing_tournaments SET channel_id = ? WHERE id = ?', [interaction.channelId, r.id]).catch(() => {});
+          return interaction.reply(announcement);
+        }
       }
       if (sub === 'status') return tournamentStatus(interaction);
     }
@@ -206,7 +234,7 @@ export default {
         const lock = locked.has(i.key) || locked.has(i.baseKey) ? ' 🔒' : '';
         return `${i.emoji} ${r.emoji} **${metaName(i, i.shiny)}** ×${i.quantity} — \`${n(i.totalValue)}\` ${COIN}${lock}`;
       });
-      const embed = new EmbedBuilder().setColor(0x3b82f6).setTitle(`🎒 ${interaction.user.username}'s bucket`)
+      const embed = new EmbedBuilder().setColor(0x3b82f6).setTitle(`🎒 ${displayNameFor(interaction.user, interaction.guild)}'s bucket`)
         .setDescription(lines.join('\n')).setFooter({ text: `Sell value: ${n(total)} ${COIN} · /fish sell` });
       return interaction.reply({ embeds: [embed], components: [new ActionRowBuilder().addComponents(
         new ButtonBuilder().setCustomId('fish_sellall').setLabel('Sell all').setEmoji('💰').setStyle(ButtonStyle.Success),
@@ -236,7 +264,7 @@ export default {
       const af = getAutofisher(p);
       const nextLvlXp = xpForLevel(p.level + 1);
       const embed = new EmbedBuilder().setColor(0xf59e0b)
-        .setAuthor({ name: `${target.username}'s angler card`, iconURL: target.displayAvatarURL() })
+        .setAuthor({ name: `${displayNameFor(target, interaction.guild)}'s angler card`, iconURL: target.displayAvatarURL() })
         .addFields(
           { name: '🪙 Fishcoins', value: n(p.coins), inline: true },
           { name: '⭐ Level', value: `${p.level} (${n(p.xp)}/${n(nextLvlXp)} XP)`, inline: true },
@@ -260,7 +288,7 @@ export default {
       const byRarity = {};
       for (const r of list.filter(l => l.meta.rarity !== 'junk')) (byRarity[r.meta.rarity] ||= []).push(r);
       const pct = Math.round((caughtSpecies / totalSpecies) * 100);
-      const embed = new EmbedBuilder().setColor(0xa855f7).setTitle(`📖 ${target.username}'s Bestiary`)
+      const embed = new EmbedBuilder().setColor(0xa855f7).setTitle(`📖 ${displayNameFor(target, interaction.guild)}'s Bestiary`)
         .setDescription(`**${caughtSpecies}/${totalSpecies}** species discovered (**${pct}%**)${list.some(l => l.shiny) ? ` · ✨ ${list.filter(l => l.shiny).length} shiny` : ''}`);
       for (const tier of [...RANKS].reverse()) {
         const arr = byRarity[tier]; if (!arr) continue;
@@ -274,7 +302,7 @@ export default {
       const { list } = await getRecords(uid);
       const best = list.filter(i => i.meta.rarity !== 'junk').sort((a, b) => (b.shiny - a.shiny) || rank(b.meta.rarity) - rank(a.meta.rarity) || b.bestWeight - a.bestWeight).slice(0, 12);
       if (!best.length) return interaction.reply({ content: '🐠 Your aquarium is empty — go catch some prize fish!', ephemeral: true });
-      const embed = new EmbedBuilder().setColor(0xa855f7).setTitle(`🐠 ${interaction.user.username}'s Aquarium`)
+      const embed = new EmbedBuilder().setColor(0xa855f7).setTitle(`🐠 ${displayNameFor(interaction.user, interaction.guild)}'s Aquarium`)
         .setDescription(best.map(i => `${i.meta.emoji} ${(RARITIES[i.meta.rarity] || RARITIES.common).emoji} **${metaName(i.meta, i.shiny)}** — best ${i.bestWeight} kg (×${n(i.timesCaught)})`).join('\n'))
         .setFooter({ text: 'Trophies are kept forever — selling never removes them.' });
       return interaction.reply({ embeds: [embed] });

@@ -1,6 +1,7 @@
 import pool from '../../utils/db.js';
 import logger from '../../utils/logger.js';
 import SuggestionManager from '../../core/suggestion-manager.js';
+import { votingOpen } from '../../core/suggestion-review.js';
 
 /**
  * Handle suggestion upvote button clicks
@@ -28,6 +29,15 @@ export async function handleSuggestionUpvote(interaction) {
         if (suggestions.length === 0) {
             await interaction.reply({
                 content: 'Suggestion not found.',
+                ephemeral: true
+            });
+            return;
+        }
+
+        // Waiting for staff approval: no votes until it is approved.
+        if (!votingOpen(suggestions[0].status)) {
+            await interaction.reply({
+                content: 'This suggestion is waiting for staff approval. Voting opens once it is approved.',
                 ephemeral: true
             });
             return;

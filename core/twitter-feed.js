@@ -2,6 +2,8 @@ import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'disc
 import pool from '../utils/db.js';
 import logger from '../utils/logger.js';
 import { getUserTweets, getUserProfile } from '../utils/platforms/twitter-api.js';
+import { buildFeedContent } from './feed-message.js';
+import { pollsGuild } from './guild-presence-logic.js';
 
 // Cache for profile avatars
 const avatarCache = new Map();
@@ -12,10 +14,12 @@ const AVATAR_CACHE_DURATION = 30 * 60 * 1000; // 30 minutes
  */
 async function checkTwitterFeeds(client) {
     try {
-        const [feeds] = await pool.execute('SELECT * FROM twitter_feeds');
+        const [allFeeds] = await pool.execute('SELECT * FROM twitter_feeds');
+        // Only the feeds of servers this bot serves (H-315): a server no bot is in is not polled.
+        const feeds = allFeeds.filter(feed => pollsGuild(client, feed.guild_id, global.botManager));
         if (feeds.length === 0) return;
 
-        logger.info(`[TwitterFeed] Checking ${feeds.length} Twitter feeds...`);
+        logger.debug(`[TwitterFeed] Checking ${feeds.length} Twitter feeds...`);
 
         // Process feeds in parallel batches of 3
         const batchSize = 3;
@@ -190,17 +194,22 @@ async function postTweetEmbed(channel, tweet, feed, avatar) {
                 .setEmoji('🐦')
         );
 
-    // Build message content
-    let content = null;
-    if (feed.custom_message) {
-        content = feed.custom_message
-            .replace('{username}', tweet.author?.username || feed.twitter_username)
-            .replace('{name}', tweet.author?.name || feed.twitter_username);
-    }
+    // Message content: the feed's custom message with its variables filled, and the ping role in
+    // front. Neither set: no content and default mentions, as before.
+    const { content, allowedMentions } = buildFeedContent({
+        template: feed.custom_message,
+        pingRoleId: feed.ping_role_id,
+        vars: {
+            username: tweet.author?.username || feed.twitter_username,
+            name: tweet.author?.name || feed.twitter_username,
+            url: tweetUrl,
+        },
+    });
 
     // Send the message
     await channel.send({
-        content: content,
+        content: content ?? null,
+        allowedMentions,
         embeds: [embed],
         components: [row]
     });

@@ -1,4 +1,5 @@
 import { EmbedBuilder } from 'discord.js';
+import { themeColor } from '../../core/guild-theme.js';
 
 export async function handleWouldYouRather(interaction) {
   const questions = [
@@ -73,7 +74,7 @@ export async function handleTruthOrDare(interaction) {
 export async function handleNeverHaveIEver(interaction) {
   const statements = ['Never have I ever skipped school', 'Never have I ever told a lie to get out of trouble', 'Never have I ever eaten food that fell on the floor', 'Never have I ever stalked someone on social media', 'Never have I ever pretended to like a gift', 'Never have I ever laughed at an inappropriate moment', 'Never have I ever sung in the shower', 'Never have I ever talked to myself', 'Never have I ever re-gifted something', 'Never have I ever forgotten someone\'s name right after meeting them', 'Never have I ever binge-watched an entire series in one day', 'Never have I ever pretended to know something I didn\'t', 'Never have I ever accidentally sent a message to the wrong person', 'Never have I ever fallen asleep during a movie', 'Never have I ever googled myself'];
   const embed = new EmbedBuilder()
-    .setColor('#4CAF50').setTitle('🙋 Never Have I Ever').setDescription(`**${statements[Math.floor(Math.random() * statements.length)]}**`)
+    .setColor(themeColor(interaction.guildId, 'success')).setTitle('🙋 Never Have I Ever').setDescription(`**${statements[Math.floor(Math.random() * statements.length)]}**`)
     .setFooter({ text: 'React if you HAVE done this!' }).setTimestamp();
   return interaction.reply({ embeds: [embed] });
 }

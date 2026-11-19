@@ -1,14 +1,14 @@
 // READ-ONLY diagnostic for the Verification reaction-role panel.
-// Guild 1475352754682597468, custom bot 1475353066243883111.
+// Guild 1475352754682597468, acting as whichever bot guild_bot_mapping names.
 // Uses REST only (no gateway session). Prints evidence; writes nothing.
 import { REST, Routes, PermissionFlagsBits } from 'discord.js';
 import dotenv from 'dotenv';
 import pool from '../utils/db.js';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 
 dotenv.config();
 
-const BOT_ID   = '1475353066243883111';
+// The acting bot comes from guild_bot_mapping — never pinned here.
 const GUILD    = '1475352754682597468';
 const CHANNEL  = '1475365704772358237';
 const MESSAGE  = '1475365831817957466';
@@ -17,8 +17,8 @@ const VERIFIED = '1487024558715174913'; // intended
 
 const has = (perms, bit) => (BigInt(perms) & bit) === bit;
 
-const [[bot]] = [await pool.query('SELECT bot_token FROM custom_bots WHERE bot_id = ?', [BOT_ID])];
-const token = encryption.decrypt(JSON.parse(bot[0].bot_token));
+const bot = await resolveBotForGuild(GUILD, { db: pool });
+const token = bot.token;
 const rest = new REST({ version: '10' }).setToken(token);
 
 console.log('=== ROLES ===');
@@ -32,7 +32,7 @@ show(OLD_ROLE, 'OLD');
 show(VERIFIED, 'VERIFIED');
 
 console.log('\n=== BOT MEMBER + HIERARCHY ===');
-const me = await rest.get(Routes.guildMember(GUILD, BOT_ID));
+const me = await rest.get(Routes.guildMember(GUILD, bot.botId));
 const myRoles = me.roles.map(id => byId[id]).filter(Boolean);
 const myHighest = myRoles.reduce((m, r) => (r.position > m.position ? r : m), { position: -1, name: '(none)' });
 const everyone = byId[GUILD]; // @everyone role shares the guild id

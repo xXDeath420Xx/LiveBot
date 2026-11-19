@@ -41,6 +41,9 @@ const KNOWN_SUBCOMMANDS = [
     // /owo2 shard/forge/ranch overflow
     'shards', 'dismantle', 'forge', 'favorite', 'forge-prices',
     'ranch', 'ranch-claim',
+    // /owo2 social + economy ports (pray/curse, cookies, lottery, drops, duels, wallpapers, rings)
+    'pray', 'curse', 'cookie', 'top', 'lottery', 'drop', 'pickup', 'duel', 'battle-settings', 'give-limits',
+    'transactions', 'wallpaper', 'ring', 'marry', 'shop', 'profile',
     // top-level commands
     'autohunt', 'luck',
 ];
@@ -61,12 +64,12 @@ function sanitizeSubcommandArray(arr) {
     return arr.filter(v => KNOWN_SUBCOMMANDS.includes(v));
 }
 
-async function auditLog(req, embedBuilder) {
+async function auditLog(req, embedBuilder, action) {
     try {
         const guild = req.guildObject;
         if (!guild) return;
         const embed = embedBuilder(guild);
-        await sendLogEmbed(guild, 'owoAdminAction', embed);
+        await sendLogEmbed(guild, 'owoAdminAction', embed, action);
     } catch (e) {
         logger.warn('[OwO API] audit log failed (non-fatal)', { err: e.message });
     }
@@ -225,7 +228,7 @@ router.get('/catalog', (req, res) => {
 const COMMANDS = [
     { name: 'hunt',        slash: '/owo hunt',                      prefix: 'owo hunt',            aliases: ['h', 'catch'],          category: 'Actions',  description: 'Hunt for a random animal.' },
     { name: 'sell',        slash: '/owo sell <rank>',               prefix: 'owo sell <rank>',     aliases: [],                      category: 'Actions',  description: 'Sell duplicates of a rank for currency (keeps 1 of each).' },
-    { name: 'sacrifice',   slash: '/owo sacrifice <rank>',          prefix: 'owo sacrifice <rank>',aliases: ['sac'],                 category: 'Actions',  description: 'Sacrifice duplicates of a rank for XP.' },
+    { name: 'sacrifice',   slash: '/owo sacrifice <rank>',          prefix: 'owo sacrifice <rank>',aliases: ['sac'],                 category: 'Actions',  description: 'Sacrifice duplicates of a rank for essence (keeps 1 of each).' },
     { name: 'daily',       slash: '/owo daily',                     prefix: 'owo daily',           aliases: [],                      category: 'Economy', description: 'Claim the daily currency reward.' },
     { name: 'balance',     slash: '/owo balance',                   prefix: 'owo balance',         aliases: ['bal', 'money', 'cowoncy'], category: 'Economy', description: 'Show your wallet + bank.' },
     { name: 'give',        slash: '/owo give <user> <amount>',      prefix: 'owo give @user <amt>',aliases: ['gift'],                category: 'Economy', description: 'Transfer currency to another member.' },
@@ -296,8 +299,8 @@ router.post('/reset-user', async (req, res) => {
                 { name: 'Actor', value: `<@${req.user.id}>`, inline: true },
                 { name: 'Rows removed', value: `zoo: ${result.zooRowsRemoved} · cooldowns: ${result.cooldownsRemoved}`, inline: true }
             )
-            .setTimestamp()
-        );
+            .setTimestamp(),
+        'owoAdminAction.reset');
         res.json({ success: true, ...result });
     } catch (error) {
         logger.error('[API OwO Reset User]', error);
@@ -320,8 +323,8 @@ router.post('/reset-guild', async (req, res) => {
                 { name: 'Actor', value: `<@${req.user.id}>`, inline: true },
                 { name: 'Rows removed', value: `zoo: ${result.zooRowsRemoved} · cooldowns: ${result.cooldownsRemoved}`, inline: true }
             )
-            .setTimestamp()
-        );
+            .setTimestamp(),
+        'owoAdminAction.reset');
         res.json({ success: true, ...result });
     } catch (error) {
         logger.error('[API OwO Reset Guild]', error);
@@ -353,8 +356,8 @@ router.post('/grant-animal', async (req, res) => {
                 { name: 'Delta',  value: String(count),      inline: true },
                 { name: 'New count', value: String(result.newCount), inline: true }
             )
-            .setTimestamp()
-        );
+            .setTimestamp(),
+        count > 0 ? 'owoAdminAction.granted' : 'owoAdminAction.removed');
         res.json({ success: true, ...result });
     } catch (error) {
         logger.error('[API OwO Grant Animal]', error);
@@ -473,8 +476,8 @@ router.post('/grant-shards', async (req, res) => {
                 { name: 'Target', value: `<@${userId}>`, inline: true },
                 { name: 'Delta',  value: String(amount), inline: true },
                 { name: 'New total', value: String(total), inline: true }
-            ).setTimestamp()
-        );
+            ).setTimestamp(),
+        amount > 0 ? 'owoAdminAction.granted' : 'owoAdminAction.removed');
         res.json({ success: true, delta: amount, total });
     } catch (error) {
         logger.error('[API OwO Grant Shards]', error);
@@ -505,8 +508,8 @@ router.post('/grant-currency', async (req, res) => {
                 { name: 'Target', value: `<@${userId}>`, inline: true },
                 { name: 'Delta',  value: String(amount), inline: true },
                 { name: 'New total', value: String(total), inline: true }
-            ).setTimestamp()
-        );
+            ).setTimestamp(),
+        amount > 0 ? 'owoAdminAction.granted' : 'owoAdminAction.removed');
         res.json({ success: true, delta: amount, total });
     } catch (error) {
         logger.error('[API OwO Grant Currency]', error);
@@ -541,8 +544,8 @@ router.post('/grant-crate', async (req, res) => {
                 { name: 'Target', value: `<@${userId}>`, inline: true },
                 { name: 'Count',  value: String(count), inline: true },
                 { name: 'New total', value: String(total), inline: true }
-            ).setTimestamp()
-        );
+            ).setTimestamp(),
+        'owoAdminAction.granted');
         res.json({ success: true, delta: count, total });
     } catch (error) {
         logger.error('[API OwO Grant Crate]', error);
@@ -581,11 +584,10 @@ router.get('/leaderboard/:kind', async (req, res) => {
             });
         }
         if (kind === 'wealth') {
-            // guild-native economy table; schema lives outside this module.
-            // Best-effort: read from `economy` — if schema doesn't match, empty.
+            // The server economy lives in user_economy (the old `economy` table was replaced and is empty).
             try {
                 const [rows] = await pool.execute(
-                    `SELECT user_id, wallet FROM economy
+                    `SELECT user_id, wallet FROM user_economy
                      WHERE guild_id = ?
                      ORDER BY wallet DESC
                      LIMIT 15`,
@@ -643,7 +645,7 @@ router.get('/module-snapshot', async (req, res) => {
             ['autohuntActive',  "SELECT COUNT(*) n FROM owo_autohunt WHERE guild_id = ?"],
             ['questHolders',    "SELECT COUNT(DISTINCT uid) n FROM owo_quest WHERE guild_id = ? AND claimed IS NULL"],
             ['ranchClaims',     "SELECT COUNT(*) n FROM owo_cooldowns WHERE guild_id = ? AND command = 'ranch'"],
-            ['luckRolls',       "SELECT COALESCE(SUM(lcount), 0) n FROM owo_luck WHERE guild_id = ?"],
+            ['luckRolls',       "SELECT COALESCE(SUM(rolls), 0) n FROM owo_luck WHERE guild_id = ?"],
             ['cratesUnopened',  "SELECT COALESCE(SUM(boxcount), 0) n FROM owo_crate WHERE guild_id = ?"],
             ['totalShards',     "SELECT COALESCE(SUM(count), 0) n FROM owo_shards WHERE guild_id = ?"],
         ];

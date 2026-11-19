@@ -1,0 +1,130 @@
+<%#
+  GET /stream/bot/overlays (dashboard/routes/stream-bot-overlays.js). Locals: ready, profile, overlays (overlayView rows), media
+  (mediaView rows), form (types and lists), mediaLimits, usedBytes, studioOnline. Adding, deleting and uploads run in
+  /js/stream-bot-overlays.js, which builds every element with createElement and textContent.
+%>
+<%- include('_head', { pageTitle: 'Overlays', active: 'overlays', sbPage: 'overlays' }) %>
+<link rel="stylesheet" href="/css/stream-bot-overlays.css">
+<%
+  const _when = (iso) => iso ? new Date(iso).toISOString().slice(0, 16).replace('T', ' ') + ' UTC' : '';
+  const _size = (n) => n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
+%>
+<div class="cf-page-head">
+    <div>
+        <h1 class="cf-page-title">Overlays</h1>
+        <p class="cf-page-sub">Alerts, chat, goals, counters and more for OBS, as browser sources. Each overlay has its own private address; your events and automations drive it.</p>
+    </div>
+</div>
+<%- include('_tabs', { active: 'overlays' }) %>
+
+<div class="cf-notice" id="sbo-msg" role="status" aria-live="polite" hidden><div class="cf-notice-body" id="sbo-msg-text"></div></div>
+
+<% if (!ready) { %>
+<section class="cf-section"><div class="cf-rows"><div class="cf-state cf-state--compact"><p class="cf-state-title">Overlays start after the next CertiFried restart.</p></div></div></section>
+<% } else { %>
+
+<section class="cf-section" aria-labelledby="sbo-list-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbo-list-title">Your overlays</h2>
+        <p class="cf-section-desc"><%= overlays.length %> of <%= form.limits.overlays %>. Open one to change how it looks, preview it and send test alerts.</p></div></header>
+    <div class="cf-rows">
+        <% if (!overlays.length) { %>
+        <div class="cf-state cf-state--compact"><p class="cf-state-title">No overlays yet.</p><p class="cf-state-desc">Add an alert box below to start.</p></div>
+        <% } else { %>
+        <div class="cf-list">
+            <% overlays.forEach((o) => { %>
+            <div class="cf-list-item cf-list-item--multi">
+                <div class="cf-list-main">
+                    <p class="cf-list-title"><a class="sb-name-link" href="/stream/bot/overlays/<%= o.id %>"><%= o.name %></a></p>
+                    <p class="cf-list-meta">
+                        <span><%= o.typeLabel %></span>
+                        <span><%= o.summary %></span>
+                        <span><%= o.online ? 'Open in OBS now' : (o.lastSeenAt ? 'Last open ' + _when(o.lastSeenAt) : 'Not opened yet') %></span>
+                    </p>
+                </div>
+                <div class="cf-list-actions">
+                    <a class="btn btn-secondary btn-sm" href="/stream/bot/overlays/<%= o.id %>">Edit</a>
+                    <button type="button" class="btn btn-secondary btn-sm" data-delete-overlay="<%= o.id %>" data-name="<%= o.name %>">Delete</button>
+                </div>
+            </div>
+            <% }) %>
+        </div>
+        <% } %>
+    </div>
+</section>
+
+<section class="cf-section" aria-labelledby="sbo-add-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbo-add-title">Add an overlay</h2>
+        <p class="cf-section-desc">You can have several of each kind, for example a second alert box for another scene.</p></div></header>
+    <form id="sbo-add-form" class="cf-rows" novalidate>
+        <fieldset class="cf-row cf-row--stack">
+            <div class="cf-row-text"><legend class="cf-row-label">Kind</legend></div>
+            <div class="cf-row-control sbo-types">
+                <% form.types.forEach((t, i) => { %>
+                <label class="sbo-type"><input type="radio" name="type" value="<%= t.type %>"<%= i === 0 ? ' checked' : '' %>>
+                    <span class="sbo-type-text"><span class="sbo-type-name"><%= t.label %></span><span class="sbo-type-desc"><%= t.description %></span></span></label>
+                <% }) %>
+            </div>
+        </fieldset>
+        <div class="cf-row">
+            <div class="cf-row-text"><label class="cf-row-label" for="sbo-add-name">Name</label><p class="cf-row-desc">Only you see it. Empty uses the kind's name.</p></div>
+            <div class="cf-row-control"><input type="text" id="sbo-add-name" maxlength="80" autocomplete="off"></div>
+        </div>
+        <div class="cf-section-foot">
+            <span class="cf-status-line" id="sbo-add-status" role="status" aria-live="polite"></span>
+            <button type="submit" class="btn btn-primary btn-sm">Add overlay</button>
+        </div>
+    </form>
+</section>
+
+<section class="cf-section" aria-labelledby="sbo-obs-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbo-obs-title">Put them in OBS</h2></div></header>
+    <div class="cf-rows">
+        <div class="cf-row"><div class="cf-row-text"><p class="cf-row-label">With CertiFried Studio</p>
+            <p class="cf-row-desc">In Studio open <strong>Set up OBS</strong>, then <strong>CertiFried overlays</strong>. It lists these overlays and adds the one you pick to the scene on air as a browser source, one click each, named after its kind (CertiFried Alerts, CertiFried Chat, CertiFried Goal …).<%= studioOnline ? ' Studio is connected now.' : '' %></p></div></div>
+        <div class="cf-row"><div class="cf-row-text"><p class="cf-row-label">By hand</p>
+            <p class="cf-row-desc">In OBS add a <strong>Browser</strong> source, paste the overlay's address from its page, and set width 1920 and height 1080. For the alert box, tick <strong>Control audio via OBS</strong> so its sounds can be kept off your VOD track in Advanced Audio Properties.</p></div></div>
+    </div>
+</section>
+
+<section class="cf-section" aria-labelledby="sbo-media-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbo-media-title">Images and videos</h2>
+        <p class="cf-section-desc">For alerts and the Show an image or video action. <%= media.length %> of <%= mediaLimits.count %>, <%= _size(usedBytes || 0) %> of <%= Math.round(mediaLimits.totalBytes / 1048576) %> MB used. Sounds come from the <a href="/stream/bot/sounds">Sounds</a> tab.</p></div>
+        <div class="cf-section-actions"><span class="cf-status-line" id="sbo-media-status" role="status" aria-live="polite"></span></div></header>
+    <div class="cf-rows">
+        <% if (!media.length) { %>
+        <div class="cf-state cf-state--compact"><p class="cf-state-title">No images or videos yet.</p></div>
+        <% } else { %>
+        <div class="cf-list">
+            <% media.forEach((m) => { %>
+            <div class="cf-list-item cf-list-item--multi">
+                <div class="cf-list-main">
+                    <p class="cf-list-title"><%= m.name %></p>
+                    <p class="cf-list-meta"><span><%= m.kind === 'video' ? 'Video' : 'Image' %>, <%= String(m.mime || '').split('/')[1].toUpperCase() %></span><span><%= _size(m.size) %></span></p>
+                </div>
+                <div class="cf-list-actions">
+                    <a class="btn btn-secondary btn-sm" href="/stream/bot/api/overlays/media/<%= m.id %>/file" target="_blank" rel="noopener">View</a>
+                    <button type="button" class="btn btn-secondary btn-sm" data-delete-media="<%= m.id %>" data-name="<%= m.name %>">Delete</button>
+                </div>
+            </div>
+            <% }) %>
+        </div>
+        <% } %>
+        <form id="sbo-media-form" novalidate>
+            <div class="cf-row">
+                <div class="cf-row-text"><label class="cf-row-label" for="sbo-media-file">File</label><p class="cf-row-desc">PNG, JPEG, GIF, WebP, WebM or MP4, up to <%= mediaLimits.fileBytes / 1048576 %> MB. Animated GIF and WebP work. A WebM with transparency shows through to your scene.</p></div>
+                <div class="cf-row-control"><input type="file" id="sbo-media-file" accept="image/png,image/jpeg,image/gif,image/webp,video/webm,video/mp4,.png,.jpg,.jpeg,.gif,.webp,.webm,.mp4"></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text"><label class="cf-row-label" for="sbo-media-name">Name</label><p class="cf-row-desc">What you pick in alerts and type in actions. The file name is used when this is empty.</p></div>
+                <div class="cf-row-control"><input type="text" id="sbo-media-name" maxlength="80" autocomplete="off"></div>
+            </div>
+            <div class="cf-section-foot">
+                <span class="cf-status-line" id="sbo-up-status" role="status" aria-live="polite"></span>
+                <button type="submit" class="btn btn-primary btn-sm">Upload</button>
+            </div>
+        </form>
+    </div>
+</section>
+<script src="/js/stream-bot-overlays.js" defer></script>
+<% } %>
+<%- include('_foot') %>

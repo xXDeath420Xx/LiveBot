@@ -12,35 +12,35 @@ export default {
             sub.setName('profile')
                 .setDescription('View a Throne user\'s profile')
                 .addStringOption(opt =>
-                    opt.setName('username').setDescription('Throne username (or use /throne link)').setRequired(false)
+                    opt.setName('username').setDescription('Throne username (or use /creator throne link)').setRequired(false)
                 )
         )
         .addSubcommand(sub =>
             sub.setName('wishlist')
                 .setDescription('Browse a Throne user\'s wishlist items')
                 .addStringOption(opt =>
-                    opt.setName('username').setDescription('Throne username (or use /throne link)').setRequired(false)
+                    opt.setName('username').setDescription('Throne username (or use /creator throne link)').setRequired(false)
                 )
         )
         .addSubcommand(sub =>
             sub.setName('collections')
                 .setDescription('View a Throne user\'s collections')
                 .addStringOption(opt =>
-                    opt.setName('username').setDescription('Throne username (or use /throne link)').setRequired(false)
+                    opt.setName('username').setDescription('Throne username (or use /creator throne link)').setRequired(false)
                 )
         )
         .addSubcommand(sub =>
             sub.setName('gifts')
                 .setDescription('View a Throne user\'s gift history')
                 .addStringOption(opt =>
-                    opt.setName('username').setDescription('Throne username (or use /throne link)').setRequired(false)
+                    opt.setName('username').setDescription('Throne username (or use /creator throne link)').setRequired(false)
                 )
         )
         .addSubcommand(sub =>
             sub.setName('leaderboard')
                 .setDescription('View a Throne user\'s gifter leaderboard')
                 .addStringOption(opt =>
-                    opt.setName('username').setDescription('Throne username (or use /throne link)').setRequired(false)
+                    opt.setName('username').setDescription('Throne username (or use /creator throne link)').setRequired(false)
                 )
                 .addStringOption(opt =>
                     opt.setName('period').setDescription('Time period for the leaderboard')
@@ -117,7 +117,7 @@ export default {
             sub.setName('random')
                 .setDescription('Pick a random available item from a Throne wishlist')
                 .addStringOption(opt =>
-                    opt.setName('username').setDescription('Throne username (or use /throne link)').setRequired(false)
+                    opt.setName('username').setDescription('Throne username (or use /creator throne link)').setRequired(false)
                 )
         )
         .addSubcommand(sub =>
@@ -127,14 +127,14 @@ export default {
                     opt.setName('query').setDescription('Search keyword').setRequired(true)
                 )
                 .addStringOption(opt =>
-                    opt.setName('username').setDescription('Throne username (or use /throne link)').setRequired(false)
+                    opt.setName('username').setDescription('Throne username (or use /creator throne link)').setRequired(false)
                 )
         )
         .addSubcommand(sub =>
             sub.setName('stats')
                 .setDescription('View wishlist statistics for a Throne user')
                 .addStringOption(opt =>
-                    opt.setName('username').setDescription('Throne username (or use /throne link)').setRequired(false)
+                    opt.setName('username').setDescription('Throne username (or use /creator throne link)').setRequired(false)
                 )
         ),
 

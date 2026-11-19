@@ -8,10 +8,10 @@ import 'dotenv/config';
 import fs from 'fs/promises';
 import path from 'path';
 import pool from '../utils/db.js';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 
 const GUILD = '800157336458231848';
-const HARLEY_BOT_ID = '1503936879635202149';
+// The acting bot comes from guild_bot_mapping — never pinned here.
 
 const MUTED_ROLE   = '1503946366542548992';
 const CITIZEN_ROLE = '800252381513777158';
@@ -28,15 +28,8 @@ const PERM_BITS = {
   MODERATE_MEMBERS:  1n << 40n,  // 1099511627776
 };
 
-const [row] = await pool.execute(
-  'SELECT bot_token FROM custom_bots WHERE bot_id = ?',
-  [HARLEY_BOT_ID]
-);
-if (row.length === 0) {
-  console.error(`Harley's Bat token (${HARLEY_BOT_ID}) not found in custom_bots`);
-  process.exit(1);
-}
-const token = encryption.decrypt(JSON.parse(row[0].bot_token));
+const bot = await resolveBotForGuild(GUILD, { db: pool });
+const token = bot.token;
 
 async function api(method, path) {
   await new Promise(r => setTimeout(r, 80));

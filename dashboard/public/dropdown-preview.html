@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dropdown style reference — CertiFried</title>
+
+<!-- The real stylesheet, exactly as every view loads it. -->
+<link rel="stylesheet" href="/css/a11y.css">
+<link rel="stylesheet" href="/css/dropdowns.css">
+
+<style>
+    /* Reproduces the design tokens the views define in their own <style> blocks,
+       so this page composites dropdowns against the same surfaces they sit on
+       in the real UI rather than against an arbitrary background. */
+    :root {
+        --bg-primary: #0b0f11;
+        --bg-secondary: #0f1316;
+        --bg-card: rgba(255, 255, 255, 0.03);
+        --text-primary: #ffffff;
+        --text-secondary: rgba(255, 255, 255, 0.7);
+        --text-muted: rgba(255, 255, 255, 0.5);
+        --border-color: rgba(255, 255, 255, 0.10);
+        --accent-purple: #a78bfa;
+    }
+    body {
+        margin: 0;
+        padding: 2rem;
+        background: var(--bg-primary);
+        color: var(--text-primary);
+        font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+    }
+    h1 { font-size: 1.35rem; margin: 0 0 0.25rem; }
+    .sub { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 2rem; }
+    h2 {
+        font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.06em;
+        color: var(--text-muted); margin: 2rem 0 0.75rem;
+    }
+    .card {
+        background: var(--bg-card);
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        padding: 1.25rem;
+        margin-bottom: 1rem;
+    }
+    .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1rem; }
+    .field { display: flex; flex-direction: column; gap: 0.4rem; }
+    label { font-size: 0.85rem; color: var(--text-secondary); }
+    select, input { padding: 0.65rem 0.9rem; font-size: 0.9rem; font-family: inherit; width: 100%; box-sizing: border-box; }
+    .note { font-size: 0.8rem; color: var(--text-muted); margin-top: 0.35rem; }
+    .swatches { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.5rem; }
+    .sw { font-size: 0.7rem; padding: 0.3rem 0.6rem; border-radius: 6px; border: 1px solid var(--border-color); font-family: ui-monospace, monospace; }
+</style>
+</head>
+<body>
+
+<main id="main-content" tabindex="-1">
+
+<h1>Dropdown style reference</h1>
+<p class="sub">
+    Every dropdown shape used across the dashboard, rendered against the real
+    surfaces with the real stylesheet. Open each one — the popup list is drawn by
+    the browser, so it is the part that has to be checked visually rather than
+    read off the CSS.
+</p>
+
+<h2>Standard select</h2>
+<div class="card">
+    <div class="row">
+        <div class="field">
+            <label for="s1">With a placeholder option</label>
+            <select id="s1">
+                <option value="">Choose a channel…</option>
+                <option value="1"># general</option>
+                <option value="2"># announcements</option>
+                <option value="3"># mod-log</option>
+            </select>
+            <span class="note">Placeholder should read as muted, not as a real choice.</span>
+        </div>
+        <div class="field">
+            <label for="s2">With a selection made</label>
+            <select id="s2">
+                <option value="">Choose a channel…</option>
+                <option value="1" selected># general</option>
+                <option value="2"># announcements</option>
+            </select>
+        </div>
+        <div class="field">
+            <label for="s3">Disabled</label>
+            <select id="s3" disabled>
+                <option>Not available</option>
+            </select>
+            <span class="note">Arrow removed, control dimmed.</span>
+        </div>
+    </div>
+</div>
+
+<h2>Grouped options</h2>
+<div class="card">
+    <div class="row">
+        <div class="field">
+            <label for="s4">optgroup labels</label>
+            <select id="s4">
+                <option value="">Choose a role…</option>
+                <optgroup label="Staff">
+                    <option>Admin</option>
+                    <option>Moderator</option>
+                </optgroup>
+                <optgroup label="Community">
+                    <option>Streamer</option>
+                    <option>Subscriber</option>
+                    <option disabled>Verified (unavailable)</option>
+                </optgroup>
+            </select>
+            <span class="note">Group headers muted; disabled option muted.</span>
+        </div>
+        <div class="field">
+            <label for="s5">Long list (scrollbar)</label>
+            <select id="s5">
+                <option value="">Choose a timezone…</option>
+                <option>America/New_York</option><option>America/Chicago</option>
+                <option>America/Denver</option><option>America/Los_Angeles</option>
+                <option>Europe/London</option><option>Europe/Berlin</option>
+                <option>Europe/Madrid</option><option>Australia/Sydney</option>
+                <option>Australia/Brisbane</option><option>Australia/Adelaide</option>
+                <option>Pacific/Pago_Pago</option><option>UTC</option>
+            </select>
+            <span class="note">Popup scrollbar should be dark, not the OS light default.</span>
+        </div>
+    </div>
+</div>
+
+<h2>Multi-select (renders inline, not as a popup)</h2>
+<div class="card">
+    <div class="row">
+        <div class="field">
+            <label for="s6">Ignored channels</label>
+            <select id="s6" multiple size="5">
+                <option selected># bot-spam</option>
+                <option># general</option>
+                <option selected># memes</option>
+                <option># announcements</option>
+                <option># mod-log</option>
+                <option># archive</option>
+            </select>
+            <span class="note">Selected rows use the accent tint; no arrow.</span>
+        </div>
+        <div class="field">
+            <label for="s7">Sized single-select</label>
+            <select id="s7" size="4">
+                <option>Delete the wrong number</option>
+                <option selected>Reset the count</option>
+                <option>Allow same user twice</option>
+                <option>Require different users</option>
+            </select>
+        </div>
+    </div>
+</div>
+
+<h2>Custom (non-native) dropdown menu</h2>
+<div class="card">
+    <p class="note" style="margin-top:0">
+        Bootstrap-style menus and the user menu in the topbar. Shown open so the
+        surface can be compared against the native popup above — the two shapes
+        should not read as two different design systems.
+    </p>
+    <div class="dropdown-menu" style="position: static; display: block; max-width: 260px;">
+        <div class="dropdown-header">Account</div>
+        <a class="dropdown-item" href="#">Profile</a>
+        <a class="dropdown-item active" href="#">My Servers</a>
+        <a class="dropdown-item" href="#">Settings</a>
+        <hr class="dropdown-divider">
+        <a class="dropdown-item" href="#">Log out</a>
+    </div>
+</div>
+
+<h2>Datalist input</h2>
+<div class="card">
+    <div class="field" style="max-width: 320px;">
+        <label for="dl">Autocomplete</label>
+        <input id="dl" list="dlopts" placeholder="Start typing a platform…">
+        <datalist id="dlopts">
+            <option>Twitch</option><option>Kick</option>
+            <option>YouTube</option><option>Rumble</option><option>TikTok</option>
+        </datalist>
+        <span class="note">
+            The datalist popup cannot be styled by the page in any browser — it
+            follows <code>color-scheme</code> only. That is why it is declared on
+            <code>:root</code>.
+        </span>
+    </div>
+</div>
+
+<h2>Surfaces in use</h2>
+<div class="card">
+    <div class="swatches">
+        <span class="sw" style="background:#0b0f11">--bg-primary #0b0f11 (control)</span>
+        <span class="sw" style="background:#0f1316">--bg-secondary #0f1316 (popup)</span>
+        <span class="sw" style="background:rgba(167,139,250,0.22)">accent tint (selected)</span>
+        <span class="sw" style="color:#a78bfa">#a78bfa (arrow / focus)</span>
+    </div>
+    <p class="note">
+        Before unification these six near-identical greys were all in use for the
+        popup surface: #1a1d21, #1a1f25, #12141b, #1a1e23, #161b1f, #141a1e —
+        none of them matching --bg-secondary. All now resolve to the token.
+    </p>
+</div>
+
+</main>
+
+<script>
+    // Theme toggle mirrors topbar.ejs, so the light branch can be checked too.
+    document.addEventListener('keydown', (e) => {
+        if (e.key !== 't') return;
+        const root = document.documentElement;
+        root.setAttribute('data-theme', root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+    });
+</script>
+</body>
+</html>

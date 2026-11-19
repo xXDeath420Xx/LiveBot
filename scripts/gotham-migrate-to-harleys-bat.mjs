@@ -1,5 +1,5 @@
 // Transfer ownership of all default-bot-posted interactive messages in
-// The Bat Cave to Harley's Bat (1503936879635202149).
+// The Bat Cave to Harley's Bat (resolved from guild_bot_mapping).
 //
 // For each known panel:
 //   1. Fetch current message (via Harley's Bat, which has MANAGE_MESSAGES)
@@ -15,11 +15,11 @@
 
 import 'dotenv/config';
 import pool from '../utils/db.js';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 
 const GUILD = '800157336458231848';
-const HARLEY_BOT_ID  = '1503936879635202149';
-const DEFAULT_BOT_ID = '1409904443125665875';
+// The acting bot comes from guild_bot_mapping — never pinned here.
+const DEFAULT_BOT_ID = '1409904443125665875';  // bot-id-ok: previous author of the messages being migrated, not a credential
 
 // Panels I posted earlier in this server, by channel/message
 const KNOWN_PANELS = [
@@ -28,9 +28,10 @@ const KNOWN_PANELS = [
   { kind: 'ticket',         dbId: 26,  channel: '1503912714479730799', messageId: '1503938674348396664', label: 'Tech ticket panel' },
 ];
 
-// Decrypt Harley's Bat token
-const [row] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id = ?', [HARLEY_BOT_ID]);
-const harleyToken = encryption.decrypt(JSON.parse(row[0].bot_token));
+// The acting bot's id + token, from guild_bot_mapping
+const actingBot = await resolveBotForGuild(GUILD, { db: pool });
+const HARLEY_BOT_ID = actingBot.botId;
+const harleyToken = actingBot.token;
 
 async function api(method, path, body, useDefaultToken = false) {
   await new Promise(r => setTimeout(r, 80));

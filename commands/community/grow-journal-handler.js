@@ -9,17 +9,71 @@ import {
 } from 'discord.js';
 import pool from '../../utils/db.js';
 import logger from '../../utils/logger.js';
+import { themeColor } from '../../core/guild-theme.js';
+import { getConfig } from '../../core/feature-config.js';
+import {
+    entryStageFor,
+    displayStageKey,
+    parseEnvironment,
+    parseFeeding,
+    parseHeight,
+    parseWeightGrams
+} from '../../core/grow-journal-helpers.js';
 
+/*
+ * Data model (migration 267):
+ *   grow_journals.status         'active' while growing, 'harvested' once completed (there is no is_active column)
+ *   grow_journals.current_stage  the /grow journal stage choices below
+ *   grow_journals.grow_environment  indoor / outdoor / greenhouse — the create command's "type" option.
+ *                                (grow_type is photo/auto genetics, which the command doesn't ask for.)
+ *   grow_journals.is_public      private by default; /grow journal privacy toggles it
+ *   journal_entries              entry_text (notes), ph_in, ec_ppm, watered, vpd, height_cm; dated by created_at
+ */
 const STAGES = {
     germination: { emoji: '', name: 'Germination', color: '#8B4513' },
     seedling: { emoji: '', name: 'Seedling', color: '#90EE90' },
     vegetative: { emoji: '', name: 'Vegetative', color: '#228B22' },
     transition: { emoji: '', name: 'Transition', color: '#32CD32' },
     flowering: { emoji: '', name: 'Flowering', color: '#FF69B4' },
+    flush: { emoji: '', name: 'Flush', color: '#87CEEB' },
     harvest: { emoji: '', name: 'Harvest', color: '#FFD700' },
+    dry: { emoji: '', name: 'Drying', color: '#CD853F' },
     cure: { emoji: '', name: 'Curing', color: '#DAA520' },
     complete: { emoji: '', name: 'Complete', color: '#00FF00' }
 };
+
+/** Display info for a journal stage or a journal_entries.stage value ('veg', 'flower', …). */
+function stageInfo(stage) {
+    return STAGES[displayStageKey(stage)] || { emoji: '', name: stage || 'Unknown', color: '#228B22' };
+}
+
+function isOn(v) {
+    return v === true || v === 1 || v === '1';
+}
+
+/**
+ * Copy an update from a PUBLIC journal to the Grow Toolkit page's "Journal posts channel".
+ * Private journals are never posted, and nothing is copied into the channel the update was
+ * made in (the member's own reply is already there). Never throws: sharing is a side effect.
+ */
+async function shareJournalUpdate(interaction, journal, embed) {
+    try {
+        if (!journal || !isOn(journal.is_public) || !interaction.guild) return;
+        const cfg = await getConfig('grow', interaction.guild.id);
+        const channelId = cfg.journal_channel_id ? String(cfg.journal_channel_id) : null;
+        if (!channelId || channelId === interaction.channelId) return;
+        const channel = interaction.guild.channels.cache.get(channelId)
+            || await interaction.guild.channels.fetch(channelId).catch(() => null);
+        if (!channel?.isTextBased?.()) return;
+        const name = interaction.member?.displayName || interaction.user.username;
+        const copy = EmbedBuilder.from(embed)
+            .setAuthor({ name: `${name}'s grow journal`, iconURL: interaction.user.displayAvatarURL() })
+            .setFooter({ text: `Journal #${journal.id} - /grow journal view ${journal.id}` });
+        await channel.send({ embeds: [copy], allowedMentions: { parse: [] } });
+    } catch (error) {
+        logger.warn('[Journal] Could not post to the journal channel', { journalId: journal?.id, error: error.message });
+    }
+}
 
 const MEDIUMS = {
     soil: 'Soil',
@@ -37,10 +91,18 @@ export async function handleCreate(interaction) {
     const growType = interaction.options.getString('type');
     const breeder = interaction.options.getString('breeder') || null;
 
+    // Column sizes: title varchar(255), strain_name / breeder varchar(100).
+    if (title.length > 255 || strain.length > 100 || (breeder && breeder.length > 100)) {
+        return interaction.reply({
+            content: 'Title must be 255 characters or fewer; strain and breeder 100 or fewer.',
+            ephemeral: true
+        });
+    }
+
     await interaction.deferReply();
 
     const [existing] = await pool.execute(
-        'SELECT COUNT(*) as count FROM grow_journals WHERE user_id = ? AND is_active = TRUE',
+        "SELECT COUNT(*) as count FROM grow_journals WHERE user_id = ? AND status = 'active'",
         [interaction.user.id]
     );
 
@@ -51,10 +113,16 @@ export async function handleCreate(interaction) {
         });
     }
 
+    // Grow Toolkit page, "New journals are public by default".
+    const isPublic = isOn((await getConfig('grow', interaction.guild.id)).public_journals_default) ? 1 : 0;
+
+    // grow_type (photo/auto) is left NULL rather than its 'photo' default — the command never asks.
     const [result] = await pool.execute(
-        `INSERT INTO grow_journals (guild_id, user_id, title, strain_name, breeder, grow_medium, grow_type, start_date)
-        VALUES (?, ?, ?, ?, ?, ?, ?, CURDATE())`,
-        [interaction.guild.id, interaction.user.id, title, strain, breeder, medium, growType]
+        `INSERT INTO grow_journals
+            (guild_id, user_id, title, strain_name, breeder, grow_medium, grow_type, grow_environment,
+             current_stage, status, is_public, start_date)
+        VALUES (?, ?, ?, ?, ?, ?, NULL, ?, 'germination', 'active', ?, CURDATE())`,
+        [interaction.guild.id, interaction.user.id, title, strain, breeder, medium, growType, isPublic]
     );
 
     const journalId = result.insertId;
@@ -71,10 +139,13 @@ export async function handleCreate(interaction) {
             { name: 'Type', value: growType.charAt(0).toUpperCase() + growType.slice(1), inline: true },
             { name: 'Stage', value: ' Germination', inline: true }
         )
-        .setFooter({ text: 'Use /grow journal log to add daily entries!' })
+        .setFooter({ text: isPublic
+            ? 'Use /grow journal log to add daily entries! This journal is public — /grow journal privacy hides it.'
+            : 'Use /grow journal log to add daily entries! Journals start private — /grow journal privacy shares it.' })
         .setTimestamp();
 
     await interaction.editReply({ embeds: [embed] });
+    await shareJournalUpdate(interaction, { id: journalId, is_public: isPublic }, embed);
 
     logger.info('[Journal] New journal created', {
         journalId,
@@ -89,7 +160,7 @@ export async function handleLog(interaction) {
 
     if (!journalId) {
         const [journals] = await pool.execute(
-            `SELECT id, title FROM grow_journals WHERE user_id = ? AND is_active = TRUE ORDER BY updated_at DESC LIMIT 1`,
+            `SELECT id, title FROM grow_journals WHERE user_id = ? AND status = 'active' ORDER BY updated_at DESC LIMIT 1`,
             [interaction.user.id]
         );
 
@@ -173,51 +244,30 @@ export async function handleLog(interaction) {
         const environment = modalSubmit.fields.getTextInputValue('environment') || null;
         const feeding = modalSubmit.fields.getTextInputValue('feeding') || null;
         const heightStr = modalSubmit.fields.getTextInputValue('height');
-        const height = heightStr ? parseFloat(heightStr) : null;
+        const height = parseHeight(heightStr);
 
-        let tempHigh = null, tempLow = null, humidityHigh = null, humidityLow = null, vpd = null;
-        if (environment) {
-            const tempMatch = environment.match(/temp[:\s]*(\d+)[-–]?(\d+)?/i);
-            const rhMatch = environment.match(/rh[:\s]*(\d+)[-–]?(\d+)?/i) || environment.match(/humidity[:\s]*(\d+)[-–]?(\d+)?/i);
-            const vpdMatch = environment.match(/vpd[:\s]*([0-9.]+)/i);
+        const env = parseEnvironment(environment);
+        const feed = parseFeeding(feeding);
 
-            if (tempMatch) {
-                tempHigh = parseFloat(tempMatch[2] || tempMatch[1]);
-                tempLow = parseFloat(tempMatch[1]);
-            }
-            if (rhMatch) {
-                humidityHigh = parseFloat(rhMatch[2] || rhMatch[1]);
-                humidityLow = parseFloat(rhMatch[1]);
-            }
-            if (vpdMatch) {
-                vpd = parseFloat(vpdMatch[1]);
-            }
-        }
-
-        let phValue = null, ecValue = null, waterAmount = null;
-        if (feeding) {
-            const phMatch = feeding.match(/ph[:\s]*([0-9.]+)/i);
-            const ecMatch = feeding.match(/ec[:\s]*([0-9.]+)/i);
-            const galMatch = feeding.match(/([0-9.]+)\s*gal/i);
-
-            if (phMatch) phValue = parseFloat(phMatch[1]);
-            if (ecMatch) ecValue = parseFloat(ecMatch[1]);
-            if (galMatch) waterAmount = galMatch[0];
-        }
-
-        await pool.execute(
+        // entry_text = the notes; the raw feeding text (amount, nutrients, EC) goes to nutrients_used.
+        // created_at dates the entry.
+        const [entryResult] = await pool.execute(
             `INSERT INTO journal_entries
-            (journal_id, day_number, entry_date, stage, notes, temp_high, temp_low, humidity_high, humidity_low, vpd, ph_value, ec_value, water_amount, nutrients_used, height_cm)
-            VALUES (?, ?, CURDATE(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-            [journalId, dayNumber, journal[0].current_stage, notes, tempHigh, tempLow, humidityHigh, humidityLow, vpd, phValue, ecValue, waterAmount, feeding, height]
+            (journal_id, day_number, stage, entry_text, temp_high, temp_low, humidity_high, humidity_low, vpd,
+             ph_in, ec_ppm, watered, nutrients_used, height_cm)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [journalId, dayNumber, entryStageFor(journal[0].current_stage), notes,
+             env.tempHigh, env.tempLow, env.humidityHigh, env.humidityLow, env.vpd,
+             feed.phIn, feed.ecPpm, feed.watered, feeding, height]
         );
+        const entryId = entryResult.insertId;
 
         await pool.execute('UPDATE grow_journals SET updated_at = NOW() WHERE id = ?', [journalId]);
 
-        const stageInfo = STAGES[journal[0].current_stage];
+        const stage = stageInfo(journal[0].current_stage);
         const embed = new EmbedBuilder()
-            .setColor(stageInfo.color)
-            .setTitle(`${stageInfo.emoji} Day ${dayNumber} Logged!`)
+            .setColor(stage.color)
+            .setTitle(`${stage.emoji} Day ${dayNumber} Logged!`)
             .setDescription(`**${journal[0].title}** - ${journal[0].strain_name}`)
             .addFields(
                 { name: 'Notes', value: notes.substring(0, 1024), inline: false }
@@ -237,13 +287,19 @@ export async function handleLog(interaction) {
         embed.setFooter({ text: 'Attach photos in your next message (60 sec timeout)' });
 
         await modalSubmit.editReply({ embeds: [embed] });
+        await shareJournalUpdate(modalSubmit, journal[0], embed);
 
         const photoPrompt = await modalSubmit.followUp({
             content: 'Upload photos for this log entry (up to 4 images) or type `skip` to skip.',
             ephemeral: true
         });
 
-        const messageFilter = (m) => m.author.id === interaction.user.id;
+        // Only the user's image uploads (or "skip") are taken — and deleted — so ordinary chat
+        // in the same minute isn't swallowed.
+        const messageFilter = (m) => m.author.id === interaction.user.id && (
+            m.content.trim().toLowerCase() === 'skip' ||
+            m.attachments.some(a => a.contentType?.startsWith('image/'))
+        );
         const collector = interaction.channel?.createMessageCollector({
             filter: messageFilter,
             time: 60000,
@@ -253,7 +309,7 @@ export async function handleLog(interaction) {
         const photos = [];
 
         collector?.on('collect', async (message) => {
-            if (message.content.toLowerCase() === 'skip') {
+            if (message.content.trim().toLowerCase() === 'skip') {
                 collector.stop('skipped');
                 return;
             }
@@ -268,23 +324,19 @@ export async function handleLog(interaction) {
         });
 
         collector?.on('end', async () => {
-            if (photos.length > 0) {
-                const [entries] = await pool.execute(
-                    'SELECT id FROM journal_entries WHERE journal_id = ? ORDER BY id DESC LIMIT 1',
-                    [journalId]
+            if (photos.length === 0) return;
+            try {
+                await pool.execute(
+                    'UPDATE journal_entries SET photo_urls = ? WHERE id = ?',
+                    [JSON.stringify(photos), entryId]
                 );
-
-                if (entries.length > 0) {
-                    await pool.execute(
-                        'UPDATE journal_entries SET photo_urls = ? WHERE id = ?',
-                        [JSON.stringify(photos), entries[0].id]
-                    );
-                }
 
                 await modalSubmit.followUp({
                     content: ` ${photos.length} photo(s) added to your log entry!`,
                     ephemeral: true
                 });
+            } catch (error) {
+                logger.error('[Journal] Failed to attach photos to entry', { journalId, entryId, error: error.message });
             }
         });
 
@@ -312,8 +364,8 @@ export async function handleList(interaction) {
                 (SELECT COUNT(*) FROM journal_entries WHERE journal_id = gj.id) as entry_count,
                 DATEDIFF(CURDATE(), gj.start_date) + 1 as days_running
          FROM grow_journals gj
-         WHERE gj.user_id = ? ${isOwnJournals ? '' : 'AND gj.is_public = TRUE'}
-         ORDER BY gj.is_active DESC, gj.updated_at DESC
+         WHERE gj.user_id = ? ${isOwnJournals ? '' : 'AND gj.is_public = 1'}
+         ORDER BY (gj.status = 'active') DESC, gj.updated_at DESC
          LIMIT 10`,
         [targetUser.id]
     );
@@ -334,10 +386,10 @@ export async function handleList(interaction) {
 
     let description = '';
     for (const j of journals) {
-        const stageInfo = STAGES[j.current_stage];
-        const status = j.is_active ? '' : '';
+        const stage = stageInfo(j.current_stage);
+        const status = j.status === 'active' ? '' : '';
         description += `**${status} #${j.id}: ${j.title}**\n`;
-        description += `${stageInfo.emoji} ${j.strain_name} | ${MEDIUMS[j.grow_medium]} | Day ${j.days_running}\n`;
+        description += `${stage.emoji} ${j.strain_name} | ${MEDIUMS[j.grow_medium] || j.grow_medium} | Day ${j.days_running}\n`;
         description += `${j.entry_count} entries | ${j.is_public ? 'Public' : 'Private'}\n\n`;
     }
 
@@ -368,7 +420,7 @@ export async function handleView(interaction) {
     }
 
     const [entries] = await pool.execute(
-        `SELECT * FROM journal_entries WHERE journal_id = ? ORDER BY entry_date DESC LIMIT 5`,
+        `SELECT * FROM journal_entries WHERE journal_id = ? ORDER BY created_at DESC, id DESC LIMIT 5`,
         [journalId]
     );
 
@@ -377,22 +429,30 @@ export async function handleView(interaction) {
         [journalId]
     );
 
-    const stageInfo = STAGES[journal.current_stage];
+    const [[entryCount]] = await pool.execute(
+        'SELECT COUNT(*) AS total FROM journal_entries WHERE journal_id = ?',
+        [journalId]
+    );
+
+    const stage = stageInfo(journal.current_stage);
     const startDate = new Date(journal.start_date);
     const today = new Date();
     const daysRunning = Math.floor((today - startDate) / (1000 * 60 * 60 * 24)) + 1;
+    const environment = journal.grow_environment
+        ? journal.grow_environment.charAt(0).toUpperCase() + journal.grow_environment.slice(1)
+        : 'Not set';
 
     const embed = new EmbedBuilder()
-        .setColor(stageInfo.color)
-        .setTitle(`${stageInfo.emoji} ${journal.title}`)
+        .setColor(stage.color)
+        .setTitle(`${stage.emoji} ${journal.title}`)
         .setDescription(`**${journal.strain_name}**${journal.breeder ? ` by ${journal.breeder}` : ''}`)
         .addFields(
-            { name: 'Stage', value: stageInfo.name, inline: true },
+            { name: 'Stage', value: stage.name, inline: true },
             { name: 'Day', value: `${daysRunning}`, inline: true },
             { name: 'Started', value: `<t:${Math.floor(startDate.getTime() / 1000)}:D>`, inline: true },
-            { name: 'Medium', value: MEDIUMS[journal.grow_medium], inline: true },
-            { name: 'Type', value: journal.grow_type.charAt(0).toUpperCase() + journal.grow_type.slice(1), inline: true },
-            { name: 'Entries', value: `${entries.length}+`, inline: true }
+            { name: 'Medium', value: MEDIUMS[journal.grow_medium] || journal.grow_medium || 'Unknown', inline: true },
+            { name: 'Type', value: environment, inline: true },
+            { name: 'Entries', value: `${entryCount.total}`, inline: true }
         )
         .setTimestamp();
 
@@ -405,8 +465,9 @@ export async function handleView(interaction) {
 
     if (entries.length > 0) {
         const latest = entries[0];
-        let entryPreview = latest.notes.substring(0, 200);
-        if (latest.notes.length > 200) entryPreview += '...';
+        const latestText = latest.entry_text || '(no notes)';
+        let entryPreview = latestText.substring(0, 200);
+        if (latestText.length > 200) entryPreview += '...';
         embed.addFields({
             name: `Latest Entry (Day ${latest.day_number})`,
             value: entryPreview,
@@ -419,13 +480,11 @@ export async function handleView(interaction) {
             new ButtonBuilder()
                 .setCustomId(`journal_entries_${journalId}`)
                 .setLabel('View All Entries')
-                .setStyle(ButtonStyle.Primary)
-                .setEmoji(''),
+                .setStyle(ButtonStyle.Primary),
             new ButtonBuilder()
                 .setCustomId(`journal_photos_${journalId}`)
                 .setLabel('Photo Gallery')
                 .setStyle(ButtonStyle.Secondary)
-                .setEmoji('')
         );
 
     await interaction.editReply({ embeds: [embed], components: [row] });
@@ -451,18 +510,19 @@ async function showEntries(interaction, journal, entries) {
         });
     }
 
-    const stageInfo = STAGES[journal.current_stage];
+    const stage = stageInfo(journal.current_stage);
     const embed = new EmbedBuilder()
-        .setColor(stageInfo.color)
+        .setColor(stage.color)
         .setTitle(` Recent Entries - ${journal.title}`)
         .setTimestamp();
 
     let description = '';
     for (const entry of entries.slice(0, 5)) {
-        const entryStage = STAGES[entry.stage];
+        const entryStage = stageInfo(entry.stage);
+        const text = entry.entry_text || '(no notes)';
         description += `**Day ${entry.day_number}** (${entryStage.emoji} ${entryStage.name})\n`;
-        description += entry.notes.substring(0, 150);
-        if (entry.notes.length > 150) description += '...';
+        description += text.substring(0, 150);
+        if (text.length > 150) description += '...';
         description += '\n\n';
     }
 
@@ -473,7 +533,7 @@ async function showEntries(interaction, journal, entries) {
 
 async function showPhotos(interaction, journalId) {
     const [entries] = await pool.execute(
-        `SELECT day_number, photo_urls FROM journal_entries WHERE journal_id = ? AND photo_urls IS NOT NULL ORDER BY entry_date DESC LIMIT 10`,
+        `SELECT day_number, photo_urls FROM journal_entries WHERE journal_id = ? AND photo_urls IS NOT NULL ORDER BY created_at DESC, id DESC LIMIT 10`,
         [journalId]
     );
 
@@ -520,16 +580,18 @@ export async function handleStage(interaction) {
         });
     }
 
+    // 'Complete' is the same end state /grow journal complete records, so it closes the journal too;
+    // any other stage means the grow is (still or again) running.
     await pool.execute(
-        'UPDATE grow_journals SET current_stage = ?, updated_at = NOW() WHERE id = ?',
-        [newStage, journalId]
+        `UPDATE grow_journals SET current_stage = ?, status = ?, updated_at = NOW() WHERE id = ?`,
+        [newStage, newStage === 'complete' ? 'harvested' : 'active', journalId]
     );
 
-    const stageInfo = STAGES[newStage];
+    const stage = stageInfo(newStage);
     const embed = new EmbedBuilder()
-        .setColor(stageInfo.color)
-        .setTitle(`${stageInfo.emoji} Stage Updated!`)
-        .setDescription(`**${journal[0].title}** is now in **${stageInfo.name}** stage.`)
+        .setColor(stage.color)
+        .setTitle(`${stage.emoji} Stage Updated!`)
+        .setDescription(`**${journal[0].title}** is now in **${stage.name}** stage.`)
         .setTimestamp();
 
     await interaction.reply({ embeds: [embed] });
@@ -545,6 +607,10 @@ export async function handleMilestone(interaction) {
     const journalId = interaction.options.getInteger('journal_id');
     const milestoneType = interaction.options.getString('type');
     const notes = interaction.options.getString('notes') || null;
+
+    if (notes && notes.length > 512) {
+        return interaction.reply({ content: 'Milestone notes must be 512 characters or fewer.', ephemeral: true });
+    }
 
     const [journal] = await pool.execute(
         'SELECT * FROM grow_journals WHERE id = ? AND user_id = ?',
@@ -579,7 +645,7 @@ export async function handleMilestone(interaction) {
     };
 
     const embed = new EmbedBuilder()
-        .setColor('#FFD700')
+        .setColor(themeColor(interaction.guildId, 'warning'))
         .setTitle('Milestone Recorded!')
         .setDescription(`**${milestoneNames[milestoneType]}**\n${journal[0].title}`)
         .setTimestamp();
@@ -589,6 +655,7 @@ export async function handleMilestone(interaction) {
     }
 
     await interaction.reply({ embeds: [embed] });
+    await shareJournalUpdate(interaction, journal[0], embed);
 }
 
 export async function handlePrivacy(interaction) {
@@ -610,7 +677,7 @@ export async function handlePrivacy(interaction) {
 
     await pool.execute(
         'UPDATE grow_journals SET is_public = ? WHERE id = ?',
-        [newPrivacy, journalId]
+        [newPrivacy ? 1 : 0, journalId]
     );
 
     await interaction.reply({
@@ -623,6 +690,16 @@ export async function handleComplete(interaction) {
     const journalId = interaction.options.getInteger('journal_id');
     const wetWeight = interaction.options.getString('wet_weight') || null;
     const dryWeight = interaction.options.getString('dry_weight') || null;
+
+    // grow_harvest_stats stores grams (wet_weight_grams / dry_weight_grams).
+    const wet = parseWeightGrams(wetWeight);
+    const dry = parseWeightGrams(dryWeight);
+    if (!wet.ok || !dry.ok) {
+        return interaction.reply({
+            content: 'Weights need a number with an optional unit, e.g. `500g`, `1.2kg`, `3 oz` or `1 lb`.',
+            ephemeral: true
+        });
+    }
 
     const [journal] = await pool.execute(
         'SELECT * FROM grow_journals WHERE id = ? AND user_id = ?',
@@ -637,47 +714,66 @@ export async function handleComplete(interaction) {
     }
 
     await pool.execute(
-        `UPDATE grow_journals SET current_stage = 'complete', is_active = FALSE, updated_at = NOW() WHERE id = ?`,
+        `UPDATE grow_journals SET current_stage = 'complete', status = 'harvested', updated_at = NOW() WHERE id = ?`,
         [journalId]
     );
-
-    if (wetWeight || dryWeight) {
-        await pool.execute(
-            `INSERT INTO grow_harvest_stats (guild_id, user_id, journal_id, strain_name, wet_weight, dry_weight)
-            VALUES (?, ?, ?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE wet_weight = VALUES(wet_weight), dry_weight = VALUES(dry_weight)`,
-            [interaction.guild.id, interaction.user.id, journalId, journal[0].strain_name, wetWeight, dryWeight]
-        );
-    }
 
     const startDate = new Date(journal[0].start_date);
     const daysTotal = Math.floor((new Date() - startDate) / (1000 * 60 * 60 * 24)) + 1;
 
+    if (wet.grams !== null || dry.grams !== null) {
+        // One harvest row per journal: running complete again (e.g. to add the dry weight after
+        // the cure) updates it instead of logging a second harvest.
+        const [existingStats] = await pool.execute(
+            'SELECT id FROM grow_harvest_stats WHERE journal_id = ? LIMIT 1',
+            [journalId]
+        );
+        if (existingStats.length > 0) {
+            await pool.execute(
+                `UPDATE grow_harvest_stats
+                    SET wet_weight_grams = COALESCE(?, wet_weight_grams),
+                        dry_weight_grams = COALESCE(?, dry_weight_grams),
+                        total_days = ?
+                  WHERE id = ?`,
+                [wet.grams, dry.grams, daysTotal, existingStats[0].id]
+            );
+        } else {
+            await pool.execute(
+                `INSERT INTO grow_harvest_stats
+                    (guild_id, user_id, journal_id, strain_name, grow_medium, total_days, wet_weight_grams, dry_weight_grams)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                [journal[0].guild_id, interaction.user.id, journalId, journal[0].strain_name,
+                 journal[0].grow_medium, daysTotal, wet.grams, dry.grams]
+            );
+        }
+    }
+
     const embed = new EmbedBuilder()
-        .setColor('#00FF00')
+        .setColor(themeColor(interaction.guildId, 'success'))
         .setTitle(' Grow Complete!')
         .setDescription(`Congratulations! **${journal[0].title}** has been completed.`)
         .addFields(
             { name: 'Strain', value: journal[0].strain_name, inline: true },
             { name: 'Total Days', value: `${daysTotal}`, inline: true },
-            { name: 'Medium', value: MEDIUMS[journal[0].grow_medium], inline: true }
+            { name: 'Medium', value: MEDIUMS[journal[0].grow_medium] || journal[0].grow_medium || 'Unknown', inline: true }
         )
         .setTimestamp();
 
-    if (wetWeight) {
-        embed.addFields({ name: 'Wet Weight', value: wetWeight, inline: true });
+    if (wet.grams !== null) {
+        embed.addFields({ name: 'Wet Weight', value: `${wet.grams} g`, inline: true });
     }
-    if (dryWeight) {
-        embed.addFields({ name: 'Dry Weight', value: dryWeight, inline: true });
+    if (dry.grams !== null) {
+        embed.addFields({ name: 'Dry Weight', value: `${dry.grams} g`, inline: true });
     }
 
     await interaction.reply({ embeds: [embed] });
+    await shareJournalUpdate(interaction, journal[0], embed);
 
     logger.info('[Journal] Grow completed', {
         journalId,
         userId: interaction.user.id,
         daysTotal,
-        wetWeight,
-        dryWeight
+        wetGrams: wet.grams,
+        dryGrams: dry.grams
     });
 }

@@ -1,0 +1,110 @@
+<%#
+  "Commands" at the end of a game page (the MEE6 plugin-page pattern): the slash commands the feature
+  adds, read from the bot's own command definitions so the list cannot drift from Discord.
+    include('_game-commands', { gkCommands: [ { cmd: 'economy', groups: ['earn', 'bank'] }, { cmd: 'steam' } ],
+                                gkCmdNote: 'optional sentence under the title' })
+  `groups` keeps only those subcommand groups (and drops loose subcommands); without it, everything.
+  `exclude` drops loose subcommands by name (ones the page already lists itself). `as` shows the command
+  under the path members type ({ cmd: 'owo2', as: 'owo' }). Optional gkCmdTitle.
+  Over 15 commands a search box is shown; over 40 the groups fold up (search opens the ones that match).
+%><%
+const _gkSpecs = (typeof gkCommands !== 'undefined' && Array.isArray(gkCommands)) ? gkCommands : [];
+const _gkClient = guild && guild.client;
+const _gkStaff = /\s*(\[admin\]|\(admin only\)|\(manage server\)|\(staff(?: only)?\)|\(host or server manager\))\s*/ig;
+const _gkClean = (s) => String(s || '').replace(/^[\p{Extended_Pictographic}️‍\s]+/u, '').replace(_gkStaff, ' ').replace(/\s{2,}/g, ' ').trim();
+const _gkGroups = [];
+for (const spec of _gkSpecs) {
+    let json = null;
+    try {
+        const c = _gkClient && _gkClient.commands && _gkClient.commands.get(spec.cmd);
+        const d = c && c.data;
+        json = d ? (typeof d.toJSON === 'function' ? d.toJSON() : d) : null;
+    } catch (e) { json = null; }
+    if (!json) continue;
+    // `as`: the path members type when it differs from the command's own name (a text tree merged into
+    // another, core/command-registration.js TEXT_MERGE: owo2 -> 'owo', owo-profile -> 'owo profile').
+    const base = '/' + (spec.as ? String(spec.as) : json.name);
+    const loose = { label: base, rows: [] };
+    const nested = [];
+    (json.options || []).forEach((o) => {
+        if (o.type === 1 && !spec.groups && !(spec.exclude || []).includes(o.name)) {
+            loose.rows.push({ name: base + ' ' + o.name, desc: o.description });
+        } else if (o.type === 2 && (!spec.groups || spec.groups.includes(o.name))) {
+            const g = { label: base + ' ' + o.name, rows: [] };
+            (o.options || []).forEach((s) => { if (s.type === 1) g.rows.push({ name: g.label + ' ' + s.name, desc: s.description }); });
+            if (g.rows.length) nested.push(g);
+        }
+    });
+    if (!(json.options || []).some((o) => o.type === 1 || o.type === 2)) loose.rows.push({ name: base, desc: json.description });
+    if (loose.rows.length) _gkGroups.push(loose);
+    nested.forEach((g) => _gkGroups.push(g));
+}
+_gkGroups.forEach((g) => g.rows.forEach((r) => { r.staff = _gkStaff.test(r.desc || ''); _gkStaff.lastIndex = 0; r.desc = _gkClean(r.desc); }));
+const _gkTotal = _gkGroups.reduce((n, g) => n + g.rows.length, 0);
+const _gkFold = _gkTotal > 40;
+const _gkNote = (typeof gkCmdNote !== 'undefined' && gkCmdNote) ? gkCmdNote : null;
+const _gkTitle = (typeof gkCmdTitle !== 'undefined' && gkCmdTitle) ? gkCmdTitle : 'Commands';
+%><% if (_gkTotal) { %>
+<section class="cf-section gk-cmds" aria-labelledby="gk-cmds-title" data-gk-cmds>
+    <header class="cf-section-head">
+        <div>
+            <h2 class="cf-section-title" id="gk-cmds-title"><%= _gkTitle %> <span class="gk-cmd-count"><%= _gkTotal %></span></h2>
+            <p class="cf-section-desc"><%= _gkNote || 'What members type in Discord. Commands marked Staff need a moderator or admin.' %></p>
+        </div>
+        <% if (_gkTotal > 15) { %>
+        <div class="cf-section-actions">
+            <label class="cf-search">
+                <i class="fas fa-search" aria-hidden="true"></i>
+                <input type="search" class="form-control" placeholder="Search commands" aria-label="Search commands" autocomplete="off" data-gk-cmd-search data-no-savebar>
+            </label>
+        </div>
+        <% } %>
+    </header>
+    <div class="cf-rows">
+        <% _gkGroups.forEach((g) => { %>
+            <% if (_gkFold) { %>
+            <details class="cf-expand gk-cmd-group" data-gk-group>
+                <summary><span><code class="gk-cmd-name"><%= g.label %></code><span class="gk-cmd-count"><%= g.rows.length %></span></span></summary>
+                <div class="cf-expand-body cf-list">
+            <% } else if (_gkGroups.length > 1) { %>
+            <div class="cf-rows-head" data-gk-group-head><%= g.label %></div>
+            <% } %>
+            <% g.rows.forEach((r) => { %>
+                <div class="cf-list-item gk-cmd" data-gk-text="<%= (r.name + ' ' + r.desc).toLowerCase() %>">
+                    <div class="cf-list-main"><code class="gk-cmd-name"><%= r.name %></code><span class="gk-cmd-desc"><%= r.desc %></span></div>
+                    <% if (r.staff) { %><span class="cf-pill">Staff</span><% } %>
+                </div>
+            <% }) %>
+            <% if (_gkFold) { %></div></details><% } %>
+        <% }) %>
+        <div class="cf-state cf-state--compact" data-gk-cmd-none hidden><p class="cf-state-text">No commands match.</p></div>
+    </div>
+</section>
+<script>
+(function () {
+    var box = document.querySelector('[data-gk-cmds]');
+    var search = box && box.querySelector('[data-gk-cmd-search]');
+    if (!search) return;
+    search.addEventListener('input', function () {
+        var q = search.value.trim().toLowerCase();
+        var shown = 0;
+        box.querySelectorAll('.gk-cmd').forEach(function (row) {
+            var hit = !q || row.getAttribute('data-gk-text').indexOf(q) !== -1;
+            row.hidden = !hit;
+            if (hit) shown++;
+        });
+        box.querySelectorAll('[data-gk-group]').forEach(function (g) {
+            var any = g.querySelector('.gk-cmd:not([hidden])');
+            g.hidden = !any;
+            if (q) g.open = !!any;
+        });
+        box.querySelectorAll('[data-gk-group-head]').forEach(function (h) {
+            var n = h.nextElementSibling, any = false;
+            while (n && n.classList.contains('gk-cmd')) { if (!n.hidden) any = true; n = n.nextElementSibling; }
+            h.hidden = !any;
+        });
+        box.querySelector('[data-gk-cmd-none]').hidden = shown > 0;
+    });
+})();
+</script>
+<% } %>

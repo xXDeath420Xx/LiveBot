@@ -1,0 +1,45 @@
+/* CertiFried: a Style (variant) for OBS Studio's Yami theme, in CertiFried's dark colours.
+ * Installed by CertiFried Studio into %APPDATA%\obs-studio\themes. Choose it in OBS under
+ * Settings, Appearance: Theme "Yami", Style "CertiFried". Needs OBS 30.2 or later.
+ * Built as a variant of Yami, as OBS recommends, so OBS updates keep working. Uses the system font. */
+
+@OBSThemeMeta {
+    name: 'CertiFried';
+    id: 'com.certifried.studio.Dark';
+    extends: 'com.obsproject.Yami';
+    author: 'CertiFried';
+    dark: 'true';
+}
+
+@OBSThemeVars {
+    --grey1: #5a5e68;
+    --grey2: #4a4e57;
+    --grey3: #3a3d44;
+    --grey4: #2b2e34;
+    --grey5: #23262b;
+    --grey6: #1b1d21;
+    --grey7: #151619;
+    --grey8: #0e0f11;
+
+    --primary: #4a7a10;
+    --primary_light: #5c8f1a;
+    --primary_lighter: #b4e04f;
+    --primary_dark: #3d6609;
+    --primary_darker: #2f5007;
+
+    --bg_window: var(--grey7);
+    --bg_base: var(--grey6);
+    --bg_preview: var(--grey8);
+
+    --text: #ececef;
+    --text_light: #ececef;
+    --text_muted: #8a8c95;
+
+    --border_color: #25272c;
+    --input_bg: var(--grey4);
+    --input_border: var(--grey3);
+    --input_border_hover: var(--grey1);
+    --input_border_focus: #b4e04f;
+
+    --highlight_color: #b4e04f;
+}

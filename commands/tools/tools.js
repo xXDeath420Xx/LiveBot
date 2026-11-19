@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import * as generateHandlers from './tools-generate-handler.js';
 import * as convertHandlers from './tools-convert-handler.js';
 import * as colorHandlers from './tools-color-handler.js';
@@ -6,6 +6,13 @@ import * as qrHandlers from './tools-qr-handler.js';
 import * as translateHandlers from './tools-translate-handler.js';
 import * as codeHandlers from './tools-code-handler.js';
 import * as ttsHandlers from './tools-tts-handler.js';
+import { themeColor } from '../../core/guild-theme.js';
+import { checkUrl } from '../../core/message-threats.js';
+import { rememberCheck } from '../../core/domain-reports.js';
+
+// /tools checkurl: 20 checks a minute per user (Hashbot's public rate), in memory.
+const CHECKURL_PER_MINUTE = 20;
+const checkurlUses = new Map();   // userId -> [ms]
 
 export default {
     category: 'tools',
@@ -403,6 +410,19 @@ export default {
                 .addStringOption(opt =>
                     opt.setName('message').setDescription('The AFK message to display when mentioned (leave empty to remove AFK)')
                 )
+        )
+        .addSubcommand(sub =>
+            sub.setName('afk-list')
+                .setDescription('Show everyone currently AFK in this server')
+        )
+
+        // ── URL checker (core/message-threats.js checkUrl) ──
+        .addSubcommand(sub =>
+            sub.setName('checkurl')
+                .setDescription('Check a link against the phishing list, safe list, link policy and obfuscation check')
+                .addStringOption(opt =>
+                    opt.setName('url').setDescription('The link or domain to check').setRequired(true).setMaxLength(500)
+                )
         ),
 
     async autocomplete(interaction) {
@@ -420,6 +440,40 @@ export default {
             // Handle flat subcommands (no group)
             if (!group) {
                 switch (subcommand) {
+                    case 'checkurl': {
+                        const now = Date.now();
+                        const uses = (checkurlUses.get(interaction.user.id) || []).filter(t => now - t < 60_000);
+                        if (uses.length >= CHECKURL_PER_MINUTE) {
+                            return interaction.reply({ content: `You can check ${CHECKURL_PER_MINUTE} links a minute. Try again shortly.`, ephemeral: true });
+                        }
+                        uses.push(now);
+                        checkurlUses.set(interaction.user.id, uses);
+                        if (checkurlUses.size > 5000) for (const [k, v] of checkurlUses) if (!v.some(t => now - t < 60_000)) checkurlUses.delete(k);
+
+                        await interaction.deferReply({ ephemeral: true });
+                        const result = await checkUrl(interaction.options.getString('url'), interaction.guild?.id ?? null);
+                        const colour = { malicious: 'danger', suspicious: 'warning', safe: 'success', unknown: 'info' }[result.verdict] || 'info';
+                        const icon = { malicious: '⛔', suspicious: '⚠️', safe: '✅', unknown: '❔' }[result.verdict] || '❔';
+                        const embed = new EmbedBuilder()
+                            .setColor(themeColor(interaction.guild?.id, colour))
+                            .setTitle(`${icon} ${result.title}`.slice(0, 256))
+                            .setDescription(result.reasons.map(r => `• ${r}`).join('\n').slice(0, 4000) || 'Nothing to report.')
+                            .setFooter({ text: result.listSize ? `Phishing list: ${result.listSize.toLocaleString()} domains` : 'Phishing list not loaded on this bot' });
+                        // Report a phishing link the list does not have yet, or dispute a block (core/domain-reports.js;
+                        // the bot owner reviews them and the reporter is told the outcome by DM).
+                        const components = [];
+                        if (result.host && interaction.guild) {
+                            const token = rememberCheck(result.host, interaction.user.id);
+                            const row = new ActionRowBuilder();
+                            if (result.verdict === 'malicious' && result.listed) {
+                                row.addComponents(new ButtonBuilder().setCustomId(`domrep_dispute:${token}`).setLabel('Dispute this block').setEmoji('⚖️').setStyle(ButtonStyle.Secondary));
+                            } else if (result.verdict !== 'safe') {
+                                row.addComponents(new ButtonBuilder().setCustomId(`domrep_report:${token}`).setLabel('Report as phishing').setEmoji('🚩').setStyle(ButtonStyle.Danger));
+                            }
+                            if (row.components.length) components.push(row);
+                        }
+                        return interaction.editReply({ embeds: [embed], components });
+                    }
                     case 'afk': {
                         const message = interaction.options.getString('message');
                         const afkManager = interaction.client.afkManager;
@@ -432,23 +486,52 @@ export default {
                         if (!message) {
                             const isAFK = afkManager.isAFK(userId);
                             if (isAFK) {
-                                const success = await afkManager.removeAFK(userId, guildId);
-                                return interaction.editReply({ content: success ? 'Your AFK status has been removed.' : 'Failed to remove your AFK status. Please try again.' });
+                                const success = await afkManager.removeAFK(userId, guildId, interaction.member);
+                                return interaction.editReply({ content: success ? '✅ Your AFK status has been removed.' : 'Failed to remove your AFK status. Please try again.' });
                             }
                             return interaction.editReply({ content: 'You are not currently AFK. Use this command with a message to set yourself as AFK.' });
                         }
 
-                        const success = await afkManager.setAFK(userId, guildId, message);
-                        if (success) {
+                        // "Let members set an AFK status" on the Colour roles & AFK page. Clearing a status
+                        // (no message, above) still works while it is off.
+                        const { getConfig } = await import('../../core/feature-config.js');
+                        const afkCfg = await getConfig('colorroles', guildId).catch(() => ({}));
+                        if (!colorHandlers.colorrolesSwitchOn(afkCfg, 'afk_enabled')) {
+                            return interaction.editReply({ content: 'AFK statuses are turned off in this server.' });
+                        }
+
+                        const result = await afkManager.setAFK(userId, guildId, message, interaction.member);
+                        if (result.ok) {
                             const embed = new EmbedBuilder()
-                                .setColor('#FFA500')
-                                .setTitle('AFK Status Set')
-                                .setDescription(`You are now AFK with the message:\n\n*${message}*`)
-                                .setFooter({ text: 'Send any message to remove your AFK status' })
+                                .setColor(themeColor(interaction.guildId, 'warning'))
+                                .setTitle('💤 You are now AFK')
+                                .setDescription(`*${message}*`)
+                                .setFooter({ text: result.nickChanged
+                                    ? 'Tagged [AFK] in the member list · send any message to return'
+                                    : 'Send any message to return' })
                                 .setTimestamp();
                             return interaction.editReply({ embeds: [embed] });
                         }
                         return interaction.editReply({ content: 'Failed to set your AFK status. Please try again.' });
+                    }
+                    case 'afk-list': {
+                        const afkManager = interaction.client.afkManager;
+                        if (!afkManager) return interaction.reply({ content: 'AFK system is not available.', ephemeral: true });
+                        const list = afkManager.listAFK(interaction.guild.id);
+                        if (!list.length) {
+                            return interaction.reply({ content: '🟢 Nobody is AFK in this server right now.', ephemeral: true });
+                        }
+                        const lines = list.slice(0, 25).map(a => {
+                            const mins = Math.floor((Date.now() - a.timestamp.getTime()) / 60000);
+                            const ago = mins < 1 ? 'just now' : mins < 60 ? `${mins}m` : mins < 1440 ? `${Math.floor(mins / 60)}h` : `${Math.floor(mins / 1440)}d`;
+                            return `• <@${a.userId}> — *${a.message}* (${ago})`;
+                        });
+                        const embed = new EmbedBuilder()
+                            .setColor(themeColor(interaction.guildId, 'warning'))
+                            .setTitle(`💤 AFK in ${interaction.guild.name}`)
+                            .setDescription(lines.join('\n'))
+                            .setFooter({ text: `${list.length} member${list.length === 1 ? '' : 's'} away` });
+                        return interaction.reply({ embeds: [embed], allowedMentions: { parse: [] } });
                     }
                 }
                 return;

@@ -1,0 +1,210 @@
+<%#
+  GET /stream/bot/import (dashboard/routes/stream-bot-import.js). Locals: channels, history [{ id, sources, fileNames, summary,
+  createdAt }], rewards [{ id, title, kind, cost, costUnit, prompt, enabled, createdBy, recreated, source }], categories, canRecreate,
+  words [{ id, source, words, wasOn, channels: [{ id, channelId, name, pending, applied }] }] (saved banned word lists, H-742),
+  uploadMb, importData (page JSON: { preview, categories }). The preview, the import and the reward buttons run in
+  /js/stream-bot-import.js, which builds every element with createElement and textContent.
+%>
+<%- include('_head', { pageTitle: 'Import', active: 'import' }) %>
+<%
+  const _when = (iso) => iso ? new Date(iso).toISOString().slice(0, 16).replace('T', ' ') + ' UTC' : '';
+  const _src = { firebot: 'Firebot', streamerbot: 'Streamer.bot' };
+  const _sources = (s) => String(s || '').split(',').filter(Boolean).map((x) => _src[x] || x).join(' and ');
+  const _total = (sum) => { let n = 0; for (const c of Object.values((sum && sum.counts) || {})) n += (c.created || 0); return n; };
+%>
+<div class="cf-page-head">
+    <div>
+        <h1 class="cf-page-title">Import</h1>
+        <p class="cf-page-sub">Bring your commands, events, timers, counters and rewards over from Firebot or Streamer.bot. Everything arrives switched off, so nothing answers chat twice while your old bot is still running. Turn things on when you switch over.</p>
+    </div>
+</div>
+<%- include('_tabs', { active: 'import' }) %>
+
+<div class="cf-notice" id="sbi-msg" role="status" aria-live="polite" hidden><div class="cf-notice-body" id="sbi-msg-text"></div></div>
+
+<section class="cf-section" aria-labelledby="sbi-files-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbi-files-title">Which file to upload</h2>
+        <p class="cf-section-desc">Upload one file at a time. If you used both apps, upload one of each before you import; they are combined in one preview.</p></div></header>
+    <div class="cf-rows">
+        <details class="cf-expand">
+            <summary>Firebot</summary>
+            <div class="cf-expand-body">
+                <p class="cf-list-body"><span class="cf-em">Whole profile (recommended).</span> In File Explorer, open <code>%APPDATA%\Firebot\v5\profiles\Main</code> (use your profile's name if it is not Main). Select everything in that folder, right-click, then Send to → Compressed (zipped) folder, and upload the zip. Counters, timers, channel point rewards, moderation and viewer stats are only in the profile.</p>
+                <p class="cf-list-body"><span class="cf-em">Setup file.</span> In Firebot, open Settings, then Setups, and create a setup with the commands, events and timers you want. Upload the <code>.firebotsetup</code> file it saves.</p>
+            </div>
+        </details>
+        <details class="cf-expand">
+            <summary>Streamer.bot</summary>
+            <div class="cf-expand-body">
+                <p class="cf-list-body"><span class="cf-em">Whole data folder (recommended).</span> Open the folder that has <code>Streamer.bot.exe</code> in it, right-click the <code>data</code> folder, then Send to → Compressed (zipped) folder, and upload the zip. Commands, channel point rewards, voice commands and timed actions are read from it.</p>
+                <p class="cf-list-body"><span class="cf-em">Import string.</span> On the Actions tab, select the actions, right-click, choose Export, and copy the import string. Paste it in the box below, or upload the <code>.sb</code> file.</p>
+            </div>
+        </details>
+        <div class="cf-row">
+            <div class="cf-row-text"><p class="cf-row-label">What happens to passwords</p>
+                <p class="cf-row-desc">Login files (<code>auth-twitch.json</code>, <code>auth.db</code>) are skipped without being read. Passwords, tokens, keys and webhook addresses are removed before anything is saved, and the result is checked again. Programs and scripts in a zip are never opened. Connect your services again on Connections instead.</p></div>
+        </div>
+    </div>
+</section>
+
+<section class="cf-section" aria-labelledby="sbi-up-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbi-up-title">Upload</h2>
+        <p class="cf-section-desc">A <code>.zip</code>, <code>.firebotsetup</code>, <code>.sb</code> or <code>.json</code> file up to <%= uploadMb %> MB, or a pasted Streamer.bot import string. Nothing is imported until you check the preview and press Import.</p></div></header>
+    <div class="cf-rows">
+        <form id="sbi-form" novalidate>
+            <div class="cf-row">
+                <div class="cf-row-text"><label class="cf-row-label" for="sbi-file">File</label></div>
+                <div class="cf-row-control"><input type="file" id="sbi-file" accept=".zip,.firebotsetup,.json,.sb,.txt,application/zip,application/json,text/plain"></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text"><label class="cf-row-label" for="sbi-text">Or paste an import string</label><p class="cf-row-desc">Streamer.bot only. Leave empty when you upload a file.</p></div>
+                <div class="cf-row-control"><textarea id="sbi-text" rows="3" spellcheck="false" autocomplete="off"></textarea></div>
+            </div>
+            <div class="cf-section-foot">
+                <span class="cf-status-line" id="sbi-up-status" role="status" aria-live="polite"></span>
+                <button type="button" class="btn btn-secondary btn-sm" id="sbi-clear" hidden>Start over</button>
+                <button type="submit" class="btn btn-primary btn-sm">Read file</button>
+            </div>
+        </form>
+    </div>
+</section>
+
+<section class="cf-section" id="sbi-preview" aria-labelledby="sbi-prev-title" hidden>
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbi-prev-title">Preview</h2>
+        <p class="cf-section-desc" id="sbi-prev-desc">What was found, and where each part goes in CertiFried.</p></div></header>
+    <div class="cf-rows">
+        <div class="cf-list" id="sbi-files"></div>
+        <div class="cf-table-wrap">
+            <table class="cf-table cf-table--stack">
+                <caption class="sr-only">What was found, by category</caption>
+                <thead><tr><th scope="col">Import</th><th scope="col">Category</th><th scope="col">As they are</th><th scope="col">With changes</th><th scope="col">Not imported</th></tr></thead>
+                <tbody id="sbi-counts"></tbody>
+            </table>
+        </div>
+        <div class="cf-row" id="sbi-viewers-row" hidden>
+            <div class="cf-row-text"><p class="cf-row-label">Viewer stats</p>
+                <p class="cf-row-desc" id="sbi-viewers-desc"></p></div>
+        </div>
+        <details class="cf-expand" id="sbi-group-as_is"><summary></summary><div class="cf-expand-body"><div class="cf-list"></div></div></details>
+        <details class="cf-expand" id="sbi-group-changed"><summary></summary><div class="cf-expand-body"><div class="cf-list"></div></div></details>
+        <details class="cf-expand" id="sbi-group-skipped"><summary></summary><div class="cf-expand-body"><div class="cf-list"></div></div></details>
+        <details class="cf-expand" id="sbi-gaps"><summary></summary><div class="cf-expand-body">
+            <p class="cf-list-body">Features you used that CertiFried does not have yet, how often, and the phase planned to add them.</p>
+            <div class="cf-table-wrap"><table class="cf-table cf-table--stack"><caption class="sr-only">Features CertiFried does not have yet</caption>
+                <thead><tr><th scope="col">Feature</th><th scope="col">Used</th><th scope="col">Planned</th></tr></thead><tbody></tbody></table></div>
+        </div></details>
+        <details class="cf-expand" id="sbi-connect"><summary></summary><div class="cf-expand-body"><div class="cf-list"></div></div></details>
+        <details class="cf-expand" id="sbi-media"><summary></summary><div class="cf-expand-body">
+            <p class="cf-list-body">Files on your PC that your effects play or show. They are not in the upload. Add sounds on the Sounds tab under the same name, and the imported Play a sound steps will find them.</p>
+            <div class="cf-list"></div>
+        </div></details>
+        <div class="cf-section-foot">
+            <span class="cf-status-line" id="sbi-run-status" role="status" aria-live="polite"></span>
+            <button type="button" class="btn btn-primary btn-sm" id="sbi-run">Import, switched off</button>
+        </div>
+    </div>
+</section>
+
+<section class="cf-section" id="sbi-result" aria-labelledby="sbi-res-title" hidden>
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbi-res-title">Imported</h2>
+        <p class="cf-section-desc">Everything below is switched off. Turn automations on on the Automations tab, Twitch channel commands on the Commands tab, and Kick channel commands and timed messages on your Kick channel's page. Importing the same file again does not create anything twice.</p></div></header>
+    <div class="cf-rows"><div class="cf-list" id="sbi-results"></div></div>
+</section>
+
+<section class="cf-section" aria-labelledby="sbi-rw-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbi-rw-title">Saved channel point rewards</h2>
+        <p class="cf-section-desc">Twitch lets only the app that made a reward change it. Recreating one makes a copy owned by CertiFried, switched off; imported automations for the old reward are moved to the copy. Delete or rename the old one in Firebot or Streamer.bot first, because two rewards cannot share a title.</p></div>
+        <div class="cf-section-actions"><span class="cf-status-line" id="sbi-rw-status" role="status" aria-live="polite"></span></div></header>
+    <div class="cf-rows">
+        <% if (!canRecreate && rewards.some((r) => r.kind === 'channel_points')) { %>
+        <div class="cf-row"><div class="cf-row-text"><p class="cf-row-desc">To recreate rewards, connect Twitch on <a href="/stream/bot/connections">Connections</a> with the Stream bot permissions.</p></div></div>
+        <% } %>
+        <% if (!rewards.length) { %>
+        <div class="cf-state cf-state--compact"><p class="cf-state-title">No rewards saved yet.</p></div>
+        <% } else { %>
+        <div class="cf-list" id="sbi-rewards">
+            <% rewards.forEach((r) => { %>
+            <div class="cf-list-item cf-list-item--multi">
+                <div class="cf-list-main">
+                    <p class="cf-list-title"><%= r.title %><% if (r.kind === 'power_up') { %> <span class="cf-pill">Power-up</span><% } %><% if (r.recreated) { %> <span class="cf-pill is-ok">Recreated</span><% } %></p>
+                    <p class="cf-list-meta">
+                        <span><%= Number(r.cost || 0).toLocaleString('en-US') %> <%= r.costUnit === 'bits' ? 'Bits' : 'points' %></span>
+                        <span>From <%= _src[r.source] || r.source %></span>
+                        <% if (r.createdBy) { %><span>Made by <%= r.createdBy %></span><% } %>
+                        <% if (!r.enabled) { %><span>Off on Twitch</span><% } %>
+                    </p>
+                    <% if (r.prompt) { %><p class="cf-list-body"><%= r.prompt %></p><% } %>
+                </div>
+                <div class="cf-list-actions">
+                    <% if (r.kind === 'channel_points' && !r.recreated) { %>
+                    <button type="button" class="btn btn-secondary btn-sm" data-recreate="<%= r.id %>" data-name="<%= r.title %>"<% if (!canRecreate) { %> disabled<% } %>>Recreate under CertiFried</button>
+                    <% } %>
+                </div>
+            </div>
+            <% }) %>
+        </div>
+        <% } %>
+    </div>
+</section>
+
+<% const _words = (typeof words !== 'undefined' && Array.isArray(words)) ? words : []; %>
+<% if (_words.length) { %>
+<section class="cf-section" aria-labelledby="sbi-words-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbi-words-title">Saved banned words</h2>
+        <p class="cf-section-desc">Imported banned words are saved here and not applied anywhere yet. Kick automod switches its word rule on as soon as it has words, so they are added only when you press Apply on a channel. Twitch blocked terms are not changed: they work as soon as they are added, so add them yourself on Twitch (Creator Dashboard, Settings, Moderation, Blocked terms) when you switch over.</p></div>
+        <div class="cf-section-actions"><span class="cf-status-line" id="sbi-words-status" role="status" aria-live="polite"></span></div></header>
+    <div class="cf-rows">
+        <div class="cf-list">
+            <% _words.forEach((w) => { %>
+            <div class="cf-list-item cf-list-item--multi">
+                <div class="cf-list-main">
+                    <p class="cf-list-title"><%= w.words.length %> banned word<%= w.words.length === 1 ? '' : 's' %> from <%= _src[w.source] || w.source %></p>
+                    <p class="cf-list-meta"><% if (w.wasOn) { %><span>On in <%= _src[w.source] || w.source %></span><% } %><span>Not applied</span></p>
+                    <p class="cf-list-body"><%= w.words.join(', ') %></p>
+                    <% if (!w.channels.length) { %>
+                    <p class="cf-list-body">To apply them on Kick, add your Kick channel to the channel bot first.</p>
+                    <% } %>
+                </div>
+                <div class="cf-list-actions">
+                    <% w.channels.forEach((c) => { %>
+                    <% if (c.pending) { %>
+                    <button type="button" class="btn btn-secondary btn-sm" data-apply-words="<%= w.id %>" data-channel-bot="<%= c.id %>" data-name="<%= c.name || c.channelId %>" data-count="<%= c.pending %>">Apply to Kick automod<% if (w.channels.length > 1) { %> (<%= c.name || c.channelId %>)<% } %></button>
+                    <% } else { %>
+                    <span class="cf-pill is-ok">In <%= c.name || c.channelId %>'s Kick automod</span>
+                    <% } %>
+                    <% }) %>
+                </div>
+            </div>
+            <% }) %>
+        </div>
+    </div>
+</section>
+<% } %>
+
+<section class="cf-section" aria-labelledby="sbi-hist-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbi-hist-title">Past imports</h2></div></header>
+    <div class="cf-rows">
+        <% if (!history.length) { %>
+        <div class="cf-state cf-state--compact"><p class="cf-state-title">Nothing imported yet.</p></div>
+        <% } else { %>
+        <div class="cf-list">
+            <% history.forEach((h) => { %>
+            <div class="cf-list-item">
+                <div class="cf-list-main">
+                    <p class="cf-list-title">From <%= _sources(h.sources) %></p>
+                    <p class="cf-list-meta">
+                        <span><time datetime="<%= new Date(h.createdAt).toISOString() %>"><%= _when(h.createdAt) %></time></span>
+                        <span><%= _total(h.summary) %> created</span>
+                        <% if (h.fileNames) { %><span><%= h.fileNames %></span><% } %>
+                    </p>
+                </div>
+            </div>
+            <% }) %>
+        </div>
+        <% } %>
+    </div>
+</section>
+
+<script type="application/json" id="sbi-data"><%- importData %></script>
+<script src="/js/stream-bot-import.js" defer></script>
+<%- include('_foot') %>

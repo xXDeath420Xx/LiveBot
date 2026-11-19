@@ -13,6 +13,7 @@ import { plan, apply, detectBots, executeAll } from '../../core/takeover-manager
 import { getLatestScan } from '../../core/guild-analyzer.js';
 import { isSuperAdmin } from '../../utils/constants.js';
 import logger from '../../utils/logger.js';
+import { logFeatureEvent, userLabel } from '../../core/feature-log.js';
 
 const EPHEMERAL = { flags: MessageFlags.Ephemeral };
 const COLOR = 0xF2A65A;
@@ -132,8 +133,8 @@ export default {
       const guild = interaction.guild;
 
       // A dry run is the default. Going live needs the server name typed — a real barrier, so "go"
-      // can never be an accident — but a forgiving one: this guild's name has a CURLY apostrophe
-      // (Kabster’s), and refusing a run because someone typed a normal ' would be a confirmation that
+      // can never be an accident — but a forgiving one: plenty of server names carry a CURLY
+      // apostrophe, and refusing a run because someone typed a normal ' would be a confirmation that
       // punishes correctness. Fold the quote variants and surrounding space; nothing else.
       const norm = (s) => String(s ?? '').replace(/[’‘‛]/g, "'").replace(/[“”]/g, '"').trim();
       const confirm = interaction.options.getString('confirm');
@@ -185,6 +186,20 @@ export default {
       if (res.kept.length) extras.push(`**Left alone:** ${res.kept.join(', ')}`);
       if (extras.length) embed.addFields({ name: '​', value: extras.join('\n\n').slice(0, 1024) });
 
+      if (!res.dryRun) {
+        void logFeatureEvent(() => (guild), 'system.setupApplied', () => ({
+          title: '🛠️ Setup Applied',
+          description: `A full takeover ran with \`/utilities takeover execute\`: ${res.willRunCount} of ${res.order.length} action(s) ran.`,
+          fields: [
+            ['Source', '/utilities takeover execute'],
+            ['By', userLabel(interaction.user)],
+            ['Soak', waiveSoak ? 'Waived' : 'Enforced'],
+            ['Left alone', res.kept.length ? res.kept.join(', ') : null, false],
+            ['Manual follow-ups', res.followUps.length ? res.followUps.map(f => `• ${f}`).join('\n') : null, false],
+          ],
+        }));
+      }
+
       return interaction.editReply({ embeds: [embed] });
     }
 
@@ -224,7 +239,7 @@ export default {
 export async function handleTakeoverButton(interaction) {
   const entry = pending.get(interaction.message.id);
   if (!entry) {
-    return interaction.reply({ content: 'That plan has expired. Run `/takeover plan` again.', ...EPHEMERAL });
+    return interaction.reply({ content: 'That plan has expired. Run `/utilities takeover plan` again.', ...EPHEMERAL });
   }
   if (entry.userId !== interaction.user.id) {
     return interaction.reply({ content: 'That is not your plan.', ...EPHEMERAL });
@@ -250,6 +265,19 @@ export async function handleTakeoverButton(interaction) {
   const body = results.map(r => `${icon[r.outcome]} **${r.label}**${r.error ? ` — ${r.error}` : ''}`).join('\n')
     || 'Nothing to do.';
   const applied = results.filter(r => r.outcome === 'applied').length;
+  if (applied) {
+    const failedSteps = results.filter(r => r.outcome === 'failed' || r.outcome === 'blocked');
+    void logFeatureEvent(() => (interaction.guild), 'system.setupApplied', () => ({
+      title: '🛠️ Setup Applied',
+      description: `A takeover plan was applied with \`/utilities takeover\`: ${applied} step(s) set up.`,
+      fields: [
+        ['Source', '/utilities takeover apply'],
+        ['By', userLabel(interaction.user)],
+        ['Set up', results.filter(r => r.outcome === 'applied').map(r => r.label).join(', '), false],
+        ['Not applied', failedSteps.length ? failedSteps.map(r => `${r.label}${r.error ? ` — ${r.error}` : ''}`).join('\n') : null, false],
+      ],
+    }));
+  }
 
   const embed = new EmbedBuilder().setColor(applied ? 0x57F287 : COLOR)
     .setTitle('Takeover applied')

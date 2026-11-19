@@ -5,7 +5,8 @@
 import express from 'express';
 import crypto from 'node:crypto';
 import path from 'node:path';
-import { readFile } from 'node:fs/promises';
+import { readFile, mkdir, writeFile } from 'node:fs/promises';
+import fsSync from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 import pool from '../../utils/db.js';
@@ -14,8 +15,12 @@ import logger from '../../utils/logger.js';
 import {
   LOGIN_URL, exchangeAuthCode, fetchSpriteData, buildModel, parseAuthCode,
   syncFromRefreshToken, TIERS, EAS_CONFIGURED, authorizeUrl, connectViaOAuth, signInViaEpic,
+  deriveDataminedVariants, imgIdFor, FAMILY_LABEL,
   refreshToken as epicRefreshToken, shortLabelForSeasonNum,
-  createDeviceAuth, deviceAuthLogin,
+  createDeviceAuth, deviceAuthLogin, killSession, upcomingReleases,
+  getCatalogVersion, setCatalogVersion,
+  setReleaseSchedule, setObservedAvailability, getObservedAvailability, activeSchedule, discoveredTierKeys,
+  setEpicDisabled, normDisabledKey, PENDING_FAMILY_LABEL,
 } from '../../core/epic-sprites.js';
 
 // ESM has no __dirname/__filename — derive both from import.meta.url so the
@@ -285,7 +290,37 @@ async function syncWithAtomicRotation(row, prevDisplayName) {
   }
 
   const { catalog, inventory, athena } = await fetchSpriteData(tok.account_id, tok.access_token);
-  const model = buildModel(catalog, inventory, athena);
+  const model = buildModel(catalog, inventory, athena, {
+    pakDatamined: await getPakDataminedVariants(),
+    familyDisplayNames: getPakFamilyDisplayNames(),
+  });
+
+  // Capture the live-endpoint response sizes so /sprites/info can show fresh
+  // "12,709 B on <today>" values instead of frozen 2026-07-09 numbers.
+  // Best-effort — failure to persist doesn't block the sync.
+  try {
+    const sizes = {
+      catalog: JSON.stringify(catalog).length,
+      magpie:  JSON.stringify(inventory).length,
+      athena:  JSON.stringify(athena).length,
+      catalogVariants: catalog ? Object.keys(catalog).length : null,
+    };
+    // Persist against ALL accounts — cheap and lets us use any account as
+    // the audit source later. Column is added by migration on first read.
+    await pool.execute(
+      `UPDATE epic_sprite_accounts SET last_endpoint_sizes=? WHERE account_id=?`,
+      [JSON.stringify(sizes), tok.account_id],
+    ).catch(async (e) => {
+      if (e.code === 'ER_BAD_FIELD_ERROR') {
+        // First-run migration — add the column and retry.
+        await pool.execute(`ALTER TABLE epic_sprite_accounts ADD COLUMN last_endpoint_sizes JSON NULL`);
+        await pool.execute(`UPDATE epic_sprite_accounts SET last_endpoint_sizes=? WHERE account_id=?`,
+          [JSON.stringify(sizes), tok.account_id]);
+      } else throw e;
+    });
+  } catch (e) {
+    logger.warn(`[sprites] size capture failed for ${tok.account_id}: ${e.message}`);
+  }
 
   // Back-fill: any successful sync on an account WITHOUT device auth becomes
   // the moment we mint one. After this lands, every active user transitions
@@ -295,6 +330,17 @@ async function syncWithAtomicRotation(row, prevDisplayName) {
   if (!hasDevice) {
     try { deviceAuth = await createDeviceAuth(tok.account_id, tok.access_token); }
     catch (e) { logger.warn(`[sprites] device auth back-fill failed for ${tok.account_id}: ${e.message}`); }
+  }
+
+  // Terminate THIS sync's Epic session so they don't accumulate and trip Epic's
+  // "logged in too many places" security (which forces the user to reset their
+  // password). Only when the account has device auth for the NEXT sync — device
+  // auth doesn't depend on the killed access token, so this is fully safe there.
+  // A refresh-only account whose device-auth back-fill just failed KEEPS its
+  // session (killing could invalidate the just-rotated refresh token → brick it).
+  if (usedDeviceAuth || deviceAuth) {
+    const killed = await killSession(tok.access_token);
+    if (!killed) logger.warn(`[sprites] session kill non-ok for ${tok.account_id} (harmless — session will expire itself)`);
   }
 
   return {
@@ -327,12 +373,17 @@ async function setTokenStatus(accountId, needsRelogin) {
 // Errors from Epic that mean "stored refresh token is gone, user has to re-paste".
 // Other errors (network blips, magpie 5xx, etc.) are transient and shouldn't trip
 // the banner since they'll succeed on the next try.
-const DEAD_TOKEN_PATTERN = /TOKEN_NOT_FOUND|invalid_grant|errors\.com\.epicgames\.account\.auth_token\.invalid_refresh_token/i;
+// Includes device-auth rejection ("account credentials you are using are
+// invalid", HTTP 400) — a revoked/expired device auth OR a dead refresh token.
+// Without this, such accounts never trip needs_relogin: they just retry every
+// sweep and keep showing their last-good (now stale) snapshot. (2026-11-01: this
+// was 25/42 accounts frozen on the Override collection, stale since Oct-30.)
+const DEAD_TOKEN_PATTERN = /TOKEN_NOT_FOUND|invalid_grant|errors\.com\.epicgames\.account\.auth_token\.invalid_refresh_token|account credentials you are using are invalid/i;
 
 function tryBackgroundResync(accountId, encryptedRefreshTokenRow, displayName) {
-  if (inFlightResyncs.has(accountId)) return;
+  if (inFlightResyncs.has(accountId)) return Promise.resolve();
   inFlightResyncs.add(accountId);
-  syncWithAtomicRotation(encryptedRefreshTokenRow, displayName)
+  return syncWithAtomicRotation(encryptedRefreshTokenRow, displayName)
     .then((synced) => saveAccount(synced))
     .catch((e) => {
       logger.warn(`[sprites] bg resync failed for ${accountId}: ${e.message}`);
@@ -342,7 +393,7 @@ function tryBackgroundResync(accountId, encryptedRefreshTokenRow, displayName) {
 }
 
 // ── Discord export (PNG with composited sprite icons) ──────────────────────
-// Renders a shareable PNG: 4 tier columns (NORMAL=basic, GOLD=gold, GUMMY=candy,
+// Renders a shareable PNG: 4 tier columns (NORMAL=basic, GOLD=gold, GUMMY=gummy,
 // GALAXY=galaxy — the four that are universally obtainable; Holofoil + Gem are
 // future-only for most families so they're excluded), one row per non-vaulted
 // family, owned icons in full color and missing icons greyscaled + dimmed.
@@ -353,12 +404,6 @@ function tryBackgroundResync(accountId, encryptedRefreshTokenRow, displayName) {
 //   3) Build a base SVG with the layout chrome (bg, stripes, header, family
 //      labels, footer text, dividers)
 //   4) Composite all icon buffers onto the base SVG → final PNG
-const DISCORD_TIERS = [
-  { key: 'basic',  label: 'NORMAL' },
-  { key: 'gold',   label: 'GOLD'   },
-  { key: 'candy',  label: 'GUMMY'  },
-  { key: 'galaxy', label: 'GALAXY' },
-];
 const ESC_XML = (s) => String(s ?? '').replace(/[<>&"']/g, (c) => (
   { '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;' }[c]));
 
@@ -367,6 +412,27 @@ async function buildDiscordExport(state) {
   // entirely greyscaled and just clutter the export.
   const families = state.groups.filter((g) => (g.obtainableCount ?? g.totalCount ?? 0) > 0);
   if (!families.length) throw new Error('no obtainable families to export');
+
+  // The embed shows ONLY obtainable sprites — owned or still-gettable — never
+  // unreleased or vaulted ones. `obtainable` is the single predicate driving
+  // every decision below (which columns exist, which icons draw, which get a
+  // padlock), so the three can't disagree:
+  //   - future (Gem, pre-release tiers)  → excluded
+  //   - vaulted                          → excluded
+  //   - pak-datamined-only leaks (Quack) → excluded (also `future`)
+  //   - owned / obtainable-but-unowned   → INCLUDED
+  const isObtainable = (v) => !!(v?.imgId && !v.future && !v.vaulted && !v.pakDatamined);
+
+  // Tier columns are DERIVED from the live catalog, not hardcoded. A tier gets
+  // a column iff at least one exported family has an OBTAINABLE variant for it —
+  // so the base tiers always show, Cube/Holofoil appear once Epic ships them,
+  // and an all-unreleased tier like Gem gets no column at all. This used to be a
+  // fixed 4-tier list (Basic/Gold/Gummy/Galaxy), which is why Cube never
+  // appeared even after it went live.
+  const DISCORD_TIERS = TIERS
+    .filter((t) => families.some((g) => isObtainable(g.variants[t.key])))
+    .map((t) => ({ key: t.key, label: t.label.toUpperCase() }));
+  if (!DISCORD_TIERS.length) throw new Error('no tier columns to export');
 
   const ICON = 64;
   const CELL_W = 100;
@@ -377,18 +443,17 @@ async function buildDiscordExport(state) {
   const W = LABEL_COL + DISCORD_TIERS.length * CELL_W;
   const H = HEADER_H + families.length * CELL_H + FOOTER_H;
 
-  // Load + process all icons in parallel — each becomes a sharp.composite() layer.
-  // Icons now render in FULL COLOR regardless of owned state; the overlay SVG
-  // painted on top carries the state semantic (jail bars for vaulted/future,
-  // dark scrim + padlock for unowned obtainable). Same visual language as the
-  // web UI's .cell.locked / .cell.vaulted / .cell.future overlays.
+  // Load + process all icons in parallel — each becomes a sharp.composite()
+  // layer. Only obtainable variants are drawn (owned in full color, unowned in
+  // full color with a padlock painted on top). Unreleased/vaulted variants
+  // aren't drawn at all — their cell stays empty background.
   const iconJobs = [];
   for (let i = 0; i < families.length; i++) {
     const g = families[i];
     for (let t = 0; t < DISCORD_TIERS.length; t++) {
       const tier = DISCORD_TIERS[t];
       const v = g.variants[tier.key];
-      if (!v?.imgId) continue;
+      if (!isObtainable(v)) continue;
       const top = HEADER_H + i * CELL_H + Math.round((CELL_H - ICON) / 2);
       const left = LABEL_COL + t * CELL_W + Math.round((CELL_W - ICON) / 2);
       iconJobs.push((async () => {
@@ -402,34 +467,21 @@ async function buildDiscordExport(state) {
   }
   const icons = (await Promise.all(iconJobs)).filter(Boolean);
 
-  // Overlay SVG — painted on TOP of the icons. Per-cell decorations that
-  // match the web UI:
-  //   - vaulted OR future (unowned) → 4 vertical jail bars + top/bottom rails
-  //   - unowned obtainable         → dark scrim + centered white padlock
-  //   - owned                       → nothing (icon is the answer)
-  // Empty cells (no imgId) also get nothing since there's no sprite to lock up.
+  // Overlay SVG — painted on TOP of the icons. Only one decoration remains:
+  //   - obtainable but unowned → dark scrim + centered white padlock
+  //   - owned                  → nothing (the color icon is the answer)
+  // There are no jail bars anymore: unreleased/vaulted variants aren't drawn at
+  // all (they're filtered out above), so every cell with an icon is obtainable.
   const overlays = [];
   for (let i = 0; i < families.length; i++) {
     const g = families[i];
     for (let t = 0; t < DISCORD_TIERS.length; t++) {
       const tier = DISCORD_TIERS[t];
       const v = g.variants[tier.key];
-      if (!v?.imgId || v.owned) continue;
+      if (!isObtainable(v) || v.owned) continue;
       const x = LABEL_COL + t * CELL_W + Math.round((CELL_W - ICON) / 2);
       const y = HEADER_H + i * CELL_H + Math.round((CELL_H - ICON) / 2);
-      if (v.vaulted || v.future) {
-        // Jail bars — 4 vertical bars at fixed positions within the icon area,
-        // plus a top and bottom rail. Warm iron color with a subtle gradient
-        // via inner stroke so the bars read as 3D instead of flat.
-        overlays.push(`<g transform="translate(${x},${y})">
-          <rect x="0" y="0" width="${ICON}" height="4" fill="#4a3818"/>
-          <rect x="0" y="${ICON - 4}" width="${ICON}" height="4" fill="#4a3818"/>
-          <rect x="9" y="4" width="4" height="${ICON - 8}" fill="#1a1207" stroke="#583c14" stroke-width="0.4"/>
-          <rect x="24" y="4" width="4" height="${ICON - 8}" fill="#1a1207" stroke="#583c14" stroke-width="0.4"/>
-          <rect x="38" y="4" width="4" height="${ICON - 8}" fill="#1a1207" stroke="#583c14" stroke-width="0.4"/>
-          <rect x="52" y="4" width="4" height="${ICON - 8}" fill="#1a1207" stroke="#583c14" stroke-width="0.4"/>
-        </g>`);
-      } else {
+      {
         // Dark scrim + centered padlock (SVG shapes — emoji rendering via
         // librsvg is unreliable, so we draw the padlock ourselves).
         const cx = ICON / 2, cy = ICON / 2;
@@ -561,7 +613,20 @@ async function buildBuybackExport(state, buybackList) {
 // At our current scale (≤ a few dozen accounts), firing all syncs in parallel
 // is fine. If this ever grows to hundreds of accounts, batch by chunks of ~16
 // or stagger with a small per-account delay to spread the load on Epic.
-const PERIODIC_SYNC_INTERVAL_MS = 60 * 1000;
+// 10 minutes (NOT 60s — that was a regression: the comments above/below both say
+// "every 10 min", but the constant had drifted to 60s, so all accounts re-synced
+// every single minute). Sprite data changes on a ~daily event cadence, so 10 min
+// is already generous; combined with per-sync session-kill it keeps standing Epic
+// sessions at zero and stops the "logged in too many places" lockouts.
+const PERIODIC_SYNC_INTERVAL_MS = 10 * 60 * 1000;
+// Serialize the sweep with a gap between accounts. Each device-auth sync opens
+// an Epic session and kills it on completion (see syncWithAtomicRotation), but
+// firing all N resyncs at once opens N concurrent sessions BEFORE any killSession
+// runs → trips Epic's "logged in too many places" cap. That's why, after the
+// 2026-11-01 Treasure Hunters module cutover, only ~17/42 accounts re-synced and
+// the other 25 kept reporting the stale Override totals (the "/162" on compare).
+// One-at-a-time + a short delay holds us to a single live session at a time.
+const PERIODIC_SYNC_STAGGER_MS = 4 * 1000;
 async function periodicBackgroundSync() {
   try {
     const [rows] = await pool.execute(
@@ -572,8 +637,11 @@ async function periodicBackgroundSync() {
          AND (device_id_enc IS NOT NULL OR refresh_token_enc IS NOT NULL)`,
     );
     if (rows.length === 0) return;
-    logger.info(`[sprites] periodic sync sweep: ${rows.length} accounts`);
-    for (const row of rows) tryBackgroundResync(row.account_id, row, row.display_name);
+    logger.info(`[sprites] periodic sync sweep: ${rows.length} accounts (staggered ${PERIODIC_SYNC_STAGGER_MS}ms apart)`);
+    for (const row of rows) {
+      await tryBackgroundResync(row.account_id, row, row.display_name);
+      await new Promise((r) => setTimeout(r, PERIODIC_SYNC_STAGGER_MS));
+    }
   } catch (e) {
     logger.warn(`[sprites] periodic sync sweep query failed: ${e.message}`);
   }
@@ -583,6 +651,401 @@ async function periodicBackgroundSync() {
 // handles we deliberately don't track — process lifetime owns them.
 setTimeout(periodicBackgroundSync, 30 * 1000);
 setInterval(periodicBackgroundSync, PERIODIC_SYNC_INTERVAL_MS);
+
+// ── Hotfix DDSS poller ──────────────────────────────────────────────────────
+// Fortnite ships live-config overrides via /cloudstorage/system/*.ini files —
+// the same mechanism that flips sprite plugin availability, adjusts drop
+// rates, and sets the ComingSoonTimestamp for the next scheduled drop. We
+// poll every 15 min from the SERVER (no Windows scheduled task, no mitmproxy)
+// using Death420's device_auth. Results land in dashboard/data/hotfix-current.json
+// which /sprites/info + /sprites/countdown read on every render.
+//
+// The polling reuses any account with valid device_auth — Death420 is preferred
+// (his account has the tracker's most stable auth). Falls back to any other
+// account if his auth expires. Zero user impact — just a couple HTTPS calls
+// per 15 min per online instance.
+const HOTFIX_POLL_INTERVAL_MS = 15 * 60 * 1000;
+const HOTFIX_CACHE_PATH = path.resolve(__dirname, '../data/hotfix-current.json');
+// Files we care about (matched exactly). Every other .ini in the hotfix system
+// is ignored to keep processing cheap. Add here as we discover new relevant ones.
+const HOTFIX_TARGET_FILES = new Set([
+  'DefaultEngine.ini',
+  'DefaultGame.ini',
+  'DefaultPH_OrangeRemote_Week2Game.ini',
+  'DefaultPH_OrangeRemote_Week4Game.ini',
+  'DefaultOrangeRemote_AllDayEventGame.ini',
+  'DefaultOrangeRemoteGreatOutdoorsGame.ini',
+  'DefaultForbiddenFruitGame.ini',
+  'DefaultBlastberryGame.ini',
+  'DefaultFigmentCoreGame.ini',
+]);
+async function pollHotfixConfig() {
+  try {
+    // Find any account with device_auth we can use — prefer Death420 by name
+    const [rows] = await pool.execute(
+      `SELECT account_id, display_name, device_id_enc, device_secret_enc
+       FROM epic_sprite_accounts
+       WHERE needs_relogin = 0 AND device_id_enc IS NOT NULL AND device_secret_enc IS NOT NULL
+       ORDER BY (display_name='XxXDeath420XxX') DESC, synced_at DESC
+       LIMIT 3`,
+    );
+    if (rows.length === 0) {
+      logger.warn('[hotfix] no accounts with device_auth — poll skipped');
+      return;
+    }
+    let tok = null;
+    let sourceAccount = null;
+    for (const row of rows) {
+      try {
+        const deviceId = encryptionService.decrypt(JSON.parse(row.device_id_enc));
+        const secret = encryptionService.decrypt(JSON.parse(row.device_secret_enc));
+        tok = await deviceAuthLogin({ accountId: row.account_id, deviceId, secret });
+        sourceAccount = row.display_name;
+        break;
+      } catch (e) {
+        logger.warn(`[hotfix] device_auth failed for ${row.display_name}: ${e.message}`);
+      }
+    }
+    if (!tok) { logger.warn('[hotfix] no working device_auth across candidates — poll skipped'); return; }
+
+    // Step 1: fetch the file list
+    const listRes = await fetch(
+      'https://mcp-gc.live.fngw.ol.epicgames.com/fortnite/api/cloudstorage/system',
+      { headers: { Authorization: `bearer ${tok.access_token}` } },
+    );
+    if (!listRes.ok) { logger.warn(`[hotfix] system list HTTP ${listRes.status}`); return; }
+    const files = await listRes.json();
+
+    // Step 2: fetch bodies of files we care about (parallel, but bounded)
+    const targets = files.filter((f) => HOTFIX_TARGET_FILES.has(f.filename) && f.length > 0);
+    const bodies = {};
+    for (const f of targets) {
+      try {
+        const r = await fetch(
+          `https://mcp-gc.live.fngw.ol.epicgames.com/fortnite/api/cloudstorage/system/${f.uniqueFilename}`,
+          { headers: { Authorization: `bearer ${tok.access_token}` } },
+        );
+        if (r.ok) bodies[f.filename] = { hash: f.hash256, uploaded: f.uploaded, body: await r.text() };
+      } catch (e) {
+        logger.warn(`[hotfix] fetch ${f.filename} failed: ${e.message}`);
+      }
+    }
+
+    // Step 3: parse sprite-relevant CVars out of the bodies
+    const parsed = parseHotfixBodies(bodies);
+    parsed.polled_at = new Date().toISOString();
+    parsed.source_account = sourceAccount;
+    parsed.file_count = files.length;
+    parsed.targets_matched = Object.keys(bodies).length;
+
+    // Step 4: persist
+    await mkdir(path.dirname(HOTFIX_CACHE_PATH), { recursive: true });
+    await writeFile(HOTFIX_CACHE_PATH, JSON.stringify(parsed, null, 2));
+    logger.info(`[hotfix] polled OK — nextDrop=${parsed.next_drop_iso || 'none'} weights=${Object.keys(parsed.variant_weights || {}).length} families`);
+  } catch (e) {
+    logger.warn(`[hotfix] poll failed: ${e.message}`);
+  }
+}
+function parseHotfixBodies(bodies) {
+  const out = {
+    next_drop_ts: null,           // Unix seconds
+    next_drop_iso: null,
+    variant_weights: {},          // { family: { tier: weight } }
+    xp_curves: {},                // { key: value } — e.g. XPPerElim: 200
+    extraction_multipliers: {},   // { tier|Default: multiplier }
+    extraction_multipliers_win: {},
+    disabled_variants: [],        // GROUND TRUTH: variants Epic unmapped (MappingID;None) = NOT obtainable
+    raw_cvars: {},                // any other Extraction.* CVars
+    file_stamps: {},              // last-modified per file
+  };
+  const disabledSet = new Set();
+  for (const [fname, entry] of Object.entries(bodies)) {
+    out.file_stamps[fname] = entry.uploaded;
+    const body = entry.body;
+    // ComingSoonTimestamp — the next scheduled drop
+    for (const m of body.matchAll(/Extraction\.Persistence\.ComingSoonTimestamp\s*=\s*(\d+)/g)) {
+      out.next_drop_ts = parseInt(m[1], 10);
+      out.next_drop_iso = new Date(out.next_drop_ts * 1000).toISOString();
+    }
+    // DT_VariantWeights row updates: RowUpdate;Family_Tier;Weight;0.63
+    // Epic occasionally ships typo'd family names in their hotfix configs
+    // (e.g. "Punky_Galaxy" instead of "Punk_Galaxy" in Week2 config). We
+    // canonicalize known typos here so the drop-rates table doesn't split
+    // one family across two rows. Log any unknown-shape family we see once
+    // so future typos surface for review.
+    const FAMILY_ALIAS = { Punky: 'Punk' };
+    for (const m of body.matchAll(/DT_VariantWeights[^;]*;RowUpdate;(\w+?)_(\w+);Weight;([\d.]+)/g)) {
+      const [_, rawFam, tier, w] = m;
+      const fam = FAMILY_ALIAS[rawFam] || rawFam;
+      if (!out.variant_weights[fam]) out.variant_weights[fam] = {};
+      out.variant_weights[fam][tier] = parseFloat(w);
+    }
+    // SpriteExtractionGameplay.XPPerElim (etc.) — take the ROW value at time 2.0 (max level)
+    for (const m of body.matchAll(/SpriteExtractionGameplay\.(\w+)[^;]*;\s*[\d.]+\s*;\s*([\d.]+)/g)) {
+      // Store the LAST value seen per key — usually the max-level value
+      out.xp_curves[m[1]] = parseFloat(m[2]);
+    }
+    // Extraction point multipliers
+    for (const m of body.matchAll(/DT_ExtractionMulltiplier(_Win)?[^;]*;RowUpdate;(\S+?);[\d.]+;([\d.]+)/g)) {
+      const bucket = m[1] === '_Win' ? out.extraction_multipliers_win : out.extraction_multipliers;
+      // Tier name normalization: "Extraction.VariantRarity.Candy" → "Candy"; "Default" stays.
+      // Kept as Epic's raw string here so debugging matches the payload — display-side
+      // remaps "Candy" → "Gummy" at render time (see renderHotfixSection).
+      const tier = m[2].replace(/^Extraction\.VariantRarity\./, '');
+      bucket[tier] = parseFloat(m[3]);
+    }
+    // Any other Extraction.* CVars for future analysis
+    for (const m of body.matchAll(/(Extraction\.\w+(?:\.\w+)*)\s*=\s*([\w.-]+)/g)) {
+      out.raw_cvars[m[1]] = m[2];
+    }
+    // GROUND-TRUTH AVAILABILITY: Epic disables a variant by unmapping it in the
+    // Sprite asset registry — `DT_SpriteAssetRegistry;RowUpdate;<Variant>;MappingID;None`.
+    // A variant here is NOT in the loot pool right now (this is how the 7 Gems
+    // are gated while Llama Gem, absent from the list, stays live). The audit
+    // reconciles our obtainable set against this so an over-claim can't hide.
+    for (const m of body.matchAll(/DT_SpriteAssetRegistry;RowUpdate;([^;]+);MappingID;None/g)) {
+      disabledSet.add(m[1].trim());
+    }
+  }
+  out.disabled_variants = [...disabledSet];
+  return out;
+}
+// Fire ~15s after boot then every 15 min. Non-blocking, best-effort.
+setTimeout(pollHotfixConfig, 15 * 1000);
+setInterval(pollHotfixConfig, HOTFIX_POLL_INTERVAL_MS);
+
+// In-memory cache for reads from /sprites/info + /sprites/countdown
+let _hotfixCache = null;
+let _hotfixCacheMtime = 0;
+function getHotfixCache() {
+  try {
+    const stat = fsSync.statSync(HOTFIX_CACHE_PATH);
+    if (_hotfixCache && stat.mtimeMs === _hotfixCacheMtime) return _hotfixCache;
+    _hotfixCache = JSON.parse(fsSync.readFileSync(HOTFIX_CACHE_PATH, 'utf8'));
+    _hotfixCacheMtime = stat.mtimeMs;
+    return _hotfixCache;
+  } catch (e) {
+    return null;   // Not fatal — page still renders without hotfix data
+  }
+}
+
+// ── Live availability wiring (migration 166) ────────────────────────────────
+// epic-sprites.js has no DB access by design, so this is where live state gets
+// pushed into it. Three sources of truth, in increasing order of authority:
+//
+//   1. epic_sprite_release_schedule  — human-editable prediction. Editable at
+//      runtime via /sprites/admin; no redeploy to change a date.
+//   2. Epic's hotfix ComingSoonTimestamp — Epic's OWN next-drop stamp, polled
+//      every 15 min. If Epic moves a drop, this moves with it.
+//   3. epic_sprite_observed_variants — variants players have actually held.
+//      Ground truth; overrides both of the above the moment it disagrees.
+//
+// NOTE: hotfix `variant_weights` is deliberately NOT used for availability.
+// Epic ships those as RowUpdate deltas, so a live tier can have zero weight
+// rows (Holofoil has none despite shipping 2026-07-09). Absence proves nothing.
+const AVAILABILITY_REFRESH_MS = 30 * 1000;
+let _availabilityLoadedAt = 0;
+
+async function loadReleaseSchedule() {
+  const [rows] = await pool.execute(
+    'SELECT scope, item_key, release_at, gate, label, note_label, note_text FROM epic_sprite_release_schedule WHERE enabled=1',
+  );
+  const sched = { tiers: {}, families: {}, cells: {} };
+  for (const r of rows) {
+    const entry = {
+      at: r.release_at == null ? null : Number(r.release_at),
+      gate: r.gate === 1 || r.gate === true,
+      label: r.label || undefined,
+    };
+    if (r.note_label && r.note_text) entry.note = { label: r.note_label, text: r.note_text };
+    // scope 'cell' gates one specific family:tier (item_key = "familyToken:tierKey"),
+    // e.g. a single Cheat Master variant that debuts on a dated New Sprite Day while
+    // the rest of its tier/family is already live. 'tier' and 'family' stay coarse.
+    const bucket = r.scope === 'tier' ? sched.tiers : r.scope === 'cell' ? sched.cells : sched.families;
+    bucket[r.item_key] = entry;
+  }
+  reconcileWithHotfix(sched);
+  setReleaseSchedule(sched);
+  return sched;
+}
+
+// Epic's ComingSoonTimestamp is a single global "next drop" instant — we use it
+// ONLY to fill in a date for an announced-but-undated entry (at == null). We
+// NEVER overwrite a confident date we already have: one global stamp can't be
+// right for every entry at once (Ironmouse drops Aug 4, Gems Aug 6, but
+// next_drop_ts is a single value — blindly stamping it onto both would drag
+// Ironmouse to Aug 6). Gating is now driven by Epic's PER-VARIANT disable list,
+// so these dates are for countdown display only; an exact date isn't load-bearing.
+// (This also permanently kills the old Cube phantom: a confident past date like
+// Cube's Jul 23 is never overwritten.)
+function reconcileWithHotfix(sched) {
+  const ts = getHotfixCache()?.next_drop_ts;
+  if (!ts) return;
+  const epicAt = ts * 1000;
+  if (epicAt <= Date.now()) return;              // stale/past stamp, ignore
+  for (const bucket of ['tiers', 'families']) {
+    for (const [key, e] of Object.entries(sched[bucket])) {
+      if (e.gate === false) continue;            // note-only entries carry no countdown
+      // NEVER auto-date an entry that carries an explicit note. A note means we
+      // have real context (e.g. Storm Scout = "future Sprite Day, undated"; Gold
+      // = "Power Hours only") and the generic hotfix next-drop stamp would be a
+      // FABRICATED countdown pointing at the wrong instant. These stay dateless
+      // (gated, no "releases in X" clock) until Epic gives a real date.
+      if (e.note) continue;
+      if (e.at == null) {                         // fill a MISSING date only — never overwrite a confident one
+        e.at = epicAt;
+        logger.info(`[sprite-schedule] filled missing date for ${bucket}/${key} from Epic hotfix: ${new Date(epicAt).toISOString()}`);
+      }
+    }
+  }
+}
+
+async function loadObservedAvailability() {
+  const [rows] = await pool.execute(
+    'SELECT DISTINCT tier_key, family_token FROM epic_sprite_observed_variants',
+  );
+  setObservedAvailability({
+    tiers: rows.map((r) => r.tier_key),
+    families: rows.map((r) => r.family_token),
+    cells: rows.map((r) => `${r.family_token}:${r.tier_key}`),
+  });
+}
+
+// Officially-announced-but-unshipped sprites (migration 167). Cached in-process
+// and refreshed alongside the schedule so the /info reporting reflects edits
+// within ~30s. Best-effort: the table may not exist on an un-migrated box.
+let _announcedSprites = [];
+async function loadAnnouncedSprites() {
+  try {
+    const [rows] = await pool.execute(
+      'SELECT slug, name, release_at, rarity, ability, how_to_get, source_url, family_token FROM epic_sprite_announced WHERE enabled=1 ORDER BY release_at IS NULL, release_at',
+    );
+    _announcedSprites = rows.map((r) => ({
+      slug: r.slug,
+      name: r.name,
+      releaseAt: r.release_at == null ? null : Number(r.release_at),
+      rarity: r.rarity || null,
+      ability: r.ability || null,
+      howToGet: r.how_to_get || null,
+      sourceUrl: r.source_url || null,
+      familyToken: r.family_token || null,
+    }));
+  } catch (e) {
+    _announcedSprites = [];
+  }
+}
+const getAnnouncedSprites = () => _announcedSprites;
+
+// Append-only ledger write. Called after every successful sync; a variant only
+// ever needs recording once, so INSERT IGNORE keeps this to a no-op in steady
+// state. Never throws into the sync path — availability data is best-effort.
+async function recordObservations(model) {
+  try {
+    const seen = [];
+    for (const g of model?.groups || []) {
+      for (const v of Object.values(g.variants || {})) {
+        if (v.owned && v.name && v.familyToken && v.tierKey) seen.push([v.name, v.familyToken, v.tierKey]);
+      }
+    }
+    if (!seen.length) return;
+    const ph = seen.map(() => '(?,?,?)').join(',');
+    await pool.execute(
+      `INSERT IGNORE INTO epic_sprite_observed_variants (variant_name, family_token, tier_key) VALUES ${ph}`,
+      seen.flat(),
+    );
+  } catch (e) {
+    logger.warn(`[sprite-observed] record failed: ${e.message}`);
+  }
+}
+
+// Self-heal stale gates. A family/cell gate exists to hide something UNTIL it
+// releases. The moment ANY player is observed owning it, it has demonstrably
+// shipped — so drop the gate. Without this the per-player observed override
+// still shows it obtainable on LIVE accounts, but a frozen (needs_relogin)
+// account keeps rendering the pre-release "locked" state forever, and someone
+// has to notice + un-gate by hand on every drop (Storm Scout 2026-08). Tier
+// gates are deliberately EXCLUDED — tiers ship staggered, so one observed cell
+// must not flip a whole tier live (see isTierLive / the Gem-staggering note).
+async function autoClearReleasedGates() {
+  try {
+    const obs = getObservedAvailability();
+    const ownedFamilies = new Set(obs.families || []);
+    const ownedCells = new Set(obs.cells || []);
+    const sched = activeSchedule();
+    const toDrop = [];
+    for (const [key, s] of Object.entries(sched.families || {})) {
+      // gate:false rows are note-only (already obtainable) — nothing to clear.
+      if (s && s.gate !== false && ownedFamilies.has(key)) toDrop.push(['family', key]);
+    }
+    for (const key of Object.keys(sched.cells || {})) {
+      if (ownedCells.has(key)) toDrop.push(['cell', key]);
+    }
+    if (!toDrop.length) return;
+    for (const [scope, key] of toDrop) {
+      await pool.execute('DELETE FROM epic_sprite_release_schedule WHERE scope=? AND item_key=?', [scope, key]);
+      delete sched[scope === 'family' ? 'families' : 'cells'][key];
+      logger.info(`[sprite-schedule] auto-cleared ${scope} gate "${key}" — a player is observed owning it, so it has released`);
+    }
+    setReleaseSchedule(sched); // apply the pruned schedule to the model immediately
+  } catch (e) {
+    logger.warn(`[sprite-schedule] auto-clear failed: ${e.message}`);
+  }
+}
+
+// Persist the catalog version across restarts. `currentCatalogVersion` is an
+// in-memory `let` that resets to the compile-time baseline on every restart — so
+// without this, each restart re-stales the catalog (serving an OLD version until
+// the probe slowly climbs, which is how we ended up on v9/12-families while the
+// game was on v12/16-families). Load the last-known version on boot; save every
+// forward bump. So a future Epic version bump, once discovered, survives restarts.
+let _catalogVerLoaded = false;
+let _lastPersistedCatalogVer = 0;
+async function syncCatalogVersion() {
+  try {
+    await pool.execute('CREATE TABLE IF NOT EXISTS epic_sprite_meta (k VARCHAR(40) PRIMARY KEY, v VARCHAR(64))');
+    if (!_catalogVerLoaded) {
+      const [rows] = await pool.execute('SELECT v FROM epic_sprite_meta WHERE k=?', ['catalog_version']);
+      if (rows.length) { setCatalogVersion(Number(rows[0].v)); _lastPersistedCatalogVer = Number(rows[0].v); }
+      _catalogVerLoaded = true;
+    }
+    const cur = getCatalogVersion();
+    if (cur > _lastPersistedCatalogVer) {
+      await pool.execute('INSERT INTO epic_sprite_meta (k,v) VALUES (?,?) ON DUPLICATE KEY UPDATE v=VALUES(v)', ['catalog_version', String(cur)]);
+      _lastPersistedCatalogVer = cur;
+      logger.info('[sprite-catalog] persisted catalog version v' + cur);
+    }
+  } catch (e) { logger.warn('[sprite-catalog] version persist failed: ' + e.message); }
+}
+
+// Keep both caches warm. Cheap (two small queries) and gives us a ~30s worst
+// case between an admin editing a date and the site reflecting it.
+async function refreshAvailability() {
+  try {
+    // Observed ownership must load BEFORE the schedule: loadReleaseSchedule()
+    // calls reconcileWithHotfix(), which consults getObservedAvailability() to
+    // avoid dragging an already-shipped tier's date forward. Loading them
+    // concurrently would race that dependency on the very first cycle.
+    await loadObservedAvailability();
+    await Promise.all([loadReleaseSchedule(), loadAnnouncedSprites()]);
+    // Drop any family/cell gate that a player is now observed owning (released).
+    await autoClearReleasedGates();
+    // Load/persist the catalog version so restarts don't re-stale it.
+    await syncCatalogVersion();
+    // Push Epic's own disable list (from the hotfix cache) into the model as an
+    // authoritative gate. Carries the poll time so the model can expire it if the
+    // hotfix poller dies — a stale list must never keep gating past reality.
+    const hf = getHotfixCache();
+    setEpicDisabled({
+      variants: hf?.disabled_variants || [],
+      polledAtMs: hf?.polled_at ? new Date(hf.polled_at).getTime() : 0,
+    });
+    _availabilityLoadedAt = Date.now();
+  } catch (e) {
+    logger.warn(`[sprite-availability] refresh failed: ${e.message}`);
+  }
+}
+setTimeout(refreshAvailability, 3000);
+setInterval(refreshAvailability, AVAILABILITY_REFRESH_MS);
 
 // Encrypt-and-persist a freshly-minted device auth pair. Called after a
 // successful exchange or refresh sync to back-fill long-lived credentials.
@@ -725,6 +1188,12 @@ async function saveAccount({ accountId, displayName, refreshToken, refreshExpire
     [accountId, displayName, enc, refreshExpiresAt || null, state],
   );
 
+  // Record every variant this account holds into the global observed ledger.
+  // This is what makes availability self-correcting: the first player anywhere
+  // to loot a Cube flips the tier live for every viewer on the next refresh,
+  // regardless of what date the schedule predicted.
+  if (model) await recordObservations(model);
+
   // If a fresh device_auth was minted as part of this sync, encrypt + persist
   // it alongside the row. Best-effort: failures don't break the save.
   if (deviceAuth?.deviceId && deviceAuth?.secret) {
@@ -764,6 +1233,42 @@ async function saveAccount({ accountId, displayName, refreshToken, refreshExpire
       catch (e) { logger.warn(`[sprites] event insert failed: ${e.message}`); }
     }
   }
+  // Fire off Discord embed refresh in the background — never blocks the sync
+  // response. refreshAllEmbedsForAccount checks rate-limits internally
+  // (skips embeds refreshed in the last 30s).
+  setImmediate(() => {
+    refreshDiscordEmbedsForAccount(accountId).catch((e) => {
+      logger.warn(`[sprites] discord embed refresh failed for ${accountId}: ${e.message}`);
+    });
+  });
+}
+
+// Lazy-load the Discord embed refresh function — bot code lives in a sibling
+// module that imports discord.js. Guarded so a bot-side crash doesn't break
+// the web sync path.
+let _refreshEmbeds = null;
+async function refreshDiscordEmbedsForAccount(accountId) {
+  if (_refreshEmbeds === null) {
+    try {
+      const cmd = await import('../../commands/tools/sprites.js');
+      _refreshEmbeds = cmd?.refreshAllEmbedsForAccount || (() => {});
+    } catch (e) {
+      logger.warn(`[sprites] sprites-command import failed: ${e.message}`);
+      _refreshEmbeds = () => {};
+      return;
+    }
+  }
+  // BotManager exposes a getClientForGuild(guildId) method — some guilds have
+  // custom bots. We look up each embed's guild individually inside the
+  // refresh function; here we just pass a resolver.
+  const bm = global.botManager;
+  if (!bm) return;
+  const clientResolver = (guildId) => {
+    try {
+      return bm.getClientForGuild ? bm.getClientForGuild(guildId) : bm.getDefaultClient?.();
+    } catch { return bm.getDefaultClient?.(); }
+  };
+  await _refreshEmbeds(accountId, clientResolver);
 }
 async function getAccount(accountId) {
   const [rows] = await pool.execute('SELECT * FROM epic_sprite_accounts WHERE account_id=?', [accountId]);
@@ -816,7 +1321,10 @@ async function finishLogin(req, res, tok) {
   // level / account level / pass XP / career wins / current season label —
   // populated on the user's FIRST visit, no second sync needed.
   const { catalog, inventory, athena } = await fetchSpriteData(tok.account_id, tok.access_token);
-  const model = buildModel(catalog, inventory, athena);
+  const model = buildModel(catalog, inventory, athena, {
+    pakDatamined: await getPakDataminedVariants(),
+    familyDisplayNames: getPakFamilyDisplayNames(),
+  });
   // Mint a device auth — forever-permission so the user never has to re-paste.
   // Best-effort: if Epic rejects it for any reason we still have the refresh
   // token to fall back on (and the next sync will retry the back-fill).
@@ -855,8 +1363,11 @@ function cell(v, opts = {}) {
          <input type="hidden" name="variant_name" value="${esc(v.name)}">
          <button type="submit" class="buyback-toggle ${isOnBuyback ? 'on' : 'off'}" title="${isOnBuyback ? 'Remove from buy-back list' : 'Add to buy-back list'}">${isOnBuyback ? '★' : '+'}</button>
        </form>` : '';
+  // Friendly name for alt/title — shown by the browser while the icon loads or
+  // if it 404s. Uses the display label, never the raw catalog codename.
+  const friendly = `${v.familyLabel ? v.familyLabel + ' ' : ''}${v.tierLabel || ''}`.trim() || v.tierLabel || 'Sprite';
   const img = v.imgId
-    ? `<img loading="lazy" src="/sprites/img/${esc(v.imgId)}.png" alt="${esc(v.name)}" onerror="this.replaceWith(Object.assign(document.createElement('span'),{innerHTML:this.dataset.ph}).firstChild)" data-ph="${esc(placeholder(v))}">`
+    ? `<img loading="lazy" src="/sprites/img/${esc(v.imgId)}.png" alt="${esc(friendly)}" onerror="this.replaceWith(Object.assign(document.createElement('span'),{innerHTML:this.dataset.ph}).firstChild)" data-ph="${esc(placeholder(v))}">`
     : placeholder(v);
   const badges = [];
   if (v.starter) badges.push('<span class="b starter">★ Starter</span>');
@@ -871,19 +1382,53 @@ function cell(v, opts = {}) {
   // promising a countdown would be misleading. The 🚫 Vaulted badge below
   // already carries the "not available" signal on its own.
   if (v.future && !v.owned && !v.vaulted) {
-    if (v.tierKey === 'holofoil') {
-      badges.push('<span class="b countdown">Releases in <span class="holofoil-cd">…</span></span>');
+    // Countdown is data-driven: buildModel puts the unlock instant on the
+    // variant as `releasesAt`, so this renderer never needs to know which
+    // tiers are special. Anything without a committed date (Gem, Quack, and
+    // speculative pak-datamined tiles) has releasesAt=null and falls back to
+    // the static "Unreleased" pill — we don't promise a moment we can't back
+    // up. The client script ticks every [data-release-at] span in unison.
+    if (v.releasesAt && !v.pakDatamined) {
+      badges.push(`<span class="b countdown">Releases in <span class="rel-cd" data-release-at="${v.releasesAt}">…</span></span>`);
     } else {
       badges.push('<span class="b soon">Unreleased</span>');
     }
   }
   if (v.vaulted) badges.push('<span class="b vaulted">🚫 Vaulted</span>');
+  // Availability disclaimer badge — appears alongside future/vaulted for
+  // sprites with unusual availability (e.g. Pollo's stream-event debut). The
+  // full explanation lives on the info-card; the tile just gets a short
+  // headline. Owned variants still get the badge so the user knows their copy
+  // came from a limited event.
+  if (v.availabilityNote) badges.push(`<span class="b note" title="${esc(v.availabilityNote.text)}">⚠ ${esc(v.availabilityNote.label)}</span>`);
   const xpLine = v.owned
     ? `<span class="xp">${fmt(v.xp)} XP${v.mastered ? '' : ` / ${fmt(4000)}`}</span>`
     : `<span class="cost">${v.summonCost != null ? `${fmt(v.summonCost)} ✦` : ''}</span>`;
   const bar = v.owned && !v.mastered
     ? `<i class="prog" style="width:${Math.min(100, Math.round((v.xp / 4000) * 100))}%"></i>` : '';
-  return `<td><div class="${cls.join(' ')}" title="${esc(v.name)}">
+  // data-* attributes power the click-to-open info-card modal. Every field
+  // needed to render the card is on the tile itself — family label + ability
+  // text come from window.__SPRITE_META (injected once per page) so we don't
+  // duplicate the full ability description on every one of the ~100 tiles.
+  const dataAttrs = [
+    `data-name="${esc(v.name)}"`,
+    `data-family-token="${esc(v.familyToken)}"`,
+    `data-tier-key="${esc(v.tierKey)}"`,
+    `data-tier-label="${esc(v.tierLabel)}"`,
+    `data-tier-color="${esc(v.tierColor)}"`,
+    `data-owned="${v.owned ? 1 : 0}"`,
+    `data-xp="${v.xp ?? ''}"`,
+    `data-mastered="${v.mastered ? 1 : 0}"`,
+    `data-dupes="${v.dupes ?? 0}"`,
+    `data-summon="${v.summonCost ?? ''}"`,
+    `data-starter="${v.starter ? 1 : 0}"`,
+    `data-vaulted="${v.vaulted ? 1 : 0}"`,
+    `data-future="${v.future ? 1 : 0}"`,
+    `data-pak-datamined="${v.pakDatamined ? 1 : 0}"`,
+    `data-img="${esc(v.imgId || '')}"`,
+    'data-info-trigger="1"',
+  ].join(' ');
+  return `<td><div class="${cls.join(' ')}" ${dataAttrs} title="${esc(friendly)}">
     ${buybackBtn}
     <div class="thumb">${img}${v.owned ? '<span class="tick">✓</span>' : '<span class="lock">🔒</span>'}</div>
     <div class="meta"><span class="tn" style="color:${v.tierColor}">${esc(v.tierLabel)}</span>${xpLine}</div>
@@ -992,6 +1537,27 @@ const STYLE = `
   .profile-extras > summary:hover{color:var(--txt);border-color:var(--purple)}
   .profile-extras[open] > summary{margin-bottom:16px}
   .career-timeline{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:22px 26px;margin-bottom:24px;content-visibility:auto;contain-intrinsic-size:0 900px}
+  /* Sprite extras — quest progression + cosmetic locker cards. Mirror the
+     .card padding/margin/border of the info page's cards so they blend into
+     the profile view visually. Grid layout stacks vertically at ≤700px. */
+  .sprite-extras .card{padding:18px 20px}
+  .sprite-extras .cardhead{font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 12px;font-weight:700}
+  .sprite-quest-row{margin-bottom:10px}
+  .sprite-quest-row:last-child{margin-bottom:0}
+  .sprite-quest-row .ct-bar{position:relative;height:6px;background:#1c2030;border-radius:3px;overflow:hidden}
+  .sprite-quest-row .ct-fill{height:100%;background:linear-gradient(90deg,var(--purple),#5bf0ff);transition:width .3s}
+  .sprite-quest-row .ct-fill.completed{background:linear-gradient(90deg,var(--green),#8ff0b0)}
+  .sqr-label{font-size:13px;line-height:1.35}
+  .sprite-cosmetic-row{margin-bottom:14px}
+  .sprite-cosmetic-row:last-child{margin-bottom:0}
+  .scr-header{font-size:13px;margin-bottom:6px}
+  .scr-header .sub{font-size:11px;color:var(--muted);margin-left:6px}
+  .scr-chips{display:flex;flex-wrap:wrap;gap:5px}
+  .cosmetic-chip{font-size:11px;padding:3px 8px;border:1px solid var(--line);border-radius:999px;background:#0e0f13;color:var(--txt);font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+  .cosmetic-chip b{color:var(--purple);font-weight:800;margin-right:4px}
+  @media (max-width:700px){
+    .sprite-extras{grid-template-columns:1fr!important}
+  }
   .career-timeline .cardhead{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 14px;font-weight:700}
   .career-timeline .cardhead .sub{font-size:11px;color:var(--muted);font-weight:600;text-transform:none;letter-spacing:0}
   .ct-rows{display:flex;flex-direction:column;gap:6px}
@@ -1080,7 +1646,12 @@ const STYLE = `
      inline-block + min-width on the number span locks total pill width so
      digit transitions can't cause micro-reflow (the "wobble" symptom). */
   .b.countdown{color:#ffcf3a;background:rgba(255,207,58,.14);border:1px solid rgba(255,207,58,.22)}
-  .holofoil-cd{color:#ffe48a;font-variant-numeric:tabular-nums;letter-spacing:.02em;display:inline-block;min-width:6.6em;text-align:right}
+  /* Availability disclaimer — warm gold like the countdown, but with a solid
+     border to visually distinguish "unusual availability" from "releases in X".
+     Owned + note = still shows so users know their copy came from a limited
+     window. Full explanation opens on tile click via the info-card modal. */
+  .b.note{color:#ffcf3a;background:rgba(255,207,58,.1);border:1px solid rgba(255,207,58,.35);cursor:help}
+  .rel-cd{color:#ffe48a;font-variant-numeric:tabular-nums;letter-spacing:.02em;display:inline-block;min-width:6.6em;text-align:right}
   /* Buy-back list — same gold palette as the countdown pill, matched theming. */
   .bb-panel{margin:0 auto 18px;max-width:1180px;padding:0;border:1px solid rgba(255,207,58,.22);border-radius:14px;background:linear-gradient(180deg,rgba(255,207,58,.06),rgba(255,207,58,.01));overflow:hidden}
   .bb-panel[open]{background:linear-gradient(180deg,rgba(255,207,58,.08),rgba(255,207,58,.015))}
@@ -1176,6 +1747,111 @@ const STYLE = `
   .cmp-need .cmp-user{background:rgba(255,91,110,.12);color:#ff8aa6;border-color:rgba(255,91,110,.3)}
   .cmp-need .cmp-user:hover{background:rgba(255,91,110,.2)}
   .cmp-have-col,.cmp-need-col{width:38%}
+  /* Global pill (health-audit card renders pills outside .admin-table). Less
+     specific than the scoped admin-table pill rule, so that still wins there. */
+  .pill{display:inline-block;padding:3px 10px;border-radius:999px;font-size:11px;font-weight:800;letter-spacing:.04em;background:#1a1d26;color:var(--muted)}
+  .pill.ok{background:rgba(58,208,122,.15);color:var(--green)}
+  .pill.bad{background:rgba(255,91,110,.18);color:#ff8aa6}
+  .pill.warn{background:rgba(255,207,58,.15);color:var(--gold)}
+  .audit-list{margin:4px 0 0;padding-left:18px;font-size:12.5px;line-height:1.5}
+  .audit-list.bad li{color:#ff9db2}
+  .audit-list.warn li{color:#d9c47a}
+  /* ── Compare "Viewing as" visual board (cb-*) ─────────────────────────── */
+  .cb-standings{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+  .cb-stand{display:inline-flex;align-items:center;gap:7px;padding:5px 11px;border-radius:999px;background:#0e0f13;border:1px solid var(--line);text-decoration:none;color:var(--txt);font-size:12.5px}
+  .cb-stand:hover{border-color:var(--purple)}
+  .cb-stand.on{border-color:var(--gold);background:rgba(255,207,58,.08)}
+  .cb-stand .cb-rank{color:var(--muted);font-weight:800;font-variant-numeric:tabular-nums}
+  .cb-stand .cb-stand-n{color:var(--green);font-weight:800;font-variant-numeric:tabular-nums}
+  .cb-stand .cb-stand-go{color:var(--muted);font-weight:800;margin-left:1px}
+  .cb-stand:hover .cb-stand-go{color:var(--purple)}
+  .cb-fromlink{color:var(--green);text-decoration:none;font-weight:700}
+  .cb-fromlink:hover{text-decoration:underline}
+  .cb-agg{margin:6px 0 14px}
+  .cb-agg-bar{height:8px;border-radius:999px;background:#0e0f13;border:1px solid var(--line);overflow:hidden}
+  .cb-agg-bar span{display:block;height:100%;background:linear-gradient(90deg,#3ad07a,#5bf0ff)}
+  .cb-agg-txt{font-size:13px;color:var(--muted);margin-top:6px}
+  .cb-agg-txt b{color:var(--txt)}
+  .cb-viewas{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:6px}
+  .cb-viewas-lbl{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);font-weight:800}
+  .cb-chips{display:flex;flex-wrap:wrap;gap:6px}
+  .cb-vchip{padding:5px 12px;border-radius:999px;background:#0e0f13;border:1px solid var(--line);text-decoration:none;color:var(--muted);font-size:12.5px;font-weight:700}
+  .cb-vchip:hover{color:var(--txt);border-color:var(--purple)}
+  .cb-vchip.on{background:var(--purple);border-color:var(--purple);color:#fff}
+  .cb-vselect{display:none;background:#0e0f13;border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:7px 10px;font-size:13px;max-width:100%}
+  .cb-controls{display:flex;flex-direction:column;gap:10px;margin-bottom:14px}
+  .cb-tiers{display:flex;flex-wrap:wrap;gap:6px}
+  .cb-tierpill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;border:1px solid var(--line);cursor:pointer;font-size:12px;font-weight:700;user-select:none}
+  .cb-tierpill span{color:var(--tc)}
+  .cb-tierpill input{accent-color:var(--tc)}
+  .cb-ctl-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  #cb-search,#cb-sort{background:#0e0f13;border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:7px 10px;font-size:13px}
+  #cb-search{min-width:140px}
+  .cb-toggle{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;color:var(--muted);cursor:pointer}
+  .cb-csv{padding:6px 11px;border-radius:8px;background:#0e0f13;border:1px solid var(--line);color:var(--muted);text-decoration:none;font-size:12.5px;font-weight:700;cursor:pointer}
+  .cb-csv:hover{color:var(--txt);border-color:var(--purple)}
+  .cb-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:12px}
+  .cb-tile{position:relative;background:var(--bg2);border:1px solid var(--line);border-radius:14px;padding:10px;display:flex;flex-direction:column;gap:8px;border-top:3px solid var(--tc)}
+  .cb-tile.cb-uniq{box-shadow:0 0 0 1px rgba(255,207,58,.4),0 0 14px rgba(255,207,58,.1)}
+  .cb-tile.cb-dim{opacity:.62}
+  .cb-tile[role=button]{cursor:pointer}
+  .cb-tile[role=button]:hover{border-color:var(--tc)}
+  .cb-art{aspect-ratio:1/1;border-radius:10px;background:#0f1118;display:grid;place-items:center;overflow:hidden}
+  .cb-art img,.cb-art .ph{width:100%;height:100%;object-fit:contain}
+  .cb-meta{display:flex;flex-direction:column;gap:2px;line-height:1.25}
+  .cb-tier{font-size:10px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--tc)}
+  .cb-fam{font-size:14px}
+  .cb-ctx{font-size:11.5px;color:var(--muted);margin-top:2px}
+  .cb-ctx.cb-from{color:var(--green)}
+  .cb-ctx.cb-hunt{color:#8ab4ff}
+  .cb-ctx.cb-vault{color:#ff8aa6}
+  .cb-ctx.cb-need{color:var(--gold)}
+  .cb-detail{display:none;font-size:11.5px;border-top:1px solid var(--line);padding-top:7px;margin-top:2px}
+  .cb-tile.open .cb-detail{display:block}
+  .cb-detail>div{display:flex;flex-wrap:wrap;gap:4px 6px;margin-bottom:5px;align-items:baseline}
+  .cb-detail>div>span{font-weight:800;font-size:10px;text-transform:uppercase;letter-spacing:.04em}
+  .cb-has>span{color:var(--green)}
+  .cb-needs>span{color:#ff8aa6}
+  .cb-detail a{color:var(--txt);text-decoration:none;background:#0f1118;border:1px solid var(--line);border-radius:999px;padding:1px 8px;font-weight:600}
+  .cb-detail a:hover{border-color:var(--purple)}
+  .cb-detail i{color:var(--muted)}
+  .cb-empty{text-align:center;padding:40px 20px;font-size:15px;color:var(--muted);background:var(--bg2);border:1px dashed var(--line);border-radius:14px}
+  .cb-lev{margin-top:18px;background:#0e0f13;border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+  .cb-lev summary{cursor:pointer;font-weight:700;color:var(--txt)}
+  @media (max-width:640px){
+    .cb-chips{display:none}
+    .cb-vselect{display:inline-block}
+    .cb-grid{grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:9px}
+  }
+  /* Matrix view — auto-selected for large collector groups (>5). A sticky
+     sprite column on the left, then one narrow column per collector. Scan a
+     COLUMN for one person's gaps, a ROW for scarcity. Horizontal scroll
+     instead of the unreadable 17-chips-per-cell soup the chip table becomes. */
+  .cmp-matrix-wrap{overflow-x:auto;border:1px solid var(--line);border-radius:14px;background:var(--bg2);-webkit-overflow-scrolling:touch}
+  .cmp-matrix{border-collapse:collapse;font-size:12px;min-width:100%}
+  .cmp-matrix td,.cmp-matrix th{border-bottom:1px solid var(--line);vertical-align:middle}
+  .cmp-matrix tr:last-child td{border-bottom:0}
+  .cmp-matrix thead th{background:#12141c;padding:6px 4px}
+  .cmp-matrix .mx-sprite{position:sticky;left:0;background:var(--bg2);min-width:190px;max-width:190px;padding:7px 12px;box-shadow:1px 0 0 var(--line)}
+  .cmp-matrix thead .mx-sprite{z-index:5;background:#12141c;text-transform:uppercase;letter-spacing:.05em;font-size:11px;color:var(--muted);text-align:left}
+  .cmp-matrix tbody .mx-sprite{z-index:1}
+  .mx-sprite-in{display:flex;align-items:center;gap:10px}
+  .mx-ico{flex:none;width:34px;height:34px;border-radius:8px;background:#0f1118;border:1px solid var(--line);display:grid;place-items:center;overflow:hidden;font-size:14px}
+  .mx-ico img{width:100%;height:100%;object-fit:contain}
+  .mx-txt{display:flex;flex-direction:column;line-height:1.25;min-width:0}
+  .mx-txt .mx-tier{font-weight:800;font-size:9.5px;text-transform:uppercase;letter-spacing:.05em}
+  .mx-txt b{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px}
+  .cmp-matrix .mx-user{writing-mode:vertical-rl;white-space:nowrap;height:120px;width:26px;max-width:26px;padding:6px 0;font-weight:700}
+  .cmp-matrix .mx-user a{color:var(--muted);text-decoration:none;font-size:11px}
+  .cmp-matrix .mx-user a:hover{color:var(--purple)}
+  .cmp-matrix .mx-cell{text-align:center;width:26px;font-size:15px;line-height:1;padding:4px 0}
+  .mx-miss{color:#2c3140}
+  .mx-master{color:var(--gold)}
+  .cmp-matrix .mx-count{text-align:center;min-width:48px;font-variant-numeric:tabular-nums;font-weight:800;padding:4px 10px;color:var(--txt)}
+  .cmp-matrix .mx-count .mx-of{color:var(--muted);font-weight:600}
+  .cmp-matrix tbody tr.unique td{background:rgba(255,207,58,.05)}
+  .cmp-matrix tbody tr.unique .mx-sprite{background:#1b1a12;box-shadow:inset 3px 0 0 var(--gold),1px 0 0 var(--line)}
+  .cmp-rank{display:inline-block;min-width:20px;font-variant-numeric:tabular-nums;color:var(--muted);font-weight:800;margin-right:6px}
   @media (max-width:720px){
     .cmp-table thead{display:none}
     .cmp-table tr{display:block;border:1px solid var(--line);border-radius:12px;padding:12px;margin-bottom:10px;background:var(--bg2)}
@@ -1203,6 +1879,10 @@ const STYLE = `
   .audit-tokens{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 4px}
   .audit-token{background:#1a1e2b;border:1px solid #2a2f3c;padding:3px 9px;border-radius:6px;color:#a9b6d0;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;white-space:nowrap}
   .audit-token.absent{background:#2a1015;border-color:#6b1a24;color:#ffb4bd;font-weight:700}
+  /* Confirmed-shipped rumor pill. Carries a codename + live count so it runs
+     longer than the terse absent pills — allow it to wrap. */
+  .audit-token.present{background:#0f2418;border-color:#1f6b3a;color:#8ce8ac;font-weight:700;white-space:normal}
+  .audit-token.present code{color:#c8f7d8;background:rgba(0,0,0,.25);padding:1px 4px;border-radius:4px}
   .audit-token.family{font-size:11px}
   @media (max-width:600px){
     /* Global — the whole site benefits from these, not just /sprites/info */
@@ -1257,7 +1937,7 @@ const STYLE = `
     /* Countdown pill inside a mobile cell — width was 6.6em to prevent digit
        wobble; that's too wide for a shrunken cell. 5em still holds the widest
        "23h 59m" reading without wobbling. */
-    .holofoil-cd{min-width:5em}
+    .rel-cd{min-width:5em}
     /* Buffs strip stacks single-column instead of two side-by-side. */
     .cf-buffs-panel{min-width:0;flex:1 1 100%}
     /* Info-page audit table — stack into a card-per-row on mobile.
@@ -1387,7 +2067,376 @@ const STYLE = `
   table.f-need .cell.owned, table.f-need .cell.future, table.f-need .cell.vaulted,
   table.f-master .cell:not(.mastered),
   table.f-unrel .cell:not(.future){opacity:.1}
-  tr.rowhide{display:none}`;
+  tr.rowhide{display:none}
+  /* ── Trading-card modal (Pokemon / Yu-Gi-Oh vibe) ─────────────────────── */
+  .cell[data-info-trigger]{cursor:pointer}
+  .info-modal{position:fixed;inset:0;background:rgba(6,7,10,.82);backdrop-filter:blur(10px);
+    display:none;align-items:center;justify-content:center;z-index:9999;padding:16px;
+    animation:info-fade .2s ease-out}
+  .info-modal.open{display:flex}
+  @keyframes info-fade{from{opacity:0}to{opacity:1}}
+  @keyframes card-in{
+    0%{transform:scale(.85) rotateY(-8deg);opacity:0}
+    60%{transform:scale(1.03) rotateY(2deg);opacity:1}
+    100%{transform:scale(1) rotateY(0);opacity:1}
+  }
+  @keyframes holo-shimmer{
+    0%{background-position:0% 50%}
+    50%{background-position:100% 50%}
+    100%{background-position:0% 50%}
+  }
+  @keyframes card-glow{
+    0%,100%{filter:drop-shadow(0 0 12px var(--card-glow, rgba(123,92,255,.4)))}
+    50%{filter:drop-shadow(0 0 22px var(--card-glow, rgba(123,92,255,.7)))}
+  }
+  /* Card outer frame — colored border per rarity. Width capped like a real
+     trading card; height auto-fits content so the ability panels never scroll. */
+  .info-card{
+    width:min(380px, 92vw);
+    max-height:92vh;
+    position:relative;padding:0;
+    background:linear-gradient(155deg,var(--card-a,#2a2438) 0%,var(--card-b,#0f1018) 100%);
+    border-radius:22px;
+    border:none;
+    box-shadow:
+      0 0 0 3px var(--card-frame,#3a3550),
+      0 0 0 5px rgba(0,0,0,.35),
+      0 30px 80px rgba(0,0,0,.7);
+    animation:card-in .35s cubic-bezier(.2,.9,.3,1.3);
+    display:flex;flex-direction:column;
+    /* Card content flows naturally; only scroll if the card itself
+       exceeds the viewport (very tall descriptions on tiny screens). */
+    overflow:hidden auto;
+    scrollbar-width:thin;scrollbar-color:var(--card-frame) transparent;
+  }
+  .info-card::-webkit-scrollbar{width:5px}
+  .info-card::-webkit-scrollbar-thumb{background:var(--card-frame);border-radius:3px}
+  /* Rarity variables set via data attribute */
+  .info-card[data-rarity="Rare"]{--card-frame:#5bf0ff;--card-a:#0e2833;--card-b:#0a1418;--card-glow:rgba(91,240,255,.35)}
+  .info-card[data-rarity="Epic"]{--card-frame:#c084fc;--card-a:#241238;--card-b:#0e0a18;--card-glow:rgba(192,132,252,.4)}
+  .info-card[data-rarity="Legendary"]{--card-frame:#ffcf3a;--card-a:#332510;--card-b:#161006;--card-glow:rgba(255,207,58,.45)}
+  .info-card[data-rarity="Mythic"]{--card-frame:#ff6cc4;--card-a:#331428;--card-b:#180a12;--card-glow:rgba(255,108,196,.5);animation:card-in .35s cubic-bezier(.2,.9,.3,1.3), card-glow 2.4s ease-in-out infinite 1s}
+  /* CH7S4 Override rarity system (Common/Uncommon/Rare/Very Rare). "Rare" reuses the cyan above. */
+  .info-card[data-rarity="Common"]{--card-frame:#b6c0cf;--card-a:#1c2027;--card-b:#0d0f13;--card-glow:rgba(182,192,207,.28)}
+  .info-card[data-rarity="Uncommon"]{--card-frame:#4fd77a;--card-a:#0f2a1a;--card-b:#08160e;--card-glow:rgba(79,215,122,.35)}
+  .info-card[data-rarity="Very Rare"]{--card-frame:#a678ff;--card-a:#221338;--card-b:#100a18;--card-glow:rgba(166,120,255,.42)}
+  /* Holofoil / Gem / Cube tiers get the iridescent conic-gradient overlay */
+  .info-card.holo::before{
+    content:'';position:absolute;inset:0;pointer-events:none;border-radius:22px;
+    background:conic-gradient(from 0deg, #ff6cc4, #ffcf3a, #3ad07a, #5bf0ff, #7b5cff, #ff6cc4);
+    background-size:200% 200%;
+    mix-blend-mode:overlay;
+    opacity:.32;
+    animation:holo-shimmer 4.5s ease-in-out infinite;
+    z-index:1;
+  }
+  .info-card > *{position:relative;z-index:2}
+
+  /* Header bar — sprite name + level/HP badge */
+  .info-hdr{
+    display:flex;align-items:center;justify-content:space-between;gap:8px;
+    padding:11px 16px 8px;
+  }
+  .info-hdr .fam-wrap{flex:1;min-width:0}
+  .info-hdr .fam-name{
+    font:900 20px/1.05 inherit;letter-spacing:-.01em;margin:0;
+    color:#f5f0ff;text-shadow:0 1px 0 rgba(0,0,0,.5);
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  }
+  .info-hdr .fam-sub{
+    font:800 9px/1 inherit;letter-spacing:.14em;text-transform:uppercase;
+    color:var(--card-frame);margin-top:3px;opacity:.9;
+  }
+  .info-hdr .level-badge{
+    background:rgba(0,0,0,.55);border:2px solid var(--card-frame);
+    padding:5px 10px 4px;border-radius:22px;text-align:center;
+    min-width:56px;line-height:1;flex-shrink:0;
+  }
+  .info-hdr .level-badge .lvl-num{
+    font:900 18px/1 inherit;color:var(--card-frame);display:block;
+    text-shadow:0 0 8px var(--card-glow,rgba(255,255,255,.3));
+  }
+  .info-hdr .level-badge .lvl-lbl{
+    font:800 8px/1 inherit;letter-spacing:.1em;text-transform:uppercase;
+    color:#e8eaf0;opacity:.85;margin-top:2px;display:block;
+  }
+  .info-close{position:absolute;top:8px;right:8px;background:rgba(0,0,0,.55);
+    border:1.5px solid var(--card-frame);color:#e8eaf0;width:28px;height:28px;
+    border-radius:50%;font:800 16px/1 inherit;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;z-index:10;
+    transition:background .12s,transform .12s}
+  .info-close:hover{background:var(--card-frame);color:#000;transform:scale(1.1)}
+
+  /* Art window */
+  .info-art{
+    margin:0 14px;
+    aspect-ratio: 1 / 1;
+    background:radial-gradient(ellipse at 50% 45%, rgba(255,255,255,.06) 0%, rgba(0,0,0,.5) 80%);
+    border:2px solid var(--card-frame);
+    border-radius:10px;
+    display:flex;align-items:center;justify-content:center;
+    overflow:hidden;position:relative;
+    box-shadow:inset 0 2px 8px rgba(0,0,0,.6);
+  }
+  .info-art img{width:88%;height:88%;object-fit:contain;
+    filter:drop-shadow(0 6px 18px rgba(0,0,0,.6))}
+  .info-art svg{width:70%;height:70%}
+  .info-art .art-tier-badge{
+    position:absolute;top:8px;left:8px;
+    background:var(--card-frame);color:#000;
+    font:900 10px/1 inherit;letter-spacing:.08em;text-transform:uppercase;
+    padding:3px 8px;border-radius:6px;
+    box-shadow:0 2px 4px rgba(0,0,0,.4);
+  }
+  .info-art .art-status{
+    position:absolute;bottom:8px;right:8px;
+    background:rgba(0,0,0,.7);color:#e8eaf0;
+    font:800 10px/1 inherit;letter-spacing:.08em;text-transform:uppercase;
+    padding:4px 9px;border-radius:6px;border:1px solid rgba(255,255,255,.15);
+  }
+  .info-art .art-status.owned{color:#3ad07a;border-color:rgba(58,208,122,.4)}
+  .info-art .art-status.mastered{color:#c084fc;border-color:rgba(192,132,252,.4)}
+
+  /* Body — ability boxes + stats. No internal scroll — card grows to fit. */
+  .info-body{padding:10px 14px 12px}
+
+  /* Ability box — mimic Pokemon's move-description box */
+  .info-move{
+    background:linear-gradient(180deg,rgba(255,255,255,.05) 0%,rgba(0,0,0,.15) 100%);
+    border:1.5px solid rgba(255,255,255,.14);
+    border-radius:8px;
+    padding:9px 11px;
+    margin-bottom:8px;
+    position:relative;
+  }
+  .info-move-hdr{
+    display:flex;align-items:center;gap:8px;margin-bottom:5px;
+  }
+  .info-move-hdr .icon{
+    width:22px;height:22px;border-radius:50%;
+    background:var(--card-frame);color:#000;
+    display:flex;align-items:center;justify-content:center;
+    font:900 14px/1 inherit;flex-shrink:0;
+  }
+  .info-move-hdr .name{
+    font:900 12.5px/1.1 inherit;color:#f5f0ff;flex:1;
+    text-transform:uppercase;letter-spacing:.04em;
+  }
+  .info-move-hdr .power{
+    font:900 12.5px/1 inherit;color:var(--card-frame);
+    text-shadow:0 0 6px var(--card-glow,rgba(255,255,255,.2));
+  }
+  .info-move-desc{
+    font:500 11.5px/1.4 inherit;color:#d5d8e0;margin:0;
+  }
+  /* Per-level scaling table under the ability description */
+  .lvl-list{
+    display:grid;
+    grid-template-columns:auto 1fr;
+    gap:3px 8px;
+    margin-top:6px;
+    padding-top:6px;
+    border-top:1px dashed rgba(255,255,255,.08);
+  }
+  .lvl-tag{
+    font:900 9.5px/1.35 inherit;letter-spacing:.05em;text-transform:uppercase;
+    color:var(--card-frame);
+    background:rgba(0,0,0,.35);
+    padding:2px 7px;border-radius:4px;
+    text-align:center;white-space:nowrap;align-self:center;
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.04);
+  }
+  .lvl-val{
+    color:#e4e7ee;font:600 11px/1.4 inherit;
+    align-self:center;
+  }
+  /* On the /sprites/info ability table use neutral color (no card-frame var) */
+  .audit-table .lvl-list{border-top-color:rgba(123,92,255,.15)}
+  .audit-table .lvl-tag{color:var(--purple);background:rgba(123,92,255,.12)}
+
+  /* Stats strip — mimic Pokemon's weakness/retreat row */
+  .info-stats{
+    display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;
+    padding:8px;
+    background:rgba(0,0,0,.35);
+    border:1px solid rgba(255,255,255,.08);
+    border-radius:6px;
+    margin-bottom:8px;
+  }
+  .info-stat{text-align:center}
+  .info-stat b{display:block;font:900 14px/1 inherit;color:var(--card-frame);margin-bottom:2px;
+    text-shadow:0 0 6px var(--card-glow,rgba(255,255,255,.2))}
+  .info-stat .lbl{font:800 8px/1 inherit;letter-spacing:.08em;text-transform:uppercase;
+    color:#a9b6d0;opacity:.85}
+
+  /* XP progress bar */
+  .info-progress{height:5px;background:rgba(0,0,0,.5);border-radius:3px;overflow:hidden;
+    margin:6px 0 3px;border:1px solid rgba(255,255,255,.05)}
+  .info-progress i{display:block;height:100%;background:linear-gradient(90deg,var(--card-frame),#fff);
+    transition:width .3s;box-shadow:0 0 6px var(--card-glow,rgba(255,255,255,.4))}
+  .info-progress-lbl{font:700 10px/1 inherit;text-align:center;color:#a9b6d0;
+    letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px}
+
+  /* Footer with rarity dot + codename */
+  .info-foot{
+    display:flex;align-items:center;justify-content:space-between;gap:8px;
+    padding:6px 14px 10px;
+    font:600 9px/1.2 inherit;color:#7a8395;
+    border-top:1px solid rgba(255,255,255,.05);
+  }
+  .info-foot .codename{
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    font-size:9.5px;opacity:.8;
+    overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+    flex:1;min-width:0;
+  }
+  .info-foot .rarity-dot{
+    display:inline-flex;align-items:center;gap:5px;flex-shrink:0;
+    font:900 9px/1 inherit;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--card-frame);
+  }
+  .info-foot .rarity-dot::before{
+    content:'';width:8px;height:8px;border-radius:50%;
+    background:var(--card-frame);
+    box-shadow:0 0 6px var(--card-glow,rgba(255,255,255,.3));
+  }
+
+  /* Special-status ribbons that appear as banners over the art */
+  .info-ribbon{
+    position:absolute;top:12px;right:-30px;
+    background:var(--card-frame);color:#000;
+    padding:3px 34px;font:900 10px/1 inherit;letter-spacing:.1em;text-transform:uppercase;
+    transform:rotate(35deg);
+    box-shadow:0 2px 4px rgba(0,0,0,.35);z-index:3;
+  }
+  .info-ribbon.vaulted{background:#ff5b6e;color:#fff}
+  .info-ribbon.mastered{background:linear-gradient(90deg,#ffcf3a,#c084fc);color:#000}
+
+  /* Compact mobile tweaks */
+  @media(max-width:420px){
+    .info-card{width:96vw;max-height:95vh}
+    .info-hdr .fam-name{font-size:17px}
+    .info-hdr .level-badge{min-width:48px;padding:4px 8px 3px}
+    .info-hdr .level-badge .lvl-num{font-size:16px}
+    .info-body{padding:8px 12px 10px}
+  }
+  /* ── /sprites/cards catalogue grid ─────────────────────────────────────── */
+  .cards-toolbar{display:flex;gap:12px;flex-wrap:wrap;align-items:end;
+    background:rgba(0,0,0,.2);border:1px solid var(--line);
+    border-radius:10px;padding:12px 14px;margin-top:12px}
+  .cards-toolbar label{display:flex;flex-direction:column;gap:4px;
+    font:800 10.5px/1 inherit;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--muted);min-width:130px}
+  .cards-toolbar select{background:#0e0f13;border:1px solid var(--line);
+    color:var(--txt);border-radius:8px;padding:8px 10px;font:600 13px/1 inherit;
+    cursor:pointer;min-width:130px}
+  .cards-toolbar button{margin-left:6px}
+  .cards-grid{
+    display:grid;
+    grid-template-columns:repeat(auto-fill,minmax(340px,1fr));
+    gap:22px;
+    margin-top:16px;
+  }
+  /* Catalogue cards render inline (not as modal) — remove animation + shadows
+     tuned for modal-in-viewport, add a subtle hover lift. */
+  .catalogue-card{
+    width:100%!important;
+    max-height:none!important;
+    max-width:400px;
+    margin:0 auto;
+    animation:none;
+    transition:transform .18s ease-out, box-shadow .18s ease-out;
+  }
+  .catalogue-card:hover{
+    transform:translateY(-4px) scale(1.01);
+    box-shadow:
+      0 0 0 3px var(--card-frame,#3a3550),
+      0 0 0 5px rgba(0,0,0,.35),
+      0 20px 40px rgba(0,0,0,.7),
+      0 0 30px var(--card-glow, rgba(123,92,255,.4));
+  }
+  @media(max-width:600px){
+    .cards-grid{grid-template-columns:1fr;gap:16px}
+    .cards-toolbar label{min-width:100%}
+    .cards-toolbar select{width:100%}
+  }
+  /* PNG download button per card */
+  .card-dl{
+    position:absolute;top:8px;right:8px;z-index:10;
+    background:rgba(0,0,0,.6);border:1.5px solid var(--card-frame,#7b5cff);
+    color:var(--card-frame,#e8eaf0);
+    width:30px;height:30px;border-radius:50%;
+    font:900 15px/1 inherit;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;
+    transition:transform .12s, background .12s, color .12s;
+    opacity:.7;
+  }
+  .card-dl:hover{opacity:1;background:var(--card-frame,#7b5cff);color:#000;transform:scale(1.12)}
+  .card-dl.working{background:var(--card-frame);color:#000;animation:card-in .5s ease-in-out infinite alternate}
+  .card-dl.done{background:#3ad07a;border-color:#3ad07a;color:#000}
+  /* Bulk-download bar */
+  .cards-bulk{display:flex;gap:10px;align-items:center;flex-wrap:wrap;
+    background:rgba(123,92,255,.08);border:1px solid rgba(123,92,255,.3);
+    border-radius:10px;padding:10px 14px;margin-top:12px}
+  .cards-bulk .dl-all{background:var(--purple);color:#fff;border:0;
+    border-radius:8px;padding:8px 14px;font:800 12.5px/1 inherit;cursor:pointer;
+    letter-spacing:.04em;text-transform:uppercase}
+  .cards-bulk .dl-all:hover{background:#8f70ff}
+  .cards-bulk .dl-status{color:var(--muted);font:600 12.5px/1 inherit;flex:1}
+  .cards-bulk progress{height:8px;flex:1;max-width:280px;
+    background:#0e0f13;border:1px solid var(--line);border-radius:4px;
+    overflow:hidden;appearance:none;-webkit-appearance:none}
+  .cards-bulk progress::-webkit-progress-bar{background:#0e0f13}
+  .cards-bulk progress::-webkit-progress-value{background:var(--purple)}
+  .cards-bulk progress::-moz-progress-bar{background:var(--purple)}
+  /* ── Shared layout pass (2026-11-18): one header + tab row on every page,
+     readable contrast, visible keyboard focus, no squeezed hero on phones. ── */
+  :root{--muted:#9ca3b8;--link:#ab98ff}
+  html{background:var(--bg)}
+  body{min-height:100vh}
+  a{color:var(--link)}
+  .navlink{color:var(--link)}
+  :where(a,button,summary,input,select,textarea,[tabindex]):focus-visible{outline:2px solid var(--link);outline-offset:2px}
+  header.st-header{display:block;padding:0;position:sticky;top:0;z-index:30;background:#0c0d12;border-bottom:1px solid var(--line)}
+  .st-bar{display:flex;align-items:center;gap:10px 14px;flex-wrap:wrap;padding:12px 26px}
+  .st-bar .logo{white-space:nowrap}
+  .st-bar .nav{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+  .st-tabs{display:flex;gap:2px;padding:0 20px;overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  .st-tabs::-webkit-scrollbar{display:none}
+  .st-tabs a{flex:none;padding:9px 12px 10px;color:var(--muted);font-weight:700;font-size:13.5px;text-decoration:none;border-bottom:2px solid transparent;white-space:nowrap}
+  .st-tabs a:hover{color:var(--txt)}
+  .st-tabs a[aria-current="page"]{color:var(--txt);border-bottom-color:var(--purple)}
+  .cfn-here{margin-left:auto;font-size:10px;color:var(--muted);font-weight:600}
+  .nav .navlink[aria-current="page"]{background:#161922;color:var(--txt)}
+  .btn,.nav .navlink.primary,.nav .navlink.primary:hover{background:linear-gradient(90deg,#6744f0,#7a5cf6);color:#fff}
+  .btn:hover{filter:brightness(1.08)}
+  .btn.btn-quiet{background:#262a37;color:var(--txt)}
+  .st-input{width:100%;padding:9px 11px;border-radius:8px;border:1px solid #2f3446;background:#12141b;color:var(--txt);font:inherit;margin:0}
+  .st-input:focus{border-color:var(--purple)}
+  .st-field{display:grid;gap:4px}
+  .st-field > span:first-child{font-weight:600}
+  .st-hint{font-size:12px;color:var(--muted)}
+  main input:not([type=checkbox]):not([type=radio]),main select,main textarea{max-width:100%}
+  .table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+  .st-empty{text-align:center;color:var(--muted);padding:22px 12px;margin:0}
+  .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+  .stats{flex:1 1 320px;min-width:0}
+  .browse-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:14px}
+  .browse-actions .btn[disabled]{opacity:.5;cursor:not-allowed;filter:none}
+  .catalogue-card .info-hdr{padding-right:44px}
+  .table-scroll{overflow-wrap:normal;word-break:normal}
+  .table-scroll > table{min-width:880px}
+  @media (max-width:600px){
+    header.st-header{position:static}
+    .st-bar{padding:10px 14px;gap:8px 10px}
+    .st-bar .nav{margin-left:0}
+    .st-tabs{padding:0 6px;flex-wrap:wrap;overflow:visible}
+    .st-tabs a{padding:8px 10px 9px;font-size:13px}
+    .hero{gap:14px;padding:14px 16px}
+    .stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 16px;flex-basis:100%}
+    .stat,.stat b{overflow-wrap:normal;word-break:normal}
+    .stat b{font-size:19px}
+  }`;
 
 // Client-side filter + sort + copy-share (CSP allows inline script via 'unsafe-inline').
 // Server-rendered SHELL for the Buffs & Drops strip — shared between
@@ -1427,6 +2476,228 @@ const BUFFS_STRIP = `<div class="cf-buffs">
 </div>`;
 
 const SCRIPT = `<script>(function(){
+  // ── Sprite info card modal ──────────────────────────────────────────────
+  // Click any tile (data-info-trigger="1") to open a card showing full sprite
+  // metadata. Data comes from the tile's data-* attributes + window.__SPRITE_META
+  // (server-injected map of familyToken → { label, ability } + tier bonuses).
+  var META = window.__SPRITE_META || { families: {}, abilities: {}, tiers: {} };
+  var modal = document.getElementById('info-modal');
+  if (modal) {
+    function fmtNum(n){ n = +n; if(!n && n!==0) return ''; return n.toLocaleString(); }
+    function esc(s){ return String(s == null ? '' : s).replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
+    function openModal(cell){
+      var d = cell.dataset;
+      var famToken = d.familyToken || '';
+      var famLabel = META.families[famToken] || famToken;
+      var ability = META.abilities[famToken] || '';
+      var tierKey = d.tierKey || '';
+      var tierLabel = d.tierLabel || '';
+      var tierColor = d.tierColor || '#7a8395';
+      var tierMeta = META.tiers[tierKey] || {};
+      var owned = d.owned === '1';
+      var xp = +d.xp || 0;
+      var mastered = d.mastered === '1';
+      var dupes = +d.dupes || 0;
+      var summon = d.summon ? +d.summon : null;
+      var starter = d.starter === '1';
+      var vaulted = d.vaulted === '1';
+      var future = d.future === '1';
+      var pakDatamined = d.pakDatamined === '1';
+      var name = d.name || '';
+      var img = d.img;
+      // Rarity is a FAMILY property from the base-tier cost, computed server-side
+      // with the correct bands (META.rarities) so every variant of a family shows
+      // the SAME rarity — a special tile no longer inflates it. Fallback to a
+      // base-cost heuristic only if META somehow lacks it.
+      var rarity = (META.rarities && META.rarities[famToken] && META.rarities[famToken] !== 'unknown')
+        ? META.rarities[famToken]
+        : (summon >= 6750 ? 'Mythic' : summon >= 4500 ? 'Legendary' : summon >= 2700 ? 'Epic' : 'Rare');
+
+      // Card level display — for owned, show numeric level (1-5 based on XP).
+      // For locked, show padlock. Unreleased = clock. Vaulted = 🚫.
+      var lvl = Math.max(1, Math.min(5, Math.ceil(xp / 800)));  // 800 XP/lvl, mastered=5
+      var lvlNumHtml, lvlLblHtml;
+      if (vaulted && !owned) { lvlNumHtml = '🚫'; lvlLblHtml = 'Vaulted'; }
+      else if (future && !owned) { lvlNumHtml = '⏳'; lvlLblHtml = 'Locked'; }
+      else if (!owned) { lvlNumHtml = '🔒'; lvlLblHtml = 'Locked'; }
+      else if (mastered) { lvlNumHtml = '✦'; lvlLblHtml = 'Master'; }
+      else { lvlNumHtml = 'Lv ' + lvl; lvlLblHtml = fmtNum(xp) + ' XP'; }
+
+      // Image / placeholder for the art window
+      var imgHtml = img
+        ? '<img src="/sprites/img/' + esc(img) + '.png" alt="' + esc(name) + '" onerror="this.style.display=\\'none\\'; this.parentNode.querySelector(\\'.art-fallback\\').style.display=\\'block\\'">'
+          + '<svg class="art-fallback" style="display:none" viewBox="0 0 100 100"><rect width="100" height="100" rx="14" fill="#15171e"/><text x="50" y="62" text-anchor="middle" font-size="40" font-weight="800" fill="' + esc(tierColor) + '">' + esc((tierLabel||'?')[0]) + '</text></svg>'
+        : '<svg viewBox="0 0 100 100"><rect width="100" height="100" rx="14" fill="#15171e"/><text x="50" y="62" text-anchor="middle" font-size="40" font-weight="800" fill="' + esc(tierColor) + '">' + esc((tierLabel||'?')[0]) + '</text></svg>';
+
+      // Art window overlays
+      var artStatusHtml = '';
+      if (mastered) artStatusHtml = '<div class="art-status mastered">✦ Mastered</div>';
+      else if (owned) artStatusHtml = '<div class="art-status owned">✓ Collected</div>';
+
+      // Ribbon (top-right diagonal) for special states
+      var ribbonHtml = '';
+      if (vaulted && !owned) ribbonHtml = '<div class="info-ribbon vaulted">Vaulted</div>';
+      else if (starter) ribbonHtml = '<div class="info-ribbon">Starter</div>';
+      else if (mastered) ribbonHtml = '<div class="info-ribbon mastered">Mastered</div>';
+
+      // Progress bar for owned + not mastered
+      var progressHtml = '';
+      if (owned && !mastered) {
+        var pct = Math.min(100, Math.round((xp / 4000) * 100));
+        progressHtml = '<div class="info-progress"><i style="width:' + pct + '%"></i></div>'
+                     + '<div class="info-progress-lbl">' + fmtNum(xp) + ' / 4,000 XP · ' + pct + '%</div>';
+      }
+
+      // Tier bonus (Pokemon-move-style box)
+      var tierMoveHtml = tierMeta.effect
+        ? '<div class="info-move">'
+          + '<div class="info-move-hdr">'
+            + '<span class="icon" style="background:' + esc(tierColor) + '">✦</span>'
+            + '<span class="name">' + esc(tierLabel) + ' Bonus</span>'
+            + '<span class="power">×</span>'
+          + '</div>'
+          + '<p class="info-move-desc">' + esc(tierMeta.effect) + '</p>'
+        + '</div>'
+        : '';
+
+      // Family ability box — parse per-level scaling into a compact table
+      function parseAbil(text){
+        if (!text) return { base:'', levels:[] };
+        var luIdx = text.search(/Level Ups?[!:]/i);
+        if (luIdx === -1 || text.indexOf('->') === -1) return { base:text.trim(), levels:[] };
+        var preLU = text.slice(0, luIdx);
+        var m = preLU.match(/^([\s\S]*[.!?])\s*(.+?)$/);
+        var base = (m ? m[1] : preLU).trim();
+        var afterLU = text.slice(luIdx).replace(/^Level Ups?[!:]\s*/i, '');
+        var levels = afterLU.split(/\s*->\s*/).map(function(s){return s.trim();}).filter(Boolean);
+        return { base:base, levels:levels };
+      }
+      var abilityMoveHtml = '';
+      if (ability) {
+        var parsed = parseAbil(ability);
+        var lvlHtml = '';
+        if (parsed.levels.length) {
+          lvlHtml = '<div class="lvl-list">';
+          for (var li = 0; li < parsed.levels.length; li++) {
+            lvlHtml += '<span class="lvl-tag">Lv ' + (li+1) + '</span>'
+                    + '<span class="lvl-val">' + esc(parsed.levels[li]) + '</span>';
+          }
+          lvlHtml += '</div>';
+        }
+        abilityMoveHtml = '<div class="info-move">'
+          + '<div class="info-move-hdr">'
+            + '<span class="icon">⚔</span>'
+            + '<span class="name">Family Passive</span>'
+          + '</div>'
+          + (parsed.base ? '<p class="info-move-desc">' + esc(parsed.base) + '</p>' : '')
+          + lvlHtml
+        + '</div>';
+      }
+
+      // Datamined / vaulted flavor text
+      var flavorHtml = '';
+      if (pakDatamined) {
+        flavorHtml = '<div class="info-move" style="border-color:rgba(192,132,252,.3);background:linear-gradient(180deg,rgba(192,132,252,.06),rgba(0,0,0,.15))">'
+          + '<div class="info-move-hdr"><span class="icon" style="background:#c084fc">i</span>'
+          + '<span class="name">Datamined</span></div>'
+          + '<p class="info-move-desc" style="font-style:italic;color:#c084fc">Defined in Fortnite\\'s pak files but not yet enabled server-side. Confirmed real — just not extractable from matches yet.</p>'
+        + '</div>';
+      } else if (vaulted && !owned) {
+        flavorHtml = '<div class="info-move" style="border-color:rgba(255,91,110,.3)">'
+          + '<div class="info-move-hdr"><span class="icon" style="background:#ff5b6e">!</span>'
+          + '<span class="name">Vaulted</span></div>'
+          + '<p class="info-move-desc" style="font-style:italic">Currently not appearing in Battle Royale matches. Prior-window copies still count.</p>'
+        + '</div>';
+      }
+
+      // Availability-note callout — shown for sprites with unusual constraints
+      // (event/timed releases). Renders even for owned copies so the user has
+      // context on why their variant is rare. Sourced from META.notes so the
+      // full text lives once per family in the injected payload, not on every
+      // tile's data-* attributes.
+      var noteHtml = '';
+      var note = META.notes && META.notes[famToken];
+      if (note) {
+        noteHtml = '<div class="info-move" style="border-color:rgba(255,207,58,.4);background:linear-gradient(180deg,rgba(255,207,58,.08),rgba(0,0,0,.15))">'
+          + '<div class="info-move-hdr"><span class="icon" style="background:#ffcf3a;color:#1a1613">⚠</span>'
+          + '<span class="name">' + esc(note.label) + '</span></div>'
+          + '<p class="info-move-desc" style="color:#ffcf3a">' + esc(note.text) + '</p>'
+        + '</div>';
+      }
+
+      // Stats row — always shows something meaningful
+      var statsHtml =
+        '<div class="info-stats">'
+          + '<div class="info-stat"><b>' + (owned ? fmtNum(xp) : '—') + '</b><span class="lbl">XP</span></div>'
+          + '<div class="info-stat"><b>' + fmtNum(dupes) + '</b><span class="lbl">In Locker</span></div>'
+          + '<div class="info-stat"><b>' + (summon ? fmtNum(summon) : '—') + '</b><span class="lbl">Dust ✦</span></div>'
+        + '</div>';
+
+      // Set card frame color via CSS var + rarity data attribute
+      var card = modal.querySelector('.info-card');
+      card.dataset.rarity = rarity;
+      // Holofoil / Gem / Cube get the holographic overlay
+      var isHolo = ['holofoil','gem','cube','quack'].indexOf(tierKey) !== -1;
+      card.classList.toggle('holo', isHolo);
+
+      card.innerHTML =
+        '<button class="info-close" aria-label="Close">&times;</button>'
+        + ribbonHtml
+        + '<div class="info-hdr">'
+          + '<div class="fam-wrap">'
+            + '<h3 class="fam-name">' + esc(famLabel) + '</h3>'
+            + '<div class="fam-sub">' + esc(tierLabel) + ' · ' + esc(rarity) + '</div>'
+          + '</div>'
+          + '<div class="level-badge">'
+            + '<span class="lvl-num">' + lvlNumHtml + '</span>'
+            + '<span class="lvl-lbl">' + esc(lvlLblHtml) + '</span>'
+          + '</div>'
+        + '</div>'
+        + '<div class="info-art">'
+          + '<div class="art-tier-badge">' + esc(tierLabel) + '</div>'
+          + imgHtml
+          + artStatusHtml
+        + '</div>'
+        + '<div class="info-body">'
+          + progressHtml
+          + noteHtml
+          + tierMoveHtml
+          + abilityMoveHtml
+          + flavorHtml
+          + statsHtml
+        + '</div>'
+        + '<div class="info-foot">'
+          + '<span class="codename">' + esc(name) + '</span>'
+          + '<span class="rarity-dot">' + esc(rarity) + '</span>'
+        + '</div>';
+      modal.classList.add('open');
+      document.body.style.overflow = 'hidden';
+    }
+    function closeModal(){
+      modal.classList.remove('open');
+      document.body.style.overflow = '';
+    }
+    // Delegated click: any tile with data-info-trigger triggers modal. Guard
+    // against the buy-back toggle button (inside cell) — its clicks shouldn't
+    // open the modal.
+    document.addEventListener('click', function(e){
+      // Close button / backdrop
+      if (e.target === modal || e.target.classList.contains('info-close')) {
+        return closeModal();
+      }
+      // Ignore clicks originating in the buyback toggle (its own form handler runs)
+      if (e.target.closest('.buyback-toggle') || e.target.closest('.buyback-toggle-form')) return;
+      var cell = e.target.closest('[data-info-trigger="1"]');
+      if (!cell) return;
+      openModal(cell);
+    });
+    // Esc closes
+    document.addEventListener('keydown', function(e){
+      if (e.key === 'Escape' && modal.classList.contains('open')) closeModal();
+    });
+  }
+
   // Grid-dependent logic (filters, sort, share-link copy) only runs when a
   // sprite grid is on the page — profile page has no grid but does have the
   // buffs strip further down, so we can't hard-return here or the whole
@@ -1531,9 +2802,11 @@ const SCRIPT = `<script>(function(){
       return null;
     }
     // ─── Verified events (Epic Community sources) ─────────────────────────
-    // Holofoil variants drop Thursday 2026-07-09 at 6 AM PT (9 AM ET) with
-    // the weekly patch. Source: communities.epicgames.com/thread/…/kqQk
-    var HOLOFOIL_DROP_MS = wallMs(2026,7,9,9,0);
+    // NOTE: sprite/tier drop dates are deliberately NOT declared here. They
+    // live in epic-sprites.js RELEASE_SCHEDULE and reach the client via
+    // __SPRITE_META.releases, so the buffs strip and the per-tile countdowns
+    // read from one source and can never disagree. Only recurring//windowed
+    // gameplay events belong below.
     // Catch-Up Day: Thursday 2026-07-02, 9 AM ET → next 9 AM ET (24-hour
     // event). Legendary Sprites drop at 4× rate.
     // Source: communities.epicgames.com/thread/…/oM9D
@@ -1553,6 +2826,44 @@ const SCRIPT = `<script>(function(){
       if(et.ms>=GONE_WILD_START&&et.ms<GONE_WILD_END)return {end:GONE_WILD_END};
       return null;
     }
+    // ─── Sprite Spree Week (CH7S3: Runners finale, Aug 14–20 2026) ─────────
+    // Sources: communities.epicgames.com/thread/whats-new-in-fortnite-runners-
+    // august-14/Gvie + vice.com fortnite-sprite-spree-week-schedule. All-week
+    // bonuses (below) run to Season 4's drop (Aug 20 9 AM ET = 13:00 UTC, same
+    // instant as SEASON4_DROP_MS). Each day themes a rarer variant with a 24h
+    // "Hours" spawn boost; Mythic Hours (Aug 15) lives in SATURDAY_EVENTS since
+    // it uses the Saturday windows. 6 AM PT = 9 AM ET, so every edge is 9 AM ET.
+    var SPREE_WEEK_START = wallMs(2026,8,14,9,0), SPREE_WEEK_END = wallMs(2026,8,20,7,0);
+    var SPREE_WEEK_DESC = 'Sprites level up 2× faster · resummoning extracted Sprites costs 0 Dust · faster leveling at Campfires · Daily Quests grant Lucky Locators';
+    function activeSpreeWeek(et){
+      return (et.ms>=SPREE_WEEK_START&&et.ms<SPREE_WEEK_END)?{end:SPREE_WEEK_END}:null;
+    }
+    var SPREE_HOURS = [
+      { s:wallMs(2026,8,16,9,0), e:wallMs(2026,8,17,9,0), label:'🌌 Galaxy Hours',   desc:'Galaxy Sprites appear more often — all day' },
+      { s:wallMs(2026,8,17,9,0), e:wallMs(2026,8,18,9,0), label:'💿 Holofoil Hours', desc:'Holofoil Sprites appear more often — equip one to help find other rare Sprites' },
+      { s:wallMs(2026,8,18,9,0), e:wallMs(2026,8,19,9,0), label:'⬢ Cube Hours',       desc:'Cube Sprites appear more often — equip one for Overdrive in the Storm' },
+      { s:wallMs(2026,8,19,9,0), e:wallMs(2026,8,20,7,0), label:'💎 Gem Hours',        desc:'Gem Sprites appear more often — equip one for −30% fall damage' }
+    ];
+    function activeSpreeHours(et){
+      for(var i=0;i<SPREE_HOURS.length;i++){ var h=SPREE_HOURS[i]; if(et.ms>=h.s&&et.ms<h.e) return h; }
+      return null;
+    }
+    // Mythic Hours (Aug 15) session starts, for the "Coming up" list.
+    var MYTHIC_SESSIONS = [wallMs(2026,8,15,14,0), wallMs(2026,8,15,21,0)];
+    // One-off weekday events (Season 4 Override). Source: vice.com
+    // /fortnite-cheat-master-sprites-august-27-update. 6 AM PT = 9 AM ET reset.
+    // Aug 24 Cheat Code Day · Aug 27 New Sprite Day (4 Cheat Master Sprites debut:
+    // Klombo, Shadow, Jackrabbit, Killswitch).
+    var CHEATCODE_DAY = wallMs(2026,8,24,9,0);
+    var NEWSPRITE_DAY = wallMs(2026,8,27,9,0);
+    // ─── Chapter 7 Season 4: Override (v42.00, live Aug 20 7 AM ET) ─────────
+    // Persistent "new season" banner shown as the baseline once Override goes
+    // live — yields to any acute event (Power Hours, Mastery Monday). The 16 new
+    // sprites (Sonic/Tails/Shadow/Klombo/…) auto-absorb from Epic's catalog when
+    // it flips; this is season CONTEXT, not sprite data.
+    var OVERRIDE_START = wallMs(2026,8,20,7,0);
+    var OVERRIDE_DESC = 'New generation of Sprites (Sonic, Tails, Shadow, Klombo & more) rolling out · Sprite Garden keeps your old collection · redeem Lobby Hacks codes in the lobby for Sprite Dust & rare variants';
+    function activeOverride(et){ return et.ms>=OVERRIDE_START?{}:null; }
     // Saturday Power Hours run 2-4 PM ET (afternoon) + 9-11 PM ET (evening)
     // and are themed per-week: Gold & Gummy Hours, Holofoil Hours, etc.
     // Sources: /thread/gold-and-gummy-hours-july-4/vHTx (Jul 4 Gold+Gummy),
@@ -1565,6 +2876,26 @@ const SCRIPT = `<script>(function(){
       '2026-07-11': {
         label: '💿 Holofoil Hours',
         description: 'Holofoil variants appear more often · Shock Rocks (2× jump, drops more) + Self-Revive on Bus drop'
+      },
+      // Sprite Spree Week finale (CH7S3): Mythic Hours runs the Saturday
+      // afternoon+evening windows. Source: communities.epicgames.com
+      // /thread/whats-new-in-fortnite-runners-august-14/Gvie + vice.com
+      // sprite-spree-week schedule. 11 AM–1 PM PT = 2–4 PM ET, 6–8 PM PT = 9–11 PM ET.
+      '2026-08-15': {
+        label: '🟣 Mythic Hours',
+        description: 'Mythic Sprites appear far more often — two 2-hour windows (2–4 PM & 9–11 PM ET). Sprite Spree Week finale'
+      },
+      // Chapter 7 Season 4: Override — first Power Hours of the new season.
+      // Source: beebom.com/fortnite-chapter-7-season-4-patch-notes (Aug 22, Gold).
+      '2026-08-22': {
+        label: '⚡ Gold Hours',
+        description: 'Gold Sprite variants appear more often — Season 4: Override Power Hours (2–4 PM & 9–11 PM ET)'
+      },
+      // Source: vice.com/fortnite-cheat-master-sprites-august-27-update — Sonic-themed
+      // Power Hours the Saturday after the Aug 27 Cheat Master debut.
+      '2026-08-29': {
+        label: '🦔 Sonic Power Hours',
+        description: 'Sonic-themed Power Hours — Sonic Sprite variants appear more often (2–4 PM & 9–11 PM ET)'
       }
     };
     var DEFAULT_SAT_EVENT = { label:'⚡ Saturday Power Hour', description:'Variant Sprites boosted + unique gameplay modifiers' };
@@ -1588,10 +2919,19 @@ const SCRIPT = `<script>(function(){
     function render(){
       var et=nowET();
       var sat=activeSaturday(et), cu=activeCatchUpDay(et), mm=activeMastery(et), gw=activeGoneWild(et);
-      // CURRENT panel priority: acute events (Saturday themed > Catch-Up Day >
-      // Mastery Monday) headline first. Gone Wild is a persistent background
-      // event, so it fills the panel only when no acute event is running.
-      if(sat){
+      var sh=activeSpreeHours(et), sw=activeSpreeWeek(et), ov=activeOverride(et);
+      // CURRENT panel priority: acute events headline first. During the Spree
+      // finale the daily 24h "Hours" (sh) outrank everything; the general
+      // week bonus (sw) is a background event like Gone Wild, filling the panel
+      // only when no acute Hours/Saturday event is live.
+      if(sh){
+        bufCur.className='cf-buffs-panel power';
+        elCurTitle.textContent='🎉 Sprite Spree — active event';
+        elCurHead.textContent=sh.label;
+        elCurSub1.textContent=sh.desc;
+        elCurSub2Wrap.style.display='';
+        elCurCd.textContent=fmtDelta(sh.e-et.ms);
+      } else if(sat){
         bufCur.className='cf-buffs-panel power';
         elCurTitle.textContent='💿 Active event';
         elCurHead.textContent=sat.theme.label+' ('+sat.window+')';
@@ -1612,6 +2952,19 @@ const SCRIPT = `<script>(function(){
         elCurSub1.textContent='2× XP · 2× Dust · Legendary/Mythic spawn boosted';
         elCurSub2Wrap.style.display='';
         elCurCd.textContent=fmtDelta(mm.end-et.ms);
+      } else if(sw){
+        bufCur.className='cf-buffs-panel mastery';
+        elCurTitle.textContent='🎉 Sprite Spree Week';
+        elCurHead.textContent='Runners finale — all-week bonuses';
+        elCurSub1.textContent=SPREE_WEEK_DESC;
+        elCurSub2Wrap.style.display='';
+        elCurCd.textContent=fmtDelta(sw.end-et.ms);
+      } else if(ov){
+        bufCur.className='cf-buffs-panel power';
+        elCurTitle.textContent='🎮 New season';
+        elCurHead.textContent='Chapter 7 Season 4: Override';
+        elCurSub1.textContent=OVERRIDE_DESC;
+        elCurSub2Wrap.style.display='none';
       } else if(gw){
         bufCur.className='cf-buffs-panel power';
         elCurTitle.textContent='🌴 Active event';
@@ -1633,21 +2986,53 @@ const SCRIPT = `<script>(function(){
       // Thursday events (Catch-Up Day, Holofoil arrival, etc.).
       var candidates=[];
       if(CATCHUP_START>et.ms) candidates.push({label:'🎯 Catch-Up Day (Legendary 4×)',at:CATCHUP_START,precise:true});
-      if(HOLOFOIL_DROP_MS>et.ms) candidates.push({label:'💿 Holofoil variants arrive',at:HOLOFOIL_DROP_MS,precise:true});
-      candidates.push({label:'🟢 Mastery Monday',at:nextWeekly(et,1,9,0),precise:true});
-      // Next Saturday event — figure out which window (afternoon or evening)
-      // is soonest, then look up the theme for that Saturday's date. Themed
-      // events (Gold & Gummy Hours, Holofoil Hours) get their specific label;
-      // unannounced Saturdays fall through to "⚡ Saturday Power Hour".
-      var nextSat, nextSatWindow;
-      if(et.wd===6){
-        var mins=et.h*60+et.mi;
-        if(mins<840){ nextSat=wallMs(et.y,et.m,et.d,14,0); nextSatWindow='afternoon'; }
-        else if(mins<1260){ nextSat=wallMs(et.y,et.m,et.d,21,0); nextSatWindow='evening'; }
-        else { nextSat=nextWeekly(et,6,14,0); nextSatWindow='afternoon'; }
-      } else { nextSat=nextWeekly(et,6,14,0); nextSatWindow='afternoon'; }
-      var nextSatTheme=SATURDAY_EVENTS[isoDateFromWallMs(nextSat)]||DEFAULT_SAT_EVENT;
-      candidates.push({label:nextSatTheme.label+' ('+nextSatWindow+')',at:nextSat,precise:true});
+      if(CHEATCODE_DAY>et.ms) candidates.push({label:'🎟️ Cheat Code Day',at:CHEATCODE_DAY,precise:true});
+      // NOTE: the 4 "New Sprite Day" Cheat Masters (Klombo/Shadow/Jackrabbit/Killswitch)
+      // released EARLY (grabbable in-game by Aug 25, ahead of the Aug 27 announce), so the
+      // Aug-27 countdown was pulled — no confirmed content left for that date, and a
+      // speculative clock is worse than none. Re-add only if Epic announces new Aug-27 content.
+      // Sprite/tier drops come from the server's RELEASE_SCHEDULE (injected as
+      // __SPRITE_META.releases) rather than dates duplicated here — one source
+      // of truth with the tile countdowns, and past entries are pre-filtered
+      // server-side so they can't linger.
+      //
+      // Those stamps are TRUE epochs, but everything in this strip is measured
+      // against et.ms (Eastern wall-clock via Date.UTC — a shifted pseudo-
+      // epoch). Rebase them with etShift so the subtraction downstream yields
+      // the real remaining duration instead of one off by the ET offset.
+      var etShift=et.ms-Date.now();
+      (META.releases||[]).forEach(function(r){
+        var atWall=r.at+etShift;
+        if(atWall>et.ms) candidates.push({label:r.label,at:atWall,precise:true});
+      });
+      // Sprite Spree Week finale: surface the real daily "Hours" schedule. While
+      // the finale runs, suppress the generic recurring events (Mastery Monday,
+      // unannounced Saturday Power Hour) — the announced Hours ARE this week's
+      // schedule, so a speculative "weekly" line would be noise. They resume
+      // automatically once the week ends (inSpree=false → Season 4 cadence).
+      var inSpree = et.ms < SPREE_WEEK_END;
+      SPREE_HOURS.forEach(function(h){ if(h.s>et.ms) candidates.push({label:h.label,at:h.s,precise:true}); });
+      MYTHIC_SESSIONS.forEach(function(t){ if(t>et.ms) candidates.push({label:'🟣 Mythic Hours',at:t,precise:true}); });
+      if(!inSpree){
+        candidates.push({label:'🟢 Mastery Monday',at:nextWeekly(et,1,9,0),precise:true});
+        // Next Saturday event — figure out which window (afternoon or evening)
+        // is soonest, then look up the theme for that Saturday's date. Themed
+        // events (Gold & Gummy Hours, Holofoil Hours) get their specific label;
+        // unannounced Saturdays fall through to "⚡ Saturday Power Hour".
+        var nextSat, nextSatWindow;
+        if(et.wd===6){
+          var mins=et.h*60+et.mi;
+          if(mins<840){ nextSat=wallMs(et.y,et.m,et.d,14,0); nextSatWindow='afternoon'; }
+          else if(mins<1260){ nextSat=wallMs(et.y,et.m,et.d,21,0); nextSatWindow='evening'; }
+          else { nextSat=nextWeekly(et,6,14,0); nextSatWindow='afternoon'; }
+        } else { nextSat=nextWeekly(et,6,14,0); nextSatWindow='afternoon'; }
+        var nextSatTheme=SATURDAY_EVENTS[isoDateFromWallMs(nextSat)]||DEFAULT_SAT_EVENT;
+        candidates.push({label:nextSatTheme.label+' ('+nextSatWindow+')',at:nextSat,precise:true});
+      }
+      // Safety net: if every dated event has passed (e.g. mid-transition to a
+      // new season before releases are re-seeded), fall back to the recurring
+      // Mastery Monday so the panel never dereferences an empty list.
+      if(!candidates.length) candidates.push({label:'🟢 Mastery Monday',at:nextWeekly(et,1,9,0),precise:true});
       candidates.sort(function(a,b){return a.at-b.at});
       var soonest=candidates[0];
       elNextHead.textContent=soonest.label;
@@ -1664,15 +3049,29 @@ const SCRIPT = `<script>(function(){
           slot.cd.textContent=(c.precise?fmtPrecise:fmtShort)(c.at-et.ms);
         } else slot.row.style.display='none';
       });
-      // Per-cell Holofoil countdowns — same tick as the buffs strip so they
-      // tick in unison. Compute the text once, apply to every matching span.
-      // Once the drop passes we show "Available now" until the next server
-      // sync refreshes the state model and drops the .future flag.
-      var holoCells=document.querySelectorAll('.holofoil-cd');
-      if(holoCells.length){
-        var delta=HOLOFOIL_DROP_MS-et.ms;
-        var text=delta>0?fmtPrecise(delta):'Available now';
-        holoCells.forEach(function(el){ el.textContent=text; });
+      // Per-cell release countdowns — same tick as the buffs strip so every
+      // clock on the page advances in unison. Each span carries its own
+      // unlock instant in data-release-at (server-computed), so this loop is
+      // tier-agnostic: new gated tiers need zero client changes. Post-drop we
+      // show "Available now" until the next sync refreshes state_json and
+      // clears the .future flag.
+      var relCells=document.querySelectorAll('.rel-cd[data-release-at]');
+      if(relCells.length){
+        var cache={};
+        relCells.forEach(function(el){
+          var at=+el.getAttribute('data-release-at');
+          if(!at) return;
+          if(!(at in cache)){
+            // data-release-at is a TRUE epoch (Date.UTC on the server), so it
+            // must be differenced against Date.now(), NOT et.ms. et.ms is
+            // Eastern wall-clock run through Date.UTC — a shifted pseudo-epoch
+            // — and mixing the two silently adds the ET offset (a 4h error in
+            // EDT). See the note on nowET() above.
+            var d=at-Date.now();
+            cache[at]=d>0?fmtPrecise(d):'Available now';
+          }
+          el.textContent=cache[at];
+        });
       }
     }
     render();
@@ -1711,14 +3110,30 @@ const SCRIPT = `<script>(function(){
     var hiddenSince = 0;
     var inFlight = false;
     var lastResync = Date.now();
-    var MIN_HIDDEN_MS = 15 * 1000;
-    var VISIBLE_POLL_MS = 30 * 1000;
+    var MIN_HIDDEN_MS = 60 * 1000;
+    // 5 min (was 30s). An idle open owner tab used to force an Epic re-login every
+    // 30 seconds — the single biggest source of session churn on the owner's own
+    // account. Sprite data changes on a daily cadence; 5 min keeps the tab fresh
+    // without hammering Epic. Tab-focus after >60s hidden still triggers an
+    // immediate refresh, so returning to the tab is still snappy.
+    var VISIBLE_POLL_MS = 5 * 60 * 1000;
+    var currentFp = resyncForm.getAttribute('data-fp') || '';
     async function forceResync(reason){
       if (inFlight) return;
       inFlight = true;
       try {
-        var res = await fetch('/sprites/resync', { method:'POST', credentials:'same-origin', body:'' });
-        if (res.ok) location.reload();
+        // Ask for JSON so the server returns a fingerprint instead of the page.
+        // Only hard-reload when it actually changed — an idle tab with nothing
+        // new no longer flashes/reloads every 30s. A tab-focus after alt-tabbing
+        // from the game still reloads if you collected something.
+        var res = await fetch('/sprites/resync', {
+          method:'POST', credentials:'same-origin', body:'',
+          headers:{ 'Accept':'application/json' },
+        });
+        if (res.ok) {
+          var data = await res.json().catch(function(){ return null; });
+          if (data && data.fingerprint && data.fingerprint !== currentFp) location.reload();
+        }
       } catch(e) {}
       inFlight = false;
       lastResync = Date.now();
@@ -1761,33 +3176,47 @@ ${meta.image ? `<meta name="twitter:image" content="${esc(meta.image)}">` : ''}
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>${esc(title)}</title>${ogTags}
 <style>${STYLE}</style></head><body>${body}</body></html>`;
 }
+// Section tabs shown on every Sprite Tracker page. `match` lists the paths that
+// mark a tab as the current one (set client-side from location.pathname, so no
+// route has to thread a "current page" argument through to chrome()).
+const SITE_TABS = [
+  { href: '/sprites', label: 'My collection', match: '/sprites /sprites/profile /sprites/account /sprites/discord-connect /sprites/admin' },
+  { href: '/sprites/browse', label: 'Compare', match: '/sprites/browse /sprites/compare' },
+  { href: '/sprites/cards', label: 'Cards', match: '/sprites/cards /sprites/override /sprites/garden' },
+  { href: '/sprites/codes', label: 'Codes', match: '/sprites/codes' },
+  { href: '/sprites/countdown', label: 'Next drop', match: '/sprites/countdown' },
+  { href: '/sprites/info', label: 'Catalog audit', match: '/sprites/info' },
+];
 function chrome(nav = '') {
-  // "CertiFried Network" dropdown next to the brand — mirrors the dashboard
-  // sidebar's Features section so users navigating from /sprites can hop into
-  // /dashboard, /cah, etc. without going through the URL bar. Native
-  // <details>/<summary> = no JS, no event listeners, no race conditions.
+  // One header for every page: brand, the CertiFried Network menu (native
+  // <details>, no JS), page-specific actions on the right (user menu or a
+  // call to action), and the section tabs underneath.
   const networkMenu = `<details class="cf-network">
-    <summary>🌐 CertiFried Network ▾</summary>
+    <summary>CertiFried Network <span aria-hidden="true">▾</span></summary>
     <div class="cf-network-menu">
       <div class="cfn-section">Tools</div>
-      <a href="https://certifriedmultitool.com/">🏠 Home</a>
-      <a href="/dashboard">📊 Bot Dashboard</a>
-      <a href="/sprites">👾 Sprite Tracker <span style="margin-left:auto;font-size:10px;color:var(--muted)">you are here</span></a>
-      <a href="/cah">🃏 Cards Against Humanity</a>
+      <a href="https://certifriedmultitool.com/">Home</a>
+      <a href="/dashboard">Bot dashboard</a>
+      <a href="/sprites">Sprite Tracker <span class="cfn-here">you are here</span></a>
+      <a href="/cah">Cards Against Humanity</a>
       <div class="cfn-divider"></div>
       <div class="cfn-section">Info</div>
-      <a href="/commands">⌨️ Bot Commands</a>
-      <a href="/status">📈 Status</a>
-      <a href="/donate">💜 Donate</a>
-      <a href="https://certifriedmultitool.com/discord" target="_blank" rel="noopener">💬 Discord ↗</a>
+      <a href="/commands">Bot commands</a>
+      <a href="/status">Status</a>
+      <a href="/donate">Donate</a>
+      <a href="https://certifriedmultitool.com/discord" target="_blank" rel="noopener">Discord server ↗</a>
     </div>
   </details>`;
-  return `<header>
-    <a href="/sprites" class="logo"><span class="c">Certi</span><span class="f">Fried</span> · Sprite Tracker</a>
-    ${networkMenu}
-    <div class="tagline">Live from Epic — the only auto-synced sprite collection tracker</div>
-    ${nav ? `<div class="nav">${nav}</div>` : ''}
-  </header>`;
+  const tabs = SITE_TABS.map((t) => `<a href="${t.href}" data-match="${t.match}">${t.label}</a>`).join('');
+  return `<header class="st-header">
+    <div class="st-bar">
+      <a href="/sprites" class="logo"><span class="c">Certi</span><span class="f">Fried</span> · Sprite Tracker</a>
+      ${networkMenu}
+      ${nav ? `<div class="nav">${nav}</div>` : ''}
+    </div>
+    <nav class="st-tabs" aria-label="Sprite Tracker sections">${tabs}</nav>
+  </header>
+  <script>(function(){var p=location.pathname.replace(/\\/+$/,'')||'/';document.querySelectorAll('.st-tabs a').forEach(function(a){if((a.getAttribute('data-match')||'').split(' ').indexOf(p)!==-1)a.setAttribute('aria-current','page');});})();</script>`;
 }
 
 // Avatar-style colored circle from a display name's first character. The hue is
@@ -1808,17 +3237,17 @@ function userMenu({ displayName, isAdmin = false, currentPath = '' } = {}) {
   const item = (href, icon, label, opts = {}) => {
     const active = opts.active ? ' current' : '';
     const danger = opts.danger ? ' danger' : '';
-    return `<a class="menu-item${active}${danger}" href="${esc(href)}"><span class="menu-icon">${icon}</span>${esc(label)}</a>`;
+    return `<a class="menu-item${active}${danger}" href="${esc(href)}"${opts.active ? ' aria-current="page"' : ''}>${esc(label)}</a>`;
   };
   const formItem = (action, icon, label, opts = {}) => {
     const danger = opts.danger ? ' danger' : '';
-    return `<form method="post" action="${esc(action)}" class="menu-form"><button class="menu-item${danger}" type="submit"><span class="menu-icon">${icon}</span>${esc(label)}</button></form>`;
+    return `<form method="post" action="${esc(action)}" class="menu-form"><button class="menu-item${danger}" type="submit">${esc(label)}</button></form>`;
   };
   return `<details class="usermenu">
     <summary>
       ${avatarMarkup(displayName)}
       <span class="usermenu-name">${esc(displayName)}</span>
-      <span class="usermenu-caret">▾</span>
+      <span class="usermenu-caret" aria-hidden="true">▾</span>
     </summary>
     <div class="usermenu-dropdown">
       ${item('/sprites', '⬚', 'My collection', { active: currentPath === '/sprites' })}
@@ -1866,13 +3295,11 @@ function renderLogin({ error } = {}) {
         <label style="display:grid;gap:4px">
           <span style="font-weight:600">Username</span>
           <input type="text" name="username" required autocomplete="username"
-            inputmode="text" minlength="3" maxlength="32"
-            style="padding:9px 11px;border-radius:8px;border:1px solid #2a2f3c;background:#15171e;color:#e8eaf0;font:inherit">
+            inputmode="text" minlength="3" maxlength="32" class="st-input">
         </label>
         <label style="display:grid;gap:4px">
           <span style="font-weight:600">Password</span>
-          <input type="password" name="password" required autocomplete="current-password"
-            style="padding:9px 11px;border-radius:8px;border:1px solid #2a2f3c;background:#15171e;color:#e8eaf0;font:inherit">
+          <input type="password" name="password" required autocomplete="current-password" class="st-input">
         </label>
         <button class="btn" type="submit">Sign in →</button>
       </form>
@@ -1882,7 +3309,7 @@ function renderLogin({ error } = {}) {
           <span class="sub" style="font-size:12px">or</span>
           <div style="flex:1;height:1px;background:#2a2f3c"></div>
         </div>
-        <a href="/sprites/connect" class="btn" style="display:inline-block;background:#2a2f3c;color:#e8eaf0;text-decoration:none;max-width:360px;text-align:center">🎮 Sign in with Epic</a>
+        <a href="/sprites/connect" class="btn btn-quiet" style="max-width:360px;text-align:center">Sign in with Epic</a>
         <p class="sub" style="margin-top:8px;font-size:12px;color:#ffb87a">
           ⚠️ <b>Returning users only.</b> If you've never connected here before, this button will bounce you back with a friendly error. Use <b>Epic Setup</b> below first.
         </p>
@@ -1950,13 +3377,11 @@ function renderLogin({ error } = {}) {
 // change anything once a password is set.
 function renderAccount({ displayName, currentUsername, hasPassword, passwordSetAt, isAdmin = false, viaEpic = false, error = null, success = null } = {}) {
   const fmtTs = (t) => t ? new Date(t).toISOString().slice(0, 16).replace('T', ' ') + ' UTC' : '';
-  const input = 'padding:9px 11px;border-radius:8px;border:1px solid #2a2f3c;background:#15171e;color:#e8eaf0;font:inherit';
   // Show the "current password" gate only when there IS a stored password AND
   // the user signed in via username/password. Epic-paste login is sufficient
   // ownership proof, so it skips the gate (recovery path for forgotten password).
   const requireCurrent = hasPassword && !viaEpic;
-  const nav = `<a class="navlink" href="/sprites/browse">🤝 Compare</a>
-               ${userMenu({ displayName, isAdmin, currentPath: '/sprites/account' })}`;
+  const nav = userMenu({ displayName, isAdmin, currentPath: '/sprites/account' });
   return shell('Username & password — CertiFried Sprite Tracker', chrome(nav) + `<main>
     <div class="card">
       <h2>Username & password</h2>
@@ -1971,19 +3396,19 @@ function renderAccount({ displayName, currentUsername, hasPassword, passwordSetA
           <span style="font-weight:600">Username</span>
           <input type="text" name="username" required minlength="3" maxlength="32"
             autocomplete="username" pattern="[A-Za-z0-9][A-Za-z0-9_\\-]{1,30}[A-Za-z0-9]"
-            value="${esc(currentUsername || '')}" style="${input}">
+            value="${esc(currentUsername || '')}" class="st-input">
           <span class="sub" style="font-size:12px">3-32 chars, letters/digits/_/- only. Starts and ends with a letter or digit.</span>
         </label>
         ${requireCurrent ? `
           <label style="display:grid;gap:4px">
             <span style="font-weight:600">Current password</span>
-            <input type="password" name="current_password" required autocomplete="current-password" style="${input}">
+            <input type="password" name="current_password" required autocomplete="current-password" class="st-input">
             <span class="sub" style="font-size:12px">Set ${esc(fmtTs(passwordSetAt))}. Required to change anything.</span>
           </label>
         ` : ''}
         <label style="display:grid;gap:4px">
           <span style="font-weight:600">${hasPassword ? 'New password' : 'Password'}</span>
-          <input type="password" name="password" required minlength="8" autocomplete="new-password" style="${input}">
+          <input type="password" name="password" required minlength="8" autocomplete="new-password" class="st-input">
           <span class="sub" style="font-size:12px">At least 8 characters. Longer = stronger; we don't enforce complexity rules.</span>
         </label>
         <button class="btn" type="submit">${hasPassword ? 'Update credentials' : 'Save credentials'}</button>
@@ -2000,8 +3425,10 @@ function renderCollection(state, { readOnly = false, shareUrl = null, firstSynce
   // Carve unreleased sprites out of "collected/total" and "still needed" so the
   // percentage isn't dragged down by sprites the player physically can't get
   // yet. Falls back to s.total for old saved states that predate this split.
-  // "Obtainable right now" = total - unreleased(Holofoil/Gem) - vaulted(family-level).
-  // This is the denominator that reflects what a player can actually pursue today.
+  // "Obtainable right now" = total - future (unreleased / Epic-disabled) - vaulted.
+  // Derived per-variant in buildModel (s.obtainable), so it tracks whatever Epic
+  // has enabled today — no hardcoded tier list. Denominator = what a player can
+  // actually pursue right now.
   // Falls back to released, then total, for old saved states that predate the split.
   const denom = s.obtainable ?? s.released ?? s.total;
   const future = s.future ?? 0;
@@ -2012,14 +3439,18 @@ function renderCollection(state, { readOnly = false, shareUrl = null, firstSynce
   // Epic-published stats (Battle Pass tier, account level, season number,
   // career wins). Null until the next sync runs against the athena profile.
   const epic = s.epic || null;
-  const head = TIERS.map((t) => `<th style="color:${t.color}">${t.label}</th>`).join('');
+  // Only render tier columns that actually exist in this roster. CH7S4 Override
+  // uses Base/Gold/Cheat Master, so the dead CH7S3 tiers (Gummy/Galaxy/Gem/
+  // Holofoil/Cube/Quack) shouldn't show as empty columns. Dynamic = future-proof.
+  const activeTiers = TIERS.filter((t) => state.groups.some((g) => g.variants[t.key]));
+  const head = activeTiers.map((t) => `<th style="color:${t.color}">${t.label}</th>`).join('');
   // cellOpts is passed to cell() below inside the row map. Declared here so
   // it's available at the TIERS.map callback time (avoids TDZ against the
   // buybackSet declaration further down the function body).
   const buybackSet = new Set(buybackList.map((b) => b.variantName));
   const cellOpts = { buybackSet, showBuybackToggle: !readOnly };
   const rows = state.groups.map((g, i) => {
-    const vs = TIERS.map((t) => g.variants[t.key]).filter(Boolean);
+    const vs = activeTiers.map((t) => g.variants[t.key]).filter(Boolean);
     const futureCount = vs.filter((v) => v.future).length;
     const vaultedCount = vs.filter((v) => v.vaulted).length;
     // Use obtainableCount as the practical denominator. Fall back to totalCount
@@ -2036,21 +3467,20 @@ function renderCollection(state, { readOnly = false, shareUrl = null, firstSynce
     return `<tr data-order="${i}" data-name="${esc(g.label)}" data-owned="${g.ownedCount}" data-need="${need}" data-master="${g.masteredCount}" data-future="${futureCount}"${fullyVaulted ? ' data-vaulted="1"' : ''}>
       <th class="fam"><span class="famname">${esc(g.label)}</span>
       ${countLabel}</th>
-      ${TIERS.map((t) => cell(g.variants[t.key], cellOpts)).join('')}</tr>`;
+      ${activeTiers.map((t) => cell(g.variants[t.key], cellOpts)).join('')}</tr>`;
   }).join('');
   const synced = state.syncedAt ? `synced ${new Date(state.syncedAt).toISOString().slice(0, 16).replace('T', ' ')} UTC` : '';
   const profileHref = readOnly && shareUrl ? `${shareUrl}/profile` : '/sprites/profile';
   const nav = readOnly
-    ? `<a class="navlink" href="${esc(profileHref)}">📊 Profile</a>
-       <a class="navlink" href="/sprites/browse">🤝 Compare</a>
-       <a class="navlink primary" href="/sprites">Track your collection →</a>`
-    : `<a class="navlink" href="/sprites/browse">🤝 Compare</a>
+    ? `<a class="navlink" href="${esc(profileHref)}">Profile</a>
+       <a class="navlink primary" href="/sprites">Track your collection</a>`
+    : `<a class="navlink" href="/sprites/discord-connect">Link Discord</a>
        ${userMenu({ displayName: state.player, isAdmin, currentPath: '/sprites' })}`;
   // Stale-token banner: only shown on the owner's own view (readOnly === false).
   // Viewers of /u/:slug don't see it because it's not their problem to fix.
   const reloginBanner = (!readOnly && needsRelogin)
-    ? `<div class="relogin-banner">⚠️ <b>Your Epic connection has expired.</b> Your saved data is still here, but background re-syncs are failing. To refresh your collection (and pick up newly-collected sprites, XP changes, etc.) please paste a fresh Epic auth code below.
-        <a href="/sprites/logout" class="btn" style="margin-left:12px;padding:7px 14px;background:#ff8aa6;color:#3a0010">Reconnect →</a></div>`
+    ? `<div class="relogin-banner">⚠️ <b>Your Epic connection has expired.</b> Your saved data is still here, but background re-syncs are failing. To pick up newly collected sprites and XP changes, sign out and reconnect with a fresh Epic code.
+        <a href="/sprites/logout" class="btn" style="padding:7px 14px">Reconnect</a></div>`
     : '';
   // Proactive token-expiry warning: yellow banner shown when the refresh token
   // has < 48 hours until Epic invalidates it. Lets users pre-empt instead of
@@ -2163,7 +3593,7 @@ function renderCollection(state, { readOnly = false, shareUrl = null, firstSynce
       <select id="sort"><option value="default">Default</option><option value="complete">Most complete</option>
       <option value="incomplete">Least complete</option><option value="az">A–Z</option></select></label>
     ${exportSlug ? `<a class="resync-btn" href="/sprites/u/${esc(exportSlug)}/discord-export" download title="Download a PNG of this collection to drop into Discord">🖼️ Export PNG</a>` : ''}
-    ${!readOnly ? `<form method="post" action="/sprites/resync" class="resync-form"><button type="submit" class="resync-btn" title="Pull fresh data from Epic right now">↻ Re-sync</button></form>` : ''}
+    ${!readOnly ? `<form method="post" action="/sprites/resync" class="resync-form" data-fp="${esc(`${state.summary?.owned ?? 0}:${state.summary?.mastered ?? 0}:${state.summary?.total ?? 0}`)}"><button type="submit" class="resync-btn" title="Pull fresh data from Epic right now">↻ Re-sync</button></form>` : ''}
     </div>`;
   // Build OG meta so pasting the share URL into Discord renders a rich embed
   // card (purple stripe + title + collection summary + the same PNG we already
@@ -2177,7 +3607,7 @@ function renderCollection(state, { readOnly = false, shareUrl = null, firstSynce
     image: `${shareUrl}/discord-export?v=${state.syncedAt ? Date.parse(state.syncedAt) : Date.now()}`,
     color: '#7b5cff',
   } : null;
-  return shell(`${esc(state.player)}'s Sprites — CertiFried`, chrome(nav) + `<main>
+  return shell(`${state.player}'s Sprites — CertiFried`, chrome(nav) + `<main>
     ${reloginBanner}
     ${expiryBanner}
     <section class="hero">
@@ -2205,7 +3635,7 @@ function renderCollection(state, { readOnly = false, shareUrl = null, firstSynce
         <div class="stat owned"><b>${s.owned}/${denom}</b>Collected</div>
         <div class="stat master"><b>${s.mastered}</b>Mastered</div>
         ${epic && epic.accountLevel ? `<div class="stat acct"><b>${fmt(epic.accountLevel)}</b>Account Level</div>` : ''}
-        <div class="stat dust"><b>${fmt(s.dust)}</b>Sprite Dust ✦</div>
+        <div class="stat dust"><b>${fmt(s.dust) || '—'}</b>Sprite Dust ✦</div>
         ${future ? `<div class="stat future"><b>${future}</b>🔜 Awaiting Release</div>` : ''}
         ${vaulted ? `<div class="stat vaulted"><b>${vaulted}</b>🚫 Currently Vaulted</div>` : ''}
       </div>
@@ -2226,7 +3656,92 @@ function renderCollection(state, { readOnly = false, shareUrl = null, firstSynce
     </div>
     <footer>Auto-synced from Epic's <code>extractablerelics</code> service${synced ? ` · ${synced}` : ''} ·
       ${denom} released variants across ${s.families} families${future ? ` (+${future} awaiting release)` : ''}.<br>
-      Data is 100% live from your account — no manual entry.</footer></main>` + SCRIPT, og);
+      Data is 100% live from your account — no manual entry.</footer>
+    ${spriteInfoModalBlock(state)}
+    </main>` + SCRIPT, og);
+}
+
+// Build the per-page injected script + modal container that powers click-to-open
+// info cards for every sprite tile. Family abilities come from pak-scan meta
+// (Epic's own DataAsset text); labels come from state.groups; tier effects use
+// the PAK_SPECIAL_TIER_EFFECTS list. JSON is safely stringified so " and </
+// don't break out of the script/HTML context.
+// Sprite rarity is inferred from Epic's BASE-tier `summonCost` (the family's
+// cheapest re-summon price), which is the classic Epic rarity marker. Bands are
+// anchored to the LIVE cost distribution + web-confirmed rarities:
+//   100/1800 → Rare (Water, Fire, Earth, Air, Fishy)
+//   2700     → Epic (Duck, Aura, Demon, Ghost, King, Striker)
+//   4500     → Legendary (Dream, Boss, Seven, Punk, Llama, Peely)
+//   6750     → Mythic (Zero Point, Batman, Grim, Burnt Peanut, John Wick, Pollo,
+//                       Vini Jr., IRONMOUSE)
+// Single source of truth for BOTH the info-card and /sprites/info — the old two
+// heuristics disagreed (card said 5000/7500/15000, /info said 3000/5000/7500),
+// so Ironmouse's 6750 fell into neither's Mythic band (card→Epic, /info→unknown).
+function rarityFromBaseCost(cost) {
+  if (cost == null) return 'unknown';
+  if (cost >= 6750) return 'Mythic';
+  if (cost >= 4500) return 'Legendary';
+  if (cost >= 2700) return 'Epic';
+  return 'Rare';
+}
+// CH7S4 "Override" player-facing rarity — the classic Rare/Epic/Legendary/Mythic
+// system (NOT the internal Common/Uncommon/Rare/VeryRare roaming-weight bands, and
+// NOT cost-derivable: Killswitch & Jackrabbit share base cost 1750 but are Epic vs
+// Legendary). Confirmed 2026 by accountshark.net + gamerant + thebiglead. Keyed by
+// catalog familyToken; takes precedence over the cost heuristic for these families.
+const OVERRIDE_RARITY = {
+  // catalog familyTokens
+  '8bitblaster': 'Rare', dwarf: 'Rare', bushrangersprite: 'Rare', jonesy: 'Rare',
+  narrowfleasprite: 'Epic', narrowfleamonkeysprite: 'Epic', reloadovertimesprite: 'Epic', killswitchsprite: 'Epic',
+  cosmicthunderdoublejumpsprite: 'Legendary',
+  klombo: 'Mythic', crownsprite: 'Mythic', stormscoutsprite: 'Mythic',
+  // pak ESD codename aliases (/sprites/info keys on the pak codename, which differs)
+  eightbitblaster: 'Rare', '8bitblastersprite': 'Rare', dwarfsprite: 'Rare', bushranger: 'Rare', jonesysprite: 'Rare',
+  narrowflea: 'Epic', klombosprite: 'Mythic',
+  doublejumpsprite: 'Legendary', jazzjackrabbit: 'Legendary',
+};
+function rarityForFamily(familyToken, baseCost) {
+  return OVERRIDE_RARITY[familyToken] || rarityFromBaseCost(baseCost);
+}
+
+function spriteInfoModalBlock(state) {
+  const groups = state?.groups || [];
+  const pak = getPakScan();
+  const familyMeta = pak?.per_family_meta || {};
+  const families = {};
+  const abilities = {};
+  const notes = {};
+  const rarities = {};
+  for (const g of groups) {
+    families[g.familyToken] = g.label;
+    // Rarity from the family's BASE-tier cost — a family property, identical for
+    // all its variants (so a special tier no longer mis-reports a higher rarity).
+    rarities[g.familyToken] = rarityForFamily(g.familyToken, Object.values(g.variants || {}).find((v) => v.tierKey === 'basic')?.summonCost);
+    // Look up pak per_family_meta by matching the codename to the family token,
+    // tolerating the "Sprite"-suffix mismatch (ESD_PedicureAntacid → catalog
+    // pedicureantacidsprite) by normalizing both sides.
+    const ab = resolveFamilyAbility(g.familyToken, familyMeta);
+    if (ab) abilities[g.familyToken] = ab;
+    // Every variant in a group carries the same availabilityNote (family-level
+    // constraint), so grab the first one that has it — saves repeating identical
+    // objects across the payload.
+    for (const v of Object.values(g.variants || {})) {
+      if (v.availabilityNote) { notes[g.familyToken] = v.availabilityNote; break; }
+    }
+  }
+  const tiers = {};
+  for (const t of PAK_SPECIAL_TIER_EFFECTS) {
+    tiers[t.tierKey] = { label: t.tier, color: t.color, effect: t.effect };
+  }
+  // Announced-but-unshipped drops, straight from epic-sprites.js
+  // RELEASE_SCHEDULE (already filtered to future-only). Drives the buffs-strip
+  // "NEXT" countdown so it can't drift from the per-tile countdowns.
+  const releases = upcomingReleases();
+  const json = JSON.stringify({ families, abilities, tiers, notes, releases, rarities })
+    .replace(/</g, '\\u003c')   // prevent </script> break-out
+    .replace(/-->/g, '--\\>');
+  return `<div id="info-modal" class="info-modal" aria-hidden="true" role="dialog"><div class="info-card"></div></div>
+    <script>window.__SPRITE_META=${json};</script>`;
 }
 
 // Separate profile page: hero (compact, same as the grid page) + the player
@@ -2248,17 +3763,17 @@ function renderBuybackPage(state, buybackList, { shareUrl = null, buybackShareUr
       <td class="bb-cell-cost">${fmt(b.cost)} ✦</td>
     </tr>`;
   }).join('');
-  const nav = `<a class="navlink" href="${esc(shareUrl || '/sprites')}">← Collection</a>
-               <a class="navlink primary" href="/sprites">Track your own →</a>`;
+  const nav = `<a class="navlink" href="${esc(shareUrl || '/sprites')}">Collection</a>
+               <a class="navlink primary" href="/sprites">Track your own</a>`;
   const og = buybackShareUrl ? {
     type: 'website',
     title: `${state.player}'s Buy-back Wishlist — ${buybackList.length} items · ${totalDust.toLocaleString()} ✦ needed`,
     description: `Trade with ${state.player} to help them complete their Fortnite Sprite collection. ${buybackList.length} sprite variants wanted, ${totalDust.toLocaleString()} dust total, wallet at ${walletDust.toLocaleString()} ✦ (${pct}% funded).`,
     url: buybackShareUrl,
-    image: `${buybackShareUrl}-export?v=${state.syncedAt ? Date.parse(state.syncedAt) : Date.now()}`,
+    image: buybackList.length ? `${buybackShareUrl}-export?v=${state.syncedAt ? Date.parse(state.syncedAt) : Date.now()}` : null,
     color: '#ffcf3a',
   } : null;
-  return shell(`${esc(state.player)}'s Buy-back List — CertiFried`, chrome(nav) + `<main>
+  return shell(`${state.player}'s Buy-back List — CertiFried`, chrome(nav) + `<main>
     <section class="hero" style="display:block;padding:22px 26px">
       <div class="who" style="margin-bottom:8px">🎯 Buy-back list<b>${esc(state.player)}</b><span class="since">${buybackList.length} sprites wanted · ${fmt(totalDust)} ✦ needed · ${pct}% funded</span></div>
       ${totalDust > 0 ? `<div class="bb-progress" style="max-width:none"><i style="width:${pct}%"></i></div>` : ''}
@@ -2266,12 +3781,99 @@ function renderBuybackPage(state, buybackList, { shareUrl = null, buybackShareUr
     </section>
     ${buybackList.length ? `<table class="bb-list-table" style="max-width:640px;margin:0 auto 24px">
       <tbody>${rows}</tbody>
-    </table>` : '<p style="text-align:center;color:var(--muted);margin:40px 0">No buy-back list yet.</p>'}
+    </table>` : '<p class="st-empty" style="margin:30px 0">No sprites on this buy-back list right now.</p>'}
     <p style="text-align:center;margin:24px 0;font-size:13px;color:var(--muted)">
       Traders — DM ${esc(state.player)} in Fortnite if you can spare any of these ·
       <a href="${esc(shareUrl || '/sprites')}" class="navlink">See their full collection →</a>
     </p>
   </main>`, og);
+}
+
+// Renders two cards (quest progression + sprite cosmetic locker) from the
+// spriteExtras block that buildModel attaches to state.summary. Both come from
+// the same athena profile fetch we already do — no extra Epic API cost.
+// Returns empty string if the user has no sprite quests / cosmetics.
+function renderSpriteExtras(extras) {
+  if (!extras) return '';
+  const { questsByPhase = {}, cosmeticThemes = {} } = extras;
+  const questBuckets = Object.entries(questsByPhase);
+  const themeEntries = Object.entries(cosmeticThemes);
+  if (questBuckets.length === 0 && themeEntries.length === 0) return '';
+
+  // Quest phase labels — Epic's internal keys are terse. Map to friendly names.
+  const PHASE_LABEL = {
+    mastery_p01: 'Sprite Mastery — Phase 1',
+    mastery_p02: 'Sprite Mastery — Phase 2',
+    mastery_p03: 'Sprite Mastery — Phase 3',
+    extraction_p01: 'Extraction Quests — Phase 1',
+    extraction_p02: 'Extraction Quests — Phase 2',
+    extraction_p03: 'Extraction Quests — Phase 3',
+  };
+  // Sort mastery phases before extraction, then alphabetically within
+  questBuckets.sort(([a], [b]) => {
+    const aIsM = a.startsWith('mastery'), bIsM = b.startsWith('mastery');
+    if (aIsM !== bIsM) return aIsM ? -1 : 1;
+    return a.localeCompare(b);
+  });
+  const questCards = questBuckets.map(([key, s]) => {
+    const label = PHASE_LABEL[key] || key.replace(/_/g, ' ');
+    // "Progress" = claimed + completed (both are "done"), active = in progress,
+    // remaining = total - done - active. unattainable variants are hidden
+    // rewards that require the paid Battle Pass to claim.
+    const done = (s.claimed || 0) + (s.completed || 0);
+    const inProg = s.active || 0;
+    const total = s.total || 0;
+    const donePct = total ? Math.round((done / total) * 100) : 0;
+    const inProgPct = total ? Math.round((inProg / total) * 100) : 0;
+    const barCls = donePct === 100 ? 'ct-fill completed' : 'ct-fill';
+    return `<div class="sprite-quest-row">
+      <div class="sqr-label"><b>${esc(label)}</b>
+        <span class="sub" style="font-size:11px;margin-left:6px">${done}/${total}${inProg ? ` · ${inProg} active` : ''}${s.unattainable ? ` · ${s.unattainable} 🔒 paid` : ''}</span>
+      </div>
+      <div class="ct-bar" style="margin-top:4px">
+        <div class="${barCls}" style="width:${donePct}%"></div>
+        ${inProg ? `<div class="ct-fill" style="width:${inProgPct}%;background:#ffcf3a;opacity:.55;position:absolute;top:0;left:${donePct}%"></div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+
+  // Cosmetic themes — group by theme name; each shows count + item list
+  const themeCards = themeEntries.sort(([a], [b]) => a.localeCompare(b)).map(([theme, items]) => {
+    // Deduplicate by templateId
+    const uniq = [...new Map(items.map((i) => [i.templateId, i])).values()];
+    const chips = uniq.map((i) => {
+      const shortName = (i.templateId.split(':')[1] || i.templateId).replace(/_/g, ' ');
+      const catShort = i.category.replace(/^Athena/, '');
+      return `<span class="cosmetic-chip"><b>${esc(catShort)}</b>: ${esc(shortName)}</span>`;
+    }).join('');
+    return `<div class="sprite-cosmetic-row">
+      <div class="scr-header"><b>${esc(theme)}</b> <span class="sub">${uniq.length} item${uniq.length === 1 ? '' : 's'}</span></div>
+      <div class="scr-chips">${chips}</div>
+    </div>`;
+  }).join('');
+
+  const hasQuests = questBuckets.length > 0;
+  const hasCosmetics = themeEntries.length > 0;
+  return `
+    <section class="sprite-extras" style="display:grid;grid-template-columns:${hasQuests && hasCosmetics ? '1fr 1fr' : '1fr'};gap:16px;margin-bottom:24px">
+      ${hasQuests ? `<div class="card" style="margin:0;background:var(--card);border:1px solid var(--line)">
+        <div class="cardhead">📋 Your sprite quests</div>
+        <div class="sprite-quest-list">${questCards}</div>
+        <p class="sub" style="font-size:11.5px;margin:12px 0 0">
+          From your athena profile. Bar green = done, yellow = active, dark = remaining.
+          <b>🔒 paid</b> = quests that require the paid Battle Pass to claim rewards.
+        </p>
+      </div>` : ''}
+      ${hasCosmetics ? `<div class="card" style="margin:0;background:var(--card);border:1px solid var(--line)">
+        <div class="cardhead">🎨 Your sprite cosmetic locker</div>
+        <div class="sprite-cosmetic-list">${themeCards}</div>
+        <p class="sub" style="font-size:11.5px;margin:12px 0 0">
+          Sprite-adjacent cosmetics you own — extraction frames + character
+          themes tied to sprite content (usually Fortnite Crew rewards or
+          sprite-themed shop bundles).
+        </p>
+      </div>` : ''}
+    </section>`;
 }
 
 function renderProfile(state, { readOnly = false, shareUrl = null, firstSyncedAt = null, needsRelogin = false, isAdmin = false, refreshExpiresAt = null, hasDeviceAuth = false } = {}) {
@@ -2288,15 +3890,12 @@ function renderProfile(state, { readOnly = false, shareUrl = null, firstSyncedAt
   // for the owner, public /u/:slug for visitors).
   const backToGrid = readOnly && shareUrl ? shareUrl.replace(/\/profile$/, '') : '/sprites';
   const nav = readOnly
-    ? `<a class="navlink" href="${esc(backToGrid)}">← Sprites</a>
-       <a class="navlink" href="/sprites/browse">🤝 Compare</a>
-       <a class="navlink primary" href="/sprites">Track your collection →</a>`
-    : `<a class="navlink" href="/sprites">← Sprites</a>
-       <a class="navlink" href="/sprites/browse">🤝 Compare</a>
-       ${userMenu({ displayName: state.player, isAdmin, currentPath: '/sprites/profile' })}`;
+    ? `<a class="navlink" href="${esc(backToGrid)}">Collection</a>
+       <a class="navlink primary" href="/sprites">Track your collection</a>`
+    : userMenu({ displayName: state.player, isAdmin, currentPath: '/sprites/profile' });
   const reloginBanner = (!readOnly && needsRelogin)
-    ? `<div class="relogin-banner">⚠️ <b>Your Epic connection has expired.</b> Your saved data is still here, but background re-syncs are failing. To refresh your collection please paste a fresh Epic auth code below.
-        <a href="/sprites/logout" class="btn" style="margin-left:12px;padding:7px 14px;background:#ff8aa6;color:#3a0010">Reconnect →</a></div>`
+    ? `<div class="relogin-banner">⚠️ <b>Your Epic connection has expired.</b> Your saved data is still here, but background re-syncs are failing. Sign out and reconnect with a fresh Epic code to refresh it.
+        <a href="/sprites/logout" class="btn" style="padding:7px 14px">Reconnect</a></div>`
     : '';
   const expiryBanner = (() => {
     if (readOnly || needsRelogin || hasDeviceAuth || !refreshExpiresAt) return '';
@@ -2307,7 +3906,7 @@ function renderProfile(state, { readOnly = false, shareUrl = null, firstSyncedAt
     return `<div class="expiry-banner">⏳ <b>Your Epic connection expires in ${label}.</b> Visit your sprite page now to trigger a re-sync — that mints a permanent device credential so this won't happen again.
         <form method="post" action="/sprites/resync" style="display:inline;margin-left:12px"><button class="btn" style="background:#ffcf3a;color:#3a2a00">Refresh now →</button></form></div>`;
   })();
-  return shell(`${esc(state.player)}'s Profile — CertiFried`, chrome(nav) + `<main>
+  return shell(`${state.player}'s Profile — CertiFried`, chrome(nav) + `<main>
     ${reloginBanner}
     ${expiryBanner}
     ${BUFFS_STRIP}
@@ -2336,7 +3935,7 @@ function renderProfile(state, { readOnly = false, shareUrl = null, firstSyncedAt
         <div class="stat owned"><b>${s.owned}/${denom}</b>Collected</div>
         <div class="stat master"><b>${s.mastered}</b>Mastered</div>
         ${epic && epic.accountLevel ? `<div class="stat acct"><b>${fmt(epic.accountLevel)}</b>Account Level</div>` : ''}
-        <div class="stat dust"><b>${fmt(s.dust)}</b>Sprite Dust ✦</div>
+        <div class="stat dust"><b>${fmt(s.dust) || '—'}</b>Sprite Dust ✦</div>
       </div>
       <div class="ring" style="--p:${pct}"><i>${pct}%</i></div>
     </section>
@@ -2392,6 +3991,7 @@ function renderProfile(state, { readOnly = false, shareUrl = null, firstSyncedAt
         </ul>
       </div>
     </section>
+    ${renderSpriteExtras(state.summary?.spriteExtras)}
     ${epic && epic.timeline && epic.timeline.length >= 2 ? `
     <section class="career-timeline">
       <div class="cardhead">📊 Career timeline <span class="sub" style="margin-left:8px">${epic.timeline.length} season${epic.timeline.length === 1 ? '' : 's'} played · ${epic.completedPasses || 0} Battle Pass${epic.completedPasses === 1 ? '' : 'es'} completed</span></div>
@@ -2446,7 +4046,7 @@ router.get('/', async (req, res) => {
     return res.send(renderCollection({ ...synced.model, player: synced.displayName, syncedAt: new Date().toISOString() }, { shareUrl, firstSyncedAt: new Date(), isAdmin: ADMIN_ACCOUNT_IDS.has(acct) }));
   } catch (e) {
     logger.warn(`[sprites] view failed: ${e.message}`);
-    return res.send(renderLogin({ error: `Session expired — please reconnect. (${esc(e.message)})` }));
+    return res.send(renderLogin({ error: `Session expired — please reconnect. (${e.message})` }));
   }
 });
 
@@ -2564,7 +4164,7 @@ router.get('/u/:shareId/profile', async (req, res) => {
     if (!row || !row.state_json) {
       return res.status(404).send(shell('Not found — CertiFried Sprite Tracker', chrome() + `<main>
         <div class="card"><h2>Collection not found</h2>
-        <p class="tagline" style="border:0;padding:0">That share link doesn't exist or hasn't synced yet.
+        <p class="sub">That share link doesn't exist or hasn't synced yet.
           <a href="/sprites">Track your own →</a></p></div></main>`));
     }
     const state = JSON.parse(row.state_json);
@@ -2628,7 +4228,7 @@ router.get('/u/:shareId', async (req, res) => {
     if (!row || !row.state_json) {
       return res.status(404).send(shell('Not found — CertiFried Sprite Tracker', chrome() + `<main>
         <div class="card"><h2>Collection not found</h2>
-        <p class="tagline" style="border:0;padding:0">That share link doesn't exist or hasn't synced yet.
+        <p class="sub">That share link doesn't exist or hasn't synced yet.
           <a href="/sprites">Track your own →</a></p></div></main>`));
     }
     const state = JSON.parse(row.state_json);
@@ -2673,7 +4273,7 @@ router.get('/connect', (req, res) => {
 // Fortnite token (the bridge Epic refuses).
 router.get('/callback', async (req, res) => {
   const { code, state, error } = req.query;
-  if (error) return res.send(renderLogin({ error: `Epic login was canceled (${esc(String(error))}).` }));
+  if (error) return res.send(renderLogin({ error: `Epic login was canceled (${String(error).slice(0, 120)}).` }));
   if (!code || !state || state !== req.session?.epicOauthState) {
     return res.send(renderLogin({ error: 'Login session expired or invalid — please try again.' }));
   }
@@ -2696,7 +4296,7 @@ router.get('/callback', async (req, res) => {
     }));
   } catch (e) {
     logger.warn(`[sprites] oauth callback failed: ${e.message}`);
-    res.send(renderLogin({ error: `Epic sign-in failed: ${esc(e.message)}` }));
+    res.send(renderLogin({ error: `Epic sign-in failed: ${e.message}` }));
   }
 });
 
@@ -2856,15 +4456,28 @@ router.post('/credentials', async (req, res) => {
 // getting stuck at /sprites/resync (which is POST-only → 404 on refresh).
 router.post('/resync', async (req, res) => {
   const acct = req.session?.epicAccountId;
-  if (!acct) return res.redirect('/sprites');
+  // The background heartbeat calls this with Accept: application/json and only
+  // reloads the page when the returned fingerprint changed — so an idle tab
+  // stops hard-reloading (and flashing) every 30s when nothing actually moved.
+  const wantsJson = (req.get('accept') || '').includes('application/json');
+  if (!acct) return wantsJson ? res.json({ ok: false }) : res.redirect('/sprites');
+  let fingerprint = null;
   try {
     const row = await getAccount(acct);
-    if (!row) { delete req.session.epicAccountId; return res.redirect('/sprites'); }
+    if (!row) {
+      delete req.session.epicAccountId;
+      return wantsJson ? res.json({ ok: false }) : res.redirect('/sprites');
+    }
     const synced = await syncWithAtomicRotation(row, row.display_name);
     await saveAccount(synced);
+    // Fingerprint = what a user would actually see change: owned count, mastered
+    // count, and the total (so a new-sprite drop that grows the catalog counts).
+    const s = synced?.model?.summary;
+    if (s) fingerprint = `${s.owned}:${s.mastered}:${s.total}`;
   } catch (e) {
     logger.warn(`[sprites] resync failed: ${e.message}`);
   }
+  if (wantsJson) return res.json({ ok: true, fingerprint });
   res.redirect('/sprites');
 });
 
@@ -2879,7 +4492,7 @@ router.post('/resync', async (req, res) => {
 const BUYBACK_TIER_ALIAS = {
   'basic': 'basic', 'normal': 'basic', 'base': 'basic', 'a': 'basic',
   'gold': 'gold',
-  'gummy': 'candy', 'candy': 'candy',
+  'gummy': 'gummy', 'candy': 'gummy',
   'galaxy': 'galaxy', 'galactic': 'galaxy',
   'gem': 'gem',
   'holofoil': 'holofoil',
@@ -3026,6 +4639,191 @@ router.get('/logout', (req, res) => {
   res.redirect('/sprites');
 });
 
+// ── Discord linking flow ──────────────────────────────────────────────────
+// User visits /sprites/discord-connect while signed in. We generate a 6-digit
+// code and stash it in a global map (shared with the bot command via a global
+// singleton on globalThis.__spriteLinkCodes). User goes to Discord, types
+// `/tools sprites link <code>`, bot verifies and creates the DB row.
+// Codes expire after 5 minutes.
+if (!globalThis.__spriteLinkCodes) globalThis.__spriteLinkCodes = new Map();
+const SPRITE_LINK_CODES = globalThis.__spriteLinkCodes;
+function issueLinkCode(accountId, displayName) {
+  // Sweep expired codes
+  const now = Date.now();
+  for (const [code, entry] of SPRITE_LINK_CODES) {
+    if (now - entry.issuedAt > 5 * 60 * 1000) SPRITE_LINK_CODES.delete(code);
+  }
+  // Also invalidate any prior code for this account so users can't accidentally
+  // link a stale code from a previous visit.
+  for (const [code, entry] of SPRITE_LINK_CODES) {
+    if (entry.accountId === accountId) SPRITE_LINK_CODES.delete(code);
+  }
+  // 6 random digits, avoid leading zero for readability
+  const code = String(Math.floor(100000 + Math.random() * 900000));
+  SPRITE_LINK_CODES.set(code, { accountId, displayName, issuedAt: now });
+  return code;
+}
+
+// ── One-click Discord OAuth linking ──────────────────────────────────────
+// Kicks off the app-wide passport-discord flow; on callback control returns
+// to /sprites/discord-oauth-finish which reads req.user + req.session and
+// writes the link row. Zero manual code paste required.
+router.get('/discord-oauth-init', (req, res) => {
+  const acct = req.session?.epicAccountId;
+  if (!acct) return res.redirect('/sprites');
+  // Set returnTo so the app-wide /auth/discord/callback bounces here
+  req.session.returnTo = '/sprites/discord-oauth-finish';
+  res.redirect('/auth/discord?returnTo=/sprites/discord-oauth-finish');
+});
+
+router.get('/discord-oauth-finish', async (req, res) => {
+  const acct = req.session?.epicAccountId;
+  const discordUser = req.user;
+  if (!acct) return res.redirect('/sprites');
+  if (!discordUser?.id) return res.redirect('/sprites/discord-connect?err=oauth');
+  try {
+    // Confirm the sprite account still exists
+    const [rows] = await pool.execute(
+      'SELECT display_name FROM epic_sprite_accounts WHERE account_id = ?',
+      [acct],
+    );
+    if (!rows.length) return res.redirect('/sprites');
+    // If a *different* Discord user is already linked to this sprite account,
+    // block the swap and tell the user how to unlink first.
+    const [existing] = await pool.execute(
+      'SELECT discord_user_id FROM epic_sprite_discord_links WHERE sprite_account_id = ?',
+      [acct],
+    );
+    if (existing.length && existing[0].discord_user_id !== discordUser.id) {
+      return res.redirect('/sprites/discord-connect?err=already-linked');
+    }
+    // If *this* Discord user is already linked to a *different* sprite account,
+    // block that too — Discord users can only link to one sprite account.
+    const [reverse] = await pool.execute(
+      'SELECT sprite_account_id FROM epic_sprite_discord_links WHERE discord_user_id = ?',
+      [discordUser.id],
+    );
+    if (reverse.length && reverse[0].sprite_account_id !== acct) {
+      return res.redirect('/sprites/discord-connect?err=discord-user-taken');
+    }
+    await pool.execute(
+      'INSERT INTO epic_sprite_discord_links (discord_user_id, sprite_account_id, linked_at) VALUES (?, ?, NOW()) ' +
+      'ON DUPLICATE KEY UPDATE sprite_account_id = VALUES(sprite_account_id), linked_at = NOW()',
+      [discordUser.id, acct],
+    );
+    logger.info(`[sprites] OAuth link: sprite=${acct} discord=${discordUser.id} (${discordUser.username})`);
+    return res.redirect('/sprites/discord-connect?ok=linked');
+  } catch (e) {
+    logger.warn(`[sprites] /discord-oauth-finish failed: ${e.message}`);
+    return res.redirect('/sprites/discord-connect?err=server');
+  }
+});
+
+router.get('/discord-connect', async (req, res) => {
+  const acct = req.session?.epicAccountId;
+  if (!acct) return res.redirect('/sprites');
+  try {
+    const [rows] = await pool.execute(
+      'SELECT display_name FROM epic_sprite_accounts WHERE account_id = ?',
+      [acct],
+    );
+    if (!rows.length) return res.redirect('/sprites');
+    const displayName = rows[0].display_name;
+    // Check existing link status
+    const [existing] = await pool.execute(
+      'SELECT discord_user_id, linked_at FROM epic_sprite_discord_links WHERE sprite_account_id = ?',
+      [acct],
+    );
+    // Only issue a code if the user explicitly asks for the fallback method
+    // (?method=code) or requests a fresh one (?new=1). OAuth is the default.
+    const wantsCode = req.query.method === 'code' || req.query.new === '1';
+    const code = wantsCode && !existing.length ? issueLinkCode(acct, displayName) : null;
+    // Query-param status banners (?ok=linked / ?err=xxx)
+    const statusBanner = (() => {
+      if (req.query.ok === 'linked') {
+        return `<div class="card" style="background:rgba(58,208,122,.08);border:1px solid rgba(58,208,122,.35)">
+          <h3 style="margin-top:0;color:#3ad07a">✓ Discord connected!</h3>
+          <p>Head to a server with the CertiFried bot and run <code>/tools sprites embed collection</code> to post your first auto-updating tracker.</p>
+        </div>`;
+      }
+      const errs = {
+        oauth: 'Discord returned no user info. Try again.',
+        'already-linked': 'This sprite account is already linked to a different Discord user. Run <code>/tools sprites unlink</code> in Discord from that account first.',
+        'discord-user-taken': 'That Discord account is already linked to a different sprite tracker. Sign out of that other tracker\'s Discord link first.',
+        server: 'Something went wrong on our end. Try again in a minute.',
+      };
+      if (req.query.err && errs[req.query.err]) {
+        return `<div class="card" style="background:rgba(255,91,110,.08);border:1px solid rgba(255,91,110,.35)">
+          <h3 style="margin-top:0;color:#ff5b6e">⚠ Link failed</h3>
+          <p>${errs[req.query.err]}</p>
+        </div>`;
+      }
+      return '';
+    })();
+    const linkedInfo = existing.length
+      ? `<div class="card" style="background:rgba(58,208,122,.08);border:1px solid rgba(58,208,122,.35)">
+          <h3 style="margin-top:0;color:#3ad07a">✓ Already linked</h3>
+          <p>Your sprite tracker is linked to Discord user <code>${esc(existing[0].discord_user_id)}</code>
+             since ${new Date(existing[0].linked_at).toISOString().slice(0, 16).replace('T', ' ')} UTC.</p>
+          <p>To move your link to a different Discord account: run <code>/tools sprites unlink</code> in Discord first,
+             then click "Sign in with Discord" below or <a href="/sprites/discord-connect?method=code" class="navlink">use a code instead</a>.</p>
+        </div>`
+      : '';
+    const nav = `<a class="navlink" href="/sprites/profile">Profile</a>`;
+    const body = chrome(nav) + `<main>
+      <div class="card" style="background:linear-gradient(180deg,#1a1638 0%,#161922 60%);border:1px solid #6b4cff">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
+          <span style="background:#5865F2;color:#fff;font-size:11px;font-weight:800;letter-spacing:0.08em;padding:3px 9px;border-radius:999px">🔗 DISCORD</span>
+        </div>
+        <h1 style="margin:0 0 6px">Link to Discord</h1>
+        <p class="sub">Connect this sprite account to a Discord user so the bot can post auto-updating tracker embeds in your servers.</p>
+      </div>
+      ${statusBanner}
+      ${linkedInfo}
+      ${!existing.length ? `
+      <div class="card">
+        <h2 style="margin-top:0">🚀 Sign in with Discord (recommended)</h2>
+        <p>One click — Discord's own OAuth confirms who you are, we save the link, done.</p>
+        <a href="/sprites/discord-oauth-init" style="display:inline-flex;align-items:center;gap:10px;background:#5865F2;color:#fff;border-radius:12px;padding:14px 22px;font:800 15px/1 inherit;text-decoration:none;margin:10px 0;box-shadow:0 4px 12px rgba(88,101,242,.35);transition:transform .1s, box-shadow .15s"
+           onmouseover="this.style.transform='translateY(-2px)';this.style.boxShadow='0 6px 18px rgba(88,101,242,.5)'"
+           onmouseout="this.style.transform='';this.style.boxShadow='0 4px 12px rgba(88,101,242,.35)'">
+          <svg width="20" height="20" viewBox="0 0 71 55" fill="#fff"><path d="M60.1 4.9A58.5 58.5 0 0 0 45.5.4a41.3 41.3 0 0 0-1.9 3.8 54.1 54.1 0 0 0-16.2 0A41.3 41.3 0 0 0 25.5.4 58.5 58.5 0 0 0 10.9 4.9C1.6 18.7-.9 32.2.3 45.5a58.9 58.9 0 0 0 17.8 9c1.4-2 2.7-4.1 3.7-6.3a38 38 0 0 1-5.8-2.8l1.4-1.1a41.9 41.9 0 0 0 36.2 0l1.4 1.1a38 38 0 0 1-5.8 2.8c1.1 2.2 2.4 4.3 3.7 6.3a58.9 58.9 0 0 0 17.8-9c1.6-15.5-2.5-28.9-9.6-40.6zM23.7 37.3c-3.5 0-6.4-3.2-6.4-7.2s2.8-7.2 6.4-7.2c3.6 0 6.5 3.2 6.4 7.2 0 4-2.8 7.2-6.4 7.2zm23.6 0c-3.5 0-6.4-3.2-6.4-7.2s2.8-7.2 6.4-7.2c3.6 0 6.5 3.2 6.4 7.2 0 4-2.8 7.2-6.4 7.2z"/></svg>
+          Sign in with Discord to link
+        </a>
+        <p class="sub" style="font-size:12px;margin-bottom:0">You'll be redirected to Discord to authorize. We only ask for your basic profile — no server or DM access.
+          Prefer to type a code manually? <a href="/sprites/discord-connect?method=code" class="navlink" style="font-size:12px">Use a 6-digit code instead</a>.</p>
+      </div>` : ''}
+      ${code ? `
+      <div class="card">
+        <h2 style="margin-top:0">Or link with a code</h2>
+        <p>If OAuth doesn't work (guild bots without OAuth scope, etc.), you can paste this code into any Discord server that has the CertiFried bot:</p>
+        <div style="background:#0e0f13;border:1px solid var(--line);border-radius:12px;padding:20px;text-align:center;margin:14px 0">
+          <div style="font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:36px;font-weight:900;letter-spacing:.14em;color:var(--purple);text-shadow:0 0 12px rgba(123,92,255,.4)">${code}</div>
+          <div style="margin-top:10px;font-size:12px;color:var(--muted)">Expires in 5 minutes · linked to <b>${esc(displayName)}</b></div>
+        </div>
+        <div style="background:#0e0f13;border:1px solid var(--line);border-radius:8px;padding:14px 16px;font-family:ui-monospace,monospace;font-size:14px;margin:14px 0">
+          <code>/tools sprites link ${code}</code>
+        </div>
+        <p class="sub" style="font-size:12px">If your code expires, <a href="/sprites/discord-connect?method=code&new=1" class="navlink">get a new one</a>.</p>
+      </div>` : ''}
+      <div class="card">
+        <h2 style="margin-top:0">What can I do after linking?</h2>
+        <ul style="line-height:1.8">
+          <li><b>Post an auto-updating collection embed</b> in any channel — <code>/tools sprites embed collection</code>. The bot edits the same message every time your sprites sync (roughly every 60 seconds when you're actively collecting).</li>
+          <li><b>Post an auto-updating buy-back list embed</b> — <code>/tools sprites embed buyback</code>. Shows which variants you're saving dust for, grouped by rarity, with the funded percentage.</li>
+          <li><b>Multiple channels supported</b> — post the same embed in multiple servers/channels. Each one auto-updates independently.</li>
+          <li><b>Remove embeds anytime</b> — <code>/tools sprites remove-embed</code> or <code>/tools sprites unlink</code>.</li>
+          <li><b>Check status</b> — <code>/tools sprites status</code> shows which channels have active embeds.</li>
+        </ul>
+      </div>
+    </main>`;
+    res.send(shell('Link to Discord — CertiFried Sprite Tracker', body));
+  } catch (e) {
+    logger.warn(`[sprites] /discord-connect failed: ${e.message}`);
+    res.status(500).send(shell('Error', chrome() + '<main><div class="card"><h2>Couldn\'t generate a code</h2><p class="sub">Try again in a minute.</p></div></main>'));
+  }
+});
+
 router.post('/logout', async (req, res) => {
   const acct = req.session?.epicAccountId;
   if (acct && req.body?.forget === '1') {
@@ -3047,6 +4845,12 @@ router.get('/browse', async (req, res) => {
               JSON_UNQUOTE(JSON_EXTRACT(state_json, '$.summary.epic.passLevel')) AS pass_level
        FROM epic_sprite_accounts
        WHERE share_id IS NOT NULL AND state_json IS NOT NULL
+         -- Hide accounts that can't currently sync (dead/expired credentials):
+         -- their snapshot is frozen on the PREVIOUS collection, so showing it on
+         -- the live leaderboard mixes an old denominator (e.g. Override /162)
+         -- with the current one. They reappear automatically once they re-auth
+         -- (saveAccount clears needs_relogin on the next successful sync).
+         AND (needs_relogin = 0 OR needs_relogin IS NULL)
        ORDER BY CAST(JSON_UNQUOTE(JSON_EXTRACT(state_json, '$.summary.owned')) AS UNSIGNED) DESC`,
     );
     // Recent activity events for the feed at the bottom of the browse page.
@@ -3089,29 +4893,34 @@ router.get('/browse', async (req, res) => {
         }
       } else if (e.event_type === 'pass_level') {
         icon = '🎮';
-        text = `leveled up to Battle Pass Level ${data.to}${data.season ? ` in ${esc(data.season)}` : ''}`;
-      } else { icon = '·'; text = e.event_type; }
-      return `<li class="feed-row"><span class="feed-icon">${icon}</span> ${userLink} ${esc(text)} ${time}</li>`;
+        text = `leveled up to Battle Pass Level ${data.to}${data.season ? ` in ${data.season}` : ''}`;
+      } else { icon = '·'; text = String(e.event_type || '').replace(/_/g, ' '); }
+      return `<li class="feed-row"><span class="feed-icon" aria-hidden="true">${icon}</span> ${userLink} ${esc(text)} ${time}</li>`;
     }).join('');
+    const preRaw = req.query.preselect;
+    const preselect = new Set((Array.isArray(preRaw) ? preRaw : (preRaw ? [preRaw] : [])).map((s) => String(s).slice(0, 64)).slice(0, 25));
     const list = rows.map((r) => `<li class="browse-row" data-name="${esc((r.display_name || r.share_id).toLowerCase())}" data-slug="${esc(r.share_id.toLowerCase())}">
         <label>
-          <input type="checkbox" name="u" value="${esc(r.share_id)}">
+          <input type="checkbox" name="u" value="${esc(r.share_id)}"${preselect.has(r.share_id) ? ' checked' : ''}>
           <span class="browse-id">
             <b>${esc(r.display_name || r.share_id)}</b>
             <span class="sub">/u/${esc(r.share_id)}${r.pass_level ? ` · Lv ${esc(String(r.pass_level))}` : ''}</span>
           </span>
-          <span class="browse-count">${r.owned ?? '?'}<span class="sub">/${r.obtainable ?? '?'}</span></span>
+          <span class="browse-count">${esc(r.owned ?? '?')}<span class="sub">/${esc(r.obtainable ?? '?')}</span></span>
         </label>
       </li>`).join('');
-    res.send(shell('Browse Collectors — CertiFried Sprite Tracker', chrome(`<a class="navlink" href="/sprites">← Tracker</a> <a class="navlink" href="/sprites/info">📋 Catalog audit</a>`) + `<main>
+    res.send(shell('Browse Collectors — CertiFried Sprite Tracker', chrome() + `<main>
       <div class="card">
         <h2>Compare collections</h2>
         <p class="sub">Pick two or more collectors below and we'll show who has what others don't — perfect for finding trade partners.</p>
         ${rows.length < 2 ? `<p class="warn">Need at least 2 collectors with public profiles to compare. (${rows.length} signed up so far.)</p>` : ''}
-        <form method="get" action="/sprites/compare">
-          <input type="text" id="browse-search" placeholder="🔍 Search collectors by name…" class="browse-search" autocomplete="off">
-          <ul class="browse-list" id="browse-list">${list || '<li class="sub">No public collectors yet.</li>'}</ul>
-          <p style="margin-top:14px"><button class="btn" type="submit">🤝 Compare selected →</button></p>
+        ${preselect.size === 1 ? '<p class="warn" role="status">Pick at least one more collector to compare with.</p>' : ''}
+        <form method="get" action="/sprites/compare" id="browse-form">
+          <label for="browse-search" class="sr-only">Search collectors</label>
+          <input type="search" id="browse-search" placeholder="Search collectors by name" class="browse-search" autocomplete="off">
+          <ul class="browse-list" id="browse-list">${list || '<li class="st-empty">No public collectors yet. Connect your Epic account to be the first.</li>'}</ul>
+          <p class="st-empty" id="browse-nomatch" hidden>No collectors match that search.</p>
+          <div class="browse-actions"><button class="btn" type="submit" id="browse-go">Compare selected</button><span class="sub" id="browse-picked" aria-live="polite"></span></div>
         </form>
       </div>
       ${events.length ? `
@@ -3125,13 +4934,23 @@ router.get('/browse', async (req, res) => {
       var input = document.getElementById('browse-search');
       var list = document.getElementById('browse-list');
       if (!input || !list) return;
+      var nomatch = document.getElementById('browse-nomatch');
       input.addEventListener('input', function(){
-        var q = input.value.toLowerCase().trim();
+        var q = input.value.toLowerCase().trim(), shown = 0;
         list.querySelectorAll('.browse-row').forEach(function(li){
           var n = li.dataset.name || '', s = li.dataset.slug || '';
-          li.style.display = (!q || n.indexOf(q) >= 0 || s.indexOf(q) >= 0) ? '' : 'none';
+          var on = !q || n.indexOf(q) >= 0 || s.indexOf(q) >= 0;
+          li.style.display = on ? '' : 'none'; if (on) shown++;
         });
+        if (nomatch) nomatch.hidden = !(q && shown === 0 && list.querySelector('.browse-row'));
       });
+      var go = document.getElementById('browse-go'), picked = document.getElementById('browse-picked');
+      function sync(){
+        var n = list.querySelectorAll('input[name="u"]:checked').length;
+        if (go) go.disabled = n < 2;
+        if (picked) picked.textContent = n === 0 ? 'Pick two or more.' : (n === 1 ? '1 picked, pick one more.' : n + ' picked.');
+      }
+      list.addEventListener('change', sync); sync();
     })();</script>`));
   } catch (e) {
     logger.warn(`[sprites] browse view failed: ${e.message}`);
@@ -3147,32 +4966,594 @@ router.get('/browse', async (req, res) => {
 // Update AUDIT_STAMP + the tier/family lists whenever we re-run the four-
 // endpoint audit against a live account. See doc-block below the route for
 // the exact commands.
-const AUDIT_STAMP = '2026-07-09';
-const AUDIT_ACCOUNT_LABEL = 'XxXDeath420XxX';
-const AUDIT_TIER_TOKENS = ['A', 'Base', 'Candy', 'Galactic', 'Galaxy', 'Gem', 'Gold', 'Holofoil'];
-const AUDIT_FAMILY_TOKENS = [
-  'AirSprite', 'BossSprite', 'BurntPeanut', 'DemonSprite', 'DrifterSprite',
-  'DuckSprite', 'EarthSprite', 'FishySprite', 'GhostSprite', 'GrimSprite',
-  'KingSprite', 'PunkSprite', 'SevenSprite', 'SleepySprite', 'SoccerSprite',
-  'Spitfire', 'Water', 'ZeroPointSprite',
+// ── Dynamic pak-audit values, loaded from the nightly pak-scan.json ────────
+// The daily Windows scheduled task at B:\Code\pak-audit\run-daily.ps1 pushes
+// a fresh pak-scan.json to /home/death/CertiFriedUtility/data/ every night
+// at 00:00 PT. getPakScan() reads it with a 1-hour in-memory cache invalidated
+// by mtime — so the info page always reflects the latest audit without needing
+// a service restart.
+// pak-scan.json can land in either data dir depending on which uploader ran: the
+// code historically read ../data (= dashboard/data) while the nightly/boot scanner
+// targeted ../../data (= CertiFriedUtility/data) — an off-by-one that let the file
+// silently go 6 weeks stale. Resolve BOTH candidates and always use the most
+// recently modified, so a fresh scan is picked up no matter which dir it lands in.
+const PAK_SCAN_CANDIDATES = [
+  path.resolve(__dirname, '../data/pak-scan.json'),     // dashboard/data
+  path.resolve(__dirname, '../../data/pak-scan.json'),  // CertiFriedUtility/data (nightly/boot target)
 ];
-const AUDIT_ABSENT_TOKENS = ['Quack', 'Cube', 'Batman', 'Wick', 'Goose'];
+let _pakScanCache = null;
+let _pakScanCacheKey = '';   // "<path>:<mtime>" — a switch to a newer candidate busts the cache
+let _pakScanCacheExpiresAt = 0;
+function getPakScan() {
+  const now = Date.now();
+  try {
+    // Pick the most recently modified candidate — wherever the freshest scan landed.
+    let best = null, bestStat = null;
+    for (const p of PAK_SCAN_CANDIDATES) {
+      try { const s = fsSync.statSync(p); if (!bestStat || s.mtimeMs > bestStat.mtimeMs) { best = p; bestStat = s; } } catch (_) { /* candidate absent */ }
+    }
+    if (!best) throw new Error('no pak-scan.json in any candidate path');
+    // Cache hit ONLY when path+mtime match AND TTL valid — a fresh push (or a newer
+    // file in the other candidate dir) is noticed immediately, not up to 1h later.
+    const key = `${best}:${bestStat.mtimeMs}`;
+    if (_pakScanCache && key === _pakScanCacheKey && now < _pakScanCacheExpiresAt) {
+      return _pakScanCache;
+    }
+    _pakScanCache = JSON.parse(fsSync.readFileSync(best, 'utf8'));
+    _pakScanCacheKey = key;
+    _pakScanCacheExpiresAt = now + 60 * 60 * 1000;
+    return _pakScanCache;
+  } catch (e) {
+    logger.warn(`[sprites] pak-scan.json read failed: ${e.message}, using hardcoded fallback`);
+    return PAK_SCAN_FALLBACK;
+  }
+}
+// Families the pak-scan can't resolve by itself. Two cases, both rare:
+//  - { aliasToken } : Epic's ESD asset name differs from the catalog token so the
+//    nf-normalizer can't match them (Jackrabbit's catalog token is
+//    cosmicthunderdoublejumpsprite but its ESD is ESD_DoubleJumpSprite). The
+//    alias points at the pak key that DOES carry the description, so we still use
+//    Epic's live text — no hardcoded copy.
+//  - { text } : the ability FText is StringTable-backed, not inline in the ESD
+//    blob the pak-scan reads, so the longest-string heuristic finds nothing
+//    (Overshield). Here we must carry Epic's text literally.
+const ABILITY_FALLBACK = {
+  cosmicthunderdoublejumpsprite: { aliasToken: 'doublejump' },
+  // Datamined string from fortnite.gg (corroborated by AccountShark). Its ability
+  // FText is StringTable-backed, so the pak-scan's inline-string heuristic can't see it.
+  overshieldsprite: { text: 'Grants overshield, scaling with level.' },
+};
+// Single resolution path for a family's ability text, used by the main sprite
+// page, the cards catalogue, AND the admin audit — so all three agree.
+function resolveFamilyAbility(token, familyMeta) {
+  const nf = (s) => String(s).toLowerCase().replace(/sprite$/, '');
+  for (const [pakName, m] of Object.entries(familyMeta || {})) {
+    if (nf(pakName) === nf(token) && m?.description) return m.description;
+  }
+  const fb = ABILITY_FALLBACK[token];
+  if (fb?.aliasToken) {
+    for (const [pakName, m] of Object.entries(familyMeta || {})) {
+      if (nf(pakName) === nf(fb.aliasToken) && m?.description) return m.description;
+    }
+  }
+  if (fb?.text) return fb.text;
+  return null;
+}
+// Hardcoded fallback used only if pak-scan.json is missing on disk (e.g. first
+// deploy before nightly task fires, or file gets deleted). Kept in sync with
+// the last known good scan.
+const PAK_SCAN_FALLBACK = {
+  audit_stamp: '2026-07-10 00:00:00 UTC',
+  fortnite_build: '++Fortnite+Release-41.10-CL-55227503',
+  matching_assets: 1916,
+  unique_families: ['AirSprite','BossSprite','BurntPeanut','DemonSprite','DrifterSprite','DuckSprite','EarthSprite','FishySprite','GhostSprite','GrimSprite','KingSprite','PunkSprite','SevenSprite','SleepySprite','SoccerSprite','Spitfire','Water','ZeroPointSprite'],
+  unique_tiers: ['A','Base','Gummy','Cube','Galactic','Galaxy','Gem','Gold','Holofoil','Quack'],
+  per_family_pak: {},
+};
 
-// Pak-datamined variants — extracted 2026-07-10 from Fortnite build
-// ++Fortnite+Release-41.10-CL-55227503 using retoc.exe against the IoStore
-// utoc containers under D:\Fortnite\FortniteGame\Content\Paks. See
-// scratchpad/pak-extract/out/pak-audit-summary.json for the raw dump.
-// Update these when re-running against a new build.
-const PAK_AUDIT_STAMP = '2026-07-10';
-const PAK_BUILD = '41.10-CL-55227503';
-const PAK_TOTAL_VARIANTS = 95;
-const PAK_UNRELEASED_VARIANTS = [
-  { family: 'PunkSprite', tier: 'Cube', hasIcons: true },
-  { family: 'SleepySprite', tier: 'Cube', hasIcons: true },
-  { family: 'ZeroPointSprite', tier: 'Cube', hasIcons: false },
-  { family: 'ZeroPointSprite', tier: 'Quack', hasIcons: true },
-];
-const PAK_RUMORS_ZERO_HITS = ['Batman', 'JohnWick', 'Wick', 'Joker', 'Goose'];
+const AUDIT_ACCOUNT_LABEL = 'XxXDeath420XxX';
+
+// Vault status, read from the live model.
+//
+// This section used to be a standing argument that Air + Seven were vaulted at
+// runtime but shipped in the pak. v41.20 un-vaulted both, which turned the whole
+// section into fiction — it kept telling readers two fully-obtainable families
+// were disabled. Now it reports whatever is actually vaulted, and says so when
+// nothing is.
+function renderVaultStatus(state) {
+  const groups = state?.groups || [];
+  const vaultedGroups = groups.filter((g) => Object.values(g.variants || {}).some((v) => v.vaulted));
+
+  if (!vaultedGroups.length) {
+    return `<p style="margin-bottom:0">
+      <b>Nothing is currently vaulted.</b> Every family in Epic's catalog is
+      reachable in Battle Royale right now. Air and Seven — long reported as
+      vaulted by wiki and community sources — were re-enabled in v41.20 and are
+      fully obtainable again.
+    </p>
+    <p class="sub" style="font-size:12px;margin:8px 0 0">
+      Vaulting is a server-side DDSS hotfix flag, not a pak change: the assets
+      never leave the build, Epic just stops spawning them. That's why a family
+      can come back in a patch with no download. This section is generated from
+      the live model, so it reflects the current flag state rather than a
+      remembered one.
+    </p>`;
+  }
+
+  return `<p>
+      ${vaultedGroups.length === 1 ? 'One family is' : `${vaultedGroups.length} families are`}
+      currently pulled from the Battle Royale loot pool. Copies already owned
+      still count toward your collection.
+    </p>
+    <div class="audit-tokens" style="margin:8px 0 10px">
+      ${vaultedGroups.map((g) => {
+        const vs = Object.values(g.variants || {});
+        return `<span class="audit-token absent">${esc(g.label)} · ${vs.filter((v) => v.vaulted).length}/${vs.length} tiers</span>`;
+      }).join('')}
+    </div>
+    <p class="sub" style="font-size:12px;margin:0">
+      Vaulting is a server-side DDSS hotfix flag, not a pak change — the assets
+      stay in the build and Epic simply stops spawning them, so a family can
+      return in a patch with no download.
+    </p>`;
+}
+
+// Re-summon costs, read straight off the catalog's `summonCost` attribute
+// instead of transcribed from IGN. The transcribed table was incomplete: it
+// listed Rare as base=100, missing the 2,000-dust band entirely (Air + Fishy),
+// so two families' buy-back prices were simply wrong on this page.
+function renderDustCosts(state) {
+  const groups = state?.groups || [];
+  if (!groups.length) return '<p class="sub">No synced account yet.</p>';
+
+  // Group families by their (base cost, special cost) pair — that pairing IS
+  // the rarity band, so we don't have to guess where the thresholds sit.
+  const bands = new Map();
+  for (const g of groups) {
+    const vs = Object.values(g.variants || {});
+    const base = vs.find((v) => v.tierKey === 'basic')?.summonCost ?? null;
+    const special = [...new Set(vs.filter((v) => v.tierKey !== 'basic' && v.summonCost).map((v) => v.summonCost))];
+    if (base == null && !special.length) continue;
+    const key = `${base}|${special.sort((a, b) => a - b).join(',')}`;
+    if (!bands.has(key)) bands.set(key, { base, special, families: [] });
+    bands.get(key).families.push(g.label);
+  }
+  const rows = [...bands.values()].sort((a, b) => (a.base ?? 0) - (b.base ?? 0));
+
+  return `
+    <p>
+      Die with a Sprite equipped and it leaves your inventory — buy it back from
+      the locker with Sprite Dust. These are Epic's own <code>summonCost</code>
+      values from the live catalog, grouped by the families that share them.
+    </p>
+    <div style="overflow-x:auto">
+    <table class="audit-table">
+      <thead><tr>
+        <th class="audit-num">Base tier</th>
+        <th class="audit-num">Special tiers</th>
+        <th>Families</th>
+      </tr></thead>
+      <tbody>
+        ${rows.map((r) => `<tr>
+          <td class="audit-num" data-label="Base tier">${r.base != null ? `${r.base.toLocaleString()} ✦` : '—'}</td>
+          <td class="audit-num" data-label="Special tiers">${r.special.length ? r.special.map((s) => `${s.toLocaleString()} ✦`).join(' / ') : '<span class="sub">base only</span>'}</td>
+          <td data-label="Families">${esc(r.families.sort().join(', '))}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table>
+    </div>
+    <p class="sub" style="font-size:12px;margin-top:8px">
+      "Special tiers" means everything above Basic — Gold, Gummy, Galaxy,
+      Holofoil, Cube, Gem. Epic prices every one of them the same within a
+      family.
+    </p>`;
+}
+
+// Accounts for every variant in the catalog: how many are obtainable today, and
+// for each one that isn't, exactly why. Replaces a hardcoded "our 82 vs IGN's
+// 66" table whose every row went stale (Cube shipped, Batman/Vini Jr./Pollo
+// shipped, Air + Seven were un-vaulted) and which pinned us to a third-party
+// number we can't keep current. The underlying question — "why is your count
+// what it is?" — is answered here from live state instead.
+function renderCountBreakdown(state) {
+  const groups = state?.groups || [];
+  const all = groups.flatMap((g) => Object.values(g.variants || {}).map((v) => ({ ...v, famLabel: g.label })));
+  if (!all.length) return '<p class="sub">No synced account yet — nothing to break down.</p>';
+
+  const sched = activeSchedule();
+  const tierLabelFor = (k) => (TIERS.find((t) => t.key === k) || {}).label || k;
+  const stamp = (ms) => new Date(ms).toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
+  const rows = [];
+
+  const obtainable = all.filter((v) => !v.future && !v.vaulted);
+  rows.push({
+    bucket: 'Obtainable right now',
+    count: obtainable.length,
+    primary: true,
+    what: 'In Epic\'s live catalog and not gated — what a player can actually find and extract today.',
+  });
+
+  // Everything not obtainable, grouped by tier, each with its own reason.
+  const byTier = {};
+  for (const v of all.filter((v) => v.future)) (byTier[v.tierKey] ||= []).push(v);
+  for (const [tierKey, vs] of Object.entries(byTier).sort((a, b) => b[1].length - a[1].length)) {
+    const s = sched.tiers[tierKey];
+    const pakOnly = vs.every((v) => v.pakDatamined);
+    let what;
+    if (pakOnly) {
+      what = 'Present in the <code>.pak</code> but absent from Epic\'s live catalog — datamined only, no server entry yet.';
+    } else if (s && s.at == null) {
+      what = 'In the catalog and visible in the in-game collection menu, but locked. Epic hasn\'t announced a date, so no countdown is shown.';
+    } else if (s && s.at > Date.now()) {
+      what = `Announced — unlocks <b>${esc(stamp(s.at))}</b>. Flips to obtainable automatically.`;
+    } else {
+      what = 'Not yet live in the loot pool.';
+    }
+    const fams = [...new Set(vs.map((v) => v.famLabel))].sort();
+    rows.push({
+      bucket: `${tierLabelFor(tierKey)} — not out yet`,
+      count: vs.length,
+      what: `${what}<span class="audit-sub">${esc(fams.join(', '))}</span>`,
+    });
+  }
+
+  const vaulted = all.filter((v) => v.vaulted);
+  if (vaulted.length) {
+    const fams = [...new Set(vaulted.map((v) => v.famLabel))].sort();
+    rows.push({
+      bucket: 'Vaulted',
+      count: vaulted.length,
+      what: `Pulled from the loot pool by Epic. Copies already owned still count.<span class="audit-sub">${esc(fams.join(', '))}</span>`,
+    });
+  }
+
+  const owned = all.filter((v) => v.owned).length;
+  return `
+    <p>
+      Epic's catalog returns <b>${all.length} variants</b> for
+      <b>${esc(AUDIT_ACCOUNT_LABEL)}</b>'s account. Every one is accounted for
+      below — this table is generated from the live model on each page load, so
+      it can't drift from what the grid shows.
+    </p>
+    <div style="overflow-x:auto">
+    <table class="audit-table" style="font-size:13px">
+      <thead><tr><th>Bucket</th><th class="audit-num">Count</th><th>What it is</th></tr></thead>
+      <tbody>
+        ${rows.map((r) => `<tr${r.primary ? ' style="background:rgba(58,208,122,.10)"' : ''}>
+          <td data-label="Bucket">${r.primary ? `<b>${esc(r.bucket)}</b>` : esc(r.bucket)}</td>
+          <td class="audit-num${r.primary ? '' : ' audit-hit'}" data-label="Count">${r.primary ? `<b>${r.count}</b>` : `+${r.count}`}</td>
+          <td data-label="What it is">${r.what}</td>
+        </tr>`).join('')}
+        <tr style="background:rgba(107,76,255,.12)">
+          <td data-label="Bucket"><b>Catalog total</b></td>
+          <td class="audit-num" data-label="Count"><b>${all.length}</b></td>
+          <td data-label="What it is">Every variant Epic ships to this account, obtainable or not. <b>${owned}</b> currently collected.</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>`;
+}
+// Community-rumored sprites, VERIFIED AGAINST LIVE DATA on every render rather
+// than asserted as absent.
+//
+// This used to be a hardcoded "zero hits" list and it published a flatly false
+// claim: it grepped the pak for the marketing name "Batman", found nothing, and
+// concluded the sprite was fabricated. Epic ships families under internal
+// codenames — Batman is `FossilMealSprite`, Vini Jr. is `CokeParmesan`, Pollo is
+// `CompanyStargazer` — so searching asset paths for a marketing name is a
+// guaranteed false negative. The real name lives in the DataAsset's DisplayName
+// FText (`FossilMealSprite` → "Batman Sprite"), which is exactly where we look
+// now. A rumor is only reported absent when it appears in NEITHER Epic's live
+// catalog NOR any pak DisplayName.
+// Names the community asks about but that Epic has neither shipped nor announced
+// — pure "does this exist?" folklore. Confirmed-upcoming sprites live in the DB
+// (epic_sprite_announced) and are merged in below, so this stays small.
+const RUMOR_WATCHLIST = ['Joker', 'Goose'];
+
+// Resolve each watched name against live data. One row per name, three states:
+//   'shipped'   -> in Epic's catalog/pak now (with the codename that masked it)
+//   'announced' -> officially confirmed + dated, but not in the catalog yet
+//   'absent'    -> no evidence anywhere: not shipped, not announced
+// Checked in that order, so a sprite that actually ships is reported as shipped
+// even if a stale announcement row lingers.
+function verifyRumors(state) {
+  const meta = getPakScan()?.per_family_meta || {};
+  const groups = state?.groups || [];
+  const announced = getAnnouncedSprites();
+  const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+  // Every name we report on: the folklore watchlist + everything announced.
+  const names = [...new Set([...announced.map((a) => a.name), ...RUMOR_WATCHLIST])];
+
+  return names.map((name) => {
+    const n = norm(name);
+    // 1) Epic's live catalog, matched on the family's display label.
+    const group = groups.find((g) => norm(g.label).includes(n));
+    // 2) The pak's DisplayName strings — this is what unmasks codenames.
+    let codename = null;
+    for (const [pakName, m] of Object.entries(meta)) {
+      if (m?.display_name && norm(m.display_name).includes(n)) { codename = pakName; break; }
+    }
+    if (group || codename) {
+      const variants = group ? Object.values(group.variants || {}) : [];
+      return {
+        name,
+        status: 'shipped',
+        codename: codename || group?.familyToken || null,
+        label: group?.label || null,
+        total: variants.length,
+        owned: variants.filter((v) => v.owned).length,
+        live: variants.filter((v) => !v.future && !v.vaulted).length,
+      };
+    }
+    // 3) Officially announced but not in the catalog yet.
+    const ann = announced.find((a) => norm(a.name) === n);
+    if (ann) return { name, status: 'announced', ...ann };
+
+    return { name, status: 'absent' };
+  });
+}
+
+// Auto-derived list of pak variants Epic hasn't shipped in the live catalog.
+// Computed from pak-scan.json (per_family_pak) minus what Epic returns in the
+// live catalog (source: one recent state_json's Epic-native variants). hasIcon
+// is resolved by disk-checking whether the audit exported the icon to
+// public/sprites/img/. Cached and invalidated on pak-scan.json mtime change,
+// with a 10-min live-catalog re-fetch heartbeat.
+let _dataminedCache = null;
+let _dataminedCacheMtime = 0;
+let _liveCatalogSet = null;
+let _liveCatalogAt = 0;
+async function getLiveCatalogTierSet() {
+  const now = Date.now();
+  if (_liveCatalogSet && now - _liveCatalogAt < 10 * 60 * 1000) return _liveCatalogSet;
+  try {
+    const [rows] = await pool.execute(
+      "SELECT state_json FROM epic_sprite_accounts WHERE state_json IS NOT NULL ORDER BY synced_at DESC LIMIT 1"
+    );
+    if (!rows.length) return new Set();
+    const state = JSON.parse(rows[0].state_json);
+    const set = new Set();
+    for (const g of state.groups || []) {
+      for (const v of Object.values(g.variants || {})) {
+        // Only Epic-native counts as "live" — backfilled pakDatamined variants
+        // must NOT filter themselves out of the derive.
+        if (v.pakDatamined) continue;
+        set.add(`${g.familyToken}:${v.tierKey}`);
+      }
+    }
+    _liveCatalogSet = set;
+    _liveCatalogAt = now;
+    return set;
+  } catch (e) {
+    logger.warn(`[sprites] live-catalog reference fetch failed: ${e.message}`);
+    return new Set();
+  }
+}
+async function getPakDataminedVariants() {
+  const pak = getPakScan();
+  if (!pak) return [];
+  const liveSet = await getLiveCatalogTierSet();
+  try {
+    const stat = fsSync.statSync(PAK_SCAN_PATH);
+    if (_dataminedCache && stat.mtimeMs === _dataminedCacheMtime && _dataminedCache._liveSize === liveSet.size) {
+      return _dataminedCache;
+    }
+    _dataminedCacheMtime = stat.mtimeMs;
+  } catch { /* pak-scan missing — fall through and derive from fallback */ }
+  const raw = deriveDataminedVariants(pak);
+  // ESD-exists + icon-exists in pak isn't strong enough evidence a variant
+  // is actually enabled in-game — the pak retains prior-season art (Duck
+  // Holofoil, Punk Gem, etc) that Epic no longer serves in the catalog.
+  // Injecting those creates phantom tiles that render "Available now" but
+  // are jail-barred, which is worse than showing nothing.
+  //
+  // ALLOWLIST — variants we've explicitly confirmed Epic is teasing but
+  // hasn't yet enabled in the catalog. Add entries here ONLY when there's
+  // affirmative evidence (patch note mention, boss encounter plugin, DDSS
+  // hotfix reference, etc). Format: `familytoken:tierkey`.
+  const PAK_ONLY_ALLOWLIST = new Set([
+    'zeropointsprite:quack',  // datamined, teased since CH7S3 launch; no catalog entry yet
+  ]);
+  const filtered = raw
+    // Filter out anything Epic already ships in the live catalog.
+    .filter((v) => {
+      const t = TIERS.find((x) => x.match.includes(v.tierToken));
+      const tierKey = t ? t.key : v.tierToken;
+      return !liveSet.has(`${v.familyToken}:${tierKey}`);
+    })
+    // Additionally require explicit allowlist entry (see above).
+    .filter((v) => {
+      const t = TIERS.find((x) => x.match.includes(v.tierToken));
+      const tierKey = t ? t.key : v.tierToken;
+      return PAK_ONLY_ALLOWLIST.has(`${v.familyToken}:${tierKey}`);
+    })
+    // Attach hasIcon by disk-checking whether the audit extracted a PNG.
+    .map((v) => {
+      const id = imgIdFor(v.name);
+      const hasIcon = !!id && fsSync.existsSync(path.join(SPRITE_IMG_DIR, `${id}.png`));
+      return { ...v, hasIcon };
+    })
+    .filter((v) => v.hasIcon);
+  filtered._liveSize = liveSet.size;
+  _dataminedCache = filtered;
+  return filtered;
+}
+// Read per-family base summonCost from a recent state_json to enable pure
+// data-driven rarity inference. Cached 10 min alongside the live-catalog set.
+let _famBaseCosts = null;
+let _famBaseCostsAt = 0;
+async function getFamilyBaseCosts() {
+  const now = Date.now();
+  if (_famBaseCosts && now - _famBaseCostsAt < 10 * 60 * 1000) return _famBaseCosts;
+  try {
+    const [rows] = await pool.execute(
+      "SELECT state_json FROM epic_sprite_accounts WHERE state_json IS NOT NULL ORDER BY synced_at DESC LIMIT 1"
+    );
+    if (!rows.length) return {};
+    const state = JSON.parse(rows[0].state_json);
+    const out = {};
+    for (const g of state.groups || []) {
+      // Prefer the actual "basic" (A/Base) tier — that's the family's cheapest
+      // variant and its summonCost is the classic Epic rarity marker.
+      const basicCost = g.variants?.basic?.summonCost;
+      if (basicCost != null) out[g.familyToken] = basicCost;
+    }
+    _famBaseCosts = out;
+    _famBaseCostsAt = now;
+    return out;
+  } catch (e) {
+    logger.warn(`[sprites] family base-cost fetch failed: ${e.message}`);
+    return {};
+  }
+}
+
+// Parse Epic's ability descriptions into { base, levels[] }. The pak text
+// almost always follows the pattern:
+//   "<base sentence(s)>. <transition phrase> at each Level Up: A -> B -> C -> D -> E<optional trailing suffix>"
+// The transition phrase varies ("Increases in power", "Duration increases",
+// "Required damage decreases", etc.) so we cut on "Level Up:" / "Level Up!"
+// and trim the base back to the last sentence-ending punctuation. If the
+// description has no leveling structure (Air, Batman, Punk, Dream), returns
+// the description as base with an empty levels array.
+function parseAbilityText(desc) {
+  if (!desc || typeof desc !== 'string') return { base: desc || '', levels: [] };
+  const luIdx = desc.search(/Level Ups?[!:]/i);
+  if (luIdx === -1 || !desc.includes('->')) return { base: desc.trim(), levels: [] };
+  // Trim base back to the last sentence terminator before the Level Up marker
+  const preLU = desc.slice(0, luIdx);
+  const sentEndMatch = preLU.match(/^([\s\S]*[.!?])\s*(.+?)$/);
+  const base = (sentEndMatch ? sentEndMatch[1] : preLU).trim();
+  // Everything after Level Up marker split on ->
+  const afterLU = desc.slice(luIdx).replace(/^Level Ups?[!:]\s*/i, '');
+  const levels = afterLU.split(/\s*->\s*/).map((s) => s.trim()).filter(Boolean);
+  return { base, levels };
+}
+
+// Render a parsed ability as: base paragraph + a Lv 1..Lv N table below.
+function renderAbilityBody(desc) {
+  const { base, levels } = parseAbilityText(desc);
+  let html = base ? `<p class="info-move-desc">${esc(base)}</p>` : '';
+  if (levels.length) {
+    html += '<div class="lvl-list">';
+    for (let i = 0; i < levels.length; i++) {
+      html += `<span class="lvl-tag">Lv ${i + 1}</span><span class="lvl-val">${esc(levels[i])}</span>`;
+    }
+    html += '</div>';
+  }
+  return html;
+}
+
+// Return { family, rarity, ability, source } rows for /sprites/info's ability
+// table. Descriptions come DIRECTLY from Epic's own text (extracted from the
+// ESD_*.uasset DisplayName + Description fields during pak-audit). Rarity is
+// inferred purely from Epic's own summonCost economy — no hardcoded map,
+// so any new family Epic ships auto-classifies without a code change.
+async function getPakFamilyAbilities() {
+  const pak = getPakScan();
+  const meta = pak?.per_family_meta || {};
+  if (Object.keys(meta).length === 0) return [];
+  const famCosts = await getFamilyBaseCosts();
+  // Normalize BOTH sides of the lookup: famCosts is keyed by the CATALOG token
+  // (`pedicureantacidsprite`), but the pak meta key is the codename
+  // (`PedicureAntacid`). A raw lookup missed Ironmouse → null → "unknown" even
+  // though its base cost (6750) is right there. Strip the trailing "sprite".
+  const nf = (s) => String(s).toLowerCase().replace(/sprite$/, '');
+  const famCostByNorm = {};
+  for (const [k, v] of Object.entries(famCosts)) famCostByNorm[nf(k)] = v;
+  const out = [];
+  for (const [pakFamName, m] of Object.entries(meta)) {
+    if (!m?.description) continue;
+    const token = pakFamName.toLowerCase();
+    const displayName = (m.display_name || pakFamName).replace(/\s+Sprite$/i, '').trim();
+    out.push({
+      family: displayName,
+      familyToken: token,
+      rarity: rarityForFamily(token, famCostByNorm[nf(pakFamName)]),   // explicit Override grades + cost fallback
+      ability: m.description.trim(),
+      source: 'Epic (extracted from pak ESD_*.uasset)',
+    });
+  }
+  return out.sort((a, b) => {
+    const order = { Rare: 0, Epic: 1, Legendary: 2, Mythic: 3, unknown: 9 };
+    return (order[a.rarity] - order[b.rarity]) || a.family.localeCompare(b.family);
+  });
+}
+
+// Extract { familyToken: "Real Name Sprite" } from pak-scan's per_family_meta.
+// buildModel prefers this over hardcoded FAMILY_LABEL so a new family shipped
+// by Epic auto-gets its real display name on the next pak-audit run (per build),
+// no code changes needed. Falls back to {} if pak-scan is missing.
+function getPakFamilyDisplayNames() {
+  const pak = getPakScan();
+  if (!pak?.per_family_meta) return {};
+  const out = {};
+  for (const [pakFamName, meta] of Object.entries(pak.per_family_meta)) {
+    if (!meta?.display_name) continue;
+    // pak family names are like "AirSprite", "CokeParmesan" — lowercase to
+    // match familyToken (buildModel's `parseVariant` lowercases too).
+    const base = pakFamName.toLowerCase();
+    out[base] = meta.display_name;
+    // Epic sometimes appends "Sprite" to the CATALOG token even when the ESD
+    // codename doesn't (ESD_PedicureAntacid → catalog pedicureantacidsprite →
+    // "Ironmouse Sprite"). Emit the suffixed key too so buildModel's lookup by
+    // the catalog token matches either form — otherwise the raw codename leaks
+    // to the UI ("pedicureantacidsprite" instead of "Ironmouse").
+    if (!base.endsWith('sprite')) out[base + 'sprite'] = meta.display_name;
+  }
+  return out;
+}
+
+// Adapter — /sprites/info's audit table wants { family, tier, hasIcons } shape.
+async function getPakUnreleasedForInfo() {
+  const list = await getPakDataminedVariants();
+  return list.map((v) => {
+    // Extract "Family" + "Tier" from the pak variant name.
+    const parts = v.name.split(/_Variant_|_Variation_/);
+    return { family: parts[0], tier: parts[1] || v.tierToken, hasIcons: v.hasIcon };
+  });
+}
+
+// ── Live endpoint size cache — fetched fresh on /sprites/info load ─────────
+// The four sizes shown in the audit table (12,709 B catalog, 5,433 B magpie,
+// 568,517 B athena, 696,242 B item shop) come from a live probe against
+// Death420's account. Cached for 10 min so refreshing /sprites/info doesn't
+// hammer Epic every request.
+let _endpointSizeCache = null;
+let _endpointSizeCacheExpiresAt = 0;
+async function getEndpointSizes() {
+  const now = Date.now();
+  if (_endpointSizeCache && now < _endpointSizeCacheExpiresAt) return _endpointSizeCache;
+  const sizes = { catalog: null, magpie: null, athena: null, shop: null, catalogVariants: null, stamp: null };
+  try {
+    // Reuse Death420's cached raw sizes if we've captured them recently;
+    // otherwise fall back to the hardcoded values while a background sync
+    // updates them. See the fetchSpriteData wrapper below.
+    const [rows] = await pool.execute(
+      `SELECT display_name, last_endpoint_sizes, synced_at
+       FROM epic_sprite_accounts WHERE display_name=? LIMIT 1`,
+      [AUDIT_ACCOUNT_LABEL],
+    );
+    if (rows.length && rows[0].last_endpoint_sizes) {
+      const p = typeof rows[0].last_endpoint_sizes === 'string'
+        ? JSON.parse(rows[0].last_endpoint_sizes) : rows[0].last_endpoint_sizes;
+      sizes.catalog = p.catalog ?? null;
+      sizes.magpie  = p.magpie  ?? null;
+      sizes.athena  = p.athena  ?? null;
+      sizes.catalogVariants = p.catalogVariants ?? null;
+      sizes.stamp = rows[0].synced_at || null;
+    }
+    // Item shop is public, no auth. 5-min TTL is fine.
+    const shopRes = await fetch('https://fortnite-api.com/v2/shop', { headers: { 'User-Agent': 'CertiFriedSpriteTracker/1.0' } });
+    const shopBuf = await shopRes.text();
+    sizes.shop = shopBuf.length;
+  } catch (e) {
+    logger.warn(`[sprites] endpoint size probe failed: ${e.message}`);
+  }
+  _endpointSizeCache = sizes;
+  _endpointSizeCacheExpiresAt = now + 10 * 60 * 1000;
+  return _endpointSizeCache;
+}
 
 // Full deep-dive findings (2026-07-10) — extracted from a comprehensive
 // enumeration of all 4 CH7S3 plugins + broader Fortnite pak scan. Every list
@@ -3180,43 +5561,27 @@ const PAK_RUMORS_ZERO_HITS = ['Batman', 'JohnWick', 'Wick', 'Joker', 'Goose'];
 // Special variant effects — cross-referenced with IGN's CH7S3 sprite guide
 // (https://www.ign.com/wikis/fortnite/Sprites_Checklist_and_Guide...). Each
 // non-basic tier adds a passive on top of the family's base ability.
+// Tier passive effects — refreshed 2026-07-17 from IGN's post-v41.20 guide.
+// These stack ON TOP of the family's base ability (from pak per_family_meta).
+// Values are per-tier bonuses that apply regardless of family.
 const PAK_SPECIAL_TIER_EFFECTS = [
-  { tier: 'Gold',     tierKey: 'gold',     color: '#ffcf3a', effect: 'Bonus XP from eliminations' },
-  { tier: 'Gummy',    tierKey: 'candy',    color: '#ff6cc4', effect: '10% more Sprite Dust when extracting' },
-  { tier: 'Galaxy',   tierKey: 'galaxy',   color: '#7b5cff', effect: '20% more ammo when opening ammo boxes' },
-  { tier: 'Holofoil', tierKey: 'holofoil', color: '#5bf0ff', effect: 'Higher chance of finding rare Sprite variants in chests' },
-  { tier: 'Gem',      tierKey: 'gem',      color: '#3ad0c4', effect: '30% less fall damage (marked "coming soon" by IGN)' },
-];
-
-// Family-specific abilities cross-referenced against IGN's CH7S3 guide + the
-// games.gg tier-list guide. `verified` distinguishes documented (IGN/games.gg)
-// from pak-only inference. Family rarity comes from games.gg's tier list —
-// determines dust re-summon cost per PAK_DUST_COSTS.
-const PAK_FAMILY_ABILITIES = [
-  // Rare rarity — the entry-level trio
-  { family: 'Fire (Spitfire)',    rarity: 'Rare',      ability: 'Spawns fire when you deal enough damage to an enemy',                                              pakBoon: 'FireflyFrenzy (molotov cocktail projectile)',            verified: 'IGN' },
-  { family: 'Water',              rarity: 'Rare',      ability: 'Coastal/river map-area bonus (games.gg calls out its usefulness near water)',                       pakBoon: 'Water = "Hydro Healing"',                                verified: 'games.gg' },
-  { family: 'Earth',              rarity: 'Rare',      ability: 'Chest loot bonus — stacks with aggressive looting routes',                                          pakBoon: 'Collector (extraction/loot yield)',                      verified: 'games.gg' },
-  // Epic rarity
-  { family: 'Demon',              rarity: 'Epic',      ability: 'Siphons both shields AND health on kills — constant recovery in fights',                            pakBoon: 'Siphon (heal-on-damage)',                                verified: 'games.gg' },
-  { family: 'Ghost',              rarity: 'Epic',      ability: 'Stealth window during reloads (cloak while reloading)',                                             pakBoon: 'GhostReload (has "StartCloak" GameplayEffect)',          verified: 'games.gg' },
-  { family: 'Duck',               rarity: 'Epic',      ability: 'Rewards using emotes mid-match (niche but real)',                                                    pakBoon: 'JamSession (music/emote theme)',                         verified: 'games.gg' },
-  { family: 'Fishy',              rarity: 'Epic',      ability: 'Increases swim speed + speed boost after taking damage',                                             pakBoon: 'AirSpeed / SuperSprint (movement)',                      verified: 'IGN' },
-  { family: 'Striker (Soccer)',   rarity: 'Epic',      ability: 'Overdrive buff on mantle/hurdle/wall-scramble — bumps fire rate, reload, and movement speed',        pakBoon: 'OverdriveParkour = "Wind Parkour"',                     verified: 'IGN' },
-  { family: 'Grim Reaper (Grim)', rarity: 'Epic',      ability: 'Players who damage you become marked for a short duration',                                          pakBoon: 'DarkIntel (marking/intel)',                              verified: 'IGN' },
-  { family: 'Boss',               rarity: 'Epic',      ability: null,                                                                                                 pakBoon: 'BossHealth (extra HP/shield gameplay effects)',          verified: 'pak-only' },
-  { family: 'King',               rarity: 'Epic',      ability: null,                                                                                                 pakBoon: 'RoyalWins (winner theme)',                               verified: 'pak-only' },
-  { family: 'Aura (Drifter)',     rarity: 'Epic',      ability: null,                                                                                                 pakBoon: 'HauntedHelpers / Void (aura/ambient theme)',             verified: 'pak-only' },
-  // Legendary rarity
-  { family: 'Dream (Sleepy)',     rarity: 'Legendary', ability: 'Randomized item drops per level; can produce Legendary loot at max level (variance play)',           pakBoon: 'StarterPack = "Loot Pack" (random cache drops)',        verified: 'games.gg' },
-  { family: 'Punk',               rarity: 'Legendary', ability: null,                                                                                                 pakBoon: 'JamSession or Maniac (music/punk theme — unclear)',      verified: 'unconfirmed', note: 'games.gg explicitly flags Punk\'s ability as "not yet confirmed"' },
-  // Mythic rarity
-  { family: 'Zero Point',         rarity: 'Mythic',    ability: 'Shield Bubble Jr. spawns automatically every time you heal — huge late-game defensive tool',        pakBoon: 'SuperShield (bubble/shield generation)',                verified: 'games.gg' },
-  // Cosmetic tier
-  { family: 'TheBurntPeanut',     rarity: 'Cosmetic',  ability: '10% chance to pull Mythic loot from eliminations at max level — scales per level',                  pakBoon: 'Greedy (loot yield boost)',                             verified: 'games.gg' },
-  // Server-vaulted — no in-game data
-  { family: 'Air (server-vaulted)',   rarity: 'unknown', ability: null, pakBoon: 'Air / AirSpeed / WindVortex (movement family)',    verified: 'vaulted' },
-  { family: 'Seven (server-vaulted)', rarity: 'unknown', ability: null, pakBoon: 'unknown',                                          verified: 'vaulted' },
+  { tier: 'Gold',     tierKey: 'gold',     color: '#ffcf3a', effect: '3× Elimination XP (extraction bonus)' },
+  // CH7S4 Override tier bonuses — confirmed live (datamine via spritechecklist.org /
+  // fortnite.gg). Each is a tier-wide bonus that STACKS on the sprite's base ability.
+  { tier: 'Cheat Master',  tierKey: 'cheatmaster', color: '#ff4d6d', effect: 'All Cheat Code inputs count as correct (never fumble a Cheat Code entry)' },
+  { tier: 'Loot Hacker',   tierKey: 'loothacker',  color: '#22c55e', effect: 'Increases the chance of spawning items from your Loot Hacks' },
+  { tier: 'Bounty Hunter', tierKey: 'reaper',      color: '#a855f7', effect: 'Chance to find Sprites when eliminating opponents; only gains Sprite XP from eliminations (unless the Sprite has special XP rules, e.g. Crown/Klombo)' },
+  // Trick or Treat (Fortnitemares) tier is live in the catalog but Epic has NOT
+  // published its bonus effect yet. effect:null = "known tier, no bonus to show" —
+  // registers it so the audit stops flagging it, without inventing an effect.
+  // Fill in when the Fortnitemares patch notes / datamine confirm it.
+  { tier: 'Trick or Treat', tierKey: 'tricktreat', color: '#ff7518', effect: null },
+  { tier: 'Gummy',    tierKey: 'gummy',    color: '#ff6cc4', effect: '20% more Sprite Dust when extracting' },
+  { tier: 'Galaxy',   tierKey: 'galaxy',   color: '#7b5cff', effect: '30% more ammo when opening ammo boxes' },
+  { tier: 'Holofoil', tierKey: 'holofoil', color: '#5bf0ff', effect: '5% higher chance of finding rare Sprite variants in chests' },
+  { tier: 'Cube',     tierKey: 'cube',     color: '#c084fc', effect: 'Grants the Overdrive effect while inside the Storm — easier repositioning and safer extractions' },
+  { tier: 'Gem',      tierKey: 'gem',      color: '#3ad0c4', effect: '30% less fall damage' },
+  { tier: 'Quack',    tierKey: 'quack',    color: '#facc15', effect: 'Whenever this Sprite earns XP, every other Sprite in your match inventory gains an extra 50% of that XP' },
 ];
 
 // Sprite Dust re-summon costs (IGN). If you die with a variant equipped,
@@ -3270,24 +5635,918 @@ const PAK_SPRITE_BOONS = [
   { name: 'Void',            display: null, hasIcon: false },
   { name: 'WindVortex',      display: null, hasIcon: false },
 ];
-router.get('/info', (req, res) => {
-  res.send(renderInfo());
+router.get('/info', async (req, res) => {
+  try {
+    res.send(await renderInfo());
+  } catch (e) {
+    logger.warn(`[sprites] /info render failed: ${e.message}`);
+    res.status(500).send(shell('Error', chrome() + '<main><div class="card"><h2>Info page unavailable</h2><p class="sub">Try again in a minute.</p></div></main>'));
+  }
 });
 
-function renderInfo() {
-  const tierPills = AUDIT_TIER_TOKENS
-    .map((t) => `<span class="audit-token">${esc(t)}</span>`).join('');
-  const familyPills = AUDIT_FAMILY_TOKENS
-    .map((f) => `<span class="audit-token family">${esc(f)}</span>`).join('');
-  const absentPills = AUDIT_ABSENT_TOKENS
-    .map((t) => `<span class="audit-token absent">${esc(t)}</span>`).join('');
-  const nav = `<a class="navlink" href="/sprites">👾 My collection</a>
-               <a class="navlink" href="/sprites/browse">🤝 Compare</a>`;
+// ── /sprites/codes — Override Admin Panel / Lobby Hack codes ─────────────
+// Season-specific free-reward codes (Cheat Master sprites, gizmos, dust, XP,
+// cosmetics). Static list, community-verified; update when Epic adds/expires
+// codes. Copy-to-clipboard, grouped by reward type.
+const OVERRIDE_CODES = [
+  { code: 'GottaGoFast', reward: 'Cheat Master Sonic Sprite', cat: 'Sprites' },
+  { code: 'IWannaFlyHigh', reward: 'Cheat Master Tails Sprite', cat: 'Sprites' },
+  { code: '8BitBlast', reward: 'Cheat Master 8-Bit Sprite', cat: 'Sprites' },
+  { code: 'Born2Play', reward: 'Cheat Master Adventure Sprite', cat: 'Sprites' },
+  { code: 'Play4All', reward: 'Cheat Master Jonesy Sprite', cat: 'Sprites' },
+  { code: 'O2Override', reward: 'Llama Supply Drop + Portable Extractor', cat: 'Gizmos' },
+  { code: 'TakeYourHeart', reward: '2× Extraction Accelerator', cat: 'Gizmos' },
+  { code: 'PerfectOrder', reward: '4× Spicy Taco', cat: 'Gizmos' },
+  { code: 'SurviveTheNight', reward: '2× Cheat Code Extractor', cat: 'Gizmos' },
+  { code: 'FindItChat', reward: '2× Cheat Code Locator', cat: 'Gizmos' },
+  { code: 'OverrideXP', reward: '40,000 XP', cat: 'XP & Dust' },
+  { code: 'Perlimpinpin', reward: '2,000 Sprite Dust', cat: 'XP & Dust' },
+  { code: 'Magilume', reward: '2,000 Sprite Dust', cat: 'XP & Dust' },
+  { code: 'Chispambo', reward: '2,000 Sprite Dust', cat: 'XP & Dust' },
+  { code: 'Abgestaubt', reward: '2,000 Sprite Dust', cat: 'XP & Dust' },
+  { code: 'BeMoreAlien', reward: 'Override Ready Loading Screen', cat: 'Cosmetics' },
+  { code: 'ReachYourImpossible', reward: 'Block Party Loading Screen', cat: 'Cosmetics' },
+  { code: 'LetsBlockAndRoll', reward: 'Transform into a Tetris block', cat: 'Cosmetics', reusable: true },
+  { code: 'DontBlockMe', reward: 'Revert to normal lobby appearance', cat: 'Cosmetics', reusable: true },
+];
+// Codes live in the epic_sprite_codes DB table (runtime-editable + auto-polled by
+// pollLobbyHackCodes below). OVERRIDE_CODES above is only the compile-time
+// FALLBACK used if the table is empty/unreachable.
+let _codesCache = null, _codesCheckedAt = null, _codesLoadedAt = 0;
+const CODES_CACHE_TTL_MS = 3 * 60 * 1000;   // DB edits reflect within ~3 min, no redeploy/restart
+async function loadCodesFromDB() {
+  try {
+    // expires_at gate: an event-dated code (e.g. birthday codes) self-retires
+    // from the public list the moment it lapses — the poller only ADDS codes, so
+    // without this a time-limited code would linger as stale/invalid info. NULL =
+    // no known expiry (permanent unlocks, easter-eggs, undated drops). The column
+    // may be absent on an un-migrated box, so fall back to the un-gated query.
+    let rows;
+    try {
+      [rows] = await pool.query(
+        "SELECT code, reward, category, reusable, expires_at FROM epic_sprite_codes WHERE enabled=1 AND (expires_at IS NULL OR expires_at > NOW()) ORDER BY FIELD(category,'Sprites','Gizmos','XP & Dust','Cosmetics','Other'), code");
+    } catch (colErr) {
+      [rows] = await pool.query(
+        "SELECT code, reward, category, reusable FROM epic_sprite_codes WHERE enabled=1 ORDER BY FIELD(category,'Sprites','Gizmos','XP & Dust','Cosmetics','Other'), code");
+    }
+    _codesCache = rows.length ? rows.map((r) => ({ code: r.code, reward: r.reward, cat: r.category, reusable: !!r.reusable, expiresAt: r.expires_at ? new Date(r.expires_at).getTime() : null })) : null;
+    _codesLoadedAt = Date.now();
+  } catch (e) { logger.warn(`[codes] DB load failed: ${e.message}`); }
+}
+router.get('/codes', async (req, res) => {
+  try {
+    if (!_codesCache || Date.now() - _codesLoadedAt > CODES_CACHE_TTL_MS) await loadCodesFromDB();
+    const CODES = _codesCache || OVERRIDE_CODES;
+    const cats = ['Sprites', 'Gizmos', 'XP & Dust', 'Cosmetics', 'Other'];
+    const catIcon = { 'Sprites': '\u{1F47E}', 'Gizmos': '\u{1F381}', 'XP & Dust': '✨', 'Cosmetics': '\u{1F3A8}' };
+    const sections = cats.map((cat) => {
+      const items = CODES.filter((c) => c.cat === cat);
+      if (!items.length) return '';
+      const rows = items.map((c) => {
+        // Time-limited codes still show while valid (loadCodesFromDB already drops
+        // lapsed ones); flag the end date so a user knows to grab it before it goes.
+        const endTag = c.expiresAt ? ` <span class="code-tag ends">ends ${new Date(c.expiresAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}</span>` : '';
+        return `<div class="code-row">
+        <button type="button" class="code-copy" data-code="${esc(c.code)}" title="Copy code" aria-label="Copy code ${esc(c.code)}"><code>${esc(c.code)}</code><span class="copy-ic">⧉</span></button>
+        <span class="code-reward">${esc(c.reward)}${c.reusable ? ' <span class="code-tag">reusable</span>' : ''}${endTag}</span>
+      </div>`;
+      }).join('');
+      return `<section class="code-cat"><h2>${catIcon[cat] ? `<span aria-hidden="true">${catIcon[cat]}</span> ` : ''}${esc(cat)} <span class="sub" style="font-weight:600;font-size:13px">(${items.length})</span></h2><div class="code-list">${rows}</div></section>`;
+    }).join('');
+    const nav = '';
+    const body = `<main>
+      <section class="hero" style="display:block;padding:20px 26px">
+        <h1 style="margin:0 0 6px">\u{1F579}️ Override Cheat Codes</h1>
+        <p class="sub" style="margin:0 0 10px">All <b>${CODES.length}</b> Admin Panel / Lobby Hack codes for Chapter 7 Season 4: Override — free Cheat Master sprites, gizmos, Sprite Dust, XP &amp; cosmetics, no grind.</p>
+        <div class="code-howto"><b>How to redeem:</b> In the lobby, open the <b>…/ Admin Panel</b> prompt (top-right of the screen), type the code <b>exactly</b> (case-sensitive), and Submit. Most are <b>one-time</b>; the two Tetris codes are reusable. Redeeming a Sprite you already own grants <b>10,000 Sprite Dust</b> instead.</div>
+      </section>
+      ${sections || '<p class="st-empty">No codes are active right now. New ones show up here on their own.</p>'}
+      <p class="sub" style="text-align:center;margin:16px 0 24px">Auto-tracked — this list refreshes itself from community sources (Dexerto, GamesRadar, PCGamesN, GameRant); new codes appear here on their own.${_codesCheckedAt ? ` Last checked ${new Date(_codesCheckedAt).toISOString().slice(0, 16).replace('T', ' ')} UTC.` : ''} Tap any code to copy it.</p>
+    </main>
+    <style>
+      .code-cat{max-width:820px;margin:0 auto}
+      .code-cat h2{font-size:16px;margin:18px 16px 8px;color:#e8eaf0}
+      .code-list{display:flex;flex-direction:column;gap:8px;padding:0 16px}
+      .code-row{display:flex;align-items:center;gap:14px;background:#12141a;border:1px solid #2a2f3c;border-radius:10px;padding:10px 14px;flex-wrap:wrap}
+      .code-copy{display:inline-flex;align-items:center;gap:10px;background:#1a1d26;border:1px solid #3a4250;border-radius:8px;padding:7px 12px;cursor:pointer;color:#cbb5ff;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:700;font-size:14px;transition:all .12s;min-width:190px;justify-content:space-between}
+      .code-copy:hover{border-color:var(--purple,#8b5cf6);background:#211a34;color:#fff}
+      .code-copy.copied{border-color:#3ad07a;color:#3ad07a;background:#0f2a1a}
+      .code-copy code{background:none;padding:0;color:inherit;font:inherit}
+      .code-copy .copy-ic{opacity:.55;font-size:13px}
+      .code-reward{color:#c3cad6;font-size:14px;flex:1;min-width:180px}
+      .code-tag{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;font-size:10px;font-weight:800;background:#0f2a1a;color:#4fd77a;border:1px solid #1f5a36}
+      .code-tag.ends{background:#2a2410;color:#ffcf3a;border-color:#5a4a1f}
+      .code-howto{background:#0e0f13;border:1px solid #2a2f3c;border-radius:10px;padding:11px 14px;font-size:13px;color:#c3cad6;line-height:1.5}
+      .code-howto b{color:#e8eaf0}
+    </style>
+    <script>(function(){
+      document.querySelectorAll('.code-copy').forEach(function(b){
+        b.addEventListener('click', function(){
+          var code=b.getAttribute('data-code');
+          var ic=b.querySelector('.copy-ic');var old=ic.textContent;
+          function done(ok){b.classList.toggle('copied',ok);ic.textContent=ok?'✓':'!';b.title=ok?'Copied':'Copy failed: select the code and copy it';setTimeout(function(){b.classList.remove('copied');ic.textContent=old;b.title='Copy code';},1400);}
+          function legacy(){var t=document.createElement('textarea');t.value=code;t.setAttribute('readonly','');t.style.position='fixed';t.style.opacity='0';document.body.appendChild(t);t.select();var ok=false;try{ok=document.execCommand('copy');}catch(_){}document.body.removeChild(t);done(ok);}
+          if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(code).then(function(){done(true);},legacy);}else{legacy();}
+        });
+      });
+    })();</script>`;
+    res.send(shell('Override Cheat Codes — CertiFried Sprite Tracker', chrome(nav) + body));
+  } catch (e) {
+    logger.warn(`[sprites] /codes render failed: ${e.message}`);
+    res.status(500).send(shell('Error', chrome() + '<main><div class="card"><h2>Codes page unavailable</h2></div></main>'));
+  }
+});
+
+// ── Lobby Hack codes auto-poller ─────────────────────────────────────────
+// Scrapes community code trackers, cross-validates (a NEW code must appear on
+// >=2 independent sources), and upserts epic_sprite_codes so /codes stays current
+// with no redeploy. Known codes get last_seen bumped; genuinely new confirmed
+// codes are added (auto=1) and DM'd for review. Best-effort — a source that 403s
+// a bot is skipped; a false positive is easy to disable in the table.
+const CODE_SOURCES = [
+  'https://www.dexerto.com/fortnite/fortnite-admin-panel-cheat-codes-august-2026-3400374/',
+  'https://www.gamesradar.com/games/fortnite/fortnite-lobby-hack-codes/',
+  'https://www.pcgamesn.com/fortnite/lobby-hack-codes',
+  'https://gamerant.com/fortnite-all-lobby-hack-codes/',
+  // Added 2026-09-17 — beebom/nintendolife often publish new codes early (they had
+  // BLINKYINKYPINKYCLYDE / SAYH12WR1X3L before the others). Broader net for the ≥2-source poller.
+  'https://beebom.com/fortnite-lobby-hack-codes/',
+  'https://www.nintendolife.com/guides/fortnite-lobby-hack-codes-admin-panel',
+  // Vice runs a per-update "all new codes" article — had MagicIsReal / DestinyAwaits /
+  // ChatFindMeAnotherCode before the others. Authoritative for fresh-drop codes.
+  'https://www.vice.com/en/article/fortnite-admin-panel-codes-september-17-update/',
+];
+const CODE_REWARD_KW = /(Cheat Master|Sprite Dust|Sprite|\bXP\b|Gizmo|Taco|Extractor|Locator|Loading Screen|Llama|Tetris|Accelerator|Portable)/i;
+const CODE_STOPWORDS = new Set(['sprite', 'sprites', 'cheat', 'master', 'codes', 'code', 'admin', 'panel', 'fortnite', 'lobby', 'hack', 'hacks', 'override', 'season', 'chapter', 'battle', 'royale', 'reward', 'rewards', 'loading', 'screen', 'block', 'party', 'tetris', 'free', 'gizmo', 'gizmos', 'dust', 'extractor', 'locator', 'portable', 'llama', 'supply', 'spicy', 'taco', 'tacos', 'with', 'that', 'this', 'your', 'from', 'what', 'each', 'used', 'once', 'only', 'type', 'into', 'then', 'they', 'will', 'more', 'also', 'list', 'click', 'enter', 'august', 'september', 'october', 'here', 'these', 'available', 'unlock', 'unlocks', 'redeem', 'grants',
+  // category headers + JSON-LD/page-structure words (systematic false positives)
+  'cosmetics', 'sprite dust', 'other', 'position', 'item', 'name', 'context', 'schema', 'listitem', 'webpage', 'article', 'guide', 'latest', 'updated', 'section', 'header', 'category', 'itemlistelement', 'primaryimageofpage', 'imageobject', 'caption', 'following', 'below', 'above', 'about',
+  // Intro/outro PROSE words that leaked as candidates (poller scans the whole page,
+  // so boilerplate sentences — shared across code sites — clear the >=2-source bar).
+  // Observed false-positive DMs: "already", "Extraction", "Locators", "SIGNUP".
+  // These only ever block a STANDALONE single-word token, never a concatenated code
+  // (JONESYISGOLDEN / PerfectOrder are matched as whole tokens, not "order"), so adding
+  // reward-noun singulars/plurals here is safe.
+  'already', 'being', 'since', 'start', 'started', 'added', 'adding', 'turn', 'turns', 'turning',
+  'briefly', 'before', 'after', 'complete', 'completed', 'completing', 'record', 'records',
+  'pieces', 'piece', 'claiming', 'claim', 'need', 'needs', 'needed', 'their', 'have', 'been',
+  'make', 'sure', 'without', 'when', 'where', 'which', 'while', 'you', 'the', 'and', 'for', 'all',
+  'get', 'gets', 'give', 'gives', 'find', 'finds', 'extraction', 'accelerator', 'accelerators',
+  'locators', 'signup', 'signin', 'order', 'orders', 'voice', 'line', 'story', 'quest', 'quests',
+  'jumpscare', 'nights', 'freddy', 'scarecrow', 'pumpkin', 'snack', 'lantern', 'lanterns', 'black',
+  'disguise', 'outfit', 'style', 'spray', 'emote', 'portrait', 'bling', 'backbling', 'wrap', 'snackolanterns']);
+function codeCategory(r) {
+  if (/Cheat Master/i.test(r)) return 'Sprites';
+  if (/\bXP\b|Dust/i.test(r)) return 'XP & Dust';
+  if (/Loading Screen|Tetris|lobby appearance/i.test(r)) return 'Cosmetics';
+  if (/Gizmo|Taco|Extractor|Locator|Llama|Portable|Accelerator/i.test(r)) return 'Gizmos';
+  if (/Sprite/i.test(r)) return 'Sprites';
+  return 'Other';
+}
+async function pollLobbyHackCodes() {
+  const seen = new Map();
+  for (const url of CODE_SOURCES) {
+    let html = '';
+    try {
+      const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120', 'Accept': 'text/html' }, signal: AbortSignal.timeout(15000) });
+      if (!res.ok) continue;
+      html = await res.text();
+    } catch (e) { continue; }
+    // Decode \uXXXX (pages embed the code list in JSON-LD) BEFORE stripping tags,
+    // else en-dash separators arrive as literal "–" and fragment the codes.
+    const text = html.replace(/\\u([0-9a-fA-F]{4})/g, (_, h) => String.fromCharCode(parseInt(h, 16)))
+      .replace(/<[^>]+>/g, ' ').replace(/&#8211;|&ndash;/g, '-').replace(/&amp;/g, '&').replace(/&#?[a-z0-9]+;/gi, ' ').replace(/[ \t]+/g, ' ');
+    // Token may START WITH A DIGIT (e.g. 8BITBLAST) — the old [A-Za-z] lead clipped
+    // it to "BITBLAST" and DM'd a bogus "new" code. Lookahead requires >=1 letter so
+    // pure numbers ("5000" from "5,000 Sprite Dust") still don't match.
+    // Code = EITHER a 5-30 char contiguous alnum run (IMTHEREALEDGELORD, 8BITBLAST)
+    // OR a dash-segmented code (S7H-50P-R03 — segments too short for the 5+ run, so
+    // the old regex captured nothing and the poller never surfaced it). Lookahead
+    // still requires ≥1 letter so "5,000" / "50-50" are rejected.
+    const re = /((?=[0-9A-Za-z-]*[A-Za-z])(?:[A-Za-z0-9]{5,30}|[A-Za-z0-9]{2,}(?:-[A-Za-z0-9]{2,}){1,4}))[\s\-–—:|)]{1,4}([^\n|]{3,90})/g;
+    let m, hits = 0;
+    while ((m = re.exec(text)) && hits < 4000) {
+      hits++;
+      const tok = m[1], rewardRaw = m[2].trim();
+      if (CODE_STOPWORDS.has(tok.toLowerCase())) continue;
+      // A dash-segmented token is only a real code if it carries a digit (S7H-50P-R03).
+      // Hyphenated prose the dash-alternative now matches ("cheat-code", "drop-in") never
+      // does — reject it so widening the regex for dash codes didn't open a prose hole.
+      if (tok.includes('-') && !/[0-9]/.test(tok)) continue;
+      if (!CODE_REWARD_KW.test(rewardRaw)) continue;
+      const key = tok.toLowerCase();
+      if (!seen.has(key)) seen.set(key, { code: tok, reward: rewardRaw, sources: new Set() });
+      seen.get(key).sources.add(url);
+    }
+  }
+  if (!seen.size) { logger.warn('[codes] poll: no sources readable'); _codesCheckedAt = Date.now(); return; }
+  const [known] = await pool.query('SELECT code FROM epic_sprite_codes');
+  const knownSet = new Set(known.map((r) => r.code.toLowerCase()));
+  // DM-dedup ledger: every candidate we've EVER alerted about. The user only wants
+  // a DM the FIRST time a genuinely-new code appears — not the same candidate
+  // re-DM'd every 6h. knownSet covers codes on the curated list; this ledger
+  // additionally covers candidates never added (a real one not yet curated, or a
+  // false positive) so neither is ever alerted twice.
+  const [alerted] = await pool.query('SELECT code FROM epic_sprite_code_alerts').catch(() => [[]]);
+  const alertedSet = new Set((alerted || []).map((r) => r.code.toLowerCase()));
+  let refreshed = 0; const candidates = []; const newAlerts = [];
+  for (const [key, info] of seen) {
+    if (knownSet.has(key)) {
+      // Only ever REFRESH the last_seen of codes already curated in the table.
+      await pool.query('UPDATE epic_sprite_codes SET last_seen=CURRENT_TIMESTAMP, sources_seen=? WHERE code=?', [info.sources.size, info.code]);
+      refreshed++;
+    } else if (info.sources.size >= 2 && !alertedSet.has(key)) {
+      // NEVER auto-insert. Community pages produce false positives (category
+      // headers, prose fragments) and getting one wrong on a public page is worse
+      // than a missed code. The /codes list is DB-curated ONLY; the poller just
+      // surfaces a NEW candidate ONCE for a human to add if real.
+      candidates.push(info.code + ' -> ' + info.reward.replace(/\s{2,}/g, ' ').trim().slice(0, 90));
+      newAlerts.push([info.code]);
+    }
+  }
+  _codesCheckedAt = Date.now();
+  await loadCodesFromDB();
+  logger.info('[codes] poll: ' + seen.size + ' seen, ' + refreshed + ' known refreshed, ' + candidates.length + ' NEW (never alerted)');
+  if (candidates.length) {
+    try { await dmSpriteAlert('🕹️ **NEW Override code(s) detected** (>=2 sources, first-time alert — NOT auto-added):\n' + candidates.slice(0, 15).join('\n') + '\n\nIf real, add them to the codes list.'); } catch (e) {}
+    // Record them so they are NEVER DM'd again, even if never added to the list.
+    try { await pool.query('INSERT IGNORE INTO epic_sprite_code_alerts (code) VALUES ?', [newAlerts]); }
+    catch (e) { logger.warn('[codes] alert-ledger write failed: ' + e.message); }
+  }
+}
+// Only schedule the poller in the REAL app process. A stray
+// `node -e "import('./dashboard/routes/sprites.js')"` (an import test) would otherwise
+// run this top-level scheduling too, spawning a zombie poller that outlives the shell
+// and keeps re-adding false codes on its 6h timer. That was the ACTUAL root cause of the
+// recurring "cosmetics" code — abandoned import-test processes, not the pm2 app.
+// Primary signal: pm2 sets process.env.pm_id for managed apps; `node -e` tests never have it.
+// Fallback: a direct `node index.js` run. `node -e`/--eval has process.argv.length < 2.
+const _isImportEval = process.argv.length < 2;
+const _isMainApp = !_isImportEval && (process.env.pm_id !== undefined || /(?:^|[\\/])index\.js$/.test(process.argv[1] || ''));
+logger.info('[codes] poller scheduling: isMainApp=' + _isMainApp + ' pm_id=' + (process.env.pm_id ?? 'unset') + ' argv1=' + (process.argv[1] || 'none'));
+if (_isMainApp) {
+  setTimeout(pollLobbyHackCodes, 25 * 1000);
+  setInterval(pollLobbyHackCodes, 6 * 60 * 60 * 1000);
+}
+
+// ── /sprites/cards — full trading-card catalogue ─────────────────────────
+// Public page showing every sprite variant as a fully-rendered trading card.
+// No user state — reads catalog + pak metadata only. Same styling as the
+// click-to-open modal cards on the grid pages.
+router.get('/cards', async (req, res) => {
+  try {
+    res.send(await renderCardsCatalogue(req.query));
+  } catch (e) {
+    logger.warn(`[sprites] /cards render failed: ${e.message}`);
+    res.status(500).send(shell('Error', chrome() + '<main><div class="card"><h2>Catalogue unavailable</h2><p class="sub">Try again in a minute.</p></div></main>'));
+  }
+});
+
+// Legacy collection views — read the per-account snapshots frozen at each module
+// cutover. Same catalogue renderer, different source column + archived styling.
+// Override = CH7S4 (locked when Treasure Hunters began); Garden = CH7S3 (locked
+// when Override began). Browsable, read-only; linked from the catalogue nav.
+router.get('/override', async (req, res) => {
+  try {
+    res.send(await renderCardsCatalogue(req.query, { column: 'override_json', legacy: true, collLabel: 'Override', formAction: '/sprites/override' }));
+  } catch (e) {
+    logger.warn(`[sprites] /override render failed: ${e.message}`);
+    res.status(500).send(shell('Error', chrome() + '<main><div class="card"><h2>Override archive unavailable</h2><p class="sub">Try again in a minute.</p></div></main>'));
+  }
+});
+router.get('/garden', async (req, res) => {
+  try {
+    res.send(await renderCardsCatalogue(req.query, { column: 'garden_json', legacy: true, collLabel: 'Sprite Garden', formAction: '/sprites/garden' }));
+  } catch (e) {
+    logger.warn(`[sprites] /garden render failed: ${e.message}`);
+    res.status(500).send(shell('Error', chrome() + '<main><div class="card"><h2>Garden archive unavailable</h2><p class="sub">Try again in a minute.</p></div></main>'));
+  }
+});
+
+// Build one trading-card HTML (server-side mirror of the modal's openModal()).
+// Same class names, same data structure — CSS in STYLE renders them identically.
+function renderCatalogueCard(v, opts = {}) {
+  const { familyLabel, ability, tierMeta, availabilityNote, rarity: rarityOpt } = opts;
+  const tierColor = v.tierColor || '#7a8395';
+  const tierLabel = v.tierLabel || '';
+  const tierKey = v.tierKey || '';
+  const summon = v.summonCost;
+  // Rarity is a FAMILY property (base-tier cost, shared bands) — passed in via
+  // opts.rarity. Fallback to a base-cost heuristic only if not provided.
+  const rarity = rarityOpt
+    || (summon >= 6750 ? 'Mythic' : summon >= 4500 ? 'Legendary' : summon >= 2700 ? 'Epic' : 'Rare');
+  const isHolo = ['holofoil', 'gem', 'cube', 'quack'].includes(tierKey);
+  // Catalogue view is "showcase" — no owned/XP/vaulted signals since it's
+  // public data. Level badge shows the tier icon symbol.
+  const tierIcon = { basic: 'A', gold: 'G', gummy: '★', galaxy: '✧', gem: '◆', holofoil: '✦', cube: '⬢', quack: '🦆' }[tierKey] || '?';
+  const imgHtml = v.imgId
+    ? `<img src="/sprites/img/${esc(v.imgId)}.png" alt="${esc(v.name)}" onerror="this.style.display='none';this.parentNode.querySelector('.art-fallback').style.display='block'">
+       <svg class="art-fallback" style="display:none" viewBox="0 0 100 100"><rect width="100" height="100" rx="14" fill="#15171e"/><text x="50" y="62" text-anchor="middle" font-size="40" font-weight="800" fill="${esc(tierColor)}">${esc((tierLabel||'?')[0])}</text></svg>`
+    : `<svg viewBox="0 0 100 100"><rect width="100" height="100" rx="14" fill="#15171e"/><text x="50" y="62" text-anchor="middle" font-size="40" font-weight="800" fill="${esc(tierColor)}">${esc((tierLabel||'?')[0])}</text></svg>`;
+  const tierMoveHtml = tierMeta?.effect
+    ? `<div class="info-move">
+        <div class="info-move-hdr">
+          <span class="icon" style="background:${esc(tierColor)}">✦</span>
+          <span class="name">${esc(tierLabel)} Bonus</span>
+          <span class="power">×</span>
+        </div>
+        <p class="info-move-desc">${esc(tierMeta.effect)}</p>
+      </div>` : '';
+  const abilityMoveHtml = ability
+    ? `<div class="info-move">
+        <div class="info-move-hdr">
+          <span class="icon">⚔</span>
+          <span class="name">Family Passive</span>
+        </div>
+        ${renderAbilityBody(ability)}
+      </div>` : '';
+  // Catalogue-card variant of the note callout — same visual language as the
+  // modal so downloaded PNGs carry the disclaimer inline (which is the whole
+  // point of a share-friendly card).
+  const noteHtml = availabilityNote
+    ? `<div class="info-move" style="border-color:rgba(255,207,58,.4);background:linear-gradient(180deg,rgba(255,207,58,.08),rgba(0,0,0,.15))">
+        <div class="info-move-hdr">
+          <span class="icon" style="background:#ffcf3a;color:#1a1613">⚠</span>
+          <span class="name">${esc(availabilityNote.label)}</span>
+        </div>
+        <p class="info-move-desc" style="color:#ffcf3a">${esc(availabilityNote.text)}</p>
+      </div>` : '';
+  // Filename for downloaded PNG — safe for cross-platform saves.
+  const dlName = `${(familyLabel || v.familyToken).replace(/[^\w]+/g, '')}_${tierLabel || tierKey}.png`;
+  return `<div class="info-card catalogue-card${isHolo ? ' holo' : ''}" data-rarity="${esc(rarity)}" data-family="${esc(v.familyToken)}" data-tier="${esc(tierKey)}" data-rarity-tag="${esc(rarity)}">
+    <button class="card-dl" type="button" data-dl-name="${esc(dlName)}" title="Download as PNG" aria-label="Download ${esc(dlName)}">⬇</button>
+    <div class="info-hdr">
+      <div class="fam-wrap">
+        <h3 class="fam-name">${esc(familyLabel || v.familyToken)}</h3>
+        <div class="fam-sub">${esc(tierLabel)} · ${esc(rarity)}</div>
+      </div>
+      <div class="level-badge">
+        <span class="lvl-num">${esc(tierIcon)}</span>
+        <span class="lvl-lbl">${esc(tierLabel)}</span>
+      </div>
+    </div>
+    <div class="info-art">
+      <div class="art-tier-badge">${esc(tierLabel)}</div>
+      ${imgHtml}
+    </div>
+    <div class="info-body">
+      ${noteHtml}
+      ${tierMoveHtml}
+      ${abilityMoveHtml}
+      <div class="info-stats">
+        <div class="info-stat"><b>${summon ? fmt(summon) : '—'}</b><span class="lbl">Dust ✦</span></div>
+        <div class="info-stat"><b>${esc(rarity[0])}</b><span class="lbl">${esc(rarity)}</span></div>
+        <div class="info-stat"><b>${esc(tierIcon)}</b><span class="lbl">${esc(tierLabel)}</span></div>
+      </div>
+    </div>
+    <div class="info-foot">
+      <span class="codename">${esc(v.name)}</span>
+      <span class="rarity-dot">${esc(rarity)}</span>
+    </div>
+  </div>`;
+}
+
+async function renderCardsCatalogue(query = {}, opts = {}) {
+  // Source column: the live catalogue reads state_json; the legacy collection
+  // views read the per-account snapshots frozen at each module cutover
+  // (override_json = CH7S4 Override, garden_json = CH7S3 Garden). Whitelisted —
+  // the column name is interpolated, not bound, so it can never be user-driven.
+  const COLUMN = ({ state_json: 1, override_json: 1, garden_json: 1 }[opts.column]) ? opts.column : 'state_json';
+  const legacy = !!opts.legacy;
+  const collLabel = opts.collLabel || null;
+  const formAction = opts.formAction || '/sprites/cards';
+  // Most-recent snapshot that actually has this column populated.
+  const [rows] = await pool.execute(
+    `SELECT ${COLUMN} AS sj FROM epic_sprite_accounts WHERE ${COLUMN} IS NOT NULL ORDER BY synced_at DESC LIMIT 1`
+  );
+  if (!rows.length) {
+    return shell('Cards Catalogue — CertiFried', chrome() + `<main><div class="card"><h2>${esc(collLabel || 'Catalogue')} unavailable</h2><p class="sub">No ${legacy ? 'archived snapshot for this collection' : 'sync data'} yet.</p></div></main>`);
+  }
+  const state = JSON.parse(rows[0].sj);
+  const groups = state.groups || [];
+  const pak = getPakScan();
+  const familyMeta = pak?.per_family_meta || {};
+  // Family ability text is resolved per-card via resolveFamilyAbility (shared with
+  // the main page + admin audit), which handles nf-matching + alias/text fallbacks.
+  // Tier bonus lookup
+  const tierMetaByKey = {};
+  for (const t of PAK_SPECIAL_TIER_EFFECTS) tierMetaByKey[t.tierKey] = t;
+
+  // Flatten every variant across every family
+  const allCards = [];
+  for (const g of groups) {
+    const variants = Object.values(g.variants || {});
+    // Rarity is a family property from the base-tier cost (shared bands).
+    const rarity = rarityForFamily(g.familyToken, variants.find((v) => v.tierKey === 'basic')?.summonCost);
+    for (const v of variants) {
+      allCards.push({
+        v,
+        familyLabel: g.label,
+        ability: resolveFamilyAbility(g.familyToken, familyMeta) || '',
+        tierMeta: tierMetaByKey[v.tierKey] || null,
+        familyToken: g.familyToken,
+        rarity,
+      });
+    }
+  }
+
+  // Filter/sort (via query params — bookmarkable)
+  const filterFam = query.family || '';
+  const filterTier = query.tier || '';
+  const filterRarity = query.rarity || '';
+  const sortMode = query.sort || 'family';
+  let filtered = allCards.filter((c) => {
+    if (filterFam && c.familyToken !== filterFam) return false;
+    if (filterTier && c.v.tierKey !== filterTier) return false;
+    if (filterRarity && c.rarity !== filterRarity) return false;
+    return true;
+  });
+  const tierOrder = { basic: 0, gold: 1, gummy: 2, galaxy: 3, gem: 4, holofoil: 5, cube: 6, quack: 7 };
+  const rarityOrder = { Rare: 0, Epic: 1, Legendary: 2, Mythic: 3 };
+  filtered.sort((a, b) => {
+    if (sortMode === 'rarity') {
+      return (rarityOrder[b.rarity] || 0) - (rarityOrder[a.rarity] || 0)
+        || (a.familyLabel || '').localeCompare(b.familyLabel || '') || (tierOrder[a.v.tierKey] || 9) - (tierOrder[b.v.tierKey] || 9);
+    }
+    if (sortMode === 'tier') {
+      return (tierOrder[a.v.tierKey] || 9) - (tierOrder[b.v.tierKey] || 9)
+          || (a.familyLabel || '').localeCompare(b.familyLabel || '');
+    }
+    // family (default)
+    return (a.familyLabel || '').localeCompare(b.familyLabel || '')
+        || (tierOrder[a.v.tierKey] || 9) - (tierOrder[b.v.tierKey] || 9);
+  });
+
+  const cardsHtml = filtered.map(({ v, familyLabel, ability, tierMeta, rarity }) =>
+    renderCatalogueCard(v, { familyLabel, ability, tierMeta, rarity, availabilityNote: v.availabilityNote })
+  ).join('');
+
+  // Filter form values for the toolbar
+  const uniqueFams = [...new Set(groups.map((g) => ({ token: g.familyToken, label: g.label })).map(JSON.stringify))].map(JSON.parse).sort((a, b) => a.label.localeCompare(b.label));
+  const famOptions = uniqueFams.map((f) => `<option value="${esc(f.token)}" ${filterFam === f.token ? 'selected' : ''}>${esc(f.label)}</option>`).join('');
+  const tierOptions = TIERS.map((t) => `<option value="${esc(t.key)}" ${filterTier === t.key ? 'selected' : ''}>${esc(t.label)}</option>`).join('');
+  const rarityOptions = ['Rare', 'Epic', 'Legendary', 'Mythic'].map((r) => `<option value="${r}" ${filterRarity === r ? 'selected' : ''}>${r}</option>`).join('');
+
+  // Cross-link live + both legacy collections; mark the one you're on.
+  const here = (p) => formAction === p ? ' aria-current="page"' : '';
+  const nav = `<a class="navlink" href="/sprites/cards"${here('/sprites/cards')}>Live catalogue</a>
+               <a class="navlink" href="/sprites/override"${here('/sprites/override')}>Override archive</a>
+               <a class="navlink" href="/sprites/garden"${here('/sprites/garden')}>Garden archive</a>`;
+  // Legacy collections get a distinct (muted) banner + an archived note so nobody
+  // mistakes a frozen snapshot for the live, collectable set.
+  const badge = legacy
+    ? `<span style="background:#5a6072;color:#fff;font-size:11px;font-weight:800;letter-spacing:0.08em;padding:3px 9px;border-radius:999px">🗄 LEGACY${collLabel ? ' · ' + esc(collLabel.toUpperCase()) : ''}</span>`
+    : `<span style="background:#7b5cff;color:#fff;font-size:11px;font-weight:800;letter-spacing:0.08em;padding:3px 9px;border-radius:999px">🃏 CATALOGUE</span>`;
+  const heading = legacy ? `The ${esc(collLabel)} collection — archived` : 'The complete Sprite card catalogue';
+  const blurb = legacy
+    ? `A frozen snapshot of the <b>${esc(collLabel)}</b> sprite collection as it stood when Epic rotated it out of the active lineup. Preserved read-only — it no longer live-syncs. Your current collection is on the <a href="/sprites/cards" style="color:#9b7bff">live catalogue →</a>`
+    : `Every variant Epic serves in the live catalog, rendered as its own trading card.
+        Holofoil / Gem / Cube / Quack tiers get the animated iridescent shimmer.
+        No user state — pure showcase.`;
+  const cardBorder = legacy ? '#4a5160' : '#6b4cff';
+  const cardBg = legacy ? 'linear-gradient(180deg,#1c2030 0%,#161922 60%)' : 'linear-gradient(180deg,#1a1638 0%,#161922 60%)';
+  const body = chrome(nav) + `<main>
+    <div class="card" style="background:${cardBg};border:1px solid ${cardBorder}">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
+        ${badge}
+        <span class="sub" style="font-size:12px">${filtered.length} of ${allCards.length} cards shown</span>
+      </div>
+      <h1 style="margin:0 0 8px">${heading}</h1>
+      <p class="sub" style="margin:0 0 14px">${blurb}</p>
+      <form method="get" action="${formAction}" class="cards-toolbar">
+        <label>Family:
+          <select name="family"><option value="">All (${uniqueFams.length})</option>${famOptions}</select>
+        </label>
+        <label>Tier:
+          <select name="tier"><option value="">All</option>${tierOptions}</select>
+        </label>
+        <label>Rarity:
+          <select name="rarity"><option value="">All</option>${rarityOptions}</select>
+        </label>
+        <label>Sort by:
+          <select name="sort">
+            <option value="family" ${sortMode === 'family' ? 'selected' : ''}>Family → Tier</option>
+            <option value="tier" ${sortMode === 'tier' ? 'selected' : ''}>Tier → Family</option>
+            <option value="rarity" ${sortMode === 'rarity' ? 'selected' : ''}>Rarity (high → low)</option>
+          </select>
+        </label>
+        <button type="submit" class="resync-btn" style="background:var(--purple);color:#fff;border-color:var(--purple)">Apply</button>
+        <a href="${formAction}" class="navlink" style="margin-left:auto">Reset</a>
+      </form>
+    </div>
+    ${filtered.length === 0
+      ? '<div class="card"><h3>No cards match those filters</h3><p class="sub">Try loosening the filter or hit Reset.</p></div>'
+      : `<div class="cards-bulk">
+          <button class="dl-all" type="button" id="dl-all-btn">⬇ Download all ${filtered.length} as PNG</button>
+          <span class="dl-status" id="dl-status">Or click ⬇ on any individual card.</span>
+          <progress id="dl-progress" value="0" max="${filtered.length}" style="display:none"></progress>
+        </div>
+        <div class="cards-grid">${cardsHtml}</div>`}
+  </main>
+  <script src="/sprites/html2canvas.min.js"></script>
+  <script>(function(){
+    // ── PNG downloader for /sprites/cards ────────────────────────────────
+    if (typeof html2canvas === 'undefined') {
+      console.warn('[cards] html2canvas failed to load');
+      document.querySelectorAll('.card-dl,.cards-bulk').forEach(function(el){ el.hidden = true; el.style.display = 'none'; });
+      return;
+    }
+    function download(dataUrl, filename) {
+      var a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function(){ document.body.removeChild(a); }, 100);
+    }
+    // Render one card element to a PNG data-URL. Uses html2canvas with
+    // pixel-ratio 2 for retina-quality output.
+    async function cardToPng(cardEl) {
+      // Hide the download button before capture so it doesn't appear in the PNG
+      var dlBtn = cardEl.querySelector('.card-dl');
+      var origDisplay = dlBtn ? dlBtn.style.display : '';
+      if (dlBtn) dlBtn.style.display = 'none';
+      // Also disable animations so the shimmer freezes at a good frame
+      cardEl.style.animation = 'none';
+      try {
+        var canvas = await html2canvas(cardEl, {
+          backgroundColor: null,   // preserve card's own background/glow
+          scale: 2,                // retina-quality (2× pixel density)
+          useCORS: true,
+          allowTaint: false,
+          logging: false,
+          // Card has box-shadow glow — grow the capture area to include it
+          width: cardEl.offsetWidth + 40,
+          height: cardEl.offsetHeight + 40,
+          x: -20,
+          y: -20,
+        });
+        return canvas.toDataURL('image/png');
+      } finally {
+        if (dlBtn) dlBtn.style.display = origDisplay;
+        cardEl.style.animation = '';
+      }
+    }
+    // Single-card download via delegated click
+    document.addEventListener('click', async function(e){
+      var btn = e.target.closest('.card-dl');
+      if (!btn) return;
+      var card = btn.closest('.catalogue-card');
+      if (!card) return;
+      var filename = btn.dataset.dlName || 'sprite.png';
+      btn.classList.add('working');
+      btn.textContent = '…';
+      try {
+        var dataUrl = await cardToPng(card);
+        download(dataUrl, filename);
+        btn.classList.remove('working');
+        btn.classList.add('done');
+        btn.textContent = '✓';
+        setTimeout(function(){ btn.classList.remove('done'); btn.textContent = '⬇'; }, 1500);
+      } catch (err) {
+        console.error('[cards] PNG render failed', err);
+        btn.classList.remove('working');
+        btn.textContent = '⚠';
+        setTimeout(function(){ btn.textContent = '⬇'; }, 2000);
+      }
+    });
+    // Bulk-download — iterate through all cards, save each as PNG.
+    // Uses a small delay between captures so the browser stays responsive.
+    var dlAllBtn = document.getElementById('dl-all-btn');
+    var dlStatus = document.getElementById('dl-status');
+    var dlProgress = document.getElementById('dl-progress');
+    if (dlAllBtn) {
+      dlAllBtn.addEventListener('click', async function(){
+        var cards = Array.from(document.querySelectorAll('.catalogue-card'));
+        if (!cards.length) return;
+        dlAllBtn.disabled = true;
+        dlAllBtn.textContent = 'Rendering…';
+        dlProgress.style.display = '';
+        dlProgress.max = cards.length;
+        dlProgress.value = 0;
+        var ok = 0, failed = 0;
+        for (var i = 0; i < cards.length; i++) {
+          var card = cards[i];
+          var btn = card.querySelector('.card-dl');
+          var name = btn ? (btn.dataset.dlName || ('sprite_' + i + '.png')) : ('sprite_' + i + '.png');
+          dlStatus.textContent = 'Rendering ' + (i + 1) + ' / ' + cards.length + ': ' + name;
+          try {
+            var dataUrl = await cardToPng(card);
+            download(dataUrl, name);
+            ok++;
+          } catch (err) {
+            console.error('[cards] failed:', name, err);
+            failed++;
+          }
+          dlProgress.value = i + 1;
+          // Yield to browser between saves to prevent tab freeze
+          await new Promise(function(r){ setTimeout(r, 150); });
+        }
+        dlAllBtn.disabled = false;
+        dlAllBtn.textContent = '⬇ Download all ' + cards.length + ' as PNG';
+        dlStatus.textContent = 'Done — saved ' + ok + (failed ? ' · ' + failed + ' failed' : '') + '.';
+      });
+    }
+  })();</script>`;
+  return shell(legacy ? `${collLabel} (legacy) — CertiFried Sprite Tracker` : 'Card Catalogue — CertiFried Sprite Tracker', body);
+}
+
+
+// ── Renders the "Live hotfix state" section for /sprites/info ──────────────
+// Sources data from the server-side hotfix poller (pollHotfixConfig above).
+// Returns empty string if the cache doesn't exist yet — first poll fires ~15s
+// after boot so this is rare but handled.
+function renderHotfixSection(hf) {
+  if (!hf) {
+    return `<h2 style="margin-top:22px;font-size:16px">Live hotfix state</h2>
+      <p class="sub">Waiting on first hotfix poll... (fires every 15 min from server)</p>`;
+  }
+  const polledAgo = hf.polled_at ? Math.round((Date.now() - new Date(hf.polled_at).getTime()) / 60000) : null;
+  // Tier columns: [epicKey, displayLabel]. Epic ships "Candy" in the hotfix
+  // payload but the in-game label is "Gummy" — we keep the lookup key raw so
+  // tiers[epicKey] finds it, and render the label so users see "Gummy".
+  const TIER_COLS = [
+    ['Base', 'Base'], ['Candy', 'Gummy'], ['Gold', 'Gold'], ['Galaxy', 'Galaxy'],
+    ['Gem', 'Gem'], ['Holofoil', 'Holofoil'], ['Cube', 'Cube'], ['Quack', 'Quack'],
+  ];
+  // Drop rates table — grouped by family
+  const weightRows = Object.entries(hf.variant_weights || {})
+    .filter(([fam]) => fam.length > 2)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([fam, tiers]) => {
+      const cells = TIER_COLS.map(([epicKey]) => {
+        const w = tiers[epicKey];
+        if (w == null) return '<td class="center sub">—</td>';
+        const pct = (w * 100).toFixed(1);
+        const color = w >= 0.3 ? '#e8eaf0' : w >= 0.05 ? '#ffcf3a' : w >= 0.005 ? '#ff8090' : '#9b6bff';
+        return `<td class="center" style="color:${color};font-weight:${w >= 0.05 ? 800 : 600}">${pct}%</td>`;
+      }).join('');
+      return `<tr><td><b>${esc(fam)}</b></td>${cells}</tr>`;
+    }).join('');
+  // Next drop timestamp
+  const nextDropBlock = hf.next_drop_ts
+    ? (() => {
+        const dropDate = new Date(hf.next_drop_ts * 1000);
+        const iso = dropDate.toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
+        const msUntil = dropDate.getTime() - Date.now();
+        const hoursUntil = Math.round(msUntil / 3600000);
+        const isPast = msUntil < 0;
+        return `<div style="background:rgba(255,207,58,.10);border:1px solid rgba(255,207,58,.35);border-radius:10px;padding:14px 16px;margin:10px 0">
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">
+            <span style="background:#ffcf3a;color:#000;font-size:11px;font-weight:800;letter-spacing:0.06em;padding:3px 9px;border-radius:999px">🕐 EPIC'S SCHEDULED TIME</span>
+            <b style="font-size:15px">${esc(iso)}</b>
+            <span class="sub" style="font-size:12px">(${isPast ? Math.abs(hoursUntil) + ' h ago' : '~' + hoursUntil + ' h out'})</span>
+          </div>
+          <p class="sub" style="margin:0;font-size:12.5px">Epic's <code>ComingSoonTimestamp</code> — their <i>advertised</i> next-drop time, not a guarantee.
+            <b>Epic frequently ships early</b> (v41.30 dropped ~2h ahead of this stamp), so sprites tied to this window may already be live — this tracker follows what's actually in the live catalog, not the clock.
+            <a href="/sprites/countdown" class="navlink" style="padding:0;color:#ffcf3a">→ Live countdown widget</a></p>
+        </div>`;
+      })()
+    : '';
+  // Extraction multipliers — remap Epic's raw "Candy" tier to display "Gummy"
+  const displayTier = (t) => t === 'Candy' ? 'Gummy' : t;
+  const multRows = Object.entries(hf.extraction_multipliers_win || {}).sort(([a], [b]) => a.localeCompare(b));
+  const multTable = multRows.length ? multRows.map(([tier, mult]) => `
+    <tr><td><b>${esc(displayTier(tier))}</b></td><td class="center audit-num"><b>${mult}×</b></td></tr>`).join('') : '';
+  const xpKeys = ['XPPerElim', 'XPPerAssist', 'XPPerExtract', 'XPPerDown', 'XPPerContainer', 'XPPerDupeExtract'];
+  const xpRows = xpKeys.filter((k) => hf.xp_curves && hf.xp_curves[k] != null).map((k) => `
+    <tr><td><b>${esc(k.replace('XPPer', 'XP per '))}</b></td><td class="center audit-num">${hf.xp_curves[k]}</td></tr>`).join('');
+
+  return `<h2 style="margin-top:22px;font-size:16px">🔥 Live hotfix state</h2>
+    <p>
+      Fortnite pushes runtime config overrides via <code>/cloudstorage/system/*.ini</code>
+      files — same mechanism that flips sprite plugin availability + adjusts drop rates.
+      We poll this endpoint from the server every 15 min using our device_auth
+      (no mitmproxy, no client instrumentation). Last poll:
+      <b>${polledAgo != null ? polledAgo + ' min ago' : 'unknown'}</b>
+      via account <code>${esc(hf.source_account || 'unknown')}</code>.
+      Watching ${hf.targets_matched}/${hf.file_count} hotfix .ini files.
+    </p>
+    ${nextDropBlock}
+    ${weightRows ? `
+      <h2 style="margin-top:18px;font-size:15px">Live drop rates per family</h2>
+      <p class="sub">Base/Gummy/Gold/Galaxy weights currently in effect (from
+        <code>DT_VariantWeights</code> hotfix overrides). Values are relative —
+        each family's row sums to ~1.0. Green cells = common,
+        gold = uncommon, red = rare, purple = mythic-rare.</p>
+      <div style="overflow-x:auto"><table class="audit-table" style="font-size:12.5px">
+        <thead><tr><th>Family</th>${TIER_COLS.map(([, label]) => `<th class="center">${label}</th>`).join('')}</tr></thead>
+        <tbody>${weightRows}</tbody>
+      </table></div>
+    ` : ''}
+    ${xpRows ? `
+      <h2 style="margin-top:18px;font-size:15px">XP curves (per action, max sprite level)</h2>
+      <table class="audit-table" style="font-size:12.5px"><tbody>${xpRows}</tbody></table>
+    ` : ''}
+    ${multTable ? `
+      <h2 style="margin-top:18px;font-size:15px">Extraction point multipliers (on match win)</h2>
+      <p class="sub">Bonus multiplier applied to the base extraction reward when you Victory Royale with a variant of that tier equipped.</p>
+      <table class="audit-table" style="font-size:12.5px">
+        <thead><tr><th>Tier</th><th class="center">Multiplier</th></tr></thead>
+        <tbody>${multTable}</tbody>
+      </table>
+    ` : ''}`;
+}
+
+// ── /sprites/countdown ──────────────────────────────────────────────────────
+// Public widget page — live tick-tocking countdown to ComingSoonTimestamp from
+// the hotfix poller cache. Auto-refreshes with a client-side JS timer for the
+// visual countdown; server-side data reloads on every page load via mtime check.
+router.get('/countdown', (req, res) => {
+  const hf = getHotfixCache();
+  const nav = '';
+  if (!hf || !hf.next_drop_ts) {
+    return res.send(shell('Next drop — CertiFried Sprite Tracker', chrome(nav) + `<main>
+      <div class="card">
+        <h1>Countdown unavailable</h1>
+        <p class="sub">Waiting on the first hotfix poll — comes back in a minute or two after server startup.</p>
+        <p><a href="/sprites" class="navlink">← Back to tracker</a></p>
+      </div>
+    </main>`));
+  }
+  const dropTsMs = hf.next_drop_ts * 1000;
+  const dropIso = new Date(dropTsMs).toISOString();
+  const polledAgo = hf.polled_at ? Math.round((Date.now() - new Date(hf.polled_at).getTime()) / 60000) : null;
+  // A ComingSoonTimestamp that lapsed more than a drop-day ago is not an
+  // imminent drop — Epic simply hasn't published a new one yet. Rendering a
+  // week-old date as "DROP LIVE" is misinformation on a public page, so show
+  // an honest "nothing scheduled" card instead. Self-heals: the moment Epic
+  // sets a future timestamp, the hotfix poller picks it up and the live
+  // countdown returns with no code change.
+  const STALE_GRACE_MS = 12 * 60 * 60 * 1000;
+  if (dropTsMs < Date.now() - STALE_GRACE_MS) {
+    const sinceDays = Math.floor((Date.now() - dropTsMs) / 86400000);
+    return res.send(shell('Next drop — CertiFried Sprite Tracker', chrome(nav) + `<main>
+      <div class="card" style="background:linear-gradient(180deg,#1f2330 0%,#161922 60%);border:1px solid #39405a;text-align:center">
+        <div style="display:flex;justify-content:center;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+          <span style="background:#39405a;color:#cdd3e0;font-size:11px;font-weight:800;letter-spacing:0.08em;padding:3px 9px;border-radius:999px">🕐 NEXT SCHEDULED DROP</span>
+        </div>
+        <h1 style="margin:10px 0">No drop currently scheduled</h1>
+        <p class="sub" style="font-size:14px;line-height:1.7;max-width:460px;margin:0 auto">
+          Epic's live hotfix config isn't pointing at an upcoming sprite drop right now —
+          the last scheduled time (<b>${esc(dropIso)}</b>) was about <b>${sinceDays} day${sinceDays === 1 ? '' : 's'}</b> ago.
+          This page updates on its own the moment Epic sets a new <code>ComingSoonTimestamp</code>.
+        </p>
+        <div class="sub" style="font-size:13px;margin-top:16px">
+          Last polled: <b>${polledAgo != null ? polledAgo + ' min ago' : 'unknown'}</b>
+          via account <code>${esc(hf.source_account || 'unknown')}</code>.
+        </div>
+      </div>
+      <p style="text-align:center;margin:22px 0 0;font-size:14px">
+        <a href="/sprites/info" class="navlink">📋 Full audit &amp; drop rates</a>
+        &nbsp;·&nbsp;
+        <a href="/sprites" class="navlink">👾 Back to tracker</a>
+      </p>
+    </main>`));
+  }
+  const body = chrome(nav) + `<main>
+    <div class="card" style="background:linear-gradient(180deg,#2a2338 0%,#161922 60%);border:1px solid #ffcf3a;text-align:center">
+      <div style="display:flex;justify-content:center;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+        <span style="background:#ffcf3a;color:#000;font-size:11px;font-weight:800;letter-spacing:0.08em;padding:3px 9px;border-radius:999px">🕐 NEXT SCHEDULED DROP</span>
+        <span class="sub" style="font-size:12px">Live from Epic's DDSS hotfix service</span>
+      </div>
+      <div id="cd-display" style="font-family:'Segoe UI',sans-serif;font-weight:900;font-size:56px;color:#ffcf3a;letter-spacing:0.02em;line-height:1.1;margin:20px 0 6px;text-shadow:0 2px 20px rgba(255,207,58,.25)">
+        <span id="cd-d">—</span>d <span id="cd-h">—</span>h <span id="cd-m">—</span>m <span id="cd-s">—</span>s
+      </div>
+      <p style="font-size:14px;margin:6px 0 22px"><b>Drop time:</b> <span id="cd-drop-local">${esc(dropIso)}</span></p>
+      <div class="sub" style="font-size:13px;line-height:1.7">
+        Source: <code>Extraction.Persistence.ComingSoonTimestamp</code> from
+        <code>DefaultEngine.ini</code> in Fortnite's live hotfix config.<br>
+        Last polled: <b>${polledAgo != null ? polledAgo + ' min ago' : 'unknown'}</b>
+        via account <code>${esc(hf.source_account || 'unknown')}</code>.<br>
+        Auto-refreshes on this page — no action needed.
+      </div>
+    </div>
+    <p style="text-align:center;margin:22px 0 0;font-size:14px">
+      <a href="/sprites/info" class="navlink">📋 Full audit &amp; drop rates</a>
+      &nbsp;·&nbsp;
+      <a href="/sprites" class="navlink">👾 Back to tracker</a>
+    </p>
+  </main>
+  <script>(function(){
+    var dropMs = ${dropTsMs};
+    var el = { d: document.getElementById('cd-d'), h: document.getElementById('cd-h'),
+               m: document.getElementById('cd-m'), s: document.getElementById('cd-s'),
+               dropLocal: document.getElementById('cd-drop-local'),
+               display: document.getElementById('cd-display') };
+    // Render drop time in viewer's local timezone
+    try { el.dropLocal.textContent = new Date(dropMs).toLocaleString(undefined,
+      { weekday:'short', year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit', timeZoneName:'short' });
+    } catch(e){}
+    function tick() {
+      var diff = dropMs - Date.now();
+      if (diff <= 0) {
+        el.display.innerHTML = '<span style="color:#3ad07a">DROP LIVE — check the tracker</span>';
+        return;
+      }
+      var s = Math.floor(diff / 1000);
+      var d = Math.floor(s / 86400); s -= d * 86400;
+      var h = Math.floor(s / 3600);  s -= h * 3600;
+      var m = Math.floor(s / 60);    s -= m * 60;
+      el.d.textContent = d;
+      el.h.textContent = String(h).padStart(2,'0');
+      el.m.textContent = String(m).padStart(2,'0');
+      el.s.textContent = String(s).padStart(2,'0');
+    }
+    tick(); setInterval(tick, 1000);
+    // Auto-reload the whole page every 15 min so we pick up new hotfix state
+    setTimeout(function(){ location.reload(); }, 15 * 60 * 1000);
+  })();</script>`;
+  res.send(shell('Next drop countdown — CertiFried Sprite Tracker', body, {
+    type: 'website',
+    title: 'Next Fortnite Sprite drop countdown',
+    description: 'Live countdown to the next scheduled sprite drop, pulled from Epic\'s DDSS hotfix config.',
+    color: '#ffcf3a',
+  }));
+});
+
+async function renderInfo() {
+  const pak = getPakScan();
+  const sizes = await getEndpointSizes();
+  // The audit account's model. This page is PUBLIC and names the account it
+  // audits, so it must read that specific account — not "whoever synced most
+  // recently", which would render a stranger's collection totals under the
+  // audit account's name. Falls back to catalog-only rendering if that account
+  // hasn't synced, rather than silently substituting someone else's data.
+  let state = null;
+  try {
+    const [[row]] = await pool.execute(
+      'SELECT state_json FROM epic_sprite_accounts WHERE display_name=? AND state_json IS NOT NULL LIMIT 1',
+      [AUDIT_ACCOUNT_LABEL],
+    );
+    if (row?.state_json) state = JSON.parse(row.state_json);
+  } catch { /* sections that need it degrade to a "no data" note */ }
+  // Derive display values from the latest pak-scan.json instead of hardcoding.
+  // pak.audit_stamp is "YYYY-MM-DD HH:MM:SS UTC" — take the date part for display.
+  const pakAuditStamp = (pak.audit_stamp || '').split(' ')[0] || '(unknown)';
+  const pakBuild = (pak.fortnite_build || '').replace(/^\+\+Fortnite\+Release-/, '') || '(unknown)';
+  const totalVariants = Object.values(pak.per_family_pak || {}).reduce((sum, tiers) => sum + tiers.length, 0)
+    || pak.matching_assets || 0;
+  // pak-scan.json comes from the raw pak file names — Epic ships the tier
+  // as "Candy" there but the user-facing label is "Gummy". Remap for display.
+  // These come from the PAK, so they include things Epic hasn't enabled (Quack).
+  // Kept for the pak-side section further down — NOT for "what's live", which
+  // must read the live catalog or it contradicts itself.
+  const tierTokens = (pak.unique_tiers || []).map((t) => t === 'Candy' ? 'Gummy' : t);
+  // Live-catalog view: what Epic is actually serving right now.
+  const liveTierPills = (() => {
+    const seen = new Map();
+    for (const g of state?.groups || []) {
+      for (const v of Object.values(g.variants || {})) {
+        if (v.pakDatamined) continue;               // catalog only
+        if (!seen.has(v.tierKey)) seen.set(v.tierKey, { label: v.tierLabel, color: v.tierColor, live: 0, locked: 0 });
+        const e = seen.get(v.tierKey);
+        if (v.future) e.locked++; else e.live++;
+      }
+    }
+    return [...seen.values()]
+      .sort((a, b) => (b.live + b.locked) - (a.live + a.locked))
+      .map((t) => `<span class="audit-token" style="border-color:${esc(t.color)}55;color:${esc(t.color)}">${esc(t.label)}${t.locked ? ` <span class="sub" style="font-size:11px">${t.live ? `${t.live} live · ` : ''}${t.locked} locked</span>` : ''}</span>`)
+      .join('');
+  })();
+  const liveFamilyPills = (state?.groups || [])
+    .map((g) => `<span class="audit-token family">${esc(g.label)}</span>`).join('');
+  // Auto-derived from pak_scan minus live catalog — replaces the old
+  // hardcoded PAK_UNRELEASED_VARIANTS so new pak-only tiers auto-appear.
+  const unreleasedVariants = await getPakUnreleasedForInfo();
+  // Live audit stamp for the 4-endpoint table: use the timestamp of the last
+  // successful sync we captured sizes from, falling back to today's date.
+  const liveAuditStamp = sizes.stamp
+    ? new Date(sizes.stamp).toISOString().slice(0, 10)
+    : new Date().toISOString().slice(0, 10);
+  // Quack column, measured rather than asserted. We only token-search the two
+  // endpoints we actually parse; claiming a zero for athena/shop would be
+  // stating a result we never computed.
+  const quackAudit = (() => {
+    const all = (state?.groups || []).flatMap((g) => Object.values(g.variants || {}));
+    const q = all.filter((v) => v.tierKey === 'quack');
+    const inCatalog = q.filter((v) => !v.pakDatamined).length;
+    const ownedQ = q.filter((v) => v.owned).length;
+    const cell = (n) => (n > 0 ? `✅ ${n}` : '❌ 0');
+    return {
+      catalogCell: state ? cell(inCatalog) : '<span class="sub">—</span>',
+      magpieCell: state ? cell(ownedQ) : '<span class="sub">—</span>',
+      notSearched: '<span class="sub" title="We do not token-search this endpoint">not searched</span>',
+    };
+  })();
+  // Single source for both the TL;DR pills and the rumor section further down,
+  // so the two can never contradict each other (they did: the TL;DR listed
+  // Batman as absent while the abilities table below rendered its ability).
+  const rumorRows = verifyRumors(state);
+  const rumorsAbsent = rumorRows.filter((r) => r.status === 'absent');
+  const rumorsShipped = rumorRows.filter((r) => r.status === 'shipped');
+  const rumorsAnnounced = rumorRows.filter((r) => r.status === 'announced');
+  const dateShort = (ms) => (ms == null ? 'TBA'
+    : new Date(ms).toLocaleString('en-US', { timeZone: 'UTC', month: 'short', day: 'numeric' })
+      + ' ' + new Date(ms).toISOString().slice(11, 16) + ' UTC');
+  const absentPills = rumorsAbsent.length
+    ? rumorsAbsent.map((t) => `<span class="audit-token absent">${esc(t.name)}</span>`).join('')
+    : '<span class="sub">Nothing on the watchlist is unaccounted for.</span>';
+  const nav = '';
   const body = chrome(nav) + `<main>
     <div class="card" style="background:linear-gradient(180deg,#1a2438 0%,#161922 60%);border:1px solid #2a5aa8">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
         <span style="background:#2a5aa8;color:#fff;font-size:11px;font-weight:800;letter-spacing:0.08em;padding:3px 9px;border-radius:999px">📋 TRANSPARENCY</span>
-        <span class="sub" style="font-size:12px">Audited ${esc(AUDIT_STAMP)}</span>
+        <span class="sub" style="font-size:12px">Audited ${esc(liveAuditStamp)}</span>
       </div>
       <h1>The definitive Sprite catalog audit</h1>
       <p class="sub" style="margin:0">
@@ -3299,19 +6558,25 @@ function renderInfo() {
 
     <div class="card" style="border:1px solid #6b1a24;background:linear-gradient(180deg,#2a1015 0%,#161922 40%)">
       <h2 style="margin-top:0">TL;DR — the tokens people ask about most</h2>
+      ${rumorsAnnounced.length ? `<p style="margin:0 0 8px"><b>Confirmed, not out yet:</b>
+        ${rumorsAnnounced.map((r) => `${esc(r.name)} <span class="sub">(releases ${esc(dateShort(r.releaseAt))}${r.rarity ? `, ${esc(r.rarity)}` : ''})</span>`).join(' · ')}</p>` : ''}
+      ${rumorsShipped.length ? `<p style="margin:0 0 8px"><b>Now shipped:</b>
+        ${rumorsShipped.map((r) => `${esc(r.name)} <span class="sub">(Epic codename <code>${esc(r.codename)}</code>${r.total ? `, ${r.live}/${r.total} live` : ''})</span>`).join(' · ')}</p>` : ''}
       <div class="audit-tokens" style="margin:8px 0 12px">${absentPills}</div>
-      <p style="margin:0"><b>These do not exist</b> as live items in:</p>
+      ${rumorsAbsent.length ? `
+      <p style="margin:0"><b>No trace of these</b> in either place we can check:</p>
       <ul style="margin:6px 0 10px 20px;padding:0">
-        <li>Epic's live sprite catalog</li>
-        <li>Any account's magpie inventory</li>
-        <li>Any account's BR cosmetic profile (where Back Blings live)</li>
-        <li>Today's Item Shop rotation</li>
+        <li>Epic's live sprite catalog (what you can find in a match)</li>
+        <li>Any <code>DisplayName</code> inside the pak's sprite DataAssets — the
+            field that reveals a family's real name even when its asset path uses
+            an internal codename</li>
       </ul>
       <p style="margin:0">
-        They're pre-baked in Fortnite's <code>.pak</code> files (what fortnite.gg
-        surfaces) but Epic hasn't flipped the server-side flag that would make
-        them obtainable in-game.
-      </p>
+        That's a statement about the current build only. A sprite can exist in the
+        pak long before Epic flips the server flag that makes it obtainable — and
+        it can ship under a codename that looks nothing like its marketing name,
+        which is why we match on <code>DisplayName</code> rather than file paths.
+      </p>` : ''}
     </div>
 
     <div class="card">
@@ -3325,39 +6590,34 @@ function renderInfo() {
           <tr>
             <th>Endpoint</th>
             <th>What it authoritatively lists</th>
-            <th class="audit-num">Size on ${esc(AUDIT_STAMP)}</th>
+            <th class="audit-num">Size on ${esc(liveAuditStamp)}</th>
             <th class="center">Quack?</th>
-            <th class="center">Batman?</th>
           </tr>
         </thead>
         <tbody>
           <tr>
             <td data-label="Endpoint"><code>mcp-gc.live.fngw</code><span class="audit-sub">extractablerelics/…/getBackendCatalog</span></td>
             <td data-label="Lists">Every extractable sprite variant Epic will let you find in a BR match</td>
-            <td class="audit-num" data-label="Response size">12,709 B<span class="audit-sub">82 variants</span></td>
-            <td class="center audit-hit" data-label="Quack hits">❌ 0</td>
-            <td class="center audit-hit" data-label="Batman hits">❌ 0</td>
+            <td class="audit-num" data-label="Response size">${sizes.catalog != null ? sizes.catalog.toLocaleString() : '—'} B${sizes.catalogVariants ? `<span class="audit-sub">${sizes.catalogVariants} variants</span>` : ''}</td>
+            <td class="center audit-hit" data-label="Quack hits">${quackAudit.catalogCell}</td>
           </tr>
           <tr>
             <td data-label="Endpoint"><code>gc.svc.live.fngw</code><span class="audit-sub">magpie inventory (deployment-scoped)</span></td>
             <td data-label="Lists">Your owned + extracted-once (buyback) sprites + dust currency + metadata</td>
-            <td class="audit-num" data-label="Response size">5,433 B</td>
-            <td class="center audit-hit" data-label="Quack hits">❌ 0</td>
-            <td class="center audit-hit" data-label="Batman hits">❌ 0</td>
+            <td class="audit-num" data-label="Response size">${sizes.magpie != null ? sizes.magpie.toLocaleString() : '—'} B</td>
+            <td class="center audit-hit" data-label="Quack hits">${quackAudit.magpieCell}</td>
           </tr>
           <tr>
             <td data-label="Endpoint"><code>account-public-service</code><span class="audit-sub">athena BR cosmetic profile</span></td>
             <td data-label="Lists">Every equippable cosmetic on your account — <b>including Back Blings</b></td>
-            <td class="audit-num" data-label="Response size">568,517 B</td>
-            <td class="center audit-hit" data-label="Quack hits">❌ 0</td>
-            <td class="center audit-hit" data-label="Batman hits">❌ 0</td>
+            <td class="audit-num" data-label="Response size">${sizes.athena != null ? sizes.athena.toLocaleString() : '—'} B</td>
+            <td class="center audit-hit" data-label="Quack hits">${quackAudit.notSearched}</td>
           </tr>
           <tr>
             <td data-label="Endpoint"><code>fortnite-api.com/v2/shop</code><span class="audit-sub">public Item Shop rotation</span></td>
             <td data-label="Lists">Every cosmetic Epic is selling right now (previewable even if unpurchased)</td>
-            <td class="audit-num" data-label="Response size">696,242 B</td>
-            <td class="center audit-hit" data-label="Quack hits">❌ 0</td>
-            <td class="center audit-hit" data-label="Batman hits">❌ 0</td>
+            <td class="audit-num" data-label="Response size">${sizes.shop != null ? sizes.shop.toLocaleString() : '—'} B</td>
+            <td class="center audit-hit" data-label="Quack hits">${quackAudit.notSearched}</td>
           </tr>
         </tbody>
       </table>
@@ -3371,20 +6631,23 @@ function renderInfo() {
 
     <div class="card">
       <h2 style="margin-top:0">What's actually live right now</h2>
-      <p style="margin:6px 0 4px"><b>Tier tokens (variant rarities) Epic is currently serving:</b></p>
-      <div class="audit-tokens">${tierPills}</div>
+      <p style="margin:6px 0 4px"><b>Tiers Epic is currently serving:</b></p>
+      <div class="audit-tokens">${liveTierPills || '<span class="sub">no synced account</span>'}</div>
       <p class="sub" style="font-size:12px;margin:12px 0 14px">
-        Note two live-catalog quirks: <code>A</code> and <code>Base</code> both mean "basic"
-        (Epic named different families' basic variants inconsistently), and
-        <code>Galactic</code> is a Sleepy-Sprite-only spelling of what every other family calls
-        <code>Galaxy</code>. Tracker handles both.
+        Straight from the live catalog — <b>not</b> the pak, so a tier only appears
+        here once Epic actually serves it. "Locked" means Epic ships the entry and
+        the in-game collection menu shows it, but it can't be found in a match yet.
+        Two naming quirks the tracker normalises: <code>A</code> and <code>Base</code>
+        both mean Basic, and <code>Galactic</code> is Dream Sprite's spelling of
+        what every other family calls <code>Galaxy</code>.
       </p>
-      <p style="margin:6px 0 4px"><b>Sprite families in the CH7S3 catalog (${AUDIT_FAMILY_TOKENS.length} total):</b></p>
-      <div class="audit-tokens">${familyPills}</div>
+      <p style="margin:6px 0 4px"><b>Sprite families in the live catalog (${(state?.groups || []).length} total):</b></p>
+      <div class="audit-tokens">${liveFamilyPills || '<span class="sub">no synced account</span>'}</div>
       <p class="sub" style="font-size:12px;margin:14px 0 0">
-        BurntPeanut has only a Base variant (no Gold/Gummy/Galaxy). AirSprite and SevenSprite
-        are family-level vaulted this season — present in catalog so previously-collected
-        copies still display, but not appearing in active BR loot pools.
+        Shown under their in-game names. Epic's internal codenames differ — Batman
+        ships as <code>FossilMealSprite</code>, Vini&nbsp;Jr. as <code>CokeParmesan</code>,
+        Pollo as <code>CompanyStargazer</code> — which is why the raw asset names
+        further down this page won't all look familiar.
       </p>
     </div>
 
@@ -3403,25 +6666,29 @@ function renderInfo() {
         as a Back Bling, because sprite Back Blings share the same entitlement
         check.
       </p>
-      <p class="sub" style="margin-bottom:12px">
-        The neonlightsmedia.com article people cite has no leakers, no fortnite.gg
-        links, no dataminers — and it explicitly lists Quack/Cube/John Wick under
-        <b>"Unknown Release Dates"</b>. It agrees with our tracker.
-      </p>
       <h2 style="margin-top:18px">When this will change</h2>
+      <p>
+        Automatically, on the next sync. Nothing on this page is a stored verdict:
+        tiers and families are read from the live catalog, and <b>what's obtainable
+        is driven straight from Epic's own hotfix — the exact list of variants Epic
+        has disabled (unmapped from the loot pool) gates them directly, per
+        variant</b>. On top of that, <b>anything a real player is observed owning is
+        treated as obtainable no matter what</b>, and release dates come from Epic's
+        hotfix too. A drop that lands, or a variant Epic flips on or off, corrects
+        itself within one sync cycle.
+      </p>
       <p style="margin-bottom:0">
-        The moment any of the four endpoints above starts returning Quack (or Cube
-        or Batman), this tracker surfaces it automatically on the next sync — no
-        code change needed. Tier tokens are discovered from the live catalog, not
-        hardcoded. If you see a "Quack Sprite" screenshot before then, it's
-        Photoshopped, from a modded server, or a datamining tool mockup.
+        That is how <b>Cube</b> went live on this page — it flipped the moment
+        Cube variants started showing up in synced accounts, with no code change
+        and nobody editing a date. The same path is waiting for anything still
+        listed as locked above.
       </p>
     </div>
 
     <div class="card" style="border:1px solid #6b4cff;background:linear-gradient(180deg,#1e1a2e 0%,#161922 60%)">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
         <span style="background:#6b4cff;color:#fff;font-size:11px;font-weight:800;letter-spacing:0.08em;padding:3px 9px;border-radius:999px">🗂 PAK AUDIT</span>
-        <span class="sub" style="font-size:12px">Extracted ${esc(PAK_AUDIT_STAMP)} · build ${esc(PAK_BUILD)}</span>
+        <span class="sub" style="font-size:12px">Extracted ${esc(pakAuditStamp)} · build ${esc(pakBuild)}</span>
       </div>
       <h2 style="margin-top:6px">What's in the pak but not on the server yet</h2>
       <p>
@@ -3434,11 +6701,11 @@ function renderInfo() {
         server hasn't turned it on yet.
       </p>
       <div class="audit-tokens" style="margin:10px 0 6px">
-        <span class="audit-token"><b>${PAK_TOTAL_VARIANTS}</b> variants in pak</span>
-        <span class="audit-token"><b>${AUDIT_TIER_TOKENS.length}</b> tiers live</span>
-        <span class="audit-token absent"><b>${PAK_UNRELEASED_VARIANTS.length}</b> datamined-not-live</span>
+        <span class="audit-token"><b>${totalVariants}</b> variants in pak</span>
+        <span class="audit-token"><b>${tierTokens.length}</b> tiers in pak</span>
+        <span class="audit-token absent"><b>${unreleasedVariants.length}</b> datamined-not-live</span>
       </div>
-      <h2 style="margin-top:18px;font-size:16px">The 4 unreleased variants that exist in the pak</h2>
+      <h2 style="margin-top:18px;font-size:16px">The ${unreleasedVariants.length} unreleased variant${unreleasedVariants.length === 1 ? '' : 's'} that exist${unreleasedVariants.length === 1 ? 's' : ''} in the pak</h2>
       <table class="audit-table">
         <thead>
           <tr>
@@ -3449,7 +6716,7 @@ function renderInfo() {
           </tr>
         </thead>
         <tbody>
-          ${PAK_UNRELEASED_VARIANTS.map((v) => `
+          ${unreleasedVariants.map((v) => `
           <tr>
             <td data-label="Family"><b>${esc(v.family)}</b></td>
             <td data-label="Tier"><span class="audit-token absent">${esc(v.tier)}</span></td>
@@ -3473,20 +6740,49 @@ function renderInfo() {
         appear in the live catalog, the future-flag drops automatically and
         players can find them in-game.
       </div>
-      <h2 style="margin-top:18px;font-size:16px">Rumors debunked at the file-system level</h2>
+      <h2 style="margin-top:18px;font-size:16px">Rumored sprites — checked against live data</h2>
       <p style="margin-bottom:6px">
-        Community folklore says a "Batman Sprite" is coming and John Wick / Joker
-        variants are on the way. Zero of these tokens exist anywhere in the
-        sprite-adjacent pak assets:
+        Every name the community asks about, re-checked on each page load against
+        Epic's live catalog <i>and</i> the <code>DisplayName</code> strings inside
+        the pak's DataAssets. Nothing here is a stored verdict.
       </p>
-      <div class="audit-tokens" style="margin:8px 0 10px">
-        ${PAK_RUMORS_ZERO_HITS.map((t) => `<span class="audit-token absent">${esc(t)}: 0 hits</span>`).join('')}
-      </div>
-      <p class="sub" style="font-size:12px;margin:0">
-        Not just absent from the live catalog — <b>the art doesn't exist</b>. Nothing
-        in the <code>.pak</code> matches these tokens in any sprite-relevant
-        context. Any "Batman Sprite reveal" you see is fabricated content.
-      </p>
+      ${(() => {
+        const rumors = verifyRumors(state);
+        const shipped = rumors.filter((r) => r.status === 'shipped');
+        const announced = rumors.filter((r) => r.status === 'announced');
+        const absent = rumors.filter((r) => r.status === 'absent');
+        const dateLong = (ms) => (ms == null ? 'a date Epic hasn\'t published'
+          : new Date(ms).toLocaleString('en-US', { timeZone: 'UTC', weekday: 'short', month: 'short', day: 'numeric' })
+            + ' ' + new Date(ms).toISOString().slice(11, 16) + ' UTC');
+        return `
+        ${shipped.length ? `<div class="audit-tokens" style="margin:8px 0 10px">
+          ${shipped.map((r) => `<span class="audit-token present">${esc(r.name)}: shipped as <code>${esc(r.codename)}</code>${r.total ? ` · ${r.live}/${r.total} live` : ''}</span>`).join('')}
+        </div>` : ''}
+        ${announced.map((r) => `<div class="info-move" style="margin:10px 0;border-color:rgba(91,240,255,.35);background:linear-gradient(180deg,rgba(91,240,255,.06),rgba(0,0,0,.15))">
+          <div class="info-move-hdr"><span class="icon" style="background:#5bf0ff;color:#04212a">◷</span>
+          <span class="name">${esc(r.name)} — confirmed, not out yet</span></div>
+          <p class="info-move-desc" style="margin:2px 0 0">
+            Releases <b>${esc(dateLong(r.releaseAt))}</b>${r.rarity ? ` · <b>${esc(r.rarity)}</b>` : ''}. Not in Epic's catalog or the current pak yet, so it has no grid tile — it appears automatically once it ships.
+            ${r.ability ? `<br><b>Ability:</b> ${esc(r.ability)}` : ''}
+            ${r.howToGet ? `<br><b>How to get:</b> ${esc(r.howToGet)}` : ''}
+            ${r.sourceUrl ? `<br><a href="${esc(r.sourceUrl)}" target="_blank" rel="noopener">source</a>` : ''}
+          </p>
+        </div>`).join('')}
+        ${absent.length ? `<div class="audit-tokens" style="margin:8px 0 10px">
+          ${absent.map((r) => `<span class="audit-token absent">${esc(r.name)}: no catalog entry, no DisplayName match, not announced</span>`).join('')}
+        </div>` : ''}
+        <p class="sub" style="font-size:12px;margin:0">
+          <b>Why a name search alone isn't proof.</b> Epic ships families under
+          internal codenames, so the marketing name never appears in the asset
+          path. Batman is <code>FossilMealSprite</code>, Vini&nbsp;Jr. is
+          <code>CokeParmesan</code>, Pollo is <code>CompanyStargazer</code>.
+          Grepping the pak for "Batman" returns zero hits even though the sprite
+          is fully shipped — this page previously drew exactly that wrong
+          conclusion. The reliable signal is the <code>DisplayName</code> FText
+          inside each <code>ESD_*.uasset</code>, which spells out the real name.
+          ${absent.length ? `The ${absent.length === 1 ? 'name' : 'names'} above ${absent.length === 1 ? 'matches' : 'match'} no live catalog family and no DisplayName in the current pak — but that is a statement about today's build, not a prediction.` : ''}
+        </p>`;
+      })()}
       <details class="info-details" style="margin-top:14px">
         <summary>Show the reproduction commands</summary>
         <p class="sub" style="font-size:12.5px;margin:6px 0 4px">
@@ -3507,7 +6803,7 @@ function renderInfo() {
     <div class="card" style="border:1px solid #6b4cff;background:linear-gradient(180deg,#1e1a2e 0%,#161922 60%)">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
         <span style="background:#6b4cff;color:#fff;font-size:11px;font-weight:800;letter-spacing:0.08em;padding:3px 9px;border-radius:999px">🔬 DEEP DIVE</span>
-        <span class="sub" style="font-size:12px">Full pak enumeration ${esc(PAK_AUDIT_STAMP)}</span>
+        <span class="sub" style="font-size:12px">Full pak enumeration ${esc(pakAuditStamp)}</span>
       </div>
       <h2 style="margin-top:6px">What else the pak reveals</h2>
       <p>
@@ -3574,32 +6870,18 @@ function renderInfo() {
         </p>
       </details>
 
-      <h2 style="margin-top:22px;font-size:16px">Vault-status correction: Air &amp; Seven Sprites</h2>
-      <p>
-        Fortnite wiki + community sources widely report that <b>AirSprite and
-        SevenSprite are "vaulted" and don't appear in CH7S3</b>. The pak
-        disagrees:
-      </p>
-      <ul>
-        <li><code>LagerEventData_CH7S3Sprites_Air.uasset</code> + <code>Air_Roaming.uasset</code> — Air's encounter placement data ships in the pak</li>
-        <li><code>LagerEventData_CH7S3Sprites_Seven.uasset</code> + <code>Seven_Guaranteed.uasset</code> + <code>Seven_Roaming.uasset</code> — Seven ships with FULL 3-tier encounter data (Main + Guaranteed + Roaming)</li>
-        <li>Both families have complete variant definitions (<code>ESD_AirSprite_Variant_*</code>, <code>ESD_SevenSprite_Variant_*</code>) — Basic/Candy/Galaxy/Gold/Holofoil for each</li>
-      </ul>
-      <p style="margin-bottom:0">
-        <b>What "vaulted" actually means:</b> Epic flipped a server-side DDSS
-        hotfix flag disabling their spawn — a runtime override, not a pak
-        change. Both families are structurally ready to re-enable via hotfix.
-        Seven especially is deployment-ready: full encounter data + full
-        variant catalog + all icons. The wiki claim "Air and Seven are absent
-        from CH7S3" is accurate about in-game availability but <b>wrong at the
-        pak level</b>.
-      </p>
+      <h2 style="margin-top:22px;font-size:16px">Vault status</h2>
+      ${renderVaultStatus(state)}
 
       <h2 style="margin-top:22px;font-size:16px">Special variant effects</h2>
       <p>
         Every non-Basic tier stacks a passive effect on top of its family's base
-        ability. Sourced from <a href="https://www.ign.com/wikis/fortnite/Sprites_Checklist_and_Guide:_All_Variants,_Abilities,_and_Extraction_Tips" target="_blank" rel="noopener">IGN's CH7S3 guide</a>
-        and cross-verified against the tier tokens Epic ships in the live catalog.
+        ability. The effect wording is community-sourced
+        (<a href="https://www.ign.com/wikis/fortnite/Sprites_Checklist_and_Guide:_All_Variants,_Abilities,_and_Extraction_Tips" target="_blank" rel="noopener">IGN's CH7S3 guide</a>)
+        — unlike the family abilities above, which come from Epic's own DataAssets.
+        Treat the numbers here as reported rather than verified; where Epic's
+        hotfix config exposes a matching multiplier, it appears in the live-hotfix
+        section further down, and that is the part we can confirm first-hand.
       </p>
       <table class="audit-table">
         <thead>
@@ -3617,17 +6899,25 @@ function renderInfo() {
         </tbody>
       </table>
       <p class="sub" style="font-size:12px;margin:10px 0 0">
-        IGN's guide flags <b>Gem as "coming soon"</b> — matches our tracker's
-        <code>future: true</code> state. Cube and Quack aren't listed by IGN
-        at all (unreleased and unknown to non-datamining sources).
+        Effect text is community-sourced; the tier list itself is read from Epic's
+        live catalog, so a tier can't appear here unless Epic is actually serving
+        it. A tier being served isn't the same as every variant being obtainable,
+        though — availability is tracked <b>per variant</b> against Epic's own
+        enable/disable config, so a tier can be part-live (e.g. Gem is mid-rollout:
+        some families' Gem variants are obtainable now, the rest gated until Epic
+        flips them). Cube and Quack are fully live.
       </p>
 
       <h2 style="margin-top:22px;font-size:16px">Family abilities (base effect when equipped)</h2>
       <p>
-        Each sprite family grants a unique passive when equipped. Cross-referenced
-        against two public sources — <a href="https://www.ign.com/wikis/fortnite/Sprites_Checklist_and_Guide:_All_Variants,_Abilities,_and_Extraction_Tips" target="_blank" rel="noopener">IGN's checklist guide</a>
-        and <a href="https://games.gg/fortnite/guides/fortnite-all-sprite-abilities-and-how-to-find-them/" target="_blank" rel="noopener">games.gg's tier list</a>
-        — plus our pak boon inference for the rest.
+        Every sprite family grants a unique passive when equipped. These descriptions
+        are the <code>Description</code> FText lifted directly from Epic's own
+        <code>ESD_*.uasset</code> DataAssets — the same text the in-game locker shows you,
+        word for word. Rarity is inferred from the catalog's <code>summonCost</code>.
+        Last extracted from <b>build ${esc(pakBuild)}</b> on <b>${esc(pakAuditStamp)}</b>;
+        the audit re-runs whenever Fortnite ships a new build (a pak only changes on a
+        client patch, so an unchanged stamp means Epic hasn't patched — not that the
+        data is stale).
       </p>
       <div style="overflow-x:auto">
       <table class="audit-table">
@@ -3635,126 +6925,51 @@ function renderInfo() {
           <tr>
             <th>Family</th>
             <th>Rarity</th>
-            <th>Ability</th>
-            <th>Pak boon</th>
-            <th class="center">Source</th>
+            <th>Ability (from Epic's DataAsset)</th>
           </tr>
         </thead>
         <tbody>
-          ${PAK_FAMILY_ABILITIES.map((a) => {
-            const rarityColors = { Rare: '#5bf0ff', Epic: '#c084fc', Legendary: '#ffcf3a', Mythic: '#ff6cc4', Cosmetic: '#3ad07a', unknown: '#7a8395' };
+          ${(await getPakFamilyAbilities()).map((a) => {
+            const rarityColors = { Common: '#b6c0cf', Uncommon: '#4fd77a', Rare: '#5bf0ff', 'Very Rare': '#a678ff', Epic: '#c084fc', Legendary: '#ffcf3a', Mythic: '#ff6cc4', unknown: '#7a8395' };
             const rarityColor = rarityColors[a.rarity] || '#7a8395';
-            const srcHtml = a.verified === 'IGN' ? '<span style="color:#3ad07a;font-weight:800">✓ IGN</span>'
-              : a.verified === 'games.gg' ? '<span style="color:#3ad07a;font-weight:800">✓ games.gg</span>'
-              : a.verified === 'unconfirmed' ? '<span style="color:#ff8090;font-weight:800">? unconfirmed</span>'
-              : a.verified === 'vaulted' ? '<span style="color:#7a8395;font-weight:800">— vaulted</span>'
-              : '<span style="color:#ffcf3a;font-weight:800">? pak-only</span>';
-            const abilityHtml = a.ability
-              ? esc(a.ability) + (a.note ? `<br><span class="sub" style="font-size:11px;font-style:italic">${esc(a.note)}</span>` : '')
-              : (a.verified === 'vaulted'
-                  ? '<span class="sub" style="font-style:italic">(family vaulted server-side — no in-game data)</span>'
-                  : (a.note
-                      ? `<span class="sub" style="font-style:italic">${esc(a.note)}</span>`
-                      : '<span class="sub" style="font-style:italic">(not documented — inferred from boon name)</span>'));
             return `
           <tr>
             <td data-label="Family"><b>${esc(a.family)}</b></td>
             <td data-label="Rarity"><span class="audit-token" style="color:${rarityColor};border-color:${rarityColor}66;font-size:11px">${esc(a.rarity)}</span></td>
-            <td data-label="Ability">${abilityHtml}</td>
-            <td data-label="Pak boon"><code>${esc(a.pakBoon)}</code></td>
-            <td class="center" data-label="Source">${srcHtml}</td>
+            <td data-label="Ability" style="font-size:12.5px;line-height:1.5">${renderAbilityBody(a.ability)}</td>
           </tr>`;
           }).join('')}
         </tbody>
       </table>
       </div>
       <p class="sub" style="font-size:12px;margin:10px 0 0">
-        <b>12 of 16 in-game families</b> now have their ability documented across
-        IGN + games.gg — up from 4 with just IGN. games.gg explicitly notes
-        Punk's full ability isn't confirmed publicly yet. King, Aura/Drifter, and
-        Boss are pak-only inferences (their boon files exist but the descriptions
-        aren't published). Air and Seven are server-vaulted, so no in-game
-        behavior can be observed. Each undocumented family has its own
-        <code>BP_SpawnAction_GiveSpriteTags_&lt;Family&gt;</code> blueprint in
-        the pak, but the boon reference lives inside serialized bytecode we'd
-        need a full blueprint decompiler to read.
+        Ability text above is no longer sourced from third-party guides at all —
+        every line is the <code>Description</code> FText lifted from that family's
+        own <code>ESD_*.uasset</code> during the pak audit, so it matches what the
+        in-game locker shows word for word. That closed the last gaps: Boss, King,
+        Aura and Punk were previously listed here as undocumented because no
+        public guide had published them, and Punk's real text turns out to be
+        Epic's own joke — "Possibly nothing... or infinitely something."
       </p>
 
-      <h2 style="margin-top:22px;font-size:16px">Sprite Dust re-summon costs by rarity</h2>
-      <p>
-        Die with a Sprite equipped and you'll lose it from your inventory —
-        buy it back from your locker for Sprite Dust. The cost scales with
-        rarity. Sourced from IGN's guide.
-      </p>
-      <table class="audit-table">
-        <thead>
-          <tr>
-            <th>Rarity</th>
-            <th class="audit-num">Base tier cost</th>
-            <th class="audit-num">Special tier cost <span class="sub" style="font-weight:400;font-size:11px">(Gold/Gummy/Galaxy/Holofoil/Gem)</span></th>
-          </tr>
-        </thead>
-        <tbody>
-          ${PAK_DUST_COSTS.map((d) => `
-          <tr>
-            <td data-label="Rarity"><b>${esc(d.rarity)}</b></td>
-            <td class="audit-num" data-label="Base cost">${d.base.toLocaleString()} dust</td>
-            <td class="audit-num" data-label="Special cost">${d.special.toLocaleString()} dust</td>
-          </tr>`).join('')}
-        </tbody>
-      </table>
+      <h2 style="margin-top:22px;font-size:16px">Sprite Dust re-summon costs</h2>
+      ${renderDustCosts(state)}
 
-      <h2 style="margin-top:22px;font-size:16px">Why our count (82) is higher than IGN's (66)</h2>
-      <p>
-        IGN says CH7S3 has <b>66 currently obtainable variants</b>. Our
-        catalog shows <b>82 variant entries</b> for Death420's account. The
-        difference is real, and it tracks the runtime-vs-shipped distinction
-        we've been calling out throughout this page:
-      </p>
-      <div style="overflow-x:auto">
-      <table class="audit-table" style="font-size:13px">
-        <thead>
-          <tr>
-            <th>Bucket</th>
-            <th class="audit-num">Count</th>
-            <th>What it is</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td data-label="Bucket">In-game right now (IGN's 66)</td>
-            <td class="audit-num" data-label="Count">66</td>
-            <td data-label="What it is">15 families × 4 shipped tiers (Basic/Gold/Gummy/Galaxy) + BurntPeanut (1 tier) + 5 Holofoils = 66. Matches IGN's "16 base Sprites" narrative.</td>
-          </tr>
-          <tr>
-            <td data-label="Bucket">Gem "coming soon"</td>
-            <td class="audit-num audit-hit" data-label="Count">+6</td>
-            <td data-label="What it is">Water/Earth/Duck/Demon/ZeroPoint/Aura have Gem entries in the catalog, all with <code>future: true</code>. IGN flags Gem as "coming soon" — matches.</td>
-          </tr>
-          <tr>
-            <td data-label="Bucket">Air Sprite (server-vaulted)</td>
-            <td class="audit-num audit-hit" data-label="Count">+5</td>
-            <td data-label="What it is">Air ships in the pak with 5 tiers — Basic/Candy/Galaxy/Gold/Holofoil — but the server-side flag is off. Owned copies from prior seasons still appear in accounts that have them.</td>
-          </tr>
-          <tr>
-            <td data-label="Bucket">Seven Sprite (server-vaulted)</td>
-            <td class="audit-num audit-hit" data-label="Count">+5</td>
-            <td data-label="What it is">Same story as Air — 5 tiers in the pak, server flag off. Seven has the full 3-tier encounter data (Main + Guaranteed + Roaming), so it's deployment-ready.</td>
-          </tr>
-          <tr style="background:rgba(107,76,255,.12)">
-            <td data-label="Bucket"><b>Our tracker total</b></td>
-            <td class="audit-num" data-label="Count"><b>82</b></td>
-            <td data-label="What it is">66 + 6 + 5 + 5 = 82. Matches exactly.</td>
-          </tr>
-        </tbody>
-      </table>
-      </div>
+      <h2 style="margin-top:22px;font-size:16px">Where our number comes from</h2>
+      ${renderCountBreakdown(state)}
+
+      ${renderHotfixSection(getHotfixCache())}
 
       <h2 style="margin-top:22px;font-size:16px">What we still can't determine</h2>
       <ul style="margin-bottom:0">
-        <li><b>4 families' abilities.</b> Boss, King, Aura (Drifter), and Punk are still pak-only inferences — the boon files exist but no public source has published the ability description. games.gg explicitly flags Punk as "not yet confirmed."</li>
-        <li><b>Per-variant drop rates.</b> <code>DT_VariantLootWeightTables.uasset</code> and <code>DT_VariantWeights.uasset</code> exist but their row schemas need Fortnite-specific mappings we don't have. Can enumerate the table names but not the weight values.</li>
-        <li><b>Exact release timing.</b> Confirmed absent from the pak — schedule is server-only DDSS hotfix data.</li>
+        <li><b>Release dates Epic hasn't announced.</b> Variants sitting in the
+            catalog with no published date show as "Unreleased" with no countdown.
+            We don't guess — if Epic's hotfix starts advertising a timestamp, or a
+            player is observed owning one, the tracker updates itself.</li>
+        <li><b>Two of the four audit endpoints aren't token-searched.</b> We record
+            the athena cosmetic profile and Item Shop response sizes, but don't
+            scan their bodies for individual tokens, so those cells read
+            "not searched" rather than asserting a zero we never measured.</li>
       </ul>
     </div>
 
@@ -3797,7 +7012,7 @@ function renderInfo() {
   return shell('Sprite Catalog Audit — CertiFried Sprite Tracker', body, {
     type: 'article',
     title: 'The definitive Fortnite Sprite catalog audit',
-    description: `Verified against Epic's live endpoints ${AUDIT_STAMP}. Quack, Cube, Batman, and Wick sprites do not exist yet — here's the receipts.`,
+    description: `Every Sprite variant Epic is actually serving, verified against four live endpoints on ${liveAuditStamp} — plus what's sitting in the pak unreleased. Receipts included.`,
     color: '#2a5aa8',
   });
 }
@@ -3810,8 +7025,8 @@ router.get('/compare', async (req, res) => {
   let slugs = req.query.u;
   if (!slugs) return res.redirect('/sprites/browse');
   if (!Array.isArray(slugs)) slugs = [slugs];
-  // Cap at 8 to keep the table readable and prevent a viral URL from DoSing.
-  slugs = Array.from(new Set(slugs.map((s) => String(s).slice(0, 64)))).slice(0, 8);
+  // Cap at 25 collectors — a whole friend group / clan, still bounds the query.
+  slugs = Array.from(new Set(slugs.map((s) => String(s).slice(0, 64)))).slice(0, 25);
   if (slugs.length < 2) {
     return res.redirect(`/sprites/browse${slugs.length === 1 ? `?preselect=${encodeURIComponent(slugs[0])}` : ''}`);
   }
@@ -3827,111 +7042,129 @@ router.get('/compare', async (req, res) => {
         <p class="sub">At least 2 of the slugs you picked don't have public profiles. <a href="/sprites/browse">← Back to browse</a></p>
         </div></main>`));
     }
-    // Stable order — match the user's selection order, not DB order.
     const bySlug = new Map(rows.map((r) => [r.share_id, r]));
     const ordered = slugs.map((s) => bySlug.get(s)).filter(Boolean);
+    const syncedAtBySlug = new Map(rows.map((r) => [r.share_id, r.synced_at]));
 
-    // Build per-user ownership / mastery sets keyed by variant name.
+    // Per-user ownership / mastery sets keyed by variant name.
     const users = ordered.map((r) => {
       const state = JSON.parse(r.state_json);
       const owned = new Set(), mastered = new Set();
-      for (const g of state.groups) {
-        for (const v of Object.values(g.variants)) {
-          if (v.owned) owned.add(v.name);
-          if (v.mastered) mastered.add(v.name);
-        }
+      for (const g of state.groups) for (const v of Object.values(g.variants)) {
+        if (v.owned) owned.add(v.name);
+        if (v.mastered) mastered.add(v.name);
       }
-      return { displayName: r.display_name, shareId: r.share_id, ownedCount: owned.size, owned, mastered };
+      return { displayName: r.display_name, shareId: r.share_id, owned, mastered, ownedCount: owned.size, masteredCount: mastered.size, syncedAt: syncedAtBySlug.get(r.share_id) };
     });
+    const userBySlug = new Map(users.map((u) => [u.shareId, u]));
 
-    // Canonical variant list from the first user (all states share the same
-    // catalog — buildModel iterates the same Epic catalog for everyone).
+    // Canonical variant list (every state shares the same Epic catalog).
     const firstState = JSON.parse(ordered[0].state_json);
-    const variants = firstState.groups.flatMap((g) => Object.values(g.variants).map((v) => ({
-      ...v, familyLabel: g.label,
-    })));
-
-    // For each variant, classify: who owns, who needs. Skip universally-owned
-    // and universally-unowned (no trade potential).
-    const trades = [];
-    for (const v of variants) {
-      if (v.vaulted) continue; // skip vaulted — nobody can get more, irrelevant for trades
-      const owners = users.filter((u) => u.owned.has(v.name));
-      const needers = users.filter((u) => !u.owned.has(v.name));
-      if (!owners.length || !needers.length) continue;
-      trades.push({ v, owners, needers, isUnique: owners.length === 1 });
-    }
-    // Sort: unique-owner rows first (highest trade value), then by owner count
-    // ascending (rarer first), then by family label, then by tier order.
+    const variants = firstState.groups.flatMap((g) => Object.values(g.variants).map((v) => ({ ...v, familyLabel: g.label })));
     const tierRank = Object.fromEntries(TIERS.map((t, i) => [t.key, i]));
-    trades.sort((a, b) => (a.owners.length - b.owners.length)
+
+    // Per-variant ownership across the group, rarest-first.
+    const board = variants.map((v) => {
+      const owners = users.filter((u) => u.owned.has(v.name));
+      const masters = users.filter((u) => u.mastered.has(v.name));   // maxed (Lv5) it
+      return { v, owners, ownerCount: owners.length, masters, masterCount: masters.length, obtainable: !v.vaulted && !v.future };
+    });
+    board.sort((a, b) => (a.ownerCount - b.ownerCount)
       || a.v.familyLabel.localeCompare(b.v.familyLabel)
       || ((tierRank[a.v.tierKey] ?? 99) - (tierRank[b.v.tierKey] ?? 99)));
 
-    const userChip = (u) => `<a href="/sprites/u/${esc(u.shareId)}" class="cmp-user" title="View ${esc(u.displayName)}'s collection">${esc(u.displayName)}</a>`;
-    const tradeRows = trades.map((t) => {
-      const tierColor = t.v.tierColor;
-      // Use the same /sprites/img/<imgId>.png assets as the main grid. If the
-      // image 404s, swap in a tier-colored letter placeholder client-side via
-      // the onerror handler (same pattern as cell() in the main collection).
-      const phLetter = esc((t.v.tierLabel || '?')[0]);
-      const phHtml = `<svg viewBox=\\"0 0 100 100\\" class=\\"ph\\"><rect width=\\"100\\" height=\\"100\\" rx=\\"14\\" fill=\\"#15171e\\"/><text x=\\"50\\" y=\\"62\\" text-anchor=\\"middle\\" font-size=\\"40\\" font-weight=\\"800\\" fill=\\"${tierColor}\\">${phLetter}</text></svg>`;
-      const img = t.v.imgId
-        ? `<img loading="lazy" src="/sprites/img/${esc(t.v.imgId)}.png" alt="${esc(t.v.name)}" onerror="this.outerHTML=this.dataset.ph" data-ph='${phHtml}'>`
-        : `<svg viewBox="0 0 100 100" class="ph"><rect width="100" height="100" rx="14" fill="#15171e"/><text x="50" y="62" text-anchor="middle" font-size="40" font-weight="800" fill="${tierColor}">${phLetter}</text></svg>`;
-      const anchorId = `trade-${esc(t.v.familyToken || 'fam')}-${esc(t.v.tierKey || 'tier')}`;
-      return `<tr id="${anchorId}" class="${t.isUnique ? 'unique' : ''}" data-tier="${esc(t.v.tierKey)}">
-        <td class="cmp-sprite">
-          <div class="cmp-thumb" style="border-color:${tierColor}55">${img}</div>
-          <div class="cmp-text">
-            <span class="cmp-tier" style="color:${tierColor}">${esc(t.v.tierLabel)}</span>
-            <b>${esc(t.v.familyLabel)}</b>
-            ${t.isUnique ? '<span class="cmp-badge">⭐ only one owner</span>' : ''}
-          </div>
-        </td>
-        <td class="cmp-have">${t.owners.map(userChip).join(' ')}</td>
-        <td class="cmp-need">${t.needers.map(userChip).join(' ')}</td>
-      </tr>`;
-    }).join('');
+    // Group aggregate: how much of the obtainable universe the group holds together.
+    const obtainableCells = board.filter((b) => b.obtainable);
+    const groupHas = obtainableCells.filter((b) => b.ownerCount > 0).length;
+    const groupTotal = obtainableCells.length;
+    const groupMissing = obtainableCells.filter((b) => b.ownerCount === 0);
 
-    // Per-user summary: how many sprites are unique to this user across the comparison?
-    // Also pull the row's synced_at so each card can show freshness — alongside
-    // the periodic 10-min server sweep, this makes it visible whose data was
-    // refreshed most recently.
-    const syncedAtBySlug = new Map(rows.map((r) => [r.share_id, r.synced_at]));
-    const userSummary = users.map((u) => {
-      let unique = 0, owned = u.owned.size;
-      for (const v of variants) {
-        if (u.owned.has(v.name) && !users.some((o) => o !== u && o.owned.has(v.name))) unique++;
-      }
-      return { ...u, unique, owned, syncedAt: syncedAtBySlug.get(u.shareId) };
-    });
-    // Most-stale timestamp across the comparison — used by the auto-refresh
-    // countdown so users know how fresh "fresh" is for this page.
-    const oldestSyncedAt = rows.reduce((acc, r) => {
-      const t = r.synced_at ? new Date(r.synced_at).getTime() : 0;
-      return (!acc || (t && t < acc)) ? t : acc;
-    }, null);
+    // Focus: view from ONE collector's perspective. Persisted in the URL (?as=)
+    // so the auto-refresh reload keeps it and a focused view is shareable. null
+    // = group view.
+    const focus = (typeof req.query.as === 'string' && userBySlug.get(req.query.as)) || null;
 
-    // CSV export — same data, machine-readable format. Activated by ?format=csv.
+    // "Trade-relevant" = obtainable AND some-have-some-don't. Drives the group
+    // board default and the CSV. Vaulted/universal are excluded (nothing to do).
+    const differ = board.filter((b) => b.obtainable && b.ownerCount > 0 && b.ownerCount < users.length);
+
+    // ── Mastery axis ─────────────────────────────────────────────────────────
+    // Second comparison mode for near-complete collectors: once everyone owns
+    // everything, the endgame is MASTERY (Lv5). Trade signal here is "someone's
+    // maxed it, someone who owns it is still leveling" — they can hand off a
+    // maxed copy to cap each other. You can only master what you own, so a
+    // mastery "needer" is an OWNER who hasn't mastered (not just anyone missing).
+    const mode = req.query.mode === 'mastery' ? 'mastery' : 'collection';
+    const isMastery = mode === 'mastery';
+    // Sprites whose mastery CANNOT be traded: they auto-extract at max level, so
+    // a Lv5 copy can't be held or handed off — each collector must solo the
+    // grind. Dream (sleepysprite) explodes into legendary loot at Lv5 and
+    // self-extracts (web-confirmed: gamerant / neonlightsmedia, 2026-08). Matched
+    // on DISPLAY family label, never asset path (codenames make paths lie).
+    const NO_TRADE_MASTERY = new Set(['dream']);
+    const noTrade = (v) => NO_TRADE_MASTERY.has((v.familyLabel || '').toLowerCase());
+    // Mastery-trade-relevant: obtainable, at least one owner maxed it AND at
+    // least one owner hasn't (masterCount within (0, ownerCount)).
+    const masteryDiffer = board.filter((b) => b.obtainable && b.masterCount > 0 && b.masterCount < b.ownerCount);
+
+    // ── CSV export (?format=csv) — the trade-relevant set, machine-readable ──
     if (req.query.format === 'csv') {
       const escCsv = (s) => `"${String(s ?? '').replace(/"/g, '""')}"`;
-      const header = ['Sprite', 'Tier', 'Family', 'Owners', 'Needers', 'IsUnique'];
-      const lines = [header.join(',')];
-      for (const t of trades) {
-        lines.push([
-          escCsv(`${t.v.tierLabel} ${t.v.familyLabel}`),
-          escCsv(t.v.tierLabel),
-          escCsv(t.v.familyLabel),
-          escCsv(t.owners.map((u) => u.displayName).join('; ')),
-          escCsv(t.needers.map((u) => u.displayName).join('; ')),
-          t.isUnique ? '1' : '0',
-        ].join(','));
+      let lines;
+      if (isMastery) {
+        lines = [['Sprite', 'Tier', 'Family', 'Mastered', 'StillLeveling', 'Tradeable'].join(',')];
+        for (const b of masteryDiffer) {
+          const laggards = b.owners.filter((u) => !u.mastered.has(b.v.name));
+          lines.push([
+            escCsv(`${b.v.tierLabel} ${b.v.familyLabel}`), escCsv(b.v.tierLabel), escCsv(b.v.familyLabel),
+            escCsv(b.masters.map((u) => u.displayName).join('; ')),
+            escCsv(laggards.map((u) => u.displayName).join('; ')),
+            noTrade(b.v) ? 'NO (solo — auto-extracts at Lv5)' : 'yes',
+          ].join(','));
+        }
+      } else {
+        lines = [['Sprite', 'Tier', 'Family', 'Owners', 'Needers', 'OnlyOneOwner'].join(',')];
+        for (const b of differ) {
+          const needers = users.filter((u) => !u.owned.has(b.v.name));
+          lines.push([
+            escCsv(`${b.v.tierLabel} ${b.v.familyLabel}`), escCsv(b.v.tierLabel), escCsv(b.v.familyLabel),
+            escCsv(b.owners.map((u) => u.displayName).join('; ')),
+            escCsv(needers.map((u) => u.displayName).join('; ')),
+            b.ownerCount === 1 ? '1' : '0',
+          ].join(','));
+        }
       }
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-      res.setHeader('Content-Disposition', `attachment; filename="trade-matrix-${users.map((u) => u.shareId).join('-vs-').slice(0, 80)}.csv"`);
+      res.setHeader('Content-Disposition', `attachment; filename="sprite-${isMastery ? 'mastery' : 'compare'}-${users.map((u) => u.shareId).join('-vs-').slice(0, 80)}.csv"`);
       return res.send(lines.join('\n'));
     }
+
+    // ── shared bits ──
+    const slugQS = slugs.map((s) => `u=${encodeURIComponent(s)}`).join('&');
+    const modeQS = isMastery ? '&mode=mastery' : '';
+    const hrefAs = (asSlug) => `/sprites/compare?${slugQS}${asSlug ? `&as=${encodeURIComponent(asSlug)}` : ''}${modeQS}`;
+    // Mode toggle keeps the current "viewing as" focus so switching Collection ⇄
+    // Mastery doesn't bounce you back to the group view.
+    const hrefMode = (m) => `/sprites/compare?${slugQS}${focus ? `&as=${encodeURIComponent(focus.shareId)}` : ''}${m === 'mastery' ? '&mode=mastery' : ''}`;
+    const modeToggle = `<div class="cb-modetoggle" role="tablist" aria-label="Compare by">
+      <span class="cb-mode-lbl">Compare&nbsp;by</span>
+      <a class="cb-mchip ${isMastery ? '' : 'on'}" role="tab" aria-selected="${isMastery ? 'false' : 'true'}" href="${hrefMode('collection')}">🗃️ Collection</a>
+      <a class="cb-mchip ${isMastery ? 'on' : ''}" role="tab" aria-selected="${isMastery ? 'true' : 'false'}" href="${hrefMode('mastery')}">⭐ Mastery</a>
+    </div>
+    <style>
+      .cb-modetoggle{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:2px 0 12px}
+      .cb-mode-lbl{font-size:12px;color:#8b93a3;font-weight:700;text-transform:uppercase;letter-spacing:.04em}
+      .cb-mchip{display:inline-flex;align-items:center;gap:5px;padding:7px 15px;border-radius:999px;border:1px solid #2a2f3c;background:#12141a;color:#c3cad6;font-weight:700;font-size:13px;text-decoration:none;transition:all .12s}
+      .cb-mchip:hover{border-color:#3a4250;color:#e8eaf0}
+      .cb-mchip.on{background:linear-gradient(180deg,#2a2140,#211a34);border-color:var(--purple,#8b5cf6);color:#fff;box-shadow:0 0 0 1px var(--purple,#8b5cf6) inset}
+      .cb-caveat{display:flex;gap:10px;align-items:flex-start;margin:0 0 12px;padding:10px 14px;background:#1a1508;border:1px solid #4a3a12;border-radius:10px;font-size:12.5px;color:#e8d9a8;line-height:1.45}
+      .cb-caveat b{color:#ffd479}
+      .cb-mtag{display:inline-block;margin-left:6px;padding:1px 7px;border-radius:999px;font-size:10.5px;font-weight:800;letter-spacing:.02em;vertical-align:middle}
+      .cb-mtag.solo{background:#3a2a08;color:#ffd479;border:1px solid #5a4410}
+      .cb-tile.cb-solo{outline:1px solid #5a4410}
+      .cb-ctx.cb-mastered{color:#ffd479}
+      .cb-detail .cb-mast>span{color:#ffd479}
+    </style>`;
     const fmtRelative = (ts) => {
       if (!ts) return '—';
       const s = Math.floor((Date.now() - new Date(ts).getTime()) / 1000);
@@ -3940,119 +7173,873 @@ router.get('/compare', async (req, res) => {
       if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
       return `${Math.floor(s / 86400)}d ago`;
     };
-    res.send(shell(`Compare ${users.length} collectors — CertiFried`, chrome(`<a class="navlink" href="/sprites/browse">+ pick more</a>`) + `<main>
-      <section class="hero" style="display:block;padding:18px 26px">
-        <div class="who" style="margin-bottom:14px">Comparing <b style="font-size:18px">${users.length} collectors</b></div>
-        <div class="cmp-summary">
-          ${userSummary.map((u) => `<div class="cmp-summary-card">
-            <a href="/sprites/u/${esc(u.shareId)}" class="cmp-user-link"><b>${esc(u.displayName)}</b></a>
-            <div class="sub">${u.owned} sprites · <b style="color:#5bf0ff">${u.unique} unique</b> in this comparison</div>
-            <div class="sub" style="font-size:11px;color:#7a8395;margin-top:2px">synced ${esc(fmtRelative(u.syncedAt))}</div>
-          </div>`).join('')}
+    const oldestSyncedAt = rows.reduce((acc, r) => {
+      const t = r.synced_at ? new Date(r.synced_at).getTime() : 0;
+      return (!acc || (t && t < acc)) ? t : acc;
+    }, null);
+
+    // Visual sprite tile — the shared unit of both views. `ctx` is the one-line
+    // context under the name; `detail` is optional hidden who-has/who-needs HTML
+    // revealed on click. `cls` adds state classes (dim/vault/unique).
+    const tile = (b, { ctx = '', detail = '', cls = '', differ = null } = {}) => {
+      const v = b.v;
+      const tc = v.tierColor || '#9aa6b2';
+      const phLetter = esc((v.tierLabel || '?')[0]);
+      const phHtml = `<svg viewBox="0 0 100 100" class="ph"><rect width="100" height="100" rx="14" fill="#15171e"/><text x="50" y="62" text-anchor="middle" font-size="40" font-weight="800" fill="${esc(tc)}">${phLetter}</text></svg>`;
+      const art = v.imgId
+        ? `<img loading="lazy" src="/sprites/img/${esc(v.imgId)}.png" alt="${esc(v.familyLabel)} ${esc(v.tierLabel)}" onerror="this.outerHTML=this.dataset.ph" data-ph="${esc(phHtml)}">`
+        : `<svg viewBox="0 0 100 100" class="ph"><rect width="100" height="100" rx="14" fill="#15171e"/><text x="50" y="62" text-anchor="middle" font-size="40" font-weight="800" fill="${tc}">${phLetter}</text></svg>`;
+      const isDiffer = differ == null ? (b.obtainable && b.ownerCount > 0 && b.ownerCount < users.length) : differ;
+      return `<div class="cb-tile ${cls}" data-tier="${esc(v.tierKey)}" data-tr="${tierRank[v.tierKey] ?? 99}" data-fam="${esc(v.familyLabel.toLowerCase())}" data-owners="${b.ownerCount}" data-differ="${isDiffer ? 1 : 0}" style="--tc:${tc}"${detail ? ' tabindex="0" role="button"' : ''}>
+        <div class="cb-art">${art}</div>
+        <div class="cb-meta">
+          <span class="cb-tier">${esc(v.tierLabel)}</span>
+          <b class="cb-fam">${esc(v.familyLabel)}</b>
+          ${ctx}
         </div>
+        ${detail}
+      </div>`;
+    };
+
+    // Standings strip (compact leaderboard — you ranked this low, so it's a glance).
+    const standings = [...users].sort((a, b) => (isMastery ? (b.masteredCount - a.masteredCount) || (b.ownedCount - a.ownedCount) : b.ownedCount - a.ownedCount));
+    // Leaderboard entries link straight to each collector's full PROFILE — the
+    // most accessible "go see this person's collection" spot. Switching the
+    // analysis perspective is the separate "Viewing as" row below, so the two
+    // intents don't collide (and profile links aren't buried in tile popovers).
+    const standingsHtml = standings.map((u, i) => `<a class="cb-stand ${focus && focus.shareId === u.shareId ? 'on' : ''}" href="/sprites/u/${esc(u.shareId)}" title="View ${esc(u.displayName)}'s full collection — ${u.ownedCount} owned, ${u.masteredCount} mastered">
+      <span class="cb-rank">#${i + 1}</span><b>${esc(u.displayName)}</b><span class="cb-stand-n" title="${isMastery ? 'mastered' : 'owned'}">${isMastery ? `⭐${u.masteredCount}` : u.ownedCount}</span><span class="cb-stand-go" aria-hidden="true">↗</span></a>`).join('');
+
+    // "Viewing as" selector — chips on wide screens, a <select> on narrow.
+    const chips = `<a class="cb-vchip ${focus ? '' : 'on'}" href="${hrefAs(null)}">👥 Whole group</a>` +
+      users.map((u) => `<a class="cb-vchip ${focus && focus.shareId === u.shareId ? 'on' : ''}" href="${hrefAs(u.shareId)}">${esc(u.displayName)}</a>`).join('');
+    const selectOpts = `<option value="${esc(hrefAs(null))}"${focus ? '' : ' selected'}>👥 Whole group</option>` +
+      users.map((u) => `<option value="${esc(hrefAs(u.shareId))}"${focus && focus.shareId === u.shareId ? ' selected' : ''}>${esc(u.displayName)}</option>`).join('');
+    const viewingAs = `<div class="cb-viewas">
+      <span class="cb-viewas-lbl" title="Switch whose gaps/trades the board shows. Tap a name in the leaderboard above to open their full profile instead.">Viewing as</span>
+      <div class="cb-chips">${chips}</div>
+      <select class="cb-vselect" onchange="if(this.value)location.href=this.value">${selectOpts}</select>
+    </div>`;
+
+    // Controls: tier filter + sort + search (+ show-all only in group view).
+    const controls = `<div class="cb-controls">
+      <div class="cb-tiers">${TIERS.map((t) => `<label class="cb-tierpill" style="--tc:${t.color}"><input type="checkbox" checked data-tier="${esc(t.key)}"><span>${esc(t.label)}</span></label>`).join('')}</div>
+      <div class="cb-ctl-row">
+        <input type="search" id="cb-search" placeholder="🔍 family…" autocomplete="off">
+        <select id="cb-sort">
+          <option value="rarity">Rarest first</option>
+          <option value="family">By family</option>
+          <option value="tier">By tier</option>
+        </select>
+        ${focus ? '' : (isMastery
+          ? '<label class="cb-toggle" title="Also show sprites nobody here has mastered yet and ones every owner already maxed — i.e. every owned sprite, not just the tradeable ones. Sprites nobody owns are never shown."><input type="checkbox" id="cb-showall"> ＋ show all owned</label>'
+          : '<label class="cb-toggle" title="Also show sprites everyone here already owns. (Sprites nobody has are never shown.)"><input type="checkbox" id="cb-showall"> ＋ ones everyone has</label>')}
+        <a class="cb-csv" href="/sprites/compare?${slugQS}&format=csv${modeQS}" download>⬇ CSV</a>
+      </div>
+    </div>`;
+
+    // ── build the board body for whichever view ──
+    let heading, boardHtml, footNote = '';
+    if (isMastery && focus) {
+      // Mastery focus — from ONE collector's chair, three buckets:
+      //  • canCap  : me owns it, hasn't maxed it, someone here HAS → trade a Lv5 in
+      //  • soloCap : same, but Dream — can't be traded, must grind it solo
+      //  • lend    : me maxed it, others own-but-haven't → me can hand a Lv5 out
+      const me = focus;
+      const canCap = [], soloCap = [], lend = [];
+      for (const b of board) {
+        const v = b.v;
+        if (!b.obtainable || !me.owned.has(v.name)) continue;   // can only master what you own
+        if (me.mastered.has(v.name)) {
+          const needers = users.filter((u) => u !== me && u.owned.has(v.name) && !u.mastered.has(v.name));
+          if (needers.length && !noTrade(v)) lend.push({ b, needers });
+        } else {
+          const from = users.filter((u) => u !== me && u.mastered.has(v.name));
+          if (!from.length) continue;
+          (noTrade(v) ? soloCap : canCap).push({ b, from });
+        }
+      }
+      canCap.sort((a, b) => a.b.masterCount - b.b.masterCount);   // rarest maxed-source first
+
+      heading = `<b>${esc(me.displayName)}</b> can cap <b style="color:var(--gold)">${canCap.length}</b> ${canCap.length === 1 ? 'sprite' : 'sprites'} with a maxed copy from someone here`;
+      const capTiles = canCap.map(({ b, from }) => {
+        const links = from.slice(0, 3).map((u) => `<a href="/sprites/u/${esc(u.shareId)}" class="cb-fromlink">${esc(u.displayName)}</a>`).join(', ');
+        const ctx = `<span class="cb-ctx cb-from">⭐ max from ${links}${from.length > 3 ? ` +${from.length - 3}` : ''}</span>`;
+        return tile(b, { ctx, differ: true });
+      }).join('');
+      const soloTiles = soloCap.map(({ b }) => tile(b, {
+        ctx: `<span class="cb-ctx cb-mastered">⚠ solo only — auto-extracts at Lv5<span class="cb-mtag solo">DREAM</span></span>`,
+        cls: 'cb-solo', differ: true,
+      })).join('');
+      const lendTiles = lend.map(({ b, needers }) => tile(b, {
+        ctx: `<span class="cb-ctx cb-need">${needers.length} here still leveling it</span>`, differ: true,
+      })).join('');
+
+      boardHtml = canCap.length
+        ? `<div class="cb-grid" id="cb-grid">${capTiles}</div>`
+        : `<div class="cb-empty">🎉 <b>${esc(me.displayName)}</b> has already mastered every sprite someone here could trade a Lv5 copy of. Nothing left to cap by trade.</div>`;
+      footNote = `<p class="sub" style="margin:6px 0 0">Sprites <b>${esc(me.displayName)}</b> owns but hasn't mastered, where someone here holds a Lv5 to trade — tap a name to open their collection.</p>`;
+      if (soloCap.length) {
+        boardHtml += `<details class="cb-lev" open><summary>⚠ ${soloCap.length} sprite${soloCap.length === 1 ? '' : 's'} that must be mastered solo (can't be traded at Lv5)</summary>
+          <div class="cb-grid" style="margin-top:12px">${soloTiles}</div></details>`;
+      }
+      if (lend.length) {
+        boardHtml += `<details class="cb-lev"><summary>💪 ${lend.length} sprite${lend.length === 1 ? '' : 's'} <b>${esc(me.displayName)}</b> has maxed that others still need</summary>
+          <div class="cb-grid" style="margin-top:12px">${lendTiles}</div></details>`;
+      }
+    } else if (isMastery) {
+      // Mastery group board. Obtainable sprites ≥1 owner holds; default to the
+      // mastery-differ set (someone maxed, someone still leveling). "Show all"
+      // reveals ones every owner already maxed (nothing left to trade).
+      const showTiles = board.filter((b) => !b.v.future && !b.v.vaulted && b.ownerCount > 0);
+      const masteryDifferSet = new Set(masteryDiffer.map((b) => b.v.name));
+      heading = `<b style="color:var(--gold)">${masteryDiffer.length}</b> sprites tradeable for mastery — someone's maxed, someone's still leveling`;
+      boardHtml = `<div class="cb-grid" id="cb-grid">${showTiles.map((b) => {
+        const v = b.v;
+        const laggards = b.owners.filter((u) => !u.mastered.has(v.name));
+        const isDiff = masteryDifferSet.has(v.name);
+        const uniq = b.masterCount === 1 && isDiff;
+        const solo = noTrade(v);
+        const ctx = `<span class="cb-ctx cb-mastered">${uniq ? '⭐ ' : ''}${b.masterCount}/${b.ownerCount} mastered${solo ? '<span class="cb-mtag solo">SOLO</span>' : ''}</span>`;
+        const detail = `<div class="cb-detail"><div class="cb-has cb-mast"><span>⭐ mastered</span> ${b.masters.map((u) => `<a href="/sprites/u/${esc(u.shareId)}">${esc(u.displayName)}</a>`).join('') || '<i>nobody yet</i>'}</div>
+          <div class="cb-needs"><span>◔ leveling</span> ${laggards.map((u) => `<a href="/sprites/u/${esc(u.shareId)}">${esc(u.displayName)}</a>`).join('') || '<i>all owners maxed</i>'}</div>
+          ${solo ? '<div class="cb-needs" style="color:#ffd479"><span>⚠</span> <i>Dream auto-extracts at Lv5 — cannot be traded; each owner must solo it.</i></div>' : ''}</div>`;
+        return tile(b, { ctx, detail, cls: (uniq ? 'cb-uniq ' : '') + (solo ? 'cb-solo' : ''), differ: isDiff });
+      }).join('')}</div>`;
+      footNote = `<p class="sub" style="margin:6px 0 0">Owners who've maxed a sprite can trade a Lv5 copy to owners still leveling it — that's how you both hit the cap. Tap a sprite for who's maxed / still leveling. ⭐ = only one person has mastered it. Toggle <b>＋ show all owned</b> to include not-yet-started and already-fully-mastered sprites.</p>`;
+    } else if (focus) {
+      const me = focus;
+      const missing = [];
+      const leverage = [];
+      for (const b of board) {
+        const v = b.v;
+        if (me.owned.has(v.name)) {
+          const needers = users.filter((u) => u !== me && !u.owned.has(v.name));
+          if (b.obtainable && needers.length) leverage.push({ b, needers });
+        } else {
+          // Only show gaps someone here can actually fill. Skip unreleased,
+          // vaulted, AND sprites nobody in the group owns (a dead-end gap — matches
+          // "don't show what nobody has"). Left: sprites this collector lacks that
+          // at least one other collector owns.
+          if (v.future || v.vaulted || b.owners.length === 0) continue;
+          missing.push({ b });
+        }
+      }
+      missing.sort((a, b) => a.b.ownerCount - b.b.ownerCount);   // rarest source first
+
+      heading = `<b>${esc(me.displayName)}</b> is missing <b style="color:var(--gold)">${missing.length}</b> ${missing.length === 1 ? 'sprite' : 'sprites'} someone here can trade`;
+      const missTiles = missing.map(({ b }) => {
+        // Each owner links to their profile — the "who can I get this from" flow.
+        const links = b.owners.slice(0, 3)
+          .map((u) => `<a href="/sprites/u/${esc(u.shareId)}" class="cb-fromlink">${esc(u.displayName)}</a>`)
+          .join(', ');
+        const ctx = `<span class="cb-ctx cb-from">from ${links}${b.owners.length > 3 ? ` +${b.owners.length - 3}` : ''}</span>`;
+        return tile(b, { ctx });
+      }).join('');
+
+      const levTiles = leverage.map(({ b, needers }) => tile(b, {
+        ctx: `<span class="cb-ctx cb-need">${needers.length} here need${needers.length === 1 ? 's' : ''} it</span>`,
+      })).join('');
+
+      boardHtml = missing.length
+        ? `<div class="cb-grid" id="cb-grid">${missTiles}</div>`
+        : `<div class="cb-empty">🎉 <b>${esc(me.displayName)}</b> already has every sprite anyone else here owns. Nothing to trade for.</div>`;
+      footNote = `<p class="sub" style="margin:6px 0 0">Sprites <b>${esc(me.displayName)}</b> lacks that someone here owns — tap a name to open their collection. Sprites nobody here has (and vaulted / unreleased) are hidden.</p>`;
+
+      if (leverage.length) {
+        boardHtml += `<details class="cb-lev"><summary>💪 ${leverage.length} sprite${leverage.length === 1 ? '' : 's'} <b>${esc(me.displayName)}</b> has that others still need</summary>
+          <div class="cb-grid" style="margin-top:12px">${levTiles}</div></details>`;
+      }
+    } else {
+      // Group view — the trade board. Only sprites SOMEONE here owns (ownerCount
+      // > 0): a sprite nobody in the comparison has is noise, so it's dropped
+      // entirely (not just hidden). Default shows the differ set (some have, some
+      // don't); "show all" additionally reveals the ones EVERYONE already has.
+      // Unreleased + vaulted are excluded too (not tradeable; the main grid still
+      // shows those jail-barred).
+      const showTiles = board.filter((b) => !b.v.future && !b.v.vaulted && b.ownerCount > 0);
+      heading = `<b style="color:var(--gold)">${differ.length}</b> tradeable sprites — someone has, someone needs`;
+      boardHtml = `<div class="cb-grid" id="cb-grid">${showTiles.map((b) => {
+        const needers = users.filter((u) => !u.owned.has(b.v.name));
+        const uniq = b.ownerCount === 1 && b.obtainable;
+        const ctx = `<span class="cb-ctx">${uniq ? '⭐ ' : ''}${b.ownerCount}/${users.length} have it</span>`;
+        const detail = `<div class="cb-detail"><div class="cb-has"><span>✓ has</span> ${b.owners.map((u) => `<a href="/sprites/u/${esc(u.shareId)}">${esc(u.displayName)}</a>`).join('') || '<i>nobody</i>'}</div>
+          <div class="cb-needs"><span>✗ needs</span> ${needers.map((u) => `<a href="/sprites/u/${esc(u.shareId)}">${esc(u.displayName)}</a>`).join('') || '<i>everyone has it</i>'}</div></div>`;
+        return tile(b, { ctx, detail, cls: uniq ? 'cb-uniq' : '' });
+      }).join('')}</div>`;
+      footNote = `<p class="sub" style="margin:6px 0 0">Only sprites someone here owns are shown — ones nobody has are hidden. Tap a sprite for who has / needs it. ⭐ = only one owner. Toggle <b>＋ ones everyone has</b> to add the ones you all share.</p>`;
+    }
+
+    const groupMastered = obtainableCells.filter((b) => b.masterCount > 0).length;
+    const groupUnmastered = obtainableCells.filter((b) => b.masterCount === 0);
+    const aggHas = isMastery ? groupMastered : groupHas;
+    const aggMissList = isMastery ? groupUnmastered : groupMissing;
+    const aggPct = groupTotal ? Math.round((aggHas / groupTotal) * 100) : 0;
+    const missNames = aggMissList.slice(0, 4).map((b) => `${b.v.familyLabel} ${b.v.tierLabel}`).join(', ');
+    const aggregate = `<div class="cb-agg">
+      <div class="cb-agg-bar"><span style="width:${aggPct}%"></span></div>
+      <div class="cb-agg-txt">Together this group ${isMastery ? 'has mastered' : 'holds'} <b>${aggHas}/${groupTotal}</b> obtainable sprites (${aggPct}%).
+      ${aggMissList.length ? `${isMastery ? 'Nobody here has mastered' : 'Still missing as a group'}: <b>${esc(missNames)}</b>${aggMissList.length > 4 ? ` +${aggMissList.length - 4} more` : ''}.` : (isMastery ? 'Between you, every obtainable sprite is mastered. 🏆' : 'You collectively own every obtainable sprite. 🏆')}</div>
+    </div>`;
+
+    res.send(shell(`Compare ${users.length} collectors — CertiFried`, chrome(`<a class="navlink" href="/sprites/browse?${slugs.map((s) => `preselect=${encodeURIComponent(s)}`).join('&amp;')}">Add or remove collectors</a>`) + `<main>
+      <section class="hero" style="display:block;padding:18px 26px">
+        <div class="who" style="margin-bottom:10px">Comparing <b style="font-size:18px">${users.length} collectors</b></div>
+        <div class="cb-standings">${standingsHtml}</div>
+        ${aggregate}
+        <div class="sub" style="margin:0 0 10px;font-size:12px">🔗 The more collectors linked, the faster this tracker sees exactly what's obtainable. <a href="/sprites" style="color:var(--purple);font-weight:700">Link your account →</a></div>
+        ${modeToggle}
+        ${viewingAs}
         <div id="cmp-refresh-bar" data-rendered-at="${Date.now()}" data-oldest-synced-at="${oldestSyncedAt || ''}"
-             style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:14px;padding:10px 14px;background:#0e0f13;border:1px solid #2a2f3c;border-radius:10px;font-size:13px">
+             style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:12px;padding:9px 14px;background:#0e0f13;border:1px solid #2a2f3c;border-radius:10px;font-size:12.5px">
           <span style="display:flex;align-items:center;gap:6px">
             <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#3ad07a;animation:cmp-pulse 2s infinite"></span>
-            <b style="color:#e8eaf0">Live</b>
-            <span class="sub">— auto-refreshes every 5 min when this tab is active.</span>
+            <b style="color:#e8eaf0">Live</b><span class="sub">— auto-refreshes every 5 min.</span>
           </span>
           <span id="cmp-refresh-countdown" class="sub" style="font-variant-numeric:tabular-nums;font-weight:600;color:#cfe">next refresh in 5:00</span>
-          <button id="cmp-pause-btn" type="button" class="cmp-clear" style="margin-left:auto">⏸ Pause</button>
-          <button id="cmp-refresh-now" type="button" class="cmp-clear">🔄 Refresh now</button>
+          <button id="cmp-pause-btn" type="button" class="cb-csv" style="margin-left:auto">⏸ Pause</button>
+          <button id="cmp-refresh-now" type="button" class="cb-csv">🔄 Refresh now</button>
         </div>
         <style>@keyframes cmp-pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.85)}}</style>
       </section>
 
       <section class="playercard" style="display:block">
-        <div class="cardhead" style="margin-bottom:8px">🤝 Trade opportunities <span id="cmp-count" style="color:var(--muted);font-weight:600">(${trades.length})</span></div>
-        <p class="sub" style="margin:0 0 10px">Each row is a sprite that some have and others need. ⭐ "only one owner" rows are uniquely held — perfect trade leverage. Click a name to open that collector's profile.</p>
-        <div class="cmp-filter">
-          <span class="cmp-filter-label">Filter tiers:</span>
-          ${TIERS.map((t) => `<label class="cmp-tier-pill" style="border-color:${t.color}55">
-            <input type="checkbox" checked data-tier="${esc(t.key)}">
-            <span style="color:${t.color}">${esc(t.label)}</span>
-          </label>`).join('')}
-          <button type="button" id="cmp-clear" class="cmp-clear">Clear all</button>
-          <button type="button" id="cmp-all" class="cmp-clear">All</button>
-          <a class="cmp-clear" href="?${slugs.map((s) => `u=${encodeURIComponent(s)}`).join('&')}&format=csv" download style="text-decoration:none">⬇ CSV</a>
-        </div>
-        <table class="cmp-table">
-          <thead><tr><th>Sprite</th><th class="cmp-have-col">✓ Has it</th><th class="cmp-need-col">✗ Needs it</th></tr></thead>
-          <tbody>${tradeRows || '<tr><td colspan="3" class="sub" style="text-align:center;padding:24px">No trade opportunities — every selected collector owns the same sprites.</td></tr>'}</tbody>
-        </table>
+        <div class="cardhead" style="margin-bottom:8px">${focus ? '🎯 ' : (isMastery ? '⭐ ' : '🤝 ')}${heading} <span id="cb-count" class="sub" style="font-weight:600"></span></div>
+        ${controls}
+        ${isMastery ? `<div class="cb-caveat">⚠️ <div><b>Dream can't be traded at Level 5.</b> It explodes into legendary loot and auto-extracts the instant it maxes, so a Lv5 Dream can't be held or handed off — everyone has to master Dream solo. Every other sprite's mastery can be passed around freely.</div></div>` : ''}
+        ${boardHtml}
+        ${footNote}
       </section>
     </main>
     <script>(function(){
-      var rows = document.querySelectorAll('.cmp-table tbody tr');
-      var pills = document.querySelectorAll('.cmp-tier-pill input');
-      var count = document.getElementById('cmp-count');
-      var totalRows = rows.length;
+      var grid = document.getElementById('cb-grid');
+      var tiles = [].slice.call(document.querySelectorAll('#cb-grid > .cb-tile'));
+      var pills = [].slice.call(document.querySelectorAll('.cb-tierpill input'));
+      var search = document.getElementById('cb-search');
+      var sortSel = document.getElementById('cb-sort');
+      var showAll = document.getElementById('cb-showall');
+      var count = document.getElementById('cb-count');
       function apply(){
-        var allowed = new Set();
-        pills.forEach(function(p){ if(p.checked) allowed.add(p.dataset.tier); });
+        var allowed = {}; pills.forEach(function(p){ if(p.checked) allowed[p.dataset.tier]=1; });
+        var q = (search && search.value || '').trim().toLowerCase();
         var shown = 0;
-        rows.forEach(function(r){
-          var t = r.dataset.tier;
-          var ok = !t || allowed.has(t);
-          r.style.display = ok ? '' : 'none';
+        tiles.forEach(function(el){
+          var ok = allowed[el.dataset.tier];
+          if (ok && q) ok = el.dataset.fam.indexOf(q) !== -1;
+          if (ok && showAll && !showAll.checked) ok = el.dataset.differ === '1';
+          el.style.display = ok ? '' : 'none';
           if (ok) shown++;
         });
-        if (count) count.textContent = '(' + shown + (shown !== totalRows ? ' of ' + totalRows : '') + ')';
+        if (count) count.textContent = '(' + shown + ')';
+      }
+      function sortTiles(){
+        if (!grid) return;
+        var mode = sortSel ? sortSel.value : 'rarity';
+        tiles.sort(function(a,b){
+          if (mode === 'family') return a.dataset.fam.localeCompare(b.dataset.fam) || (a.dataset.tr - b.dataset.tr);
+          if (mode === 'tier') return (a.dataset.tr - b.dataset.tr) || a.dataset.fam.localeCompare(b.dataset.fam);
+          return (a.dataset.owners - b.dataset.owners) || a.dataset.fam.localeCompare(b.dataset.fam); // rarity
+        });
+        tiles.forEach(function(el){ grid.appendChild(el); });
       }
       pills.forEach(function(p){ p.addEventListener('change', apply); });
-      var clear = document.getElementById('cmp-clear');
-      var all = document.getElementById('cmp-all');
-      if (clear) clear.addEventListener('click', function(){ pills.forEach(function(p){ p.checked = false; }); apply(); });
-      if (all) all.addEventListener('click', function(){ pills.forEach(function(p){ p.checked = true; }); apply(); });
+      if (search) search.addEventListener('input', apply);
+      if (showAll) showAll.addEventListener('change', apply);
+      if (sortSel) sortSel.addEventListener('change', function(){ sortTiles(); });
+      // Tap a tile to reveal who-has / who-needs (group view only).
+      tiles.forEach(function(el){
+        if (!el.querySelector('.cb-detail')) return;
+        el.addEventListener('click', function(){ el.classList.toggle('open'); });
+        el.addEventListener('keydown', function(e){ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); el.classList.toggle('open'); } });
+      });
+      apply();
 
-      // ── auto-refresh ────────────────────────────────────────────────────
-      // 5-minute reload cycle, paused while tab is hidden. Server sync runs
-      // every 10 min, so polling every 5 min catches changes within ~5 min of
-      // them happening without slamming the page. Pause toggle for users who
-      // want a stable view (mid-trade screenshot, etc.). "Refresh now" forces
-      // an immediate reload. Countdown lives in #cmp-refresh-countdown.
-      var REFRESH_INTERVAL_S = 5 * 60;
-      var paused = false;
-      var startedAt = Date.now();
+      // ── auto-refresh (focus is in the URL, so reload keeps the view) ──
+      var REFRESH_INTERVAL_S = 5 * 60, paused = false, startedAt = Date.now();
       var countdownEl = document.getElementById('cmp-refresh-countdown');
       var pauseBtn = document.getElementById('cmp-pause-btn');
       var refreshNowBtn = document.getElementById('cmp-refresh-now');
-      function fmtRemain(s){
-        var m = Math.floor(s / 60), sec = s % 60;
-        return m + ':' + (sec < 10 ? '0' : '') + sec;
-      }
+      function fmtRemain(s){ var m = Math.floor(s/60), sec = s%60; return m + ':' + (sec<10?'0':'') + sec; }
       function tick(){
         if (!countdownEl) return;
         if (paused){ countdownEl.textContent = 'auto-refresh paused'; return; }
         if (document.hidden){ countdownEl.textContent = 'paused (tab hidden)'; return; }
-        var elapsed = Math.floor((Date.now() - startedAt) / 1000);
-        var remain = REFRESH_INTERVAL_S - elapsed;
-        if (remain <= 0){
-          // Preserve scroll position across the reload by writing it into the
-          // URL hash temporarily — the browser restores scroll on same-URL
-          // reload anyway, but this is a belt-and-braces guard for back/fwd.
-          location.reload();
-          return;
-        }
+        var remain = REFRESH_INTERVAL_S - Math.floor((Date.now()-startedAt)/1000);
+        if (remain <= 0){ location.reload(); return; }
         countdownEl.textContent = 'next refresh in ' + fmtRemain(remain);
       }
-      setInterval(tick, 1000);
-      tick();
-      if (pauseBtn) pauseBtn.addEventListener('click', function(){
-        paused = !paused;
-        pauseBtn.textContent = paused ? '▶ Resume' : '⏸ Pause';
-        if (!paused) startedAt = Date.now();  // restart the countdown on resume
-      });
+      setInterval(tick, 1000); tick();
+      if (pauseBtn) pauseBtn.addEventListener('click', function(){ paused = !paused; pauseBtn.textContent = paused ? '▶ Resume' : '⏸ Pause'; if(!paused) startedAt = Date.now(); });
       if (refreshNowBtn) refreshNowBtn.addEventListener('click', function(){ location.reload(); });
-      // Re-tick immediately when the tab regains focus so the user doesn't
-      // see "paused (tab hidden)" for up to a second after switching back.
       document.addEventListener('visibilitychange', tick);
     })();</script>`));
   } catch (e) {
     logger.warn(`[sprites] compare view failed: ${e.message}`);
     res.status(500).send(shell('Error', chrome() + '<main><div class="card"><h2>Something went wrong</h2></div></main>'));
   }
+});
+
+// ── Release-schedule admin ──────────────────────────────────────────────────
+// Editing availability without a redeploy. Rows here are the *prediction*
+// layer only: Epic's hotfix ComingSoonTimestamp can override a date, and real
+// observed ownership overrides everything, so a mistake here is self-limiting.
+// Changes reach the site within ~30s (AVAILABILITY_REFRESH_MS).
+//
+// Times are entered/displayed in UTC deliberately. Epic drops land on a UTC
+// instant (6 AM PT = 13:00 UTC in summer) and rendering the admin form in the
+// operator's local zone is how off-by-an-offset bugs get introduced.
+const dtLocalToMs = (s) => {
+  if (!s) return null;
+  const ms = Date.parse(`${s}:00Z`);      // treat the field as UTC, not local
+  return Number.isFinite(ms) ? ms : null;
+};
+const msToDtLocal = (ms) => (ms == null ? '' : new Date(Number(ms)).toISOString().slice(0, 16));
+
+// ── Self-audit: continuous accuracy + pipeline-health check ─────────────────
+// Makes the one-off "0% doubt" audit permanent. Same bug classes we chased by
+// hand — missing images, codename leaks, blank abilities, availability
+// contradictions, label drift, a frozen sync pipeline — now surface themselves
+// via /sprites/admin and an hourly timer that logs loudly on any regression.
+// Reads the STABLE audit-account model (AUDIT_ACCOUNT_LABEL) for the accuracy
+// checks — catalog structure is identical across accounts, and this never
+// touches a stranger's ownership. Pipeline freshness aggregates all accounts.
+const STALE_PIPELINE_MS = 6 * 60 * 60 * 1000;   // no sync anywhere in 6h = frozen
+async function runSpriteHealthAudit() {
+  const problems = [];
+  const warnings = [];
+  const P = (m) => problems.push(m);
+  const W = (m) => warnings.push(m);
+  const isLeak = (label) => label && label !== PENDING_FAMILY_LABEL && /sprite$/i.test(label);
+
+  const [[ref]] = await pool.execute(
+    'SELECT synced_at, state_json FROM epic_sprite_accounts WHERE display_name=? AND state_json IS NOT NULL LIMIT 1',
+    [AUDIT_ACCOUNT_LABEL],
+  );
+  const model = ref?.state_json ? JSON.parse(ref.state_json) : null;
+  const groups = model?.groups || [];
+
+  let imgFiles = new Set();
+  try {
+    imgFiles = new Set(fsSync.readdirSync(SPRITE_IMG_DIR).filter((f) => f.endsWith('.png')).map((f) => f.slice(0, -4)));
+  } catch (e) { W(`image dir unreadable: ${e.message}`); }
+
+  const familyMeta = getPakScan()?.per_family_meta || {};
+  const nf = (s) => String(s).toLowerCase().replace(/sprite$/, '');
+  const abilityFor = (token) => !!resolveFamilyAbility(token, familyMeta);
+
+  let variantCount = 0;
+  const labelsByFam = new Map();
+  for (const g of groups) {
+    if (g.labelPending) W(`family "${g.familyToken}" has no resolved name yet (showing "${PENDING_FAMILY_LABEL}") — add a FAMILY_LABEL entry or boot the game so the pak-scan runs`);
+    if (isLeak(g.label)) P(`CODENAME LEAK: family "${g.familyToken}" label = "${g.label}"`);
+    if (!g.labelPending && !abilityFor(g.familyToken)) W(`family "${g.familyToken}" (${g.label}) has no pak ability text`);
+    if (!labelsByFam.has(g.familyToken)) labelsByFam.set(g.familyToken, new Set());
+    for (const v of Object.values(g.variants || {})) {
+      variantCount++;
+      labelsByFam.get(g.familyToken).add(v.familyLabel);
+      const id = `${g.familyToken}/${v.tierKey}`;
+      if (!v.imgId) { if (!v.future) W(`${id} (${g.label} ${v.tierLabel}) has no imgId`); }
+      else if (imgFiles.size && !imgFiles.has(v.imgId)) P(`MISSING IMAGE: ${id} → ${v.imgId}.png not on disk`);
+      if (isLeak(v.familyLabel)) P(`CODENAME LEAK: ${id} familyLabel = "${v.familyLabel}"`);
+      if (!v.tierLabel) P(`no tier label: ${id}`);
+      if (v.future && v.owned) P(`contradiction future+owned: ${id}`);
+      if (v.future && v.vaulted) P(`contradiction future+vaulted: ${id}`);
+    }
+  }
+  for (const [token, set] of labelsByFam) if (set.size > 1) P(`label drift: "${token}" → ${[...set].join(' / ')}`);
+
+  const effectTiers = new Set(PAK_SPECIAL_TIER_EFFECTS.map((t) => t.tierKey));
+  const usedTiers = new Set(groups.flatMap((g) => Object.values(g.variants || {}).map((v) => v.tierKey)));
+  for (const t of usedTiers) if (t !== 'basic' && !effectTiers.has(t)) W(`tier "${t}" has no effect text in PAK_SPECIAL_TIER_EFFECTS`);
+
+  // ── #2 GROUND-TRUTH reconciliation vs Epic's own hotfix ────────────────────
+  // Epic disables a variant by unmapping it (`MappingID;None`) in the DDSS
+  // registry. Anything we show OBTAINABLE that Epic has disabled is an
+  // over-claim — the dangerous direction (this would have caught the Gem drift).
+  // Match on the NORMALIZED family:tier key (not the raw name) so Epic's
+  // `_0`-style names (Ironmouse) are caught — the old exact-name match silently
+  // missed them, which is exactly how Ironmouse over-claimed off a lapsed timer.
+  const disabled = new Set((getHotfixCache()?.disabled_variants || []).map(normDisabledKey).filter(Boolean));
+  const byKey = new Map();
+  for (const g of groups) for (const v of Object.values(g.variants || {})) byKey.set(`${g.familyToken}:${v.tierKey}`, { v, g });
+  let disabledGated = 0;
+  for (const key of disabled) {
+    const hit = byKey.get(key);
+    if (!hit) continue;   // Epic disabled a variant our catalog doesn't serve (e.g. Punk Gem) — irrelevant
+    const { v, g } = hit;
+    if (!v.future && !v.vaulted && !v.owned) {
+      P(`OVER-CLAIM: ${g.familyToken}/${v.tierKey} shown obtainable but Epic's hotfix has it DISABLED (MappingID;None) — should be gated`);
+    } else disabledGated++;
+  }
+
+  // ── #1 drift signals ───────────────────────────────────────────────────────
+  // Staggered tier (some cells live, some gated — the Gem case). Not a problem,
+  // but surfaced so a partial rollout is visible rather than silent.
+  const tierState = {};
+  for (const g of groups) for (const v of Object.values(g.variants || {})) {
+    if (!tierState[v.tierKey]) tierState[v.tierKey] = { live: 0, gated: 0 };
+    if (v.future) tierState[v.tierKey].gated++; else if (!v.vaulted) tierState[v.tierKey].live++;
+  }
+  const staggered = Object.entries(tierState)
+    .filter(([, s]) => s.live > 0 && s.gated > 0)
+    .map(([t, s]) => `${t} (${s.live} live / ${s.gated} gated)`);
+  if (staggered.length) W(`staggered tier rollout: ${staggered.join(', ')} — per-family availability, verify it tracks Epic`);
+
+  // Ghost drop: a scheduled date has passed but NOTHING of that tier has been
+  // observed anywhere — did the drop actually land, or did Epic slip it?
+  const sched = activeSchedule();
+  const obsTiers = new Set(getObservedAvailability().tiers);
+  for (const [key, s] of Object.entries(sched.tiers || {})) {
+    if (s.at != null && s.at < Date.now() && !obsTiers.has(key)) {
+      W(`scheduled tier "${key}" release date passed (${new Date(s.at).toISOString().slice(0, 10)}) but ZERO observed ownership — did it drop, or slip?`);
+    }
+  }
+
+  const [[agg]] = await pool.execute(
+    `SELECT COUNT(*) total, SUM(state_json IS NOT NULL) withState, SUM(needs_relogin=1) dead,
+            MAX(synced_at) newest, SUM(synced_at < (NOW() - INTERVAL 6 HOUR)) stale
+     FROM epic_sprite_accounts`,
+  );
+  const newestMs = agg.newest ? new Date(agg.newest).getTime() : 0;
+  const pipeline = {
+    accounts: Number(agg.total) || 0,
+    withState: Number(agg.withState) || 0,
+    dead: Number(agg.dead) || 0,
+    stale: Number(agg.stale) || 0,
+    newestSyncedAt: agg.newest || null,
+    newestAgeMin: newestMs ? Math.floor((Date.now() - newestMs) / 60000) : null,
+  };
+  if (newestMs && (Date.now() - newestMs) > STALE_PIPELINE_MS) {
+    P(`PIPELINE STALE: newest sync across all accounts is ${pipeline.newestAgeMin} min old (> 6h) — sync may be broken`);
+  }
+  if (!groups.length) P(`no reference model — audit account "${AUDIT_ACCOUNT_LABEL}" has no state_json`);
+
+  return {
+    ok: problems.length === 0,
+    problems,
+    warnings,
+    stats: { families: groups.length, variants: variantCount, imageFiles: imgFiles.size, refSyncedAt: ref?.synced_at || null },
+    pipeline,
+    reconcile: { hotfixDisabled: disabled.size, disabledGatedOk: disabledGated, staggered },
+  };
+}
+
+// Alerts go to the tracker owner's Discord DM (via the bot token). Deduped so a
+// standing problem pings ONCE, not every hour, plus an all-clear when it resolves.
+const SPRITE_ALERT_USER_ID = '365905620060340224';
+let _lastSpriteAlertSig = null;
+async function dmSpriteAlert(content) {
+  const token = process.env.DISCORD_TOKEN;
+  if (!token) return;
+  try {
+    const r1 = await fetch('https://discord.com/api/v10/users/@me/channels', {
+      method: 'POST', headers: { Authorization: `Bot ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recipient_id: SPRITE_ALERT_USER_ID }),
+    });
+    const ch = await r1.json();
+    if (!ch?.id) { logger.warn(`[sprite-audit] DM channel open failed: ${r1.status}`); return; }
+    await fetch(`https://discord.com/api/v10/channels/${ch.id}/messages`, {
+      method: 'POST', headers: { Authorization: `Bot ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content: content.slice(0, 1900) }),
+    });
+  } catch (e) { logger.warn(`[sprite-audit] DM alert failed: ${e.message}`); }
+}
+
+// Hourly self-check: log LOUDLY on any hard problem so a regression can't hide
+// between admin visits. Accuracy drifts on patch/sync boundaries, not by the
+// second, so hourly is plenty.
+async function periodicHealthCheck() {
+  try {
+    const a = await runSpriteHealthAudit();
+    if (a.problems.length) {
+      logger.error(`[sprite-audit] ${a.problems.length} PROBLEM(S): ${a.problems.slice(0, 6).join(' | ')}`);
+      const sig = a.problems.join('\n');
+      if (sig !== _lastSpriteAlertSig) {              // only DM when the problem set CHANGES — no hourly spam
+        _lastSpriteAlertSig = sig;
+        await dmSpriteAlert(`⚠️ **Sprite Tracker — ${a.problems.length} accuracy problem(s) detected:**\n${a.problems.map((p) => `• ${p}`).join('\n')}\n\nSee /sprites/admin for the full audit.`);
+      }
+    } else if (_lastSpriteAlertSig) {                 // problems just cleared — send one all-clear
+      _lastSpriteAlertSig = null;
+      await dmSpriteAlert('✅ Sprite Tracker — all accuracy problems resolved. Back to clean.');
+    }
+  } catch (e) { logger.warn(`[sprite-audit] health check failed: ${e.message}`); }
+}
+setTimeout(periodicHealthCheck, 15000);
+setInterval(periodicHealthCheck, 60 * 60 * 1000);
+
+// Renders the health audit as an admin card: a PASS/FAIL verdict, the pipeline
+// freshness line, and any problem/warning detail.
+function renderHealthAudit(a) {
+  const fmtTs = (t) => t ? new Date(t).toISOString().slice(0, 16).replace('T', ' ') + ' UTC' : '—';
+  const verdict = a.ok
+    ? `<span class="pill ok">✓ ${a.warnings.length ? 'PASS (with notes)' : 'ALL CLEAR'}</span>`
+    : `<span class="pill bad">✗ ${a.problems.length} PROBLEM${a.problems.length === 1 ? '' : 'S'}</span>`;
+  const pl = a.pipeline;
+  const freshPill = pl.newestAgeMin == null ? '<span class="pill warn">no syncs</span>'
+    : pl.newestAgeMin > 360 ? `<span class="pill bad">newest sync ${pl.newestAgeMin}m ago</span>`
+      : `<span class="pill ok">newest sync ${pl.newestAgeMin}m ago</span>`;
+  const list = (arr, cls) => arr.length
+    ? `<ul class="audit-list ${cls}">${arr.map((m) => `<li>${esc(m)}</li>`).join('')}</ul>`
+    : '';
+  return `<section class="playercard" style="display:block;margin-top:22px">
+    <div class="cardhead" style="margin-bottom:8px">🩺 Health &amp; accuracy audit ${verdict}</div>
+    <p class="sub" style="margin:0 0 10px">Auto-runs hourly (DMs the owner on any change) and on every visit here. Checks images on disk, codename leaks, ability coverage, availability contradictions, label drift, pipeline freshness, and reconciles our obtainable set against <b>Epic's own hotfix disable list</b> (the ground-truth availability feed). Reference: <b>${esc(AUDIT_ACCOUNT_LABEL)}</b> · ${a.stats.families} families / ${a.stats.variants} variants / ${a.stats.imageFiles} images.</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+      ${freshPill}
+      ${a.reconcile ? `<span class="pill ${a.problems.some((p) => p.startsWith('OVER-CLAIM')) ? 'bad' : 'ok'}">Epic hotfix: ${a.reconcile.hotfixDisabled} disabled · ${a.reconcile.disabledGatedOk} correctly gated</span>` : ''}
+      ${a.reconcile && a.reconcile.staggered.length ? `<span class="pill warn">staggered: ${esc(a.reconcile.staggered.join(', '))}</span>` : ''}
+      <span class="pill ${pl.dead ? 'warn' : 'ok'}">${pl.dead} need re-login</span>
+      <span class="pill ${pl.stale ? 'warn' : 'ok'}">${pl.stale} stale (&gt;6h)</span>
+      <span class="pill ok">${pl.withState}/${pl.accounts} accounts synced</span>
+      <span class="sub">reference synced ${esc(fmtTs(a.stats.refSyncedAt))}</span>
+    </div>
+    ${a.problems.length ? `<div class="sub" style="color:#ff8aa6;font-weight:800;margin:4px 0">Problems</div>${list(a.problems, 'bad')}` : ''}
+    ${a.warnings.length ? `<div class="sub" style="color:#ffcf3a;font-weight:800;margin:8px 0 4px">Notes / warnings</div>${list(a.warnings, 'warn')}` : ''}
+    ${a.ok && !a.warnings.length ? '<p class="sub">Nothing to flag — every variant has a real name, image, ability, and consistent availability. 0% doubt. ✓</p>' : ''}
+  </section>`;
+}
+
+async function renderScheduleAdmin(req) {
+  const [rows] = await pool.execute(
+    'SELECT scope,item_key,release_at,gate,label,note_label,note_text FROM epic_sprite_release_schedule ORDER BY scope, item_key',
+  );
+  const [obs] = await pool.execute(
+    'SELECT tier_key, COUNT(*) n FROM epic_sprite_observed_variants GROUP BY tier_key ORDER BY n DESC',
+  );
+  // One recent model so each row can say how many sprites it actually affects —
+  // "affects 8 sprites" means far more to an operator than a raw tier key does.
+  const counts = {};
+  try {
+    const [[recent]] = await pool.execute(
+      'SELECT state_json FROM epic_sprite_accounts WHERE state_json IS NOT NULL ORDER BY synced_at DESC LIMIT 1',
+    );
+    for (const g of JSON.parse(recent.state_json).groups || []) {
+      for (const v of Object.values(g.variants || {})) {
+        counts[`tier:${v.tierKey}`] = (counts[`tier:${v.tierKey}`] || 0) + 1;
+        counts[`family:${v.familyToken}`] = (counts[`family:${v.familyToken}`] || 0) + 1;
+      }
+    }
+  } catch { /* the count is a nicety — never block the page on it */ }
+
+  const sched = activeSchedule();
+  const hf = getHotfixCache();
+  const epicAt = hf?.next_drop_ts ? hf.next_drop_ts * 1000 : null;
+  const tierLabel = Object.fromEntries(TIERS.map((t) => [t.key, t.label]));
+  const prettyName = (scope, key) => (scope === 'tier'
+    ? `${tierLabel[key] || key} variants`
+    : (FAMILY_LABEL[key] || key));
+  const human = (ms) => new Date(ms).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
+  const until = (ms) => {
+    const d = ms - Date.now();
+    if (d <= 0) return 'now';
+    const h = Math.floor(d / 3600000);
+    const m = Math.floor((d % 3600000) / 60000);
+    if (h >= 24) return `${Math.floor(h / 24)}d ${h % 24}h`;
+    return h ? `${h}h ${m}m` : `${m}m`;
+  };
+
+  const cards = rows.map((r) => {
+    const live = (r.scope === 'tier' ? sched.tiers : sched.families)[r.item_key];
+    const effAt = live?.at ?? (r.release_at == null ? null : Number(r.release_at));
+    const epicWon = effAt != null && r.release_at != null && Number(r.release_at) !== effAt;
+    const proven = obs.find((o) => o.tier_key === r.item_key);
+    const n = counts[`${r.scope}:${r.item_key}`];
+
+    // Status in plain language: what a visitor sees right now, and why.
+    let badge; let why;
+    if (proven) {
+      badge = '<span class="pill ok">Available</span>';
+      why = `Players own ${proven.n} of these, so it stays unlocked no matter what date is set below.`;
+    } else if (!r.gate) {
+      badge = '<span class="pill ok">Available</span>';
+      why = (effAt != null && Date.now() < effAt)
+        ? `Obtainable already — this row only adds the note below, which clears itself in <b>${until(effAt)}</b>.`
+        : 'Obtainable already — this row only adds the note below.';
+    } else if (effAt == null) {
+      badge = '<span class="pill">Locked</span>';
+      why = 'Locked with no date, so it shows as "Unreleased" with no countdown.';
+    } else if (Date.now() >= effAt) {
+      badge = '<span class="pill ok">Available</span>';
+      why = `Unlocked on ${human(effAt)}.`;
+    } else {
+      badge = '<span class="pill warn">Locked</span>';
+      why = `Counting down — unlocks in <b>${until(effAt)}</b> (${human(effAt)}).`;
+    }
+
+    return `<div class="card" style="margin-bottom:12px">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <b style="font-size:15px">${esc(prettyName(r.scope, r.item_key))}</b>
+        ${badge}
+        <span class="sub">${n ? `affects ${n} sprite${n === 1 ? '' : 's'}` : ''}</span>
+      </div>
+      <p class="sub" style="margin:6px 0 0">${why}</p>
+      ${epicWon ? `<p class="sub" style="margin:4px 0 0;color:#ffcf3a">⚠ Epic's own hotfix says <b>${esc(human(effAt))}</b>, so that is being used instead of the date below.</p>` : ''}
+      ${(r.note_label || r.note_text) ? `<p class="sub" style="margin:8px 0 0;padding:8px 10px;border-left:3px solid #ffcf3a;background:rgba(255,207,58,.07);border-radius:0 6px 6px 0">
+        <b>Note shown on this sprite:</b> ${r.note_label ? `<b>${esc(r.note_label)}</b>` : ''}${(r.note_label && r.note_text) ? ' — ' : ''}${esc(r.note_text || '')}</p>` : ''}
+
+      <form method="post" action="/sprites/admin/schedule" style="margin-top:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <input type="hidden" name="scope" value="${esc(r.scope)}">
+        <input type="hidden" name="item_key" value="${esc(r.item_key)}">
+        <label class="sub">${r.gate ? 'Unlocks at' : 'Note clears at'}
+          <input type="datetime-local" name="release_at" value="${esc(msToDtLocal(r.release_at))}" style="margin-left:6px">
+          <span style="opacity:.7">UTC</span>
+        </label>
+        <button class="btn" type="submit" name="action" value="save">Save date</button>
+        ${(r.gate && !proven && (effAt == null || Date.now() < effAt))
+          ? '<button class="btn" type="submit" name="action" value="unlock" title="Mark available immediately">Unlock now</button>'
+          : ''}
+        <details style="width:100%;margin-top:4px">
+          <summary class="sub" style="cursor:pointer">More options</summary>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;align-items:center">
+            <label class="sub" title="Off = already obtainable; the row then only shows the note">
+              <input type="checkbox" name="gate" value="1" ${r.gate ? 'checked' : ''}> Lock until the date
+            </label>
+            <input type="text" name="label" aria-label="Countdown label" value="${esc(r.label || '')}" placeholder="Countdown label" size="24">
+            <input type="text" name="note_label" aria-label="Note title" value="${esc(r.note_label || '')}" placeholder="Note title" size="16">
+            <input type="text" name="note_text" aria-label="Note shown on the sprite" value="${esc(r.note_text || '')}" placeholder="Note shown on the sprite" size="34">
+            <button class="btn" type="submit" name="action" value="save">Save all</button>
+            <button class="btn" type="submit" name="action" value="delete"
+              onclick="return confirm('Remove this from the schedule? It will be treated as available.')">Remove row</button>
+          </div>
+        </details>
+      </form>
+    </div>`;
+  }).join('');
+
+  const provenPills = obs.map((o) => `<span class="pill ok">${esc(tierLabel[o.tier_key] || o.tier_key)} · ${o.n}</span>`).join(' ')
+    || '<span class="sub">nothing recorded yet</span>';
+  const discovered = discoveredTierKeys();
+  const emptyState = '<div class="card"><p class="sub">No rows — everything in Epic&#39;s catalog is treated as available.</p></div>';
+
+  return `<section style="margin-top:30px">
+    <div class="who" style="margin-bottom:4px">Release schedule<b>What shows as locked</b>
+      <span class="since">Changes go live within ~30 seconds — no redeploy</span></div>
+    <p class="sub" style="margin:6px 0 16px">
+      Only add a row for something that <b>isn&#39;t out yet</b>. Anything without a row counts as available.
+      Two things can override a date you set here: Epic&#39;s own hotfix, and players actually owning the sprite — whichever says &quot;available&quot; wins.
+    </p>
+
+    ${cards || emptyState}
+
+    <details style="margin-top:6px">
+      <summary class="sub" style="cursor:pointer">➕ Add a row</summary>
+      <form method="post" action="/sprites/admin/schedule" class="card" style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <select name="scope"><option value="tier">a whole tier</option><option value="family">one sprite family</option></select>
+        <input type="text" name="item_key" placeholder="e.g. cube  /  companystargazer" size="26" required>
+        <label class="sub">Unlocks at <input type="datetime-local" name="release_at" style="margin-left:6px"><span style="opacity:.7">UTC</span></label>
+        <label class="sub"><input type="checkbox" name="gate" value="1" checked> Lock until then</label>
+        <input type="text" name="label" placeholder="Countdown label" size="20">
+        <button class="btn" type="submit" name="action" value="save">Add</button>
+        <p class="sub" style="width:100%;margin:2px 0 0">Leave the date blank for &quot;announced, no date yet&quot; — shows as Unreleased with no countdown.</p>
+      </form>
+    </details>
+
+    <div style="margin-top:16px">
+      <div class="sub" style="margin-bottom:6px"><b>Proven available</b> — tiers a real account is holding. These stay unlocked regardless of any date above.</div>
+      ${provenPills}
+    </div>
+
+    ${epicAt ? `<p class="sub" style="margin-top:12px">Epic&#39;s hotfix currently advertises the next drop as <b>${esc(human(epicAt))}</b>${epicAt <= Date.now() ? ' — in the past, so it is being ignored' : ''}.</p>` : ''}
+
+    ${discovered.length ? `<p class="sub" style="margin-top:12px;color:#ffcf3a">
+      ⚠ <b>New tier${discovered.length === 1 ? '' : 's'} spotted in Epic&#39;s catalog:</b> ${discovered.map((d) => `<code>${esc(d)}</code>`).join(', ')}.
+      Added to the grid automatically and shown as locked. Add a row above to give ${discovered.length === 1 ? 'it' : 'them'} a countdown.
+    </p>` : ''}
+  </section>`;
+}
+
+
+// ── Announced-but-unshipped sprites (epic_sprite_announced) ─────────────────
+// The /info "rumored sprites" check reports these as "announced" (with date, rarity, ability and
+// how to get) until Epic's catalog or the pak shows the sprite, at which point "shipped" wins.
+// Only enabled rows are read (loadAnnouncedSprites); this form is the table's only writer.
+const ANN_RARITIES = ['Common', 'Uncommon', 'Rare', 'Epic', 'Legendary', 'Mythic', 'Exotic'];
+const annSlugOf = (s) => String(s || '').toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f]/g, '')
+  .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48);
+
+async function renderAnnouncedAdmin() {
+  let rows = [];
+  let missing = false;
+  try {
+    [rows] = await pool.execute(
+      'SELECT slug, name, release_at, rarity, ability, how_to_get, source_url, family_token, enabled, updated_at FROM epic_sprite_announced ORDER BY enabled DESC, release_at IS NULL, release_at, name',
+    );
+  } catch (e) {
+    if (e.code !== 'ER_NO_SUCH_TABLE') throw e;
+    missing = true;
+  }
+  const human = (ms) => new Date(Number(ms)).toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
+  const rarityList = `<datalist id="ann-rarities">${ANN_RARITIES.map((r) => `<option value="${esc(r)}">`).join('')}</datalist>`;
+  const fields = (r = {}) => `
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:8px">
+        <input type="text" name="name" aria-label="Name" value="${esc(r.name || '')}" placeholder="Name, as Epic writes it" maxlength="80" size="22" required>
+        <label class="sub">Release <input type="datetime-local" name="release_at" value="${esc(msToDtLocal(r.release_at))}" style="margin-left:6px"><span style="opacity:.7">UTC</span></label>
+        <input type="text" name="rarity" aria-label="Rarity" value="${esc(r.rarity || '')}" placeholder="Rarity" maxlength="24" size="10" list="ann-rarities">
+        <input type="text" name="family_token" aria-label="Catalog codename" value="${esc(r.family_token || '')}" placeholder="Catalog codename (when known)" maxlength="48" size="24">
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+        <textarea name="ability" aria-label="Ability" rows="2" maxlength="2000" placeholder="Ability" style="flex:1 1 240px;min-width:0">${esc(r.ability || '')}</textarea>
+        <textarea name="how_to_get" aria-label="How to get it" rows="2" maxlength="2000" placeholder="How to get it" style="flex:1 1 240px;min-width:0">${esc(r.how_to_get || '')}</textarea>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;align-items:center">
+        <input type="url" name="source_url" aria-label="Source link" value="${esc(r.source_url || '')}" placeholder="Source link (Epic post, article)" maxlength="300" size="46">
+      </div>`;
+
+  const cards = rows.map((r) => {
+    const at = r.release_at == null ? null : Number(r.release_at);
+    const badge = !r.enabled ? '<span class="pill">Hidden</span>'
+      : at == null ? '<span class="pill warn">Announced, no date</span>'
+        : at > Date.now() ? `<span class="pill warn">Due ${esc(human(at))}</span>`
+          : `<span class="pill bad">Date passed ${esc(human(at))}</span>`;
+    return `<div class="card" style="margin-bottom:12px${r.enabled ? '' : ';opacity:.7'}">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <b style="font-size:15px">${esc(r.name)}</b>${badge}
+        <code class="sub">${esc(r.slug)}</code>
+        ${r.rarity ? `<span class="sub">${esc(r.rarity)}</span>` : ''}
+      </div>
+      ${(at != null && at <= Date.now() && r.enabled) ? '<p class="sub" style="margin:6px 0 0">If it has shipped, /info already reports it as shipped; remove or hide this row when you like.</p>' : ''}
+      <form method="post" action="/sprites/admin/announced">
+        <input type="hidden" name="slug" value="${esc(r.slug)}">
+        ${fields(r)}
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px">
+          <button class="btn" type="submit" name="action" value="save">Save</button>
+          ${r.enabled
+    ? '<button class="btn" type="submit" name="action" value="disable" formnovalidate title="Stop reporting it, keep the row">Hide</button>'
+    : '<button class="btn" type="submit" name="action" value="enable" formnovalidate>Show again</button>'}
+          <button class="btn" type="submit" name="action" value="delete" formnovalidate
+            onclick="return confirm('Remove this announced sprite?')">Remove</button>
+        </div>
+      </form>
+    </div>`;
+  }).join('');
+
+  return `<section style="margin-top:30px">
+    <div class="who" style="margin-bottom:4px">Announced sprites<b>Confirmed but not in Epic&#39;s catalog yet</b>
+      <span class="since">Used by the rumored-sprites check on /sprites/info; changes apply at once</span></div>
+    <p class="sub" style="margin:6px 0 16px">
+      Add a sprite Epic has announced but not shipped, so it is reported as <b>announced</b> (with its date) instead of &quot;no evidence&quot;.
+      It never adds a grid tile. As soon as the sprite is in the catalog or the pak it is reported as shipped, whatever this list says.
+    </p>
+    ${missing ? '<div class="card"><p class="sub">The announced-sprites table does not exist on this server yet (migration 167).</p></div>' : (cards || '<div class="card"><p class="sub">No announced sprites.</p></div>')}
+    ${missing ? '' : `<details style="margin-top:6px">
+      <summary class="sub" style="cursor:pointer">Add an announced sprite</summary>
+      <form method="post" action="/sprites/admin/announced" class="card" style="margin-top:8px">
+        <input type="hidden" name="action" value="save">
+        <input type="hidden" name="is_new" value="1">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <input type="text" name="slug" aria-label="Short id" placeholder="Short id, e.g. john-wick (made from the name if blank)" maxlength="48" size="44" pattern="[a-z0-9][a-z0-9-]*">
+        </div>
+        ${fields()}
+        <div style="margin-top:8px"><button class="btn" type="submit">Add</button></div>
+      </form>
+    </details>`}
+    ${rarityList}
+  </section>`;
+}
+
+router.post('/admin/announced', async (req, res) => {
+  const acct = req.session?.epicAccountId;
+  if (!acct || !ADMIN_ACCOUNT_IDS.has(acct)) return res.status(403).send('Forbidden');
+  const back = (msg) => res.redirect('/sprites/admin' + (msg ? `?ann=${encodeURIComponent(msg)}` : '') + '#announced');
+  try {
+    const action = String(req.body.action || 'save');
+    const isNew = req.body.is_new === '1';
+    const text = (v, max) => { const s = String(v ?? '').trim(); return s ? s.slice(0, max) : null; };
+    const slug = annSlugOf(text(req.body.slug, 48) || (isNew ? text(req.body.name, 80) : ''));
+    if (!slug) return back('Give the sprite a name.');
+
+    if (action === 'delete') {
+      await pool.execute('DELETE FROM epic_sprite_announced WHERE slug = ?', [slug]);
+      logger.warn(`[sprite-announced] admin ${acct} REMOVED ${slug}`);
+    } else if (action === 'disable' || action === 'enable') {
+      await pool.execute('UPDATE epic_sprite_announced SET enabled = ? WHERE slug = ?', [action === 'enable' ? 1 : 0, slug]);
+      logger.warn(`[sprite-announced] admin ${acct} ${action === 'enable' ? 'SHOWED' : 'HID'} ${slug}`);
+    } else {
+      const name = text(req.body.name, 80);
+      if (!name) return back('Give the sprite a name.');
+      const rawAt = text(req.body.release_at, 32);
+      // Strict YYYY-MM-DDTHH:MM (the datetime-local format): Date.parse alone accepts junk such as
+      // "not-a-date:00Z" as the year 2000.
+      const at = rawAt && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(rawAt) ? dtLocalToMs(rawAt) : null;
+      if (rawAt && at == null) return back('That release date is not a valid date.');
+      const rarity = text(req.body.rarity, 24);
+      const ability = text(req.body.ability, 2000);
+      const howToGet = text(req.body.how_to_get, 2000);
+      let sourceUrl = text(req.body.source_url, 300);
+      if (sourceUrl) {
+        try {
+          const u = new URL(sourceUrl);
+          if (u.protocol !== 'https:' && u.protocol !== 'http:') throw new Error('scheme');
+          sourceUrl = u.href.slice(0, 300);
+        } catch { return back('The source link must be a full http(s) address.'); }
+      }
+      const fam = text(req.body.family_token, 48);
+      const familyToken = fam ? fam.toLowerCase() : null;
+      if (familyToken && !/^[a-z0-9_-]+$/.test(familyToken)) return back('The catalog codename can only use letters, numbers, - and _.');
+      if (isNew) {
+        const [[exists]] = await pool.execute('SELECT 1 AS x FROM epic_sprite_announced WHERE slug = ?', [slug]);
+        if (exists) return back(`"${slug}" is already in the list; edit that row instead.`);
+        await pool.execute(
+          `INSERT INTO epic_sprite_announced (slug, name, release_at, rarity, ability, how_to_get, source_url, family_token, enabled)
+           VALUES (?,?,?,?,?,?,?,?,1)`,
+          [slug, name, at, rarity, ability, howToGet, sourceUrl, familyToken],
+        );
+        logger.warn(`[sprite-announced] admin ${acct} ADDED ${slug} at=${at ? new Date(at).toISOString() : 'null'}`);
+      } else {
+        const [r] = await pool.execute(
+          `UPDATE epic_sprite_announced SET name=?, release_at=?, rarity=?, ability=?, how_to_get=?, source_url=?, family_token=?
+            WHERE slug=?`,
+          [name, at, rarity, ability, howToGet, sourceUrl, familyToken, slug],
+        );
+        if (!r.affectedRows) return back('That row no longer exists.');
+        logger.warn(`[sprite-announced] admin ${acct} SAVED ${slug} at=${at ? new Date(at).toISOString() : 'null'}`);
+      }
+    }
+    await loadAnnouncedSprites();   // apply now rather than at the next 30s refresh
+    return back('Saved.');
+  } catch (e) {
+    logger.warn(`[sprites] announced save failed: ${e.message}`);
+    return back('Could not save: ' + e.message);
+  }
+});
+
+router.post('/admin/schedule', async (req, res) => {
+  const acct = req.session?.epicAccountId;
+  if (!acct || !ADMIN_ACCOUNT_IDS.has(acct)) return res.status(403).send('Forbidden');
+  try {
+    const scope = req.body.scope === 'family' ? 'family' : 'tier';
+    const key = String(req.body.item_key || '').trim().toLowerCase();
+    if (!key) return res.redirect('/sprites/admin');
+    if (req.body.action === 'delete') {
+      await pool.execute('DELETE FROM epic_sprite_release_schedule WHERE scope=? AND item_key=?', [scope, key]);
+      logger.warn(`[sprite-schedule] admin ${acct} DELETED ${scope}/${key} — now treated as live`);
+    } else if (req.body.action === 'unlock') {
+      // "Unlock now" — backdate rather than delete, so the row (and its label
+      // and note) survives and the change is auditable via updated_at.
+      await pool.execute(
+        'UPDATE epic_sprite_release_schedule SET release_at=?, gate=1 WHERE scope=? AND item_key=?',
+        [Date.now(), scope, key],
+      );
+      logger.warn(`[sprite-schedule] admin ${acct} UNLOCKED ${scope}/${key} immediately`);
+    } else {
+      const at = dtLocalToMs(req.body.release_at);
+      const gate = req.body.gate ? 1 : 0;
+      const noteLabel = String(req.body.note_label || '').trim() || null;
+      const noteText = String(req.body.note_text || '').trim() || null;
+      await pool.execute(
+        `INSERT INTO epic_sprite_release_schedule (scope,item_key,release_at,gate,label,note_label,note_text,enabled)
+         VALUES (?,?,?,?,?,?,?,1)
+         ON DUPLICATE KEY UPDATE release_at=VALUES(release_at), gate=VALUES(gate),
+           label=VALUES(label), note_label=VALUES(note_label), note_text=VALUES(note_text), enabled=1`,
+        [scope, key, at, gate, String(req.body.label || '').trim() || null, noteLabel, noteText],
+      );
+      logger.warn(`[sprite-schedule] admin ${acct} SAVED ${scope}/${key} at=${at ? new Date(at).toISOString() : 'null'} gate=${gate}`);
+    }
+    await refreshAvailability();   // apply immediately rather than waiting 30s
+  } catch (e) {
+    logger.warn(`[sprites] schedule save failed: ${e.message}`);
+  }
+  res.redirect('/sprites/admin');
 });
 
 router.get('/admin', async (req, res) => {
@@ -4102,16 +8089,16 @@ router.get('/admin', async (req, res) => {
         else authPill = `<span class="pill warn">↻ Refresh · ${Math.round(hoursLeft)}h left</span>`;
       } else authPill = '<span class="pill warn">unknown</span>';
       const slugLink = r.share_id
-        ? `<a href="/sprites/u/${esc(r.share_id)}" target="_blank">${esc(r.share_id)} ↗</a>`
+        ? `<a href="/sprites/u/${esc(r.share_id)}" target="_blank" rel="noopener">${esc(r.share_id)} ↗</a>`
         : '<span class="sub">—</span>';
       return `<tr>
         <td><b>${esc(r.display_name || '(unknown)')}</b><br><code class="sub">${esc(String(r.account_id).slice(0, 8))}…</code></td>
         <td>${slugLink}</td>
         <td>${authPill}</td>
-        <td>${passLevel}</td>
-        <td>${accountLevel}</td>
-        <td>${owned}/${obtainable}</td>
-        <td>${familyCount}</td>
+        <td>${esc(passLevel)}</td>
+        <td>${esc(accountLevel)}</td>
+        <td>${esc(owned)}/${esc(obtainable)}</td>
+        <td>${esc(familyCount)}</td>
         <td title="${esc(fmtTs(r.first_synced_at))}">${fmtTs(r.first_synced_at)}</td>
         <td title="${esc(fmtTs(r.synced_at))}">${fmtTs(r.synced_at)}</td>
         <td class="sub">${(r.state_size || 0).toLocaleString()} B</td>
@@ -4121,18 +8108,26 @@ router.get('/admin', async (req, res) => {
     const permanent = rows.filter((r) => r.has_device && !r.needs_relogin).length;
     const ephemeral = rows.filter((r) => !r.has_device && !r.needs_relogin).length;
     const summary = `${rows.length} accounts · 🔒 ${permanent} permanent (device_auth) · ↻ ${ephemeral} refresh-only · ✗ ${dead} need re-login`;
-    res.send(shell('Admin — CertiFried Sprite Tracker', chrome(`<a class="navlink" href="/sprites">← Back to my tracker</a>`) + `<main>
+    res.send(shell('Admin — CertiFried Sprite Tracker', chrome() + `<main>
       <section class="hero" style="display:block">
         <div class="who" style="margin-bottom:6px">Tracker Admin<b>All connected accounts</b><span class="since">${summary}</span></div>
       </section>
-      <table class="admin-table">
+      <div class="table-scroll"><table class="admin-table">
         <thead><tr>
           <th>User</th><th>Slug</th><th>Auth</th><th>BP&nbsp;Lvl</th><th>Account&nbsp;Lvl</th>
           <th>Sprites</th><th>Families</th><th>First sync</th><th>Last sync</th><th>State&nbsp;size</th>
         </tr></thead>
         <tbody>${tableRows || '<tr><td colspan="10" class="sub" style="text-align:center;padding:24px">No accounts yet.</td></tr>'}</tbody>
-      </table>
+      </table></div>
       <p class="sub" style="margin-top:14px">🔒 <b>Forever</b> = device_auth on file, permanent until user revokes from Epic account settings. ↻ <b>Refresh</b> = refresh_token only (48h rotating); back-fills to device_auth on next sync. ✗ <b>DEAD</b> = needs a manual re-paste to recover.</p>
+      ${renderHealthAudit(await runSpriteHealthAudit().catch((e) => {
+    logger.warn(`[sprites] health audit failed: ${e.message}`);
+    return { ok: false, problems: [`audit crashed: ${e.message}`], warnings: [], stats: { families: 0, variants: 0, imageFiles: 0, refSyncedAt: null }, pipeline: { accounts: 0, withState: 0, dead: 0, stale: 0, newestAgeMin: null } };
+  }))}
+      ${await renderScheduleAdmin(req)}
+      <div id="announced"></div>
+      ${req.query.ann ? `<div class="card" style="margin-top:30px" role="status"><p class="sub">${esc(String(req.query.ann).slice(0, 200))}</p></div>` : ''}
+      ${await renderAnnouncedAdmin()}
     </main>`));
   } catch (e) {
     logger.warn(`[sprites] admin view failed: ${e.message}`);

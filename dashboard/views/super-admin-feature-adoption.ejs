@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>" lang="en">
+<head>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="/css/super-admin-music.css?v=5">
+
+    <style>
+        .chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 1rem; }
+        .chip { font: inherit; font-size: 0.8rem; font-weight: 600; padding: 0.35rem 0.75rem; border-radius: 999px; cursor: pointer;
+            background: var(--bg-card); border: 1px solid var(--border-color); color: var(--text-secondary); }
+        .chip[aria-pressed="true"] { background: color-mix(in srgb, var(--accent-purple) 20%, transparent); border-color: var(--accent-purple); color: var(--text-primary); }
+        .chip .n { color: var(--text-muted); margin-left: 0.25rem; }
+        .chip:focus-visible, th button:focus-visible, tr.feat:focus-visible { outline: 2px solid var(--accent-purple); outline-offset: 2px; }
+        .tog { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.83rem; color: var(--text-secondary); cursor: pointer; }
+        table.adopt { min-width: 860px; }
+        table.adopt th button { all: unset; cursor: pointer; }
+        table.adopt th[aria-sort="descending"] button::after { content: " ▾"; color: var(--accent-purple); }
+        table.adopt th[aria-sort="ascending"] button::after { content: " ▴"; color: var(--accent-purple); }
+        table.adopt td { vertical-align: middle; }
+        tr.feat { cursor: pointer; }
+        tr.feat:hover td { background: var(--bg-card-hover); }
+        .fname { font-weight: 600; }
+        .use { display: grid; grid-template-columns: 2.2rem minmax(6rem, 1fr); gap: 0.6rem; align-items: center; min-width: 11rem; }
+        .use b { text-align: right; font-variant-numeric: tabular-nums; }
+        .use .bd-track { display: block; }
+        .tag { margin-left: 0.4rem; }
+        .tone-info { --tone: var(--accent-blue); }
+        .fresh { color: var(--accent-green); }
+        tr.servers td { background: var(--bg-card); padding: 0.75rem 1rem 1rem; }
+        .srv { columns: 3 15rem; column-gap: 1.5rem; list-style: none; font-size: 0.82rem; }
+        .srv li { break-inside: avoid; padding: 0.15rem 0; display: flex; justify-content: space-between; gap: 0.75rem; }
+        .srv li span:last-child { color: var(--text-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+        .notes { display: grid; gap: 0.4rem; color: var(--text-muted); font-size: 0.82rem; margin-top: 1rem; max-width: 80ch; }
+        .notes b { color: var(--text-secondary); }
+    </style>
+<%- include('partials/site-head', { title: 'Feature adoption · Owner console · CertiFried', noindex: true }) %>
+</head>
+<body>
+    <%- include('partials/site-header', { user }) %>
+
+    <main id="main-content" tabindex="-1">
+        <div class="container">
+            <%- include('partials/site/_owner-nav', { ownerActive: 'adoption' }) %>
+            <div class="page-header">
+                <div class="page-header-content">
+                    <div class="page-icon" aria-hidden="true"><i class="fas fa-ranking-star"></i></div>
+                    <div>
+                        <h1 class="page-title">Feature adoption</h1>
+                        <p class="page-subtitle">Every bot feature, ranked by how many of the servers our bots are in use it. Live from the database.</p>
+                    </div>
+                </div>
+                <div class="controls">
+                    <div class="seg" role="group" aria-label="Activity window">
+                        <button type="button" data-range="24h" aria-pressed="false">24h</button>
+                        <button type="button" data-range="7d" aria-pressed="false">7 days</button>
+                        <button type="button" data-range="30d" aria-pressed="true">30 days</button>
+                        <button type="button" data-range="90d" aria-pressed="false">90 days</button>
+                    </div>
+                    <button type="button" class="btn" id="refresh"><i class="fas fa-rotate-right" aria-hidden="true"></i> Refresh</button>
+                    <span class="updated" id="updated"></span>
+                </div>
+            </div>
+
+            <div id="error"></div>
+            <div class="kpis" id="kpis" aria-live="polite"></div>
+
+            <form class="filters" role="search" onsubmit="return false">
+                <label class="sr-only" for="f-q">Search features</label>
+                <input class="field search" id="f-q" type="search" placeholder="Search features" autocomplete="off">
+                <label class="tog"><input type="checkbox" id="f-always"> Hide always-on tracking</label>
+                <label class="tog"><input type="checkbox" id="f-unused"> Hide unused</label>
+            </form>
+            <div class="chips" id="chips" role="group" aria-label="Category"></div>
+
+            <div class="card"><div class="table-wrap">
+                <table class="adopt">
+                    <thead><tr>
+                        <th scope="col"><span class="sr-only">Rank</span>#</th>
+                        <th scope="col"><button type="button" data-k="name">Feature</button></th>
+                        <th scope="col"><button type="button" data-k="cat">Category</button></th>
+                        <th scope="col" aria-sort="descending"><button type="button" data-k="using">Servers using</button></th>
+                        <th scope="col" class="num"><button type="button" data-k="on">Switched on</button></th>
+                        <th scope="col" class="num"><button type="button" data-k="setup">Set up</button></th>
+                        <th scope="col" class="num"><button type="button" data-k="active" id="active-h">Active</button></th>
+                        <th scope="col" class="num"><button type="button" data-k="lastAt">Last activity</button></th>
+                    </tr></thead>
+                    <tbody id="rows"><tr><td colspan="8" class="empty">Loading…</td></tr></tbody>
+                </table>
+            </div></div>
+
+            <div class="notes">
+                <div><b>Servers using</b> is the ranking: servers with the feature switched on. Always-on tracking counts servers it recorded something for in the chosen window. Features that are on by default count real activity where the bot records any, otherwise only servers that switched them on themselves.</div>
+                <div><b>Switched on</b> includes defaults. <b>Set up</b> is any saved configuration, on or off. <b>Active</b> is servers where the feature did something in the chosen window; <b>Last activity</b> is the newest of those across all servers. A dash means the bot keeps no record that could show it.</div>
+                <div>Click a row for the servers behind it and when each last used it. Only servers a bot is in right now are counted. The page refreshes itself every minute.</div>
+            </div>
+        </div>
+    </main>
+    <%- include('partials/site-footer') %>
+
+    <script>
+    (function () {
+        'use strict';
+        const API = '/api/super-admin/feature-adoption';
+        const REFRESH_MS = 60000;
+        const RANGES = ['24h', '7d', '30d', '90d'];
+        const RANGE_LABEL = { '24h': '24h', '7d': '7 days', '30d': '30 days', '90d': '90 days' };
+
+        const params = new URLSearchParams(location.search);
+        const state = { range: RANGES.includes(params.get('range')) ? params.get('range') : '30d', sort: 'using', dir: -1,
+            cat: 'All', q: '', hideAlways: false, hideUnused: false, open: new Set() };
+        try {
+            const s = JSON.parse(localStorage.getItem('feature-adoption') || '{}');
+            for (const k of ['sort', 'dir', 'cat', 'hideAlways', 'hideUnused']) if (s[k] != null) state[k] = s[k];
+        } catch (e) { /* storage disabled */ }
+        const save = () => { try { localStorage.setItem('feature-adoption', JSON.stringify({ sort: state.sort, dir: state.dir, cat: state.cat, hideAlways: state.hideAlways, hideUnused: state.hideUnused })); } catch (e) { /* storage disabled */ } };
+        let data = null, loadedAt = 0, inFlight = null;
+
+        // Every node is built here, so server and feature names are text, never HTML.
+        function h(tag, attrs, ...kids) {
+            const el = document.createElement(tag);
+            for (const [k, v] of Object.entries(attrs || {})) if (v != null && v !== false) el.setAttribute(k, String(v));
+            for (const kid of kids.flat(Infinity)) if (kid != null && kid !== false) el.append(kid instanceof Node ? kid : String(kid));
+            return el;
+        }
+        const $ = (id) => document.getElementById(id);
+        const put = (id, ...nodes) => $(id).replaceChildren(...nodes.flat(Infinity).filter(n => n != null && n !== false));
+        const icon = (cls) => h('i', { class: cls, 'aria-hidden': 'true' });
+        const fmtNum = new Intl.NumberFormat();
+        const fmtFull = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        function ago(ms) {
+            const s = Math.max(0, Math.round(ms / 1000));
+            if (s < 60) return `${s}s ago`;
+            if (s < 3600) return `${Math.round(s / 60)}m ago`;
+            if (s < 172800) return `${Math.round(s / 3600)}h ago`;
+            return `${Math.round(s / 86400)}d ago`;
+        }
+        const dash = () => h('span', { class: 'muted' }, '–');
+
+        async function load(fresh) {
+            const ctrl = new AbortController();
+            if (inFlight) inFlight.abort();
+            inFlight = ctrl;
+            try {
+                const r = await fetch(`${API}?range=${state.range}${fresh ? '&fresh=1' : ''}`, { credentials: 'same-origin', headers: { accept: 'application/json' }, signal: ctrl.signal });
+                if (!(r.headers.get('content-type') || '').includes('application/json')) throw new Error('Your session expired — reload the page to sign in again.');
+                const body = await r.json();
+                if (!r.ok) throw new Error(body.error || `HTTP ${r.status}`);
+                data = body; loadedAt = Date.now();
+                for (const f of data.features) f.usingN = f.using.length;
+                put('error', data.failed.length ? h('div', { class: 'banner tone-degraded', role: 'status' }, h('div', { class: 'banner-icon' }, icon('fas fa-triangle-exclamation')),
+                    h('div', null, h('h2', null, `${data.failed.length} source${data.failed.length === 1 ? '' : 's'} could not be read`), h('p', null, 'Their numbers show as a dash. ' + data.failed.join(' · ')))) : null);
+                render();
+            } catch (e) {
+                if (e.name === 'AbortError') return;
+                put('error', h('div', { class: 'banner tone-down', role: 'alert' }, h('div', { class: 'banner-icon' }, icon('fas fa-circle-xmark')),
+                    h('div', null, h('h2', null, 'Could not load feature adoption'), h('p', null, e.message))));
+            } finally { if (inFlight === ctrl) inFlight = null; tickUpdated(); }
+        }
+
+        function render() { renderKpis(); renderChips(); renderRows(); }
+
+        function renderKpis() {
+            const f = data.features;
+            const kpi = (value, label, sub) => h('div', { class: 'kpi' }, h('div', { class: 'kpi-value' }, value), h('div', { class: 'kpi-label' }, label), sub ? h('div', { class: 'kpi-sub' }, sub) : null);
+            const used = f.filter(x => x.usingN > 0).length;
+            const activeAny = f.filter(x => x.active > 0).length;
+            const top = f.filter(x => !x.note)[0];
+            const newest = f.reduce((m, x) => (x.lastAt && (!m || x.lastAt > m.lastAt) ? x : m), null);
+            put('kpis',
+                kpi(fmtNum.format(data.openServers), 'Servers served'),
+                kpi(fmtNum.format(f.length), 'Features tracked'),
+                kpi(fmtNum.format(used), 'Used by a server', `${f.length - used} used by none`),
+                kpi(fmtNum.format(activeAny), `Active in ${RANGE_LABEL[data.range]}`, 'features that did something'),
+                top ? kpi(fmtNum.format(top.usingN), 'Most chosen', top.name) : null,
+                newest ? kpi(ago(data.now - newest.lastAt), 'Latest activity', newest.name) : null);
+            $('active-h').textContent = `Active ${data.range}`;
+        }
+
+        function renderChips() {
+            const cats = ['All', ...[...new Set(data.features.map(f => f.cat))].sort()];
+            if (!cats.includes(state.cat)) state.cat = 'All';
+            put('chips', cats.map(c => h('button', { type: 'button', class: 'chip', 'data-c': c, 'aria-pressed': String(c === state.cat) },
+                c, h('span', { class: 'n' }, c === 'All' ? data.features.length : data.features.filter(f => f.cat === c).length))));
+        }
+
+        const val = (f, k) => k === 'using' ? f.usingN : (k === 'name' || k === 'cat') ? f[k].toLowerCase() : (f[k] ?? -1);
+        function renderRows() {
+            document.querySelectorAll('table.adopt th').forEach(th => {
+                const b = th.querySelector('button'); if (!b) return;
+                if (b.dataset.k === state.sort) th.setAttribute('aria-sort', state.dir < 0 ? 'descending' : 'ascending'); else th.removeAttribute('aria-sort');
+            });
+            const q = state.q.toLowerCase();
+            const list = data.features.filter(f => (state.cat === 'All' || f.cat === state.cat)
+                && (!q || f.name.toLowerCase().includes(q) || f.cat.toLowerCase().includes(q))
+                && !(state.hideAlways && f.note === 'always') && !(state.hideUnused && f.usingN === 0));
+            list.sort((a, b) => { const x = val(a, state.sort), y = val(b, state.sort); return (x < y ? -1 : x > y ? 1 : 0) * state.dir || b.usingN - a.usingN || a.name.localeCompare(b.name); });
+            if (!list.length) return put('rows', h('tr', null, h('td', { colspan: 8, class: 'empty' }, 'No features match. Clear the search or pick another category.')));
+            const N = data.openServers;
+            const rows = [];
+            list.forEach((f, i) => {
+                const pct = N ? Math.round((f.usingN / N) * 100) : 0;
+                const tag = f.note === 'always' ? h('span', { class: 'pill tone-info tag' }, 'Always on')
+                    : f.note === 'default' ? h('span', { class: 'pill tone-degraded tag' }, 'On by default')
+                    : f.usingN === 0 ? h('span', { class: 'pill tone-down tag' }, 'Unused') : null;
+                const open = state.open.has(f.name);
+                const recent = f.lastAt && data.now - f.lastAt < 3600000;
+                rows.push(h('tr', { class: 'feat', tabindex: 0, 'data-name': f.name, 'aria-expanded': String(open) },
+                    h('td', { class: 'muted' }, i + 1),
+                    h('td', null, h('span', { class: 'fname' }, f.name), tag),
+                    h('td', { class: 'muted small' }, f.cat),
+                    h('td', null, h('div', { class: 'use', title: `${pct}% of ${N} servers` }, h('b', null, f.usingN),
+                        h('span', { class: 'bd-track' }, h('span', { class: 'bd-fill', style: `width:${pct}%` })))),
+                    h('td', { class: 'num' }, f.on ?? dash()),
+                    h('td', { class: 'num' }, f.setup ?? dash()),
+                    h('td', { class: 'num' }, f.active ?? dash()),
+                    h('td', { class: `num${recent ? ' fresh' : ''}`, title: f.lastAt ? fmtFull.format(new Date(f.lastAt)) : null }, f.lastAt ? ago(data.now - f.lastAt) : dash())));
+                if (open) {
+                    const srv = f.using.map(u => ({ name: data.servers[u.id] || u.id, last: u.last }))
+                        .sort((a, b) => (b.last || 0) - (a.last || 0) || a.name.localeCompare(b.name));
+                    rows.push(h('tr', { class: 'servers' }, h('td'), h('td', { colspan: 7 }, srv.length
+                        ? h('ul', { class: 'srv' }, srv.map(s => h('li', null, h('span', null, s.name), h('span', null, s.last ? ago(data.now - s.last) : ''))))
+                        : h('span', { class: 'muted' }, 'No server counts as using this.'))));
+                }
+            });
+            put('rows', rows);
+        }
+
+        // ── controls ───────────────────────────────────────────────────────────
+        $('chips').addEventListener('click', e => { const b = e.target.closest('.chip'); if (!b) return; state.cat = b.dataset.c; save(); render(); });
+        $('f-q').addEventListener('input', e => { state.q = e.target.value.trim(); if (data) renderRows(); });
+        $('f-always').checked = state.hideAlways;
+        $('f-always').addEventListener('change', e => { state.hideAlways = e.target.checked; save(); if (data) renderRows(); });
+        $('f-unused').checked = state.hideUnused;
+        $('f-unused').addEventListener('change', e => { state.hideUnused = e.target.checked; save(); if (data) renderRows(); });
+        document.querySelectorAll('table.adopt th button').forEach(b => b.addEventListener('click', () => {
+            const k = b.dataset.k;
+            if (state.sort === k) state.dir *= -1; else { state.sort = k; state.dir = (k === 'name' || k === 'cat') ? 1 : -1; }
+            save(); if (data) renderRows();
+        }));
+        const toggle = tr => { const n = tr.dataset.name; state.open.has(n) ? state.open.delete(n) : state.open.add(n); renderRows(); };
+        $('rows').addEventListener('click', e => { const tr = e.target.closest('tr.feat'); if (tr) toggle(tr); });
+        $('rows').addEventListener('keydown', e => { const tr = e.target.closest('tr.feat'); if (tr && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggle(tr); } });
+        document.querySelectorAll('.seg button').forEach(b => b.addEventListener('click', () => {
+            state.range = b.dataset.range;
+            history.replaceState(null, '', `${location.pathname}?range=${state.range}`);
+            document.querySelectorAll('.seg button').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.range === state.range)));
+            load();
+        }));
+        document.querySelectorAll('.seg button').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.range === state.range)));
+        $('refresh').addEventListener('click', () => load(true));
+        function tickUpdated() { $('updated').textContent = loadedAt ? `Updated ${ago(Date.now() - loadedAt)}` : ''; }
+        setInterval(tickUpdated, 1000);
+        setInterval(() => { if (!document.hidden) load(); }, REFRESH_MS);
+        document.addEventListener('visibilitychange', () => { if (!document.hidden && Date.now() - loadedAt > REFRESH_MS) load(); });
+        load();
+    })();
+    </script>
+</body>
+</html>

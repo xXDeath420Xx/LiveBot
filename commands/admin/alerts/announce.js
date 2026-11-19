@@ -1,6 +1,7 @@
 import { EmbedBuilder } from 'discord.js';
 import logger from '../../../utils/logger.js';
 import { getAnnouncementsManager } from '../../../jobs/announcement-scheduler.js';
+import { themeColor } from '../../../core/guild-theme.js';
 
 export async function execute(interaction) {
     const subcommand = interaction.options.getSubcommand();
@@ -62,7 +63,7 @@ async function createAnnouncement(interaction, manager) {
 
         const embed = new EmbedBuilder()
             .setTitle('Scheduled Announcement Created')
-            .setColor(0x00FF00)
+            .setColor(themeColor(interaction.guildId, 'success'))
             .setDescription(`Successfully created announcement #${announcementId}`)
             .addFields(
                 { name: 'Channel', value: `<#${channel.id}>`, inline: true },

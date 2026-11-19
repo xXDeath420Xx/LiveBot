@@ -36,14 +36,14 @@
             gap: 0.75rem;
             padding: 1rem 1.25rem;
             border-radius: 12px;
-            background: rgba(15, 19, 22, 0.95);
+            background: color-mix(in srgb, var(--cf-surface, #0f1316) 95%, transparent);
             backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            color: #fff;
+            border: 1px solid color-mix(in srgb, var(--cf-text, #fff) 10%, transparent);
+            color: var(--cf-text, #fff);
             font-size: 0.9rem;
             font-weight: 500;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+            box-shadow: var(--cf-shadow-pop, 0 10px 40px rgba(0, 0, 0, 0.4));
             pointer-events: auto;
             transform: translateX(120%);
             opacity: 0;
@@ -73,7 +73,7 @@
         .toast-close {
             background: none;
             border: none;
-            color: rgba(255, 255, 255, 0.5);
+            color: var(--cf-text-3, rgba(255, 255, 255, 0.5));
             cursor: pointer;
             padding: 0.25rem;
             font-size: 1rem;
@@ -82,35 +82,35 @@
         }
 
         .toast-close:hover {
-            color: #fff;
+            color: var(--cf-text, #fff);
         }
 
         .toast-success {
-            border-left: 4px solid #34d399;
+            border-left: 4px solid var(--cf-success, #34d399);
         }
         .toast-success .toast-icon {
-            color: #34d399;
+            color: var(--cf-success, #34d399);
         }
 
         .toast-error {
-            border-left: 4px solid #f87171;
+            border-left: 4px solid var(--cf-danger, #f87171);
         }
         .toast-error .toast-icon {
-            color: #f87171;
+            color: var(--cf-danger, #f87171);
         }
 
         .toast-warning {
-            border-left: 4px solid #fbbf24;
+            border-left: 4px solid var(--cf-warning, #fbbf24);
         }
         .toast-warning .toast-icon {
-            color: #fbbf24;
+            color: var(--cf-warning, #fbbf24);
         }
 
         .toast-info {
-            border-left: 4px solid #60a5fa;
+            border-left: 4px solid var(--cf-info, #60a5fa);
         }
         .toast-info .toast-icon {
-            color: #60a5fa;
+            color: var(--cf-info, #60a5fa);
         }
 
         @media (max-width: 480px) {

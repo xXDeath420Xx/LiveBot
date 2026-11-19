@@ -1,159 +1,80 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Terms of Service - CertiFried MultiTool</title>
-    <meta name="description" content="Terms of Service for CertiFried MultiTool Discord bot.">
-    <meta name="theme-color" content="#a78bfa">
-    <meta property="og:title" content="Terms of Service - CertiFried MultiTool">
-    <meta property="og:description" content="Terms of Service for CertiFried MultiTool Discord bot.">
-    <meta property="og:image" content="/images/CertiFried.png">
-    <link rel="icon" type="image/png" href="/images/CertiFried.png">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<%- include('partials/site-head', { title: 'Terms of Service · CertiFried', description: 'Terms of Service for the CertiFried Discord bot, dashboard, stream bot, song requests and CertiFried Studio.', path: '/terms' }) %>
     <style>
-        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-        :root {
-            --bg-primary: #0b0f11;
-            --bg-card: rgba(255, 255, 255, 0.03);
-            --border-color: rgba(255, 255, 255, 0.08);
-            --text-primary: #ffffff;
-            --text-secondary: rgba(255, 255, 255, 0.7);
-            --text-muted: rgba(255, 255, 255, 0.5);
-            --accent-purple: #a78bfa;
-            --accent-blue: #60a5fa;
+        /* Legal text: the old cards become plain sections; one notice style. */
+        .legal .notice-box, .legal .highlight-box {
+            margin: 0 0 var(--cf-8); padding: var(--cf-3) var(--cf-4); border: 1px solid var(--cf-border);
+            border-left: 3px solid var(--cf-accent-line); border-radius: var(--cf-radius); background: var(--cf-surface);
+            color: var(--cf-text-2); font-size: var(--cf-text-sm);
         }
-        html { scroll-behavior: smooth; }
-        body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: var(--bg-primary);
-            color: var(--text-primary);
-            min-height: 100vh;
-            line-height: 1.7;
-        }
-        .bg-effects { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; overflow: hidden; }
-        .orb { position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.3; animation: float 20s ease-in-out infinite; }
-        .orb-1 { width: 500px; height: 500px; background: linear-gradient(135deg, #7c3aed, #a78bfa); top: -10%; left: -10%; }
-        .orb-2 { width: 400px; height: 400px; background: linear-gradient(135deg, #3b82f6, #60a5fa); bottom: 10%; right: -10%; animation-delay: -10s; }
-        @keyframes float { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(30px, 30px); } }
-        .container { width: 100%; max-width: 900px; margin: 0 auto; padding: 0 1.5rem; }
-        .navbar { position: fixed; top: 0; left: 0; right: 0; z-index: 1000; padding: 1rem 0; background: rgba(11, 15, 17, 0.9); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-bottom: 1px solid var(--border-color); }
-        .navbar-container { max-width: 1400px; margin: 0 auto; padding: 0 1.5rem; display: flex; align-items: center; justify-content: space-between; }
-        .navbar-brand { display: flex; align-items: center; gap: 0.75rem; text-decoration: none; color: var(--text-primary); font-weight: 700; }
-        .navbar-logo { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 2px solid var(--accent-purple); }
-        .navbar-links { display: flex; align-items: center; gap: 1.5rem; }
-        .navbar-links a { color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; font-weight: 500; transition: color 0.2s; }
-        .navbar-links a:hover { color: var(--text-primary); }
-        .nav-cta { padding: 0.5rem 1rem; background: linear-gradient(135deg, var(--accent-purple), var(--accent-blue)); color: white !important; border-radius: 8px; font-weight: 600; font-size: 0.85rem; }
-        main { position: relative; z-index: 1; padding: 120px 0 4rem; }
-        .page-header { text-align: center; margin-bottom: 3rem; }
-        .page-header h1 { font-size: clamp(2rem, 4vw, 2.75rem); font-weight: 800; background: linear-gradient(135deg, var(--text-primary), var(--accent-purple)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin-bottom: 0.75rem; }
-        .page-header .updated { color: var(--text-muted); font-size: 0.9rem; }
-        .notice-box { background: linear-gradient(135deg, rgba(167, 139, 250, 0.1), rgba(96, 165, 250, 0.1)); border: 1px solid rgba(167, 139, 250, 0.3); border-left: 4px solid var(--accent-purple); border-radius: 12px; padding: 1.25rem 1.5rem; margin-bottom: 2.5rem; display: flex; align-items: center; gap: 1rem; }
-        .notice-box svg { width: 24px; height: 24px; color: var(--accent-purple); flex-shrink: 0; }
-        .notice-box p { color: var(--text-secondary); font-size: 0.95rem; }
-        .legal-section { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; padding: 2rem; margin-bottom: 1.5rem; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); transition: border-color 0.3s; }
-        .legal-section:hover { border-color: rgba(167, 139, 250, 0.3); }
-        .legal-section h2 { font-size: 1.35rem; font-weight: 700; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.75rem; }
-        .legal-section h2 svg { width: 22px; height: 22px; color: var(--accent-purple); }
-        .legal-section h3 { font-size: 1.1rem; font-weight: 600; margin: 1.5rem 0 0.75rem; color: var(--text-primary); }
-        .legal-section p { color: var(--text-secondary); margin-bottom: 1rem; }
-        .legal-section ul, .legal-section ol { margin-left: 1.5rem; margin-bottom: 1rem; color: var(--text-secondary); }
-        .legal-section li { margin-bottom: 0.5rem; }
-        .legal-section a { color: var(--accent-purple); text-decoration: none; }
-        .legal-section a:hover { text-decoration: underline; }
-        .contact-box { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; padding: 2rem; text-align: center; margin-top: 2rem; }
-        .contact-box h3 { font-size: 1.25rem; margin-bottom: 1rem; }
-        .contact-box p { color: var(--text-secondary); margin-bottom: 1.5rem; }
-        .contact-links { display: flex; flex-direction: column; gap: 0.75rem; align-items: center; }
-        .contact-links a { color: var(--accent-purple); text-decoration: none; display: flex; align-items: center; gap: 0.5rem; }
-        .contact-links a:hover { text-decoration: underline; }
-        .contact-links svg { width: 18px; height: 18px; }
-        .footer { padding: clamp(2rem, 5vh, 3.5rem) 0; background: var(--bg-primary); border-top: 1px solid var(--border-color); text-align: center; margin-top: 3rem; }
-        .footer-links { display: flex; gap: clamp(1.25rem, 2.5vw, 2.5rem); justify-content: center; flex-wrap: wrap; margin-bottom: 1.5rem; }
-        .footer-link { color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; transition: color 0.3s ease; }
-        .footer-link:hover { color: var(--accent-purple); }
-        .footer-copyright { color: var(--text-muted); font-size: 0.85rem; }
-        @media (max-width: 768px) { .navbar-links { display: none; } .legal-section { padding: 1.5rem; } .footer-links { flex-direction: column; gap: 0.75rem; } }
-        /* Mobile Menu Styles */
-        .mobile-menu-btn { display: none; background: none; border: none; cursor: pointer; padding: 0.5rem; z-index: 1001; }
-        .mobile-menu-btn svg { width: 24px; height: 24px; color: var(--text-primary); }
-        .mobile-menu { position: fixed; top: 0; right: -100%; width: 280px; height: 100vh; background: rgba(11, 15, 17, 0.98); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); z-index: 1000; transition: right 0.3s ease; padding: 5rem 1.5rem 2rem; border-left: 1px solid var(--border-color); }
-        .mobile-menu.active { right: 0; }
-        .mobile-menu-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.5); z-index: 999; opacity: 0; visibility: hidden; transition: opacity 0.3s ease, visibility 0.3s ease; }
-        .mobile-menu-overlay.active { opacity: 1; visibility: visible; }
-        .mobile-menu-close { position: absolute; top: 1rem; right: 1rem; background: none; border: none; cursor: pointer; padding: 0.5rem; }
-        .mobile-menu-close svg { width: 24px; height: 24px; color: var(--text-primary); }
-        .mobile-menu-links { display: flex; flex-direction: column; gap: 0.5rem; }
-        .mobile-menu-links a { color: var(--text-secondary); text-decoration: none; font-size: 1rem; font-weight: 500; padding: 0.75rem 1rem; border-radius: 8px; transition: all 0.2s; }
-        .mobile-menu-links a:hover { color: var(--text-primary); background: rgba(255, 255, 255, 0.05); }
-        .mobile-menu-links .nav-cta { display: inline-block; text-align: center; margin-top: 1rem; padding: 0.75rem 1.5rem; background: linear-gradient(135deg, var(--accent-purple), var(--accent-blue)); color: white !important; border-radius: 8px; font-weight: 600; }
-        @media (max-width: 768px) { .mobile-menu-btn { display: block; } }
+        .legal .highlight-box { margin: 0 0 var(--cf-4); color: var(--cf-text); font-weight: 500; }
+        .legal .notice-box p { margin: 0; }
+        .legal .legal-section { padding: 0 0 var(--cf-2); border-bottom: 1px solid var(--cf-border); margin-bottom: var(--cf-8); }
+        .legal .legal-section:last-of-type { border-bottom: 0; }
+        .legal .legal-section h2 { margin-top: 0; }
+        .legal .contact-box { margin-top: var(--cf-8); padding: var(--cf-5); border: 1px solid var(--cf-border); border-radius: var(--cf-radius-lg); background: var(--cf-surface); }
+        .legal .contact-box h3 { margin-top: 0; }
+        .legal .contact-links { display: flex; flex-wrap: wrap; gap: var(--cf-2) var(--cf-5); }
+        .legal .contact-links a { display: inline-flex; align-items: center; min-height: 40px; }
     </style>
 </head>
-<body>
-    <div class="bg-effects"><div class="orb orb-1"></div><div class="orb orb-2"></div></div>
-
-    <nav class="navbar">
-        <div class="navbar-container">
-            <a href="/" class="navbar-brand">
-                <img src="/images/CertiFried.png" alt="CertiFried" class="navbar-logo">
-                <span>CertiFried</span>
-            </a>
-            <div class="navbar-links">
-                <a href="/">Home</a>
-                <a href="/commands">Commands</a>
-                <a href="/cards">Cards</a>
-                <a href="/status">Status</a>
-                <a href="/donate">Donate</a>
-                <a href="/auth/discord" class="nav-cta">Login</a>
-            </div>
-            <button class="mobile-menu-btn" aria-label="Open menu">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
-            </button>
+<body class="cfs-body">
+<%- include('partials/site-header', { active: '', user: locals.user || null, returnTo: '/terms' }) %>
+    <main id="main-content" tabindex="-1" class="cfs-main">
+        <div class="cfs-pagehead">
+            <h1>Terms of Service</h1>
+            <p class="cfs-meta">Last updated November 19, 2026</p>
         </div>
-    </nav>
-
-    <!-- Mobile Menu -->
-    <div class="mobile-menu-overlay"></div>
-    <div class="mobile-menu">
-        <button class="mobile-menu-close" aria-label="Close menu">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-        </button>
-        <div class="mobile-menu-links">
-            <a href="/">Home</a>
-            <a href="/commands">Commands</a>
-                <a href="/cards">Cards</a>
-            <a href="/status">Status</a>
-            <a href="/donate">Donate</a>
-            <a href="/auth/discord" class="nav-cta">Login</a>
-        </div>
-    </div>
-
-    <main>
-        <div class="container">
-            <div class="page-header">
-                <h1>Terms of Service</h1>
-                <p class="updated">Last Updated: <%= new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) %></p>
-            </div>
-
-            <div class="notice-box">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                <p>By using CertiFried MultiTool, you agree to these Terms of Service. Please read them carefully before using our bot or dashboard.</p>
-            </div>
-
-            <div class="legal-section">
-                <h2><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>1. Acceptance of Terms</h2>
-                <p>By inviting CertiFried MultiTool to your Discord server, accessing our dashboard, or using any of our services, you agree to be bound by these Terms of Service, our <a href="/eula">End User License Agreement</a>, and our <a href="/privacy">Privacy Policy</a>. If you do not agree to these terms, please do not use our services.</p>
-                <p>These terms apply to all users of the bot, including but not limited to server administrators, moderators, and regular users who interact with the bot's features.</p>
-            </div>
-
-            <div class="legal-section">
-                <h2><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>2. Description of Service</h2>
-                <p>CertiFried MultiTool is a comprehensive Discord bot that provides the following features:</p>
+        <div class="cfs-doc">
+            <nav class="cfs-toc" aria-label="On this page">
+                <h2>On this page</h2>
+                <ol>
+                    <li><a href="#acceptance-of-terms">1. Acceptance of Terms</a></li>
+                    <li><a href="#description-of-service">2. Description of Service</a></li>
+                    <li><a href="#administrator-dashboard-access-transparency-disc">Administrator Dashboard Access &mdash; Transparency Disclosure</a></li>
+                    <li><a href="#group-greeting-cards-service">Group Greeting Cards Service</a></li>
+                    <li><a href="#greenhouse-tycoon">Greenhouse Tycoon</a></li>
+                    <li><a href="#stream-bot-studio-and-song-requests">Stream Bot, CertiFried Studio and Song Requests</a></li>
+                    <li><a href="#user-responsibilities">3. User Responsibilities</a></li>
+                    <li><a href="#data-collection-and-privacy">4. Data Collection and Privacy</a></li>
+                    <li><a href="#service-limitations-and-disclaimers">5. Service Limitations and Disclaimers</a></li>
+                    <li><a href="#limitation-of-liability">6. Limitation of Liability</a></li>
+                    <li><a href="#enforcement-and-termination">7. Enforcement and Termination</a></li>
+                    <li><a href="#changes-to-terms">8. Changes to Terms</a></li>
+                    <li><a href="#pricing-and-donations">9. Pricing and Donations</a></li>
+                    <li><a href="#disputes">10. Disputes</a></li>
+                    <li><a href="#copyright-complaints">11. Copyright Complaints</a></li>
+                    <li><a href="#age-requirements">12. Age Requirements</a></li>
+                    <li><a href="#changelog">Changelog</a></li>
+                </ol>
+                <h2>Related</h2>
                 <ul>
-                    <li>Multi-platform go-live streaming notifications (Twitch, Kick, YouTube, Trovo, TikTok, Facebook)</li>
-                    <li>Social media feed notifications (Reddit, YouTube, Twitter/X, Bluesky, Facebook)</li>
+                    <li><a href="/eula">EULA and the AGPL</a></li>
+                    <li><a href="/privacy">Privacy Policy</a></li>
+                    <li><a href="/legal">All policies</a></li>
+                </ul>
+            </nav>
+            <div class="cfs-prose legal">
+
+<div class="notice-box">
+                <p>By using CertiFried MultiTool, you agree to these Terms of Service. Please read them carefully before using our bot, the dashboard, the stream bot or CertiFried Studio.</p>
+            </div>
+
+            <div class="legal-section">
+                <h2 id="acceptance-of-terms">1. Acceptance of Terms</h2>
+                <p>By inviting CertiFried MultiTool to your Discord server, accessing our dashboard, using the stream bot, installing CertiFried Studio, or using any of our services, you agree to be bound by these Terms of Service, our <a href="/eula">End User License Agreement</a>, and our <a href="/privacy">Privacy Policy</a>. If you do not agree to these terms, please do not use our services.</p>
+                <p>These terms apply to all users of the bot, including but not limited to server administrators, moderators, and regular users who interact with the bot's features, and to streamers who use the stream bot and CertiFried Studio.</p>
+            </div>
+
+            <div class="legal-section">
+                <h2 id="description-of-service">2. Description of Service</h2>
+                <p>CertiFried MultiTool is a Discord bot with the following features:</p>
+                <ul>
+                    <li>Multi-platform go-live streaming notifications (Twitch, Kick, YouTube, Rumble, TikTok)</li>
+                    <li>Social media feed notifications (YouTube, Twitter/X, Bluesky, TikTok videos and RSS)</li>
+                    <li>Greenhouse Tycoon, a plant-growing game played on the website, in a Twitch panel extension and through Discord commands</li>
                     <li>Music playback with AI DJ and text-to-speech functionality</li>
                     <li>Server moderation, security, anti-raid, anti-nuke, and phishing detection tools</li>
                     <li>Economy systems with currency, shop, pets, gambling, and trading</li>
@@ -163,24 +84,26 @@
                     <li>Custom forms, ticket systems, and support workflows</li>
                     <li>Stream Team signups &mdash; apply to a creator&rsquo;s stream team via private application tickets</li>
                     <li>Birthday tracking with digital birthday cards and collaborative signing</li>
-                    <li><strong>Standalone Group Greeting Cards</strong> at <a href="/cards" style="color: var(--accent-purple);">certifriedmultitool.com/cards</a> &mdash; free digital group cards for any occasion (birthdays, farewells, thank yous, congratulations, and more) with unlimited signers, no account required</li>
-                    <li>AI-generated card cover images powered by Google Gemini</li>
+                    <li><strong>Standalone Group Greeting Cards</strong> at <a href="/cards">certifriedmultitool.com/cards</a> &mdash; free digital group cards for any occasion (birthdays, farewells, thank yous, congratulations, and more) with unlimited signers, no account required</li>
+                    <li>AI-generated card cover images (Google Gemini, with Hugging Face as a fallback)</li>
                     <li>Voice message recording (up to 30 seconds) on greeting cards</li>
                     <li>Encrypted digital gift card code attachment (AES-256-GCM encryption)</li>
                     <li>Scheduled channel purge and auto-cleanup tools</li>
                     <li>Custom embeds, reaction roles, and stat display channels</li>
-                    <li>TikTok video feed notifications and Twitch schedule synchronization</li>
+                    <li>Twitch schedule images posted to Discord</li>
                     <li>Creator integrations: Buy Me a Coffee supporter announcements, Throne wishlists, Fourthwall shop, and Steam game watcher</li>
                     <li>Guided <code>/setup</code> onboarding wizard for configuring features</li>
                     <li>Custom bot instances (self-service or managed)</li>
                     <li>Web dashboard at certifriedmultitool.com for server management</li>
+                    <li>A stream bot for your own Twitch and Kick channels: automations on follows, subs, cheers, raids, channel points, polls and tips; chat commands and timers; stream management; song requests</li>
+                    <li><a href="/studio">CertiFried Studio</a>, a free Windows app that carries out stream bot actions on your PC (OBS control, sounds, hotkeys, voice commands, OBS docks)</li>
                     <li>And many additional features</li>
                 </ul>
                 <p>We reserve the right to modify, suspend, or discontinue any aspect of our services at any time without prior notice.</p>
             </div>
 
             <div class="legal-section">
-                <h2><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>Administrator Dashboard Access &mdash; Transparency Disclosure</h2>
+                <h2 id="administrator-dashboard-access-transparency-disc">Administrator Dashboard Access &mdash; Transparency Disclosure</h2>
                 <p>In the interest of complete honesty and transparency, we want you to know exactly who has elevated access to the CertiFried Dashboard and what that access entails.</p>
                 <h3>Authorized Administrators</h3>
                 <p>The following individuals have super-administrator access to the CertiFried MultiTool dashboard, which allows them to view guild settings, bot configurations, and server setup details for <strong>any server</strong> that has the bot installed:</p>
@@ -207,12 +130,12 @@
                 </ul>
                 <h3>Our Commitment</h3>
                 <p>This access exists <strong>solely for the purpose of providing bot support</strong> &mdash; diagnosing issues, verifying configurations, and assisting server administrators with setup. We will <strong>never</strong> log in to, manage, or make changes to any user's guild without their <strong>express consent and knowledge</strong>. If support requires us to view or modify your settings, we will always ask for your permission first.</p>
-                <p>By inviting CertiFried MultiTool to your Discord server, you acknowledge and agree to this access. If you have concerns or wish to discuss this policy, please contact us through our Discord Support Server.</p>
+                <p>By inviting CertiFried MultiTool to your Discord server, you acknowledge and agree to this access. If you have concerns or wish to discuss this policy, contact us through our Discord support server or at <a href="mailto:support@certifriedmultitool.com">support@certifriedmultitool.com</a>.</p>
             </div>
 
             <div class="legal-section">
-                <h2><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>Group Greeting Cards Service</h2>
-                <p>CertiFried offers a free standalone group greeting card service at <a href="/cards" style="color: var(--accent-purple);">certifriedmultitool.com/cards</a> that operates independently of Discord servers. By using the cards service, you agree to the following additional terms:</p>
+                <h2 id="group-greeting-cards-service">Group Greeting Cards Service</h2>
+                <p>CertiFried offers a free standalone group greeting card service at <a href="/cards">certifriedmultitool.com/cards</a> that operates independently of Discord servers. By using the cards service, you agree to the following additional terms:</p>
                 <h3>Card Creation &amp; Signing</h3>
                 <ul>
                     <li>Cards can be created by anyone without an account. Cards created without a Discord login are "standalone" and can optionally be connected to a Discord server later.</li>
@@ -222,7 +145,7 @@
                 </ul>
                 <h3>AI-Generated Cover Images</h3>
                 <ul>
-                    <li>AI cover images are generated using Google Gemini and are subject to Google's usage policies.</li>
+                    <li>AI cover images are generated with Google Gemini, or Hugging Face when Gemini cannot make one, and are subject to that provider's usage policies.</li>
                     <li>Generated images are stored on our servers and associated with the card. We do not claim ownership of AI-generated images.</li>
                     <li>Prompts are filtered to prevent generation of inappropriate content. Attempting to bypass content filters is a violation of these terms.</li>
                 </ul>
@@ -245,11 +168,47 @@
             </div>
 
             <div class="legal-section">
-                <h2><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>3. User Responsibilities</h2>
+                <h2 id="greenhouse-tycoon">Greenhouse Tycoon</h2>
+                <p>Greenhouse Tycoon is a plant-growing simulation game. It replaced CertiFried Tycoon; progress from that game was not carried over.</p>
+                <ul>
+                    <li><strong>No real value.</strong> In-game cash, plants, decorations, badges and rewards have no real-world value and cannot be bought, sold or exchanged for money or anything outside the game.</li>
+                    <li><strong>No purchases.</strong> The game charges nobody; it does not use Bits, subscriptions or payments.</li>
+                    <li><strong>One save.</strong> Twitch, Kick and Discord sign-ins can be linked to one save. Saves are never merged, and a Replant resets progress by your choice.</li>
+                    <li><strong>Fair play.</strong> Do not use bots, scripts, multiple accounts or bugs to gain an advantage. We may correct balances, remove items, reset progress or exclude players who do.</li>
+                    <li><strong>Seasons.</strong> Seasons, quests, challenges, prices and rewards may change, end early or be rebalanced. Season rewards are paid in game currency and badges only.</li>
+                    <li><strong>Twitch panel.</strong> Use of the panel on Twitch is also subject to Twitch&rsquo;s Terms of Service. Sharing your Twitch ID with the panel is optional and can be revoked in Twitch&rsquo;s settings.</li>
+                </ul>
+            </div>
+
+            <div class="legal-section">
+                <h2 id="stream-bot-studio-and-song-requests">Stream Bot, CertiFried Studio and Song Requests</h2>
+                <p>The stream bot acts on your own Twitch and Kick channels with the permissions you give it, and CertiFried Studio acts on your PC and in your OBS. By using them you also agree to the following:</p>
+                <h3>Your channel, your responsibility</h3>
+                <ul>
+                    <li>You are responsible for what your automations, timers and commands do and post, as if you had done it yourself. Test an automation (Dry run) before relying on it.</li>
+                    <li>You must follow the terms and rules of every platform you connect, including Twitch&rsquo;s Terms of Service and Community Guidelines and Kick&rsquo;s Terms of Service and Community Guidelines. CertiFried cannot give you permission to do something a platform forbids.</li>
+                    <li>Money is tracked, never processed. Tips, Bits, subs and orders are notifications of payments made on Twitch, Kick or the tip service; CertiFried does not handle, hold or refund money and never sees payment details. Questions about a payment go to the service it was made on.</li>
+                </ul>
+                <h3>Music, sounds and copyright</h3>
+                <ul>
+                    <li>You are responsible for having the rights to the music, sounds, images and videos you play or show on stream, including song requests from your viewers, sound alerts and uploaded media. Copyright claims, takedowns, strikes and platform penalties are between you, the rights holder and the platform.</li>
+                    <li>VOD protection is best effort. CertiFried Studio keeps song requests off your Twitch VOD track, but Twitch clips, Kick VODs, other platforms you stream to, local recordings and anything else on your VOD track can still contain the music. We do not promise that any song will avoid a claim.</li>
+                    <li>If you choose to play song requests with your own Spotify account, note that Spotify&rsquo;s terms do not allow broadcasting its audio. That choice and its consequences are yours.</li>
+                </ul>
+                <h3>CertiFried Studio</h3>
+                <ul>
+                    <li>Studio is published unsigned, with SHA-256 checksums on the <a href="/downloads/studio">download page</a>. Download it only from certifriedmultitool.com and check the checksum if you are unsure. The <a href="/eula#certifried-studio">EULA</a> covers the builds in more detail.</li>
+                    <li>Studio changes your OBS only as described on <a href="/studio/how-it-works#changes-to-obs">How it works</a>, and backs up OBS files before it edits them. You remain responsible for your PC, your OBS setup and your stream.</li>
+                </ul>
+            </div>
+
+            <div class="legal-section">
+                <h2 id="user-responsibilities">3. User Responsibilities</h2>
                 <h3>3.1 Appropriate Use</h3>
                 <p>You agree to use CertiFried MultiTool only for lawful purposes and in compliance with:</p>
                 <ul>
                     <li>Discord's Terms of Service and Community Guidelines</li>
+                    <li>The terms and guidelines of every other service you connect, including Twitch, Kick, YouTube, Spotify, SoundCloud, StreamElements, Streamlabs, Ko-fi, Buy Me a Coffee, Throne and Fourthwall</li>
                     <li>All applicable local, national, and international laws</li>
                     <li>These Terms of Service</li>
                 </ul>
@@ -257,20 +216,23 @@
                 <p>You agree NOT to:</p>
                 <ul>
                     <li>Use the bot to spam, harass, or abuse other users</li>
-                    <li>Attempt to exploit, hack, or reverse engineer the bot</li>
+                    <li>Attempt to exploit or break into our hosted service, its servers, or other users&rsquo; accounts</li>
                     <li>Use the bot for any illegal activities</li>
                     <li>Circumvent rate limits or abuse API endpoints</li>
-                    <li>Share, sell, or distribute bot features without permission</li>
+                    <li>Resell access to our hosted service, or present it as your own (the source code itself may be used, changed and shared under the AGPL; see the <a href="/eula#open-source-and-this-agreement">EULA</a>)</li>
                     <li>Use the bot to violate Discord's Terms of Service</li>
                     <li>Impersonate other users or services</li>
                     <li>Collect user data without consent</li>
+                    <li>Use automations, timers, commands or CertiFried Studio to harass, target or mass-message people, to raid or flood other channels, or to evade a ban or timeout</li>
+                    <li>Use the stream bot to fake engagement (view bots, follow bots, chat bots that pretend to be viewers) or to manipulate platform features against their rules</li>
+                    <li>Use song requests or sounds to play hateful, sexual or illegal content</li>
                 </ul>
                 <h3>3.3 Account Security</h3>
                 <p>You are responsible for maintaining the security of your Discord account and any actions taken through your account when using our services. Notify us immediately of any unauthorized use.</p>
             </div>
 
             <div class="legal-section">
-                <h2><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"/></svg>4. Data Collection and Privacy</h2>
+                <h2 id="data-collection-and-privacy">4. Data Collection and Privacy</h2>
                 <p>CertiFried MultiTool collects and processes certain data to provide its services, including:</p>
                 <ul>
                     <li>Discord user IDs, usernames, and server IDs</li>
@@ -284,100 +246,75 @@
             </div>
 
             <div class="legal-section">
-                <h2><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>5. Service Limitations and Disclaimers</h2>
+                <h2 id="service-limitations-and-disclaimers">5. Service Limitations and Disclaimers</h2>
                 <h3>5.1 Service Availability</h3>
                 <p>We strive to maintain 24/7 uptime, but we do not guarantee uninterrupted service. The bot may experience downtime for maintenance, updates, or due to factors beyond our control.</p>
                 <h3>5.2 No Warranty</h3>
                 <p>CertiFried MultiTool is provided "AS IS" and "AS AVAILABLE" without warranties of any kind, either express or implied.</p>
                 <h3>5.3 Third-Party Services</h3>
-                <p>Our bot integrates with third-party services (Twitch, YouTube, Kick, etc.). We are not responsible for the availability, accuracy, or functionality of these external services.</p>
+                <p>Our bot integrates with third-party services (Twitch, Kick, YouTube and YouTube Music, Spotify, SoundCloud, OBS Studio, StreamElements, Streamlabs, Ko-fi, Buy Me a Coffee, Throne, Fourthwall and others). We are not responsible for the availability, accuracy, or functionality of these external services, and a change on their side can stop a feature working. Each has its own terms, which apply to your use of it.</p>
             </div>
 
             <div class="legal-section">
-                <h2><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"/></svg>6. Limitation of Liability</h2>
+                <h2 id="limitation-of-liability">6. Limitation of Liability</h2>
                 <p>To the maximum extent permitted by law, CertiFried MultiTool and its developers shall not be liable for any indirect, incidental, special, consequential, or punitive damages, loss of profits, data, use, or goodwill.</p>
-                <p>Our total liability shall not exceed $100 USD or the amount you paid to use our services (whichever is greater).</p>
+                <p>To the extent the law allows, our total liability for any claim about the service is limited to $100 USD. The service is free, so there is no fee to refund.</p>
             </div>
 
             <div class="legal-section">
-                <h2><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3"/></svg>7. Enforcement and Termination</h2>
+                <h2 id="enforcement-and-termination">7. Enforcement and Termination</h2>
                 <p>We reserve the right to investigate violations of these terms and take appropriate action, including warning users, suspending bot access, permanently banning users or servers, or reporting violations to Discord or law enforcement.</p>
                 <p>You may stop using our services at any time by removing the bot from your server. We may terminate or suspend your access immediately, without prior notice, for any violation of these terms.</p>
             </div>
 
             <div class="legal-section">
-                <h2><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>8. Changes to Terms</h2>
+                <h2 id="changes-to-terms">8. Changes to Terms</h2>
                 <p>We reserve the right to modify these Terms of Service at any time. Changes will be effective immediately upon posting. Your continued use of the service after changes constitute acceptance of the new terms.</p>
             </div>
 
             <div class="legal-section">
-                <h2><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>9. Pricing and Donations</h2>
-                <p>CertiFried MultiTool is currently free to use. We accept voluntary donations to support development and server costs. Donations are non-refundable and do not guarantee any specific features or service levels.</p>
+                <h2 id="pricing-and-donations">9. Pricing and Donations</h2>
+                <p>CertiFried MultiTool, including the stream bot and CertiFried Studio, is free to use. There are no paid tiers, and no feature is sold. We accept voluntary donations to support development and server costs. Donations are non-refundable and do not unlock or guarantee any features or service levels.</p>
+            </div>
+
+            <div class="legal-section">
+                <h2 id="disputes">10. Disputes</h2>
+                <p>If you have a problem with the service or with these terms, contact us first on the <a href="/discord">support server</a> or at <a href="mailto:support@certifriedmultitool.com">support@certifriedmultitool.com</a>. We will try to resolve it with you informally, and you agree to give us 30 days to do so before taking any other action.</p>
+                <p>Nothing in these terms takes away rights you have under the consumer protection laws of the place where you live.</p>
+            </div>
+
+            <div class="legal-section">
+                <h2 id="copyright-complaints">11. Copyright Complaints</h2>
+                <p>If you believe something hosted on CertiFried infringes your copyright (for example a sound or image uploaded to the stream bot, or content on a greeting card), email <a href="mailto:support@certifriedmultitool.com">support@certifriedmultitool.com</a> with: the work you own, the address on CertiFried where it appears, your contact details, and a statement that you own the rights or act for the owner. We will look at it promptly, remove infringing content, and tell the person who uploaded it.</p>
+                <p>Music on a live stream or in a VOD or clip is broadcast by the streamer through Twitch, Kick or another platform, not hosted by CertiFried. Complaints about a stream should go to that platform.</p>
+            </div>
+
+            <div class="legal-section">
+                <h2 id="age-requirements">12. Age Requirements</h2>
+                <p>You must be at least 13 years old to use CertiFried, and old enough to use every platform you connect. Discord, Twitch and Kick each require users to be at least 13 (older in some countries), and Twitch and Kick expect users under 18 or the age of majority to have a parent&rsquo;s or guardian&rsquo;s permission or supervision. Those platforms&rsquo; own terms decide.</p>
+            </div>
+
+            <div class="legal-section">
+                <h2 id="changelog">Changelog</h2>
+                <ul>
+                    <li><strong>November 19, 2026:</strong> Added the stream bot, CertiFried Studio and song requests (your responsibility for automations, music and copyright, best-effort VOD protection, money tracked and never processed); acceptable-use rules for automations; the rules no longer forbid what the AGPL allows for the code; third-party services named; copyright complaints; age requirements. The liability cap and the Disputes section are unchanged.</li>
+                </ul>
             </div>
 
             <div class="contact-box">
                 <h3>Questions or Concerns?</h3>
                 <p>If you have any questions about these Terms of Service, please contact us:</p>
                 <div class="contact-links">
-                    <a href="https://certifriedmultitool.com/discord" target="_blank">
-                        <svg fill="currentColor" viewBox="0 0 24 24"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z"/></svg>
-                        Discord Support Server
+                    <a href="/discord" target="_blank" rel="noopener">
+                        Support server on Discord
                     </a>
-                    <a href="/">Return to Home</a>
+                    <a href="mailto:support@certifriedmultitool.com">support@certifriedmultitool.com</a>
+                    <a href="/">Home</a>
                 </div>
+            </div>
             </div>
         </div>
     </main>
-
-    <footer class="footer">
-        <div class="container">
-            <div class="footer-links">
-                <a href="/commands" class="footer-link">Commands</a>
-                <a href="/cards" class="footer-link">Cards</a>
-                <a href="/status" class="footer-link">Status</a>
-                <a href="/docs" class="footer-link">Documentation</a>
-                <a href="/terms" class="footer-link">Terms</a>
-                <a href="/privacy" class="footer-link">Privacy</a>
-                <a href="/eula" class="footer-link">EULA</a>
-            </div>
-            <p class="footer-copyright">&copy; <%= new Date().getFullYear() %> CertiFried MultiTool. All rights reserved.</p>
-        </div>
-    </footer>
-
-    <script>
-        // Mobile Menu Functionality
-        const mobileMenuBtn = document.querySelector('.mobile-menu-btn');
-        const mobileMenuClose = document.querySelector('.mobile-menu-close');
-        const mobileMenu = document.querySelector('.mobile-menu');
-        const mobileMenuOverlay = document.querySelector('.mobile-menu-overlay');
-
-        function openMobileMenu() {
-            mobileMenu.classList.add('active');
-            mobileMenuOverlay.classList.add('active');
-            document.body.style.overflow = 'hidden';
-        }
-
-        function closeMobileMenu() {
-            mobileMenu.classList.remove('active');
-            mobileMenuOverlay.classList.remove('active');
-            document.body.style.overflow = '';
-        }
-
-        mobileMenuBtn.addEventListener('click', openMobileMenu);
-        mobileMenuClose.addEventListener('click', closeMobileMenu);
-        mobileMenuOverlay.addEventListener('click', closeMobileMenu);
-
-        // Close menu on escape key
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && mobileMenu.classList.contains('active')) {
-                closeMobileMenu();
-            }
-        });
-
-        // Close menu when clicking on a link
-        document.querySelectorAll('.mobile-menu-links a').forEach(link => {
-            link.addEventListener('click', closeMobileMenu);
-        });
-    </script>
+<%- include('partials/site-footer') %>
 </body>
 </html>

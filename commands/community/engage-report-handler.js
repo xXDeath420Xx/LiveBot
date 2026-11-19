@@ -11,6 +11,8 @@ import {
 } from 'discord.js';
 import pool from '../../utils/db.js';
 import logger from '../../utils/logger.js';
+import { themeColor } from '../../core/guild-theme.js';
+import { getBugReportSettings, triagePing, BUG_REPORTS_OFF } from '../../core/bug-report-settings.js';
 
 const scamTypeNames = {
     'fake_seeds': 'Fake Seeds/Clones',
@@ -22,22 +24,64 @@ const scamTypeNames = {
     'other': 'Other'
 };
 
+/*
+ * Data model:
+ *   scam_reports       report_type 'user' (reported_user_id / reported_username) or 'seedbank' for vendor
+ *                      (the same table holds domain reports / disputes, report_type 'phishing_url' / 'domain_dispute',
+ *                      reviewed by the bot owner through core/domain-reports.js; every query here keeps to ENGAGE_TYPES)
+ *                      reports (entity_name / website); scam_type, loss_amount, website added by migration 268.
+ *   scammer_watchlist  entity_type 'user' (user_id / username) or 'seedbank' / 'website' (entity_name / website);
+ *                      UNIQUE (guild_id, entity_type, entity_name). report_count counts confirmed reports.
+ */
+
+// The report types /engage report owns (scam_reports also holds core/domain-reports.js's rows).
+const ENGAGE_TYPES = "('user', 'seedbank', 'website', 'other')";
+
 // ── Internal helpers ──
+
+/**
+ * Where staff alerts for scam reports and trade disputes go (also used by engage-trade-handler.js).
+ * First the staff reports channel — the same place the "Report Message" context menu
+ * (commands/context/report-message.js) sends to — then the channel the logging settings route
+ * moderation events to (log_event_config 'moderation', which these alerts originally meant to read),
+ * then the moderation log channel. Uses only channels a server has already set up for staff.
+ */
+export async function resolveStaffAlertChannel(guild) {
+    const sources = [
+        ['staff reports channel', 'SELECT reports_channel_id AS id FROM staff_contact_config WHERE guild_id = ?'],
+        ['moderation log category', "SELECT log_channel_id AS id FROM log_event_config WHERE guild_id = ? AND event_type = 'moderation' AND enabled = 1"],
+        ['moderation log', 'SELECT mod_log_channel_id AS id FROM moderation_config WHERE guild_id = ?']
+    ];
+
+    for (const [source, sql] of sources) {
+        try {
+            const [rows] = await pool.execute(sql, [guild.id]);
+            const id = rows[0]?.id;
+            if (!id) continue;
+            const channel = guild.channels.cache.get(id) ?? await guild.channels.fetch(id).catch(() => null);
+            if (channel?.isTextBased()) return channel;
+            logger.warn('[Report] Configured staff channel is missing or not text-based', { guildId: guild.id, source, channelId: id });
+        } catch (error) {
+            logger.error('[Report] Staff channel lookup failed', { guildId: guild.id, source, error: error.message });
+        }
+    }
+
+    logger.info('[Report] No staff channel configured — alert not posted (still visible in /engage report review)', { guildId: guild.id });
+    return null;
+}
+
+/** Watchlist entity type for a non-user report. */
+function watchlistEntityType(reportType) {
+    return reportType === 'website' ? 'website' : 'seedbank';
+}
 
 async function alertStaff(guild, reportId, reporter, reportedUser, scamType, description, evidence, lossAmount) {
     try {
-        const [logConfig] = await pool.execute(
-            `SELECT channel_id FROM logging_config WHERE guild_id = ? AND event_type = 'moderation' AND enabled = 1`,
-            [guild.id]
-        );
-
-        if (logConfig.length === 0) return;
-
-        const channel = await guild.channels.fetch(logConfig[0].channel_id).catch(() => null);
+        const channel = await resolveStaffAlertChannel(guild);
         if (!channel) return;
 
         const embed = new EmbedBuilder()
-            .setColor('#FF0000')
+            .setColor(themeColor(guild?.id, 'danger'))
             .setTitle(`New Scam Report #${reportId}`)
             .setDescription('A new scam report has been submitted and requires review.')
             .addFields(
@@ -67,18 +111,11 @@ async function alertStaff(guild, reportId, reporter, reportedUser, scamType, des
 
 async function alertStaffVendor(guild, reportId, reporter, vendorName, website, description, evidence) {
     try {
-        const [logConfig] = await pool.execute(
-            `SELECT channel_id FROM logging_config WHERE guild_id = ? AND event_type = 'moderation' AND enabled = 1`,
-            [guild.id]
-        );
-
-        if (logConfig.length === 0) return;
-
-        const channel = await guild.channels.fetch(logConfig[0].channel_id).catch(() => null);
+        const channel = await resolveStaffAlertChannel(guild);
         if (!channel) return;
 
         const embed = new EmbedBuilder()
-            .setColor('#FF0000')
+            .setColor(themeColor(guild?.id, 'danger'))
             .setTitle(`New Vendor Report #${reportId}`)
             .setDescription('A bad vendor/seed bank has been reported.')
             .addFields(
@@ -101,44 +138,41 @@ async function alertStaffVendor(guild, reportId, reporter, vendorName, website, 
     }
 }
 
-async function confirmReport(interaction, report) {
-    if (report.report_type === 'user') {
-        await pool.execute(
-            `INSERT INTO scammer_watchlist (guild_id, entry_type, discord_id, name, reason, reported_by, report_id)
-            VALUES (?, 'user', ?, ?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE reason = VALUES(reason), updated_at = NOW()`,
-            [
-                report.guild_id,
-                report.reported_user_id,
-                report.reported_user_tag,
-                report.description.substring(0, 500),
-                report.reporter_id,
-                report.id
-            ]
-        );
-    } else {
-        await pool.execute(
-            `INSERT INTO scammer_watchlist (guild_id, entry_type, name, website, reason, reported_by, report_id)
-            VALUES (?, 'vendor', ?, ?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE reason = VALUES(reason), updated_at = NOW()`,
-            [
-                report.guild_id,
-                report.reported_vendor_name,
-                report.reported_vendor_website,
-                report.description.substring(0, 500),
-                report.reporter_id,
-                report.id
-            ]
-        );
-    }
+/** Tell the reviewing staff member another reviewer already closed this report. */
+async function reportAlreadyHandled(interaction, report) {
+    await interaction.update({
+        content: `Report #${report.id} was already handled by another staff member.`,
+        embeds: [],
+        components: []
+    });
+}
 
-    await pool.execute(
-        `UPDATE scam_reports SET status = 'confirmed', resolved_by = ?, resolved_at = NOW() WHERE id = ?`,
+async function confirmReport(interaction, report) {
+    // Claim the report first so two reviewers can't both add it to the watchlist.
+    const [claimed] = await pool.execute(
+        `UPDATE scam_reports SET status = 'confirmed', resolved_by = ?, resolved_at = NOW()
+          WHERE id = ? AND status IN ('pending', 'investigating')`,
         [interaction.user.id, report.id]
     );
+    if (claimed.affectedRows === 0) return reportAlreadyHandled(interaction, report);
+
+    const reason = report.description.substring(0, 500);
+
+    try {
+        await addToWatchlist(interaction, report, reason);
+    } catch (error) {
+        // Put the report back in the queue so it can be confirmed again once the error is fixed.
+        await pool.execute(
+            'UPDATE scam_reports SET status = ?, resolved_at = NULL WHERE id = ?',
+            [report.status || 'pending', report.id]
+        ).catch(revertError => logger.error('[Report] Failed to reopen report after watchlist error', {
+            reportId: report.id, error: revertError.message
+        }));
+        throw error;
+    }
 
     const embed = new EmbedBuilder()
-        .setColor('#00FF00')
+        .setColor(themeColor(interaction.guildId, 'success'))
         .setTitle('Report Confirmed')
         .setDescription(`Report #${report.id} has been confirmed and the ${report.report_type === 'user' ? 'user' : 'vendor'} has been added to the watchlist.`)
         .setTimestamp();
@@ -152,14 +186,57 @@ async function confirmReport(interaction, report) {
     });
 }
 
+async function addToWatchlist(interaction, report, reason) {
+    if (report.report_type === 'user') {
+        // Users are matched on their ID (names change); entity_name stays NULL for user rows.
+        const [existing] = await pool.execute(
+            `SELECT id FROM scammer_watchlist WHERE guild_id = ? AND entity_type = 'user' AND user_id = ? LIMIT 1`,
+            [report.guild_id, report.reported_user_id]
+        );
+        if (existing.length > 0) {
+            await pool.execute(
+                `UPDATE scammer_watchlist
+                    SET username = ?, reason = ?, report_count = report_count + 1, report_id = ?
+                  WHERE id = ?`,
+                [report.reported_username, reason, report.id, existing[0].id]
+            );
+        } else {
+            await pool.execute(
+                `INSERT INTO scammer_watchlist (guild_id, entity_type, user_id, username, reason, added_by, report_id)
+                VALUES (?, 'user', ?, ?, ?, ?, ?)`,
+                [report.guild_id, report.reported_user_id, report.reported_username, reason, interaction.user.id, report.id]
+            );
+        }
+    } else {
+        // Vendors dedupe on the UNIQUE (guild_id, entity_type, entity_name) key.
+        await pool.execute(
+            `INSERT INTO scammer_watchlist (guild_id, entity_type, entity_name, website, reason, added_by, report_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE reason = VALUES(reason), website = COALESCE(VALUES(website), website),
+                report_count = report_count + 1, report_id = VALUES(report_id)`,
+            [
+                report.guild_id,
+                watchlistEntityType(report.report_type),
+                report.entity_name,
+                report.website ?? null,
+                reason,
+                interaction.user.id,
+                report.id
+            ]
+        );
+    }
+}
+
 async function investigateReport(interaction, report) {
-    await pool.execute(
-        `UPDATE scam_reports SET status = 'investigating', resolved_by = ? WHERE id = ?`,
+    // resolved_by records who is handling it; the report stays open in /engage report review.
+    const [claimed] = await pool.execute(
+        `UPDATE scam_reports SET status = 'investigating', resolved_by = ? WHERE id = ? AND status IN ('pending', 'investigating')`,
         [interaction.user.id, report.id]
     );
+    if (claimed.affectedRows === 0) return reportAlreadyHandled(interaction, report);
 
     const embed = new EmbedBuilder()
-        .setColor('#3498DB')
+        .setColor(themeColor(interaction.guildId, 'primary'))
         .setTitle('Report Under Investigation')
         .setDescription(`Report #${report.id} has been marked as under investigation.`)
         .setTimestamp();
@@ -173,10 +250,12 @@ async function investigateReport(interaction, report) {
 }
 
 async function dismissReport(interaction, report) {
-    await pool.execute(
-        `UPDATE scam_reports SET status = 'dismissed', resolved_by = ?, resolved_at = NOW() WHERE id = ?`,
+    const [claimed] = await pool.execute(
+        `UPDATE scam_reports SET status = 'dismissed', resolved_by = ?, resolved_at = NOW()
+          WHERE id = ? AND status IN ('pending', 'investigating')`,
         [interaction.user.id, report.id]
     );
+    if (claimed.affectedRows === 0) return reportAlreadyHandled(interaction, report);
 
     const embed = new EmbedBuilder()
         .setColor('#95A5A6')
@@ -192,26 +271,27 @@ async function dismissReport(interaction, report) {
     });
 }
 
-async function showReportForReview(interaction, report, totalPending) {
+async function showReportForReview(interaction, report, totalOpen) {
+    const investigating = report.status === 'investigating';
     const embed = new EmbedBuilder()
-        .setColor('#FFA500')
-        .setTitle(`Report #${report.id} - Pending Review`)
-        .setDescription(`**${totalPending} pending report(s) total**`)
+        .setColor(themeColor(interaction.guildId, 'warning'))
+        .setTitle(`Report #${report.id} - ${investigating ? 'Under Investigation' : 'Pending Review'}`)
+        .setDescription(`**${totalOpen} open report(s) total**${investigating && report.resolved_by ? `\nBeing handled by <@${report.resolved_by}>` : ''}`)
         .addFields(
             { name: 'Reporter', value: `<@${report.reporter_id}>`, inline: true },
             { name: 'Type', value: report.report_type === 'user' ? 'User Report' : 'Vendor Report', inline: true },
-            { name: 'Scam Type', value: scamTypeNames[report.scam_type] || report.scam_type, inline: true }
+            { name: 'Scam Type', value: scamTypeNames[report.scam_type] || report.scam_type || 'Not specified', inline: true }
         )
         .setTimestamp(new Date(report.created_at));
 
     if (report.report_type === 'user') {
         embed.addFields(
-            { name: 'Reported User', value: `${report.reported_user_tag} (<@${report.reported_user_id}>)`, inline: false }
+            { name: 'Reported User', value: `${report.reported_username || 'Unknown'} (<@${report.reported_user_id}>)`, inline: false }
         );
     } else {
         embed.addFields(
-            { name: 'Vendor Name', value: report.reported_vendor_name, inline: true },
-            { name: 'Website', value: report.reported_vendor_website || 'Not provided', inline: true }
+            { name: 'Vendor Name', value: report.entity_name || 'Unknown', inline: true },
+            { name: 'Website', value: report.website || 'Not provided', inline: true }
         );
     }
 
@@ -232,18 +312,15 @@ async function showReportForReview(interaction, report, totalPending) {
             new ButtonBuilder()
                 .setCustomId(`report_confirm_${report.id}`)
                 .setLabel('Confirm & Add to Watchlist')
-                .setStyle(ButtonStyle.Danger)
-                .setEmoji(''),
+                .setStyle(ButtonStyle.Danger),
             new ButtonBuilder()
                 .setCustomId(`report_investigate_${report.id}`)
                 .setLabel('Mark as Investigating')
-                .setStyle(ButtonStyle.Primary)
-                .setEmoji(''),
+                .setStyle(ButtonStyle.Primary),
             new ButtonBuilder()
                 .setCustomId(`report_dismiss_${report.id}`)
                 .setLabel('Dismiss Report')
                 .setStyle(ButtonStyle.Secondary)
-                .setEmoji('')
         );
 
     const response = await interaction.editReply({
@@ -258,15 +335,21 @@ async function showReportForReview(interaction, report, totalPending) {
             return i.reply({ content: 'Only the staff member who initiated the review can use these buttons.', ephemeral: true });
         }
 
-        if (i.customId.startsWith('report_confirm_')) {
-            await confirmReport(i, report);
-            collector.stop();
-        } else if (i.customId.startsWith('report_investigate_')) {
-            await investigateReport(i, report);
-            collector.stop();
-        } else if (i.customId.startsWith('report_dismiss_')) {
-            await dismissReport(i, report);
-            collector.stop();
+        try {
+            if (i.customId.startsWith('report_confirm_')) {
+                await confirmReport(i, report);
+                collector.stop();
+            } else if (i.customId.startsWith('report_investigate_')) {
+                await investigateReport(i, report);
+                collector.stop();
+            } else if (i.customId.startsWith('report_dismiss_')) {
+                await dismissReport(i, report);
+                collector.stop();
+            }
+        } catch (error) {
+            logger.error('[Report] Review action failed', { reportId: report.id, action: i.customId, error: error.message });
+            const reply = { content: 'Something went wrong updating this report. Please try again.', ephemeral: true };
+            await (i.replied || i.deferred ? i.followUp(reply) : i.reply(reply)).catch(() => {});
         }
     });
 
@@ -345,7 +428,7 @@ export async function handleScammerReport(interaction) {
 
         const [result] = await pool.execute(
             `INSERT INTO scam_reports
-            (guild_id, reporter_id, reported_user_id, reported_user_tag, report_type, scam_type, description, evidence_urls, loss_amount, status)
+            (guild_id, reporter_id, reported_user_id, reported_username, report_type, scam_type, description, evidence_urls, loss_amount, status)
             VALUES (?, ?, ?, ?, 'user', ?, ?, ?, ?, 'pending')`,
             [
                 interaction.guild.id,
@@ -434,6 +517,11 @@ export async function handleVendorReport(interaction) {
     const vendorName = interaction.options.getString('name');
     const website = interaction.options.getString('website') || null;
 
+    // scam_reports.entity_name / website are varchar(255).
+    if (vendorName.length > 255 || (website && website.length > 255)) {
+        return interaction.reply({ content: 'Vendor name and website must be 255 characters or fewer.', ephemeral: true });
+    }
+
     const modal = new ModalBuilder()
         .setCustomId(`vendor_report_modal_${Date.now()}`)
         .setTitle('Vendor Report Details');
@@ -472,8 +560,8 @@ export async function handleVendorReport(interaction) {
 
         const [result] = await pool.execute(
             `INSERT INTO scam_reports
-            (guild_id, reporter_id, reported_vendor_name, reported_vendor_website, report_type, scam_type, description, evidence_urls, status)
-            VALUES (?, ?, ?, ?, 'vendor', 'bad_vendor', ?, ?, 'pending')`,
+            (guild_id, reporter_id, entity_name, website, report_type, scam_type, description, evidence_urls, status)
+            VALUES (?, ?, ?, ?, 'seedbank', 'bad_vendor', ?, ?, 'pending')`,
             [
                 interaction.guild.id,
                 interaction.user.id,
@@ -541,7 +629,7 @@ export async function handleListReports(interaction) {
     }
 
     const embed = new EmbedBuilder()
-        .setColor('#FF0000')
+        .setColor(themeColor(interaction.guildId, 'danger'))
         .setTitle('Scammer Watchlist')
         .setDescription('Known scammers and bad vendors in this community')
         .setTimestamp();
@@ -550,10 +638,12 @@ export async function handleListReports(interaction) {
     let vendorList = '';
 
     for (const entry of watchlist) {
-        if (entry.entry_type === 'user') {
-            userList += `**${entry.name}** (${entry.discord_id || 'Unknown ID'})\n${entry.reason}\n\n`;
+        const reason = entry.reason || 'No reason recorded';
+        const reports = entry.report_count > 1 ? ` · ${entry.report_count} confirmed reports` : '';
+        if (entry.entity_type === 'user') {
+            userList += `**${entry.username || 'Unknown user'}** (${entry.user_id || 'Unknown ID'})${reports}\n${reason}\n\n`;
         } else {
-            vendorList += `**${entry.name}**${entry.website ? ` - ${entry.website}` : ''}\n${entry.reason}\n\n`;
+            vendorList += `**${entry.entity_name || 'Unknown vendor'}**${entry.website ? ` - ${entry.website}` : ''}${reports}\n${reason}\n\n`;
         }
     }
 
@@ -584,7 +674,7 @@ export async function handleCheck(interaction) {
 
     if (user) {
         const [userEntry] = await pool.execute(
-            `SELECT * FROM scammer_watchlist WHERE discord_id = ? AND entry_type = 'user'`,
+            `SELECT * FROM scammer_watchlist WHERE user_id = ? AND entity_type = 'user' ORDER BY created_at DESC`,
             [user.id]
         );
 
@@ -596,11 +686,11 @@ export async function handleCheck(interaction) {
 
         if (userEntry.length > 0) {
             const embed = new EmbedBuilder()
-                .setColor('#FF0000')
+                .setColor(themeColor(interaction.guildId, 'danger'))
                 .setTitle('KNOWN SCAMMER')
                 .setDescription(`${user.tag} is on the scammer watchlist!`)
                 .addFields(
-                    { name: 'Reason', value: userEntry[0].reason, inline: false },
+                    { name: 'Reason', value: (userEntry[0].reason || 'No reason recorded').substring(0, 1024), inline: false },
                     { name: 'Added', value: `<t:${Math.floor(new Date(userEntry[0].created_at).getTime() / 1000)}:R>`, inline: true }
                 )
                 .setThumbnail(user.displayAvatarURL())
@@ -608,7 +698,7 @@ export async function handleCheck(interaction) {
             embeds.push(embed);
         } else if (reports[0].count > 0) {
             const embed = new EmbedBuilder()
-                .setColor('#FFA500')
+                .setColor(themeColor(interaction.guildId, 'warning'))
                 .setTitle('User Has Reports')
                 .setDescription(`${user.tag} has ${reports[0].count} report(s) filed against them.`)
                 .setThumbnail(user.displayAvatarURL())
@@ -616,7 +706,7 @@ export async function handleCheck(interaction) {
             embeds.push(embed);
         } else {
             const embed = new EmbedBuilder()
-                .setColor('#00FF00')
+                .setColor(themeColor(interaction.guildId, 'success'))
                 .setTitle('User Clear')
                 .setDescription(`${user.tag} has no reports or watchlist entries.`)
                 .setThumbnail(user.displayAvatarURL())
@@ -626,24 +716,30 @@ export async function handleCheck(interaction) {
     }
 
     if (vendorName) {
+        const pattern = `%${vendorName}%`;
         const [vendorEntry] = await pool.execute(
-            `SELECT * FROM scammer_watchlist WHERE LOWER(name) LIKE LOWER(?) AND entry_type = 'vendor'`,
-            [`%${vendorName}%`]
+            `SELECT * FROM scammer_watchlist
+             WHERE entity_type IN ('seedbank', 'website')
+               AND (LOWER(entity_name) LIKE LOWER(?) OR LOWER(website) LIKE LOWER(?))
+             ORDER BY created_at DESC`,
+            [pattern, pattern]
         );
 
         const [reports] = await pool.execute(
             `SELECT COUNT(*) as count FROM scam_reports
-            WHERE LOWER(reported_vendor_name) LIKE LOWER(?) AND status != 'dismissed'`,
-            [`%${vendorName}%`]
+            WHERE report_type <> 'user' AND report_type IN ${ENGAGE_TYPES}
+              AND (LOWER(entity_name) LIKE LOWER(?) OR LOWER(website) LIKE LOWER(?))
+              AND status != 'dismissed'`,
+            [pattern, pattern]
         );
 
         if (vendorEntry.length > 0) {
             const embed = new EmbedBuilder()
-                .setColor('#FF0000')
+                .setColor(themeColor(interaction.guildId, 'danger'))
                 .setTitle('KNOWN BAD VENDOR')
-                .setDescription(`"${vendorEntry[0].name}" is on the vendor watchlist!`)
+                .setDescription(`"${vendorEntry[0].entity_name}" is on the vendor watchlist!`)
                 .addFields(
-                    { name: 'Reason', value: vendorEntry[0].reason, inline: false },
+                    { name: 'Reason', value: (vendorEntry[0].reason || 'No reason recorded').substring(0, 1024), inline: false },
                     { name: 'Website', value: vendorEntry[0].website || 'Unknown', inline: true },
                     { name: 'Added', value: `<t:${Math.floor(new Date(vendorEntry[0].created_at).getTime() / 1000)}:R>`, inline: true }
                 )
@@ -651,14 +747,14 @@ export async function handleCheck(interaction) {
             embeds.push(embed);
         } else if (reports[0].count > 0) {
             const embed = new EmbedBuilder()
-                .setColor('#FFA500')
+                .setColor(themeColor(interaction.guildId, 'warning'))
                 .setTitle('Vendor Has Reports')
                 .setDescription(`Vendors matching "${vendorName}" have ${reports[0].count} report(s).`)
                 .setTimestamp();
             embeds.push(embed);
         } else {
             const embed = new EmbedBuilder()
-                .setColor('#00FF00')
+                .setColor(themeColor(interaction.guildId, 'success'))
                 .setTitle('Vendor Clear')
                 .setDescription(`No reports or watchlist entries found for "${vendorName}".`)
                 .setFooter({ text: 'This does not guarantee the vendor is trustworthy - always do your research!' })
@@ -680,22 +776,36 @@ export async function handleReview(interaction) {
 
     await interaction.deferReply({ ephemeral: true });
 
-    const [pendingReports] = await pool.execute(
-        `SELECT * FROM scam_reports WHERE guild_id = ? AND status = 'pending' ORDER BY created_at ASC LIMIT 10`,
+    // Open = pending or investigating. "Mark as Investigating" keeps a report in this queue
+    // (after all pending ones) until someone confirms or dismisses it.
+    const [openReports] = await pool.execute(
+        `SELECT * FROM scam_reports WHERE guild_id = ? AND status IN ('pending', 'investigating') AND report_type IN ${ENGAGE_TYPES}
+         ORDER BY (status = 'investigating'), created_at ASC LIMIT 1`,
         [interaction.guild.id]
     );
 
-    if (pendingReports.length === 0) {
+    if (openReports.length === 0) {
         return interaction.editReply({
             content: 'No pending reports to review!',
             ephemeral: true
         });
     }
 
-    await showReportForReview(interaction, pendingReports[0], pendingReports.length);
+    const [[openCount]] = await pool.execute(
+        `SELECT COUNT(*) AS total FROM scam_reports WHERE guild_id = ? AND status IN ('pending', 'investigating') AND report_type IN ${ENGAGE_TYPES}`,
+        [interaction.guild.id]
+    );
+
+    await showReportForReview(interaction, openReports[0], openCount.total);
 }
 
 export async function handleBugReport(interaction) {
+    // Bug reports page: "Accept bug reports" off = refuse before the form opens.
+    const bugSettings = interaction.guild ? await getBugReportSettings(interaction.guild.id) : null;
+    if (bugSettings && !bugSettings.accepting) {
+        return interaction.reply({ content: BUG_REPORTS_OFF, ephemeral: true });
+    }
+
     const modal = new ModalBuilder()
         .setCustomId('bug_report_modal')
         .setTitle('Bug Report');
@@ -761,16 +871,14 @@ export async function handleBugReport(interaction) {
         // Post to bug reports forum if configured
         if (interaction.guild) {
             try {
-                const [sugConfig] = await pool.execute(
-                    'SELECT bug_report_channel_id FROM suggestion_config WHERE guild_id = ?',
-                    [interaction.guild.id]
-                );
-                const bugChannelId = sugConfig[0]?.bug_report_channel_id;
+                // Bug reports page "Post new reports to" (else the suggestion page's bug channel).
+                const bugChannelId = bugSettings?.channelId;
+                const ping = triagePing(interaction.guild, bugSettings?.triageRoleId);
                 if (bugChannelId) {
                     const bugChannel = await interaction.guild.channels.fetch(bugChannelId).catch(() => null);
                     if (bugChannel) {
                         const bugEmbed = new EmbedBuilder()
-                            .setColor('#E74C3C')
+                            .setColor(themeColor(interaction.guildId, 'danger'))
                             .setTitle(`Bug #${bugId}: ${title}`)
                             .setDescription(description)
                             .addFields(
@@ -791,7 +899,7 @@ export async function handleBugReport(interaction) {
                             const tags = [openTag?.id, mediumTag?.id].filter(Boolean);
                             const thread = await bugChannel.threads.create({
                                 name: `Bug #${bugId}: ${title.substring(0, 90)}`,
-                                message: { embeds: [bugEmbed] },
+                                message: { embeds: [bugEmbed], ...ping },
                                 appliedTags: tags
                             });
                             await pool.execute(
@@ -799,7 +907,7 @@ export async function handleBugReport(interaction) {
                                 [JSON.stringify({ thread_id: thread.id, channel_id: bugChannelId }), bugId]
                             );
                         } else {
-                            await bugChannel.send({ embeds: [bugEmbed] });
+                            await bugChannel.send({ embeds: [bugEmbed], ...ping });
                         }
                     }
                 }
@@ -809,7 +917,7 @@ export async function handleBugReport(interaction) {
         }
 
         const confirmEmbed = new EmbedBuilder()
-            .setColor('#00FF00')
+            .setColor(themeColor(interaction.guildId, 'success'))
             .setTitle(`Bug Report #${bugId} Submitted`)
             .setDescription('Thank you for reporting this bug!')
             .addFields(

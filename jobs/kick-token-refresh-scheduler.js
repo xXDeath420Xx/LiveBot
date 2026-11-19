@@ -33,12 +33,19 @@ async function refreshExpiringKickTokens() {
 
         // Only connections that CAN be refreshed (have a refresh_token) and are
         // expiring within the look-ahead window (or already expired).
+        //
+        // needs_relink rows are excluded: once Kick answers `invalid_grant` the refresh
+        // token is revoked or expired for good, and no amount of retrying brings it
+        // back. Two such connections were failing every single hour — the rest of the
+        // fleet refreshes fine, so the noise read like a broken system when it was two
+        // users who had disconnected the app.
         const cutoff = new Date(Date.now() + LOOKAHEAD_MS)
             .toISOString().slice(0, 19).replace('T', ' ');
         const [rows] = await pool.execute(
             `SELECT id, refresh_token
              FROM tokes_platform_connections
              WHERE platform = 'kick'
+               AND needs_relink = 0
                AND refresh_token IS NOT NULL
                AND expires_at IS NOT NULL
                AND expires_at < ?`,

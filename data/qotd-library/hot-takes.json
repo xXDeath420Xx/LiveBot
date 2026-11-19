@@ -1,0 +1,191 @@
+{
+  "theme": "hot-takes",
+  "label": "Hot Takes & Debates",
+  "questions": [
+    {
+      "slug": "take-overrated-thing",
+      "text": "What is the single most overrated thing that everyone around you seems to love? Defend your position."
+    },
+    {
+      "slug": "take-underrated-thing",
+      "text": "What's genuinely underrated and deserves way more credit than it gets?"
+    },
+    {
+      "slug": "take-food-crime",
+      "text": "What food combination do you enjoy that other people call a crime?"
+    },
+    {
+      "slug": "take-hill-to-die-on",
+      "text": "What is a completely trivial hill you would genuinely die on?"
+    },
+    {
+      "slug": "take-movie-bad",
+      "text": "Name a beloved film you think is actually bad. Explain before the pitchforks come out."
+    },
+    {
+      "slug": "take-sequel-better",
+      "text": "Which sequel is better than the original, and why is everyone wrong about it?"
+    },
+    {
+      "slug": "take-tradition-pointless",
+      "text": "Which common tradition or social ritual would you quietly abolish if you could?"
+    },
+    {
+      "slug": "take-tipping-etiquette",
+      "text": "What's one piece of etiquette people get wrong constantly that low-key drives you up the wall?"
+    },
+    {
+      "slug": "take-best-condiment",
+      "text": "What is objectively the best condiment, and what is the worst? Full arguments only."
+    },
+    {
+      "slug": "take-cereal-soup",
+      "text": "Settle it: is cereal a soup, is a hot dog a sandwich, and does the answer to one force the answer to the other?"
+    },
+    {
+      "slug": "take-shoes-indoors",
+      "text": "Shoes on or off in the house — and how strongly do you police this in your own home?"
+    },
+    {
+      "slug": "take-remake-ban",
+      "text": "Which franchise should be legally barred from making anything else, and which deserves ten more entries?"
+    },
+    {
+      "slug": "take-worst-holiday",
+      "text": "Which holiday is the most overrated, and which one deserves a bigger deal made of it?"
+    },
+    {
+      "slug": "take-adult-cutoff",
+      "text": "At what age does someone actually become an adult? Not legally — actually."
+    },
+    {
+      "slug": "take-pizza-topping-rank",
+      "text": "Rank the top three pizza toppings and name the one that should be taken off menus entirely.",
+      "group": "pizza-topping-debate"
+    },
+    {
+      "slug": "take-book-vs-film",
+      "text": "Name one case where the film is better than the book. Go on, be brave."
+    },
+    {
+      "slug": "take-music-generation",
+      "text": "Was music better twenty years ago, or does everyone just say that at a certain age?"
+    },
+    {
+      "slug": "take-cancel-a-vegetable",
+      "text": "You may permanently delete one vegetable from existence. Which one, and who does it hurt?"
+    },
+    {
+      "slug": "take-social-media-worst",
+      "text": "Which social platform has done the most damage, and which is the least bad?"
+    },
+    {
+      "slug": "take-airplane-seat",
+      "text": "Is reclining your seat on a plane acceptable? Armrest rules? Set the law."
+    },
+    {
+      "slug": "take-group-chat-rules",
+      "text": "What is one rule every group chat should have and almost none do?"
+    },
+    {
+      "slug": "take-spoiler-statute",
+      "text": "How long after release does something stop being a spoiler? Give a number and defend it."
+    },
+    {
+      "slug": "take-best-sandwich",
+      "text": "What's the greatest sandwich, all-time, no bracket needed? Yes you have to pick one."
+    },
+    {
+      "slug": "take-morning-people",
+      "text": "Are morning people genuinely happier, or are they just smug about it?"
+    },
+    {
+      "slug": "take-birthday-office",
+      "text": "Should adults still get a fuss made on their birthday, or is it time to let it go?"
+    },
+    {
+      "slug": "take-subtitles",
+      "text": "Subtitles on for everything, or only when you must? This says a lot about a person."
+    },
+    {
+      "slug": "take-open-plan",
+      "text": "What's a widely accepted design choice — in homes, offices, apps, cars — that you think is objectively bad?"
+    },
+    {
+      "slug": "take-worst-chore",
+      "text": "Which household chore is genuinely the worst, and which one do you secretly enjoy?"
+    },
+    {
+      "slug": "take-gift-cards",
+      "text": "Are gift cards a thoughtful present or an admission of defeat?"
+    },
+    {
+      "slug": "take-restaurant-rule",
+      "text": "What should every restaurant be required to do that most of them don't?"
+    },
+    {
+      "slug": "take-driving-pet-peeve",
+      "text": "What's the driving habit that turns you into a completely different person?"
+    },
+    {
+      "slug": "take-nostalgia-lie",
+      "text": "What are people wrong to be nostalgic about? Something that was actually worse back then."
+    },
+    {
+      "slug": "take-award-shows",
+      "text": "Do awards mean anything any more, in any field? Where's the strongest counter-example?"
+    },
+    {
+      "slug": "take-best-decade-music",
+      "text": "Best decade for music, and you must give a reason that isn't 'that's when I grew up'."
+    },
+    {
+      "slug": "take-phone-call-vs-text",
+      "text": "Calling someone without texting first: reasonable, or a hostile act?"
+    },
+    {
+      "slug": "take-leftover-rules",
+      "text": "How many days do leftovers get in your house, and what's the one food you'd never risk?"
+    },
+    {
+      "slug": "take-worst-fashion",
+      "text": "Which fashion trend needs to stay buried, and which one deserves a comeback?"
+    },
+    {
+      "slug": "take-buffet-strategy",
+      "text": "What's the correct buffet strategy, and what's the amateur mistake everyone makes?"
+    },
+    {
+      "slug": "take-tv-rewatch",
+      "text": "Is rewatching the same show for the tenth time comfort or avoidance? Be honest about which one you're doing."
+    },
+    {
+      "slug": "take-mandatory-fun",
+      "text": "What's the most pointless thing employers do in the name of team spirit?"
+    },
+    {
+      "slug": "take-best-fast-food",
+      "text": "Best fast food chain, worst fast food chain, and the one item that's better than the whole menu it's on."
+    },
+    {
+      "slug": "take-instructions",
+      "text": "Do you read the instructions first, or do you build it and see which screws are left over?"
+    },
+    {
+      "slug": "take-old-tech-better",
+      "text": "What piece of old technology was straight-up better than what replaced it?"
+    },
+    {
+      "slug": "take-luxury-waste",
+      "text": "What expensive thing is a complete waste of money, and what cheap thing is worth every penny?"
+    },
+    {
+      "slug": "take-time-travel-decade",
+      "text": "Which decade would be the worst to be transported to, and what would break you first?"
+    },
+    {
+      "slug": "take-worst-sound",
+      "text": "What's the worst sound in the world? Not scary — just genuinely unbearable."
+    }
+  ]
+}

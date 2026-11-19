@@ -1,5 +1,7 @@
 import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, ChannelType } from 'discord.js';
 import pool from '../../utils/db.js';
+import { displayNameFor } from '../../utils/display-name.js';
+import { themeColor } from '../../core/guild-theme.js';
 
 export default {
     category: 'info',
@@ -168,7 +170,7 @@ export default {
     const explicitContentFilters = ['Disabled', 'Members without roles', 'All members'];
 
     const embed = new EmbedBuilder()
-      .setColor('#3498DB')
+      .setColor(themeColor(interaction.guildId, 'primary'))
       .setTitle(`Server Info: ${guild.name}`)
       .setThumbnail(guild.iconURL({ size: 256 }))
       .addFields(
@@ -312,7 +314,7 @@ export default {
     };
 
     const embed = new EmbedBuilder()
-      .setColor('#5865F2')
+      .setColor(themeColor(interaction.guildId, 'primary'))
       .setFooter({ text: `Requested by ${interaction.user.tag}` })
       .setTimestamp();
 
@@ -353,7 +355,7 @@ export default {
             { name: '💬 Channels', value: `**Text:** ${textChannels}\n**Voice:** ${voiceChannels}\n**Categories:** ${categories}`, inline: true },
             { name: '🎭 Roles', value: `${guild.roles.cache.size}`, inline: true }
           )
-          .setColor('#57F287');
+          .setColor(themeColor(interaction.guildId, 'success'));
 
         if (guild.premiumTier > 0) {
           embed.addFields({
@@ -484,7 +486,7 @@ export default {
               { name: '👥 Members (cached)', value: cached.member_count?.toLocaleString() || 'Unknown', inline: true },
               { name: '📆 Last Seen', value: cached.last_seen ? `<t:${Math.floor(new Date(cached.last_seen).getTime() / 1000)}:R>` : 'Unknown', inline: true }
             )
-            .setColor('#FFA500');
+            .setColor(themeColor(interaction.guildId, 'warning'));
 
           embed.addFields({
             name: '🤖 Bot Presence',
@@ -508,7 +510,7 @@ export default {
         { name: '📅 Created', value: `<t:${Math.floor(createdAt.getTime() / 1000)}:F>\n(<t:${Math.floor(createdAt.getTime() / 1000)}:R>)`, inline: false },
         { name: '⏱️ Age', value: `${Math.floor((Date.now() - timestamp) / (1000 * 60 * 60 * 24))} days`, inline: true }
       )
-      .setColor('#ED4245')
+      .setColor(themeColor(interaction.guildId, 'danger'))
       .addFields({
         name: '🤖 Bot Presence',
         value: formatBotPresence(presenceInfo) + '\n\n❌ Server Discovery disabled\n❌ Server Widget disabled\n❌ No cached data available',
@@ -533,7 +535,7 @@ export default {
     const voiceChannels = channels.filter(c => c.isVoiceBased()).size;
 
     const embed = new EmbedBuilder()
-      .setColor('#5865F2')
+      .setColor(themeColor(interaction.guildId, 'primary'))
       .setTitle(`📊 ${guild.name} Statistics`)
       .setThumbnail(guild.iconURL())
       .addFields(
@@ -578,7 +580,7 @@ export default {
     const growthPercent = ((memberGrowth / earliest.member_count) * 100).toFixed(1);
 
     const embed = new EmbedBuilder()
-      .setColor('#57F287')
+      .setColor(themeColor(interaction.guildId, 'success'))
       .setTitle(`📈 Server Growth (Last ${days} Days)`)
       .addFields(
         { name: 'Current Members', value: latest.member_count.toLocaleString(), inline: true },
@@ -670,7 +672,7 @@ export default {
     const userList = await Promise.all(
       topUsers.map(async (userData, index) => {
         const user = await interaction.client.users.fetch(userData.user_id).catch(() => null);
-        const username = user ? user.username : 'Unknown User';
+        const username = displayNameFor(user, interaction.guild);
         const medal = index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : `**${index + 1}.**`;
 
         return `${medal} **${username}**\n` +
@@ -724,7 +726,7 @@ export default {
     }
 
     const embed = new EmbedBuilder()
-      .setColor('#ED4245')
+      .setColor(themeColor(interaction.guildId, 'danger'))
       .setTitle('⏰ Peak Activity Times')
       .setDescription('Times when the server is most active')
       .setTimestamp();

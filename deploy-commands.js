@@ -4,13 +4,21 @@ import logger from './utils/logger.js';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import fs from 'fs';
+import { localizeCommands } from './utils/command-localization.js';
+// Same payload builder as the automatic deploy (core/bot-manager.js runCommandDeploy): moved commands
+// folded into their parents (core/command-mounts.js) and only slash-registered commands
+// (core/command-registration.js). Pushing raw module JSON skipped both and went over Discord's 100 cap.
+import { buildDeployJson } from './core/command-mounts.js';
+import { fitSlashLimit } from './core/custom-bot-commands.js';
 
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-const commands = [];
+let commands = [];
+const modules = [];
+const skipped = [];
 
 /**
  * Load all command files and build command array
@@ -37,7 +45,14 @@ async function loadCommands() {
         const command = await import(`file://${filePath}`);
 
         if (command.default && command.default.data) {
-          commands.push(command.default.data.toJSON());
+          // guildScoped commands are deliberately kept out of the GLOBAL payload -- see
+          // scripts/deploy-guild-scoped-commands.js, which registers them per-guild to the
+          // servers that opted in. Custom bots use their own loaders and still get everything.
+          if (command.default.guildScoped) {
+            skipped.push(command.default.data.name);
+            continue;
+          }
+          modules.push(command.default);
           logger.debug(`[Deploy] Added ${folder}/${file}`);
         }
       } catch (error) {
@@ -52,13 +67,20 @@ async function loadCommands() {
  */
 async function deployCommands() {
   try {
+    commands = fitSlashLimit(buildDeployJson(modules)).commands;
     logger.info(`[Deploy] Started refreshing ${commands.length} application (/) commands.`);
+    if (skipped.length) {
+      logger.info(`[Deploy] Held back ${skipped.length} guild-scoped command(s) from the global payload: ${skipped.join(', ')}`);
+    }
 
     const rest = new REST().setToken(process.env.DISCORD_TOKEN);
 
     const data = await rest.put(
       Routes.applicationCommands(process.env.DISCORD_CLIENT_ID),
-      { body: commands }
+      // Native Discord localization: names/descriptions render in each user's
+      // own client language at no runtime cost. Applied at the payload level so
+      // no command file has to know it exists.
+      { body: localizeCommands(commands) }   // already mounted and filtered above
     );
 
     logger.info(`[Deploy] Successfully reloaded ${data.length} application (/) commands.`);

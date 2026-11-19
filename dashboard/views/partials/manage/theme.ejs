@@ -1,0 +1,367 @@
+<%#
+  Guild embed theme: an on/off switch (guild_theme.enabled), six colour slots and an embed footer
+  (POST /manage/:id/theme as JSON from the script below; the form itself is never submitted
+  natively), a live preview, and Send test (POST /manage/:id/theme/test). Needs `guild`, `theme`
+  (from getTheme) and `defaultTheme` in locals. Built on the settings-row kit (cf-settings.css); ids
+  and field names are unchanged.
+%>
+<%
+const thSaved = locals.theme || {};
+const thDefaults = locals.defaultTheme || {};
+const thEnabled = thSaved.enabled !== false;
+// Text channels for Send test, from the guild the route already has (no extra queries).
+const thChannels = (guild && guild.channels && guild.channels.cache)
+    ? Array.from(guild.channels.cache.values())
+        .filter(c => c && (c.type === 0 || c.type === 5))
+        .map(c => ({ id: c.id, name: c.name, position: c.rawPosition || c.position || 0 }))
+        .sort((a, b) => a.position - b.position)
+    : [];
+const thBot = (guild && guild.members && guild.members.me && guild.members.me.displayName) || 'CertiFried';
+%>
+<style>
+    #themePage .theme-pick { display: flex; align-items: center; gap: var(--cf-2); min-width: 0; }
+    #themePage .theme-pick input[type="color"] {
+        flex: none; width: 44px; height: 38px; margin: 0; padding: 2px; cursor: pointer;
+        background: var(--cf-surface-2); border: 1px solid var(--cf-border-strong); border-radius: var(--cf-radius);
+    }
+    #themePage .theme-pick .theme-hex { flex: 1 1 auto; min-width: 0; width: 100%; margin: 0; font-family: var(--cf-mono); text-transform: uppercase; font-variant-numeric: tabular-nums; }
+    #themePage .theme-pv { display: grid; gap: var(--cf-2); padding: var(--cf-4) var(--cf-5); background: var(--cf-surface-2); }
+    #themePage .theme-pv-head { display: flex; align-items: center; gap: var(--cf-2); font-size: var(--cf-text-sm); }
+    #themePage .theme-pv-av { flex: none; width: 28px; height: 28px; border-radius: 50%; background: var(--cf-surface-3); }
+    #themePage .theme-pv-name { font-weight: 600; color: var(--cf-text); }
+    #themePage .theme-pv-tag { padding: 0 4px; border-radius: 3px; font-size: 10px; font-weight: 600; line-height: 16px; color: var(--cf-on-accent); background: var(--cf-accent); }
+    #themePage .theme-pv-embed { max-width: 32rem; min-width: 0; padding: var(--cf-2) var(--cf-3); border-radius: var(--cf-radius-sm); background: var(--cf-surface); border-left: 4px solid var(--theme-pv, var(--cf-border-strong)); font-size: var(--cf-text-sm); color: var(--cf-text-2); overflow-wrap: anywhere; }
+    #themePage .theme-pv-title { margin: 0 0 2px; font-weight: 600; color: var(--cf-text); }
+    #themePage .theme-pv-foot { display: flex; align-items: center; gap: 6px; margin-top: 6px; font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+    #themePage .theme-pv-foot img { width: 16px; height: 16px; border-radius: 50%; object-fit: cover; }
+    #themePage .theme-pv.is-off .theme-pv-embed { --theme-pv: var(--cf-border-strong); }
+    #themePage .theme-test { display: flex; flex-wrap: wrap; align-items: center; gap: var(--cf-2); }
+    #themePage .theme-test select { flex: 1 1 12rem; min-width: 0; width: auto; margin: 0; }
+    @media (max-width: 640px) {
+        #themePage .theme-pick input[type="color"], #themePage .theme-pick .theme-hex { min-height: 44px; }
+        #themePage .theme-pv { padding: var(--cf-4); }
+        #themePage .theme-test select, #themePage .theme-test .btn { flex: 1 1 100%; min-height: 44px; justify-content: center; }
+    }
+</style>
+
+<div class="page-section" id="themePage" data-guild-id="<%= guild.id %>">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-palette" aria-hidden="true"></i>
+                <span>Theme</span>
+            </div>
+            <div class="page-section-subtitle">Colours are named by meaning, so a red brand can still keep a clear success colour.</div>
+        </div>
+    </div>
+
+    <div class="cf-notice is-bad" id="themeError" role="alert" hidden></div>
+
+    <form id="themeForm" novalidate>
+        <section class="cf-section" aria-labelledby="theme-on-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="theme-on-title">Custom theme</h2>
+                </div>
+            </header>
+            <div class="cf-rows">
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="theme-enabled">Use this theme</label>
+                        <p class="cf-row-desc" id="theme-enabled-desc">When off, embeds use the default colours and no footer. Your choices below are kept.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="checkbox" class="cf-switch" role="switch" id="theme-enabled" name="enabled" value="1" data-feature-switch aria-describedby="theme-enabled-desc"<%= thEnabled ? ' checked' : '' %>>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <%
+        const slots = [
+            { key: 'primary', label: 'Primary',  hint: 'Neutral and informational output. By far the most used colour.' },
+            { key: 'success', label: 'Success',  hint: 'Something worked: saved, added, enabled.' },
+            { key: 'danger',  label: 'Danger',   hint: 'Something failed, was denied or was deleted.' },
+            { key: 'warning', label: 'Warning',  hint: 'Caution, pending, rate-limited or needs attention.' },
+            { key: 'info',    label: 'Info',     hint: 'Secondary informational output.' },
+            { key: 'accent',  label: 'Accent',   hint: 'Decorative highlights.' }
+        ];
+        %>
+        <section class="cf-section" aria-labelledby="theme-colours-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="theme-colours-title">Embed colours</h2>
+                    <p class="cf-section-desc">Pick a colour or type a hex value such as <code>#5865F2</code>.</p>
+                </div>
+            </header>
+            <div class="cf-rows">
+                <% slots.forEach(s => { const v = thSaved[s.key] || thDefaults[s.key] || '#5865F2'; %>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="theme-<%= s.key %>"><%= s.label %></label>
+                        <p class="cf-row-desc" id="theme-<%= s.key %>-hint"><%= s.hint %></p>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="theme-pick">
+                            <input type="color"
+                                   id="theme-<%= s.key %>"
+                                   name="<%= s.key %>"
+                                   value="<%= v %>"
+                                   data-default="<%= thDefaults[s.key] || v %>"
+                                   aria-describedby="theme-<%= s.key %>-hint">
+                            <input type="text"
+                                   class="form-control theme-hex"
+                                   id="theme-<%= s.key %>-hex"
+                                   value="<%= v %>"
+                                   pattern="#[0-9A-Fa-f]{6}"
+                                   maxlength="7"
+                                   spellcheck="false"
+                                   autocomplete="off"
+                                   aria-label="<%= s.label %> colour hex value">
+                        </div>
+                    </div>
+                </div>
+                <% }) %>
+            </div>
+        </section>
+
+        <section class="cf-section" aria-labelledby="theme-footer-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="theme-footer-title">Embed footer</h2>
+                    <p class="cf-section-desc">Added to the bot's replies to commands, on embeds in your theme's colours that have no footer of their own. Send test shows it too.</p>
+                </div>
+            </header>
+            <div class="cf-rows">
+                <div class="cf-row cf-row--wide">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="theme-footer">Footer text</label>
+                        <p class="cf-row-desc" id="theme-footer-desc">A server tagline or a rules reminder. Leave empty for no footer.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="text" id="theme-footer" name="footerText" class="form-control"
+                               maxlength="2048" aria-describedby="theme-footer-desc"
+                               value="<%= thSaved.footerText || '' %>"
+                               placeholder="No footer">
+                    </div>
+                </div>
+                <div class="cf-row cf-row--wide">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="theme-footer-icon">Footer icon</label>
+                        <p class="cf-row-desc" id="theme-footer-icon-desc">Link to a small image shown before the footer text. Only shown with footer text.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="url" id="theme-footer-icon" name="footerIconUrl" class="form-control"
+                               maxlength="512" inputmode="url" aria-describedby="theme-footer-icon-desc"
+                               value="<%= thSaved.footerIconUrl || '' %>"
+                               placeholder="https://example.com/icon.png">
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="cf-section" aria-labelledby="theme-preview-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="theme-preview-title">Preview</h2>
+                    <p class="cf-section-desc">Updates as you edit. Send test posts these embeds with the saved theme.</p>
+                </div>
+            </header>
+            <div class="cf-rows">
+                <div class="theme-pv" id="themePreview" aria-live="off">
+                    <div class="theme-pv-head"><span class="theme-pv-av" aria-hidden="true"></span><span class="theme-pv-name"><%= thBot %></span><span class="theme-pv-tag">APP</span></div>
+                    <% slots.forEach(s => { %>
+                    <div class="theme-pv-embed" data-pv-slot="<%= s.key %>">
+                        <% if (s.key === 'primary') { %><p class="theme-pv-title">Theme test</p><% } %>
+                        <div><%= s.label %>: <%= s.hint.charAt(0).toLowerCase() + s.hint.slice(1) %></div>
+                        <div class="theme-pv-foot" data-pv-foot hidden></div>
+                    </div>
+                    <% }) %>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="themeTestChannel">Send test</label>
+                        <p class="cf-row-desc">Save first: the test uses the saved theme.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="theme-test">
+                            <select id="themeTestChannel" class="form-select" aria-label="Channel for the test message">
+                                <option value="">Choose a channel</option>
+                                <% thChannels.forEach(c => { %><option value="<%= c.id %>" data-kind="text">#<%= c.name %></option><% }) %>
+                            </select>
+                            <button type="button" class="btn btn-secondary btn-sm" id="themeTestBtn">Send test</button>
+                        </div>
+                        <span class="cf-status-line" id="themeTestStatus" role="status"></span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <div class="cf-form-actions">
+            <span class="cf-status-line cf-foot-note" id="themeStatus" role="status"></span>
+            <button type="button" class="btn btn-secondary" id="themeReset">Reset to defaults</button>
+            <button type="submit" class="btn btn-primary">Save theme</button>
+        </div>
+    </form>
+
+    <section class="cf-section" aria-labelledby="theme-scope-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="theme-scope-title">What this changes</h2>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--stack">
+                <div class="cf-row-text">
+                    <div class="cf-row-label">Follows your theme</div>
+                    <p class="cf-row-desc">About 700 places in the bot take their embed colour from these slots, roughly half of its embeds.</p>
+                </div>
+            </div>
+            <div class="cf-row cf-row--stack">
+                <div class="cf-row-text">
+                    <div class="cf-row-label">Left as they are</div>
+                    <p class="cf-row-desc">The other half keep fixed colours, including platform branding such as Twitch purple, so those alerts stay easy to recognise.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+</div>
+
+<script>
+(function () {
+    const form = document.getElementById('themeForm');
+    if (!form) return;
+
+    const guildId = document.getElementById('themePage').dataset.guildId;
+    const err = document.getElementById('themeError');
+    const status = document.getElementById('themeStatus');
+    const slots = ['primary', 'success', 'danger', 'warning', 'info', 'accent'];
+    const HEX = /^#[0-9A-Fa-f]{6}$/;
+    const enabled = document.getElementById('theme-enabled');
+    const footer = document.getElementById('theme-footer');
+    const footerIcon = document.getElementById('theme-footer-icon');
+    const preview = document.getElementById('themePreview');
+
+    function paintPreview() {
+        preview.classList.toggle('is-off', !enabled.checked);
+        slots.forEach((slot) => {
+            const box = preview.querySelector('[data-pv-slot="' + slot + '"]');
+            if (!box) return;
+            const picker = document.getElementById('theme-' + slot);
+            const colour = enabled.checked ? picker.value : (picker.dataset.default || picker.value);
+            box.style.setProperty('--theme-pv', colour);
+            const foot = box.querySelector('[data-pv-foot]');
+            foot.replaceChildren();
+            const text = enabled.checked ? footer.value.trim() : '';
+            foot.hidden = !text;
+            if (!text) return;
+            const icon = footerIcon.value.trim();
+            if (/^https?:\/\/\S+$/i.test(icon)) {
+                const img = document.createElement('img');
+                img.src = icon; img.alt = ''; img.referrerPolicy = 'no-referrer';
+                img.addEventListener('error', () => img.remove());
+                foot.appendChild(img);
+            }
+            const span = document.createElement('span');
+            span.textContent = text;
+            foot.appendChild(span);
+        });
+    }
+
+    // Keep the swatch and the hex box in step, so either can be used.
+    slots.forEach((slot) => {
+        const picker = document.getElementById('theme-' + slot);
+        const hex = document.getElementById('theme-' + slot + '-hex');
+        picker.addEventListener('input', () => { hex.value = picker.value.toUpperCase(); hex.removeAttribute('aria-invalid'); paintPreview(); });
+        hex.addEventListener('input', () => {
+            const v = hex.value.trim();
+            const ok = HEX.test(v);
+            hex.toggleAttribute('aria-invalid', !ok && v.length >= 7);
+            if (ok) { picker.value = v; paintPreview(); }
+        });
+    });
+    [enabled, footer, footerIcon].forEach((el) => el.addEventListener('input', paintPreview));
+    enabled.addEventListener('change', paintPreview);
+
+    const setStatus = (el, text, tone) => { el.textContent = text || ''; el.className = 'cf-status-line' + (el === status ? ' cf-foot-note' : '') + (tone ? ' is-' + tone : ''); };
+    const showErr = (text) => { err.textContent = text || ''; err.hidden = !text; };
+
+    async function send(url, body) {
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+            body: JSON.stringify(body),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(data.error || ('Request failed (' + res.status + ')'));
+        return data;
+    }
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        showErr('');
+        const bad = slots.find((slot) => !HEX.test(document.getElementById('theme-' + slot + '-hex').value.trim()));
+        if (bad) { showErr('Each colour needs a hex value like #5865F2.'); document.getElementById('theme-' + bad + '-hex').focus(); return; }
+        const icon = footerIcon.value.trim();
+        if (icon && !/^https?:\/\/\S+$/i.test(icon)) { showErr('The footer icon must be a link starting with https://.'); footerIcon.focus(); return; }
+        const payload = { enabled: enabled.checked };
+        for (const slot of slots) payload[slot] = document.getElementById('theme-' + slot).value.toUpperCase();
+        payload.footerText = footer.value.trim() || null;
+        payload.footerIconUrl = icon || null;
+        const btn = form.querySelector('button[type=submit]');
+        btn.disabled = true;
+        setStatus(status, 'Saving', 'busy');
+        try {
+            const data = await send('/manage/' + guildId + '/theme', payload);
+            setStatus(status, data.message || 'Theme saved.', 'ok');
+            form.dispatchEvent(new CustomEvent('cf:clean', { bubbles: true }));
+        } catch (ex) {
+            setStatus(status, '');
+            showErr(ex.message);
+        } finally {
+            btn.disabled = false;
+        }
+    });
+
+    document.getElementById('themeReset').addEventListener('click', async () => {
+        if (!confirm('Reset every colour and the footer to the defaults?')) return;
+        showErr('');
+        try {
+            const data = await send('/manage/' + guildId + '/theme', { reset: true });
+            if (data && data.theme) {
+                for (const slot of slots) {
+                    document.getElementById('theme-' + slot).value = data.theme[slot];
+                    document.getElementById('theme-' + slot + '-hex').value = data.theme[slot];
+                }
+                footer.value = '';
+                footerIcon.value = '';
+                enabled.checked = true;
+                enabled.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+            paintPreview();
+            setStatus(status, data.message || 'Theme reset to defaults.', 'ok');
+        } catch (ex) {
+            showErr(ex.message);
+        }
+    });
+
+    const testBtn = document.getElementById('themeTestBtn');
+    const testStatus = document.getElementById('themeTestStatus');
+    testBtn.addEventListener('click', async () => {
+        const channelId = document.getElementById('themeTestChannel').value;
+        if (!channelId) { setStatus(testStatus, 'Choose a channel first.', 'bad'); return; }
+        testBtn.disabled = true;
+        setStatus(testStatus, 'Sending', 'busy');
+        try {
+            const data = await send('/manage/' + guildId + '/theme/test', { channel_id: channelId });
+            setStatus(testStatus, data.message || 'Sent.', 'ok');
+        } catch (ex) {
+            setStatus(testStatus, ex.message, 'bad');
+        } finally {
+            testBtn.disabled = false;
+        }
+    });
+
+    paintPreview();
+})();
+</script>

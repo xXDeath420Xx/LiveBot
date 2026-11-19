@@ -1,408 +1,158 @@
 <!DOCTYPE html>
-<html lang="en" data-bs-theme="dark">
+<html data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>" lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title><%= username %> - TikTok Analytics | CertiFried MultiTool</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+<%- include('partials/site-head', { title: (username) + ' — TikTok analytics | CertiFried MultiTool', description: 'TikTok video statistics for ' + (username) + ': views, likes, comments, shares and posting times.' }) %>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <link rel="stylesheet" href="/css/unified-dark-theme.css">
+    <link rel="stylesheet" href="/css/cf-settings.css">
+    <link rel="stylesheet" href="/css/cf-analytics.css">
     <style>
-        body {
-            background: linear-gradient(135deg, #0a0e27 0%, #1e2028 50%, #16181d 100%);
-            min-height: 100vh;
-        }
-
-        .analytics-header {
-            background: linear-gradient(135deg, rgba(167, 139, 250, 0.1) 0%, rgba(255, 0, 80, 0.1) 100%);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-            padding: 2rem 0;
-        }
-
-        .creator-avatar {
-            width: 120px;
-            height: 120px;
-            border-radius: 50%;
-            border: 4px solid #a78bfa;
-            object-fit: cover;
-            box-shadow: 0 0 30px rgba(167, 139, 250, 0.4);
-        }
-
-        .creator-name {
-            font-size: 2rem;
-            font-weight: 700;
-            color: #fff;
-            margin-bottom: 0.25rem;
-        }
-
-        .creator-handle {
-            color: rgba(255, 255, 255, 0.6);
-            font-size: 1.1rem;
-        }
-
-        .stat-card {
-            background: rgba(30, 32, 40, 0.8);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 12px;
-            padding: 1.5rem;
-            text-align: center;
-            transition: all 0.3s ease;
-        }
-
-        .stat-card:hover {
-            transform: translateY(-5px);
-            border-color: #a78bfa;
-            box-shadow: 0 10px 30px rgba(167, 139, 250, 0.2);
-        }
-
-        .stat-value {
-            font-size: 2rem;
-            font-weight: 700;
-            color: #a78bfa;
-            margin-bottom: 0.25rem;
-        }
-
-        .stat-label {
-            color: rgba(255, 255, 255, 0.6);
-            font-size: 0.9rem;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-        }
-
-        .nav-tabs-custom {
-            border-bottom: 2px solid rgba(255, 255, 255, 0.1);
-            margin-bottom: 2rem;
-        }
-
-        .nav-tabs-custom .nav-link {
-            color: rgba(255, 255, 255, 0.6);
-            border: none;
-            padding: 1rem 1.5rem;
-            font-weight: 500;
-            position: relative;
-        }
-
-        .nav-tabs-custom .nav-link:hover {
-            color: #fff;
-        }
-
-        .nav-tabs-custom .nav-link.active {
-            color: #a78bfa;
-            background: transparent;
-        }
-
-        .nav-tabs-custom .nav-link.active::after {
-            content: '';
-            position: absolute;
-            bottom: -2px;
-            left: 0;
-            right: 0;
-            height: 2px;
-            background: #a78bfa;
-        }
-
-        .data-table {
-            background: rgba(30, 32, 40, 0.6);
-            border-radius: 12px;
-            overflow: hidden;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .data-table th {
-            background: rgba(167, 139, 250, 0.2);
-            color: #fff;
-            font-weight: 600;
-            padding: 1rem;
-            border: none;
-            text-transform: uppercase;
-            font-size: 0.85rem;
-            letter-spacing: 1px;
-        }
-
-        .data-table td {
-            padding: 0.875rem 1rem;
-            color: rgba(255, 255, 255, 0.8);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-            vertical-align: middle;
-        }
-
-        .data-table tbody tr:hover {
-            background: rgba(167, 139, 250, 0.1);
-        }
-
-        .positive {
-            color: #57F287;
-        }
-
-        .negative {
-            color: #ED4245;
-        }
-
-        .video-thumbnail {
-            width: 80px;
-            height: 100px;
-            object-fit: cover;
-            border-radius: 8px;
-        }
-
-        .schedule-grid {
-            display: grid;
-            grid-template-columns: repeat(7, 1fr);
-            gap: 0.5rem;
-        }
-
-        .schedule-cell {
-            background: rgba(30, 32, 40, 0.6);
-            border-radius: 8px;
-            padding: 0.75rem;
-            text-align: center;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .schedule-cell .day {
-            font-size: 0.8rem;
-            color: rgba(255, 255, 255, 0.6);
-            margin-bottom: 0.25rem;
-        }
-
-        .schedule-cell .count {
-            font-size: 1.25rem;
-            font-weight: 700;
-            color: #a78bfa;
-        }
-
-        .tiktok-brand {
-            color: #FF0050;
-        }
-
-        .brand-header {
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-            margin-bottom: 1rem;
-        }
-
-        .brand-header img {
-            height: 30px;
-        }
-
-        .empty-state {
-            text-align: center;
-            padding: 4rem 2rem;
-            color: rgba(255, 255, 255, 0.6);
-        }
-
-        .empty-state i {
-            font-size: 4rem;
-            margin-bottom: 1rem;
-            opacity: 0.3;
-        }
-
-        .btn-tiktok {
-            background: linear-gradient(135deg, #FF0050 0%, #00F2EA 100%);
-            border: none;
-            color: #fff;
-            font-weight: 600;
-            padding: 0.75rem 1.5rem;
-            border-radius: 8px;
-            transition: all 0.3s ease;
-        }
-
-        .btn-tiktok:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 20px rgba(255, 0, 80, 0.4);
-            color: #fff;
-        }
-
-        .video-link {
-            color: #a78bfa;
-            text-decoration: none;
-        }
-
-        .video-link:hover {
-            text-decoration: underline;
-        }
+        .tt-avatar { flex: none; width: 56px; height: 56px; border-radius: 50%; object-fit: cover; background: var(--cf-surface-2); border: 1px solid var(--cf-border);
+            display: inline-flex; align-items: center; justify-content: center; font-size: 22px; font-weight: 600; color: var(--cf-text-2); }
+        .tt-thumb { width: 44px; height: 58px; object-fit: cover; border-radius: var(--cf-radius-sm); background: var(--cf-surface-2); display: block; }
+        .tt-title { max-width: 32rem; overflow-wrap: anywhere; }
+        .tt-tools { display: flex; gap: var(--cf-2); align-items: center; flex-wrap: wrap; margin: 0 0 var(--cf-3); }
+        .tt-tools input[type="search"] { flex: 1 1 14rem; max-width: 22rem; }
+        #ttTable th[data-sort] { cursor: pointer; user-select: none; }
+        #ttTable th[aria-sort="ascending"]::after { content: " \2191"; }
+        #ttTable th[aria-sort="descending"]::after { content: " \2193"; }
     </style>
 </head>
-<body>
-    <!-- Navigation -->
-    <nav class="navbar navbar-expand-lg navbar-dark" style="background: rgba(0, 0, 0, 0.3);">
-        <div class="container">
-            <a class="navbar-brand d-flex align-items-center" href="/">
-                <img src="/images/logo.png" alt="CertiFried" height="40" class="me-2">
-                <span class="fw-bold">CertiFried MultiTool</span>
-            </a>
-            <div class="navbar-nav ms-auto">
-                <a class="nav-link" href="/">Home</a>
-                <a class="nav-link" href="/dashboard">Dashboard</a>
-            </div>
+<%
+    const n = (v) => Number(v || 0).toLocaleString('en-US');
+    const short = formatNumber;
+    const handle = String(username || '').replace(/[^A-Za-z0-9._]/g, '');
+    // Posting times in UTC, so the page reads the same for every visitor.
+    const byDay = [0, 0, 0, 0, 0, 0, 0], byHour = new Array(24).fill(0);
+    let dated = 0;
+    for (const v of videos) { if (!v.posted_at) continue; const d = new Date(v.posted_at); if (isNaN(d)) continue; byDay[d.getUTCDay()]++; byHour[d.getUTCHours()]++; dated++; }
+    const maxDay = Math.max(1, ...byDay), maxHour = Math.max(1, ...byHour);
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const bestDay = byDay.indexOf(Math.max(...byDay)), bestHour = byHour.indexOf(Math.max(...byHour));
+    const avgViews = videos.length ? Math.round(stats.totalViews / videos.length) : 0;
+    const safeUrl = (u) => /^https:\/\//i.test(String(u || '')) ? u : null;
+%>
+<body class="cf-an-body">
+<%- include('partials/site-header') %>
+<main id="main-content" class="cf-an-page" tabindex="-1">
+    <header class="cf-an-head">
+        <% if (safeUrl(avatar)) { %><img class="tt-avatar" src="<%= avatar %>" alt="" width="56" height="56" onerror="this.replaceWith(Object.assign(document.createElement('span'),{className:'tt-avatar',textContent:'<%= handle.charAt(0).toUpperCase() %>'}))">
+        <% } else { %><span class="tt-avatar" aria-hidden="true"><%= handle.charAt(0).toUpperCase() || '?' %></span><% } %>
+        <div class="cf-an-head-text">
+            <h1 class="cf-an-title"><%= username %></h1>
+            <p class="cf-an-sub">TikTok video statistics from the last <%= n(videos.length) %> video<%= videos.length === 1 ? '' : 's' %> CertiFried tracked, as counted when each video was first seen.</p>
         </div>
-    </nav>
+        <div class="cf-an-actions">
+            <a href="https://www.tiktok.com/@<%= handle %>" target="_blank" rel="noopener" class="btn btn-secondary btn-sm"><i class="fab fa-tiktok" aria-hidden="true"></i> Open on TikTok</a>
+            <% if (videos.length) { %><button type="button" class="btn btn-secondary btn-sm" id="csvBtn"><i class="fas fa-file-csv" aria-hidden="true"></i> Export CSV</button><% } %>
+        </div>
+    </header>
 
-    <!-- Creator Header -->
-    <div class="analytics-header">
-        <div class="container">
-            <div class="row align-items-center">
-                <div class="col-auto">
-                    <img src="<%= avatar || '/images/default-avatar.png' %>" alt="<%= username %>" class="creator-avatar">
-                </div>
-                <div class="col">
-                    <h1 class="creator-name"><%= username %></h1>
-                    <p class="creator-handle mb-2">@<%= username %></p>
-                    <a href="https://tiktok.com/@<%= username %>" target="_blank" class="btn btn-tiktok btn-sm">
-                        <i class="fab fa-tiktok me-1"></i> View on TikTok
-                    </a>
-                </div>
+    <dl class="cf-kpis">
+        <div class="cf-kpi"><dt>Videos</dt><dd><%= n(stats.totalVideos) %></dd></div>
+        <div class="cf-kpi"><dt>Views</dt><dd title="<%= n(stats.totalViews) %>"><%= short(stats.totalViews) %></dd><span class="cf-kpi-sub"><%= short(avgViews) %> per video</span></div>
+        <div class="cf-kpi"><dt>Likes</dt><dd title="<%= n(stats.totalLikes) %>"><%= short(stats.totalLikes) %></dd></div>
+        <div class="cf-kpi"><dt>Comments</dt><dd title="<%= n(stats.totalComments) %>"><%= short(stats.totalComments) %></dd></div>
+        <div class="cf-kpi"><dt>Shares</dt><dd title="<%= n(stats.totalShares) %>"><%= short(stats.totalShares) %></dd></div>
+        <div class="cf-kpi"><dt>Engagement</dt><dd><%= Number(stats.avgEngagement || 0) %>%</dd><span class="cf-kpi-sub">likes and comments per view</span></div>
+    </dl>
+
+    <% if (!videos.length) { %>
+    <div class="cf-rows"><div class="cf-state">
+        <p class="cf-state-title">No videos tracked yet</p>
+        <p class="cf-state-text">Statistics appear once CertiFried has seen this creator post on TikTok.</p>
+    </div></div>
+    <% } else { %>
+    <h2 class="cf-an-section-title">When <%= username %> posts <span class="cf-an-count">UTC</span></h2>
+    <div class="cf-an-grid is-2">
+        <section class="cf-an-card" aria-labelledby="tt-day">
+            <div class="cf-an-card-head"><h3 class="cf-an-card-title" id="tt-day">Posts by day</h3><% if (dated) { %><span class="cf-an-muted" style="font-size: var(--cf-text-xs);">Most: <%= dayNames[bestDay] %></span><% } %></div>
+            <% if (!dated) { %><div class="cf-state cf-state--compact"><p class="cf-state-text">No post dates recorded.</p></div><% } else { %>
+            <div class="cf-an-bars" role="img" aria-label="Posts by day of week: <%= dayNames.map((d, i) => d + ' ' + byDay[i]).join(', ') %>">
+                <% byDay.forEach((c, i) => { %><div class="cf-an-bar<%= c ? '' : ' is-zero' %>" style="height: <%= Math.max(2, Math.round(100 * c / maxDay)) %>%" title="<%= dayNames[i] %>: <%= c %> post<%= c === 1 ? '' : 's' %>"></div><% }) %>
             </div>
-        </div>
+            <div class="cf-an-bar-labels" aria-hidden="true"><% dayNames.forEach(d => { %><span><%= d %></span><% }) %></div>
+            <% } %>
+        </section>
+        <section class="cf-an-card" aria-labelledby="tt-hour">
+            <div class="cf-an-card-head"><h3 class="cf-an-card-title" id="tt-hour">Posts by hour</h3><% if (dated) { %><span class="cf-an-muted" style="font-size: var(--cf-text-xs);">Most: <%= String(bestHour).padStart(2, '0') %>:00</span><% } %></div>
+            <% if (!dated) { %><div class="cf-state cf-state--compact"><p class="cf-state-text">No post times recorded.</p></div><% } else { %>
+            <div class="cf-an-bars" role="img" aria-label="Posts by hour of day, UTC">
+                <% byHour.forEach((c, h) => { %><div class="cf-an-bar<%= c ? '' : ' is-zero' %>" style="height: <%= Math.max(2, Math.round(100 * c / maxHour)) %>%" title="<%= String(h).padStart(2, '0') %>:00: <%= c %> post<%= c === 1 ? '' : 's' %>"></div><% }) %>
+            </div>
+            <div class="cf-an-bar-labels" aria-hidden="true"><% for (let h = 0; h < 24; h++) { %><span><%= h % 6 === 0 ? String(h).padStart(2, '0') : '' %></span><% } %></div>
+            <% } %>
+        </section>
     </div>
 
-    <!-- Stats Overview -->
-    <div class="container py-4">
-        <div class="row g-4 mb-4">
-            <div class="col-md-3 col-6">
-                <div class="stat-card">
-                    <div class="stat-value"><%= formatNumber(stats.totalVideos) %></div>
-                    <div class="stat-label">Total Videos</div>
-                </div>
-            </div>
-            <div class="col-md-3 col-6">
-                <div class="stat-card">
-                    <div class="stat-value"><%= formatNumber(stats.totalViews) %></div>
-                    <div class="stat-label">Total Views</div>
-                </div>
-            </div>
-            <div class="col-md-3 col-6">
-                <div class="stat-card">
-                    <div class="stat-value"><%= formatNumber(stats.totalLikes) %></div>
-                    <div class="stat-label">Total Likes</div>
-                </div>
-            </div>
-            <div class="col-md-3 col-6">
-                <div class="stat-card">
-                    <div class="stat-value"><%= formatNumber(stats.avgEngagement) %>%</div>
-                    <div class="stat-label">Avg Engagement</div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Tabs -->
-        <ul class="nav nav-tabs nav-tabs-custom" role="tablist">
-            <li class="nav-item">
-                <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#videos" type="button">
-                    <i class="fas fa-video me-1"></i> Video Statistics
-                </button>
-            </li>
-            <li class="nav-item">
-                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#schedule" type="button">
-                    <i class="fas fa-calendar me-1"></i> Posting Schedule
-                </button>
-            </li>
-        </ul>
-
-        <!-- Tab Content -->
-        <div class="tab-content">
-            <!-- Video Statistics Tab -->
-            <div class="tab-pane fade show active" id="videos">
-                <% if (videos.length > 0) { %>
-                <div class="data-table">
-                    <table class="table table-dark mb-0">
-                        <thead>
-                            <tr>
-                                <th>Video</th>
-                                <th>Title</th>
-                                <th>Posted</th>
-                                <th>Views</th>
-                                <th>Likes</th>
-                                <th>Comments</th>
-                                <th>Shares</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <% videos.forEach(video => { %>
-                            <tr>
-                                <td>
-                                    <a href="<%= video.video_url %>" target="_blank">
-                                        <img src="<%= video.thumbnail_url || avatar || '/images/default-avatar.png' %>"
-                                             alt="Video thumbnail" class="video-thumbnail"
-                                             onerror="this.src='<%= avatar || '/images/default-avatar.png' %>'">
-                                    </a>
-                                </td>
-                                <td>
-                                    <a href="<%= video.video_url %>" target="_blank" class="video-link">
-                                        <%= video.title ? (video.title.length > 50 ? video.title.substring(0, 50) + '...' : video.title) : 'Untitled' %>
-                                    </a>
-                                </td>
-                                <td><%= formatDate(video.posted_at) %></td>
-                                <td><%= formatNumber(video.view_count) %></td>
-                                <td><%= formatNumber(video.like_count) %></td>
-                                <td><%= formatNumber(video.comment_count) %></td>
-                                <td><%= formatNumber(video.share_count) %></td>
-                            </tr>
-                            <% }); %>
-                        </tbody>
-                    </table>
-                </div>
-                <% } else { %>
-                <div class="empty-state">
-                    <i class="fab fa-tiktok"></i>
-                    <h4>No Videos Found</h4>
-                    <p>We haven't tracked any videos for this creator yet.</p>
-                </div>
-                <% } %>
-            </div>
-
-            <!-- Posting Schedule Tab -->
-            <div class="tab-pane fade" id="schedule">
-                <div class="row g-4">
-                    <div class="col-lg-6">
-                        <h5 class="mb-3"><i class="fas fa-calendar-week me-2"></i>Posts by Day of Week</h5>
-                        <div class="schedule-grid">
-                            <% const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']; %>
-                            <% days.forEach((day, index) => { %>
-                            <div class="schedule-cell">
-                                <div class="day"><%= day %></div>
-                                <div class="count"><%= schedule.byDay[index] || 0 %></div>
-                            </div>
-                            <% }); %>
-                        </div>
-                    </div>
-                    <div class="col-lg-6">
-                        <h5 class="mb-3"><i class="fas fa-clock me-2"></i>Most Active Hours</h5>
-                        <div class="data-table">
-                            <table class="table table-dark mb-0">
-                                <thead>
-                                    <tr>
-                                        <th>Hour</th>
-                                        <th>Posts</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <% schedule.byHour.slice(0, 6).forEach(item => { %>
-                                    <tr>
-                                        <td><%= item.hour %>:00</td>
-                                        <td><%= item.count %> posts</td>
-                                    </tr>
-                                    <% }); %>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Footer -->
-        <div class="text-center mt-5 py-4" style="border-top: 1px solid rgba(255,255,255,0.1);">
-            <p class="text-muted mb-2">
-                Powered by <a href="/" class="text-decoration-none" style="color: #a78bfa;">CertiFried MultiTool</a>
-            </p>
-            <p class="text-muted small">
-                Analytics data is collected from tracked TikTok video posts.
-            </p>
-        </div>
-    </div>
-
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <h2 class="cf-an-section-title">Videos <span class="cf-an-count"><%= n(videos.length) %></span></h2>
+    <% if (videos.length > 15) { %>
+    <div class="tt-tools"><input type="search" id="ttFind" class="form-control form-control-sm" placeholder="Find a video by title" aria-label="Find a video by title"></div>
+    <% } %>
+    <div class="cf-rows"><div class="cf-table-wrap">
+        <table class="cf-table cf-table--stack" id="ttTable">
+            <thead><tr>
+                <th scope="col"><span class="cf-an-sr">Thumbnail</span></th>
+                <th scope="col">Title</th>
+                <th scope="col" data-sort="num" aria-sort="descending">Posted</th>
+                <th scope="col" data-sort="num" class="cf-cell-end">Views</th>
+                <th scope="col" data-sort="num" class="cf-cell-end">Likes</th>
+                <th scope="col" data-sort="num" class="cf-cell-end">Comments</th>
+                <th scope="col" data-sort="num" class="cf-cell-end">Shares</th>
+            </tr></thead>
+            <tbody>
+            <% videos.forEach(v => { const url = safeUrl(v.video_url); const thumb = safeUrl(v.thumbnail_url); %>
+            <tr data-find="<%= String(v.title || v.description || '').toLowerCase() %>">
+                <td><% if (thumb) { %><a href="<%= url || '#' %>" target="_blank" rel="noopener" tabindex="-1"><img class="tt-thumb" src="<%= thumb %>" alt="" loading="lazy" width="44" height="58" onerror="this.style.visibility='hidden'"></a><% } %></td>
+                <td data-label="Title" class="tt-title"><% if (url) { %><a href="<%= url %>" target="_blank" rel="noopener"><%= v.title || 'Untitled' %></a><% } else { %><%= v.title || 'Untitled' %><% } %></td>
+                <td data-label="Posted" data-v="<%= v.posted_at ? new Date(v.posted_at).getTime() : 0 %>"><%= formatDate(v.posted_at) %></td>
+                <td data-label="Views" class="cf-cell-end" data-v="<%= Number(v.view_count || 0) %>" title="<%= n(v.view_count) %>"><%= short(v.view_count) %></td>
+                <td data-label="Likes" class="cf-cell-end" data-v="<%= Number(v.like_count || 0) %>"><%= short(v.like_count) %></td>
+                <td data-label="Comments" class="cf-cell-end" data-v="<%= Number(v.comment_count || 0) %>"><%= short(v.comment_count) %></td>
+                <td data-label="Shares" class="cf-cell-end" data-v="<%= Number(v.share_count || 0) %>"><%= short(v.share_count) %></td>
+            </tr>
+            <% }) %>
+            </tbody>
+        </table>
+    </div></div>
+    <% } %>
+    <p class="cf-an-foot">Numbers come from the TikTok posts CertiFried tracks for upload alerts. Each video's views, likes, comments and shares are saved when it is first seen and are not updated after that. Powered by <a href="/">CertiFried MultiTool</a>.</p>
+</main>
+<%- include('partials/site-footer') %>
+<% if (videos.length) { %>
+<script>
+(function () {
+    var table = document.getElementById('ttTable');
+    var body = table.tBodies[0];
+    var heads = table.tHead.rows[0].cells;
+    Array.prototype.forEach.call(heads, function (th, col) {
+        if (!th.hasAttribute('data-sort')) return;
+        th.tabIndex = 0;
+        function sort() {
+            var dir = th.getAttribute('aria-sort') === 'descending' ? 1 : -1;
+            Array.prototype.slice.call(body.rows).sort(function (a, b) {
+                return (Number(a.cells[col].getAttribute('data-v')) - Number(b.cells[col].getAttribute('data-v'))) * dir;
+            }).forEach(function (tr) { body.appendChild(tr); });
+            Array.prototype.forEach.call(heads, function (h) { h.removeAttribute('aria-sort'); });
+            th.setAttribute('aria-sort', dir === 1 ? 'ascending' : 'descending');
+        }
+        th.addEventListener('click', sort);
+        th.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); sort(); } });
+    });
+    var find = document.getElementById('ttFind');
+    if (find) find.addEventListener('input', function () {
+        var q = find.value.trim().toLowerCase();
+        Array.prototype.forEach.call(body.rows, function (tr) { tr.hidden = !!q && tr.getAttribute('data-find').indexOf(q) === -1; });
+    });
+    var data = <%- JSON.stringify(videos.map(v => [v.video_id, v.title || '', v.posted_at || '', Number(v.view_count || 0), Number(v.like_count || 0), Number(v.comment_count || 0), Number(v.share_count || 0), v.video_url || ''])).replace(/</g, '\\u003c') %>;
+    document.getElementById('csvBtn').addEventListener('click', function () {
+        function cell(v) { var s = v == null ? '' : String(v); if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; s = s.replace(/"/g, '""'); return /[",\n\r]/.test(s) ? '"' + s + '"' : s; }
+        var lines = [['video_id', 'title', 'posted_at', 'views', 'likes', 'comments', 'shares', 'url']].concat(data);
+        var blob = new Blob([lines.map(function (r) { return r.map(cell).join(','); }).join('\n') + '\n'], { type: 'text/csv;charset=utf-8' });
+        var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'tiktok-<%= handle %>-videos.csv';
+        document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+    });
+})();
+</script>
+<% } %>
 </body>
 </html>

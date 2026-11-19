@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>" lang="en">
+<head>
+<%- include('partials/site-head', { title: 'Action log — ' + (broadcasterLogin) + ' | CertiFried', noindex: true }) %>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="/css/cf-settings.css">
+    <link rel="stylesheet" href="/css/cf-analytics.css">
+</head>
+<%
+    const okCount = rows.filter(r => r.ok).length;
+    const failCount = rows.length - okCount;
+    const stamp = (d) => d ? new Date(d).toISOString().replace('T', ' ').slice(0, 16) + ' UTC' : '—';
+%>
+<body class="cf-an-body">
+<%- include('partials/site-header') %>
+<main id="main-content" class="cf-an-page" tabindex="-1">
+    <a href="/manage/<%= guildId %>?page=streamers&tab=analytics" class="cf-an-crumb"><i class="fas fa-arrow-left" aria-hidden="true"></i> Back to <%= guildName %></a>
+    <header class="cf-an-head">
+        <span class="cf-an-head-icon" aria-hidden="true"><i class="fas fa-clipboard-list"></i></span>
+        <div class="cf-an-head-text">
+            <h1 class="cf-an-title">Action log</h1>
+            <p class="cf-an-sub">Changes made to <%= broadcasterLogin %>'s Twitch channel from this dashboard, newest first.</p>
+        </div>
+        <% if (rows.length) { %>
+        <div class="cf-an-actions"><button type="button" class="btn btn-secondary btn-sm" id="csvBtn"><i class="fas fa-file-csv" aria-hidden="true"></i> Export CSV</button></div>
+        <% } %>
+    </header>
+<%- include('partials/analytics/twitch-nav', { active: 'audit' }) %>
+
+    <% if (!rows.length) { %>
+    <div class="cf-rows">
+        <div class="cf-state">
+            <p class="cf-state-title">No actions yet</p>
+            <p class="cf-state-text">Stream controls (title, polls, bans, raids and so on) are listed here once write permission is granted and used.</p>
+            <a class="btn btn-primary btn-sm" href="/manage/<%= guildId %>/twitch-analytics#tab=live">Open stream controls</a>
+        </div>
+    </div>
+    <% } else { %>
+    <dl class="cf-kpis">
+        <div class="cf-kpi"><dt>Actions shown</dt><dd><%= rows.length.toLocaleString() %></dd></div>
+        <div class="cf-kpi"><dt>Succeeded</dt><dd><%= okCount.toLocaleString() %></dd></div>
+        <div class="cf-kpi"><dt>Failed</dt><dd><%= failCount.toLocaleString() %></dd></div>
+    </dl>
+    <div class="cf-rows">
+        <div class="cf-table-wrap">
+            <table class="cf-table cf-table--stack" id="auditTable">
+                <thead><tr><th scope="col">Time</th><th scope="col">By</th><th scope="col">Action</th><th scope="col">Result</th><th scope="col" class="cf-cell-end">Took</th></tr></thead>
+                <tbody>
+                <% rows.forEach(r => { %>
+                <tr>
+                    <td data-label="Time" class="cf-an-mono"><%= stamp(r.created_at) %></td>
+                    <td data-label="By"><%= r.triggered_by_discord_username || '—' %></td>
+                    <td data-label="Action"><div><strong><%= String(r.action || '').replace(/_/g, ' ') %></strong><div class="cf-an-mono cf-an-muted"><%= r.http_verb %> <%= r.helix_path %></div></div></td>
+                    <td data-label="Result">
+                        <div>
+                            <span class="cf-status <%= r.ok ? 'is-ok' : 'is-bad' %>"><%= r.ok ? 'Done' : 'Failed' %><%= r.response_status ? ` (${r.response_status})` : '' %></span>
+                            <% if (r.error_message) { %><div class="cf-an-muted" style="font-size: var(--cf-text-xs);"><%= String(r.error_message).slice(0, 160) %></div><% } %>
+                        </div>
+                    </td>
+                    <td data-label="Took" class="cf-cell-end cf-an-mono"><%= r.duration_ms != null ? r.duration_ms + ' ms' : '—' %></td>
+                </tr>
+                <% }) %>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <p class="cf-an-foot">Shows the latest 200 actions. Times in UTC.</p>
+    <% } %>
+</main>
+<%- include('partials/site-footer') %>
+<% if (rows.length) { %>
+<script>
+(function () {
+    var data = <%- JSON.stringify(rows.map(r => [r.created_at, r.triggered_by_discord_username || '', r.action, r.http_verb, r.helix_path, r.response_status, r.ok ? 'yes' : 'no', r.duration_ms, r.error_message || ''])).replace(/</g, '\\u003c') %>;
+    function cell(v) {
+        if (v === null || v === undefined) return '';
+        var s = String(v);
+        if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+        s = s.replace(/"/g, '""');
+        return /[",\n\r]/.test(s) ? '"' + s + '"' : s;
+    }
+    document.getElementById('csvBtn').addEventListener('click', function () {
+        var lines = [['time_utc', 'by', 'action', 'method', 'path', 'http_status', 'ok', 'duration_ms', 'error']].concat(data);
+        var blob = new Blob([lines.map(function (r) { return r.map(cell).join(','); }).join('\n') + '\n'], { type: 'text/csv;charset=utf-8' });
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'twitch-action-log-<%= String(broadcasterLogin).replace(/[^a-z0-9_]/gi, '') %>.csv';
+        document.body.appendChild(a); a.click();
+        setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+    });
+})();
+</script>
+<% } %>
+</body>
+</html>

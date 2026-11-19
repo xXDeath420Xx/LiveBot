@@ -1,5 +1,6 @@
 import { EmbedBuilder } from 'discord.js';
 import economyManager from '../../core/economy-manager.js';
+import { themeColor } from '../../core/guild-theme.js';
 
 export async function handleDaily(interaction) {
     const config = await economyManager.getEconomyConfig(interaction.guild.id);
@@ -26,7 +27,7 @@ export async function handleDaily(interaction) {
     }
 
     const embed = new EmbedBuilder()
-        .setColor('#00FF00')
+        .setColor(themeColor(interaction.guildId, 'success'))
         .setTitle('\ud83d\udcb5 Daily Reward Claimed!')
         .setDescription(`You received ${economyManager.formatMoney(result.totalAmount, config)}!`)
         .addFields(
@@ -44,7 +45,7 @@ export async function handleWeekly(interaction) {
     const result = await economyManager.claimWeekly(interaction.guild.id, interaction.user.id);
 
     const embed = new EmbedBuilder()
-        .setColor('#00FF00')
+        .setColor(themeColor(interaction.guildId, 'success'))
         .setTitle('\ud83d\udcb0 Weekly Reward Claimed!')
         .setDescription(`You received ${economyManager.formatMoney(result.amount, config)}!`)
         .setFooter({ text: 'Come back in 7 days for your next reward!' });
@@ -57,7 +58,7 @@ export async function handleWork(interaction) {
     const result = await economyManager.work(interaction.guild.id, interaction.user.id);
 
     const embed = new EmbedBuilder()
-        .setColor('#00FF00')
+        .setColor(themeColor(interaction.guildId, 'success'))
         .setTitle(`${result.job.emoji} ${result.job.name}`)
         .setDescription(`You worked hard and earned ${economyManager.formatMoney(result.totalAmount, config)}!`)
         .addFields(
@@ -75,14 +76,14 @@ export async function handleCrime(interaction) {
 
     if (result.success) {
         const embed = new EmbedBuilder()
-            .setColor('#00FF00')
+            .setColor(themeColor(interaction.guildId, 'success'))
             .setTitle(`${result.crime.emoji} Crime Successful!`)
             .setDescription(`You ${result.crime.name.toLowerCase()} and got away with ${economyManager.formatMoney(result.amount, config)}!`);
 
         await interaction.reply({ embeds: [embed] });
     } else {
         const embed = new EmbedBuilder()
-            .setColor('#FF0000')
+            .setColor(themeColor(interaction.guildId, 'danger'))
             .setTitle('\ud83d\ude94 Busted!')
             .setDescription(`You got caught ${result.crime.name.toLowerCase()} and were fined ${economyManager.formatMoney(result.fine, config)}!`);
 

@@ -1,692 +1,218 @@
-<%- include('partials/modern-header', {
-    pageTitle: monthName + ' ' + year + ' - Event Calendar',
-    additionalCSS: []
-}) %>
-
-<style>
-/* Calendar Page Styles */
-.schedule-page {
-    min-height: 100vh;
-    background: var(--color-dark-800);
-    padding-bottom: var(--spacing-12);
-}
-
-.schedule-container {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: var(--spacing-6);
-}
-
-/* Page Header */
-.schedule-header {
-    background: var(--gradient-primary);
-    padding: var(--spacing-10) var(--spacing-6);
-    border-radius: var(--radius-xl);
-    margin-bottom: var(--spacing-6);
-    box-shadow: var(--shadow-lg);
-    text-align: center;
-}
-
-.schedule-header h1 {
-    font-size: var(--font-size-4xl);
-    font-weight: var(--font-weight-bold);
-    color: var(--color-text-primary);
-    margin: 0 0 var(--spacing-2) 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--spacing-3);
-}
-
-.schedule-header p {
-    color: rgba(255, 255, 255, 0.8);
-    font-size: var(--font-size-lg);
-    margin: 0;
-}
-
-/* Calendar Navigation */
-.calendar-nav {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: var(--spacing-4);
-    margin-bottom: var(--spacing-6);
-    flex-wrap: wrap;
-}
-
-.calendar-nav-btn {
-    background: var(--color-dark-600);
-    border: 1px solid var(--color-dark-400);
-    border-radius: var(--radius-md);
-    padding: var(--spacing-2) var(--spacing-4);
-    color: var(--color-text-secondary);
-    font-size: var(--font-size-base);
-    cursor: pointer;
-    transition: all 0.2s ease;
-    text-decoration: none;
-    display: inline-flex;
-    align-items: center;
-}
-
-.calendar-nav-btn:hover {
-    background: var(--color-dark-500);
-    border-color: var(--color-primary-500);
-    color: var(--color-text-primary);
-    text-decoration: none;
-}
-
-.calendar-title {
-    font-size: var(--font-size-2xl);
-    font-weight: var(--font-weight-bold);
-    color: var(--color-text-primary);
-    min-width: 220px;
-    text-align: center;
-}
-
-.calendar-selects {
-    display: flex;
-    gap: var(--spacing-2);
-}
-
-.calendar-selects select {
-    padding: var(--spacing-2) var(--spacing-3);
-    background: var(--color-dark-600);
-    border: 1px solid var(--color-dark-400);
-    border-radius: var(--radius-md);
-    color: var(--color-text-primary);
-    font-size: var(--font-size-sm);
-    cursor: pointer;
-}
-
-.calendar-selects select:hover {
-    border-color: var(--color-primary-500);
-}
-
-/* Calendar Grid */
-.calendar {
-    background: var(--color-dark-700);
-    border: 1px solid var(--color-dark-400);
-    border-radius: var(--radius-lg);
-    overflow: hidden;
-    margin-bottom: var(--spacing-8);
-    box-shadow: var(--shadow-md);
-}
-
-.calendar-header-row {
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
-    background: var(--color-dark-600);
-    border-bottom: 1px solid var(--color-dark-400);
-}
-
-.calendar-header-cell {
-    padding: var(--spacing-3);
-    text-align: center;
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-muted);
-    font-size: var(--font-size-xs);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-
-.calendar-body {
-    display: grid;
-    grid-template-columns: repeat(7, 1fr);
-}
-
-.calendar-cell {
-    min-height: 100px;
-    border-right: 1px solid var(--color-dark-400);
-    border-bottom: 1px solid var(--color-dark-400);
-    padding: var(--spacing-2);
-    background: var(--color-dark-700);
-    transition: background 0.2s ease;
-}
-
-.calendar-cell:nth-child(7n) {
-    border-right: none;
-}
-
-.calendar-cell:hover {
-    background: var(--color-dark-600);
-}
-
-.calendar-cell.empty {
-    background: var(--color-dark-800);
-}
-
-.calendar-cell.today {
-    background: rgba(167, 139, 250, 0.1);
-    border-color: var(--color-primary-500);
-}
-
-.calendar-day {
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-muted);
-    padding: var(--spacing-1) var(--spacing-2);
-    display: inline-block;
-}
-
-.calendar-cell.today .calendar-day {
-    background: var(--color-primary-500);
-    color: var(--color-text-primary);
-    border-radius: var(--radius-full);
-    min-width: 28px;
-    text-align: center;
-}
-
-.calendar-events {
-    margin-top: var(--spacing-1);
-}
-
-.calendar-event {
-    display: block;
-    padding: var(--spacing-1) var(--spacing-2);
-    margin: var(--spacing-1) 0;
-    font-size: var(--font-size-xs);
-    border-radius: var(--radius-sm);
-    background: rgba(167, 139, 250, 0.2);
-    color: var(--color-primary-400);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    transition: all 0.2s ease;
-    text-decoration: none;
-    border-left: 3px solid var(--color-primary-500);
-}
-
-.calendar-event:hover {
-    background: rgba(167, 139, 250, 0.3);
-    color: var(--color-text-primary);
-    text-decoration: none;
-    transform: translateX(2px);
-}
-
-.calendar-event.has-twitch {
-    background: rgba(145, 70, 255, 0.2);
-    color: #a970ff;
-    border-left-color: #9146ff;
-}
-
-.calendar-event.has-twitch:hover {
-    background: rgba(145, 70, 255, 0.3);
-}
-
-/* Events Section */
-.events-section {
-    background: var(--color-dark-700);
-    border: 1px solid var(--color-dark-400);
-    border-radius: var(--radius-lg);
-    overflow: hidden;
-    box-shadow: var(--shadow-md);
-}
-
-.events-section-header {
-    background: var(--color-dark-600);
-    padding: var(--spacing-4) var(--spacing-5);
-    border-bottom: 1px solid var(--color-dark-400);
-}
-
-.events-section-header h2 {
-    font-size: var(--font-size-lg);
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-primary);
-    margin: 0;
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-2);
-}
-
-.events-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-.events-table th {
-    background: var(--color-dark-600);
-    padding: var(--spacing-3) var(--spacing-4);
-    text-align: left;
-    font-weight: var(--font-weight-semibold);
-    font-size: var(--font-size-xs);
-    color: var(--color-text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    border-bottom: 1px solid var(--color-dark-400);
-}
-
-.events-table td {
-    padding: var(--spacing-4);
-    border-bottom: 1px solid var(--color-dark-400);
-    vertical-align: middle;
-    color: var(--color-text-secondary);
-}
-
-.events-table tr:last-child td {
-    border-bottom: none;
-}
-
-.events-table tr:hover td {
-    background: var(--color-dark-600);
-}
-
-.event-name {
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-primary-400);
-    text-decoration: none;
-    transition: color 0.2s ease;
-}
-
-.event-name:hover {
-    color: var(--color-text-primary);
-    text-decoration: underline;
-}
-
-.event-description {
-    font-size: var(--font-size-xs);
-    color: var(--color-text-muted);
-    margin-top: var(--spacing-1);
-}
-
-.twitch-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--spacing-1);
-    padding: var(--spacing-1) var(--spacing-2);
-    background: #9146ff;
-    color: #fff;
-    border-radius: var(--radius-sm);
-    font-size: var(--font-size-xs);
-    font-weight: var(--font-weight-medium);
-    text-decoration: none;
-    transition: background 0.2s ease;
-}
-
-.twitch-badge:hover {
-    background: #7c3aed;
-    text-decoration: none;
-    color: #fff;
-}
-
-/* Empty State */
-.empty-state {
-    text-align: center;
-    padding: var(--spacing-12) var(--spacing-6);
-    color: var(--color-text-muted);
-}
-
-.empty-state i {
-    font-size: 4rem;
-    color: var(--color-dark-400);
-    margin-bottom: var(--spacing-4);
-}
-
-.empty-state h3 {
-    font-size: var(--font-size-xl);
-    color: var(--color-text-primary);
-    margin-bottom: var(--spacing-2);
-}
-
-.empty-state p {
-    color: var(--color-text-secondary);
-}
-
-/* User Bar */
-.user-bar {
-    display: flex;
-    justify-content: flex-end;
-    align-items: center;
-    gap: var(--spacing-4);
-    padding: var(--spacing-3) var(--spacing-6);
-    background: var(--color-dark-700);
-    border-bottom: 1px solid var(--color-dark-400);
-}
-
-.user-bar-inner {
-    max-width: 1200px;
-    width: 100%;
-    margin: 0 auto;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.user-bar-left {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-3);
-}
-
-.user-bar-left a {
-    color: var(--color-text-secondary);
-    text-decoration: none;
-    font-size: var(--font-size-sm);
-    transition: color 0.2s ease;
-}
-
-.user-bar-left a:hover {
-    color: var(--color-text-primary);
-}
-
-.user-bar-right {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-3);
-}
-
-.user-info {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-2);
-}
-
-.user-avatar {
-    width: 32px;
-    height: 32px;
-    border-radius: var(--radius-full);
-    object-fit: cover;
-    border: 2px solid var(--color-primary-500);
-}
-
-.user-name {
-    color: var(--color-text-primary);
-    font-weight: var(--font-weight-medium);
-    font-size: var(--font-size-sm);
-}
-
-.twitch-login-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--spacing-2);
-    padding: var(--spacing-2) var(--spacing-4);
-    background: #9146ff;
-    color: #fff;
-    border-radius: var(--radius-md);
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-medium);
-    text-decoration: none;
-    transition: background 0.2s ease;
-}
-
-.twitch-login-btn:hover {
-    background: #7c3aed;
-    color: #fff;
-    text-decoration: none;
-}
-
-.my-schedules-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--spacing-2);
-    padding: var(--spacing-2) var(--spacing-4);
-    background: var(--color-primary-600);
-    color: #fff;
-    border-radius: var(--radius-md);
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-medium);
-    text-decoration: none;
-    transition: background 0.2s ease;
-}
-
-.my-schedules-btn:hover {
-    background: var(--color-primary-500);
-    color: #fff;
-    text-decoration: none;
-}
-
-.logout-btn {
-    padding: var(--spacing-2) var(--spacing-3);
-    background: var(--color-dark-500);
-    color: var(--color-text-secondary);
-    border-radius: var(--radius-md);
-    font-size: var(--font-size-sm);
-    text-decoration: none;
-    transition: all 0.2s ease;
-}
-
-.logout-btn:hover {
-    background: var(--color-danger-500);
-    color: #fff;
-    text-decoration: none;
-}
-
-/* Responsive */
-@media (max-width: 768px) {
-    .calendar-cell {
-        min-height: 60px;
-        padding: var(--spacing-1);
-    }
-
-    .calendar-event {
-        font-size: 10px;
-        padding: 2px 4px;
-    }
-
-    .calendar-nav {
-        flex-direction: column;
-        gap: var(--spacing-3);
-    }
-
-    .calendar-title {
-        min-width: auto;
-    }
-
-    .hide-mobile {
-        display: none;
-    }
-
-    .schedule-header h1 {
-        font-size: var(--font-size-2xl);
-    }
-
-    .user-bar {
-        padding: var(--spacing-2) var(--spacing-3);
-    }
-
-    .user-bar-inner {
-        flex-direction: column;
-        gap: var(--spacing-2);
-    }
-
-    .user-name {
-        display: none;
-    }
-}
-</style>
-
-<div class="schedule-page">
-    <!-- User Bar -->
-    <div class="user-bar">
-        <div class="user-bar-inner">
-            <div class="user-bar-left">
-                <a href="/"><i class="fas fa-home"></i> Home</a>
-                <a href="/schedule"><i class="fas fa-calendar"></i> Calendar</a>
-            </div>
-            <div class="user-bar-right">
-                <% if (twitchUser) { %>
-                    <div class="user-info">
-                        <img src="<%= twitchUser.avatar %>" alt="<%= twitchUser.display_name %>" class="user-avatar">
-                        <span class="user-name"><%= twitchUser.display_name %></span>
-                    </div>
-                    <a href="/my-schedules" class="my-schedules-btn">
-                        <i class="fas fa-calendar-plus"></i> My Schedules
-                    </a>
-                    <a href="/auth/twitch/logout" class="logout-btn">
-                        <i class="fas fa-sign-out-alt"></i> Logout
-                    </a>
+<!DOCTYPE html>
+<html data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>" lang="en">
+<head>
+<%#
+  Public event calendar (GET /schedule, routes/public-schedule.js). Locals: events, monthEvents,
+  calendar (weeks of { day, date, events }), year, month, monthName, twitchUser, error.
+  Dates are printed in UTC by the server and rewritten in the visitor's time zone by the script.
+%>
+<%
+    const _twitch = (typeof twitchUser !== 'undefined' && twitchUser) ? twitchUser : null;
+    const _monthEvents = (typeof monthEvents !== 'undefined' && Array.isArray(monthEvents)) ? monthEvents : [];
+    const _calendar = (typeof calendar !== 'undefined' && Array.isArray(calendar)) ? calendar : [];
+    const _error = (typeof error !== 'undefined' && error) ? error : null;
+    const _label = monthName + ' ' + year;
+    const _months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    const _prevMonth = month === 1 ? 12 : month - 1;
+    const _prevYear = month === 1 ? year - 1 : year;
+    const _nextMonth = month === 12 ? 1 : month + 1;
+    const _nextYear = month === 12 ? year + 1 : year;
+    const _iso = (d) => { const t = d ? new Date(d) : null; return t && !isNaN(t) ? t.toISOString() : ''; };
+    const _utcDay = (d) => new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+%>
+<%- include('partials/site-head', { title: 'Event calendar, ' + _label + ' · CertiFried', description: 'Speedrun marathons and other events that publish their run schedule on CertiFried, by month.', path: '/schedule' }) %>
+    <style>
+        /* Tap targets: at least 40px tall on every screen size. */
+        main .btn { min-height: 40px; display: inline-flex; align-items: center; justify-content: center; }
+        .sc-account { display: flex; flex-wrap: wrap; align-items: center; gap: var(--cf-2) var(--cf-3); margin-top: var(--cf-4); font-size: var(--cf-text-sm); color: var(--cf-text-2); }
+        .sc-account img { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; }
+        .sc-nav { display: flex; flex-wrap: wrap; align-items: center; gap: var(--cf-3); margin-bottom: var(--cf-4); }
+        .sc-nav h2 { margin: 0; min-width: 11ch; font-size: var(--cf-text-xl); font-weight: 600; letter-spacing: -0.015em; }
+        .sc-step { display: inline-flex; align-items: center; justify-content: center; min-width: 40px; min-height: 40px; padding: 0 12px; border: 1px solid var(--cf-border); border-radius: var(--cf-radius); background: var(--cf-surface); color: var(--cf-text); text-decoration: none; font-size: var(--cf-text-sm); }
+        .sc-step:hover { background: var(--cf-surface-2); border-color: var(--cf-border-strong); color: var(--cf-text); }
+        .sc-jump { display: flex; flex-wrap: wrap; align-items: center; gap: var(--cf-2); margin-left: auto; }
+        .sc-jump select { min-height: 40px; padding: 6px 30px 6px 10px; font: inherit; font-size: var(--cf-text-sm); color: var(--cf-text); background-color: var(--cf-inset); background-image: var(--cf-select-arrow); background-repeat: no-repeat; background-position: right 8px center; background-size: 14px 14px; border: 1px solid var(--cf-border-strong); border-radius: var(--cf-radius); -webkit-appearance: none; appearance: none; }
+        .sc-jump select:focus-visible { outline: 2px solid var(--cf-accent); outline-offset: 1px; }
+        .sc-jump .btn { min-height: 40px; }
+
+        .sc-cal { width: 100%; table-layout: fixed; border-collapse: collapse; }
+        .sc-cal th { padding: 8px 4px; font-size: var(--cf-text-xs); font-weight: 500; color: var(--cf-text-3); text-align: center; border-bottom: 1px solid var(--cf-border); }
+        .sc-cal abbr { text-decoration: none; border: 0; cursor: default; }
+        .sc-cal td { height: 96px; padding: 4px; vertical-align: top; border-right: 1px solid var(--cf-border); border-bottom: 1px solid var(--cf-border); }
+        .sc-cal td:last-child { border-right: 0; }
+        .sc-cal tr:last-child td { border-bottom: 0; }
+        .sc-cal td.is-blank { background: var(--cf-inset); }
+        .sc-day { display: inline-flex; align-items: center; justify-content: center; min-width: 24px; height: 24px; padding: 0 4px; border-radius: 999px; font-size: var(--cf-text-xs); font-weight: 500; color: var(--cf-text-2); font-variant-numeric: tabular-nums; }
+        .sc-cal td.is-today { background: var(--cf-accent-soft); }
+        .sc-cal td.is-today .sc-day { background: var(--cf-accent); color: var(--cf-on-accent); }
+        .sc-chip { display: block; margin-top: 3px; padding: 3px 6px; border-left: 2px solid var(--cf-accent); border-radius: var(--cf-radius-sm); background: var(--cf-surface-2); color: var(--cf-text); font-size: var(--cf-text-xs); text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .sc-chip:hover { background: var(--cf-surface-3); color: var(--cf-text); }
+        .sc-chip:focus-visible, .sc-ev:focus-visible { outline: 2px solid var(--cf-accent); outline-offset: 1px; }
+        .sc-mark { display: none; }
+        @media (max-width: 600px) {
+            .sc-cal td { height: 48px; padding: 2px; text-align: center; }
+            .sc-chip { display: none; }
+            .sc-mark { display: block; width: 6px; height: 6px; margin: 2px auto 0; border-radius: 50%; background: var(--cf-accent); }
+            .sc-jump { margin-left: 0; width: 100%; }
+        }
+
+        .sc-events { width: 100%; min-width: 560px; border-collapse: collapse; font-size: var(--cf-text-sm); }
+        .sc-events th, .sc-events td { padding: 10px 12px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--cf-border); }
+        .sc-events th { font-size: var(--cf-text-xs); font-weight: 500; color: var(--cf-text-3); white-space: nowrap; }
+        .sc-events tr:last-child td { border-bottom: 0; }
+        .sc-events td.num { font-variant-numeric: tabular-nums; }
+        .sc-ev { display: inline-flex; align-items: center; min-height: 40px; padding: 0; font-weight: 500; color: var(--cf-accent-fg); text-decoration: underline; text-decoration-color: var(--cf-accent-line); text-underline-offset: 2px; }
+        .sc-ev:hover { text-decoration-color: currentColor; }
+        .sc-desc { margin: 2px 0 0; color: var(--cf-text-3); font-size: var(--cf-text-xs); }
+        .sc-muted { color: var(--cf-text-3); }
+        .sc-nowrap { white-space: nowrap; }
+        .sc-ext { display: inline-flex; align-items: center; min-height: 40px; color: var(--cf-text-2); }
+        .sc-ext:hover { color: var(--cf-text); }
+        .sc-tz { margin: var(--cf-3) 0 0; font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+    </style>
+</head>
+<body class="cfs-body">
+<%- include('partials/site-header', { active: '', returnTo: '/schedule' }) %>
+    <main id="main-content" tabindex="-1" class="cfs-main">
+        <div class="cfs-pagehead">
+            <h1>Event calendar</h1>
+            <p class="cfs-lede">Speedrun marathons and other events that publish their run schedule here. Open an event to see its run order and start times.</p>
+            <div class="sc-account">
+                <% if (_twitch) { %>
+                    <% if (_twitch.avatar && /^https:\/\//.test(_twitch.avatar)) { %><img src="<%= _twitch.avatar %>" alt="" width="28" height="28" referrerpolicy="no-referrer"><% } %>
+                    <span>Signed in to Twitch as <strong><%= _twitch.display_name || _twitch.login || 'you' %></strong></span>
+                    <a href="/my-schedules" class="btn btn-primary btn-sm">My schedules</a>
+                    <a href="/auth/twitch/logout" class="btn btn-secondary btn-sm">Log out of Twitch</a>
                 <% } else { %>
-                    <a href="/auth/twitch?returnTo=/schedule" class="twitch-login-btn">
-                        <i class="fab fa-twitch"></i> Login with Twitch
-                    </a>
+                    <span>Running an event?</span>
+                    <a href="/auth/twitch?returnTo=/schedule" class="btn btn-secondary btn-sm">Log in with Twitch to publish a schedule</a>
                 <% } %>
             </div>
         </div>
-    </div>
 
-    <div class="schedule-container">
-        <!-- Header -->
-        <div class="schedule-header">
-            <h1><i class="fas fa-calendar-alt"></i> Event Calendar</h1>
-            <p>Browse upcoming speedrun marathons and events</p>
-        </div>
+        <% if (_error) { %>
+            <p class="cfs-note cfs-note--warn" role="alert">The calendar could not be loaded just now. Try again in a minute.</p>
+        <% } %>
 
-        <!-- Calendar Navigation -->
-        <div class="calendar-nav">
-            <%
-            const prevMonth = month === 1 ? 12 : month - 1;
-            const prevYear = month === 1 ? year - 1 : year;
-            const nextMonth = month === 12 ? 1 : month + 1;
-            const nextYear = month === 12 ? year + 1 : year;
-            %>
-            <a href="/schedule?year=<%= prevYear %>&month=<%= prevMonth %>" class="calendar-nav-btn">
-                <i class="fas fa-chevron-left"></i>
-            </a>
-            <div class="calendar-title"><%= monthName %> <%= year %></div>
-            <a href="/schedule?year=<%= nextYear %>&month=<%= nextMonth %>" class="calendar-nav-btn">
-                <i class="fas fa-chevron-right"></i>
-            </a>
-            <div class="calendar-selects">
-                <select onchange="navigateToMonth(this.value)">
-                    <% const months = ['January','February','March','April','May','June','July','August','September','October','November','December']; %>
-                    <% months.forEach((m, i) => { %>
-                        <option value="<%= i + 1 %>" <%= (i + 1) === month ? 'selected' : '' %>><%= m %></option>
-                    <% }); %>
-                </select>
-                <select onchange="navigateToYear(this.value)">
-                    <% for (let y = year - 2; y <= year + 2; y++) { %>
-                        <option value="<%= y %>" <%= y === year ? 'selected' : '' %>><%= y %></option>
-                    <% } %>
-                </select>
+        <section aria-labelledby="sc-month">
+            <div class="sc-nav">
+                <a class="sc-step" href="/schedule?year=<%= _prevYear %>&amp;month=<%= _prevMonth %>" aria-label="Previous month, <%= _months[_prevMonth - 1] %> <%= _prevYear %>"><span aria-hidden="true">&larr;</span></a>
+                <h2 id="sc-month"><%= _label %></h2>
+                <a class="sc-step" href="/schedule?year=<%= _nextYear %>&amp;month=<%= _nextMonth %>" aria-label="Next month, <%= _months[_nextMonth - 1] %> <%= _nextYear %>"><span aria-hidden="true">&rarr;</span></a>
+                <form class="sc-jump" method="get" action="/schedule" id="sc-jump">
+                    <label class="visually-hidden" for="sc-jump-month">Month</label>
+                    <select id="sc-jump-month" name="month">
+                        <% _months.forEach(function (m, i) { %><option value="<%= i + 1 %>"<%= (i + 1) === month ? ' selected' : '' %>><%= m %></option><% }); %>
+                    </select>
+                    <label class="visually-hidden" for="sc-jump-year">Year</label>
+                    <select id="sc-jump-year" name="year">
+                        <% for (let y = year - 2; y <= year + 2; y++) { %><option value="<%= y %>"<%= y === year ? ' selected' : '' %>><%= y %></option><% } %>
+                    </select>
+                    <button type="submit" class="btn btn-secondary btn-sm">Show</button>
+                </form>
             </div>
-        </div>
 
-        <!-- Calendar Grid -->
-        <div class="calendar">
-            <div class="calendar-header-row">
-                <div class="calendar-header-cell">Mon</div>
-                <div class="calendar-header-cell">Tue</div>
-                <div class="calendar-header-cell">Wed</div>
-                <div class="calendar-header-cell">Thu</div>
-                <div class="calendar-header-cell">Fri</div>
-                <div class="calendar-header-cell">Sat</div>
-                <div class="calendar-header-cell">Sun</div>
-            </div>
-            <div class="calendar-body">
-                <% calendar.forEach(week => { %>
-                    <% week.forEach(cell => { %>
-                        <div class="calendar-cell <%= !cell.day ? 'empty' : '' %>" data-day="<%= cell.day || '' %>" data-month="<%= month %>" data-year="<%= year %>">
-                            <% if (cell.day) { %>
-                                <span class="calendar-day"><%= cell.day %></span>
-                                <div class="calendar-events">
-                                    <% cell.events.forEach(event => { %>
-                                        <a href="/schedule/<%= event.slug %>" class="calendar-event <%= event.twitch_channel ? 'has-twitch' : '' %>" title="<%= event.name %>">
-                                            <%= event.name %>
-                                        </a>
-                                    <% }); %>
-                                </div>
-                            <% } %>
-                        </div>
-                    <% }); %>
-                <% }); %>
-            </div>
-        </div>
-
-        <!-- Events List -->
-        <div class="events-section">
-            <div class="events-section-header">
-                <h2><i class="fas fa-list"></i> Events in <%= monthName %> <%= year %></h2>
-            </div>
-            <% if (monthEvents && monthEvents.length > 0) { %>
-                <table class="events-table">
+            <div class="cfs-table-wrap">
+                <table class="sc-cal">
+                    <caption class="visually-hidden">Events in <%= _label %>, by day. Weeks start on Monday.</caption>
                     <thead>
                         <tr>
-                            <th>Event</th>
-                            <th class="hide-mobile">Date</th>
-                            <th class="hide-mobile">Schedules</th>
-                            <th class="hide-mobile">Runs</th>
-                            <th>Stream</th>
+                            <% [['Mon', 'Monday'], ['Tue', 'Tuesday'], ['Wed', 'Wednesday'], ['Thu', 'Thursday'], ['Fri', 'Friday'], ['Sat', 'Saturday'], ['Sun', 'Sunday']].forEach(function (d) { %><th scope="col"><abbr title="<%= d[1] %>"><%= d[0] %></abbr></th><% }); %>
                         </tr>
                     </thead>
                     <tbody>
-                        <% monthEvents.forEach(event => { %>
-                            <tr>
-                                <td>
-                                    <a href="/schedule/<%= event.slug %>" class="event-name"><%= event.name %></a>
-                                    <% if (event.description) { %>
-                                        <div class="event-description"><%= event.description.substring(0, 80) %><%= event.description.length > 80 ? '...' : '' %></div>
-                                    <% } %>
+                        <% _calendar.forEach(function (week) { %>
+                        <tr>
+                            <% week.forEach(function (cell) { %>
+                                <% if (!cell.day) { %>
+                                <td class="is-blank"></td>
+                                <% } else { %>
+                                <td data-day="<%= cell.day %>">
+                                    <span class="sc-day"><%= cell.day %></span>
+                                    <% (cell.events || []).forEach(function (ev) { %>
+                                    <a class="sc-chip" href="/schedule/<%= encodeURIComponent(ev.slug) %>" title="<%= ev.name %>"><%= ev.name %></a>
+                                    <% }); %>
+                                    <% if ((cell.events || []).length) { %><span class="sc-mark" aria-hidden="true"></span><% } %>
                                 </td>
-                                <td class="hide-mobile">
-                                    <% if (event.start_date) { %>
-                                        <%= new Date(event.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) %>
-                                        <% if (event.end_date && new Date(event.end_date).getTime() !== new Date(event.start_date).getTime()) { %>
-                                            - <%= new Date(event.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) %>
-                                        <% } %>
-                                    <% } else { %>
-                                        <span style="color: var(--color-text-muted);">TBD</span>
-                                    <% } %>
-                                </td>
-                                <td class="hide-mobile"><%= event.schedule_count %></td>
-                                <td class="hide-mobile"><%= event.run_count %></td>
-                                <td>
-                                    <% if (event.twitch_channel) { %>
-                                        <a href="https://twitch.tv/<%= event.twitch_channel %>" target="_blank" class="twitch-badge">
-                                            <i class="fab fa-twitch"></i> <%= event.twitch_channel %>
-                                        </a>
-                                    <% } else { %>
-                                        <span style="color: var(--color-text-muted);">-</span>
-                                    <% } %>
-                                </td>
-                            </tr>
+                                <% } %>
+                            <% }); %>
+                        </tr>
                         <% }); %>
                     </tbody>
                 </table>
+            </div>
+        </section>
+
+        <section class="cfs-section" aria-labelledby="sc-list-h">
+            <h2 id="sc-list-h">Events starting in <%= _label %></h2>
+            <% if (!_monthEvents.length) { %>
+                <div class="cfs-rows"><div class="cfs-empty"><p>No events start in <%= _label %>. Use the arrows to look at other months.</p></div></div>
             <% } else { %>
-                <div class="empty-state">
-                    <i class="fas fa-calendar-xmark"></i>
-                    <h3>No events this month</h3>
-                    <p>There are no active events scheduled for <%= monthName %> <%= year %>.</p>
+                <div class="cfs-table-wrap">
+                    <table class="sc-events">
+                        <thead>
+                            <tr><th scope="col">Event</th><th scope="col">Dates</th><th scope="col">Schedules</th><th scope="col">Runs</th><th scope="col">Stream</th></tr>
+                        </thead>
+                        <tbody>
+                            <% _monthEvents.forEach(function (ev) {
+                                const desc = ev.description ? String(ev.description) : '';
+                                const startIso = _iso(ev.start_date), endIso = _iso(ev.end_date);
+                            %>
+                            <tr>
+                                <td>
+                                    <a class="sc-ev" href="/schedule/<%= encodeURIComponent(ev.slug) %>"><%= ev.name %></a>
+                                    <% if (desc) { %><p class="sc-desc"><%= desc.length > 80 ? desc.slice(0, 80).replace(/\s+\S*$/, '') + '…' : desc %></p><% } %>
+                                </td>
+                                <td class="sc-nowrap">
+                                    <% if (startIso) { %>
+                                        <time datetime="<%= startIso %>" data-local="day"><%= _utcDay(ev.start_date) %></time><% if (endIso && endIso !== startIso) { %> to <time datetime="<%= endIso %>" data-local="day"><%= _utcDay(ev.end_date) %></time><% } %>
+                                    <% } else { %>
+                                        <span class="sc-muted">Not set yet</span>
+                                    <% } %>
+                                </td>
+                                <td class="num"><%= Number(ev.schedule_count || 0) %></td>
+                                <td class="num"><%= Number(ev.run_count || 0) %></td>
+                                <td>
+                                    <% if (ev.twitch_channel) { %>
+                                        <a class="sc-ext" href="https://twitch.tv/<%= encodeURIComponent(ev.twitch_channel) %>" target="_blank" rel="noopener">twitch.tv/<%= ev.twitch_channel %></a>
+                                    <% } else { %>
+                                        <span class="sc-muted">None</span>
+                                    <% } %>
+                                </td>
+                            </tr>
+                            <% }); %>
+                        </tbody>
+                    </table>
                 </div>
+                <p class="sc-tz" id="sc-tz">Dates are in UTC.</p>
             <% } %>
-        </div>
-    </div>
-</div>
-
-<%- include('partials/modern-footer') %>
-
+        </section>
+    </main>
+<%- include('partials/site-footer') %>
 <script>
-    function navigateToMonth(newMonth) {
-        window.location.href = `/schedule?year=<%= year %>&month=${newMonth}`;
+(function () {
+    // Pick a month or year and go there straight away; the Show button covers no-script visitors.
+    var form = document.getElementById('sc-jump');
+    if (form) form.querySelectorAll('select').forEach(function (s) { s.addEventListener('change', function () { form.submit(); }); });
+
+    // Today, in the visitor's own time zone.
+    var now = new Date();
+    if (now.getFullYear() === <%= Number(year) %> && now.getMonth() + 1 === <%= Number(month) %>) {
+        var cell = document.querySelector('.sc-cal td[data-day="' + now.getDate() + '"]');
+        if (cell) { cell.classList.add('is-today'); cell.querySelector('.sc-day').setAttribute('aria-label', 'Today, ' + now.getDate()); }
     }
 
-    function navigateToYear(newYear) {
-        window.location.href = `/schedule?year=${newYear}&month=<%= month %>`;
+    // Server dates are UTC; show them in the visitor's time zone.
+    var times = document.querySelectorAll('time[data-local="day"]');
+    times.forEach(function (t) {
+        var d = new Date(t.getAttribute('datetime'));
+        if (!isNaN(d)) t.textContent = d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+    });
+    var tz = document.getElementById('sc-tz');
+    if (tz && times.length) {
+        try { tz.textContent = 'Dates are in your time zone (' + Intl.DateTimeFormat().resolvedOptions().timeZone + ').'; } catch (e) { tz.textContent = 'Dates are in your time zone.'; }
     }
-
-    // Highlight today based on user's local timezone
-    (function() {
-        const today = new Date();
-        const localDay = today.getDate();
-        const localMonth = today.getMonth() + 1;
-        const localYear = today.getFullYear();
-
-        document.querySelectorAll('.calendar-cell[data-day]').forEach(cell => {
-            const day = parseInt(cell.dataset.day);
-            const month = parseInt(cell.dataset.month);
-            const year = parseInt(cell.dataset.year);
-
-            if (day && day === localDay && month === localMonth && year === localYear) {
-                cell.classList.add('today');
-            }
-        });
-
-        // Also show user's current date/time in header
-        const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-        console.log('User timezone:', userTimezone, 'Local date:', today.toLocaleDateString());
-    })();
+})();
 </script>
-
-<!-- Bootstrap JS -->
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

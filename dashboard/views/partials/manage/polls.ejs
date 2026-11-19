@@ -1,262 +1,28 @@
+<%#
+  Polls: counts, the list of polls (edit through JSON POST edit-poll, end-poll, delete-poll) and
+  the "Create poll" dialog (POST create-poll). Built on the settings-row kit (cf-settings.css);
+  ids, field names, handlers and script hooks unchanged.
+%>
 <style>
-/* Compact Polls Page Styles */
-.polls-stats-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 12px;
-    margin-bottom: 20px;
-}
-
-.polls-stat-card {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(167, 139, 250, 0.15);
-    border-radius: 10px;
-    padding: 14px 16px;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    transition: all 0.2s ease;
-}
-
-.polls-stat-card:hover {
-    background: rgba(255, 255, 255, 0.06);
-    border-color: rgba(167, 139, 250, 0.3);
-}
-
-.polls-stat-icon {
-    width: 36px;
-    height: 36px;
-    background: rgba(167, 139, 250, 0.15);
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-}
-
-.polls-stat-icon i { font-size: 0.9rem; color: #a78bfa; }
-.polls-stat-icon.green { background: rgba(34, 197, 94, 0.15); }
-.polls-stat-icon.green i { color: #22c55e; }
-.polls-stat-icon.gray { background: rgba(107, 114, 128, 0.15); }
-.polls-stat-icon.gray i { color: #9ca3af; }
-
-.polls-stat-label {
-    font-size: 0.7rem;
-    color: rgba(255, 255, 255, 0.5);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-}
-
-.polls-stat-value {
-    font-size: 1.25rem;
-    font-weight: 700;
-    color: #a78bfa;
-}
-
-/* Section Card */
-.polls-section-card {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(167, 139, 250, 0.15);
-    border-radius: 12px;
-    overflow: hidden;
-    margin-bottom: 16px;
-}
-
-.polls-section-header {
-    background: rgba(167, 139, 250, 0.08);
-    padding: 12px 16px;
-    border-bottom: 1px solid rgba(167, 139, 250, 0.15);
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.polls-section-header i { font-size: 0.9rem; color: #a78bfa; }
-.polls-section-header h3 { font-size: 0.9rem; font-weight: 600; color: #ffffff; margin: 0; }
-
-.polls-section-body { padding: 0; }
-
-/* Compact Table Styles */
-.polls-table { width: 100%; border-collapse: collapse; }
-.polls-table thead { background: rgba(0, 0, 0, 0.2); }
-
-.polls-table th {
-    padding: 10px 14px;
-    text-align: left;
-    font-size: 0.7rem;
-    font-weight: 600;
-    color: rgba(255, 255, 255, 0.5);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-}
-
-.polls-table td {
-    padding: 12px 14px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.polls-table tbody tr { transition: background 0.15s; }
-.polls-table tbody tr:hover { background: rgba(167, 139, 250, 0.05); }
-.polls-table tbody tr:last-child td { border-bottom: none; }
-
-.polls-question { font-weight: 600; color: #ffffff; font-size: 0.85rem; }
-
-.polls-channel {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 0.75rem;
-    color: rgba(255, 255, 255, 0.6);
-}
-
-.polls-channel i { color: #a78bfa; font-size: 0.7rem; }
-
-.polls-date { font-size: 0.7rem; color: rgba(255, 255, 255, 0.5); }
-
-/* Status Badge */
-.polls-status-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-size: 0.65rem;
-    font-weight: 600;
-    text-transform: uppercase;
-}
-
-.polls-status-badge.active { background: rgba(34, 197, 94, 0.15); color: #22c55e; }
-.polls-status-badge.ended { background: rgba(107, 114, 128, 0.15); color: #9ca3af; }
-
-/* Action Buttons */
-.polls-action-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 5px 10px;
-    border-radius: 6px;
-    font-size: 0.7rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.polls-action-btn.end {
-    background: rgba(251, 191, 36, 0.1);
-    border: 1px solid rgba(251, 191, 36, 0.3);
-    color: #fbbf24;
-}
-
-.polls-action-btn.end:hover { background: rgba(251, 191, 36, 0.2); }
-
-.polls-action-btn.delete {
-    background: rgba(248, 113, 113, 0.1);
-    border: 1px solid rgba(248, 113, 113, 0.3);
-    color: #f87171;
-}
-
-.polls-action-btn.delete:hover { background: rgba(248, 113, 113, 0.2); }
-
-.polls-actions { display: flex; gap: 6px; justify-content: flex-end; }
-
-/* Compact Empty State */
-.polls-empty-state { text-align: center; padding: 48px 24px; }
-.polls-empty-icon { font-size: 2.5rem; color: rgba(167, 139, 250, 0.3); margin-bottom: 16px; }
-.polls-empty-title { font-size: 1.1rem; font-weight: 600; color: rgba(255, 255, 255, 0.9); margin-bottom: 8px; }
-.polls-empty-description { font-size: 0.85rem; color: rgba(255, 255, 255, 0.5); margin-bottom: 20px; }
-
-/* Create Button */
-.polls-create-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 20px;
-    background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%);
-    border: none;
-    border-radius: 8px;
-    color: #ffffff;
-    font-size: 0.85rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.polls-create-btn:hover { box-shadow: 0 4px 16px rgba(124, 58, 237, 0.4); }
-
-/* Compact Modal Styles */
-.polls-modal-form-group { margin-bottom: 14px; }
-
-.polls-modal-label {
-    display: block;
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: rgba(255, 255, 255, 0.9);
-    margin-bottom: 6px;
-}
-
-.polls-modal-input,
-.polls-modal-select {
-    width: 100%;
-    padding: 10px 14px;
-    background: rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 8px;
-    color: #ffffff;
-    font-size: 0.85rem;
-    transition: all 0.2s;
-}
-
-.polls-modal-input:focus,
-.polls-modal-select:focus {
-    outline: none;
-    border-color: rgba(167, 139, 250, 0.5);
-    box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.1);
-}
-
-.polls-modal-select option { background: #1a1d21; color: #ffffff; }
-
-.polls-modal-hint {
-    display: block;
-    margin-top: 4px;
-    font-size: 0.7rem;
-    color: rgba(255, 255, 255, 0.45);
-}
-
-.polls-modal-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 12px;
-}
-
-.polls-options-box {
-    background: rgba(0, 0, 0, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 8px;
-    padding: 12px;
-}
-
-.polls-options-title {
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: rgba(255, 255, 255, 0.9);
-    margin-bottom: 8px;
-}
-
-.polls-checkbox-wrapper {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 4px 0;
-}
-
-.polls-checkbox-wrapper input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
-.polls-checkbox-wrapper label { font-size: 0.75rem; color: rgba(255, 255, 255, 0.7); cursor: pointer; }
-
-@media (max-width: 768px) {
-    .polls-stats-grid { grid-template-columns: 1fr; }
-    .polls-modal-grid { grid-template-columns: 1fr; }
-    .polls-actions { flex-direction: column; }
-}
+    .pl-question { font-weight: 600; color: var(--cf-text); overflow-wrap: anywhere; }
+    .pl-actions { display: flex; gap: var(--cf-2); justify-content: flex-end; flex-wrap: wrap; align-items: center; }
+    .pl-actions form { display: inline; margin: 0; }
+    .pl-field { display: flex; flex-direction: column; gap: 6px; margin: 0 0 var(--cf-4); }
+    .pl-field:last-child { margin-bottom: 0; }
+    .pl-field > label, .pl-field > .pl-label { margin: 0; font-size: var(--cf-text-sm); font-weight: 500; color: var(--cf-text); }
+    .pl-hint { font-size: var(--cf-text-xs); color: var(--cf-text-3); line-height: 1.4; }
+    .pl-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--cf-3) var(--cf-4); margin: 0 0 var(--cf-4); }
+    .pl-grid .pl-field { margin: 0; }
+    .pl-choices { display: grid; gap: var(--cf-2); padding-top: var(--cf-3); border-top: 1px solid var(--cf-border); }
+    .pl-choice { display: flex; align-items: center; gap: 10px; margin: 0; font-size: var(--cf-text-sm); color: var(--cf-text); cursor: pointer; }
+    .pl-choice > input { width: 16px; height: 16px; margin: 0; accent-color: var(--cf-accent); flex: none; }
+    .polls-edit-option-row { display: flex; align-items: center; gap: var(--cf-2); margin: 0 0 var(--cf-2); }
+    .polls-edit-option-row > input:not([type="checkbox"]) { flex: 1 1 auto; min-width: 0; }
+    .polls-edit-option-votes { flex: none; font-size: var(--cf-text-xs); color: var(--cf-text-3); font-variant-numeric: tabular-nums; min-width: 4rem; text-align: right; }
+    .pl-create { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 0.9fr); gap: var(--cf-5); align-items: start; }
+    .pl-preview { display: grid; gap: var(--cf-2); }
+    @media (max-width: 860px) { .pl-create { grid-template-columns: minmax(0, 1fr); } }
+    @media (max-width: 640px) { .pl-grid { grid-template-columns: minmax(0, 1fr); } }
 </style>
 
 <div class="page-section">
@@ -266,182 +32,364 @@
                 <i class="fas fa-poll"></i>
                 <span>Polls</span>
             </div>
-            <div class="page-section-subtitle">
-                Create and manage polls to get feedback from your community
-            </div>
+<div class="page-section-subtitle">Questions with a button per answer, for a set time or until you end them.</div>
         </div>
-        <button class="polls-create-btn" data-bs-toggle="modal" data-bs-target="#createPollModal">
-            <i class="fas fa-plus"></i>
-            Create Poll
-        </button>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createPollModal">Create poll</button>
     </div>
 
-    <!-- Stats Overview -->
     <% if (polls && polls.length > 0) { %>
         <% const activeCount = polls.filter(p => p.is_active).length; const endedCount = polls.filter(p => !p.is_active).length; %>
-        <div class="polls-stats-grid">
-            <div class="polls-stat-card">
-                <div class="polls-stat-icon green"><i class="fas fa-check-circle"></i></div>
-                <div>
-                    <div class="polls-stat-label">Active</div>
-                    <div class="polls-stat-value"><%= activeCount %></div>
-                </div>
-            </div>
-            <div class="polls-stat-card">
-                <div class="polls-stat-icon gray"><i class="fas fa-clock"></i></div>
-                <div>
-                    <div class="polls-stat-label">Ended</div>
-                    <div class="polls-stat-value"><%= endedCount %></div>
-                </div>
-            </div>
-        </div>
+        <%- include('../kit/_kpis', { items: [{ label: 'Open', value: activeCount }, { label: 'Ended', value: endedCount }], label: 'Polls at a glance' }) %>
     <% } %>
 
-    <!-- Polls List -->
-    <% if (polls && polls.length > 0) { %>
-        <div class="polls-section-card">
-            <div class="polls-section-header">
-                <i class="fas fa-list"></i>
-                <h3>All Polls</h3>
+    <section class="cf-section" aria-labelledby="pl-list-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="pl-list-title">All polls<% if (polls && polls.length) { %> (<%= polls.length %>)<% } %></h2>
+                <p class="cf-section-desc">Edit an open poll's question, options or end time, end it early, or delete it.</p>
             </div>
-            <div class="polls-section-body">
-                <table class="polls-table">
+            <% if (polls && polls.length > 15) { %>
+            <div class="cf-section-actions">
+                <label class="cf-search"><i class="fas fa-search" aria-hidden="true"></i><input type="search" class="form-control" placeholder="Search questions" aria-label="Search polls" data-pl-filter></label>
+            </div>
+            <% } %>
+        </header>
+        <div class="cf-rows">
+            <% if (polls && polls.length > 0) { %>
+            <div class="cf-table-wrap">
+                <table class="cf-table cf-table--stack">
                     <thead>
                         <tr>
-                            <th>Question</th>
-                            <th>Channel</th>
-                            <th>Ends At</th>
-                            <th>Status</th>
-                            <th style="text-align: right;">Actions</th>
+                            <th scope="col">Question</th>
+                            <th scope="col">Channel</th>
+                            <th scope="col">Ends</th>
+                            <th scope="col">Voted</th>
+                            <th scope="col">Status</th>
+                            <th scope="col" class="cf-cell-end"><span class="visually-hidden">Actions</span></th>
                         </tr>
                     </thead>
                     <tbody>
                         <% polls.forEach(poll => { %>
-                            <tr>
-                                <td>
-                                    <div class="polls-question"><%= poll.question %></div>
-                                </td>
-                                <td>
-                                    <div class="polls-channel">
-                                        <i class="fas fa-hashtag"></i>
-                                        <%= channels.find(c => c.id === poll.channel_id)?.name || 'Unknown' %>
-                                    </div>
-                                </td>
-                                <td>
-                                    <div class="polls-date"><%= new Date(poll.ends_at).toLocaleString() %></div>
-                                </td>
-                                <td>
+                        <tr>
+                            <td data-label="Question"><span class="pl-question"><%= poll.question %></span></td>
+<td data-label="Channel"><% const plCh = channels.find(c => c.id === poll.channel_id); %><%= plCh ? '#' + plCh.name : 'Deleted channel' %></td>
+                            <%# Shown in the viewer's own time zone by the script below (the server's clock is UTC). %>
+                            <td data-label="Ends" class="cf-cell-muted"><% if (poll.ends_at) { %><time datetime="<%= new Date(poll.ends_at).toISOString() %>" data-pl-time><%= new Date(poll.ends_at).toUTCString() %></time><% } else { %>No time limit<% } %></td>
+                            <% let plVoters = 0; try { const v = typeof poll.votes === 'string' ? JSON.parse(poll.votes || '{}') : (poll.votes || {}); plVoters = Object.keys(v || {}).length; } catch (e) {} %>
+                            <td data-label="Voted"><%= plVoters %> member<%= plVoters === 1 ? '' : 's' %></td>
+                            <td data-label="Status">
+                                <% if (poll.is_active) { %>
+                                    <span class="cf-pill is-ok">Open</span>
+                                <% } else { %>
+                                    <span class="cf-pill">Ended</span>
+                                <% } %>
+                            </td>
+                            <td class="cf-cell-end">
+                                <div class="pl-actions">
                                     <% if (poll.is_active) { %>
-                                        <span class="polls-status-badge active">
-                                            <i class="fas fa-circle"></i> Active
-                                        </span>
-                                    <% } else { %>
-                                        <span class="polls-status-badge ended">
-                                            <i class="fas fa-circle"></i> Ended
-                                        </span>
-                                    <% } %>
-                                </td>
-                                <td>
-                                    <div class="polls-actions">
-                                        <% if (poll.is_active) { %>
-                                            <form action="/manage/<%= guild.id %>/end-poll" method="POST" style="display: inline;">
-                                                <input type="hidden" name="pollId" value="<%= poll.id %>">
-                                                <button type="submit" class="polls-action-btn end" onclick="return confirm('End this poll now?');">
-                                                    <i class="fas fa-stop"></i> End
-                                                </button>
-                                            </form>
-                                        <% } %>
-                                        <form action="/manage/<%= guild.id %>/delete-poll" method="POST" style="display: inline;">
+                                        <%
+                                            let editOpts = [], editCounts = [], editVotes = {};
+                                            try { editOpts = JSON.parse(poll.options || '[]'); editVotes = JSON.parse(poll.votes || '{}'); } catch (e) {}
+                                            editCounts = editOpts.map((_, i) => Object.values(editVotes).filter(v => [].concat(v).includes(i)).length);
+                                        %>
+                                        <button type="button" class="btn btn-sm btn-secondary" onclick="openEditPoll(this)"
+                                            data-poll="<%= JSON.stringify({ id: poll.id, question: poll.question, options: editOpts, counts: editCounts, endsAt: poll.ends_at ? new Date(poll.ends_at).toISOString() : null }) %>">Edit</button>
+                                        <form action="/manage/<%= guild.id %>/end-poll" method="POST">
                                             <input type="hidden" name="pollId" value="<%= poll.id %>">
-                                            <button type="submit" class="polls-action-btn delete" onclick="return confirm('Delete this poll?');">
-                                                <i class="fas fa-trash"></i>
-                                            </button>
+                                            <button type="submit" class="btn btn-sm btn-secondary" onclick="return confirm('End this poll now?');">End now</button>
                                         </form>
-                                    </div>
-                                </td>
-                            </tr>
+                                    <% } %>
+                                    <form action="/manage/<%= guild.id %>/delete-poll" method="POST">
+                                        <input type="hidden" name="pollId" value="<%= poll.id %>">
+                                        <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Delete this poll?');" aria-label="Delete poll">Delete</button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
                         <% }) %>
                     </tbody>
                 </table>
             </div>
-        </div>
-    <% } else { %>
-        <div class="polls-empty-state">
-            <div class="polls-empty-icon">
-                <i class="fas fa-poll"></i>
+            <% } else { %>
+            <div class="cf-state cf-state--empty">
+                <p class="cf-state-title">No polls yet</p>
+                <p class="cf-state-text">Create one to ask the server a question.</p>
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createPollModal">Create poll</button>
             </div>
-            <div class="polls-empty-title">No Polls Yet</div>
-            <div class="polls-empty-description">
-                Create your first poll to gather feedback from your community
-            </div>
-            <button class="polls-create-btn" data-bs-toggle="modal" data-bs-target="#createPollModal">
-                <i class="fas fa-plus"></i>
-                Create First Poll
-            </button>
+            <% } %>
         </div>
-    <% } %>
+    </section>
 </div>
 
-<!-- Create Poll Modal -->
-<div class="modal fade" id="createPollModal" tabindex="-1">
-    <div class="modal-dialog">
+<!-- Create poll dialog -->
+<div class="modal fade" id="createPollModal" tabindex="-1" aria-labelledby="pl-create-title">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Create Poll</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <h2 class="modal-title h5" id="pl-create-title">Create poll</h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <form action="/manage/<%= guild.id %>/create-poll" method="POST">
+            <form action="/manage/<%= guild.id %>/create-poll" method="POST" id="pl-create-form">
                 <div class="modal-body">
-                    <div class="polls-modal-form-group">
-                        <label class="polls-modal-label">Question</label>
-                        <input type="text" class="polls-modal-input" name="question" required placeholder="What should we do next?">
-                        <span class="polls-modal-hint">The question you want to ask</span>
+                    <div class="pl-create">
+                    <div>
+                    <div class="pl-field">
+                        <label for="f-polls-question">Question</label>
+<input id="f-polls-question" type="text" class="form-control" name="question" required maxlength="250" placeholder="What should we play on Friday?">
                     </div>
-                    <div class="polls-modal-form-group">
-                        <label class="polls-modal-label">Options (comma-separated)</label>
-                        <input type="text" class="polls-modal-input" name="options" required placeholder="Option 1, Option 2, Option 3">
-                        <span class="polls-modal-hint">Poll options separated by commas</span>
+                    <div class="pl-field">
+                        <label for="f-polls-options">Options</label>
+                        <input id="f-polls-options" type="text" class="form-control" name="options" required placeholder="Option 1, Option 2, Option 3">
+<span class="pl-hint">Two to ten options, separated by commas. Each becomes a button, so keep them short (up to 80 characters).</span>
                     </div>
-                    <div class="polls-modal-grid">
-                        <div class="polls-modal-form-group" style="margin-bottom: 0;">
-                            <label class="polls-modal-label">Duration (optional)</label>
-                            <input type="text" class="polls-modal-input" name="duration" placeholder="30m, 2h, 1d">
-                            <span class="polls-modal-hint">Leave blank for no time limit</span>
+                    <div class="pl-grid">
+                        <div class="pl-field">
+                            <label for="f-polls-duration">Duration (optional)</label>
+                            <input id="f-polls-duration" type="text" class="form-control" name="duration" placeholder="30m, 2h, 1d">
+                            <span class="pl-hint">A number followed by s, m, h or d, such as 30m, 2h or 1d. Leave empty for no time limit.</span>
                         </div>
-                        <div class="polls-modal-form-group" style="margin-bottom: 0;">
-                            <label class="polls-modal-label">Channel</label>
-                            <select class="polls-modal-select" name="channel_id" required>
-                                <option value="">Select...</option>
-                                <% channels.forEach(channel => { %>
-                                    <option value="<%= channel.id %>">#<%= channel.name %></option>
-                                <% }); %>
+                        <div class="pl-field">
+                            <label for="f-polls-channel_id">Channel</label>
+                            <select id="f-polls-channel_id" class="form-select" name="channel_id" required>
+                            <%- include('../kit/_pick-options', { items: channels, selected: null, kind: 'channel', only: 'text', empty: 'Choose a channel' }) %>
                             </select>
                         </div>
                     </div>
-                    <div class="polls-options-box" style="margin-top: 20px;">
-                        <div class="polls-options-title">Poll Options</div>
-                        <div class="polls-checkbox-wrapper">
-                            <input type="checkbox" id="allow_multiple" name="allow_multiple" value="1">
-                            <label for="allow_multiple">Allow multiple choices</label>
-                        </div>
-                        <div class="polls-checkbox-wrapper">
-                            <input type="checkbox" id="anonymous" name="anonymous" value="1">
-                            <label for="anonymous">Anonymous voting</label>
-                        </div>
-                        <div class="polls-checkbox-wrapper">
-                            <input type="checkbox" id="allow_write_in" name="allow_write_in" value="1">
-                            <label for="allow_write_in">Allow write-in answers</label>
-                        </div>
+                    <div class="pl-choices">
+                        <label class="pl-choice"><input type="checkbox" id="allow_multiple" name="allow_multiple" value="1"> Allow more than one choice</label>
+                        <label class="pl-choice"><input type="checkbox" id="anonymous" name="anonymous" value="1"> Anonymous voting</label>
+                        <label class="pl-choice"><input type="checkbox" id="hide_results" name="hide_results" value="1"> Hide results until the poll ends</label>
+                <label class="pl-choice"><input type="checkbox" id="allow_write_in" name="allow_write_in" value="1"> Allow write-in answers</label>
+                    </div>
+                    </div>
+                    <div class="pl-preview">
+                        <span class="pl-label" id="pl-pv-title">Preview</span>
+                        <div class="cf-dc-frame" data-pl-preview aria-live="polite" aria-labelledby="pl-pv-title"></div>
+                    </div>
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="polls-create-btn">
-                        <i class="fas fa-poll"></i>
-                        Start Poll
-                    </button>
+                    <button type="submit" class="btn btn-primary">Start poll</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
+
+<!-- Edit poll dialog -->
+<div class="modal fade" id="editPollModal" tabindex="-1" aria-labelledby="pl-edit-title">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title h5" id="pl-edit-title">Edit poll</h2>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="edit-poll-form">
+                <input type="hidden" name="pollId" id="f-edit-poll-id">
+                <div class="modal-body">
+                    <div class="pl-field">
+                        <label for="f-edit-poll-question">Question</label>
+                        <input id="f-edit-poll-question" type="text" class="form-control" maxlength="250" required>
+                    </div>
+                    <div class="pl-field">
+                        <label for="f-edit-poll-ends">Ends at</label>
+                        <div class="polls-edit-option-row">
+                            <input id="f-edit-poll-ends" type="datetime-local" class="form-control">
+                            <button type="button" class="btn btn-sm btn-secondary" onclick="extendEditPoll(1)">+1h</button>
+                            <button type="button" class="btn btn-sm btn-secondary" onclick="extendEditPoll(24)">+1d</button>
+                        </div>
+                        <label class="pl-choice"><input type="checkbox" id="f-edit-poll-nolimit" onchange="document.getElementById('f-edit-poll-ends').disabled = this.checked"> No time limit</label>
+                        <span class="pl-hint">Your local time. To close the poll now, use End now instead.</span>
+                    </div>
+                    <div class="pl-field">
+                        <span class="pl-label">Options</span>
+                        <div id="edit-poll-options"></div>
+                        <div><button type="button" class="btn btn-sm btn-secondary" id="edit-poll-add-option" onclick="addEditPollOption()">Add option</button></div>
+                        <span class="pl-hint">Votes stay with their option when you rename it. Options that already have votes cannot be removed. The poll message in Discord updates in place.</span>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="edit-poll-save">Save changes</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script src="/js/cf-msgpreview.js"></script>
+<script>
+// The create dialog's preview: the post core/polls-manager.js makes (title, one line per option,
+// the notes for each switch, one button per option). And a search over a long list.
+(function () {
+    const form = document.getElementById('pl-create-form');
+    const box = document.querySelector('[data-pl-preview]');
+    const CREATOR = <%- JSON.stringify(String((typeof user !== 'undefined' && user && (user.username || user.globalName)) || 'you')).replace(/</g, '\\u003c') %>;
+    const key = (i) => (i === 9 ? '\uD83D\uDD1F' : String(i + 1) + '\uFE0F\u20E3');
+    function render() {
+        if (!form || !box || !window.CFPreview) return;
+        const opts = form.elements.options.value.split(/[,;]/).map((o) => o.trim()).filter(Boolean);
+        const shown = opts.length ? opts.slice(0, 10) : ['Option 1', 'Option 2'];
+        const hidden = form.elements.hide_results.checked;
+        const text = shown.map((o, i) => key(i) + ' **' + CFPreview.clip(o, 80) + '**\n' + (hidden ? '\u2591'.repeat(10) + ' hidden' : '\u2591'.repeat(10) + ' 0% (0 votes)')).join('\n\n');
+        const fields = [];
+        if (form.elements.allow_multiple.checked) fields.push({ name: 'Voting', value: 'You can select multiple options', wide: true });
+        if (form.elements.anonymous.checked) fields.push({ name: 'Privacy', value: 'Votes are anonymous', wide: true });
+        if (hidden) fields.push({ name: 'Results', value: 'Hidden until the poll ends', wide: true });
+        if (form.elements.allow_write_in.checked) fields.push({ name: 'Write-In', value: 'You can submit your own custom answer', wide: true });
+        const buttons = shown.map((o) => ({ label: CFPreview.clip(o, 80), style: 'primary' }));
+        if (form.elements.allow_write_in.checked) buttons.push({ label: 'Write Your Own Answer', style: 'secondary' });
+        let note = '';
+        if (opts.length === 1) note = 'Add at least one more option.';
+        else if (opts.length > 10) note = 'Only ten options fit; remove ' + (opts.length - 10) + '.';
+        else if (!form.elements.channel_id.value) note = 'Choose a channel to post it in.';
+        CFPreview.render(box, {
+            embed: { colour: '#5865F2', title: '\uD83D\uDCCA ' + (form.elements.question.value.trim() || 'Your question'), text, fields, foot: 'Created by ' + CREATOR },
+            buttons, note,
+        });
+    }
+    if (form) { form.addEventListener('input', render); form.addEventListener('change', render); render(); }
+
+    document.querySelectorAll('[data-pl-time]').forEach((t) => { const d = new Date(t.getAttribute('datetime')); if (!isNaN(d)) t.textContent = d.toLocaleString(); });
+    const filter = document.querySelector('[data-pl-filter]');
+    if (filter) filter.addEventListener('input', () => {
+        const q = filter.value.trim().toLowerCase();
+        document.querySelectorAll('.pl-question').forEach((cell) => { const row = cell.closest('tr'); if (row) row.hidden = !!q && !cell.textContent.toLowerCase().includes(q); });
+    });
+})();
+
+(function () {
+    const MAX_OPTIONS = 10;
+    let initialEnds = { value: '', noLimit: false };
+
+    // datetime-local wants local "YYYY-MM-DDTHH:MM" — toISOString() would be UTC
+    function toLocalInput(date) {
+        const pad = n => String(n).padStart(2, '0');
+        return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    }
+
+    window.extendEditPoll = function (hours) {
+        const input = document.getElementById('f-edit-poll-ends');
+        document.getElementById('f-edit-poll-nolimit').checked = false;
+        input.disabled = false;
+        const base = input.value ? new Date(input.value) : new Date();
+        input.value = toLocalInput(new Date(Math.max(base.getTime(), Date.now()) + hours * 3600 * 1000));
+    };
+
+    function renderAddButton() {
+        const count = document.querySelectorAll('#edit-poll-options .polls-edit-option-row').length;
+        document.getElementById('edit-poll-add-option').style.display = count >= MAX_OPTIONS ? 'none' : '';
+    }
+
+    function optionRow(text, orig, votes) {
+        const row = document.createElement('div');
+        row.className = 'polls-edit-option-row';
+        row.dataset.orig = orig === null ? '' : String(orig);
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'form-control';
+        input.maxLength = 80;
+        input.required = true;
+        input.value = text;
+        input.placeholder = 'Option text';
+
+        const count = document.createElement('span');
+        count.className = 'polls-edit-option-votes';
+        count.textContent = orig === null ? 'new' : votes + (votes === 1 ? ' vote' : ' votes');
+
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'btn btn-sm btn-secondary';
+        remove.setAttribute('aria-label', 'Remove option');
+        remove.innerHTML = '<i class="fas fa-times"></i>';
+        // Bets are checked server-side — a betting poll can hold bets on an option with no votes
+        if (orig !== null && votes > 0) {
+            remove.disabled = true;
+            remove.title = 'This option has votes; rename it instead';
+        } else {
+            remove.title = 'Remove option';
+        }
+        remove.onclick = () => { row.remove(); renderAddButton(); };
+
+        row.append(input, count, remove);
+        return row;
+    }
+
+    window.openEditPoll = function (btn) {
+        const poll = JSON.parse(btn.dataset.poll);
+        document.getElementById('f-edit-poll-id').value = poll.id;
+        document.getElementById('f-edit-poll-question').value = poll.question;
+        const endsInput = document.getElementById('f-edit-poll-ends');
+        const noLimit = document.getElementById('f-edit-poll-nolimit');
+        endsInput.value = poll.endsAt ? toLocalInput(new Date(poll.endsAt)) : '';
+        noLimit.checked = !poll.endsAt;
+        endsInput.disabled = noLimit.checked;
+        initialEnds = { value: endsInput.value, noLimit: noLimit.checked };
+        const list = document.getElementById('edit-poll-options');
+        list.innerHTML = '';
+        poll.options.forEach((text, i) => list.appendChild(optionRow(text, i, poll.counts[i] || 0)));
+        renderAddButton();
+        bootstrap.Modal.getOrCreateInstance(document.getElementById('editPollModal')).show();
+    };
+
+    window.addEditPollOption = function () {
+        const list = document.getElementById('edit-poll-options');
+        if (list.children.length >= MAX_OPTIONS) return;
+        const row = optionRow('', null, 0);
+        list.appendChild(row);
+        row.querySelector('input').focus();
+        renderAddButton();
+    };
+
+    document.getElementById('edit-poll-form').addEventListener('submit', async function (e) {
+        e.preventDefault();
+        const options = [...document.querySelectorAll('#edit-poll-options .polls-edit-option-row')].map(row => ({
+            orig: row.dataset.orig === '' ? null : Number(row.dataset.orig),
+            text: row.querySelector('input').value.trim()
+        }));
+        if (options.length < 2) return showToast('A poll needs at least 2 options', 'error');
+
+        const payload = {
+            pollId: document.getElementById('f-edit-poll-id').value,
+            question: document.getElementById('f-edit-poll-question').value.trim(),
+            options
+        };
+        // Only send the end time when it was touched — the picker drops seconds, so an
+        // untouched value would still read as a change
+        const endsValue = document.getElementById('f-edit-poll-ends').value;
+        const noLimit = document.getElementById('f-edit-poll-nolimit').checked;
+        if (noLimit !== initialEnds.noLimit || (!noLimit && endsValue !== initialEnds.value)) {
+            if (!noLimit && !endsValue) return showToast('Pick an end time, or tick "No time limit"', 'error');
+            payload.endsAt = noLimit ? null : new Date(endsValue).toISOString();
+        }
+
+        const save = document.getElementById('edit-poll-save');
+        save.disabled = true;
+        try {
+            const resp = await fetch('/manage/<%= guild.id %>/edit-poll', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok || !data.success) throw new Error(data.error || 'Failed to update poll');
+
+            if (!data.changed) {
+                showToast('No changes to save', 'info');
+            } else if (data.rendered === false) {
+                showToast('Poll saved, but the Discord message could not be updated', 'error');
+            } else {
+                showToast('Poll updated', 'success');
+            }
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('editPollModal')).hide();
+            if (data.changed) setTimeout(() => location.reload(), 800);
+        } catch (err) {
+            showToast(err.message, 'error');
+        } finally {
+            save.disabled = false;
+        }
+    });
+})();
+</script>

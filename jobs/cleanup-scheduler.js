@@ -63,10 +63,12 @@ class CleanupScheduler {
     let totalCleaned = 0;
 
     try {
-      // Clean up old AFK statuses (older than 7 days)
+      // Clean up stale AFK statuses (set more than 7 days ago). Only rows with no nickname to
+      // restore: deleting a `nick_changed` row would leave the member stuck with the "[AFK]"
+      // nickname for good, because the original is only kept in that row.
       totalCleaned += await this.cleanupTable(
         'afk_statuses',
-        'timestamp < DATE_SUB(NOW(), INTERVAL 7 DAY)',
+        'set_at < DATE_SUB(NOW(), INTERVAL 7 DAY) AND nick_changed = 0',
         'AFK statuses'
       );
 
@@ -84,19 +86,13 @@ class CleanupScheduler {
         'expired giveaways'
       );
 
-      // Clean up old message activity (older than 90 days)
-      totalCleaned += await this.cleanupTable(
-        'message_activity',
-        'date < DATE_SUB(NOW(), INTERVAL 90 DAY)',
-        'old message activity'
-      );
-
-      // Clean up old voice activity (older than 90 days)
-      totalCleaned += await this.cleanupTable(
-        'voice_activity',
-        'date < DATE_SUB(NOW(), INTERVAL 90 DAY)',
-        'old voice activity'
-      );
+      // Not cleaned here, on purpose:
+      //   voice_activity - /activity audits read up to 365 days back and voice stats have an
+      //     all-time view; a 90-day purge would make active members look inactive.
+      //   message_logs   - owned by jobs/retention-sweeper.js (data_retention_policy, 90 days).
+      //   message_activity - this table does not exist.
+      //   command_usage - did not exist then; since migration 433 it does, and it is owned by
+      //     data_retention_policy (400 days, jobs/retention-sweeper.js). Do not add a rule here.
 
       // Clean up orphaned live announcements (older than 24 hours)
       totalCleaned += await this.cleanupTable(
@@ -108,33 +104,9 @@ class CleanupScheduler {
       // Clean up old auto-meme history (keep last 500 per guild)
       totalCleaned += await this.cleanupMemeHistory();
 
-      // Clean up old music statistics (older than 30 days)
-      totalCleaned += await this.cleanupTable(
-        'music_statistics',
-        'played_at < DATE_SUB(NOW(), INTERVAL 30 DAY)',
-        'old music statistics'
-      );
 
-      // Clean up completed trades older than 90 days
-      totalCleaned += await this.cleanupTable(
-        'trade_escrow',
-        "status = 'completed' AND updated_at < DATE_SUB(NOW(), INTERVAL 90 DAY)",
-        'old completed trades'
-      );
-
-      // Clean up old command usage logs (older than 30 days)
-      totalCleaned += await this.cleanupTable(
-        'command_usage',
-        'used_at < DATE_SUB(NOW(), INTERVAL 30 DAY)',
-        'old command usage logs'
-      );
-
-      // Clean up old message logs (older than 30 days)
-      totalCleaned += await this.cleanupTable(
-        'message_logs',
-        'created_at < DATE_SUB(NOW(), INTERVAL 30 DAY)',
-        'old message logs'
-      );
+      // Completed trades are NOT cleaned up: /engage trade history and reputation (and /grow stats)
+      // are computed from them, and trade_reviews reference them.
 
       // Optimize tables that had significant deletions
       await this.optimizeTables();
@@ -151,7 +123,7 @@ class CleanupScheduler {
 
     logger.info(`[CleanupScheduler] Cleanup completed`, {
       totalCleaned,
-      duration: `${duration}ms`
+      duration
     });
   }
 

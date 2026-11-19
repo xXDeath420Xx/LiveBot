@@ -1,0 +1,20 @@
+<%#
+  The avatar and name line of a .cf-dc preview message (see _game-kit.ejs).
+    include('_gk-author')                                  the bot, as this server sees it
+    include('_gk-author', { gkMember: 'Alex' })            a member (a blank avatar with their initial)
+    include('_gk-author', { gkUsed: '/owo hunt' })         the bot answering a slash command: adds the
+                                                           "Alex used /owo hunt" line above
+  Optional gkTime (default "Today at 20:15").
+%><%
+let _gkName = 'CertiFried Utility', _gkAv = null;
+try {
+    const _me = guild && guild.members && guild.members.me;
+    if (_me) {
+        _gkName = _me.displayName || (_me.user && _me.user.username) || _gkName;
+        _gkAv = typeof _me.displayAvatarURL === 'function' ? _me.displayAvatarURL({ size: 64, extension: 'png' }) : null;
+    }
+} catch (e) { /* preview only */ }
+const _gkMember = (typeof gkMember !== 'undefined' && gkMember) ? String(gkMember) : null;
+const _gkUsed = (typeof gkUsed !== 'undefined' && gkUsed) ? String(gkUsed) : null;
+const _gkTime = (typeof gkTime !== 'undefined' && gkTime) ? String(gkTime) : 'Today at 20:15';
+%><% if (_gkUsed) { %><div class="cf-dc-used"><b>Alex</b> used <code><%= _gkUsed %></code></div><% } %><% if (_gkMember) { %><span class="cf-dc-av is-blank" aria-hidden="true"><%= _gkMember.charAt(0).toUpperCase() %></span><% } else if (_gkAv) { %><img class="cf-dc-av" src="<%= _gkAv %>" alt="" width="40" height="40" loading="lazy" referrerpolicy="no-referrer"><% } else { %><span class="cf-dc-av is-blank" aria-hidden="true"><%= _gkName.charAt(0).toUpperCase() %></span><% } %><div class="cf-dc-head"><span class="cf-dc-name"><%= _gkMember || _gkName %></span><% if (!_gkMember) { %><span class="cf-dc-tag">App</span><% } %><span class="cf-dc-time"><%= _gkTime %></span></div>

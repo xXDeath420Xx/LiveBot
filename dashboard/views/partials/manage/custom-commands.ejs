@@ -1,327 +1,787 @@
-<div class="page-section">
+<%
+// Custom commands (built on the settings-row kit, cf-settings.css). Create/edit/delete go through the JSON API (dashboard/routes/api/features/custom-commands.js),
+// which validates names, re-checks permission and returns variable warnings. The Variables panel is built from
+// GET …/custom-commands/reference (core/custom-command-vars.js TEMPLATE_VARIABLES), so it can never drift
+// from what the bot actually substitutes. Test (POST …/preview) runs real API calls server-side.
+const cmdList = Array.isArray(commands) ? commands : [];
+const apiCount = cmdList.filter(c => /\{api[.:]|customapi|urlfetch/i.test(c.response || '')).length;
+const roleCount = cmdList.filter(c => c.action_type === 'add_role' || c.action_type === 'remove_role').length;
+const ccPrefix = (typeof prefixConfig !== 'undefined' && prefixConfig && prefixConfig.prefix) ? prefixConfig.prefix : '!';
+const ccTotalUses = cmdList.reduce((n, c) => n + (Number(c.use_count) || 0), 0);
+// Roles the bot can give or take: below its highest role (managed roles are already left out of `roles`).
+const ccBotTop = (guild && guild.members && guild.members.me && guild.members.me.roles && guild.members.me.roles.highest) ? guild.members.me.roles.highest.position : null;
+const ccRoleList = (Array.isArray(roles) ? roles : []).slice().sort((a, b) => (b.position || 0) - (a.position || 0));
+const ccTextChannels = (Array.isArray(channels) ? channels : []).filter(c => c.type === 0 || c.type === 5);
+const ccRoleColor = (r) => (r.hexColor && r.hexColor !== '#000000') ? r.hexColor : '';
+%>
+<div class="page-section" id="ccPage" data-guild-id="<%= guild.id %>" data-prefix="<%= ccPrefix %>">
     <div class="page-section-header">
         <div>
             <div class="page-section-title">
                 <i class="fas fa-code"></i>
-                <span>Custom Commands</span>
+                <span>Custom commands</span>
             </div>
-            <div class="page-section-subtitle">
-                Create custom text commands with automated responses
-            </div>
+            <div class="page-section-subtitle">Variables, arguments, API calls and role commands.</div>
         </div>
     </div>
 
-    <!-- Stats Cards -->
-    <div class="grid grid-cols-3" style="margin-bottom: var(--spacing-6);">
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Total Commands</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary);"><%= commands?.length || 0 %></div>
-        </div>
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Command Prefix</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-primary-400);">!</div>
-        </div>
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Status</div>
-            <div style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-success); margin-top: var(--spacing-1);">
-                <i class="fas fa-check-circle"></i> Active
-            </div>
-        </div>
-    </div>
+    <dl class="cf-kpis" aria-label="Custom commands at a glance">
+        <div class="cf-kpi"><dt>Commands</dt><dd class="cf-kpi-value" id="ccxCount"><%= cmdList.length %></dd></div>
+        <div class="cf-kpi"><dt>Times used</dt><dd class="cf-kpi-value"><%= ccTotalUses.toLocaleString('en-US') %></dd></div>
+        <div class="cf-kpi"><dt>Using API calls</dt><dd class="cf-kpi-value" id="ccxApiCount"><%= apiCount %></dd></div>
+        <div class="cf-kpi"><dt>Role commands</dt><dd class="cf-kpi-value" id="cfk-cc-role-count"><%= roleCount %></dd></div>
+        <div class="cf-kpi"><dt>Run with</dt><dd class="cf-kpi-value is-small ccx-mono"><%= ccPrefix %>name</dd></div>
+    </dl>
 
-    <!-- Command Builder -->
-    <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6); margin-bottom: var(--spacing-6);">
-        <div style="display: flex; align-items: center; gap: var(--spacing-3); margin-bottom: var(--spacing-4);">
-            <div style="width: 48px; height: 48px; background: linear-gradient(135deg, var(--color-primary-500), var(--color-primary-600)); border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                <i class="fas fa-plus" style="color: white; font-size: 1.25rem;"></i>
-            </div>
-            <div>
-                <h4 style="margin: 0; font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary);">Create New Command</h4>
-                <p style="margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted);">Build a custom command with a trigger and response</p>
-            </div>
-        </div>
-
-        <form action="/manage/<%= guild.id %>/add-custom-command" method="POST">
-            <div class="grid grid-cols-3" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
-                <div>
-                    <label class="form-label">Command Name</label>
-                    <div class="input-group">
-                        <span class="input-group-icon" style="background: var(--color-dark-700); border: 1px solid var(--color-dark-400); border-right: none; padding: var(--spacing-3); border-radius: var(--radius-md) 0 0 var(--radius-md); color: var(--color-text-muted); font-weight: var(--font-weight-bold);">!</span>
-                        <input type="text" name="command_name" class="form-control" required pattern="^\S+$" placeholder="mycommand" style="border-left: none; padding-left: 0;">
+    <div class="ccx-layout">
+        <div class="ccx-main">
+            <section class="cf-section" id="cfk-cc-templates" aria-labelledby="ccx-tpl-title">
+                <header class="cf-section-head">
+                    <div>
+                        <h2 class="cf-section-title" id="ccx-tpl-title">Start from a template</h2>
+                        <p class="cf-section-desc">Fills in the editor below. Nothing is saved until you press Create command.</p>
                     </div>
-                    <div class="form-help">No spaces allowed in command name</div>
-                </div>
-
-                <div style="grid-column: span 2;">
-                    <label class="form-label">Response Message</label>
-                    <textarea name="response" class="form-control" required rows="1" placeholder="Enter the response message..." style="min-height: 46px; resize: vertical;"></textarea>
-                    <div class="form-help">The message the bot will send when the command is used</div>
-                </div>
-            </div>
-
-            <div style="background: linear-gradient(135deg, rgba(167, 139, 250, 0.1), rgba(167, 139, 250, 0.05)); border: 1px solid rgba(167, 139, 250, 0.3); border-radius: var(--radius-md); padding: var(--spacing-3); margin-bottom: var(--spacing-4);">
-                <div style="display: flex; gap: var(--spacing-3);">
-                    <i class="fas fa-info-circle" style="color: var(--color-primary-400); margin-top: 2px;"></i>
-                    <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">
-                        Users will type <code style="background: var(--color-dark-700); padding: 2px 6px; border-radius: 3px; color: var(--color-primary-400);">!commandname</code> and the bot will respond with your custom message
+                </header>
+                <div class="cf-rows">
+                    <div class="ccx-pad">
+                        <div class="ccx-tpls" id="cfk-cc-tpl-list"><span class="ccx-muted">Loading templates…</span></div>
                     </div>
                 </div>
-            </div>
+            </section>
 
-            <button type="submit" class="btn btn-primary">
-                <i class="fas fa-plus"></i>
-                <span>Create Command</span>
-            </button>
-        </form>
-    </div>
-
-    <!-- Existing Commands -->
-    <% if (commands && commands.length > 0) { %>
-        <!-- Search Bar -->
-        <div style="margin-bottom: var(--spacing-4);">
-            <div class="input-group">
-                <span class="input-group-icon">
-                    <i class="fas fa-search"></i>
-                </span>
-                <input type="text" id="commandSearch" class="form-control" placeholder="Search commands...">
-            </div>
-        </div>
-
-        <div class="table-container">
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th style="width: 200px;">Command</th>
-                        <th>Response</th>
-                        <th style="width: 120px;" class="text-end">Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="commandsTableBody">
-                    <% commands.forEach(command => { %>
-                        <tr class="command-row" data-command-name="<%= command.command_name.toLowerCase() %>" data-response="<%= command.response.toLowerCase() %>">
-                            <td>
-                                <div style="display: flex; align-items: center; gap: var(--spacing-2);">
-                                    <span style="background: var(--color-dark-700); padding: var(--spacing-2) var(--spacing-3); border-radius: var(--radius-sm); font-family: 'Courier New', monospace; font-weight: var(--font-weight-bold); color: var(--color-primary-400);">
-                                        !<%= command.command_name %>
-                                    </span>
-                                </div>
-                            </td>
-                            <td>
-                                <div style="max-width: 600px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--color-text-secondary);">
-                                    <%= command.response %>
-                                </div>
-                            </td>
-                            <td class="text-end">
-                                <button class="btn btn-sm btn-secondary" onclick="editCommand('<%= command.command_name %>', `<%= command.response.replace(/`/g, '\\`').replace(/\$/g, '\\$') %>`)" style="margin-right: var(--spacing-2);">
-                                    <i class="fas fa-pencil-alt"></i>
-                                    <span>Edit</span>
-                                </button>
-                                <form action="/manage/<%= guild.id %>/remove-custom-command" method="POST" style="display: inline;">
-                                    <input type="hidden" name="command_name" value="<%= command.command_name %>">
-                                    <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Delete this command?');">
-                                        <i class="fas fa-trash"></i>
-                                    </button>
-                                </form>
-                            </td>
-                        </tr>
-                    <% }); %>
-                </tbody>
-            </table>
-        </div>
-    <% } else { %>
-        <div class="empty-state">
-            <div class="empty-state-icon">
-                <i class="fas fa-code"></i>
-            </div>
-            <div class="empty-state-title">No Custom Commands</div>
-            <div class="empty-state-description">
-                Create your first custom command to get started
-            </div>
-        </div>
-    <% } %>
-</div>
-
-<!-- Edit Command Modal -->
-<div class="modal fade" id="editCommandModal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content" style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400);">
-            <form action="/manage/<%= guild.id %>/edit-custom-command" method="POST">
-                <div class="modal-header" style="border-bottom: 1px solid var(--color-dark-400);">
-                    <h5 class="modal-title" style="color: var(--color-text-primary);">
-                        <i class="fas fa-pencil-alt"></i> Edit Command
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <input type="hidden" id="editCommandNameHidden" name="old_command_name">
-
-                    <div style="margin-bottom: var(--spacing-4);">
-                        <label class="form-label">Command Name</label>
-                        <div class="input-group">
-                            <span class="input-group-icon" style="background: var(--color-dark-700); border: 1px solid var(--color-dark-400); border-right: none; padding: var(--spacing-3); border-radius: var(--radius-md) 0 0 var(--radius-md); color: var(--color-text-muted); font-weight: var(--font-weight-bold);">!</span>
-                            <input type="text" id="editCommandName" name="command_name" class="form-control" required pattern="^\S+$" style="border-left: none; padding-left: 0;">
+            <section class="cf-section" id="ccxEditor" aria-labelledby="ccxEditorTitle">
+                <header class="cf-section-head">
+                    <div>
+                        <h2 class="cf-section-title" id="ccxEditorTitle">Create a command</h2>
+                        <p class="cf-section-desc" id="ccxEditorSub">Pick a name, write the reply, then press Test to see exactly what the bot will send.</p>
+                    </div>
+                    <div class="cf-section-actions">
+                        <button type="button" class="btn btn-sm btn-secondary" id="ccxCancel" hidden>Cancel edit</button>
+                    </div>
+                </header>
+                <div class="cf-rows">
+                    <div class="cf-row cf-row--stack">
+                        <div class="cf-row-text">
+                            <label class="cf-row-label" for="ccxName">Name</label>
+                            <p class="cf-row-desc" id="ccxNameHelp">Letters, numbers, - and _ only, up to 30 characters. Built-in command names are taken.</p>
+                        </div>
+                        <div class="cf-row-control">
+                            <div class="ccx-name">
+                                <span class="ccx-prefix ccx-mono" aria-hidden="true"><%= ccPrefix %></span>
+                                <input type="text" id="ccxName" class="form-control" maxlength="30" autocomplete="off" spellcheck="false" placeholder="roast" aria-describedby="ccxNameHelp">
+                            </div>
                         </div>
                     </div>
 
-                    <div style="margin-bottom: var(--spacing-4);">
-                        <label class="form-label">Response Message</label>
-                        <textarea id="editCommandResponse" name="response" class="form-control" required rows="3" style="resize: vertical;"></textarea>
+                    <div class="cf-row">
+                        <div class="cf-row-text">
+                            <span class="cf-row-label" id="cfk-cc-action-label">What it does</span>
+                            <p class="cf-row-desc">A role command gives or takes the role from whoever runs it, or from the member they mention.</p>
+                        </div>
+                        <div class="cf-row-control">
+                            <div class="cf-segmented" role="group" aria-labelledby="cfk-cc-action-label" id="cfk-cc-action">
+                                <button type="button" data-action="reply" aria-pressed="true">Reply</button>
+                                <button type="button" data-action="add_role" aria-pressed="false">Give a role</button>
+                                <button type="button" data-action="remove_role" aria-pressed="false">Remove a role</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="cf-row" id="cfk-cc-role-row" hidden>
+                        <div class="cf-row-text">
+                            <label class="cf-row-label" for="cfk-cc-role">Role</label>
+                            <p class="cf-row-desc" id="ccxRoleNote">Roles above the bot's highest role cannot be given or taken.</p>
+                        </div>
+                        <div class="cf-row-control">
+                            <select id="cfk-cc-role" class="form-select">
+                                <option value="">Choose a role</option>
+                                <% ccRoleList.forEach(r => { const above = ccBotTop !== null && r.position >= ccBotTop; %>
+                                <option value="<%= r.id %>"<%= above ? ' disabled' : '' %>><%= r.name %><%= above ? ' (above the bot)' : '' %></option>
+                                <% }); %>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="cf-row cf-row--stack" id="cfk-cc-reply-row">
+                        <div class="cf-row-text">
+                            <label class="cf-row-label" for="ccxResponse">Reply</label>
+                            <p class="cf-row-desc">Click any variable in the Variables panel to insert it where the cursor is.</p>
+                        </div>
+                        <div class="cf-row-control">
+                            <textarea id="ccxResponse" class="form-control ccx-mono" rows="5" maxlength="2000" spellcheck="false" data-no-fieldkit placeholder="{touser}, {api:https://evilinsult.com/generate_insult.php?lang=en&type=text}"></textarea>
+                            <span id="ccxLen" class="ccx-num ccx-len">0 / 2000</span>
+                            <ul id="ccxWarnings" class="ccx-warnings" hidden aria-live="polite"></ul>
+                        </div>
+                    </div>
+
+                    <div class="cf-row cf-row--stack" id="cfk-cc-args-row">
+                        <div class="cf-row-text">
+                            <label class="cf-row-label" for="ccxArgs">Words to test with</label>
+                            <p class="cf-row-desc">Optional. What a member would type after the command name, such as a mention or a place.</p>
+                        </div>
+                        <div class="cf-row-control">
+                            <input type="text" id="ccxArgs" class="form-control" maxlength="300" autocomplete="off" data-no-fieldkit placeholder="@Kestrel London">
+                        </div>
+                    </div>
+
+                    <details class="cf-expand" id="cfk-cc-limits">
+                        <summary><span>Who can use it and where <span class="ccx-muted" id="cfk-cc-limit-summary">Everyone, every channel</span></span></summary>
+                        <div class="cf-row cf-row--wide">
+                            <div class="cf-row-text">
+                                <label class="cf-row-label" for="cfk-cc-req-roles">Only members with</label>
+                                <p class="cf-row-desc">Any one of these roles. Leave empty for everyone.</p>
+                            </div>
+                            <div class="cf-row-control">
+                                <select id="cfk-cc-req-roles" class="form-select" multiple data-kind="role">
+                                    <% ccRoleList.forEach(r => { %>
+                                    <option value="<%= r.id %>" data-kind="role"<% if (ccRoleColor(r)) { %> data-color="<%= ccRoleColor(r) %>"<% } %>><%= r.name %></option>
+                                    <% }); %>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="cf-row cf-row--wide">
+                            <div class="cf-row-text">
+                                <label class="cf-row-label" for="cfk-cc-channels">Only in</label>
+                                <p class="cf-row-desc">Leave empty for every channel. Elsewhere the bot says where it can be used.</p>
+                            </div>
+                            <div class="cf-row-control">
+                                <select id="cfk-cc-channels" class="form-select" multiple data-kind="text">
+                                    <% ccTextChannels.forEach(c => { %>
+                                    <option value="<%= c.id %>" data-kind="text">#<%= c.name %></option>
+                                    <% }); %>
+                                </select>
+                            </div>
+                        </div>
+                    </details>
+
+                    <div id="ccxPreview" class="ccx-preview" hidden>
+                        <div class="ccx-preview-head"><span>Preview</span><span class="ccx-muted" id="ccxPreviewMeta"></span></div>
+                        <div id="ccxPreviewOut" class="ccx-preview-out"></div>
+                        <ul id="ccxCalls" class="ccx-calls"></ul>
+                    </div>
+
+                    <div class="cf-section-foot ccx-actions">
+                        <span id="ccxStatus" class="ccx-status cf-status-line" role="status"></span>
+                        <button type="button" class="btn btn-secondary" id="ccxTest"><i class="fas fa-play" aria-hidden="true"></i> <span>Test</span></button>
+                        <button type="button" class="btn btn-primary" id="ccxSave"><span id="ccxSaveLabel">Create command</span></button>
                     </div>
                 </div>
-                <div class="modal-footer" style="border-top: 1px solid var(--color-dark-400);">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-save"></i>
-                        <span>Save Changes</span>
-                    </button>
+            </section>
+
+            <section class="cf-section" aria-labelledby="ccxListTitle">
+                <header class="cf-section-head">
+                    <div>
+                        <h2 class="cf-section-title" id="ccxListTitle">Your commands <span class="ccx-count" id="cfk-cc-list-count"><%= cmdList.length %></span></h2>
+                        <p class="cf-section-desc">Members run these in chat. Anything typed after the name becomes <code>{args}</code>.</p>
+                    </div>
+                    <div class="cf-section-actions" id="cfk-cc-list-tools" <%= cmdList.length > 1 ? '' : 'hidden' %>>
+                        <label class="visually-hidden" for="cfk-cc-sort">Sort commands</label>
+                        <select id="cfk-cc-sort" class="form-select form-select-sm ccx-sort">
+                            <option value="name">A to Z</option>
+                            <option value="uses">Most used</option>
+                        </select>
+                        <input type="search" id="ccxSearch" class="form-control ccx-search" placeholder="Search commands" aria-label="Search commands">
+                    </div>
+                </header>
+                <div class="cf-rows">
+                    <div class="ccx-table-wrap cf-table-wrap" id="ccxTableWrap" <%= cmdList.length ? '' : 'hidden' %>>
+                        <table class="ccx-table cf-table cf-table--stack">
+                            <thead><tr><th scope="col" class="ccx-col-name">Command</th><th scope="col">Reply</th><th scope="col" class="ccx-col-uses">Uses</th><th scope="col" class="ccx-right ccx-col-act"><span class="visually-hidden">Actions</span></th></tr></thead>
+                            <tbody id="ccxRows">
+                            <% cmdList.forEach(c => {
+                                const isRole = c.action_type === 'add_role' || c.action_type === 'remove_role';
+                                const usesApi = /\{api[.:]|customapi|urlfetch/i.test(c.response || '');
+                                const roleName = isRole ? ((ccRoleList.find(r => r.id === c.action_content) || {}).name || 'a deleted role') : '';
+                                let nRoles = 0, nChans = 0;
+                                try { nRoles = (JSON.parse(c.required_roles || '[]') || []).length; } catch (e) { nRoles = 0; }
+                                try { nChans = (JSON.parse(c.allowed_channels || '[]') || []).length; } catch (e) { nChans = 0; }
+                            %>
+                                <tr class="ccx-row" data-id="<%= c.id %>" data-name="<%= c.command_name %>" data-response="<%= c.response || '' %>"
+                                    data-action="<%= c.action_type || 'reply' %>" data-action-content="<%= c.action_content || '' %>"
+                                    data-roles="<%= c.required_roles || '[]' %>" data-channels="<%= c.allowed_channels || '[]' %>" data-uses="<%= Number(c.use_count) || 0 %>">
+                                    <td data-label="Command"><span class="ccx-chipname ccx-mono"><%= ccPrefix %><%= c.command_name %></span></td>
+                                    <td data-label="Reply">
+                                        <div class="ccx-replycell">
+                                            <span class="ccx-reply"><%= isRole ? (c.action_type === 'add_role' ? 'Gives @' : 'Removes @') + roleName : (c.response || '') %></span>
+                                            <% if (usesApi) { %><span class="cf-pill is-accent">API</span><% } %>
+                                            <% if (nRoles) { %><span class="cf-pill"><%= nRoles %> role<%= nRoles === 1 ? '' : 's' %></span><% } %>
+                                            <% if (nChans) { %><span class="cf-pill"><%= nChans %> channel<%= nChans === 1 ? '' : 's' %></span><% } %>
+                                        </div>
+                                    </td>
+                                    <td data-label="Uses" class="ccx-uses"><%= (Number(c.use_count) || 0).toLocaleString('en-US') %></td>
+                                    <td class="ccx-right cf-cell-end">
+                                        <button type="button" class="btn btn-sm btn-secondary" data-edit>Edit</button>
+                                        <button type="button" class="btn btn-sm btn-danger" data-delete aria-label="Delete <%= c.command_name %>"><i class="fas fa-trash" aria-hidden="true"></i></button>
+                                    </td>
+                                </tr>
+                            <% }); %>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="ccx-empty cf-state" id="ccxEmpty" <%= cmdList.length ? 'hidden' : '' %>>
+                        <p class="cf-state-title">No custom commands yet</p>
+                        <p class="cf-state-text">Pick a template above, or write your own in the editor.</p>
+                    </div>
+                    <div class="ccx-empty cf-state" id="ccxNoMatch" hidden><p class="cf-state-text">No command matches that search.</p></div>
                 </div>
-            </form>
+            </section>
         </div>
+
+        <aside class="ccx-side">
+            <section class="cf-section" id="ccxVars" aria-labelledby="ccxVarsTitle">
+                <header class="cf-section-head">
+                    <div>
+                        <h2 class="cf-section-title" id="ccxVarsTitle">Variables</h2>
+                        <p class="cf-section-desc">Filled in each time the command runs. Click one to insert it.</p>
+                    </div>
+                </header>
+                <div class="cf-rows">
+                    <div class="ccx-pad">
+                        <div id="ccxVarList" class="ccx-varlist"><div class="ccx-muted">Loading…</div></div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="cf-section" id="ccxApi" aria-labelledby="ccxApiTitle">
+                <header class="cf-section-head">
+                    <div>
+                        <h2 class="cf-section-title" id="ccxApiTitle">API calls</h2>
+                        <p class="cf-section-desc">Put a URL in <span class="ccx-mono">{api:…}</span> and the bot fetches it when the command runs, then inserts the reply text.</p>
+                    </div>
+                </header>
+                <div class="cf-rows">
+                    <div class="ccx-pad">
+                        <ul class="ccx-examples" id="ccxExamples">
+                            <li><button type="button" class="ccx-example" data-insert="{touser}, {api:https://evilinsult.com/generate_insult.php?lang=en&type=text}"><code>{touser}, {api:https://evilinsult.com/generate_insult.php?lang=en&amp;type=text}</code><span>A random insult from Evil Insult, aimed at whoever is mentioned (crude; served from our own copy, see below)</span></button></li>
+                            <li><button type="button" class="ccx-example" data-insert="{touser}, here is one for you: {api:https://icanhazdadjoke.com/}"><code>{touser}, here is one for you: {api:https://icanhazdadjoke.com/}</code><span>A random dad joke, aimed at whoever is mentioned</span></button></li>
+                            <li><button type="button" class="ccx-example" data-insert="{api:https://wttr.in/{query}?format=3}"><code>{api:https://wttr.in/{query}?format=3}</code><span>Weather for the place typed after the command. {query} keeps spaces safe in URLs</span></button></li>
+                            <li><button type="button" class="ccx-example" data-insert="{api.json:https://api.chucknorris.io/jokes/random|value}"><code>{api.json:https://api.chucknorris.io/jokes/random|value}</code><span>JSON: insert one field. Nested fields use dots and [0]</span></button></li>
+                            <li><button type="button" class="ccx-example" data-insert="${customapi.https://evilinsult.com/generate_insult.php?lang=en&type=text}"><code>${customapi.https://…}</code><span>StreamElements format, pasted as-is</span></button></li>
+                            <li><button type="button" class="ccx-example" data-insert="$(urlfetch https://icanhazdadjoke.com/)"><code>$(urlfetch https://…)</code> <code>$(customapi https://…)</code><span>Nightbot formats, pasted as-is</span></button></li>
+                        </ul>
+                    </div>
+                    <div class="ccx-pad">
+                        <div class="ccx-subhead">Evil Insult</div>
+                        <p class="ccx-muted ccx-tight" id="ccxEvil">evilinsult.com blocks bots, so its API is answered from our own copy of its open (public-domain) database instead: <span class="ccx-mono">{api:https://evilinsult.com/generate_insult.php?…}</span> in any of the forms above works unchanged, with <span class="ccx-mono">lang=</span> and <span class="ccx-mono">type=text</span>, <span class="ccx-mono">json</span> (so <span class="ccx-mono">{api.json:…|insult}</span> works) or <span class="ccx-mono">xml</span>. Or just use <span class="ccx-mono">{evilinsult}</span> / <span class="ccx-mono">{evilinsult:de}</span>. These lines are crude and include sexual jokes; they are checked against the built-in slur list and your automod banned words, never repeat within your last 50, and do not count toward the API limits below.</p>
+                    </div>
+                    <div class="ccx-pad">
+                        <div class="ccx-subhead">From StreamElements or Nightbot</div>
+                        <p class="ccx-muted ccx-tight">Commands copied from those bots work without changes. Their variables map to ours:</p>
+                        <div class="cf-table-wrap ccx-alias-wrap">
+                            <table class="ccx-alias cf-table" id="ccxAliases"><tbody><tr><td class="ccx-muted">Loading…</td></tr></tbody></table>
+                        </div>
+                    </div>
+                    <div class="ccx-pad">
+                        <div class="ccx-subhead">Limits</div>
+                        <ul class="ccx-limits" id="ccxLimits">
+                            <li>Public <span class="ccx-mono">http</span> and <span class="ccx-mono">https</span> addresses only, ports 80 and 443. Private, local and cloud-metadata addresses are refused, and so is a redirect to one.</li>
+                            <li>Up to 3 API calls per reply. Each waits at most 5 seconds and inserts at most 400 characters.</li>
+                            <li>20 calls a minute per server, and one run of a command every 3 seconds (a repeat within 3 seconds reuses the last reply).</li>
+                            <li>If a call fails the reply shows <span class="ccx-mono">(API error)</span>. API text can never ping @everyone, @here or roles.</li>
+                        </ul>
+                        <div class="ccx-note cf-notice is-info">For a ready-made roast, <span class="ccx-mono">/insult</span> is built in and filtered against your banned words. Turn it on under <a href="/manage/<%= guild.id %>?page=fun">Fun &amp; Party Games</a>.</div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="cf-section" id="ccxStorage" aria-labelledby="ccxStorageTitle">
+                <header class="cf-section-head">
+                    <div>
+                        <h2 class="cf-section-title" id="ccxStorageTitle">Storage</h2>
+                        <p class="cf-section-desc">Commands can remember values between runs. <span class="ccx-mono">{db:…}</span> keeps them per member (whoever ran the command); <span class="ccx-mono">{sdb:…}</span> keeps one set for the whole server.</p>
+                    </div>
+                </header>
+                <div class="cf-rows">
+                    <div class="ccx-pad">
+                        <ul class="ccx-examples">
+                            <li><button type="button" class="ccx-example" data-insert="{sender} has {db:incr:cookies} cookies"><code>{sender} has {db:incr:cookies} cookies</code><span>A !cookie command: each run gives that member one more cookie</span></button></li>
+                            <li><button type="button" class="ccx-example" data-insert="{db:set:quote:{args}}Saved, {sender}."><code>{db:set:quote:{args}}Saved, {sender}.</code><span>Remembers what they typed; another command shows it with {db:get:quote}</span></button></li>
+                            <li><button type="button" class="ccx-example" data-insert="{sdb:incr:deaths} deaths so far"><code>{sdb:incr:deaths} deaths so far</code><span>A counter shared by the whole server</span></button></li>
+                        </ul>
+                    </div>
+                    <div class="ccx-pad">
+                        <div class="ccx-subhead">Limits</div>
+                        <ul class="ccx-limits">
+                            <li>Keys are 1–64 letters, numbers, <span class="ccx-mono">_ . -</span> (capitals count as lower case). Values hold up to 1,000 characters.</li>
+                            <li>Up to 10 storage operations per reply, run in order before the reply is sent. <span class="ccx-mono">{db:incr:key:5}</span> adds any whole number from -1000 to 1000; text that is not a number counts as 0.</li>
+                            <li>100 keys per member and 1,000 server keys. When full, saving a new key shows <span class="ccx-mono">(storage full)</span>.</li>
+                            <li>Saved text can never ping @everyone, @here or roles. Test shows saved values but saves nothing.</li>
+                            <li>Values unused for 400 days are deleted. Members can export or delete their own with <span class="ccx-mono">/privacy</span>.</li>
+                        </ul>
+                    </div>
+                </div>
+            </section>
+        </aside>
     </div>
 </div>
 
 <style>
-.table-container {
-    overflow-x: auto;
-    border: 1px solid var(--color-dark-400);
-    border-radius: var(--radius-lg);
-}
-
-.data-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-.data-table thead {
-    background: var(--color-dark-600);
-    border-bottom: 2px solid var(--color-dark-400);
-}
-
-.data-table th {
-    padding: var(--spacing-4);
-    text-align: left;
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-
-.data-table td {
-    padding: var(--spacing-4);
-    border-bottom: 1px solid var(--color-dark-400);
-}
-
-.data-table tbody tr {
-    transition: background var(--transition-base);
-}
-
-.data-table tbody tr:hover {
-    background: var(--color-dark-600);
-}
-
-.data-table tbody tr:last-child td {
-    border-bottom: none;
-}
-
-.empty-state {
-    text-align: center;
-    padding: var(--spacing-12) var(--spacing-8);
-}
-
-.empty-state-icon {
-    font-size: 4rem;
-    color: var(--color-text-muted);
-    margin-bottom: var(--spacing-4);
-}
-
-.empty-state-title {
-    font-size: var(--font-size-xl);
-    font-weight: var(--font-weight-bold);
-    color: var(--color-text-primary);
-    margin-bottom: var(--spacing-2);
-}
-
-.empty-state-description {
-    font-size: var(--font-size-base);
-    color: var(--color-text-secondary);
-    margin-bottom: var(--spacing-6);
-}
-
-.form-label {
-    display: block;
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-primary);
-    margin-bottom: var(--spacing-2);
-}
-
-.form-help {
-    font-size: var(--font-size-xs);
-    color: var(--color-text-muted);
-    margin-top: var(--spacing-2);
-}
-
-.input-group {
-    display: flex;
-    align-items: stretch;
-}
-
-.input-group-icon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0 var(--spacing-3);
-    background: var(--color-dark-700);
-    border: 1px solid var(--color-dark-400);
-    border-right: none;
-    border-radius: var(--radius-md) 0 0 var(--radius-md);
-    color: var(--color-text-muted);
-}
-
-.modal-content {
-    border-radius: var(--radius-lg);
-}
-
-.btn-close {
-    filter: invert(1);
-    opacity: 0.5;
-}
-
-.btn-close:hover {
-    opacity: 1;
+#ccPage { --ccx-gap: var(--cf-4, 16px); }
+#ccPage .ccx-mono { font-family: var(--cf-mono, ui-monospace, SFMono-Regular, Menlo, monospace); }
+#ccPage .ccx-num { font-variant-numeric: tabular-nums; }
+#ccPage .ccx-muted { color: var(--cf-text-3); font-size: var(--cf-text-sm, .875rem); }
+#ccPage .ccx-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(19rem, 25rem); gap: var(--ccx-gap); align-items: start; }
+@media (max-width: 1100px) { #ccPage .ccx-layout { grid-template-columns: minmax(0, 1fr); } }
+#ccPage .ccx-main, #ccPage .ccx-side { display: flex; flex-direction: column; gap: var(--ccx-gap); min-width: 0; }
+#ccPage .ccx-name { display: flex; max-width: 22rem; }
+#ccPage .ccx-prefix { display: flex; align-items: center; padding: 0 .7rem; background: var(--cf-inset, var(--cf-surface-2)); border: 1px solid var(--cf-border); border-right: 0; border-radius: var(--cf-radius-sm, 6px) 0 0 var(--cf-radius-sm, 6px); color: var(--cf-text-2); }
+#ccPage .ccx-name .form-control { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+#ccPage textarea.ccx-mono { font-size: .86rem; line-height: 1.5; min-height: 7.5rem; resize: vertical; }
+#ccPage .ccx-warnings { list-style: none; margin: .55rem 0 0; padding: .55rem .75rem; border: 1px solid color-mix(in srgb, var(--cf-warning) 45%, var(--cf-border)); background: color-mix(in srgb, var(--cf-warning) 8%, transparent); border-radius: var(--cf-radius-sm, 6px); font-size: var(--cf-text-sm, .875rem); color: var(--cf-text); }
+#ccPage .ccx-warnings li { display: flex; gap: .5rem; align-items: baseline; }
+#ccPage .ccx-warnings li + li { margin-top: .25rem; }
+#ccPage .ccx-warnings li::before { content: ''; width: 6px; height: 6px; border-radius: 50%; background: var(--cf-warning); flex: none; transform: translateY(-1px); }
+#ccPage .ccx-preview { margin-top: 1rem; border: 1px solid var(--cf-border); border-radius: var(--cf-radius, 10px); overflow: hidden; }
+#ccPage .ccx-preview-head { display: flex; justify-content: space-between; gap: 1rem; padding: .45rem .8rem; background: var(--cf-surface-2); border-bottom: 1px solid var(--cf-border); font-size: var(--cf-text-xs, .75rem); font-weight: 600; color: var(--cf-text-2); text-transform: uppercase; letter-spacing: .04em; }
+#ccPage .ccx-preview-head .ccx-muted { text-transform: none; letter-spacing: 0; font-weight: 400; font-size: var(--cf-text-xs, .75rem); }
+#ccPage .ccx-preview-out { padding: .75rem .9rem; white-space: pre-wrap; word-break: break-word; color: var(--cf-text); background: var(--cf-inset, var(--cf-bg)); font-size: .92rem; line-height: 1.5; min-height: 2.6rem; }
+#ccPage .ccx-preview-out .ccx-ping { color: var(--cf-accent); background: var(--cf-accent-soft); border-radius: 4px; padding: 0 .2rem; }
+#ccPage .ccx-calls { list-style: none; margin: 0; padding: 0; }
+#ccPage .ccx-calls:empty { display: none; }
+#ccPage .ccx-calls li { display: flex; gap: .6rem; align-items: baseline; padding: .4rem .8rem; border-top: 1px solid var(--cf-border); font-size: var(--cf-text-xs, .75rem); color: var(--cf-text-2); min-width: 0; }
+#ccPage .ccx-calls .ccx-url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }
+#ccPage .ccx-search { max-width: 15rem; }
+#ccPage .ccx-table tbody tr:hover td { background: var(--cf-surface-2); }
+#ccPage .ccx-table tr.ccx-editing td { background: var(--cf-accent-soft); }
+#ccPage .ccx-right { text-align: right; white-space: nowrap; }
+#ccPage .ccx-chipname { color: var(--cf-text); font-weight: 500; }
+#ccPage .ccx-replycell { display: flex; align-items: center; gap: .4rem; min-width: 0; }
+#ccPage .ccx-reply { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--cf-mono, monospace); font-size: .82rem; }
+#ccPage .ccx-varlist { display: flex; flex-direction: column; gap: .9rem; }
+#ccPage .ccx-group-title, #ccPage .ccx-subhead { font-size: var(--cf-text-xs, .75rem); font-weight: 600; color: var(--cf-text-3); text-transform: uppercase; letter-spacing: .05em; margin-bottom: .35rem; }
+#ccPage .ccx-var { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: .1rem .6rem; width: 100%; text-align: left; background: none; border: 1px solid transparent; border-radius: var(--cf-radius-sm, 6px); padding: .35rem .45rem; color: var(--cf-text-2); cursor: pointer; font: inherit; }
+#ccPage .ccx-var:hover { background: var(--cf-surface-2); border-color: var(--cf-border); }
+#ccPage .ccx-var:focus-visible, #ccPage .ccx-example:focus-visible { outline: 2px solid var(--cf-accent); outline-offset: 1px; }
+#ccPage .ccx-var code { grid-row: span 2; align-self: start; color: var(--cf-accent); background: var(--cf-accent-soft); border-radius: 4px; padding: .1rem .35rem; font-size: .78rem; white-space: nowrap; font-family: var(--cf-mono, monospace); }
+#ccPage .ccx-var .ccx-desc { font-size: .82rem; color: var(--cf-text); line-height: 1.35; }
+#ccPage .ccx-var .ccx-ex { font-size: .74rem; color: var(--cf-text-3); font-family: var(--cf-mono, monospace); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#ccPage .ccx-examples { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: .4rem; }
+#ccPage .ccx-example { display: flex; flex-direction: column; gap: .25rem; width: 100%; text-align: left; background: var(--cf-inset, var(--cf-surface-2)); border: 1px solid var(--cf-border); border-radius: var(--cf-radius-sm, 6px); padding: .5rem .6rem; color: var(--cf-text-2); cursor: pointer; font: inherit; }
+#ccPage .ccx-example:hover { border-color: var(--cf-border-strong, var(--cf-border)); }
+#ccPage .ccx-example code { color: var(--cf-text); font-size: .76rem; word-break: break-all; background: none; padding: 0; font-family: var(--cf-mono, monospace); }
+#ccPage .ccx-example span { font-size: .78rem; color: var(--cf-text-3); }
+#ccPage .ccx-alias td:first-child { font-family: var(--cf-mono, monospace); color: var(--cf-text); word-break: break-all; }
+#ccPage .ccx-alias td:last-child { font-family: var(--cf-mono, monospace); color: var(--cf-accent); white-space: nowrap; text-align: right; }
+#ccPage .ccx-tight { margin: 0 0 .4rem; }
+#ccPage .ccx-limits { margin: 0; padding-left: 1.1rem; font-size: .8rem; color: var(--cf-text-2); display: flex; flex-direction: column; gap: .3rem; }
+#ccPage .ccx-layout > * > .cf-section { margin-bottom: 0; }
+#ccPage .ccx-pad { padding: var(--cf-4) var(--cf-5); min-width: 0; }
+#ccPage .ccx-len { align-self: flex-end; color: var(--cf-text-3); font-size: var(--cf-text-xs); }
+#ccPage .ccx-status { margin-right: auto; }
+#ccPage .ccx-note { margin: var(--cf-2) 0 0; }
+#ccPage .ccx-preview { margin: 0; border: 0; border-radius: 0; }
+#ccPage .ccx-table { table-layout: fixed; }
+#ccPage .ccx-subhead { margin: 0 0 .35rem; }
+#ccPage .cf-rows table.ccx-alias { font-size: .78rem; }
+#ccPage .cf-rows table.ccx-alias td { padding: .3rem .2rem !important; color: var(--cf-text-2); vertical-align: top; }
+#ccPage .ccx-alias-wrap { border: 1px solid var(--cf-border); border-radius: var(--cf-radius); }
+#ccPage .cf-kpi-value.ccx-mono, #ccPage .ccx-tight .ccx-mono, #ccPage .ccx-limits .ccx-mono { overflow-wrap: anywhere; }
+#ccPage .cf-rows table.ccx-alias td.ccx-muted:only-child { text-align: left; }
+#ccPage .ccx-col-name { width: 12rem; }
+#ccPage .ccx-col-uses { width: 5.5rem; }
+#ccPage .ccx-col-act { width: 9.5rem; }
+#ccPage .ccx-uses { color: var(--cf-text-2); font-variant-numeric: tabular-nums; }
+#ccPage .ccx-count { margin-left: 6px; font-size: var(--cf-text-sm); font-weight: 500; color: var(--cf-text-3); font-variant-numeric: tabular-nums; }
+#ccPage .ccx-sort { width: auto; min-width: 8.5rem; }
+#ccPage .cf-rows .cf-expand > summary > span { display: flex; flex-wrap: wrap; gap: 2px 10px; align-items: baseline; }
+#ccPage .cf-rows .cf-expand[open] > summary { border-bottom: 1px solid var(--cf-border); }
+#ccPage .ccx-tpls { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 13rem), 1fr)); gap: var(--cf-2); }
+#ccPage .ccx-tpl { display: flex; flex-direction: column; gap: 3px; min-width: 0; text-align: left; padding: .6rem .75rem; cursor: pointer; font: inherit;
+    background: var(--cf-surface-2); border: 1px solid var(--cf-border); border-radius: var(--cf-radius); color: var(--cf-text-2); }
+#ccPage .ccx-tpl:hover { border-color: var(--cf-border-strong, var(--cf-border)); background: var(--cf-surface-3); }
+#ccPage .ccx-tpl:focus-visible { outline: 2px solid var(--cf-accent); outline-offset: 1px; }
+#ccPage .ccx-tpl-name { font-size: var(--cf-text-sm); font-weight: 600; color: var(--cf-text); }
+#ccPage .ccx-tpl-cmd { font-family: var(--cf-mono, monospace); font-size: var(--cf-text-xs); color: var(--cf-accent-fg, var(--cf-accent)); }
+#ccPage .ccx-tpl-desc { font-size: var(--cf-text-xs); color: var(--cf-text-3); line-height: 1.4; }
+@media (max-width: 640px) {
+    #ccPage .ccx-pad { padding: var(--cf-4); }
+    #ccPage .ccx-name { max-width: none; }
+    #ccPage .ccx-col-name, #ccPage .ccx-col-uses, #ccPage .ccx-col-act { width: auto; }
+    #ccPage .ccx-reply { white-space: normal; overflow-wrap: anywhere; }
+    #ccPage .ccx-replycell { flex-wrap: wrap; }
+    #ccPage .ccx-sort { flex: 1 1 auto; }
 }
 </style>
 
 <script>
-document.addEventListener('DOMContentLoaded', () => {
-    // Search functionality
-    const searchInput = document.getElementById('commandSearch');
-    const tableBody = document.getElementById('commandsTableBody');
+(function () {
+    const root = document.getElementById('ccPage');
+    if (!root || root.dataset.init) return;
+    root.dataset.init = '1';
 
-    if (searchInput && tableBody) {
-        searchInput.addEventListener('input', (e) => {
-            const query = e.target.value.toLowerCase();
-            const rows = tableBody.querySelectorAll('.command-row');
+    const guildId = root.dataset.guildId;
+    const prefix = root.dataset.prefix || '!';
+    const api = (path) => `/api/guilds/${guildId}/custom-commands${path}`;
+    const $ = (id) => document.getElementById(id);
+    const el = (tag, cls, text) => { const n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; };
 
-            rows.forEach(row => {
-                const commandName = row.dataset.commandName;
-                const response = row.dataset.response;
+    const nameIn = $('ccxName'), resp = $('ccxResponse'), argsIn = $('ccxArgs');
+    const status = $('ccxStatus'), warnList = $('ccxWarnings');
+    let editing = null;       // the <tr> being edited, or null when creating
+    let lastField = resp;     // where a clicked variable goes
 
-                if (commandName.includes(query) || response.includes(query)) {
-                    row.style.display = '';
-                } else {
-                    row.style.display = 'none';
-                }
-            });
-        });
+    async function req(url, options = {}) {
+        const res = await fetch(url, { credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, ...options });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
+        return body;
     }
-});
+    function setStatus(text, kind) {
+        status.textContent = text || '';
+        status.className = 'ccx-status cf-status-line' + (kind === 'ok' ? ' is-ok' : kind === 'bad' ? ' is-bad' : /…$/.test(text || '') ? ' is-busy' : '');
+    }
+    function parseList(raw) { try { const v = JSON.parse(raw || '[]'); return Array.isArray(v) ? v : []; } catch { return []; } }
 
-function editCommand(commandName, response) {
-    document.getElementById('editCommandNameHidden').value = commandName;
-    document.getElementById('editCommandName').value = commandName;
-    document.getElementById('editCommandResponse').value = response;
-    new bootstrap.Modal(document.getElementById('editCommandModal')).show();
-}
+    // ── Warnings (server-side validateTemplate, debounced) ──
+    function showWarnings(list) {
+        warnList.replaceChildren(...(list || []).map(w => el('li', null, w)));
+        warnList.hidden = !(list && list.length);
+    }
+    let vTimer = null, vSeq = 0;
+    function validateSoon() {
+        $('ccxLen').textContent = `${resp.value.length} / 2000`;
+        clearTimeout(vTimer);
+        vTimer = setTimeout(async () => {
+            const seq = ++vSeq;
+            if (!resp.value.trim()) { showWarnings([]); return; }
+            try {
+                const r = await req(api('/validate'), { method: 'POST', body: JSON.stringify({ response: resp.value }) });
+                if (seq === vSeq) showWarnings(r.warnings);
+            } catch { /* validation is advisory */ }
+        }, 350);
+    }
+    resp.addEventListener('input', validateSoon);
+    [resp, argsIn].forEach(f => f.addEventListener('focus', () => { lastField = f; }));
+
+    // ── Insert at the cursor ──
+    function insertToken(text) {
+        const field = lastField && document.body.contains(lastField) ? lastField : resp;
+        const start = field.selectionStart ?? field.value.length;
+        const end = field.selectionEnd ?? start;
+        field.value = field.value.slice(0, start) + text + field.value.slice(end);
+        // Put the cursor where the admin types next: inside {api:https://|} / {choice:|} / {urlencode:|}.
+        let caret = start + text.length;
+        const m = text.match(/(?::|https:\/\/|\|)\}$/);
+        if (m && text.length < 30) caret = start + text.length - 1;
+        if (text === '{api.json:https://|}' || text === '{choice:|}') caret = start + text.indexOf('|');
+        field.focus();
+        field.setSelectionRange(caret, caret);
+        field.dispatchEvent(new Event('input'));
+    }
+
+    // ── Variables panel + alias table, from the bot's own list ──
+    function renderReference(ref) {
+        const groups = new Map();
+        for (const v of ref.variables || []) {
+            if (!groups.has(v.group)) groups.set(v.group, []);
+            groups.get(v.group).push(v);
+        }
+        const blocks = [];
+        for (const [name, vars] of groups) {
+            const box = el('div', 'ccx-group');
+            box.appendChild(el('div', 'ccx-group-title', name));
+            for (const v of vars) {
+                const b = el('button', 'ccx-var');
+                b.type = 'button';
+                b.dataset.insert = v.insert || v.token;
+                b.title = `Insert ${v.insert || v.token}`;
+                b.appendChild(el('code', null, v.token));
+                b.appendChild(el('span', 'ccx-desc', v.description));
+                if (v.example) b.appendChild(el('span', 'ccx-ex', v.example));
+                box.appendChild(b);
+            }
+            blocks.push(box);
+        }
+        $('ccxVarList').replaceChildren(...blocks);
+        const rows = (ref.aliases || []).map(a => {
+            const tr = el('tr');
+            tr.appendChild(el('td', null, a.token));
+            tr.appendChild(el('td', null, a.same));
+            return tr;
+        });
+        $('ccxAliases').tBodies[0].replaceChildren(...rows);
+    }
+    req(api('/reference')).then(renderReference).catch(() => {
+        $('ccxVarList').replaceChildren(el('div', 'ccx-muted', 'Could not load the variable list. Reload the page to try again.'));
+    });
+    root.addEventListener('click', (e) => {
+        const b = e.target.closest('[data-insert]');
+        if (b && root.contains(b)) { e.preventDefault(); lastField = resp; insertToken(b.dataset.insert); }
+    });
+
+    // ── Test (real API calls, server-side) ──
+    function renderOutput(text) {
+        const out = $('ccxPreviewOut');
+        const parts = String(text || '').split(/(<@!?\d{17,20}>|<@&\d{17,20}>|<#\d{17,20}>)/);
+        out.replaceChildren(...parts.filter(p => p !== '').map(p => {
+            if (/^<@!?\d+>$/.test(p)) return el('span', 'ccx-ping', '@you');
+            if (/^<@&\d+>$/.test(p)) return el('span', 'ccx-ping', '@role');
+            if (/^<#\d+>$/.test(p)) return el('span', 'ccx-ping', '#channel');
+            return document.createTextNode(p);
+        }));
+        if (!text) out.appendChild(el('span', 'ccx-muted', '(empty reply — the bot would not send anything)'));
+    }
+    $('ccxTest').addEventListener('click', async () => {
+        if (!resp.value.trim()) { setStatus('Write a reply to test first.', 'bad'); resp.focus(); return; }
+        const btn = $('ccxTest');
+        btn.disabled = true;
+        setStatus('Running…');
+        try {
+            const r = await req(api('/preview'), { method: 'POST', body: JSON.stringify({ response: resp.value, args: argsIn.value }) });
+            renderOutput(r.output);
+            const calls = r.calls || [];
+            $('ccxPreviewMeta').textContent = calls.length ? `${calls.length} API call${calls.length === 1 ? '' : 's'}` : 'No API calls';
+            $('ccxCalls').replaceChildren(...calls.map(c => {
+                const li = el('li');
+                li.appendChild(el('span', 'cf-pill ' + (c.ok ? 'is-ok' : 'is-bad'), c.ok ? (c.local ? 'served locally' : c.cached ? 'cached' : 'ok') : String(c.error || 'error').replace(/_/g, ' ')));
+                const u = el('span', 'ccx-url ccx-mono', c.url);
+                u.title = c.url;
+                li.appendChild(u);
+                return li;
+            }));
+            $('ccxPreview').hidden = false;
+            showWarnings(r.warnings);
+            setStatus('');
+        } catch (err) {
+            setStatus(err.message, 'bad');
+        } finally {
+            btn.disabled = false;
+        }
+    });
+
+    // ── What it does: reply, give a role, remove a role ──
+    const ROLE_NAMES = new Map([...$('cfk-cc-role').options].filter(o => o.value).map(o => [o.value, o.textContent.replace(/ \(above the bot\)$/, '')]));
+    let action = 'reply';
+    function setAction(next) {
+        action = ['reply', 'add_role', 'remove_role'].includes(next) ? next : 'reply';
+        for (const b of $('cfk-cc-action').querySelectorAll('button')) b.setAttribute('aria-pressed', String(b.dataset.action === action));
+        const role = action !== 'reply';
+        $('cfk-cc-role-row').hidden = !role;
+        $('cfk-cc-reply-row').hidden = role;
+        $('cfk-cc-args-row').hidden = role;
+        $('ccxTest').hidden = role;
+        if (role) $('ccxPreview').hidden = true;
+    }
+    $('cfk-cc-action').addEventListener('click', (e) => {
+        const b = e.target.closest('button[data-action]');
+        if (b) setAction(b.dataset.action);
+    });
+
+    // ── Who can use it and where ──
+    const reqRoles = $('cfk-cc-req-roles'), chans = $('cfk-cc-channels');
+    function selected(select) { return [...select.selectedOptions].map(o => o.value); }
+    function setSelected(select, ids) {
+        const want = new Set((ids || []).map(String));
+        for (const o of select.options) o.selected = want.has(o.value);
+        select.dispatchEvent(new Event('change', { bubbles: true }));   // redraws the chip picker
+    }
+    function limitSummary() {
+        const r = selected(reqRoles).length, c = selected(chans).length;
+        $('cfk-cc-limit-summary').textContent = (r ? `${r} role${r === 1 ? '' : 's'}` : 'Everyone') + ', ' + (c ? `${c} channel${c === 1 ? '' : 's'}` : 'every channel');
+    }
+    reqRoles.addEventListener('change', limitSummary);
+    chans.addEventListener('change', limitSummary);
+
+    // ── Templates (GET …/templates; core/custom-command-templates.js) ──
+    function existingNames() { return new Set([...$('ccxRows').rows].map(r => r.dataset.name)); }
+    function freeName(base) {
+        const taken = existingNames();
+        if (!taken.has(base)) return base;
+        for (let i = 2; i < 100; i++) if (!taken.has(base + i)) return (base + i).slice(0, 30);
+        return base;
+    }
+    function useTemplate(t) {
+        resetEditor();
+        nameIn.value = freeName(t.command_name);
+        setAction(t.action_type);
+        if (t.action_type === 'reply') { resp.value = t.response || ''; validateSoon(); }
+        setStatus(`Template "${t.name}" loaded. Edit it, then create the command.`);
+        $('ccxEditor').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        (t.action_type === 'reply' ? resp : $('cfk-cc-role')).focus({ preventScroll: true });
+    }
+    req(api('/templates')).then((r) => {
+        const list = r.templates || [];
+        $('cfk-cc-tpl-list').replaceChildren(...list.map((t) => {
+            const b = el('button', 'ccx-tpl');
+            b.type = 'button';
+            b.appendChild(el('span', 'ccx-tpl-name', t.name));
+            b.appendChild(el('span', 'ccx-tpl-cmd', prefix + t.command_name));
+            if (t.description) b.appendChild(el('span', 'ccx-tpl-desc', t.description));
+            b.addEventListener('click', () => useTemplate(t));
+            return b;
+        }));
+        if (!list.length) $('cfk-cc-templates').hidden = true;
+    }).catch(() => { $('cfk-cc-templates').hidden = true; });
+
+    // ── Create / edit ──
+    function startEdit(tr) {
+        if (editing) editing.classList.remove('ccx-editing');
+        editing = tr;
+        tr.classList.add('ccx-editing');
+        nameIn.value = tr.dataset.name;
+        resp.value = tr.dataset.response;
+        setAction(tr.dataset.action);
+        $('cfk-cc-role').value = tr.dataset.actionContent || '';
+        setSelected(reqRoles, parseList(tr.dataset.roles));
+        setSelected(chans, parseList(tr.dataset.channels));
+        $('cfk-cc-limits').open = !!(parseList(tr.dataset.roles).length || parseList(tr.dataset.channels).length);
+        $('ccxEditorTitle').textContent = `Edit ${prefix}${tr.dataset.name}`;
+        $('ccxEditorSub').textContent = 'Change it, test it, then save.';
+        $('ccxSaveLabel').textContent = 'Save changes';
+        $('ccxCancel').hidden = false;
+        $('ccxPreview').hidden = true;
+        setStatus('');
+        validateSoon();
+        $('ccxEditor').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        nameIn.focus({ preventScroll: true });
+    }
+    function resetEditor() {
+        if (editing) editing.classList.remove('ccx-editing');
+        editing = null;
+        nameIn.value = ''; resp.value = ''; argsIn.value = '';
+        setAction('reply');
+        $('cfk-cc-role').value = '';
+        setSelected(reqRoles, []);
+        setSelected(chans, []);
+        $('cfk-cc-limits').open = false;
+        $('ccxEditorTitle').textContent = 'Create a command';
+        $('ccxEditorSub').textContent = 'Pick a name, write the reply, then press Test to see exactly what the bot will send.';
+        $('ccxSaveLabel').textContent = 'Create command';
+        $('ccxCancel').hidden = true;
+        $('ccxPreview').hidden = true;
+        showWarnings([]);
+        $('ccxLen').textContent = '0 / 2000';
+    }
+    $('ccxCancel').addEventListener('click', () => { resetEditor(); setStatus(''); });
+
+    function pill(text, cls) { return el('span', 'cf-pill' + (cls ? ' ' + cls : ''), text); }
+    function rowFor(data) {
+        const tr = el('tr', 'ccx-row');
+        Object.assign(tr.dataset, {
+            id: data.id ?? '', name: data.name, response: data.response, action: data.action || 'reply',
+            actionContent: data.actionContent || '', roles: data.roles || '[]', channels: data.channels || '[]', uses: String(data.uses || 0),
+        });
+        const nameTd = el('td');
+        nameTd.dataset.label = 'Command';
+        nameTd.appendChild(el('span', 'ccx-chipname ccx-mono', prefix + data.name));
+        const replyTd = el('td');
+        replyTd.dataset.label = 'Reply';
+        const cell = el('div', 'ccx-replycell');
+        const role = data.action === 'add_role' || data.action === 'remove_role';
+        const roleName = ROLE_NAMES.get(String(data.actionContent)) || 'a role';
+        cell.appendChild(el('span', 'ccx-reply', role ? (data.action === 'add_role' ? 'Gives @' : 'Removes @') + roleName : data.response));
+        if (!role && /\{api[.:]|customapi|urlfetch/i.test(data.response)) cell.appendChild(pill('API', 'is-accent'));
+        const nr = parseList(data.roles).length, nc = parseList(data.channels).length;
+        if (nr) cell.appendChild(pill(`${nr} role${nr === 1 ? '' : 's'}`));
+        if (nc) cell.appendChild(pill(`${nc} channel${nc === 1 ? '' : 's'}`));
+        replyTd.appendChild(cell);
+        const usesTd = el('td', 'ccx-uses', Number(data.uses || 0).toLocaleString('en-US'));
+        usesTd.dataset.label = 'Uses';
+        const act = el('td', 'ccx-right cf-cell-end');
+        const eb = el('button', 'btn btn-sm btn-secondary', 'Edit'); eb.type = 'button'; eb.dataset.edit = '';
+        const db = el('button', 'btn btn-sm btn-danger'); db.type = 'button'; db.dataset.delete = '';
+        db.setAttribute('aria-label', `Delete ${data.name}`);
+        const icon = el('i', 'fas fa-trash'); icon.setAttribute('aria-hidden', 'true');
+        db.appendChild(icon);
+        act.append(eb, document.createTextNode(' '), db);
+        tr.append(nameTd, replyTd, usesTd, act);
+        return tr;
+    }
+    function refreshCounts() {
+        const rows = [...$('ccxRows').rows];
+        $('ccxCount').textContent = rows.length;
+        $('cfk-cc-list-count').textContent = rows.length;
+        $('ccxApiCount').textContent = rows.filter(r => r.dataset.action === 'reply' && /\{api[.:]|customapi|urlfetch/i.test(r.dataset.response)).length;
+        $('cfk-cc-role-count').textContent = rows.filter(r => r.dataset.action !== 'reply').length;
+        $('ccxTableWrap').hidden = !rows.length;
+        $('cfk-cc-list-tools').hidden = rows.length < 2;
+        $('ccxEmpty').hidden = !!rows.length;
+    }
+
+    $('ccxSave').addEventListener('click', async () => {
+        const name = nameIn.value.trim().toLowerCase();
+        if (!name) { setStatus('Give the command a name.', 'bad'); nameIn.focus(); return; }
+        if (action === 'reply' && !resp.value.trim()) { setStatus('Write a reply first.', 'bad'); resp.focus(); return; }
+        if (action !== 'reply' && !$('cfk-cc-role').value) { setStatus('Choose the role first.', 'bad'); $('cfk-cc-role').focus(); return; }
+        const body = {
+            command_name: name,
+            response: action === 'reply' ? resp.value : '',
+            action_type: action,
+            action_content: action === 'reply' ? null : $('cfk-cc-role').value,
+            required_roles: selected(reqRoles),
+            allowed_channels: selected(chans),
+        };
+        const btn = $('ccxSave');
+        btn.disabled = true;
+        setStatus('Saving…');
+        try {
+            const r = editing
+                ? await req(api(`/${encodeURIComponent(editing.dataset.id)}`), { method: 'PUT', body: JSON.stringify(body) })
+                : await req(api(''), { method: 'POST', body: JSON.stringify(body) });
+            const saved = r.command_name || name;
+            const data = {
+                id: editing ? editing.dataset.id : '', name: saved, response: body.response, action,
+                actionContent: body.action_content, roles: JSON.stringify(r.required_roles || body.required_roles),
+                channels: JSON.stringify(r.allowed_channels || body.allowed_channels), uses: editing ? editing.dataset.uses : 0,
+            };
+            if (editing) {
+                editing.replaceWith(rowFor(data));
+            } else {
+                // The create call does not return the new id; fetch the list once to get it.
+                const list = await req(api('')).catch(() => null);
+                const row = list && (list.commands || []).find(c => c.command_name === saved);
+                if (row) data.id = row.id;
+                $('ccxRows').appendChild(rowFor(data));
+            }
+            const warnings = r.warnings || [];
+            resetEditor();
+            refreshCounts();
+            applyView();
+            showWarnings(warnings.length ? [`Saved ${prefix}${saved}, but:`, ...warnings] : []);
+            setStatus(`Saved ${prefix}${saved}.`, 'ok');
+        } catch (err) {
+            setStatus(err.message, 'bad');
+        } finally {
+            btn.disabled = false;
+        }
+    });
+
+    // ── Table: edit, delete (confirmed), search, sort ──
+    $('ccxRows').addEventListener('click', async (e) => {
+        const tr = e.target.closest('tr.ccx-row');
+        if (!tr) return;
+        if (e.target.closest('[data-edit]')) { startEdit(tr); return; }
+        if (!e.target.closest('[data-delete]')) return;
+        if (!tr.dataset.id) { setStatus('Reload the page before deleting a command you just created.', 'bad'); return; }
+        if (!confirm(`Delete ${prefix}${tr.dataset.name}? This cannot be undone.`)) return;
+        try {
+            await req(api(`/${encodeURIComponent(tr.dataset.id)}`), { method: 'DELETE' });
+            if (editing === tr) resetEditor();
+            tr.remove();
+            refreshCounts();
+            applyView();
+            setStatus(`Deleted ${prefix}${tr.dataset.name}.`, 'ok');
+        } catch (err) {
+            setStatus(err.message, 'bad');
+        }
+    });
+    function applyView() {
+        const q = $('ccxSearch').value.trim().toLowerCase();
+        const body = $('ccxRows');
+        const rows = [...body.rows];
+        const byUses = $('cfk-cc-sort').value === 'uses';
+        rows.sort((a, b) => (byUses ? (Number(b.dataset.uses) - Number(a.dataset.uses)) : 0) || a.dataset.name.localeCompare(b.dataset.name));
+        let shown = 0;
+        for (const tr of rows) {
+            const hit = !q || tr.dataset.name.includes(q) || tr.dataset.response.toLowerCase().includes(q);
+            tr.hidden = !hit;
+            if (hit) shown++;
+            body.appendChild(tr);
+        }
+        $('ccxNoMatch').hidden = shown > 0 || !rows.length;
+    }
+    $('ccxSearch').addEventListener('input', applyView);
+    $('cfk-cc-sort').addEventListener('change', applyView);
+    limitSummary();
+})();
 </script>

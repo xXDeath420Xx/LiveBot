@@ -1,0 +1,167 @@
+{
+  "theme": "daily-life",
+  "label": "Daily Life",
+  "questions": [
+    {
+      "slug": "life-first-thing-morning",
+      "text": "What's genuinely the first thing you do when you wake up? Not the ideal version — the real one."
+    },
+    {
+      "slug": "life-alarm-count",
+      "text": "How many alarms do you set, and how many do you actually respect?"
+    },
+    {
+      "slug": "life-shower-thoughts",
+      "text": "What did you last spend a whole shower thinking about?"
+    },
+    {
+      "slug": "life-junk-drawer",
+      "text": "What's in your junk drawer right now? Name three things without looking."
+    },
+    {
+      "slug": "life-phone-battery",
+      "text": "What percentage does your phone battery have to hit before you panic?"
+    },
+    {
+      "slug": "life-house-rule",
+      "text": "What's a rule in your home that would confuse a visitor?"
+    },
+    {
+      "slug": "life-tidy-vs-messy",
+      "text": "Which room of yours is always tidy and which is a lost cause?"
+    },
+    {
+      "slug": "life-laundry-system",
+      "text": "Describe your laundry system. Is it a system, or is it a pile with aspirations?"
+    },
+    {
+      "slug": "life-groceries-forget",
+      "text": "What do you buy every shop and still somehow run out of?"
+    },
+    {
+      "slug": "life-routine-nonnegotiable",
+      "text": "What part of your daily routine would ruin your whole day if it got skipped?"
+    },
+    {
+      "slug": "life-procrastination-task",
+      "text": "What have you been putting off the longest? Say it out loud, it might help."
+    },
+    {
+      "slug": "life-favourite-chore",
+      "text": "Which chore do you secretly find satisfying?"
+    },
+    {
+      "slug": "life-sleep-position",
+      "text": "How many pillows, what temperature, and are the curtains fully closed? Set the scene."
+    },
+    {
+      "slug": "life-what-in-fridge-now",
+      "text": "What's the oldest thing in your fridge right now, and are you brave enough to check?"
+    },
+    {
+      "slug": "life-transport-daily",
+      "text": "How do you get around most days, and what would you change about it?"
+    },
+    {
+      "slug": "life-weekend-shape",
+      "text": "What does a good weekend look like for you? Be specific about Saturday morning."
+    },
+    {
+      "slug": "life-evening-wind-down",
+      "text": "How do you actually wind down at night, and is it working?"
+    },
+    {
+      "slug": "life-clothes-uniform",
+      "text": "Do you have an unofficial uniform? Describe your default outfit."
+    },
+    {
+      "slug": "life-cook-vs-order",
+      "text": "How many nights a week do you cook, honestly, and what's the fallback?"
+    },
+    {
+      "slug": "life-lost-item-usual",
+      "text": "What do you lose most often in your own home?"
+    },
+    {
+      "slug": "life-window-view",
+      "text": "Describe the view from your nearest window right now."
+    },
+    {
+      "slug": "life-caffeine-count",
+      "text": "How much caffeine is in your system at this exact moment? Ballpark it."
+    },
+    {
+      "slug": "life-noise-preference",
+      "text": "Silence, music, or background chatter while you work? What can you not tolerate?"
+    },
+    {
+      "slug": "life-plants",
+      "text": "Do you keep plants alive? What's your success rate and what's your worst casualty?"
+    },
+    {
+      "slug": "life-cleaning-trigger",
+      "text": "What makes you suddenly deep clean everything at an unreasonable hour?"
+    },
+    {
+      "slug": "life-shopping-treat",
+      "text": "What small thing do you buy yourself that makes a normal week better?"
+    },
+    {
+      "slug": "life-post-work-first",
+      "text": "What's the first thing you do when you get home?"
+    },
+    {
+      "slug": "life-time-blindness",
+      "text": "What activity always takes you twice as long as you expect?"
+    },
+    {
+      "slug": "life-morning-vs-night",
+      "text": "When do you do your best thinking, and does your schedule respect that at all?",
+      "group": "chronotype"
+    },
+    {
+      "slug": "life-desk-object",
+      "text": "What's the object closest to you right now that has no business being there?"
+    },
+    {
+      "slug": "life-repeated-meal",
+      "text": "What do you eat far too often because it's easy?"
+    },
+    {
+      "slug": "life-weather-mood",
+      "text": "How much does the weather actually control your mood? Be honest about it."
+    },
+    {
+      "slug": "life-cleaning-hack",
+      "text": "What's the one household trick you'd pass on to someone moving out for the first time?"
+    },
+    {
+      "slug": "life-guest-prep",
+      "text": "What do you hide before guests come round?"
+    },
+    {
+      "slug": "life-appliance-favourite",
+      "text": "Which appliance in your home would you replace first if it died tomorrow?"
+    },
+    {
+      "slug": "life-recurring-dream",
+      "text": "Do you have a dream that keeps coming back? What happens in it?"
+    },
+    {
+      "slug": "life-hobby-daily",
+      "text": "What do you do most days that isn't work and isn't a screen?"
+    },
+    {
+      "slug": "life-shortcut-known",
+      "text": "What shortcut, route, or trick do you know that saves you time every week?"
+    },
+    {
+      "slug": "life-annoyance-small",
+      "text": "What tiny daily annoyance would you pay real money to eliminate?"
+    },
+    {
+      "slug": "life-favourite-room",
+      "text": "What's the best room or corner in your home, and what makes it that?"
+    }
+  ]
+}

@@ -1,4 +1,6 @@
 import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
+import { themeColor } from '../../core/guild-theme.js';
+import { replyRetired } from '../../core/retired-commands.js';
 
 export default {
   category: 'admin',
@@ -18,7 +20,7 @@ export default {
               option.setName('channel').setDescription('The channel for starboard messages').setRequired(true)
             )
             .addIntegerOption(option =>
-              option.setName('threshold').setDescription('Minimum number of stars required (default: 3)').setMinValue(1).setMaxValue(50)
+              option.setName('threshold').setDescription('Minimum number of stars required, 1 to 100 (default: 3)').setMinValue(1).setMaxValue(100)
             )
             .addStringOption(option =>
               option.setName('emoji').setDescription('The star emoji to use (default: ⭐)')
@@ -39,45 +41,7 @@ export default {
             )
         )
     )
-    .addSubcommandGroup(group =>
-      group
-        .setName('automeme')
-        .setDescription('Configure automated meme posting')
-        .addSubcommand(sub =>
-          sub
-            .setName('setup')
-            .setDescription('Enable and configure auto-meme posting')
-            .addChannelOption(option =>
-              option.setName('channel').setDescription('Channel to post memes in').setRequired(true)
-            )
-            .addStringOption(option =>
-              option.setName('subreddit').setDescription('Subreddit to pull memes from')
-                .addChoices(
-                  { name: 'Memes (General)', value: 'memes' },
-                  { name: 'Dank Memes', value: 'dankmemes' },
-                  { name: 'Wholesome Memes', value: 'wholesomememes' },
-                  { name: 'Gaming Memes', value: 'gaming' },
-                  { name: 'Anime Memes', value: 'animemes' },
-                  { name: 'Programming Memes', value: 'ProgrammerHumor' },
-                  { name: 'Poker', value: 'poker' },
-                  { name: 'Poker Memes', value: 'pokermemes' },
-                  { name: 'Chip Porn (Poker Chips)', value: 'ChipPorn' }
-                )
-            )
-            .addIntegerOption(option =>
-              option.setName('interval').setDescription('How often to post (in hours)').setMinValue(1).setMaxValue(168)
-            )
-        )
-        .addSubcommand(sub =>
-          sub.setName('disable').setDescription('Disable auto-meme posting')
-        )
-        .addSubcommand(sub =>
-          sub.setName('status').setDescription('View current auto-meme configuration')
-        )
-        .addSubcommand(sub =>
-          sub.setName('test').setDescription('Post a test meme now')
-        )
-    )
+
     .addSubcommandGroup(group =>
       group
         .setName('pokermeme')
@@ -101,7 +65,8 @@ export default {
         case 'starboard':
           return await this.handleStarboard(interaction, subcommand);
         case 'automeme':
-          return await this.handleAutoMeme(interaction, subcommand);
+          // Removed (H-650): auto-memes came from Reddit. Discord shows it until the next command deploy.
+          return await replyRetired(interaction, 'community automeme');
         case 'pokermeme':
           return await this.handlePokerMeme(interaction, subcommand);
       }
@@ -173,7 +138,7 @@ export default {
 
     if (success) {
       const embed = new EmbedBuilder()
-        .setColor('#FFD700')
+        .setColor(themeColor(interaction.guildId, 'warning'))
         .setTitle('Starboard Configured')
         .setDescription('The starboard system has been set up successfully!')
         .addFields(
@@ -232,7 +197,7 @@ export default {
     }
 
     const embed = new EmbedBuilder()
-      .setColor('#FFD700')
+      .setColor(themeColor(interaction.guildId, 'warning'))
       .setTitle('Starboard Statistics')
       .addFields(
         { name: 'Total Starred Messages', value: `${stats.total_starred}`, inline: true },
@@ -263,10 +228,10 @@ export default {
     }
 
     const config = await starboardManager.getConfig(interaction.guild.id);
-    const emoji = config ? config.emoji : '⭐';
+    const emoji = config ? starboardManager.displayEmoji(config) : '⭐';
 
     const embed = new EmbedBuilder()
-      .setColor('#FFD700')
+      .setColor(themeColor(interaction.guildId, 'warning'))
       .setTitle(`Top Starred Messages`)
       .setFooter({ text: `${interaction.guild.name} Starboard` })
       .setTimestamp();
@@ -300,137 +265,6 @@ export default {
     embed.setDescription(description);
 
     await interaction.editReply({ embeds: [embed] });
-  },
-
-  // ==================== AUTOMEME GROUP ====================
-  async handleAutoMeme(interaction, subcommand) {
-    const autoMemeManager = interaction.client.autoMemeManager;
-
-    if (!autoMemeManager) {
-      return interaction.reply({
-        content: '❌ Auto-meme system is not available.',
-        ephemeral: true
-      });
-    }
-
-    try {
-      if (subcommand === 'setup') {
-        const channel = interaction.options.getChannel('channel');
-        const subreddit = interaction.options.getString('subreddit') || 'memes';
-        const interval = interaction.options.getInteger('interval') || 24;
-
-        if (!channel.isTextBased()) {
-          return interaction.reply({
-            content: '❌ Please select a text channel.',
-            ephemeral: true
-          });
-        }
-
-        await interaction.deferReply({ ephemeral: true });
-
-        await autoMemeManager.configureGuild(
-          interaction.guild.id,
-          true,
-          channel.id,
-          subreddit,
-          interval
-        );
-
-        const embed = new EmbedBuilder()
-          .setColor('#00FF00')
-          .setTitle('✅ Auto-Meme Posting Enabled')
-          .setDescription(`Memes will be automatically posted to ${channel}`)
-          .addFields(
-            { name: 'Subreddit', value: `r/${subreddit}`, inline: true },
-            { name: 'Interval', value: `Every ${interval} hour${interval > 1 ? 's' : ''}`, inline: true }
-          )
-          .setFooter({ text: 'Use /community automeme test to post a meme immediately' })
-          .setTimestamp();
-
-        return interaction.editReply({ embeds: [embed] });
-
-      } else if (subcommand === 'disable') {
-        await interaction.deferReply({ ephemeral: true });
-
-        await autoMemeManager.configureGuild(
-          interaction.guild.id,
-          false
-        );
-
-        return interaction.editReply({
-          content: '✅ Auto-meme posting has been disabled.'
-        });
-
-      } else if (subcommand === 'status') {
-        await interaction.deferReply({ ephemeral: true });
-
-        const config = await autoMemeManager.getGuildConfig(interaction.guild.id);
-
-        if (!config) {
-          return interaction.editReply({
-            content: '❌ Auto-meme posting is not configured for this server.\n\nUse `/community automeme setup` to get started!'
-          });
-        }
-
-        const channel = interaction.guild.channels.cache.get(config.channel_id);
-        const status = config.is_enabled ? '🟢 Enabled' : '🔴 Disabled';
-
-        const embed = new EmbedBuilder()
-          .setColor(config.is_enabled ? '#00FF00' : '#FF0000')
-          .setTitle('Auto-Meme Configuration')
-          .addFields(
-            { name: 'Status', value: status, inline: true },
-            { name: 'Channel', value: channel ? `${channel}` : 'Channel not found', inline: true },
-            { name: 'Subreddit', value: `r/${config.subreddit}`, inline: true },
-            { name: 'Interval', value: `Every ${config.post_interval_hours} hour${config.post_interval_hours > 1 ? 's' : ''}`, inline: true },
-            { name: 'Last Posted', value: config.last_posted_at ? `<t:${Math.floor(new Date(config.last_posted_at).getTime() / 1000)}:R>` : 'Never', inline: true }
-          )
-          .setTimestamp();
-
-        return interaction.editReply({ embeds: [embed] });
-
-      } else if (subcommand === 'test') {
-        const config = await autoMemeManager.getGuildConfig(interaction.guild.id);
-
-        if (!config || !config.channel_id) {
-          return interaction.reply({
-            content: '❌ Auto-meme posting is not configured. Use `/community automeme setup` first.',
-            ephemeral: true
-          });
-        }
-
-        await interaction.deferReply({ ephemeral: true });
-
-        try {
-          await autoMemeManager.postManualMeme(
-            interaction.guild.id,
-            config.channel_id,
-            config.subreddit
-          );
-
-          const channel = interaction.guild.channels.cache.get(config.channel_id);
-
-          return interaction.editReply({
-            content: `✅ Test meme posted to ${channel}!`
-          });
-
-        } catch (error) {
-          console.error('[AutoMeme Test Error]', error);
-          return interaction.editReply({
-            content: '❌ Failed to post test meme. Please check the channel permissions and try again.'
-          });
-        }
-      }
-
-    } catch (error) {
-      console.error('[AutoMeme Command Error]', error);
-
-      const replyMethod = interaction.deferred ? 'editReply' : 'reply';
-      return interaction[replyMethod]({
-        content: '❌ An error occurred while processing your request.',
-        ephemeral: true
-      });
-    }
   },
 
   // ==================== POKER MEME GROUP ====================

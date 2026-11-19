@@ -2,9 +2,9 @@
 // "/socials streamer list" verification note. Buttons are unchanged.
 
 import pool from '../utils/db.js';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 
-const TWAT_BOT    = '1496352090950467595';
+const TWAT_GUILD  = '1099732505243959407';
 const TWAT_SIGNUP = '1496351044567961620';
 const TWAT_MSG    = '1496387932561473586';
 const TWAT_OUTPUT = '1496351043372716053';
@@ -12,8 +12,9 @@ const TWAT_MIN_LEVEL = 3;
 const STREAMER_ROLE = '1503901082642813060';
 const AUTO_ADD_ROLE = '1503901083632799874';
 
-const [rows] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id=?', [TWAT_BOT]);
-const token = encryption.decrypt(JSON.parse(rows[0].bot_token));
+// The acting bot comes from guild_bot_mapping — never pinned here.
+const bot = await resolveBotForGuild(TWAT_GUILD, { db: pool });
+const token = bot.token;
 
 async function api(method, path, body) {
   const r = await fetch(`https://discord.com/api/v10${path}`, {

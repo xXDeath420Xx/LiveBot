@@ -7,11 +7,26 @@ import { CFBaseComponent, registerComponent } from './base-component.js';
 import { h } from '../utils/dom.js';
 import { formatCurrency } from '../utils/format.js';
 import { api } from '../api/client.js';
+import { store } from '../state/store.js';
+
+const PLATFORM_LABEL = { twitch: 'Twitch', kick: 'Kick', discord: 'Discord' };
+
+function daysLeft(endsAt) {
+    const ms = new Date(endsAt).getTime() - Date.now();
+    if (!Number.isFinite(ms)) return '';
+    if (ms <= 0) return 'ending now';
+    const days = Math.floor(ms / 86400000);
+    if (days >= 1) return `${days} day${days === 1 ? '' : 's'} left`;
+    const hours = Math.max(1, Math.floor(ms / 3600000));
+    return `${hours} hour${hours === 1 ? '' : 's'} left`;
+}
 
 class CFLeaderboard extends CFBaseComponent {
     constructor() {
         super();
-        this._activeType = 'level';
+        // The season board is the default: it is the one that resets and pays out (H-408)
+        this._activeType = store.get('ui.leaderboardType') || 'season';
+        this._seasons = null;
         this._players = [];
         this._isLoading = true;
         this._platform = 'twitch'; // Will be set from API response
@@ -65,6 +80,23 @@ class CFLeaderboard extends CFBaseComponent {
     }
 
     async _loadLeaderboard() {
+        if (this._activeType === 'season') {
+            if (!this._seasons) {
+                this._isLoading = true;
+                this.render();
+            }
+            try {
+                this._seasons = await api.getSeasons(25);
+            } catch (error) {
+                console.error('Failed to load seasons:', error);
+                this._seasons = this._seasons || { current: null, last: null };
+            } finally {
+                this._isLoading = false;
+                this.scheduleRender();
+            }
+            return;
+        }
+
         // Only show spinner on first load when we have no data
         const isFirstLoad = this._players.length === 0;
 
@@ -93,25 +125,19 @@ class CFLeaderboard extends CFBaseComponent {
 
     render() {
         const player = this.getState('player') || {};
-        const platformLabel = this._platform === 'kick' ? 'Kick' : 'Twitch';
 
         this.className = 'cf-leaderboard';
+        if (this._activeType === 'season') {
+            this.setContent(
+                this._renderTabs(),
+                this._isLoading && h('div', { class: 'cf-loading' }, h('div', { class: 'cf-spinner' })),
+                !this._isLoading && this._renderSeasons()
+            );
+            return;
+        }
         this.setContent(
-            // Platform indicator
-            h('div', {
-                class: 'cf-leaderboard__platform text-xs text-center mb-2',
-                style: {
-                    color: this._platform === 'kick' ? '#53fc18' : '#9146ff',
-                    fontWeight: 'bold'
-                }
-            }, `${platformLabel} Leaderboard`),
-
-            // Type tabs
-            h('div', { class: 'cf-tabs mb-3' },
-                this._renderTab('level', 'Level'),
-                this._renderTab('currency', 'Wealth'),
-                this._renderTab('prestige', 'Prestige')
-            ),
+            // Type tabs (one board for everyone, whatever they signed in with)
+            this._renderTabs(),
 
             // Loading
             this._isLoading && h('div', { class: 'cf-loading' },
@@ -184,6 +210,84 @@ class CFLeaderboard extends CFBaseComponent {
         );
     }
 
+    _renderTabs() {
+        return h('div', { class: 'cf-tabs mb-3' },
+            this._renderTab('season', 'Season'),
+            this._renderTab('level', 'Level'),
+            this._renderTab('currency', 'Wealth'),
+            this._renderTab('prestige', 'Prestige')
+        );
+    }
+
+    _renderSeasons() {
+        const { current, last } = this._seasons || {};
+        const blocks = [];
+        if (current) {
+            blocks.push(h('div', { class: 'cf-season' },
+                h('div', { class: 'cf-season__head' },
+                    h('span', { class: 'cf-season__name' }, current.name),
+                    h('span', { class: 'cf-season__meta text-xs text-muted' }, daysLeft(current.endsAt))
+                ),
+                h('p', { class: 'cf-season__note text-xs text-muted' },
+                    'Ranked by XP earned this season. Top 10 are paid when it ends.'),
+                current.me
+                    ? h('p', { class: 'cf-season__me text-sm' }, `You are #${current.me.rank} with ${current.me.seasonXp.toLocaleString()} XP`)
+                    : h('p', { class: 'cf-season__me text-sm text-muted' }, 'Earn XP (grow, sell, finish quests) to get on the board.'),
+                current.standings?.length
+                    ? h('div', { class: 'cf-leaderboard__list' }, ...current.standings.map(p => this._renderSeasonRow(p, `${p.seasonXp.toLocaleString()} XP`)))
+                    : h('div', { class: 'cf-empty' }, h('p', { class: 'cf-empty__description' }, 'Nobody has earned season XP yet.')),
+                this._renderRewards(current.rewards)
+            ));
+        } else {
+            blocks.push(h('div', { class: 'cf-empty' }, h('p', { class: 'cf-empty__description' }, 'No season is running right now.')));
+        }
+        if (last) {
+            blocks.push(h('div', { class: 'cf-season cf-season--final' },
+                h('div', { class: 'cf-season__head' },
+                    h('span', { class: 'cf-season__name' }, `${last.name}: final standings`),
+                    h('span', { class: 'cf-season__meta text-xs text-muted' }, `ended ${new Date(last.endsAt).toLocaleDateString()}`)
+                ),
+                last.standings?.length
+                    ? h('div', { class: 'cf-leaderboard__list' }, ...last.standings.map(p => this._renderSeasonRow(p, this._rewardText(p.reward) || formatCurrency(p.seasonEarnings, true))))
+                    : h('p', { class: 'text-xs text-muted' }, 'Nobody was ranked.')
+            ));
+        }
+        return h('div', { class: 'cf-seasons' }, ...blocks);
+    }
+
+    _rewardText(reward) {
+        if (!reward) return '';
+        const parts = [];
+        if (reward.cash) parts.push(formatCurrency(reward.cash, true));
+        if (reward.prestige_tokens) parts.push(`${reward.prestige_tokens} PT`);
+        return parts.join(' + ');
+    }
+
+    _renderRewards(rewards) {
+        if (!rewards?.ranks?.length) return null;
+        const rows = rewards.ranks.map(r => h('li', {},
+            `${r.from === r.to ? `#${r.from}` : `#${r.from}-${r.to}`}: ${this._rewardText(r)}`));
+        if (rewards.participation?.cash || rewards.participation?.prestige_tokens) {
+            rows.push(h('li', {}, `Everyone else on the board: ${this._rewardText(rewards.participation)}`));
+        }
+        return h('details', { class: 'cf-season__rewards text-xs' },
+            h('summary', {}, 'Season rewards'),
+            h('ul', {}, ...rows));
+    }
+
+    _renderSeasonRow(p, value) {
+        const isYou = !!p.isYou;
+        const where = PLATFORM_LABEL[p.platform] || '';
+        return h('div', { class: `cf-leaderboard__player cf-season__row ${isYou ? 'cf-leaderboard__player--current' : ''}` },
+            h('span', { class: 'cf-season__rank' }, `#${p.rank}`),
+            h('span', { class: 'cf-season__who' },
+                h('span', { class: 'cf-season__player' }, p.displayName || 'Unknown'),
+                where && h('span', { class: 'cf-season__platform text-xs text-muted' }, where)
+            ),
+            h('span', { class: 'cf-season__value' }, value)
+        );
+    }
+
     _renderTab(type, label) {
         return h('button', {
             class: `cf-tab cf-leaderboard__tab ${this._activeType === type ? 'cf-tab--active' : ''}`,
@@ -252,8 +356,8 @@ class CFLeaderboard extends CFBaseComponent {
                         textOverflow: 'ellipsis'
                     }
                 }, displayName),
-                prestigeLevel > 0 && h('div', { class: 'text-xs text-muted' },
-                    `Prestige ${prestigeLevel}`
+                h('div', { class: 'text-xs text-muted' },
+                    [PLATFORM_LABEL[player.platform], prestigeLevel > 0 ? `Prestige ${prestigeLevel}` : null].filter(Boolean).join(' · ')
                 )
             ),
 

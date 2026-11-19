@@ -87,8 +87,19 @@ export default {
     if (!interaction.guild) return interaction.reply({ content: 'Emoji only exist in servers.', ...EPHEMERAL });
 
     const me = interaction.guild.members.me;
-    if (!me?.permissions.has(PermissionFlagsBits.ManageGuildExpressions)) {
-      return interaction.reply({ content: 'I need **Manage Expressions** to do that.', ...EPHEMERAL });
+    // Discord split Manage into Create (adds) + Manage (edit/delete others). Creation subcommands
+    // accept either; `remove` can touch any emoji so it still requires Manage.
+    const needsManage = sub === 'remove';
+    const hasCreate = me?.permissions.has(PermissionFlagsBits.CreateGuildExpressions);
+    const hasManage = me?.permissions.has(PermissionFlagsBits.ManageGuildExpressions);
+    const ok = needsManage ? hasManage : (hasCreate || hasManage);
+    if (!ok) {
+      return interaction.reply({
+        content: needsManage
+          ? 'I need **Manage Expressions** to delete emoji.'
+          : 'I need **Create Expressions** (or **Manage Expressions**) to do that.',
+        ...EPHEMERAL,
+      });
     }
 
     if (sub === 'list') {

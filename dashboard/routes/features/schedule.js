@@ -1,6 +1,7 @@
 import express from 'express';
 import pool from '../../../utils/db.js';
 import logger from '../../../utils/logger.js';
+import { projectStarts } from '../../../core/schedule-announcement-logic.js';
 
 const router = express.Router();
 
@@ -11,8 +12,13 @@ router.get('/manage/:guildId/schedule/events', async (req, res) => {
   try {
     const { guildId } = req.params;
 
+    // schedule_count / run_count feed the page's "Schedules" and "Runs" totals for the whole server.
     const [events] = await pool.execute(
-      `SELECT * FROM schedule_events WHERE guild_id = ? ORDER BY created_at DESC`,
+      `SELECT e.*,
+              (SELECT COUNT(*) FROM schedule_schedules s WHERE s.event_id = e.id) AS schedule_count,
+              (SELECT COUNT(*) FROM schedule_items i JOIN schedule_schedules s ON i.schedule_id = s.id
+                WHERE s.event_id = e.id) AS run_count
+         FROM schedule_events e WHERE e.guild_id = ? ORDER BY e.created_at DESC`,
       [guildId]
     );
 
@@ -35,14 +41,15 @@ router.post('/manage/:guildId/schedule/events', async (req, res) => {
 
     const cleanSlug = slug.toLowerCase().replace(/[^a-z0-9-]/g, '-');
 
-    // Check for duplicate slug
+    // The slug is the public address (/schedule/<slug>, looked up without a server), so it has to
+    // be free everywhere, not only in this server.
     const [[existing]] = await pool.execute(
-      'SELECT id FROM schedule_events WHERE guild_id = ? AND slug = ?',
-      [guildId, cleanSlug]
+      'SELECT id FROM schedule_events WHERE slug = ? LIMIT 1',
+      [cleanSlug]
     );
 
     if (existing) {
-      return res.status(400).json({ error: 'An event with this slug already exists' });
+      return res.status(400).json({ error: 'That slug is already used by another event. Slugs are web addresses, so each one can only be used once.' });
     }
 
     const [result] = await pool.execute(
@@ -158,14 +165,21 @@ router.post('/manage/:guildId/schedule/events/:eventId/schedules', async (req, r
 
     const cleanSlug = slug.toLowerCase().replace(/[^a-z0-9-]/g, '-');
 
+    // The page sends the start as UTC "YYYY-MM-DD HH:MM:SS" (converted from the browser's own time).
+    const start = /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?$/.test(String(startTime || '')) ? String(startTime).replace('T', ' ') : null;
+
     const [result] = await pool.execute(
       `INSERT INTO schedule_schedules (event_id, slug, name, description, start_time)
        VALUES (?, ?, ?, ?, ?)`,
-      [eventId, cleanSlug, name, description || null, startTime || null]
+      [eventId, cleanSlug, name, description || null, start]
     );
 
     res.json({ success: true, scheduleId: result.insertId });
   } catch (error) {
+    // schedule_schedules has UNIQUE (event_id, slug).
+    if (error.code === 'ER_DUP_ENTRY') {
+      return res.status(400).json({ error: 'Another schedule in this event already uses that slug.' });
+    }
     logger.error('[Dashboard] Error creating schedule', { error: error.message });
     res.status(500).json({ error: 'Failed to create schedule' });
   }
@@ -206,7 +220,7 @@ router.get('/manage/:guildId/schedule/schedules/:scheduleId/items', async (req, 
 
     // Verify schedule belongs to guild
     const [[schedule]] = await pool.execute(
-      `SELECT s.id, s.name, e.name as event_name FROM schedule_schedules s
+      `SELECT s.id, s.name, s.start_time, s.setup_time_seconds, e.name as event_name FROM schedule_schedules s
        JOIN schedule_events e ON s.event_id = e.id
        WHERE s.id = ? AND e.guild_id = ?`,
       [scheduleId, guildId]
@@ -220,6 +234,14 @@ router.get('/manage/:guildId/schedule/schedules/:scheduleId/items', async (req, 
       'SELECT * FROM schedule_items WHERE schedule_id = ? ORDER BY position',
       [scheduleId]
     );
+
+    // The planned start of each run, the same projection the run announcements use
+    // (core/schedule-announcement-logic.js); null when the schedule has no start time yet.
+    const starts = projectStarts(schedule, items, Date.now());
+    for (const item of items) {
+      const ms = starts.get(item.id);
+      item.projected_start = ms == null ? null : new Date(ms).toISOString();
+    }
 
     res.json({ schedule, items });
   } catch (error) {

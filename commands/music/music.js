@@ -10,6 +10,8 @@ import * as controlsHandlers from '../../handlers/music/controls.js';
 import * as featuresHandlers from '../../handlers/music/features.js';
 import * as lastfmHandlers from '../../handlers/music/lastfm.js';
 import * as panelHandlers from '../../handlers/music/panel.js';
+import * as djLibraryHandlers from '../../handlers/music/dj-library.js';
+import * as recordingHandlers from '../../handlers/music/recording.js';
 
 export default {
     data: new SlashCommandBuilder()
@@ -60,12 +62,8 @@ export default {
             subcommand
                 .setName("filter").setDescription("Applies an audio filter to the music")
                 .addStringOption(option =>
-                    option.setName("filter").setDescription("The filter to apply or remove").setRequired(true)
-                        .addChoices(
-                            { name: "Bassboost", value: "bassboost" }, { name: "Nightcore", value: "nightcore" },
-                            { name: "Vaporwave", value: "vaporwave" }, { name: "8D", value: "8D" },
-                            { name: "Treble", value: "treble" }, { name: "Normalizer", value: "normalizer" }
-                        ))
+                    // Autocomplete, not fixed choices: it lists the filters this server allows (Music page).
+                    option.setName("filter").setDescription("The filter to apply or remove").setRequired(true).setAutocomplete(true))
                 .addStringOption(option =>
                     option.setName("action").setDescription("Whether to enable or disable the filter").setRequired(true)
                         .addChoices({ name: "Enable", value: "enable" }, { name: "Disable", value: "disable" })))
@@ -84,8 +82,14 @@ export default {
                 .addStringOption(option => option.setName('song').setDescription('A song title to influence the DJ').setRequired(false))
                 .addStringOption(option => option.setName('artist').setDescription('An artist to influence the DJ').setRequired(false))
                 .addStringOption(option => option.setName('genre').setDescription('A genre to influence the DJ').setRequired(false))
-                .addStringOption(option => option.setName('playlist_link').setDescription('A link to a Spotify or YouTube playlist to play').setRequired(false)))
-        .addSubcommand(subcommand => subcommand.setName('record').setDescription('Records the audio in a voice channel'))
+                .addStringOption(option => option.setName('playlist_link').setDescription('A link to a Spotify or YouTube playlist to play').setRequired(false))
+                .addStringOption(option => option.setName('preset').setDescription('Start a saved AI DJ preset (other options override its fields)').setRequired(false).setAutocomplete(true)))
+        .addSubcommand(subcommand =>
+            subcommand.setName('record').setDescription('Record the voice channel you are in (must be enabled by an admin; everyone is told)')
+                .addStringOption(option =>
+                    option.setName('action').setDescription('Start, stop, or check the recording').setRequired(true)
+                        .addChoices({ name: 'Start', value: 'start' }, { name: 'Stop', value: 'stop' }, { name: 'Status', value: 'status' }))
+                .addIntegerOption(option => option.setName('minutes').setDescription('Stop after this many minutes (the server limit still applies)').setRequired(false).setMinValue(1).setMaxValue(120)))
         .addSubcommand(subcommand =>
             subcommand.setName('seek').setDescription('Seeks to a specific time in the current song')
                 .addStringOption(option => option.setName("time").setDescription("The time to seek to (e.g., 1m30s, 2h, 45s)").setRequired(true)))
@@ -138,7 +142,50 @@ export default {
                             option.setName('enabled').setDescription('Enable or disable vote skip').setRequired(false)
                                 .addChoices({ name: 'On', value: 'on' }, { name: 'Off', value: 'off' }))
                         .addIntegerOption(option =>
-                            option.setName('percentage').setDescription('Percentage of listeners required to skip (1-100)').setRequired(false).setMinValue(1).setMaxValue(100))))
+                            option.setName('percentage').setDescription('Percentage of listeners required to skip (1-100)').setRequired(false).setMinValue(1).setMaxValue(100)))
+                .addSubcommand(subcommand =>
+                    subcommand.setName('djpreset').setDescription('Save, list, show or delete AI DJ presets (Manage Server)')
+                        .addStringOption(option =>
+                            option.setName('action').setDescription('What to do').setRequired(true)
+                                .addChoices({ name: 'Save', value: 'save' }, { name: 'List', value: 'list' }, { name: 'Show', value: 'show' }, { name: 'Delete', value: 'delete' }))
+                        .addStringOption(option => option.setName('name').setDescription('Preset name').setRequired(false).setMaxLength(100).setAutocomplete(true))
+                        .addStringOption(option => option.setName('prompt').setDescription('A direct prompt for the DJ').setRequired(false).setMaxLength(1000))
+                        .addStringOption(option => option.setName('song').setDescription('A song to base the mix on').setRequired(false).setMaxLength(200))
+                        .addStringOption(option => option.setName('artist').setDescription('An artist to base the mix on').setRequired(false).setMaxLength(200))
+                        .addStringOption(option => option.setName('genre').setDescription('A genre for the mix').setRequired(false).setMaxLength(100))
+                        .addStringOption(option => option.setName('playlist_link').setDescription('A Spotify or YouTube playlist to start from').setRequired(false).setMaxLength(500))
+                        .addStringOption(option => option.setName('description').setDescription('A note about this preset').setRequired(false).setMaxLength(500)))
+                .addSubcommand(subcommand =>
+                    subcommand.setName('djblock').setDescription('Songs or artists the AI DJ must never play (Manage Server)')
+                        .addStringOption(option =>
+                            option.setName('action').setDescription('What to do').setRequired(true)
+                                .addChoices({ name: 'Add', value: 'add' }, { name: 'Remove', value: 'remove' }, { name: 'List', value: 'list' }))
+                        .addStringOption(option =>
+                            option.setName('type').setDescription('Block a song or a whole artist (default: song)').setRequired(false)
+                                .addChoices({ name: 'Song', value: 'song' }, { name: 'Artist', value: 'artist' }))
+                        .addStringOption(option => option.setName('value').setDescription('Song title or artist name (empty = what is playing now)').setRequired(false).setMaxLength(255).setAutocomplete(true))
+                        .addStringOption(option => option.setName('artist').setDescription('Only block the song when it is by this artist').setRequired(false).setMaxLength(255))
+                        .addStringOption(option => option.setName('reason').setDescription('Why (shown in the list)').setRequired(false).setMaxLength(255)))
+                .addSubcommand(subcommand =>
+                    subcommand.setName('djfavorite').setDescription('Favourite songs the AI DJ seeds from when given no seed (Manage Server)')
+                        .addStringOption(option =>
+                            option.setName('action').setDescription('What to do').setRequired(true)
+                                .addChoices({ name: 'Add', value: 'add' }, { name: 'Remove', value: 'remove' }, { name: 'List', value: 'list' }))
+                        .addStringOption(option => option.setName('song').setDescription('Song title (empty = what is playing now)').setRequired(false).setMaxLength(255).setAutocomplete(true))
+                        .addStringOption(option => option.setName('artist').setDescription('Artist of the song').setRequired(false).setMaxLength(255))
+                        .addIntegerOption(option => option.setName('weight').setDescription('How often it is picked as a seed (1-10, default 1)').setRequired(false).setMinValue(1).setMaxValue(10)))
+                .addSubcommand(subcommand =>
+                    subcommand.setName('recording').setDescription('Voice recording: turn it on, who may record, where files go (Manage Server)')
+                        .addStringOption(option =>
+                            option.setName('enabled').setDescription('Allow voice recording on this server').setRequired(false)
+                                .addChoices({ name: 'On', value: 'on' }, { name: 'Off', value: 'off' }))
+                        .addChannelOption(option =>
+                            option.setName('output_channel').setDescription('Where recordings are posted (default: where it was started)')
+                                .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setRequired(false))
+                        .addBooleanOption(option => option.setName('clear_output_channel').setDescription('Post recordings where they were started again').setRequired(false))
+                        .addIntegerOption(option => option.setName('max_minutes').setDescription('Longest recording in minutes (also capped by the upload limit)').setRequired(false).setMinValue(1).setMaxValue(120))
+                        .addRoleOption(option => option.setName('allow_role').setDescription('Let this role start recordings').setRequired(false))
+                        .addRoleOption(option => option.setName('remove_role').setDescription('Stop this role from starting recordings').setRequired(false))))
         .addSubcommandGroup(group =>
             group.setName('panel').setDescription('Manage the music control panel')
                 .addSubcommand(subcommand => subcommand.setName('create').setDescription('Create a music control panel in this channel'))
@@ -192,11 +239,38 @@ export default {
     async autocomplete(interaction) {
         const focusedOption = interaction.options.getFocused(true);
 
+        // /music filter: the filters this server allows (Music page; none ticked = all of them).
+        if (focusedOption.name === 'filter' && interaction.options.getSubcommand(false) === 'filter') {
+            try {
+                const { allowedFilterNames, offeredFilters } = await import('../../core/music-filters.js');
+                const { getMusicConfig } = await import('../../utils/music_helpers.js');
+                const allowed = allowedFilterNames((await getMusicConfig(interaction.guildId))?.enabled_filters);
+                const typed = String(focusedOption.value || '').toLowerCase();
+                const list = offeredFilters(allowed)
+                    .filter(f => !typed || f.label.toLowerCase().includes(typed) || f.value.toLowerCase().includes(typed))
+                    .slice(0, 25);
+                await interaction.respond(list.map(f => ({ name: f.label, value: f.value })));
+            } catch (error) {
+                console.error('[Filter Autocomplete Error]', error.message);
+                if (!interaction.responded) await interaction.respond([]).catch(() => {});
+            }
+            return;
+        }
+
+        // AI DJ presets / blocklist / favourites (/music dj preset, /music settings dj*).
+        try {
+            if (await djLibraryHandlers.autocomplete(interaction)) return;
+        } catch (error) {
+            console.error("[DJ Library Autocomplete Error]", error.message);
+            if (!interaction.responded) await interaction.respond([]).catch(() => {});
+            return;
+        }
+
         if (focusedOption.name === "name") {
             const focusedValue = interaction.options.getString('name') || '';
             try {
                 const [playlists] = await pool.execute(
-                    "SELECT name FROM music_playlists WHERE guild_id = ? AND user_id = ? AND name LIKE ? LIMIT 25",
+                    "SELECT name FROM user_playlists WHERE guild_id = ? AND user_id = ? AND name LIKE ? LIMIT 25",
                     [interaction.guild?.id, interaction.user.id, `${focusedValue}%`]
                 );
                 await interaction.respond(playlists.map(p => ({ name: p.name, value: p.name })));
@@ -233,6 +307,10 @@ export default {
                     case 'autoplay': await controlsHandlers.handleAutoplay(interaction); break;
                     case 'requestchannel': await controlsHandlers.handleRequestChannel(interaction); break;
                     case 'voteskip': await controlsHandlers.handleVoteSkipSettings(interaction); break;
+                    case 'djpreset': await djLibraryHandlers.handleDJPreset(interaction); break;
+                    case 'djblock': await djLibraryHandlers.handleDJBlock(interaction); break;
+                    case 'djfavorite': await djLibraryHandlers.handleDJFavorite(interaction); break;
+                    case 'recording': await recordingHandlers.handleRecordingSettings(interaction); break;
                     default:
                         await interaction.reply({ content: 'Invalid settings subcommand.', ephemeral: true });
                 }
@@ -286,7 +364,7 @@ export default {
                     case 'lyrics': await featuresHandlers.handleLyrics(interaction); break;
                     case 'search': await featuresHandlers.handleSearch(interaction); break;
                     case 'dj': await featuresHandlers.handleDJ(interaction); break;
-                    case 'record': await featuresHandlers.handleRecord(interaction); break;
+                    case 'record': await recordingHandlers.handleRecord(interaction); break;
 
                     // FlaviBot-style handlers (standalone commands)
                     case 'voteskip': await controlsHandlers.handleVoteSkip(interaction); break;

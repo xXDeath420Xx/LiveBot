@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CertiFried</title>
+    <link rel="stylesheet" href="main.css">
+    <link rel="stylesheet" href="panel.css">
+</head>
+<body>
+    <div class="cf-loading-screen" id="loading-screen">
+        <div class="cf-loading-screen__title">CertiFried</div>
+        <div class="cf-loading-screen__spinner"></div>
+    </div>
+
+    <div class="cf-identity" id="identity-screen">
+        <div class="cf-loading-screen__title">CertiFried</div>
+        <p>Grow, breed and sell strains, and climb the season leaderboard.</p>
+        <p>To keep your garden between streams, the game needs your Twitch ID.</p>
+        <button type="button" class="cf-btn cf-btn--primary" id="share-identity">Share my Twitch ID and play</button>
+    </div>
+
+    <div class="cf-panel-error" id="error-screen">
+        <p id="error-text">The game could not load. Try again in a minute.</p>
+    </div>
+
+    <div class="cf-panel-frozen" id="frozen-screen" role="status">
+        <div class="cf-loading-screen__title">CertiFried Tycoon</div>
+        <p id="frozen-text">CertiFried Tycoon is being rebuilt. The new game is coming soon.</p>
+    </div>
+
+    <div id="app" class="cf-app cf-app--panel is-hidden">
+        <cf-header></cf-header>
+        <cf-nav></cf-nav>
+        <cf-season-strip></cf-season-strip>
+        <cf-app-container></cf-app-container>
+        <cf-strain-selector></cf-strain-selector>
+        <cf-toast-container></cf-toast-container>
+        <cf-tutorial></cf-tutorial>
+    </div>
+
+    <!-- Twitch Extension Helper (the only remote script allowed) -->
+    <script src="https://extension-files.twitch.tv/helper/v1/twitch-ext.min.js"></script>
+    <script type="module" src="panel.js"></script>
+</body>
+</html>

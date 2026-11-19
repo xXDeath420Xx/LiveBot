@@ -1,8 +1,13 @@
+import { PermissionsBitField } from 'discord.js';
 import MusicPanel from '../../core/music-panel.js';
 import pool from '../../utils/db.js';
 import logger from '../../utils/logger.js';
 
 export async function handleCreate(interaction) {
+  // One panel per server — any member could otherwise delete it or move it to their channel.
+  if (!interaction.member?.permissions?.has(PermissionsBitField.Flags.ManageGuild)) {
+    return interaction.reply({ content: 'You need the **Manage Server** permission to manage the music panel.', ephemeral: true });
+  }
   const guildId = interaction.guild.id;
   const channelId = interaction.channel.id;
 
@@ -49,6 +54,10 @@ export async function handleCreate(interaction) {
 }
 
 export async function handleDelete(interaction) {
+  // One panel per server — any member could otherwise delete it or move it to their channel.
+  if (!interaction.member?.permissions?.has(PermissionsBitField.Flags.ManageGuild)) {
+    return interaction.reply({ content: 'You need the **Manage Server** permission to manage the music panel.', ephemeral: true });
+  }
   const guildId = interaction.guild.id;
 
   try {

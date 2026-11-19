@@ -2,7 +2,7 @@
  * Self-promo "add me" backend for the Level-gated button + form.
  *
  * The manual path for streamers the presence Go-Live detector can't catch:
- * non-Twitch platforms (Kick/Trovo have no Discord connection), or users who
+ * non-Twitch platforms (Kick has no Discord connection), or users who
  * haven't linked Twitch to Discord. They click the button (Level-gated), paste
  * their channel link(s), and get added to the self-promo list — then their other
  * linked platforms sync in via streamer-sync. Reuses the same helpers as the
@@ -114,6 +114,31 @@ export async function getJoinConfigForChannel(guildId, channelId) {
   return { channelId, minLevel };
 }
 
+/**
+ * The member's link is already tracked. If nobody owns it yet (a friend added it
+ * via "Track a friend's stream", or it predates linking), let the member claim it
+ * — the same trust "Add my stream" gives a fresh add. Never steals a stream that is
+ * already linked to someone else. tracking_origin is left alone: an 'external'
+ * row may be a partner, and flipping it would expose them to departure untracking.
+ */
+async function alreadyOrClaim(member, platform, platformUserId, canonicalUsername) {
+  const [rows] = await pool.execute(
+    'SELECT discord_user_id FROM streamers WHERE platform = ? AND platform_user_id = ?',
+    [platform, platformUserId]
+  );
+  const owner = rows[0]?.discord_user_id || null;
+  if (owner === String(member.id)) return { status: 'already', platform, username: canonicalUsername };
+  if (owner) return { status: 'owned', platform, username: canonicalUsername };
+  // Guarded on IS NULL so two members claiming at once can't overwrite each other.
+  const [res] = await pool.execute(
+    'UPDATE streamers SET discord_user_id = ? WHERE platform = ? AND platform_user_id = ? AND discord_user_id IS NULL',
+    [member.id, platform, platformUserId]
+  );
+  if (res.affectedRows !== 1) return { status: 'owned', platform, username: canonicalUsername };
+  logger.info('[SelfPromoJoin] member claimed an unlinked tracked stream', { userId: member.id, platform, username: canonicalUsername });
+  return { status: 'linked', platform, username: canonicalUsername };
+}
+
 async function addOne(guild, member, channelId, platform, username, opts = {}) {
   // Rumble is verified from its channel page like everything else. A key is only
   // stored if the member volunteered one (it serves as a fallback for detection).
@@ -127,7 +152,7 @@ async function addOne(guild, member, channelId, platform, username, opts = {}) {
       if (kv.ok) await storeRumbleKey(canonicalUsername, key, guild.id, member.id);
     }
     const { tracked } = await isStreamerAlreadyTracked(guild.id, 'rumble', platformUserId);
-    if (tracked) return { status: 'already', platform, username: canonicalUsername };
+    if (tracked) return alreadyOrClaim(member, 'rumble', platformUserId, canonicalUsername);
     const teamId = await getTeamSubscriptionId(guild.id, member.id).catch(() => null);
     const ok = await createStreamerAndSubscription(guild.id, 'rumble', platformUserId, canonicalUsername, member.id, channelId, teamId);
     return { status: ok ? 'added' : 'error', platform, username: canonicalUsername };
@@ -135,7 +160,7 @@ async function addOne(guild, member, channelId, platform, username, opts = {}) {
   const validated = await validatePlatformUser(platform, username);
   if (!validated) return { status: 'invalid', platform, username };
   const { tracked } = await isStreamerAlreadyTracked(guild.id, platform, validated.platformUserId);
-  if (tracked) return { status: 'already', platform, username: validated.canonicalUsername };
+  if (tracked) return alreadyOrClaim(member, platform, validated.platformUserId, validated.canonicalUsername);
   const teamId = await getTeamSubscriptionId(guild.id, member.id).catch(() => null);
   const ok = await createStreamerAndSubscription(
     guild.id, platform, validated.platformUserId, validated.canonicalUsername, member.id, channelId, teamId
@@ -163,15 +188,56 @@ export async function joinFromText(guild, member, channelId, text, opts = {}) {
   return results;
 }
 
+/**
+ * "Track a friend's stream" — the member is adding SOMEONE ELSE's channel, so
+ * nothing is tied to the clicker: no discord_user_id link (streamers.discord_user_id
+ * is global, a wrong link would follow that streamer network-wide), no team
+ * routing, no linked-platform sync. tracking_origin='external' because the
+ * streamer isn't known to be a member, so the departure sweeper leaves them be.
+ */
+async function addFriendOne(guild, channelId, platform, username) {
+  const validated = platform === 'rumble'
+    ? await rumbleApi.validateUser(username)
+    : await validatePlatformUser(platform, username);
+  if (!validated) return { status: 'invalid', platform, username };
+  const { platformUserId, canonicalUsername } = validated;
+  const { tracked } = await isStreamerAlreadyTracked(guild.id, platform, platformUserId);
+  if (tracked) return { status: 'already', platform, username: canonicalUsername };
+  const ok = await createStreamerAndSubscription(
+    guild.id, platform, platformUserId, canonicalUsername, null, channelId, null, { trackingOrigin: 'external' }
+  );
+  return { status: ok ? 'added' : 'error', platform, username: canonicalUsername };
+}
+
+export async function addFriendsFromText(guild, addedBy, channelId, text) {
+  const results = [];
+  for (const e of parseLinksBlock(text)) {
+    try { results.push(await addFriendOne(guild, channelId, e.platform, e.username)); }
+    catch (err) {
+      logger.warn('[SelfPromoJoin] addFriendOne failed', { error: err.message, platform: e.platform, username: e.username });
+      results.push({ status: 'error', platform: e.platform, username: e.username });
+    }
+  }
+  const added = results.filter(r => r.status === 'added');
+  if (added.length) {
+    logger.info('[SelfPromoJoin] friend stream(s) added', {
+      guildId: guild.id, addedBy, channelId, streams: added.map(r => `${r.platform}:${r.username}`),
+    });
+  }
+  return results;
+}
+
 /** Human-readable ephemeral summary. */
 export function summarize(results) {
   if (!results.length) return "I couldn't find any valid stream links in that — paste full channel URLs (e.g. `https://twitch.tv/yourname`).";
   const by = (s) => results.filter(r => r.status === s);
   const fmt = (arr) => arr.map(r => `\`${r.username}\` (${r.platform}${r.synced ? ', auto-linked' : ''})`).join(', ');
   const lines = [];
-  const added = by('added'), already = by('already'), invalid = by('invalid'), error = by('error');
+  const added = by('added'), linked = by('linked'), already = by('already'), owned = by('owned'), invalid = by('invalid'), error = by('error');
   if (added.length) lines.push(`✅ Added: ${fmt(added)}`);
+  if (linked.length) lines.push(`🔗 Already tracked — now linked to your Discord: ${fmt(linked)}`);
   if (already.length) lines.push(`ℹ️ Already on the list: ${fmt(already)}`);
+  if (owned.length) lines.push(`🔒 Already linked to another member — ask a mod if that's yours: ${fmt(owned)}`);
   if (invalid.length) lines.push(`❌ Couldn't verify (check the spelling/URL): ${fmt(invalid)}`);
   if (error.length) lines.push(`⚠️ Hit an error adding: ${fmt(error)}`);
   return lines.join('\n');

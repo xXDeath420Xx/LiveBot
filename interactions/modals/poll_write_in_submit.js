@@ -1,6 +1,6 @@
-import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import pool from '../../utils/db.js';
 import logger from '../../utils/logger.js';
+import PollsManager from '../../core/polls-manager.js';
 
 /**
  * Handle poll write-in submission
@@ -75,8 +75,11 @@ export async function handlePollWriteInSubmit(interaction) {
             guildId: poll.guild_id
         });
 
-        // Update the poll message to show write-in options
-        await updatePollMessage(interaction.client, poll, writeInAnswers);
+        // Redraw through the polls manager — the same renderer votes and edits use
+        const manager = interaction.client.pollsManager || new PollsManager(interaction.client);
+        const votes = {};
+        for (const [userId, v] of Object.entries(poll.votes ? JSON.parse(poll.votes) : {})) votes[userId] = [].concat(v);
+        await manager.renderPoll(poll, votes, writeInAnswers);
 
         await interaction.editReply({
             content: `✅ Your answer "${answer}" has been added to the poll! Other users can now vote on it.`
@@ -89,128 +92,3 @@ export async function handlePollWriteInSubmit(interaction) {
         }).catch(() => {});
     }
 }
-
-/**
- * Update the poll message to include write-in options
- */
-async function updatePollMessage(client, poll, writeInAnswers) {
-    try {
-        const guild = client.guilds.cache.get(poll.guild_id);
-        if (!guild) return;
-
-        const channel = guild.channels.cache.get(poll.channel_id);
-        if (!channel) return;
-
-        const message = await channel.messages.fetch(poll.message_id).catch(() => null);
-        if (!message) return;
-
-        // Parse standard options
-        const standardOptions = JSON.parse(poll.options);
-
-        // Build options description
-        const emojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
-
-        // Get votes
-        let votes = {};
-        if (poll.votes) {
-            try {
-                votes = JSON.parse(poll.votes);
-            } catch (e) {
-                votes = {};
-            }
-        }
-
-        // Format standard options
-        let description = '';
-        for (let i = 0; i < standardOptions.length; i++) {
-            const voteCount = Object.values(votes).filter(v =>
-                Array.isArray(v) ? v.includes(i) : v === i
-            ).length;
-            description += `${emojis[i]} **${standardOptions[i]}** - ${voteCount} vote${voteCount !== 1 ? 's' : ''}\n`;
-        }
-
-        // Format write-in options
-        if (writeInAnswers.length > 0) {
-            description += '\n**✍️ Write-In Answers:**\n';
-            for (let i = 0; i < writeInAnswers.length; i++) {
-                const writeInIndex = standardOptions.length + i;
-                const voteCount = Object.values(votes).filter(v =>
-                    Array.isArray(v) ? v.includes(writeInIndex) : v === writeInIndex
-                ).length;
-                const author = await client.users.fetch(writeInAnswers[i].user_id).catch(() => null);
-                description += `🔹 **${writeInAnswers[i].answer}** (by ${author ? author.username : 'Unknown'}) - ${voteCount} vote${voteCount !== 1 ? 's' : ''}\n`;
-            }
-        }
-
-        // Update embed
-        const embed = EmbedBuilder.from(message.embeds[0]);
-        embed.setDescription(description);
-
-        // Create updated buttons (standard options + write-ins)
-        const rows = [];
-        let currentRow = new ActionRowBuilder();
-        let buttonsInRow = 0;
-
-        // Standard option buttons
-        for (let i = 0; i < standardOptions.length; i++) {
-            if (buttonsInRow >= 5) {
-                rows.push(currentRow);
-                currentRow = new ActionRowBuilder();
-                buttonsInRow = 0;
-            }
-
-            const button = new ButtonBuilder()
-                .setCustomId(`poll_vote_${i}`)
-                .setLabel(standardOptions[i])
-                .setStyle(ButtonStyle.Primary)
-                .setEmoji(emojis[i]);
-
-            currentRow.addComponents(button);
-            buttonsInRow++;
-        }
-
-        // Write-in option buttons
-        for (let i = 0; i < writeInAnswers.length; i++) {
-            if (buttonsInRow >= 5) {
-                rows.push(currentRow);
-                currentRow = new ActionRowBuilder();
-                buttonsInRow = 0;
-            }
-
-            const writeInIndex = standardOptions.length + i;
-            const button = new ButtonBuilder()
-                .setCustomId(`poll_vote_${writeInIndex}`)
-                .setLabel(writeInAnswers[i].answer.substring(0, 80)) // Discord button label limit
-                .setStyle(ButtonStyle.Success)
-                .setEmoji('🔹');
-
-            currentRow.addComponents(button);
-            buttonsInRow++;
-        }
-
-        if (buttonsInRow > 0) rows.push(currentRow);
-
-        // Add write-in button
-        const writeInRow = new ActionRowBuilder();
-        const writeInButton = new ButtonBuilder()
-            .setCustomId('poll_write_in')
-            .setLabel('Write Your Own Answer')
-            .setStyle(ButtonStyle.Secondary)
-            .setEmoji('✍️');
-
-        writeInRow.addComponents(writeInButton);
-        rows.push(writeInRow);
-
-        await message.edit({ embeds: [embed], components: rows });
-
-        logger.info(`[Poll Write-In] Updated poll message with ${writeInAnswers.length} write-in(s)`, {
-            pollId: poll.id,
-            guildId: poll.guild_id
-        });
-
-    } catch (error) {
-        logger.error('[Poll Write-In] Error updating poll message:', error);
-    }
-}
-
-export default handlePollWriteInSubmit;

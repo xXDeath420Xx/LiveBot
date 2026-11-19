@@ -1,0 +1,681 @@
+<%#
+  Scheduled messages: recurring channel posts. The list and the editor are built by the script at
+  the bottom from /api/guilds/:guildId/scheduled-messages (dashboard/routes/api/features/
+  scheduled-messages.js); the rows are scheduled_announcements, posted every minute by
+  jobs/announcement-scheduler.js. Expects locals: guild.
+%>
+<style>
+    .sm-msg-title { display: block; font-weight: 600; color: var(--cf-text); overflow-wrap: anywhere; }
+    .sm-msg-snippet { display: block; margin-top: 2px; font-size: var(--cf-text-xs); color: var(--cf-text-3); overflow-wrap: anywhere; max-width: 28rem; }
+    .sm-when { font-variant-numeric: tabular-nums; color: var(--cf-text-2); }
+    .sm-actions { display: flex; flex-wrap: wrap; gap: var(--cf-2); justify-content: flex-end; }
+    .sm-error-line { margin-top: 4px; }
+    .sm-days { display: flex; flex-wrap: wrap; gap: var(--cf-2) var(--cf-4); }
+    .sm-days .cf-choice { align-items: center; }
+    .sm-inline { display: flex; flex-wrap: wrap; align-items: center; gap: var(--cf-2); }
+    .sm-inline .form-control, .sm-inline .form-select { width: auto; min-width: 6rem; }
+    .sm-total { margin-left: 4px; font-size: var(--cf-text-sm); font-weight: 500; color: var(--cf-text-3); font-variant-numeric: tabular-nums; }
+    .sm-msg { display: grid; gap: 6px; padding: var(--cf-3) var(--cf-4); background: var(--cf-inset, var(--cf-surface-2)); border: 1px solid var(--cf-border); border-radius: var(--cf-radius); min-width: 0; }
+    .sm-msg-text { font-size: var(--cf-text-sm); color: var(--cf-text); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .sm-msg-text:empty { display: none; }
+    .sm-mention { padding: 0 2px; border-radius: 3px; font-weight: 500; color: var(--cf-accent-fg, var(--cf-accent)); background: color-mix(in srgb, var(--cf-accent) 18%, transparent); }
+    .sm-preview-body { display: flex; gap: var(--cf-3); align-items: flex-start; min-width: 0; }
+    .sm-preview-main { flex: 1 1 auto; min-width: 0; }
+    .sm-preview-author { display: flex; align-items: center; gap: 6px; }
+    .sm-preview-author img { width: 20px; height: 20px; border-radius: 50%; object-fit: cover; }
+    .sm-preview-title a { color: var(--cf-info, #00a8fc); text-decoration: none; }
+    .sm-preview-thumb { flex: none; width: 64px; height: 64px; border-radius: var(--cf-radius-sm, 4px); object-fit: cover; }
+    .sm-preview-image { display: block; max-width: 100%; max-height: 240px; margin-top: var(--cf-2); border-radius: var(--cf-radius-sm, 4px); }
+    .sm-preview { max-width: 32rem; padding: var(--cf-3) var(--cf-4); background: var(--cf-surface-2); border: 1px solid var(--cf-border); border-left-width: 4px; border-radius: var(--cf-radius); min-width: 0; }
+    .sm-preview-author { font-size: var(--cf-text-xs); color: var(--cf-text-2); margin-bottom: 4px; }
+    .sm-preview-title { font-weight: 600; color: var(--cf-text); font-size: var(--cf-text-sm); margin-bottom: 4px; overflow-wrap: anywhere; }
+    .sm-preview-desc { font-size: var(--cf-text-sm); color: var(--cf-text-2); line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .sm-preview-foot { font-size: var(--cf-text-xs); color: var(--cf-text-3); margin-top: 6px; }
+    .sm-preview-empty { font-size: var(--cf-text-sm); color: var(--cf-text-3); }
+    .cf-rows input[type="color"].sm-color { width: 100%; height: 38px; padding: 3px; cursor: pointer; }
+    .sm-field-wide { grid-column: 1 / -1; }
+</style>
+
+<div class="page-section" id="smPage" data-guild-id="<%= guild.id %>">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-clock"></i>
+                <span>Scheduled messages</span>
+            </div>
+            <div class="page-section-subtitle">
+                Repeating and one-off posts, such as a rules reminder every Monday.
+            </div>
+        </div>
+    </div>
+
+    <section class="cf-section" aria-labelledby="sm-list-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="sm-list-title">Messages <span class="sm-total" id="smTotal"></span></h2>
+                <p class="cf-section-desc" id="sm-tz-desc">Times are in the server's timezone.</p>
+            </div>
+            <div class="cf-section-actions">
+                <label class="cf-search" id="smSearchBox" hidden>
+                    <i class="fas fa-search" aria-hidden="true"></i>
+                    <input type="search" class="form-control" id="smSearch" placeholder="Search messages" aria-label="Search scheduled messages" autocomplete="off">
+                </label>
+                <button type="button" class="btn btn-primary" id="smNew">New message</button>
+            </div>
+        </header>
+        <div class="cf-rows" id="smList">
+            <div class="cf-state cf-state--compact cf-state--loading" role="status"><span class="cf-spinner" aria-hidden="true"></span><p class="cf-state-text">Loading</p></div>
+        </div>
+    </section>
+</div>
+
+<div id="smModal" class="cf-modal" hidden>
+    <div class="cf-modal-dialog is-wide" role="dialog" aria-modal="true" aria-labelledby="smModalTitle">
+        <header class="cf-modal-head">
+            <div>
+                <h3 class="cf-modal-title" id="smModalTitle">New scheduled message</h3>
+                <p class="cf-modal-desc" id="smModalDesc">Nothing is posted until the first scheduled time, unless you use Send now.</p>
+            </div>
+            <button type="button" class="cf-modal-close" id="smClose" aria-label="Close"><i class="fas fa-times" aria-hidden="true"></i></button>
+        </header>
+        <form class="cf-modal-body" id="smForm" novalidate>
+            <div id="smError" class="cf-notice is-bad" role="alert" hidden></div>
+
+            <div class="cf-rows">
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="sm-name">Name</label>
+                        <p class="cf-row-desc" id="sm-name-desc">Optional. Only shown here, to tell your messages apart.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="text" class="form-control" id="sm-name" maxlength="100" placeholder="Weekly rules reminder" aria-describedby="sm-name-desc">
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="sm-channel">Channel</label>
+                        <p class="cf-row-desc" id="sm-channel-desc">Where the message is posted.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <select class="form-select" id="sm-channel" aria-describedby="sm-channel-desc"></select>
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="sm-ping">Ping</label>
+                        <p class="cf-row-desc" id="sm-ping-desc">Optional. Mentioned at the start of the message. Other role mentions in the text do not ping.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <select class="form-select" id="sm-ping" aria-describedby="sm-ping-desc"></select>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="sm-content">Message</label>
+                        <p class="cf-row-desc" id="sm-content-desc">Discord formatting works. Leave it empty to post only the embed.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <textarea class="form-control" id="sm-content" rows="5" maxlength="1970" aria-describedby="sm-content-desc"></textarea>
+                    </div>
+                </div>
+            </div>
+
+            <div class="cf-rows">
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="sm-embed-on">Add an embed</label>
+                        <p class="cf-row-desc" id="sm-embed-on-desc">A boxed message with a title, colour stripe and optional images, the same fields as the Custom embeds page.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="checkbox" class="cf-switch" role="switch" id="sm-embed-on" aria-describedby="sm-embed-on-desc">
+                    </div>
+                </div>
+                <div class="cf-row cf-row--stack" id="smEmbedRow" hidden>
+                    <div class="cf-fields">
+                        <div class="cf-field">
+                            <label for="sm-embed-color">Colour</label>
+                            <input type="color" class="form-control sm-color" id="sm-embed-color" value="#5865f2">
+                        </div>
+                        <div class="cf-field">
+                            <label for="sm-embed-title">Title</label>
+                            <input type="text" class="form-control" id="sm-embed-title" maxlength="256">
+                        </div>
+                        <div class="cf-field">
+                            <label for="sm-embed-url">Title link</label>
+                            <input type="text" class="form-control" id="sm-embed-url" placeholder="https://">
+                        </div>
+                        <div class="cf-field sm-field-wide">
+                            <label for="sm-embed-description">Description</label>
+                            <textarea class="form-control" id="sm-embed-description" rows="4" maxlength="4096"></textarea>
+                        </div>
+                        <div class="cf-field">
+                            <label for="sm-embed-author_name">Author name</label>
+                            <input type="text" class="form-control" id="sm-embed-author_name" maxlength="256">
+                        </div>
+                        <div class="cf-field">
+                            <label for="sm-embed-author_icon_url">Author icon URL</label>
+                            <input type="text" class="form-control" id="sm-embed-author_icon_url" placeholder="https://">
+                        </div>
+                        <div class="cf-field">
+                            <label for="sm-embed-thumbnail_url">Thumbnail URL</label>
+                            <input type="text" class="form-control" id="sm-embed-thumbnail_url" placeholder="https://">
+                        </div>
+                        <div class="cf-field">
+                            <label for="sm-embed-image_url">Image URL</label>
+                            <input type="text" class="form-control" id="sm-embed-image_url" placeholder="https://">
+                        </div>
+                        <div class="cf-field sm-field-wide">
+                            <label for="sm-embed-footer_text">Footer</label>
+                            <input type="text" class="form-control" id="sm-embed-footer_text" maxlength="2048">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="cf-rows">
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-row-text">
+                        <span class="cf-row-label">Preview</span>
+                        <p class="cf-row-desc">Mentions show as names. Nobody is pinged by the preview.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="sm-msg" aria-live="polite">
+                            <div class="sm-msg-text" id="smMsgText"></div>
+                            <div class="sm-preview" id="smPreview" hidden></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="cf-rows">
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-row-text">
+                        <span class="cf-row-label" id="sm-mode-label">When to post</span>
+                        <p class="cf-row-desc" id="sm-mode-desc">Times are in the server's timezone.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="cf-segmented" role="group" aria-labelledby="sm-mode-label" id="smModes">
+                            <button type="button" data-mode="interval" aria-pressed="true">Repeat every</button>
+                            <button type="button" data-mode="days" aria-pressed="false">On days</button>
+                            <button type="button" data-mode="monthly" aria-pressed="false">Monthly</button>
+                            <button type="button" data-mode="once" aria-pressed="false">Once</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="cf-row" data-pane="interval">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="sm-interval-value">Every</label>
+                        <p class="cf-row-desc" id="sm-interval-desc">From every 10 minutes to every 90 days.</p>
+                    </div>
+                    <div class="cf-row-control sm-inline">
+                        <input type="number" class="form-control" id="sm-interval-value" min="1" max="2160" value="1" aria-describedby="sm-interval-desc">
+                        <select class="form-select" id="sm-interval-unit" aria-label="Unit">
+                            <option value="minutes">minutes</option>
+                            <option value="hours">hours</option>
+                            <option value="days" selected>days</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="cf-row" data-pane="interval">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="sm-start-time">Starting at</label>
+                        <p class="cf-row-desc" id="sm-start-time-desc">Optional. The time of day of the first post. Empty: one interval after you save.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="time" class="form-control" id="sm-start-time" aria-describedby="sm-start-time-desc">
+                    </div>
+                </div>
+                <div class="cf-row cf-row--stack" data-pane="days" hidden>
+                    <div class="cf-row-text">
+                        <span class="cf-row-label" id="sm-days-label">Days</span>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="sm-days" role="group" aria-labelledby="sm-days-label" id="smDays">
+                            <label class="cf-choice"><input type="checkbox" value="1"> Monday</label>
+                            <label class="cf-choice"><input type="checkbox" value="2"> Tuesday</label>
+                            <label class="cf-choice"><input type="checkbox" value="3"> Wednesday</label>
+                            <label class="cf-choice"><input type="checkbox" value="4"> Thursday</label>
+                            <label class="cf-choice"><input type="checkbox" value="5"> Friday</label>
+                            <label class="cf-choice"><input type="checkbox" value="6"> Saturday</label>
+                            <label class="cf-choice"><input type="checkbox" value="0"> Sunday</label>
+                        </div>
+                    </div>
+                </div>
+                <div class="cf-row" data-pane="monthly" hidden>
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="sm-dom">Day of the month</label>
+                        <p class="cf-row-desc" id="sm-dom-desc">In a shorter month, a day past its end posts on its last day.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="number" class="form-control" id="sm-dom" min="1" max="31" value="1" aria-describedby="sm-dom-desc">
+                    </div>
+                </div>
+                <div class="cf-row" data-pane="days monthly" hidden>
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="sm-time">Time</label>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="time" class="form-control" id="sm-time" value="09:00">
+                    </div>
+                </div>
+                <div class="cf-row" data-pane="once" hidden>
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="sm-once-date">Date and time</label>
+                    </div>
+                    <div class="cf-row-control sm-inline">
+                        <input type="date" class="form-control" id="sm-once-date" aria-label="Date">
+                        <input type="time" class="form-control" id="sm-once-time" value="09:00" aria-label="Time">
+                    </div>
+                </div>
+            </div>
+
+            <div class="cf-rows">
+                <div class="cf-row" data-pane="interval days monthly">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="sm-end-date">End date</label>
+                        <p class="cf-row-desc" id="sm-end-date-desc">Optional. No posts after this day.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="date" class="form-control" id="sm-end-date" aria-describedby="sm-end-date-desc">
+                    </div>
+                </div>
+                <div class="cf-row" data-pane="interval days monthly">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="sm-max-runs">Stop after</label>
+                        <p class="cf-row-desc" id="sm-max-runs-desc">Optional. The number of posts, after which it turns itself off.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="cf-input-unit">
+                            <input type="number" class="form-control" id="sm-max-runs" min="1" max="10000" aria-describedby="sm-max-runs-desc">
+                            <span class="cf-unit">posts</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="sm-enabled">On</label>
+                        <p class="cf-row-desc" id="sm-enabled-desc">Off keeps the message here without posting it.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="checkbox" class="cf-switch" role="switch" id="sm-enabled" checked aria-describedby="sm-enabled-desc">
+                    </div>
+                </div>
+            </div>
+        </form>
+        <footer class="cf-modal-foot">
+            <span class="cf-foot-note" id="smNext"></span>
+            <button type="button" class="btn btn-secondary" id="smCancel">Cancel</button>
+            <button type="submit" class="btn btn-primary" form="smForm" id="smSave">Save</button>
+        </footer>
+    </div>
+</div>
+
+<script>
+(function () {
+    var page = document.getElementById('smPage');
+    if (!page) return;
+    var guildId = page.getAttribute('data-guild-id');
+    var api = '/api/guilds/' + encodeURIComponent(guildId) + '/scheduled-messages';
+    var $ = function (id) { return document.getElementById(id); };
+    var state = { posts: [], channels: [], roles: [], timezone: 'UTC', timezoneLabel: 'UTC', limits: { maxPosts: 50 } };
+    var editing = null;
+    var lastFocus = null;
+    var CONTENT_MAX = 1970;
+
+    function el(tag, props) {
+        var node = document.createElement(tag);
+        var kids = Array.prototype.slice.call(arguments, 2);
+        if (props) Object.keys(props).forEach(function (k) {
+            if (k === 'class') node.className = props[k];
+            else if (k === 'text') node.textContent = props[k];
+            else if (k.indexOf('on') === 0 && typeof props[k] === 'function') node.addEventListener(k.slice(2), props[k]);
+            else if (props[k] !== null && props[k] !== undefined && props[k] !== false) node.setAttribute(k, props[k] === true ? '' : props[k]);
+        });
+        kids.forEach(function (c) { if (c !== null && c !== undefined && c !== false) node.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
+        return node;
+    }
+    function toast(msg, type) { if (window.showToast) window.showToast(msg, type); }
+    async function call(url, options) {
+        var res = await fetch(url, Object.assign({ credentials: 'same-origin', headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' } }, options || {}));
+        var data = {};
+        try { data = await res.json(); } catch (e) { /* not JSON */ }
+        if (!res.ok) throw new Error(data.error || ('Request failed (' + res.status + ')'));
+        return data;
+    }
+
+    // Dates in the server's timezone (a legacy "UTC+2" zone is shown in UTC with its label).
+    function fmt(iso) {
+        if (!iso) return '';
+        var d = new Date(iso);
+        var opts = { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' };
+        try { return new Intl.DateTimeFormat('en-GB', Object.assign({ timeZone: state.timezone }, opts)).format(d); }
+        catch (e) { return new Intl.DateTimeFormat('en-GB', Object.assign({ timeZone: 'UTC' }, opts)).format(d) + ' UTC'; }
+    }
+    function channelName(id) {
+        var c = state.channels.find(function (x) { return x.id === id; });
+        return c ? '#' + c.name : null;
+    }
+
+    // Mentions in list snippets, as names.
+    function plainMentions(text) {
+        return String(text || '').replace(/<#(\d{15,25})>/g, function (m, id) { return channelName(id) || '#unknown-channel'; })
+            .replace(/<@&(\d{15,25})>/g, function (m, id) { var r = state.roles.find(function (x) { return x.id === id; }); return '@' + (r ? r.name : 'unknown-role'); })
+            .replace(/<@!?(\d{15,25})>/g, '@user');
+    }
+
+    // ── list ─────────────────────────────────────────────────────────────────────────────────
+    function stateBlock(kind, title, text, action) {
+        var box = el('div', { class: 'cf-state cf-state--' + kind });
+        box.appendChild(el('p', { class: 'cf-state-title', text: title }));
+        if (text) box.appendChild(el('p', { class: 'cf-state-text', text: text }));
+        if (action) box.appendChild(action);
+        return box;
+    }
+
+    function render() {
+        var list = $('smList');
+        $('smNew').disabled = state.posts.length >= state.limits.maxPosts;
+        $('smNew').title = $('smNew').disabled ? 'This server has the most scheduled messages it can have (' + state.limits.maxPosts + ').' : '';
+        $('smTotal').textContent = state.posts.length ? state.posts.length + ' of ' + state.limits.maxPosts : '';
+        $('smSearchBox').hidden = state.posts.length <= 15;
+        var q = $('smSearchBox').hidden ? '' : $('smSearch').value.trim().toLowerCase();
+        if (!state.posts.length) {
+            list.replaceChildren(stateBlock('empty', 'No scheduled messages', 'Create one to post a message on a schedule, such as a rules reminder every Monday.',
+                el('button', { type: 'button', class: 'btn btn-primary', onclick: function () { openEditor(null); } }, 'New message')));
+            return;
+        }
+        var tbody = el('tbody');
+        var shown = state.posts.filter(function (p) {
+            if (!q) return true;
+            var hay = [p.name, p.message_content, p.embed && p.embed.title, p.embed && p.embed.description, channelName(p.channel_id), p.summary].join(' ').toLowerCase();
+            return hay.indexOf(q) !== -1;
+        });
+        if (!shown.length) {
+            list.replaceChildren(stateBlock('empty', 'No messages match', 'Try other words.'));
+            return;
+        }
+        shown.forEach(function (p) {
+            var title = p.name || (p.message_content ? plainMentions(p.message_content.split('\n')[0]) : '') || (p.embed && p.embed.title) || 'Embed';
+            var snippet = p.name ? plainMentions(p.message_content || (p.embed && (p.embed.title || p.embed.description)) || '') : '';
+            var msgCell = el('td', { 'data-label': 'Message' },
+                el('span', { class: 'sm-msg-title', text: title.length > 80 ? title.slice(0, 79) + '…' : title }),
+                snippet ? el('span', { class: 'sm-msg-snippet', text: snippet.length > 120 ? snippet.slice(0, 119) + '…' : snippet }) : null,
+                p.last_error ? el('div', { class: 'sm-error-line' }, el('span', { class: 'cf-pill is-bad', title: p.last_error, text: 'Last post failed: ' + p.last_error })) : null);
+            var chName = channelName(p.channel_id);
+            var chCell = el('td', { 'data-label': 'Channel' }, chName ? el('span', { text: chName }) : el('span', { class: 'cf-pill is-bad', text: 'Channel deleted' }));
+            var schedCell = el('td', { 'data-label': 'Schedule', text: p.summary + (p.end_at ? ', until ' + fmt(p.end_at).replace(/,? \d\d:\d\d.*$/, '') : '') });
+            var nextCell = el('td', { 'data-label': 'Next post' }, p.enabled && p.next_run ? el('span', { class: 'sm-when', text: fmt(p.next_run) }) : el('span', { class: 'cf-pill', text: 'Off' }));
+            var postsCell = el('td', { 'data-label': 'Posted', text: p.run_count + (p.max_runs ? ' of ' + p.max_runs : '') });
+            var sw = el('input', { type: 'checkbox', class: 'cf-switch', role: 'switch', 'aria-label': 'On: ' + title });
+            sw.checked = !!p.enabled;
+            sw.addEventListener('change', function () { toggle(p, sw); });
+            var onCell = el('td', { 'data-label': 'On' }, sw);
+            var actions = el('td', { class: 'cf-cell-end' }, el('div', { class: 'sm-actions' },
+                el('button', { type: 'button', class: 'btn btn-sm btn-secondary', onclick: function () { openEditor(p); } }, 'Edit'),
+                el('button', { type: 'button', class: 'btn btn-sm btn-secondary', onclick: function (e) { sendNow(p, e.currentTarget); } }, 'Send now'),
+                el('button', { type: 'button', class: 'btn btn-sm btn-danger', onclick: function () { remove(p); } }, 'Delete')));
+            tbody.appendChild(el('tr', null, msgCell, chCell, schedCell, nextCell, postsCell, onCell, actions));
+        });
+        var head = el('thead', null, el('tr', null,
+            el('th', { scope: 'col', text: 'Message' }), el('th', { scope: 'col', text: 'Channel' }), el('th', { scope: 'col', text: 'Schedule' }),
+            el('th', { scope: 'col', text: 'Next post' }), el('th', { scope: 'col', text: 'Posted' }), el('th', { scope: 'col', text: 'On' }),
+            el('th', { scope: 'col' }, el('span', { class: 'visually-hidden', text: 'Actions' }))));
+        list.replaceChildren(el('div', { class: 'cf-table-wrap' }, el('table', { class: 'cf-table cf-table--stack' }, head, tbody)));
+    }
+
+    async function load() {
+        try {
+            var data = await call(api);
+            state = Object.assign(state, data);
+            var tzText = 'Times are in the server\u2019s timezone, ' + state.timezone + (state.timezoneLabel && state.timezoneLabel !== state.timezone ? ' (' + state.timezoneLabel + ')' : '') + '. ';
+            var link = el('a', { href: '/manage/' + encodeURIComponent(guildId) + '?page=core', text: 'Change it in Core settings' });
+            $('sm-tz-desc').replaceChildren(tzText, link, '.');
+            $('sm-mode-desc').textContent = 'Times are in the server\u2019s timezone, ' + state.timezone + '.';
+            render();
+        } catch (err) {
+            $('smList').replaceChildren(stateBlock('error', 'Could not load scheduled messages', err.message,
+                el('button', { type: 'button', class: 'btn btn-secondary', onclick: load }, 'Try again')));
+        }
+    }
+
+    async function toggle(p, sw) {
+        sw.disabled = true;
+        try {
+            var data = await call(api + '/' + p.id, { method: 'PUT', body: JSON.stringify({ enabled: sw.checked }) });
+            Object.assign(p, data.post);
+            toast(data.message || 'Saved', 'success');
+        } catch (err) {
+            sw.checked = !sw.checked;
+            toast(err.message, 'error');
+        }
+        sw.disabled = false;
+        render();
+    }
+
+    async function sendNow(p, btn) {
+        btn.disabled = true;
+        try {
+            await call(api + '/' + p.id + '/send', { method: 'POST' });
+            toast('Posted to ' + (channelName(p.channel_id) || 'the channel'), 'success');
+            p.last_error = null;
+        } catch (err) {
+            toast(err.message, 'error');
+            await load();
+        }
+        btn.disabled = false;
+        render();
+    }
+
+    async function remove(p) {
+        if (!confirm('Delete this scheduled message? Messages it already posted stay in Discord.')) return;
+        try {
+            await call(api + '/' + p.id, { method: 'DELETE' });
+            state.posts = state.posts.filter(function (x) { return x.id !== p.id; });
+            toast('Deleted', 'success');
+            render();
+        } catch (err) { toast(err.message, 'error'); }
+    }
+
+    // ── editor ───────────────────────────────────────────────────────────────────────────────
+    var EMBED_KEYS = ['title', 'url', 'description', 'author_name', 'author_icon_url', 'thumbnail_url', 'image_url', 'footer_text'];
+    var mode = 'interval';
+
+    function fillSelect(select, items, value, empty) {
+        select.replaceChildren();
+        if (empty) select.appendChild(el('option', { value: '' }, empty));
+        items.forEach(function (it) { select.appendChild(el('option', { value: it.value }, it.label)); });
+        select.value = value || '';
+        if (select.value !== (value || '')) select.value = '';
+    }
+
+    function setMode(m) {
+        mode = m;
+        Array.prototype.forEach.call($('smModes').querySelectorAll('button'), function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-mode') === m)); });
+        Array.prototype.forEach.call(document.querySelectorAll('#smForm [data-pane]'), function (row) {
+            row.hidden = row.getAttribute('data-pane').split(' ').indexOf(m) === -1;
+        });
+    }
+
+
+    function embedValues() {
+        var out = { color: $('sm-embed-color').value };
+        EMBED_KEYS.forEach(function (k) { out[k] = $('sm-embed-' + k).value; });
+        return out;
+    }
+
+    // Text with Discord mentions shown as names: <#channel>, <@&role>, <@user>, @everyone, @here.
+    var MENTION = /<#(\d{15,25})>|<@&(\d{15,25})>|<@!?(\d{15,25})>|@(everyone|here)\b/g;
+    function withMentions(text) {
+        var frag = document.createDocumentFragment();
+        var at = 0;
+        Array.from(text.matchAll(MENTION)).forEach(function (m) {
+            if (m.index > at) frag.appendChild(document.createTextNode(text.slice(at, m.index)));
+            var label;
+            if (m[1]) label = channelName(m[1]) || '#unknown-channel';
+            else if (m[2]) { var r = state.roles.find(function (x) { return x.id === m[2]; }); label = '@' + (r ? r.name : 'unknown-role'); }
+            else if (m[3]) label = '@user';
+            else label = '@' + m[4];
+            frag.appendChild(el('span', { class: 'sm-mention', text: label }));
+            at = m.index + m[0].length;
+        });
+        if (at < text.length) frag.appendChild(document.createTextNode(text.slice(at)));
+        return frag;
+    }
+    function img(url, cls, alt) {
+        if (!/^https?:\/\//i.test(url || '')) return null;
+        var i = el('img', { class: cls, src: url, alt: alt || '', referrerpolicy: 'no-referrer', loading: 'lazy' });
+        i.addEventListener('error', function () { i.hidden = true; });
+        return i;
+    }
+
+    // The whole post as Discord shows it: the ping and text, then the embed.
+    function updatePreview() {
+        var text = $('sm-content').value;
+        var ping = $('sm-ping').value;
+        var line = $('smMsgText');
+        line.replaceChildren();
+        if (ping) {
+            var pr = ping === 'everyone' ? null : state.roles.find(function (x) { return x.id === ping; });
+            line.appendChild(el('span', { class: 'sm-mention', text: ping === 'everyone' ? '@everyone' : '@' + (pr ? pr.name : 'role') }));
+            if (text.trim()) line.appendChild(document.createTextNode(' '));
+        }
+        if (text.trim()) line.appendChild(withMentions(text));
+
+        var box = $('smPreview');
+        var on = $('sm-embed-on').checked;
+        box.hidden = !on;
+        if (!line.childNodes.length && !on) {
+            line.appendChild(el('span', { class: 'sm-preview-empty', text: 'Write a message or add an embed to see it here.' }));
+        }
+        if (!on) return;
+        var v = embedValues();
+        box.style.borderLeftColor = v.color || '#5865f2';
+        var main = el('div', { class: 'sm-preview-main' });
+        if (v.author_name.trim()) main.appendChild(el('div', { class: 'sm-preview-author' }, img(v.author_icon_url, '', ''), el('span', { text: v.author_name })));
+        if (v.title.trim()) {
+            var t = el('div', { class: 'sm-preview-title' });
+            if (/^https?:\/\//i.test(v.url)) t.appendChild(el('a', { href: v.url, target: '_blank', rel: 'noopener', text: v.title }));
+            else t.textContent = v.title;
+            main.appendChild(t);
+        }
+        if (v.description.trim()) { var d = el('div', { class: 'sm-preview-desc' }); d.appendChild(withMentions(v.description)); main.appendChild(d); }
+        var image = img(v.image_url, 'sm-preview-image', 'Embed image');
+        if (image) main.appendChild(image);
+        if (v.footer_text.trim()) main.appendChild(el('div', { class: 'sm-preview-foot', text: v.footer_text }));
+        if (!main.childNodes.length) main.appendChild(el('div', { class: 'sm-preview-empty', text: 'Fill in a title or description to see the embed.' }));
+        box.replaceChildren(el('div', { class: 'sm-preview-body' }, main, img(v.thumbnail_url, 'sm-preview-thumb', 'Thumbnail')));
+    }
+
+    function showError(msg) {
+        var box = $('smError');
+        box.textContent = msg || '';
+        box.hidden = !msg;
+        if (msg) box.scrollIntoView({ block: 'nearest' });
+    }
+
+    function openEditor(p) {
+        editing = p;
+        lastFocus = document.activeElement;
+        showError('');
+        $('smModalTitle').textContent = p ? 'Edit scheduled message' : 'New scheduled message';
+        fillSelect($('sm-channel'), state.channels.map(function (c) { return { value: c.id, label: '#' + c.name }; }), p ? p.channel_id : '', 'Choose a channel');
+        var pings = [{ value: 'everyone', label: '@everyone' }].concat(state.roles.map(function (r) { return { value: r.id, label: '@' + r.name }; }));
+        fillSelect($('sm-ping'), pings, p ? p.ping_role_id : '', 'No ping');
+        $('sm-name').value = p && p.name ? p.name : '';
+        $('sm-content').value = p ? p.message_content : '';
+        var e = p && p.embed;
+        $('sm-embed-on').checked = !!e;
+        $('smEmbedRow').hidden = !e;
+        $('sm-embed-color').value = (e && e.color) || '#5865f2';
+        EMBED_KEYS.forEach(function (k) { $('sm-embed-' + k).value = (e && e[k]) || ''; });
+        var s = (p && p.schedule) || { mode: 'interval', interval_value: 1, interval_unit: 'days', start_time: '', days: [1], time: '09:00', day_of_month: 1, once_date: '', once_time: '09:00' };
+        $('sm-interval-value').value = s.interval_value || 1;
+        $('sm-interval-unit').value = s.interval_unit || 'days';
+        $('sm-start-time').value = s.start_time || '';
+        Array.prototype.forEach.call($('smDays').querySelectorAll('input'), function (cb) { cb.checked = (s.days || []).indexOf(Number(cb.value)) !== -1; });
+        $('sm-time').value = s.time || '09:00';
+        $('sm-dom').value = s.day_of_month || 1;
+        $('sm-once-date').value = s.once_date || '';
+        $('sm-once-time').value = s.once_time || '09:00';
+        $('sm-end-date').value = p && p.end_date ? p.end_date : '';
+        $('sm-max-runs').value = p && p.max_runs ? p.max_runs : '';
+        $('sm-enabled').checked = p ? !!p.enabled : true;
+        $('smNext').textContent = p && p.enabled && p.next_run ? 'Next post: ' + fmt(p.next_run) : '';
+        setMode(s.mode || 'interval');
+        // Values set by script: let the field kit's character counters catch up.
+        ['sm-name', 'sm-content'].concat(EMBED_KEYS.map(function (k) { return 'sm-embed-' + k; })).forEach(function (id) {
+            $(id).dispatchEvent(new Event('change'));
+        });
+        updatePreview();
+        $('smModal').hidden = false;
+        $('sm-name').focus();
+    }
+
+    function closeEditor() {
+        $('smModal').hidden = true;
+        editing = null;
+        if (lastFocus && lastFocus.focus) lastFocus.focus();
+    }
+
+    function collect() {
+        var days = Array.prototype.filter.call($('smDays').querySelectorAll('input'), function (cb) { return cb.checked; }).map(function (cb) { return Number(cb.value); });
+        return {
+            name: $('sm-name').value,
+            channel_id: $('sm-channel').value,
+            ping_role_id: $('sm-ping').value,
+            message_content: $('sm-content').value,
+            embed: $('sm-embed-on').checked ? embedValues() : null,
+            schedule: {
+                mode: mode,
+                interval_value: $('sm-interval-value').value,
+                interval_unit: $('sm-interval-unit').value,
+                start_time: $('sm-start-time').value,
+                days: days,
+                time: $('sm-time').value,
+                day_of_month: $('sm-dom').value,
+                once_date: $('sm-once-date').value,
+                once_time: $('sm-once-time').value,
+            },
+            end_date: mode === 'once' ? '' : $('sm-end-date').value,
+            max_runs: mode === 'once' ? '' : $('sm-max-runs').value,
+            enabled: $('sm-enabled').checked,
+        };
+    }
+
+    async function save(ev) {
+        ev.preventDefault();
+        var body = collect();
+        if (!body.channel_id) return showError('Choose a channel.');
+        if (!body.message_content.trim() && !body.embed) return showError('Write a message, an embed, or both.');
+        if (body.message_content.length > CONTENT_MAX) return showError('The message is too long.');
+        var btn = $('smSave');
+        btn.disabled = true;
+        try {
+            var data = await call(editing ? api + '/' + editing.id : api, { method: editing ? 'PUT' : 'POST', body: JSON.stringify(body) });
+            toast(data.message || 'Saved', 'success');
+            closeEditor();
+            await load();
+        } catch (err) {
+            showError(err.message);
+        }
+        btn.disabled = false;
+    }
+
+    $('smNew').addEventListener('click', function () { openEditor(null); });
+    $('smClose').addEventListener('click', closeEditor);
+    $('smCancel').addEventListener('click', closeEditor);
+    $('smModal').addEventListener('click', function (e) { if (e.target === $('smModal')) closeEditor(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !$('smModal').hidden) closeEditor(); });
+    $('smForm').addEventListener('submit', save);
+    $('sm-content').addEventListener('input', updatePreview);
+    $('sm-ping').addEventListener('change', updatePreview);
+    $('smSearch').addEventListener('input', render);
+    $('sm-embed-on').addEventListener('change', function () { $('smEmbedRow').hidden = !this.checked; updatePreview(); });
+    ['color'].concat(EMBED_KEYS).forEach(function (k) { $('sm-embed-' + k).addEventListener('input', updatePreview); });
+    Array.prototype.forEach.call($('smModes').querySelectorAll('button'), function (b) {
+        b.addEventListener('click', function () { setMode(b.getAttribute('data-mode')); });
+    });
+
+    load();
+})();
+</script>

@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>" lang="en">
+<head>
+<%- include('partials/site-head', { title: 'AI mod queue — ' + (broadcasterLogin) + ' | CertiFried', noindex: true }) %>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="/css/cf-settings.css">
+    <link rel="stylesheet" href="/css/cf-analytics.css">
+    <style>
+        .mq-msg { margin: 8px 0 0; padding: 8px 10px; border-radius: var(--cf-radius); background: var(--cf-inset); border: 1px solid var(--cf-border);
+            font-family: var(--cf-mono); font-size: var(--cf-text-sm); color: var(--cf-text); overflow-wrap: anywhere; white-space: pre-wrap; }
+        .mq-actions { display: flex; flex-wrap: wrap; gap: var(--cf-2); margin-top: var(--cf-3); }
+        .mq-actions form { margin: 0; }
+        .mq-head { display: flex; align-items: center; gap: var(--cf-2); flex-wrap: wrap; }
+        .mq-head strong { font-size: var(--cf-text-md); color: var(--cf-text); }
+    </style>
+</head>
+<%
+    const sevTone = { critical: 'is-bad', high: 'is-bad', medium: 'is-warn', low: 'is-muted' };
+    const counts = queue.reduce((c, q) => { c[q.severity] = (c[q.severity] || 0) + 1; return c; }, {});
+    const res = locals.result || null;
+    const opLabel = { dismissed: 'Dismissed', timeout_600: 'Timed out for 10 minutes', ban: 'Banned', handled: 'Marked as handled' };
+%>
+<body class="cf-an-body">
+<%- include('partials/site-header') %>
+<main id="main-content" class="cf-an-page is-narrow" tabindex="-1">
+    <a href="/manage/<%= guildId %>?page=streamers&tab=analytics" class="cf-an-crumb"><i class="fas fa-arrow-left" aria-hidden="true"></i> Back to <%= guildName %></a>
+    <header class="cf-an-head">
+        <span class="cf-an-head-icon" aria-hidden="true"><i class="fas fa-shield-halved"></i></span>
+        <div class="cf-an-head-text">
+            <h1 class="cf-an-title">AI mod queue</h1>
+            <p class="cf-an-sub">Chat messages in <%= broadcasterLogin %>'s channel the AI flagged. Nothing happens to anyone until you choose.</p>
+        </div>
+    </header>
+<%- include('partials/analytics/twitch-nav', { active: 'mod-queue' }) %>
+
+    <% if (res && res.op) { %>
+    <div class="cf-notice <%= res.ok ? 'is-ok' : 'is-bad' %>" role="status">
+        <i class="fas <%= res.ok ? 'fa-circle-check' : 'fa-circle-exclamation' %>" aria-hidden="true"></i>
+        <div class="cf-notice-body"><% if (res.ok) { %><%= opLabel[res.op] || 'Done' %>.<% } else { %>That did not work. <%= res.op === 'timeout_600' || res.op === 'ban' ? 'Timeouts and bans need write permission for the channel; grant it from the analytics overview.' : 'The message may already have been reviewed.' %><% } %></div>
+    </div>
+    <% } %>
+
+    <% if (!queue.length) { %>
+    <div class="cf-rows"><div class="cf-state">
+        <p class="cf-state-title">Nothing to review</p>
+        <p class="cf-state-text">Flagged messages appear here while "AI chat moderator" is on in the analytics alert settings.</p>
+        <a class="btn btn-secondary btn-sm" href="/manage/<%= guildId %>/twitch-analytics#tab=admin">Alert settings</a>
+    </div></div>
+    <% } else { %>
+    <dl class="cf-kpis">
+        <div class="cf-kpi"><dt>Waiting</dt><dd><%= queue.length %></dd></div>
+        <div class="cf-kpi"><dt>Critical or high</dt><dd><%= (counts.critical || 0) + (counts.high || 0) %></dd></div>
+        <div class="cf-kpi"><dt>Medium</dt><dd><%= counts.medium || 0 %></dd></div>
+        <div class="cf-kpi"><dt>Low</dt><dd><%= counts.low || 0 %></dd></div>
+    </dl>
+    <h2 class="cf-an-section-title">Flagged messages <span class="cf-an-count"><%= queue.length %></span></h2>
+    <div class="cf-rows">
+        <div class="cf-list">
+        <% queue.forEach(q => { %>
+            <div class="cf-list-item" style="display: block;">
+                <div class="mq-head">
+                    <strong><%= q.chatter_user_login %></strong>
+                    <span class="cf-status <%= sevTone[q.severity] || 'is-muted' %>"><%= q.severity %></span>
+                    <% if (q.category) { %><span class="cf-an-muted" style="font-size: var(--cf-text-xs);"><%= q.category %></span><% } %>
+                    <% if (q.confidence) { %><span class="cf-an-muted" style="font-size: var(--cf-text-xs);"><%= (Number(q.confidence) * 100).toFixed(0) %>% sure</span><% } %>
+                    <span class="cf-an-muted cf-an-mono" style="margin-left: auto;"><%= new Date(q.created_at).toISOString().slice(0, 16).replace('T', ' ') %> UTC</span>
+                </div>
+                <div class="mq-msg"><%= q.message_text %></div>
+                <% if (q.reason) { %><p class="cf-an-muted" style="margin: 6px 0 0; font-size: var(--cf-text-sm);">Why it was flagged: <%= q.reason %></p><% } %>
+                <div class="mq-actions">
+                    <form method="POST" action="/manage/<%= guildId %>/twitch-analytics/mod-queue/<%= q.id %>/dismissed"><button type="submit" class="btn btn-secondary btn-sm">Dismiss</button></form>
+                    <form method="POST" action="/manage/<%= guildId %>/twitch-analytics/mod-queue/<%= q.id %>/actioned"><input type="hidden" name="action" value="handled"><button type="submit" class="btn btn-secondary btn-sm">Mark as handled</button></form>
+                    <form method="POST" action="/manage/<%= guildId %>/twitch-analytics/mod-queue/<%= q.id %>/actioned"><input type="hidden" name="action" value="timeout_600"><button type="submit" class="btn btn-secondary btn-sm">Time out 10 minutes</button></form>
+                    <form method="POST" action="/manage/<%= guildId %>/twitch-analytics/mod-queue/<%= q.id %>/actioned" onsubmit="return confirm('Ban <%= q.chatter_user_login %> from the channel? This is permanent until you unban them.');"><input type="hidden" name="action" value="ban"><button type="submit" class="btn btn-danger btn-sm">Ban</button></form>
+                </div>
+            </div>
+        <% }) %>
+        </div>
+    </div>
+    <p class="cf-an-foot">Timeouts and bans are sent to Twitch with the channel's write permission and recorded in the action log. Showing up to 100 messages, most severe first.</p>
+    <% } %>
+</main>
+<%- include('partials/site-footer') %>
+</body>
+</html>

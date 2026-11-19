@@ -1,0 +1,864 @@
+/*
+ * cf-ui.css — the CertiFried dashboard design system.
+ *
+ * Loaded LAST in <head> on every dashboard page (after Bootstrap, after each
+ * view's inline <style>, after themes.css), so it is the final word on tokens
+ * and on the shared components that most pages draw: buttons, form controls,
+ * tables, modals, alerts, badges, tabs and the site header.
+ *
+ * ## Tokens
+ *
+ * `--cf-*` are the real tokens. The older vocabularies the views already read
+ * (`--bg-primary`, `--text-muted`, `--accent-purple`, `--color-dark-400`,
+ * `--spacing-4`, …) are re-pointed at them, so a view that was written against
+ * the old names picks up the new palette without being edited.
+ *
+ * Dark is the default. The dark block matches both "no data-theme" (logged-out
+ * pages) and data-theme="dark"; at (0,2,0) it outranks every view's bare
+ * `:root` (0,1,0), the same mechanism themes.css documents. Light is redefined
+ * here too. The other named themes (slate, midnight, plum…) keep their colours
+ * from themes.css and only take the component styles below.
+ *
+ * `--accent-purple` is a legacy name: it is the accent slot several hundred
+ * view rules read, and it now carries the brand green from the logo. There is
+ * one accent. Status colours (success/warning/danger/info) are separate and
+ * only used for status.
+ *
+ * ## Bootstrap
+ *
+ * Bootstrap 5.3 stays loaded where it was (its modal/collapse JS is in use and
+ * dozens of partials rely on its grid). Its components are re-skinned through
+ * its own `--bs-*` custom properties wherever it exposes them, and by plain
+ * rules where it does not.
+ */
+
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap');
+
+/* Base size: pages size their text in rem, so this scales all of it
+   together (16px to 17px). */
+html { font-size: 106.25%; }
+
+/* ==========================================================================
+   Tokens
+   ========================================================================== */
+:root {
+    --cf-font: 'Geist', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --cf-mono: 'Geist Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+
+    /* type scale (px-based on a 16px root) */
+    --cf-text-xs: 0.8125rem;   /* 13 */
+    --cf-text-sm: 0.875rem;    /* 14 */
+    --cf-text-md: 0.9375rem;   /* 15 — body copy in the app */
+    --cf-text-lg: 1.0625rem;   /* 17 */
+    --cf-text-xl: 1.3125rem;   /* 21 */
+    --cf-text-2xl: 1.625rem;   /* 26 */
+
+    /* 4px grid */
+    --cf-1: 4px; --cf-2: 8px; --cf-3: 12px; --cf-4: 16px; --cf-5: 20px;
+    --cf-6: 24px; --cf-8: 32px; --cf-10: 40px; --cf-12: 48px;
+
+    --cf-radius-sm: 4px;
+    --cf-radius: 6px;
+    --cf-radius-lg: 8px;
+
+    --cf-ease: cubic-bezier(0.2, 0, 0, 1);
+    --cf-fast: 120ms;
+    --cf-base: 180ms;
+
+    --cf-header-h: 56px;
+
+    /* legacy scale names, re-pointed */
+    --spacing-1: 4px; --spacing-2: 8px; --spacing-3: 12px; --spacing-4: 16px; --spacing-5: 20px;
+    --spacing-6: 24px; --spacing-8: 32px; --spacing-10: 40px; --spacing-12: 48px;
+    --font-size-xs: 0.8125rem; --font-size-sm: 0.875rem; --font-size-base: 0.9375rem;
+    --font-size-lg: 1.0625rem; --font-size-xl: 1.1875rem; --font-size-2xl: 1.5rem;
+    --radius-sm: 4px; --radius-md: 6px; --radius-lg: 8px; --radius-xl: 10px;
+    --transition-base: 150ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* Dark — the default */
+/* :where() keeps this at the specificity of :root alone, so every named theme
+   below (and a Custom theme) overrides it. */
+:root:where(:not([data-theme="light"]):not([data-theme="sand"])) {
+    color-scheme: dark;
+
+    --cf-bg: #0e0f11;
+    --cf-surface: #151619;
+    --cf-surface-2: #1b1d21;
+    --cf-surface-3: #23262b;
+    --cf-inset: #0b0c0e;
+    --cf-border: #25272c;
+    --cf-border-strong: #3a3d44;
+    --cf-text: #ececef;
+    --cf-text-2: #a7a9b1;
+    --cf-text-3: #8a8c95;     /* 5.6:1 on --cf-bg */
+    --cf-accent: #b4e04f;     /* logo green */
+    --cf-accent-hover: #c5ea6e;
+    --cf-accent-fg: #b4e04f;  /* accent used as text/icon */
+    --cf-on-accent: #0f1409;
+    --cf-accent-soft: rgba(180, 224, 79, 0.12);
+    --cf-accent-line: rgba(180, 224, 79, 0.45);
+    --cf-success: #4fbf86;
+    --cf-warning: #e2a63f;
+    --cf-danger: #ef6a6a;
+    --cf-info: #6aa8f0;
+    --cf-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --cf-shadow-pop: 0 8px 24px rgba(0, 0, 0, 0.45), 0 0 0 1px var(--cf-border);
+    --cf-select-arrow: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23a7a9b1' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.6' d='m4 6 4 4 4-4'/%3e%3c/svg%3e");
+    --cf-check: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3e%3cpath fill='none' stroke='%230f1409' stroke-linecap='round' stroke-linejoin='round' stroke-width='3' d='m6 10 3 3 6-6'/%3e%3c/svg%3e");
+    --cf-knob-on: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='%230f1409'/%3e%3c/svg%3e");
+    --cf-knob-off: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='%238a8c95'/%3e%3c/svg%3e");
+}
+
+/* Light */
+:root[data-theme="light"],
+:root[data-theme="sand"] {
+    color-scheme: light;
+
+    --cf-bg: #f6f7f8;
+    --cf-surface: #ffffff;
+    --cf-surface-2: #f3f4f6;
+    --cf-surface-3: #e9ebee;
+    --cf-inset: #ffffff;
+    --cf-border: #e1e3e7;
+    --cf-border-strong: #c3c7ce;
+    --cf-text: #16181c;
+    --cf-text-2: #4a4f58;
+    --cf-text-3: #5f646e;     /* 5.9:1 on white */
+    --cf-accent: #4a7a10;
+    --cf-accent-hover: #3d6609;
+    --cf-accent-fg: #3f6a0c;
+    --cf-on-accent: #ffffff;
+    --cf-accent-soft: rgba(74, 122, 16, 0.10);
+    --cf-accent-line: rgba(74, 122, 16, 0.45);
+    --cf-success: #1d7f4e;
+    --cf-warning: #9a6200;
+    --cf-danger: #c53030;
+    --cf-info: #1f62b8;
+    --cf-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+    --cf-shadow-pop: 0 8px 24px rgba(16, 24, 40, 0.12), 0 0 0 1px var(--cf-border);
+    --cf-select-arrow: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%234a4f58' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.6' d='m4 6 4 4 4-4'/%3e%3c/svg%3e");
+    --cf-check: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3e%3cpath fill='none' stroke='%23fff' stroke-linecap='round' stroke-linejoin='round' stroke-width='3' d='m6 10 3 3 6-6'/%3e%3c/svg%3e");
+    --cf-knob-on: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='%23fff'/%3e%3c/svg%3e");
+    --cf-knob-off: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='%235f646e'/%3e%3c/svg%3e");
+}
+
+/* Named themes (themes.css) keep their own background tint; everything else
+   (accent, status colours, component styles) comes from the dark or light
+   tokens above. */
+:root[data-theme="amoled"] { --cf-bg: #000000; --cf-surface: #0b0b0c; --cf-surface-2: #121214; --cf-surface-3: #1a1a1d; --cf-inset: #000000; --cf-border: #202023; --cf-border-strong: #34343a; --cf-text: #f2f2f2; }
+:root[data-theme="contrast"] { --cf-bg: #000000; --cf-surface: #0a0a0a; --cf-surface-2: #141414; --cf-surface-3: #1e1e1e; --cf-inset: #000000; --cf-border: #8a8a8a; --cf-border-strong: #ffffff; --cf-text: #ffffff; }
+:root[data-theme="midnight"] { --cf-bg: #070b14; --cf-surface: #0c1220; --cf-surface-2: #131b2d; --cf-surface-3: #1a2438; --cf-inset: #060910; --cf-border: #1c2740; --cf-border-strong: #2c3a58; --cf-text: #e8eefc; }
+:root[data-theme="slate"] { --cf-bg: #11151a; --cf-surface: #171d24; --cf-surface-2: #1e262f; --cf-surface-3: #26303b; --cf-inset: #0d1014; --cf-border: #263039; --cf-border-strong: #364350; --cf-text: #e6ebf0; }
+:root[data-theme="forest"] { --cf-bg: #0b1210; --cf-surface: #101a16; --cf-surface-2: #16241f; --cf-surface-3: #1d2e28; --cf-inset: #08100d; --cf-border: #1e2e28; --cf-border-strong: #2e4339; --cf-text: #e4f2eb; }
+:root[data-theme="ember"] { --cf-bg: #140f0c; --cf-surface: #1c1512; --cf-surface-2: #261c17; --cf-surface-3: #30241d; --cf-inset: #100b09; --cf-border: #30241d; --cf-border-strong: #44342a; --cf-text: #f5e9e1; }
+:root[data-theme="plum"] { --cf-bg: #120d18; --cf-surface: #1a1223; --cf-surface-2: #231830; --cf-surface-3: #2c1f3c; --cf-inset: #0e0a13; --cf-border: #2c2039; --cf-border-strong: #3f2e52; --cf-text: #efe7f7; }
+:root[data-theme="ocean"] { --cf-bg: #06131a; --cf-surface: #0a1c26; --cf-surface-2: #0f2733; --cf-surface-3: #143241; --cf-inset: #041016; --cf-border: #143040; --cf-border-strong: #20465a; --cf-text: #e2f2f8; }
+:root[data-theme="sand"] { --cf-bg: #faf6ef; --cf-surface: #fffdf9; --cf-surface-2: #f2ece1; --cf-surface-3: #e9e1d3; --cf-inset: #fffdf9; --cf-border: #e4dac9; --cf-border-strong: #cbbfa9; --cf-text: #241d14; }
+:root[data-theme="contrast"] { --cf-text-2: #e6e6e6; --cf-text-3: #cfcfcf; }
+/* Each named theme has its own accent (buttons, links, focus, the active
+   state). Dark and Light keep the brand green. */
+:root[data-theme="amoled"] { --cf-accent: #b79dff; --cf-accent-fg: #b79dff; --bs-link-color-rgb: 183, 157, 255; }
+:root[data-theme="contrast"] { --cf-accent: #ffd76b; --cf-accent-fg: #ffd76b; --bs-link-color-rgb: 255, 215, 107; }
+:root[data-theme="midnight"] { --cf-accent: #8ba6ff; --cf-accent-fg: #8ba6ff; --bs-link-color-rgb: 139, 166, 255; }
+:root[data-theme="slate"] { --cf-accent: #7dd3fc; --cf-accent-fg: #7dd3fc; --bs-link-color-rgb: 125, 211, 252; }
+:root[data-theme="forest"] { --cf-accent: #5eead4; --cf-accent-fg: #5eead4; --bs-link-color-rgb: 94, 234, 212; }
+:root[data-theme="ember"] { --cf-accent: #ffab70; --cf-accent-fg: #ffab70; --bs-link-color-rgb: 255, 171, 112; }
+:root[data-theme="plum"] { --cf-accent: #c4a5ff; --cf-accent-fg: #c4a5ff; --bs-link-color-rgb: 196, 165, 255; }
+:root[data-theme="ocean"] { --cf-accent: #5ec8e8; --cf-accent-fg: #5ec8e8; --bs-link-color-rgb: 94, 200, 232; }
+:root[data-theme="sand"] { --cf-accent: #8a5a20; --cf-accent-fg: #8a5a20; --bs-link-color-rgb: 138, 90, 32; }
+:root[data-theme="amoled"], :root[data-theme="contrast"], :root[data-theme="midnight"], :root[data-theme="slate"], :root[data-theme="forest"], :root[data-theme="ember"], :root[data-theme="plum"], :root[data-theme="ocean"], :root[data-theme="sand"] {
+    --cf-accent-hover: color-mix(in srgb, var(--cf-accent) 82%, #fff);
+    --cf-accent-soft: color-mix(in srgb, var(--cf-accent) 14%, transparent);
+    --cf-accent-line: color-mix(in srgb, var(--cf-accent) 45%, transparent);
+}
+:root[data-theme="sand"] { --cf-on-accent: #ffffff; --cf-accent-hover: color-mix(in srgb, var(--cf-accent) 85%, #000); }
+:root[data-theme="sand"] { --cf-text-2: #574b3b; --cf-text-3: #6e604c; }
+/* Sand is warm throughout: shadows, the select arrow and the switch knob take its browns, not Light's greys. */
+:root[data-theme="sand"] {
+    --cf-shadow: 0 1px 2px rgba(60, 45, 25, 0.08);
+    --cf-shadow-pop: 0 8px 24px rgba(60, 45, 25, 0.14), 0 0 0 1px var(--cf-border);
+    --cf-select-arrow: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23574b3b' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.6' d='m4 6 4 4 4-4'/%3e%3c/svg%3e");
+    --cf-knob-off: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='%236e604c'/%3e%3c/svg%3e");
+}
+
+/* Site styles (<html data-style>, core/user-preferences.js STYLES). The colour
+   theme sets the surfaces; the style sets shape and, for Classic, the accent.
+   Every style combines with every theme. Component rules for the manage page
+   are in cf-manage.css.
+     cards    (default, and when the attribute is missing) rounder panels
+     compact  the tokens above unchanged
+     classic  the original purple accent, rounder still; not over a Custom
+              theme, whose own accent wins */
+:root:not([data-style="compact"]) { --cf-radius: 7px; --cf-radius-lg: 12px; }
+:root[data-style="classic"] { --cf-radius-sm: 6px; --cf-radius: 9px; --cf-radius-lg: 14px; }
+:root[data-style="classic"]:not([data-theme="light"]):not([data-theme="sand"]):not([data-theme="custom"]) {
+    --cf-accent: #8b5cf6;
+    --cf-accent-hover: #9d74f8;
+    --cf-accent-fg: #a78bfa;
+    --cf-on-accent: #ffffff;
+    --cf-accent-soft: rgba(139, 92, 246, 0.16);
+    --cf-accent-line: rgba(167, 139, 250, 0.5);
+    --bs-link-color-rgb: 167, 139, 250;
+    --cf-check: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3e%3cpath fill='none' stroke='%23fff' stroke-linecap='round' stroke-linejoin='round' stroke-width='3' d='m6 10 3 3 6-6'/%3e%3c/svg%3e");
+    --cf-knob-on: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='-4 -4 8 8'%3e%3ccircle r='3' fill='%23fff'/%3e%3c/svg%3e");
+}
+:root[data-style="classic"][data-theme="light"],
+:root[data-style="classic"][data-theme="sand"] {
+    --cf-accent: #6d28d9;
+    --cf-accent-hover: #5b21b6;
+    --cf-accent-fg: #6d28d9;
+    --cf-on-accent: #ffffff;
+    --cf-accent-soft: rgba(109, 40, 217, 0.10);
+    --cf-accent-line: rgba(109, 40, 217, 0.45);
+    --bs-link-color-rgb: 109, 40, 217;
+}
+:root[data-style="classic"] h1, :root[data-style="classic"] h2, :root[data-style="classic"] h3 { font-weight: 700; }
+
+/* Every theme: point every legacy vocabulary at the tokens. */
+:root:not([data-theme]),
+:root[data-theme] {
+    --bg-primary: var(--cf-bg);
+    --bg-secondary: var(--cf-surface);
+    --bg-tertiary: var(--cf-surface-2);
+    --bg-card: var(--cf-surface);
+    --bg-card-hover: var(--cf-surface-2);
+    --card-bg: var(--cf-surface);
+    --border-color: var(--cf-border);
+    --border: var(--cf-border);
+    --border-strong: var(--cf-border-strong);
+    --line: var(--cf-border);
+    --text-primary: var(--cf-text);
+    --text-secondary: var(--cf-text-2);
+    --text-muted: var(--cf-text-3);
+    --text-dim: var(--cf-text-3);
+    --text: var(--cf-text);
+    --ink: var(--cf-text);
+    --muted: var(--cf-text-3);
+    --accent: var(--cf-accent-fg);
+    --accent-purple: var(--cf-accent-fg);
+    --accent-purple-dim: var(--cf-accent-soft);
+    --card-accent: var(--cf-accent-fg);
+    --accent-green: var(--cf-success);
+    --accent-red: var(--cf-danger);
+    --accent-yellow: var(--cf-warning);
+    --accent-orange: var(--cf-warning);
+    --accent-blue: var(--cf-info);
+    --accent-cyan: var(--cf-info);
+    --accent-pink: var(--cf-text-2);
+
+    --color-dark-400: var(--cf-border);
+    --color-dark-500: var(--cf-surface-2);
+    --color-dark-600: var(--cf-surface);
+    --color-dark-700: var(--cf-surface);
+    --color-dark-800: var(--cf-bg);
+    --color-text-primary: var(--cf-text);
+    --color-text-secondary: var(--cf-text-2);
+    --color-text-muted: var(--cf-text-3);
+    --color-primary-400: var(--cf-accent-fg);
+    --color-primary-500: var(--cf-accent);
+    --color-accent-purple: var(--cf-accent-fg);
+    --color-accent-green: var(--cf-success);
+    --color-success: var(--cf-success);
+    --color-danger: var(--cf-danger);
+    --color-warning: var(--cf-warning);
+    --color-border-primary: var(--cf-border);
+
+    /* Bootstrap's own variables */
+    --bs-body-bg: var(--cf-bg);
+    --bs-body-color: var(--cf-text);
+    --bs-body-font-family: var(--cf-font);
+    --bs-body-font-size: var(--cf-text-md);
+    --bs-border-color: var(--cf-border);
+    --bs-secondary-color: var(--cf-text-2);
+    --bs-tertiary-color: var(--cf-text-3);
+    --bs-emphasis-color: var(--cf-text);
+    --bs-link-color: var(--cf-accent-fg);
+    --bs-link-hover-color: var(--cf-accent-hover);
+    --bs-link-color-rgb: 180, 224, 79;
+    --bs-border-radius: var(--cf-radius);
+    --bs-border-radius-sm: var(--cf-radius-sm);
+    --bs-border-radius-lg: var(--cf-radius-lg);
+    --bs-focus-ring-color: var(--cf-accent-soft);
+}
+:root[data-theme="light"] { --bs-link-color-rgb: 74, 122, 16; }
+:root[data-theme="sand"] { --bs-link-color-rgb: 138, 90, 32; }
+
+/* Status and accent colours used as TEXT on their own tinted fill (pills, badges, chips). Dark: the colours
+   themselves. Light and Sand: pulled a quarter of the way to the ink, which keeps 4.5:1 on a 10-16% tint
+   of the same colour (the plain colours measure 4.2-4.5:1 there). */
+:root:not([data-theme]), :root[data-theme] {
+    --cf-success-ink: var(--cf-success);
+    --cf-warning-ink: var(--cf-warning);
+    --cf-danger-ink: var(--cf-danger);
+    --cf-info-ink: var(--cf-info);
+    --cf-accent-ink: var(--cf-accent-fg);
+}
+:root:is([data-theme="light"], [data-theme="sand"]) {
+    --cf-success-ink: color-mix(in srgb, var(--cf-success) 76%, var(--cf-text));
+    --cf-warning-ink: color-mix(in srgb, var(--cf-warning) 76%, var(--cf-text));
+    --cf-danger-ink: color-mix(in srgb, var(--cf-danger) 76%, var(--cf-text));
+    --cf-info-ink: color-mix(in srgb, var(--cf-info) 76%, var(--cf-text));
+    --cf-accent-ink: color-mix(in srgb, var(--cf-accent-fg) 76%, var(--cf-text));
+}
+/* A veil: the page's own ink at low alpha. It replaces the dark theme's rgba(255, 255, 255, a) overlays and
+   hairlines, which vanish on a light page; in Dark it is the same faint light tint they were. For another
+   strength write color-mix(in srgb, var(--cf-text) N%, transparent). */
+:root:not([data-theme]), :root[data-theme] {
+    --cf-veil-1: color-mix(in srgb, var(--cf-text) 4%, transparent);
+    --cf-veil-2: color-mix(in srgb, var(--cf-text) 8%, transparent);
+    --cf-veil-3: color-mix(in srgb, var(--cf-text) 14%, transparent);
+    /* The guide screenshots' own background (scripts/site-shots draws them dark in every theme): the
+       placeholder colour while one loads. cf-site.css gives them a mat on Light and Sand. */
+    --cf-shot-bg: #0b0d10;
+}
+
+/* ==========================================================================
+   Base
+   ========================================================================== */
+html { -webkit-text-size-adjust: 100%; }
+body {
+    font-family: var(--cf-font);
+    font-size: var(--cf-text-md);
+    line-height: 1.5;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: 'cv11', 'ss01';
+}
+
+h1, h2, h3, h4, h5, h6 { font-family: var(--cf-font); letter-spacing: -0.011em; color: var(--text-primary); }
+
+/* Gradient-filled headline text reads as decoration, not hierarchy. Every view
+   that clips a gradient into its headings gets plain text back here. */
+h1, h2, h3, h1 *, h2 *, h3 *,
+.hero-title-gradient, .gradient-text, .text-gradient, .page-title {
+    -webkit-text-fill-color: currentColor !important;
+}
+.hero-title-gradient, .gradient-text, .text-gradient { background: none !important; color: var(--text-primary) !important; }
+
+/* Ambient orbs and glows behind the content. */
+.bg-effects, .orb, .orb-1, .orb-2, .orb-3, .bg-orbs, .gradient-orb, .bg-glow, .glow-orb, .background-glow { display: none !important; }
+
+a { color: var(--cf-accent-fg); text-underline-offset: 2px; }
+code, kbd, pre, samp { font-family: var(--cf-mono); font-size: 0.92em; }
+kbd {
+    display: inline-block; min-width: 1.5em; padding: 1px 5px; border-radius: var(--cf-radius-sm);
+    border: 1px solid var(--cf-border-strong); background: var(--cf-surface-2); color: var(--cf-text-2);
+    font-size: 11px; line-height: 16px; text-align: center; box-shadow: none;
+}
+hr { border: 0; border-top: 1px solid var(--cf-border); opacity: 1; }
+::selection { background: var(--cf-accent-soft); color: var(--cf-text); }
+
+/* Numbers that sit in columns or change in place. */
+.stat-value, .stat-card-value, [class*="stat-value"], [class*="-stat-num"], .cf-num, table td, .badge, .tab-count, .section-count {
+    font-variant-numeric: tabular-nums;
+}
+
+/* Focus: one ring, everywhere, only for keyboard focus. */
+:focus { outline: none; }
+:focus-visible {
+    outline: 2px solid var(--cf-accent) !important;
+    outline-offset: 2px;
+}
+input:focus-visible, select:focus-visible, textarea:focus-visible,
+.form-control:focus-visible, .form-select:focus-visible { outline-offset: 0; }
+
+.skip-to-content {
+    position: absolute; left: var(--cf-2); top: -48px; z-index: 10000;
+    padding: var(--cf-2) var(--cf-3); border-radius: var(--cf-radius);
+    background: var(--cf-accent); color: var(--cf-on-accent); font-weight: 600; text-decoration: none;
+}
+.skip-to-content:focus { top: var(--cf-2); }
+
+* { scrollbar-width: thin; scrollbar-color: var(--cf-border-strong) transparent; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--cf-border-strong); border-radius: 10px; border: 3px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-track { background: transparent; }
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+}
+
+/* ==========================================================================
+   Site header: the shared `.navbar > .container > .navbar-content` markup, and
+   the `.navbar > .navbar-container` variant (Settings, Profile, Docs and a dozen
+   more). Both used to paint each view's own hard-coded dark bar, which put the
+   Light theme's dark text on a dark header.
+   ========================================================================== */
+.navbar:has(.navbar-content),
+.navbar:has(> .navbar-container) {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+    height: var(--cf-header-h); padding: 0 !important;
+    display: flex; align-items: center;
+    background: color-mix(in srgb, var(--cf-bg) 94%, transparent) !important;
+    backdrop-filter: saturate(140%) blur(8px); -webkit-backdrop-filter: saturate(140%) blur(8px);
+    border-bottom: 1px solid var(--cf-border) !important;
+    box-shadow: none !important;
+}
+.navbar:has(.navbar-content) > .container { max-width: none; padding: 0 var(--cf-5); }
+.navbar > .navbar-container {
+    display: flex; align-items: center; gap: var(--cf-6);
+    width: 100%; max-width: none !important; height: var(--cf-header-h); margin: 0 !important; padding: 0 var(--cf-5) !important;
+}
+.navbar-content { display: flex; align-items: center; gap: var(--cf-6); height: var(--cf-header-h); width: 100%; }
+.navbar-brand {
+    display: inline-flex !important; align-items: center; gap: var(--cf-2);
+    font-size: 15px !important; font-weight: 600 !important; letter-spacing: -0.01em;
+    color: var(--cf-text) !important; text-decoration: none; padding: 0; margin: 0;
+}
+.navbar-brand span { color: var(--cf-text) !important; background: none !important; }
+.navbar-logo, .navbar-brand img {
+    width: 28px !important; height: 28px !important; border-radius: 50%;
+    border: 1px solid var(--cf-border-strong) !important; box-shadow: none !important; object-fit: cover;
+}
+.navbar-links { display: flex; align-items: center; gap: 2px !important; margin-right: auto; }
+.navbar-links a {
+    display: inline-flex; align-items: center; height: 32px; padding: 0 10px; border-radius: var(--cf-radius);
+    font-size: var(--cf-text-sm) !important; font-weight: 500 !important;
+    color: var(--cf-text-2) !important; text-decoration: none; background: none !important;
+    transition: color var(--cf-fast) var(--cf-ease), background-color var(--cf-fast) var(--cf-ease);
+}
+.navbar-links a::after, .navbar-links a::before { display: none !important; }
+.navbar-links a:hover { color: var(--cf-text) !important; background: var(--cf-surface-2) !important; }
+.navbar-links a.active, .navbar-links a[aria-current="page"] { color: var(--cf-text) !important; background: var(--cf-surface-2) !important; }
+
+.user-menu {
+    display: inline-flex; align-items: center; gap: var(--cf-2);
+    height: 34px; padding: 0 10px 0 4px !important;
+    background: transparent !important; border: 1px solid var(--cf-border) !important; border-radius: 999px !important;
+    color: var(--cf-text); text-decoration: none; cursor: pointer; box-shadow: none !important;
+}
+.user-menu:hover { background: var(--cf-surface-2) !important; border-color: var(--cf-border-strong) !important; }
+.user-avatar { width: 26px !important; height: 26px !important; border-radius: 50%; }
+.user-name { font-size: var(--cf-text-sm) !important; font-weight: 500 !important; color: var(--cf-text) !important; }
+.user-dropdown {
+    background: var(--cf-surface) !important; border: 1px solid var(--cf-border) !important;
+    border-radius: var(--cf-radius-lg) !important; box-shadow: var(--cf-shadow-pop) !important;
+    padding: var(--cf-1) !important; min-width: 220px;
+}
+.user-dropdown .dropdown-header { padding: var(--cf-2) var(--cf-3) !important; border-bottom: 1px solid var(--cf-border); margin-bottom: var(--cf-1); }
+.user-dropdown .dropdown-item {
+    display: flex; align-items: center; gap: var(--cf-2); padding: 7px var(--cf-3) !important;
+    border-radius: var(--cf-radius-sm); font-size: var(--cf-text-sm) !important; color: var(--cf-text-2) !important;
+}
+.user-dropdown .dropdown-item:hover { background: var(--cf-surface-2) !important; color: var(--cf-text) !important; }
+.user-dropdown .dropdown-item i { width: 16px; color: var(--cf-text-3); }
+.user-dropdown .dropdown-item.text-warning, .user-dropdown .dropdown-item.text-warning i { color: var(--cf-text-2) !important; }
+.user-dropdown .dropdown-item.text-danger, .user-dropdown .dropdown-item.text-danger i { color: var(--cf-danger) !important; }
+.user-dropdown .dropdown-divider { margin: var(--cf-1) 0 !important; background: var(--cf-border); height: 1px; border: 0; }
+
+.mobile-menu { background: var(--cf-bg) !important; backdrop-filter: none !important; }
+.mobile-menu-inner { align-items: stretch !important; gap: 2px !important; padding: var(--cf-4) !important; }
+.mobile-menu-link {
+    display: block; padding: 10px var(--cf-3); border-radius: var(--cf-radius);
+    font-size: var(--cf-text-lg) !important; font-weight: 500 !important; color: var(--cf-text) !important;
+}
+.mobile-menu-link:hover { background: var(--cf-surface-2); }
+.mobile-menu-btn { color: var(--cf-text) !important; border-radius: var(--cf-radius); }
+
+/* Footer */
+.footer {
+    padding: var(--cf-6) 0 !important; margin-top: var(--cf-12) !important;
+    background: transparent !important; border-top: 1px solid var(--cf-border) !important;
+}
+.footer-links { gap: var(--cf-1) var(--cf-5) !important; margin-bottom: var(--cf-2) !important; }
+.footer-link { font-size: var(--cf-text-sm) !important; color: var(--cf-text-3) !important; }
+.footer-link:hover { color: var(--cf-text) !important; }
+.footer-copyright { font-size: var(--cf-text-xs) !important; color: var(--cf-text-3) !important; }
+
+/* ==========================================================================
+   Buttons
+   ========================================================================== */
+.btn {
+    --bs-btn-font-family: var(--cf-font);
+    --bs-btn-font-size: var(--cf-text-sm);
+    --bs-btn-font-weight: 500;
+    --bs-btn-padding-x: 12px;
+    --bs-btn-padding-y: 6px;
+    --bs-btn-border-radius: var(--cf-radius);
+    --bs-btn-box-shadow: none;
+    --bs-btn-focus-box-shadow: none;
+    --bs-btn-bg: var(--cf-surface-2);
+    --bs-btn-color: var(--cf-text);
+    --bs-btn-border-color: var(--cf-border-strong);
+    --bs-btn-hover-bg: var(--cf-surface-3);
+    --bs-btn-hover-color: var(--cf-text);
+    --bs-btn-hover-border-color: var(--cf-border-strong);
+    --bs-btn-active-bg: var(--cf-surface-3);
+    --bs-btn-active-color: var(--cf-text);
+    --bs-btn-active-border-color: var(--cf-border-strong);
+    --bs-btn-disabled-opacity: 0.5;
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    min-height: 32px; padding: 6px 12px;
+    font-family: var(--cf-font); font-size: var(--cf-text-sm); font-weight: 500; line-height: 1.25;
+    border-radius: var(--cf-radius);
+    border: 1px solid var(--bs-btn-border-color);
+    background: var(--bs-btn-bg); color: var(--bs-btn-color);
+    box-shadow: none; transform: none;
+    text-decoration: none; white-space: nowrap;
+    transition: background-color var(--cf-fast) var(--cf-ease), border-color var(--cf-fast) var(--cf-ease), color var(--cf-fast) var(--cf-ease);
+}
+.btn:hover { background: var(--bs-btn-hover-bg); color: var(--bs-btn-hover-color); border-color: var(--bs-btn-hover-border-color); transform: none; box-shadow: none; }
+.btn:active { transform: none; }
+.btn:disabled, .btn.disabled { opacity: 0.5; cursor: not-allowed; }
+.btn i { font-size: 0.9em; }
+.btn-sm { min-height: 28px; padding: 4px 10px; font-size: var(--cf-text-xs); --bs-btn-padding-y: 4px; --bs-btn-padding-x: 10px; }
+.btn-lg { min-height: 40px; padding: 8px 16px; font-size: var(--cf-text-md); }
+
+.btn-primary, .btn-success.btn-primary {
+    --bs-btn-bg: var(--cf-accent); --bs-btn-color: var(--cf-on-accent); --bs-btn-border-color: var(--cf-accent);
+    --bs-btn-hover-bg: var(--cf-accent-hover); --bs-btn-hover-color: var(--cf-on-accent); --bs-btn-hover-border-color: var(--cf-accent-hover);
+    --bs-btn-active-bg: var(--cf-accent-hover); --bs-btn-active-color: var(--cf-on-accent); --bs-btn-active-border-color: var(--cf-accent-hover);
+    --bs-btn-disabled-bg: var(--cf-accent); --bs-btn-disabled-color: var(--cf-on-accent); --bs-btn-disabled-border-color: var(--cf-accent);
+    background: var(--bs-btn-bg) !important; color: var(--bs-btn-color) !important; border-color: var(--bs-btn-border-color) !important;
+    font-weight: 600;
+}
+.btn-primary:hover { background: var(--bs-btn-hover-bg) !important; border-color: var(--bs-btn-hover-border-color) !important; color: var(--bs-btn-hover-color) !important; }
+.btn-primary i { color: inherit !important; }
+/* The manage page colours every descendant of .page-content; text inside a filled button follows the button. */
+.btn-primary *, .btn-danger *, .btn-success * { color: inherit !important; }
+
+.btn-secondary, .btn-light, .btn-dark, .btn-outline-secondary, .btn-outline-primary, .btn-outline-light {
+    --bs-btn-bg: var(--cf-surface-2); --bs-btn-color: var(--cf-text); --bs-btn-border-color: var(--cf-border-strong);
+    --bs-btn-hover-bg: var(--cf-surface-3); --bs-btn-hover-color: var(--cf-text); --bs-btn-hover-border-color: var(--cf-border-strong);
+    background: var(--bs-btn-bg) !important; color: var(--bs-btn-color) !important; border-color: var(--bs-btn-border-color) !important;
+}
+.btn-secondary:hover, .btn-light:hover, .btn-dark:hover, .btn-outline-secondary:hover, .btn-outline-primary:hover, .btn-outline-light:hover {
+    background: var(--bs-btn-hover-bg) !important;
+}
+
+.btn-danger, .btn-outline-danger {
+    --bs-btn-bg: transparent; --bs-btn-color: var(--cf-danger); --bs-btn-border-color: color-mix(in srgb, var(--cf-danger) 45%, transparent);
+    --bs-btn-hover-bg: color-mix(in srgb, var(--cf-danger) 12%, transparent); --bs-btn-hover-color: var(--cf-danger); --bs-btn-hover-border-color: var(--cf-danger);
+    --bs-btn-active-bg: color-mix(in srgb, var(--cf-danger) 18%, transparent); --bs-btn-active-color: var(--cf-danger);
+    background: var(--bs-btn-bg) !important; color: var(--bs-btn-color) !important; border-color: var(--bs-btn-border-color) !important;
+}
+.btn-danger:hover, .btn-outline-danger:hover { background: var(--bs-btn-hover-bg) !important; border-color: var(--bs-btn-hover-border-color) !important; }
+
+.btn-success, .btn-outline-success {
+    --bs-btn-bg: transparent; --bs-btn-color: var(--cf-success); --bs-btn-border-color: color-mix(in srgb, var(--cf-success) 45%, transparent);
+    --bs-btn-hover-bg: color-mix(in srgb, var(--cf-success) 12%, transparent); --bs-btn-hover-color: var(--cf-success); --bs-btn-hover-border-color: var(--cf-success);
+    background: var(--bs-btn-bg) !important; color: var(--bs-btn-color) !important; border-color: var(--bs-btn-border-color) !important;
+}
+.btn-success:hover, .btn-outline-success:hover { background: var(--bs-btn-hover-bg) !important; }
+
+.btn-warning, .btn-outline-warning, .btn-info, .btn-outline-info {
+    --bs-btn-bg: transparent; --bs-btn-color: var(--cf-text); --bs-btn-border-color: var(--cf-border-strong);
+    --bs-btn-hover-bg: var(--cf-surface-2); --bs-btn-hover-color: var(--cf-text);
+    background: var(--bs-btn-bg) !important; color: var(--bs-btn-color) !important; border-color: var(--bs-btn-border-color) !important;
+}
+.btn-warning i, .btn-outline-warning i { color: var(--cf-warning); }
+
+.btn-link { --bs-btn-bg: transparent; --bs-btn-border-color: transparent; --bs-btn-color: var(--cf-accent-fg); --bs-btn-hover-bg: transparent; --bs-btn-hover-color: var(--cf-accent-hover); background: transparent !important; border-color: transparent !important; text-decoration: underline; }
+
+.btn-close { filter: none !important; opacity: 0.7; background-size: 12px; width: 28px; height: 28px; padding: 0; border-radius: var(--cf-radius); }
+:root:not([data-theme="light"]):not([data-theme="sand"]) .btn-close { filter: invert(1) grayscale(1) !important; }
+.btn-close:hover { opacity: 1; }
+
+/* ==========================================================================
+   Form controls
+   ========================================================================== */
+.form-label, .modal-form-label {
+    display: block; margin-bottom: 6px !important;
+    font-size: var(--cf-text-sm) !important; font-weight: 500 !important;
+    color: var(--cf-text) !important; text-transform: none !important; letter-spacing: 0 !important;
+}
+.form-text, .form-help, .form-hint, .modal-form-help, small.text-muted {
+    font-size: var(--cf-text-xs) !important; color: var(--cf-text-3) !important; line-height: 1.45;
+}
+/* Bootstrap's classes: these must beat Bootstrap and the views' older copies of them. */
+.form-control, .form-select, .form-input, .form-textarea {
+    min-height: 34px;
+    padding: 6px 10px;
+    font-family: var(--cf-font) !important;
+    font-size: var(--cf-text-md) !important;
+    line-height: 1.4;
+    color: var(--cf-text) !important;
+    background-color: var(--cf-inset) !important;
+    border: 1px solid var(--cf-border-strong) !important;
+    border-radius: var(--cf-radius) !important;
+    box-shadow: none !important;
+    transition: border-color var(--cf-fast) var(--cf-ease), box-shadow var(--cf-fast) var(--cf-ease);
+}
+/* Bare inputs inside app content get the same look at zero specificity, so a partial
+   that styles its own field (a search box with an icon, an inline editor) still wins. */
+:where(.page-content, .modal) :where(input[type="text"], input[type="number"], input[type="url"], input[type="email"],
+    input[type="password"], input[type="search"], input[type="time"], input[type="date"], input[type="datetime-local"],
+    input:not([type]), textarea, select) {
+    min-height: 34px;
+    padding: 6px 10px;
+    font-family: var(--cf-font);
+    font-size: var(--cf-text-md);
+    line-height: 1.4;
+    color: var(--cf-text);
+    background-color: var(--cf-inset);
+    border: 1px solid var(--cf-border-strong);
+    border-radius: var(--cf-radius);
+    box-shadow: none;
+}
+.form-control:hover, .form-select:hover { border-color: color-mix(in srgb, var(--cf-text-3) 70%, var(--cf-border-strong)) !important; }
+.form-control:focus, .form-select:focus, .form-input:focus, .form-textarea:focus {
+    border-color: var(--cf-accent) !important;
+    box-shadow: 0 0 0 3px var(--cf-accent-soft) !important;
+    background-color: var(--cf-inset) !important;
+    outline: none;
+}
+:where(.page-content, .modal) :where(input, textarea, select):focus {
+    border-color: var(--cf-accent);
+    box-shadow: 0 0 0 3px var(--cf-accent-soft);
+    outline: none;
+}
+.form-control::placeholder, :where(.page-content, .modal) :where(input, textarea)::placeholder {
+    color: var(--cf-text-3); opacity: 1;
+}
+.form-control:disabled, .form-select:disabled, :where(.page-content) :where(input, select):disabled {
+    opacity: 0.55; cursor: not-allowed;
+}
+.form-select, :where(.page-content, .modal) select:not([multiple]):not([size]) {
+    -webkit-appearance: none; appearance: none;
+    padding-right: 30px !important;
+    background-image: var(--cf-select-arrow) !important;
+    background-repeat: no-repeat !important;
+    background-position: right 8px center !important;
+    background-size: 14px 14px !important;
+}
+.form-select[multiple], select[multiple] { background-image: none !important; padding-right: 10px !important; }
+.form-select option, :where(.page-content) select option { background: var(--cf-surface); color: var(--cf-text); }
+.form-control-sm, .form-select-sm { min-height: 28px; padding-top: 3px; padding-bottom: 3px; font-size: var(--cf-text-sm) !important; }
+textarea.form-control, :where(.page-content) textarea { min-height: 72px; resize: vertical; }
+input[type="color"] { padding: 2px !important; min-height: 34px; border-radius: var(--cf-radius) !important; border: 1px solid var(--cf-border-strong) !important; background: var(--cf-inset) !important; }
+
+.input-group-text {
+    background: var(--cf-surface-2) !important; border: 1px solid var(--cf-border-strong) !important;
+    color: var(--cf-text-2) !important; font-size: var(--cf-text-sm);
+}
+
+.form-check { min-height: 20px; }
+.form-check-label { font-size: var(--cf-text-md); color: var(--cf-text) !important; }
+.form-check-input {
+    width: 16px; height: 16px; margin-top: 0.2em;
+    background-color: var(--cf-inset) !important;
+    border: 1px solid var(--cf-border-strong) !important;
+    box-shadow: none !important;
+}
+.form-check-input[type="checkbox"] { border-radius: var(--cf-radius-sm) !important; }
+.form-check-input:checked {
+    background-color: var(--cf-accent) !important; border-color: var(--cf-accent) !important;
+}
+.form-check-input:checked[type="checkbox"] { background-image: var(--cf-check) !important; }
+.form-check-input:focus { box-shadow: 0 0 0 3px var(--cf-accent-soft) !important; border-color: var(--cf-accent) !important; }
+.form-switch .form-check-input {
+    width: 32px; height: 18px; border-radius: 999px !important;
+    background-image: var(--cf-knob-off) !important; background-position: left center; background-size: contain;
+    background-color: var(--cf-surface-3) !important;
+}
+.form-switch .form-check-input:checked { background-image: var(--cf-knob-on) !important; background-position: right center; background-color: var(--cf-accent) !important; }
+
+/* The site's own CSS toggle (label.toggle-switch > input + .toggle-slider) */
+.toggle-switch { width: 34px !important; height: 20px !important; }
+.toggle-slider {
+    background: var(--cf-surface-3) !important; border: 1px solid var(--cf-border-strong);
+    border-radius: 999px !important; box-shadow: none !important;
+}
+.toggle-slider::before {
+    width: 14px !important; height: 14px !important; left: 2px !important; top: 2px !important;
+    background: var(--cf-text-3) !important; box-shadow: none !important;
+}
+.toggle-switch input:checked + .toggle-slider { background: var(--cf-accent) !important; border-color: var(--cf-accent); }
+.toggle-switch input:checked + .toggle-slider::before { transform: translateX(14px) !important; background: var(--cf-on-accent) !important; }
+.toggle-switch input:focus-visible + .toggle-slider { outline: 2px solid var(--cf-accent); outline-offset: 2px; }
+
+/* ==========================================================================
+   Containers
+   ========================================================================== */
+.card {
+    --bs-card-bg: var(--cf-surface);
+    --bs-card-border-color: var(--cf-border);
+    --bs-card-border-radius: var(--cf-radius-lg);
+    --bs-card-cap-bg: transparent;
+    --bs-card-color: var(--cf-text);
+    background: var(--cf-surface) !important;
+    border: 1px solid var(--cf-border) !important;
+    border-radius: var(--cf-radius-lg) !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    color: var(--cf-text);
+}
+.card-hover:hover { transform: none !important; box-shadow: none !important; border-color: var(--cf-border-strong) !important; }
+.card-header { background: transparent !important; border-bottom: 1px solid var(--cf-border) !important; padding: var(--cf-3) var(--cf-4) !important; font-weight: 600; font-size: var(--cf-text-md); }
+.card-body { padding: var(--cf-4) !important; }
+.card-footer { background: transparent !important; border-top: 1px solid var(--cf-border) !important; padding: var(--cf-3) var(--cf-4) !important; }
+
+/* ==========================================================================
+   Tables
+   ========================================================================== */
+.table {
+    --bs-table-bg: transparent;
+    --bs-table-color: var(--cf-text);
+    --bs-table-border-color: var(--cf-border);
+    --bs-table-striped-bg: var(--cf-surface-2);
+    --bs-table-hover-bg: var(--cf-surface-2);
+    --bs-table-hover-color: var(--cf-text);
+    margin-bottom: 0;
+}
+.table th, .data-table th, .page-content table th {
+    font-size: var(--cf-text-xs) !important; font-weight: 500 !important;
+    color: var(--cf-text-3) !important; text-transform: none !important; letter-spacing: 0 !important;
+    background: transparent !important;
+    padding: 8px 12px !important;
+    border-bottom: 1px solid var(--cf-border) !important;
+    white-space: nowrap;
+}
+.table td, .data-table td, .page-content table td {
+    font-size: var(--cf-text-sm); padding: 8px 12px !important;
+    border-bottom: 1px solid var(--cf-border) !important; vertical-align: middle;
+    color: var(--cf-text);
+}
+.page-content table tr:last-child td { border-bottom: 0 !important; }
+.table-hover tbody tr:hover > *, .data-table tr:hover td { background: var(--cf-surface-2) !important; }
+.table-container, .table-responsive {
+    border: 1px solid var(--cf-border); border-radius: var(--cf-radius-lg); background: var(--cf-surface); overflow-x: auto;
+}
+
+/* ==========================================================================
+   Modals
+   ========================================================================== */
+.modal-backdrop, .modal-backdrop.show { background-color: rgb(0 0 0 / 0.6) !important; opacity: 1 !important; }
+.modal-content {
+    background: var(--cf-surface) !important;
+    border: 1px solid var(--cf-border-strong) !important;
+    border-radius: var(--cf-radius-lg) !important;
+    box-shadow: 0 16px 48px rgb(0 0 0 / 0.45) !important;
+    color: var(--cf-text) !important;
+}
+.modal-header {
+    padding: var(--cf-4) var(--cf-5) !important; background: transparent !important;
+    border-bottom: 1px solid var(--cf-border) !important; border-radius: var(--cf-radius-lg) var(--cf-radius-lg) 0 0 !important;
+}
+.modal-title { font-size: var(--cf-text-lg) !important; font-weight: 600 !important; color: var(--cf-text) !important; }
+.modal-title i { color: var(--cf-text-3) !important; }
+.modal-body { padding: var(--cf-5) !important; }
+.modal-body label { color: var(--cf-text) !important; }
+.modal-footer {
+    padding: var(--cf-3) var(--cf-5) !important; gap: var(--cf-2); background: transparent !important;
+    border-top: 1px solid var(--cf-border) !important; border-radius: 0 0 var(--cf-radius-lg) var(--cf-radius-lg) !important;
+}
+.modal-footer > * { margin: 0 !important; }
+
+/* ==========================================================================
+   Alerts, badges, tabs, dropdowns
+   ========================================================================== */
+.alert {
+    --cf-tone: var(--cf-text-3);
+    display: block; padding: 10px 12px !important; margin-bottom: var(--cf-4);
+    font-size: var(--cf-text-sm); line-height: 1.5;
+    color: var(--cf-text) !important;
+    background: color-mix(in srgb, var(--cf-tone) 8%, var(--cf-surface)) !important;
+    border: 1px solid color-mix(in srgb, var(--cf-tone) 35%, var(--cf-border)) !important;
+    border-radius: var(--cf-radius) !important;
+}
+.alert > i:first-child, .alert > .fas:first-child, .alert > .fa:first-child { color: var(--cf-tone) !important; margin-right: 6px; }
+.alert-success { --cf-tone: var(--cf-success); }
+.alert-warning { --cf-tone: var(--cf-warning); }
+.alert-danger { --cf-tone: var(--cf-danger); }
+.alert-info, .alert-primary { --cf-tone: var(--cf-info); }
+
+/* Bootstrap badges only (a `bg-*` modifier, or inside app content). Several pages use
+   `.badge` as their own class name and are left alone. */
+.badge[class*="bg-"], .page-content .badge, .modal .badge {
+    --cf-tone: var(--cf-text-3);
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 6px !important; border-radius: var(--cf-radius-sm) !important;
+    font-size: 11.5px !important; font-weight: 500 !important; line-height: 16px; letter-spacing: 0;
+    color: var(--cf-tone) !important;
+    background: color-mix(in srgb, var(--cf-tone) 14%, transparent) !important;
+    border: 1px solid color-mix(in srgb, var(--cf-tone) 28%, transparent);
+}
+.badge.bg-primary { --cf-tone: var(--cf-accent-fg); }
+.badge.bg-success { --cf-tone: var(--cf-success); }
+.badge.bg-warning { --cf-tone: var(--cf-warning); }
+.badge.bg-danger { --cf-tone: var(--cf-danger); }
+.badge.bg-info { --cf-tone: var(--cf-info); }
+.badge.bg-secondary, .badge.bg-dark, .badge.bg-light { --cf-tone: var(--cf-text-2); }
+/* Light and Sand: the badge text a quarter of the way to the ink (see --cf-success-ink). */
+:root:is([data-theme="light"], [data-theme="sand"]) :is(.badge[class*="bg-"], .page-content .badge, .modal .badge) {
+    color: color-mix(in srgb, var(--cf-tone) 76%, var(--cf-text)) !important;
+}
+
+.nav-tabs {
+    --bs-nav-tabs-border-color: var(--cf-border);
+    --bs-nav-tabs-link-active-bg: transparent;
+    --bs-nav-tabs-link-active-color: var(--cf-text);
+    --bs-nav-tabs-border-width: 1px;
+    gap: 2px; border-bottom: 1px solid var(--cf-border) !important;
+}
+.nav-tabs .nav-link {
+    border: 0 !important; border-radius: 0 !important; background: transparent !important;
+    padding: 8px 12px; margin-bottom: -1px;
+    font-size: var(--cf-text-sm); font-weight: 500; color: var(--cf-text-2) !important;
+}
+.nav-tabs .nav-link:hover { color: var(--cf-text) !important; }
+.nav-tabs .nav-link.active { color: var(--cf-text) !important; box-shadow: inset 0 -2px 0 var(--cf-accent); }
+.nav-pills .nav-link { border-radius: var(--cf-radius); color: var(--cf-text-2); }
+.nav-pills .nav-link.active { background: var(--cf-surface-3) !important; color: var(--cf-text) !important; }
+
+.dropdown-menu {
+    --bs-dropdown-bg: var(--cf-surface); --bs-dropdown-border-color: var(--cf-border);
+    --bs-dropdown-link-color: var(--cf-text-2); --bs-dropdown-link-hover-bg: var(--cf-surface-2); --bs-dropdown-link-hover-color: var(--cf-text);
+    border-radius: var(--cf-radius-lg); box-shadow: var(--cf-shadow-pop); padding: 4px; font-size: var(--cf-text-sm);
+}
+.dropdown-menu .dropdown-item { border-radius: var(--cf-radius-sm); }
+
+.list-group { --bs-list-group-bg: var(--cf-surface); --bs-list-group-border-color: var(--cf-border); --bs-list-group-color: var(--cf-text); --bs-list-group-action-hover-bg: var(--cf-surface-2); }
+
+.progress { --bs-progress-bg: var(--cf-surface-3); --bs-progress-bar-bg: var(--cf-accent); height: 6px; border-radius: 999px; }
+
+.text-muted { color: var(--cf-text-3) !important; }
+.text-secondary { color: var(--cf-text-2) !important; }
+
+/* ==========================================================================
+   Shared page patterns of the standalone pages (settings, profile, docs, status…)
+   ========================================================================== */
+.page-title, .page-header h1 {
+    font-size: var(--cf-text-2xl) !important; font-weight: 600 !important; letter-spacing: -0.02em !important;
+    background: none !important; color: var(--cf-text) !important;
+}
+.page-subtitle, .page-header p { color: var(--cf-text-3) !important; font-size: var(--cf-text-md) !important; }
+.section-icon {
+    width: auto !important; height: auto !important; background: transparent !important; box-shadow: none !important;
+    color: var(--cf-text-3) !important; transform: none !important;
+}
+.settings-card, .info-card, .content-card, .feature-card, .legal-card, .doc-card {
+    border-left-width: 1px !important; border-left-color: var(--cf-border) !important;
+    border-radius: var(--cf-radius-lg) !important; animation: none !important;
+    box-shadow: none !important; backdrop-filter: none !important;
+}
+
+/* ==========================================================================
+   Toast (window.showToast in the manage page builds .global-toast)
+   ========================================================================== */
+.global-toast {
+    background: var(--cf-surface) !important; color: var(--cf-text) !important;
+    border: 1px solid var(--cf-border-strong) !important; border-radius: var(--cf-radius-lg) !important;
+    box-shadow: var(--cf-shadow-pop) !important; font-weight: 500 !important; padding: 10px 14px 10px 12px !important;
+    display: flex; align-items: center; gap: 8px; max-width: min(420px, calc(100vw - 32px));
+}
+.global-toast::before { content: ''; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--cf-text-3); }
+.global-toast.is-success::before { background: var(--cf-success); }
+.global-toast.is-error::before { background: var(--cf-danger); }
+
+/* ==========================================================================
+   Phone widths
+   ========================================================================== */
+@media (max-width: 768px) {
+    .navbar:has(.navbar-content) > .container { padding: 0 var(--cf-4); }
+    .navbar > .navbar-container { padding: 0 var(--cf-4) !important; gap: var(--cf-3); }
+    .navbar-links { display: none !important; }
+    .user-menu .user-name, .user-menu .user-menu-chevron { display: none; }
+    .user-menu { padding: 0 4px !important; }
+    .form-control, .form-select, :where(.page-content) :where(input:not([type="checkbox"]):not([type="radio"]), select, textarea) { font-size: 16px !important; min-height: 40px; }
+    .btn { min-height: 36px; }
+    .modal-dialog { margin: var(--cf-2) !important; max-width: calc(100vw - 16px) !important; }
+}

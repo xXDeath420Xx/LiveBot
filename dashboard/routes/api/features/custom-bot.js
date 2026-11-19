@@ -87,6 +87,26 @@ router.post('/', async (req, res) => {
             return res.status(400).json({ error: 'Invalid Application ID format (must be 17-20 digit snowflake)' });
         }
 
+        // Validate the new token before anything is removed. A wrong token (or a bot registered
+        // elsewhere) used to be found only after the current custom bot had been unassigned and its
+        // live posts deleted, leaving the server on the shared bot.
+        let botInfo;
+        try {
+            botInfo = await testBotConnection(bot_token);
+        } catch (validationError) {
+            return res.status(400).json({
+                error: 'Bot validation failed',
+                details: validationError.message
+            });
+        }
+        const [registered] = await pool.execute(
+            'SELECT gbm.guild_id FROM custom_bots cb LEFT JOIN guild_bot_mapping gbm ON gbm.bot_id = cb.bot_id AND gbm.guild_id = ? WHERE cb.bot_id = ?',
+            [guildId, botInfo.id]
+        );
+        if (registered.length > 0 && !registered[0].guild_id) {
+            return res.status(400).json({ error: 'This bot is already registered in the system.' });
+        }
+
         // Check if guild already has a custom bot — if so, remove it first
         const [existing] = await pool.execute(
             'SELECT gbm.bot_id, cb.self_service FROM guild_bot_mapping gbm JOIN custom_bots cb ON gbm.bot_id = cb.bot_id WHERE gbm.guild_id = ?',
@@ -138,17 +158,6 @@ router.post('/', async (req, res) => {
             }
 
             logger.info(`[Custom Bot API] Replaced old bot ${oldBotId} in guild ${guildId}`);
-        }
-
-        // Validate the bot token
-        let botInfo;
-        try {
-            botInfo = await testBotConnection(bot_token);
-        } catch (validationError) {
-            return res.status(400).json({
-                error: 'Bot validation failed',
-                details: validationError.message
-            });
         }
 
         const bot_id = botInfo.id;

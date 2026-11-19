@@ -1,5 +1,7 @@
 // Ends due fishing tournaments and announces the winner in the channel where
-// the tournament was started. Runs every minute.
+// the tournament's start was announced (the Fishing page's "Tournament
+// announcements" channel, else the channel /fish tournament start was used in).
+// Runs every minute.
 import cron from 'node-cron';
 import logger from '../utils/logger.js';
 import { EmbedBuilder } from 'discord.js';
@@ -17,8 +19,16 @@ async function tick(client) {
 
   for (const { tournament, standings, winner } of ended) {
     try {
-      const channel = await client.channels.fetch(tournament.channel_id).catch(() => null);
-      if (!channel || !channel.isTextBased?.()) continue;
+      /* The client this job was started with is the MAIN bot, which is not in
+         custom-bot guilds — there, fetch returns null and the results are never
+         announced. The same fault hid two Twitch clips for a day. */
+      const guildClient = global.botManager?.getClientForGuild?.(tournament.guild_id) || client;
+      const channel = await guildClient.channels.fetch(tournament.channel_id).catch(() => null);
+      if (!channel || !channel.isTextBased?.()) {
+        logger.warn(`[FishTourney] #${tournament.id}: no bot can see channel ${tournament.channel_id} `
+          + `in guild ${tournament.guild_id} — results not announced`);
+        continue;
+      }
       const medals = ['🥇', '🥈', '🥉'];
       const lines = standings.length
         ? standings.map((s, i) =>

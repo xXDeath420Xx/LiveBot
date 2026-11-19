@@ -12,6 +12,7 @@ import { EmbedBuilder } from 'discord.js';
 import { applyGuess, renderBoard, initState } from './coordle.js';
 import * as wordBank from '../word-bank.js';
 import { registerEngine, saveState, bumpStats } from '../word-game-manager.js';
+import { announceResult, resultEmbed } from '../word-game-results.js';
 import logger from '../../utils/logger.js';
 
 const GUESS_RE = /^[A-Za-z]{5}$/;
@@ -78,6 +79,10 @@ async function handle(message, session) {
   for (const uid of session.state.participants) {
     await bumpStats(session.guildId, uid, 'coordle', { played: 1, wins: won ? 1 : 0, bestScore: bonus, streak: 0 });
   }
+  await announceResult({
+    client: message.client, guildId: session.guildId, sourceChannelId: message.channel.id,
+    embed: resultEmbed('coordle', session.state, { outcome: won ? 'won' : 'lost', solverId: won ? message.author.id : null, channelId: message.channel.id }),
+  });
 
   // Auto-roll a fresh puzzle so the game continues until someone runs `/wordgame coordle end`.
   const fresh = initState(wordBank.randomAnswer(5) || session.state.answer);

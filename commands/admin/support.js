@@ -20,7 +20,8 @@ export default {
                         .setDescription('Configure the ticket system for this server')
                         .addRoleOption(opt => opt.setName('support-role').setDescription('The role that can manage tickets').setRequired(true))
                         .addChannelOption(opt => opt.setName('category').setDescription('The category where ticket channels will be created').setRequired(true).addChannelTypes(ChannelType.GuildCategory))
-                        .addChannelOption(opt => opt.setName('log-channel').setDescription('Channel where ticket logs will be sent').addChannelTypes(ChannelType.GuildText)))
+                        .addChannelOption(opt => opt.setName('log-channel').setDescription('Channel where ticket logs will be sent').addChannelTypes(ChannelType.GuildText))
+                        .addChannelOption(opt => opt.setName('alert-channel').setDescription('Channel where staff are told a new ticket opened').addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)))
                 .addSubcommand(sub =>
                     sub.setName('panel')
                         .setDescription('Create a ticket panel for users to open tickets')
@@ -64,7 +65,17 @@ export default {
                         .addStringOption(opt => opt.setName('form-name').setDescription('Which form to add the question to').setRequired(true).setAutocomplete(true))
                         .addStringOption(opt => opt.setName('question-text').setDescription('The question to ask').setRequired(true))
                         .addStringOption(opt => opt.setName('question-type').setDescription('Answer format').setRequired(true)
-                            .addChoices({ name: 'Short Text (Single Line)', value: 'text' }, { name: 'Paragraph (Multi-Line)', value: 'paragraph' })))
+                            .addChoices(
+                                { name: 'Short Text (Single Line)', value: 'text' },
+                                { name: 'Paragraph (Multi-Line)', value: 'paragraph' },
+                                { name: 'Number', value: 'number' },
+                                { name: 'Dropdown (Pick One)', value: 'select' },
+                                { name: 'Checkboxes (Pick Any)', value: 'multiselect' },
+                                { name: 'User Picker', value: 'user' },
+                                { name: 'Role Picker', value: 'role' },
+                                { name: 'Channel Picker', value: 'channel' }))
+                        .addStringOption(opt => opt.setName('choices').setDescription('For dropdown/checkboxes: the options, separated by |'))
+                        .addBooleanOption(opt => opt.setName('required').setDescription('Must this be answered? (default: yes)')))
                 .addSubcommand(sub => sub.setName('list').setDescription('View all ticket forms')))
 
         // ── Panel Management Group ──

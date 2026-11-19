@@ -1,6 +1,7 @@
 import { SlashCommandBuilder, PermissionsBitField, EmbedBuilder } from 'discord.js';
 import pool from '../../utils/db.js';
 import logger from '../../utils/logger.js';
+import { themeColor } from '../../core/guild-theme.js';
 
 export default {
     category: 'admin',
@@ -130,7 +131,8 @@ async function handleClear(interaction, guildId, shoutoutChannelId) {
     // Delete them
     const ids = toRemove.map(r => r.subscription_id);
     await pool.execute(
-        `DELETE FROM subscriptions WHERE subscription_id IN (${ids.map(() => '?').join(',')})`,
+        // Soft-delete so the Dashboard "Recently removed" panel can quick-restore accidental removals.
+        `UPDATE subscriptions SET paused = 1, departed_at = NOW(), departed_reason = 'manual' WHERE subscription_id IN (${ids.map(() => '?').join(',')})`,
         ids
     );
 
@@ -138,7 +140,7 @@ async function handleClear(interaction, guildId, shoutoutChannelId) {
     logger.info(`[Shoutout] Cleared ${toRemove.length} non-permanent subscriptions in guild ${guildId}`);
 
     const embed = new EmbedBuilder()
-        .setColor(0xED4245)
+        .setColor(themeColor(interaction.guildId, 'danger'))
         .setTitle('Shoutout List Cleared')
         .setDescription(`Removed **${toRemove.length}** non-permanent streamer(s):\n${names}`)
         .setFooter({ text: 'Permanent streamers were not affected' });
@@ -204,10 +206,12 @@ async function handleAdd(interaction, guildId, shoutoutChannelId) {
                 continue;
             }
 
-            // Add subscription (non-permanent, self-cleaning)
+            // Add subscription (non-permanent, self-cleaning).
+            // 'external': a shoutout is staff promoting a streamer, who need not be — and often
+            // is not — a member of this server. Departure tracking must never retire these.
             await pool.execute(
-                `INSERT INTO subscriptions (guild_id, streamer_id, announcement_channel_id, custom_message, delete_on_end, permanent)
-                 VALUES (?, ?, ?, ?, 1, 0)`,
+                `INSERT INTO subscriptions (guild_id, streamer_id, announcement_channel_id, custom_message, delete_on_end, permanent, tracking_origin)
+                 VALUES (?, ?, ?, ?, 1, 0, 'external')`,
                 [guildId, streamerId, shoutoutChannelId, customMessage || defaultMessage]
             );
 
@@ -237,7 +241,7 @@ async function handleAdd(interaction, guildId, shoutoutChannelId) {
         .setColor(added.length > 0 ? 0x57F287 : 0xED4245)
         .setTitle('Shoutout Add Results')
         .setDescription(desc)
-        .setFooter({ text: 'These are non-permanent and can be cleared with /shoutout clear' });
+        .setFooter({ text: 'These are non-permanent and can be cleared with /alerts shoutout clear' });
 
     return interaction.editReply({ embeds: [embed] });
 }

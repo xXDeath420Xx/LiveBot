@@ -12,9 +12,11 @@
  */
 
 import pool from '../utils/db.js';
+import { isSnowflake } from './streamer-departure.js';
 import logger from '../utils/logger.js';
 import { safeJsonArray } from '../utils/safeJson.js';
 import { parseStreamUrl } from '../utils/stream-url-parser.js';
+import { promotionSubject } from './link-policy.js';
 import * as twitchApi from '../utils/platforms/twitch.js';
 import * as kickApi from '../utils/platforms/kick.js';
 
@@ -154,15 +156,15 @@ export async function validatePlatformUser(platform, username) {
             return { platformUserId: String(user.user.id), canonicalUsername: user.user.username || username };
         }
 
-        if (platform === 'instagram') {
-            // Instagram is no longer a supported go-live platform — Meta's Graph API
-            // cannot detect Lives, so a subscription would never announce. Reject the
-            // link instead of creating a phantom subscription.
-            logger.info(`[SelfPromo] Ignoring Instagram link @${username} — platform not supported`);
+        if (platform === 'instagram' || platform === 'facebook') {
+            // Neither is a supported go-live platform: detecting their Lives needs Meta's App
+            // Review, which this bot does not have (Instagram removed twice, Facebook 2026-10-06).
+            // A subscription would never announce, so reject the link instead of creating one.
+            logger.info(`[SelfPromo] Ignoring ${platform} link @${username} — platform not supported`);
             return null;
         }
 
-        // YouTube, TikTok, Trovo, Facebook - pass through
+        // YouTube, TikTok - pass through
         return { platformUserId: username, canonicalUsername: username };
     } catch (error) {
         logger.error(`[SelfPromo] Error validating ${platform} user "${username}"`, { error: error.message });
@@ -181,7 +183,7 @@ export async function validatePlatformUser(platform, username) {
  * @param {number|null} teamSubscriptionId - team ID if the user is a team member
  * @returns {boolean} true if created successfully
  */
-export async function createStreamerAndSubscription(guildId, platform, platformUserId, canonicalUsername, discordUserId, channelId, teamSubscriptionId = null) {
+export async function createStreamerAndSubscription(guildId, platform, platformUserId, canonicalUsername, discordUserId, channelId, teamSubscriptionId = null, { trackingOrigin = null } = {}) {
     let connection;
     try {
         connection = await pool.getConnection();
@@ -195,6 +197,17 @@ export async function createStreamerAndSubscription(guildId, platform, platformU
             'SELECT streamer_id, platform_user_id FROM streamers WHERE platform = ? AND (platform_user_id = ? OR username = ?)',
             [platform, platformUserId, canonicalUsername]
         );
+
+        /*
+         * A Discord USERNAME reaching this column is not hypothetical — two rows carried the literal
+         * string 'SuperMike242', which made every membership check on them fail with 400/50035 forever.
+         * Coerced to NULL rather than thrown, so the subscription is still created; it is simply
+         * unlinked, and honestly so, instead of carrying an id that can never resolve.
+         */
+        const linkedDiscordId = isSnowflake(String(discordUserId ?? '')) ? String(discordUserId) : null;
+        if (discordUserId && !linkedDiscordId) {
+            logger.warn(`[SelfPromo] refusing non-snowflake discord_user_id ${JSON.stringify(discordUserId)} for ${platform}/${canonicalUsername}`);
+        }
 
         let streamerId;
         if (existing.length > 0) {
@@ -214,12 +227,12 @@ export async function createStreamerAndSubscription(guildId, platform, platformU
             // Link discord_user_id if not already set
             await connection.query(
                 'UPDATE streamers SET discord_user_id = ? WHERE streamer_id = ? AND discord_user_id IS NULL',
-                [discordUserId, streamerId]
+                [linkedDiscordId, streamerId]
             );
         } else {
             const [result] = await connection.query(
                 'INSERT INTO streamers (platform, platform_user_id, username, discord_user_id) VALUES (?, ?, ?, ?)',
-                [platform, platformUserId, canonicalUsername, discordUserId]
+                [platform, platformUserId, canonicalUsername, linkedDiscordId]
             );
             streamerId = result.insertId;
         }
@@ -236,7 +249,6 @@ export async function createStreamerAndSubscription(guildId, platform, platformU
                 logger.info('[SelfPromo] Streamer already has team subscription, no changes needed', {
                     guildId, streamerId, teamSubscriptionId: existingSub[0].team_subscription_id
                 });
-                if (connection) connection.release();
                 return false;
             }
             // Existing non-team subscription — update routing
@@ -256,9 +268,13 @@ export async function createStreamerAndSubscription(guildId, platform, platformU
         } else {
             // New subscription — self-promo subs get edit_on_end=1 by default
             await connection.query(
-                `INSERT INTO subscriptions (guild_id, streamer_id, announcement_channel_id, delete_on_end, edit_on_end, team_subscription_id)
-                 VALUES (?, ?, ?, ?, ?, ?)`,
-                [guildId, streamerId, channelId, teamSubscriptionId ? 0 : 1, teamSubscriptionId ? 0 : 1, teamSubscriptionId]
+                // Self-promo means the member posted their OWN link in the server, so this is a
+                // member subscription — unless it is a team row, which the roster governs instead.
+                `INSERT INTO subscriptions (guild_id, streamer_id, announcement_channel_id, delete_on_end, edit_on_end, team_subscription_id, tracking_origin)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                // A caller that knows better (a member adding a FRIEND's stream) passes trackingOrigin.
+                [guildId, streamerId, channelId, teamSubscriptionId ? 0 : 1, teamSubscriptionId ? 0 : 1, teamSubscriptionId,
+                 trackingOrigin || (teamSubscriptionId ? 'external' : 'member')]
             );
         }
 
@@ -500,13 +516,13 @@ export async function handleSelfPromoMessage(message) {
         });
         await deleteMessage();
         // The post is allowed to stay, but silently not tracking it would look like the bot
-        // ignored them. Instagram lands here by design — Meta's API cannot detect a Live.
+        // ignored them. Instagram and Facebook land here by design (see validatePlatformUser).
         if (keepMessage) {
             await notify(
-                parsed.platform === 'instagram'
-                    ? `Your post is up. Heads-up: I can't track **Instagram** go-lives (their API doesn't ` +
-                      `expose them), so it won't be announced automatically. Post a Twitch, Kick, YouTube, ` +
-                      `TikTok, Trovo, Rumble or Facebook link and I'll add you to the tracker.`
+                (parsed.platform === 'instagram' || parsed.platform === 'facebook')
+                    ? `Your post is up. Heads-up: I can't track **${parsed.platform === 'instagram' ? 'Instagram' : 'Facebook'}** ` +
+                      `go-lives, so it won't be announced automatically. Post a Twitch, Kick, YouTube, ` +
+                      `TikTok or Rumble link and I'll add you to the tracker.`
                     : `Your post is up, but I couldn't verify **${parsed.username}** on **${parsed.platform}**, ` +
                       `so I haven't added it to the stream tracker. Double-check the link, or ask a moderator.`
             );
@@ -537,6 +553,19 @@ export async function handleSelfPromoMessage(message) {
         }
 
         return true;
+    }
+
+    // Someone boosting another creator — "go watch X, they're live" — is welcome, but it is not
+    // self-promo. The post stays and the member is not told off; we simply do not auto-track a
+    // channel they have just told us belongs to someone else. This outranks the name-similarity
+    // gate below, because an explicit "go follow them" is better evidence than a coincidental
+    // name match, and auto-tracking here would link the WRONG Discord account to the streamer.
+    if (promotionSubject(message?.content) === 'third-party') {
+        logger.info('[SelfPromo] not auto-tracking: message promotes someone else', {
+            guildId, userId: member.id, platform: parsed.platform,
+            postedChannel: validated.canonicalUsername
+        });
+        return false;   // leave the message alone, no tracking, no warning
     }
 
     // Ownership gate — self-promo is for the user's OWN channel only.

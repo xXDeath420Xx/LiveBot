@@ -20,7 +20,9 @@ class MemoryMonitor {
      */
     start() {
         if (this.interval) {
-            logger.warn('[MemoryMonitor] Already running');
+            // One process-wide monitor; initializeManagers() runs once per bot (default + every custom
+            // bot), so repeat starts are expected and simply no-ops.
+            logger.debug('[MemoryMonitor] Already running');
             return;
         }
 

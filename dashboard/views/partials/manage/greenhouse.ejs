@@ -1,0 +1,198 @@
+<%#
+  Greenhouse Tycoon (the v2 game: website /greenhouse, Twitch panel, /arcade greenhouse commands).
+  Replaces the old CertiFried Tycoon page: ?page=cfx is an alias of ?page=greenhouse (core/manage-nav.js).
+  Read-only: API-driven (/api/guilds/:id/greenhouse); needs `guild`. Rows are built with createElement/textContent.
+%>
+<div class="page-section" id="ghPage" data-guild-id="<%= guild.id %>">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-seedling"></i>
+                <span>Greenhouse Tycoon</span>
+            </div>
+            <div class="page-section-subtitle">Who from this server plays, the running season and where to play.</div>
+        </div>
+        <a class="btn btn-primary" href="/greenhouse" target="_blank" rel="noopener" id="ghPlay">Open the game</a>
+    </div>
+
+    <div id="ghError" class="cf-notice is-bad" role="alert" hidden></div>
+    <div id="ghNotReady" class="cf-notice is-info" role="status" hidden>Greenhouse Tycoon is not set up yet. This page fills in once the game is open; until then the <code>/arcade greenhouse</code> commands say the same.</div>
+
+    <div id="ghLive" hidden>
+    <dl class="cf-kpis" aria-label="Greenhouse Tycoon at a glance">
+        <div class="cf-kpi"><dt>Season</dt><dd class="cf-kpi-value is-small" id="ghKpiSeason">–</dd></div>
+        <div class="cf-kpi"><dt>Ends</dt><dd class="cf-kpi-value is-small" id="ghKpiEnds">–</dd></div>
+        <div class="cf-kpi"><dt>Players from this server</dt><dd class="cf-kpi-value" id="ghKpiMembers">–</dd></div>
+        <div class="cf-kpi"><dt>Weekly challenge</dt><dd class="cf-kpi-value is-small" id="ghKpiChallenge">–</dd></div>
+    </dl>
+
+    <section class="cf-section" aria-labelledby="gh-members-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="gh-members-title">Members who play <span class="cf-chip" id="ghMembersCount" hidden></span></h2>
+                <p class="cf-section-desc">Members whose Discord account has a greenhouse: signed in on the website with Discord, used <code>/arcade greenhouse daily</code>, or linked Discord to the save they play on Twitch or Kick. Ranked by this season's score.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div id="ghPartial" class="cf-notice is-info" role="status" hidden>This server has many members; the list shows the players found so far and may be incomplete.</div>
+            <div id="ghMembers" class="cf-list">
+                <%- include('../kit/_state', { kind: 'loading', title: 'Loading', text: null, id: null, boxed: false, compact: true }) %>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="gh-season-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="gh-season-title">Season</h2>
+                <p class="cf-section-desc" id="ghSeasonDesc">Seasons last 30 days. Points come from harvests, sales, orders, quests and new hybrids, capped each day, so playing a little every day beats leaving staff running. Rewards are paid automatically when a season ends.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--stack">
+                <div class="cf-row-text">
+                    <span class="cf-row-label">This week's challenge</span>
+                    <p class="cf-row-desc" id="ghChallenge">–</p>
+                </div>
+            </div>
+            <div class="cf-row cf-row--stack">
+                <div class="cf-row-text">
+                    <span class="cf-row-label">Top 10, every player</span>
+                    <p class="cf-row-desc">The game is one world, so this is the same on every server.</p>
+                </div>
+                <div id="ghTop" class="cf-list"></div>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="gh-where-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="gh-where-title">Where to play</h2>
+                <p class="cf-section-desc">One save across the website, the Twitch panel and Discord, once a player links their sign-ins.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <span class="cf-row-label">Website</span>
+                    <p class="cf-row-desc">Sign in with Discord, Twitch or Kick. Share this link with your members.</p>
+                </div>
+                <div class="cf-row-control"><code id="ghWebLink">/greenhouse</code></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <span class="cf-row-label">Discord</span>
+                    <p class="cf-row-desc"><code>/arcade greenhouse status</code>, <code>/arcade greenhouse daily</code> (one daily reward a day across every place) and <code>/arcade greenhouse link</code> (link codes, sent by DM).</p>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <span class="cf-row-label">Twitch panel</span>
+                    <p class="cf-row-desc">The Twitch panel extension is not released yet.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+    </div>
+</div>
+
+<style>
+    #ghPage .gh-row { display: flex; align-items: center; gap: 12px; }
+    #ghPage .gh-rank { width: 2.5em; color: var(--cf-text-3); font-variant-numeric: tabular-nums; }
+    #ghPage .gh-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #ghPage .gh-sub { color: var(--cf-text-3); font-size: 0.85em; margin-left: 6px; }
+    #ghPage .gh-value { font-variant-numeric: tabular-nums; white-space: nowrap; }
+</style>
+
+<script>
+(function () {
+  const root = document.getElementById('ghPage');
+  if (!root) return;
+  const guildId = root.dataset.guildId;
+  const $ = (id) => document.getElementById(id);
+  const num = (n) => Number(n || 0).toLocaleString('en-US');
+  const date = (ms) => ms ? new Date(ms).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+
+  function h(tag, props, ...kids) {
+    const n = document.createElement(tag);
+    const p = props || {};
+    if (p.className) n.className = p.className;
+    if (p.text !== undefined) n.textContent = String(p.text);
+    for (const kid of kids) if (kid != null) n.append(kid);
+    return n;
+  }
+  const empty = (text) => h('div', { className: 'cf-list-item' }, h('span', { className: 'cf-list-main', text }));
+  const row = (rank, name, sub, value) => h('div', { className: 'cf-list-item gh-row' },
+    h('span', { className: 'gh-rank', text: rank }),
+    h('span', { className: 'gh-name' }, h('strong', { text: name }), sub ? h('span', { className: 'gh-sub', text: sub }) : null),
+    h('span', { className: 'gh-value', text: value }));
+
+  function daysLeft(ms) {
+    const left = ms - Date.now();
+    if (!(left > 0)) return 'ending now';
+    const d = Math.floor(left / 86400000);
+    return d >= 1 ? `in ${d} day${d === 1 ? '' : 's'}` : 'today';
+  }
+
+  function draw(d) {
+    if (!d.ready) { $('ghNotReady').hidden = false; return; }
+    $('ghLive').hidden = false;
+    const s = d.season;
+    $('ghKpiSeason').textContent = s ? `Season ${s.number}` : 'Starting soon';
+    $('ghKpiEnds').textContent = s ? `${date(s.endsAtMs)} (${daysLeft(s.endsAtMs)})` : '–';
+    $('ghKpiMembers').textContent = d.botInServer ? num(d.playersTotal) : '–';
+
+    const c = d.challenge;
+    let challengeText = 'No challenge this week.';
+    if (c) {
+      // services/cfx/store/meta.js (H-644): a challenge waits until enough players were seen in the last 7 days,
+      // re-counted on every season-job run; it is skipped only if its week ends first.
+      challengeText = c.status === 'skipped'
+        ? `Week ${c.week}: ${c.title}. Not run: fewer than ${c.minActivePlayers} players played before its week ended.`
+        : c.status === 'scheduled' ? `Week ${c.week}: ${c.title}. Starts once ${c.minActivePlayers} players have played in the last 7 days. ${c.activePlayers ?? 0} so far.`
+        : `Week ${c.week}: ${c.title}. Ends ${date(c.endsAtMs)}. Everyone who finishes is paid; the first three get a bonus.`;
+    }
+    $('ghChallenge').textContent = challengeText;
+    $('ghKpiChallenge').textContent = c ? (c.status === 'skipped' ? 'Not run' : c.status === 'scheduled' ? `Week ${c.week}, waiting` : `Week ${c.week}`) : '–';
+
+    const top = $('ghTop');
+    top.replaceChildren();
+    if (!s) top.append(empty('The first season starts within 15 minutes of the game opening.'));
+    else if (!d.globalTop.length) top.append(empty(`Nobody has scored in season ${s.number} yet.`));
+    else d.globalTop.forEach(p => top.append(row(`#${p.rank}`, p.displayName, `level ${p.level}`, `${num(p.score)} pts`)));
+
+    const mem = $('ghMembers');
+    mem.replaceChildren();
+    $('ghPartial').hidden = !d.partial;
+    const count = $('ghMembersCount');
+    count.hidden = !d.playersTotal;
+    count.textContent = num(d.playersTotal);
+    if (!d.botInServer) mem.append(empty('The bot is not in this server right now, so its members cannot be checked.'));
+    else if (!d.players.length) mem.append(empty('Nobody from this server plays with their Discord account yet. Share the link below, or ask members to try /arcade greenhouse daily.'));
+    d.players.forEach(p => {
+      const sub = [`level ${p.level}`, p.prestige ? `replanted ${p.prestige}x` : null, p.gameName && p.gameName !== p.displayName ? `"${p.gameName}" in the game` : null,
+        p.lastSeenAtMs ? `seen ${date(p.lastSeenAtMs)}` : null].filter(Boolean).join(' · ');
+      mem.append(row(p.communityRank ? `#${p.communityRank}` : '–', p.displayName, sub, p.seasonScore ? `${num(p.seasonScore)} pts` : 'no points yet'));
+    });
+    if (d.players.length < d.playersTotal) mem.append(empty(`and ${num(d.playersTotal - d.players.length)} more`));
+
+    const url = d.gameUrl || '/greenhouse';
+    $('ghWebLink').textContent = url;
+    $('ghPlay').setAttribute('href', url);
+  }
+
+  fetch(`/api/guilds/${guildId}/greenhouse`, { credentials: 'same-origin' })
+    .then(async (res) => {
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
+      return body;
+    })
+    .then(draw)
+    .catch((err) => {
+      $('ghLive').hidden = false;
+      $('ghMembers').replaceChildren(empty('Could not load.'));
+      const e = $('ghError'); e.textContent = err.message; e.hidden = false;
+    });
+})();
+</script>

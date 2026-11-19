@@ -285,108 +285,88 @@ class WeatherManager {
     }
 
     /**
-     * Check for active weather alerts from NWS
+     * Check for active NWS alerts in the zones members have saved.
+     *
+     * Rebuilt 2026-11-18. The old version pulled every active alert in the US, posted each severe one
+     * to every enabled server in a channel guessed by name (even #general), and remembered what it had
+     * sent only in memory, so a restart re-sent everything. Now:
+     *   - only the zones and counties members saved are queried;
+     *   - each alert goes by DM to the members whose saved location it covers, and only for servers that
+     *     have weather alerts switched on, which is what the dashboard page describes;
+     *   - "already sent" is the weather_alerts row (alert_id is UNIQUE), so restarts don't repeat alerts.
      */
     async checkAlerts() {
         try {
-            const response = await axios.get('https://api.weather.gov/alerts/active', {
-                headers: {
-                    'User-Agent': 'CertiFriedUtility Discord Bot',
-                    'Accept': 'application/geo+json'
-                },
-                timeout: 10000
-            });
-
-            const alerts = response.data.features || [];
-            logger.info(`[WeatherManager] Fetched ${alerts.length} active alerts`);
-
-            for (const alert of alerts) {
-                await this.processAlert(alert);
+            const [rows] = await pool.execute(
+                `SELECT z.user_id, z.zone_code, z.county_id
+                   FROM user_alert_zones z
+                   JOIN weather_config c ON c.guild_id = z.guild_id AND c.enabled = 1`
+            );
+            if (!rows.length) return;
+            const codes = [...new Set(rows.flatMap(r => [r.zone_code, r.county_id]).filter(Boolean))];
+            const alerts = [];
+            for (let i = 0; i < codes.length; i += 40) {
+                const response = await axios.get('https://api.weather.gov/alerts/active', {
+                    params: { zone: codes.slice(i, i + 40).join(',') },
+                    headers: { 'User-Agent': 'CertiFriedUtility Discord Bot', 'Accept': 'application/geo+json' },
+                    timeout: 15000
+                });
+                alerts.push(...(response.data.features || []));
             }
-
-            // Clean old alerts from memory (keep last 1000)
-            if (this.processedAlerts.size > 1000) {
-                const alertsArray = Array.from(this.processedAlerts);
-                this.processedAlerts = new Set(alertsArray.slice(-500));
-            }
+            logger.debug(`[WeatherManager] ${alerts.length} active alerts across ${codes.length} saved zones`);
+            for (const alert of alerts) await this.processAlert(alert, rows);
         } catch (error) {
             logger.error(`[WeatherManager] Error fetching weather alerts: ${error.message}`);
         }
     }
 
     /**
-     * Process a single weather alert
+     * Record one alert and DM the members it affects. Returns quietly if it was handled before.
      */
-    async processAlert(alert) {
+    async processAlert(alert, subscribers) {
         try {
-            const id = alert.id;
-            const properties = alert.properties;
-            const event = properties.event;
-            const severity = properties.severity;
-            const headline = properties.headline;
-            const areaDesc = properties.areaDesc;
-            const description = properties.description;
-            const instruction = properties.instruction;
-            const expires = properties.expires;
-            const link = properties.uri || `https://api.weather.gov/alerts/${id}`;
-            const ugcs = properties.geocode?.UGC || [];
+            const p = alert.properties || {};
+            const id = alert.id || p.id;
+            if (!id || !Object.prototype.hasOwnProperty.call(this.alertColors, p.event)) return;
+            if (this.processedAlerts.has(id)) return;
 
-            // Skip if already processed
-            if (this.processedAlerts.has(id)) {
-                return;
-            }
-
-            // Only process severe alerts
-            if (!Object.keys(this.alertColors).includes(event)) {
-                return;
-            }
-
-            this.processedAlerts.add(id);
-
-            // Save to database
-            await pool.execute(
-                `INSERT INTO weather_alerts (alert_id, event, severity, headline, areas, description, instruction, expires_at, link)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                 ON DUPLICATE KEY UPDATE event = VALUES(event)`,
-                [id, event, severity, headline, areaDesc, description, instruction, expires ? new Date(expires) : null, link]
+            const [ins] = await pool.execute(
+                `INSERT IGNORE INTO weather_alerts (alert_id, event, severity, headline, areas, description, instruction, expires_at, link)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                [id, p.event, p.severity || null, p.headline || null, p.areaDesc || null, p.description || null,
+                 p.instruction || null, p.expires ? new Date(p.expires) : null, p.uri || `https://api.weather.gov/alerts/${encodeURIComponent(id)}`]
             );
+            this.processedAlerts.add(id);
+            if (this.processedAlerts.size > 1000) this.processedAlerts = new Set([...this.processedAlerts].slice(-500));
+            if (!ins.affectedRows) return; // sent before this process started
 
-            // Find affected users
-            const affectedUsers = await this.getUsersInZones(ugcs);
-
-            // Send notifications
-            await this.sendAlertNotifications(event, {
-                id,
-                severity,
-                headline,
-                areaDesc,
-                description,
-                instruction,
-                expires,
-                link
-            }, affectedUsers);
-
-            logger.info(`[WeatherManager] Processed alert: ${event} - ${headline}`);
+            const ugc = new Set([...(p.geocode?.UGC || []), ...((p.affectedZones || []).map(u => String(u).split('/').pop()))]);
+            const users = [...new Set((subscribers || [])
+                .filter(s => ugc.has(s.zone_code) || (s.county_id && ugc.has(s.county_id)))
+                .map(s => s.user_id))];
+            await this.sendAlertNotifications(p.event, {
+                id, severity: p.severity, headline: p.headline, areaDesc: p.areaDesc, description: p.description,
+                instruction: p.instruction, expires: p.expires, link: p.uri || 'https://www.weather.gov'
+            }, users);
+            logger.info(`[WeatherManager] ${p.event}: ${users.length} member(s) notified`);
         } catch (error) {
             logger.error(`[WeatherManager] Error processing alert: ${error.message}`);
         }
     }
 
     /**
-     * Get users in affected zones
+     * Members whose saved zone or county is in the given UGC codes (kept for callers outside this file).
      */
     async getUsersInZones(ugcs) {
-        if (!ugcs || ugcs.length === 0) {
-            return [];
-        }
-
+        if (!ugcs || ugcs.length === 0) return [];
         try {
-            const placeholders = ugcs.map(() => '?').join(',');
+            const ph = ugcs.map(() => '?').join(',');
             const [users] = await pool.execute(
-                `SELECT DISTINCT user_id FROM user_alert_zones WHERE zone_code IN (${placeholders})`,
-                [...ugcs]
+                `SELECT DISTINCT z.user_id FROM user_alert_zones z
+                   JOIN weather_config c ON c.guild_id = z.guild_id AND c.enabled = 1
+                  WHERE z.zone_code IN (${ph}) OR z.county_id IN (${ph})`,
+                [...ugcs, ...ugcs]
             );
-
             return users.map(u => u.user_id);
         } catch (error) {
             logger.error(`[WeatherManager] Error getting users in zones: ${error.message}`);
@@ -395,64 +375,31 @@ class WeatherManager {
     }
 
     /**
-     * Send alert notifications to guilds
+     * DM each affected member once. Members with DMs closed are skipped.
      */
     async sendAlertNotifications(eventType, alertData, affectedUsers) {
-        try {
-            // Get all guilds with weather enabled
-            const [configs] = await pool.execute(
-                'SELECT guild_id FROM weather_config WHERE enabled = TRUE'
-            );
+        if (!affectedUsers?.length) return;
+        const embed = new EmbedBuilder()
+            .setTitle(eventType)
+            .setDescription((alertData.headline || alertData.description || 'No description').slice(0, 1500))
+            .addFields(
+                { name: 'Areas affected', value: String(alertData.areaDesc || 'Unknown').slice(0, 1024) },
+                { name: 'Severity', value: alertData.severity || 'N/A', inline: true },
+                { name: 'Expires', value: alertData.expires ? `<t:${Math.floor(new Date(alertData.expires).getTime() / 1000)}:R>` : 'Unknown', inline: true }
+            )
+            .setColor(this.alertColors[eventType] || 0xFFAA00)
+            .setURL(alertData.link || 'https://www.weather.gov')
+            .setFooter({ text: 'National Weather Service. Turn these off with /weather check removelocation' })
+            .setTimestamp();
+        if (alertData.instruction) embed.addFields({ name: 'What to do', value: alertData.instruction.slice(0, 1024) });
 
-            for (const { guild_id } of configs) {
-                const guild = await this.client.guilds.fetch(guild_id).catch(() => null);
-                if (!guild) continue;
-
-                // Find suitable channel
-                const channel = guild.channels.cache.find(ch =>
-                    ch.isTextBased() && (
-                        ch.name.includes('weather') ||
-                        ch.name.includes('alert') ||
-                        ch.name.includes('emergency') ||
-                        ch.name === 'general'
-                    )
-                );
-
-                if (!channel) continue;
-
-                // Filter affected users to this guild
-                const guildAffectedUsers = affectedUsers.filter(userId => {
-                    return guild.members.cache.has(userId);
-                });
-
-                const embed = new EmbedBuilder()
-                    .setTitle(`⚠️ ${eventType}`)
-                    .setDescription(alertData.headline || alertData.description?.slice(0, 1500) || 'No description')
-                    .addFields(
-                        { name: 'Areas Affected', value: alertData.areaDesc || 'Unknown' },
-                        { name: 'Severity', value: alertData.severity || 'N/A', inline: true },
-                        { name: 'Expires', value: alertData.expires ? `<t:${Math.floor(new Date(alertData.expires).getTime() / 1000)}:R>` : 'Unknown', inline: true }
-                    )
-                    .setColor(this.alertColors[eventType] || 0xFFAA00)
-                    .setURL(alertData.link || 'https://www.weather.gov')
-                    .setFooter({ text: 'National Weather Service' })
-                    .setTimestamp();
-
-                if (alertData.instruction) {
-                    embed.addFields({ name: 'Instructions', value: alertData.instruction.slice(0, 1024) });
-                }
-
-                const mentions = guildAffectedUsers.length > 0
-                    ? guildAffectedUsers.map(id => `<@${id}>`).join(' ')
-                    : undefined;
-
-                await channel.send({
-                    content: mentions,
-                    embeds: [embed]
-                });
+        for (const userId of affectedUsers) {
+            try {
+                const user = await this.client.users.fetch(userId);
+                await user.send({ embeds: [embed] });
+            } catch (error) {
+                logger.debug(`[WeatherManager] could not DM ${userId}: ${error.message}`);
             }
-        } catch (error) {
-            logger.error(`[WeatherManager] Error sending alert notifications: ${error.message}`);
         }
     }
 }

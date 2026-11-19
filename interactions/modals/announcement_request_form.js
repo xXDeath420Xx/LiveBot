@@ -1,5 +1,6 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import logger from '../../utils/logger.js';
+import { themeColor } from '../../core/guild-theme.js';
 
 export async function handleAnnouncementRequestForm(interaction) {
     try {
@@ -30,7 +31,7 @@ export async function handleAnnouncementRequestForm(interaction) {
 
         // Create embed for the request
         const requestEmbed = new EmbedBuilder()
-            .setColor('#5865F2')
+            .setColor(themeColor(interaction.guildId, 'primary'))
             .setTitle('New Stream Announcement Request')
             .setDescription(`**User:** ${interaction.user.tag} (${interaction.user.id})\n**Discord Mention:** ${interaction.user}`)
             .addFields(

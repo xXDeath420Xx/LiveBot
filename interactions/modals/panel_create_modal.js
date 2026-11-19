@@ -1,6 +1,7 @@
 import { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder } from 'discord.js';
 import pool from '../../utils/db.js';
 import logger from '../../utils/logger.js';
+import { themeColor } from '../../core/guild-theme.js';
 
 /**
  * Handle panel creation modal submission
@@ -114,7 +115,7 @@ export async function handlePanelCreateModal(interaction) {
         const row3 = new ActionRowBuilder().addComponents(roleSelect);
 
         const embed = new EmbedBuilder()
-            .setColor('#5865F2')
+            .setColor(themeColor(interaction.guildId, 'primary'))
             .setTitle('🎫 Complete Panel Configuration')
             .setDescription(`**Panel Name:** ${panelName}\n\nPlease select the required settings below:`)
             .addFields(

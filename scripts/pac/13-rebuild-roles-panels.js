@@ -4,15 +4,14 @@ import { createPool } from './shared.js';
 
 const GUILD = '1099732505243959407';
 const ROLES_CH = '1456056474097680394';
-const NEW_BOT_ID = '1496352090950467595';
+// The acting bot comes from guild_bot_mapping — never pinned here.
 const COLOR = 0x5865F2;
 
 async function main() {
     const pool = createPool();
-    const enc = (await import('../../utils/encryption.js')).default;
-    const [r] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id = ?', [NEW_BOT_ID]);
-    const token = enc.decrypt(JSON.parse(r[0].bot_token));
-    const H = { Authorization: 'Bot ' + token, 'Content-Type': 'application/json' };
+    const { resolveBotForGuild } = await import('../../utils/bot-resolver.js');
+    const bot = await resolveBotForGuild(GUILD, { db: pool });
+    const H = { Authorization: bot.auth, 'Content-Type': 'application/json' };
 
     // 1. Fetch all guild roles → name lookup
     const rolesRes = await fetch(`https://discord.com/api/v10/guilds/${GUILD}/roles`, { headers: H });

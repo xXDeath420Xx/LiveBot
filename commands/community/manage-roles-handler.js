@@ -1,6 +1,7 @@
 import { EmbedBuilder } from 'discord.js';
 import pool from '../../utils/db.js';
 import logger from '../../utils/logger.js';
+import { themeColor } from '../../core/guild-theme.js';
 
 export async function handleCreatePanel(interaction) {
     const reactionRoleManager = interaction.client.reactionRoleManager;
@@ -101,7 +102,8 @@ export async function handleAddRole(interaction) {
         role.id,
         emoji,
         label,
-        description
+        description,
+        style
     );
 
     if (result.success) {
@@ -193,7 +195,7 @@ export async function handleListPanels(interaction) {
 
     const embed = new EmbedBuilder()
         .setTitle('Reaction Role Panels')
-        .setColor('#5865F2')
+        .setColor(themeColor(interaction.guildId, 'primary'))
         .setDescription(`Found ${panels.length} panel(s) in this server.`)
         .setTimestamp();
 
@@ -208,10 +210,10 @@ export async function handleListPanels(interaction) {
         const roleCount = mappings[0].count;
 
         embed.addFields({
-            name: panel.title || `Panel ${panel.id}`,
+            name: panel.panel_name || `Panel ${panel.id}`,
             value: `**Channel:** ${channelMention}\n` +
-                `**Type:** ${panel.type}\n` +
-                `**Mode:** ${panel.mode}\n` +
+                `**Type:** ${panel.interaction_type || 'reaction'}\n` +
+                `**Mode:** ${panel.panel_mode}\n` +
                 `**Roles:** ${roleCount}\n` +
                 `**Message ID:** \`${panel.message_id}\``,
             inline: false

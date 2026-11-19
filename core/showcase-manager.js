@@ -15,6 +15,7 @@
  */
 import pool from '../utils/db.js';
 import logger from '../utils/logger.js';
+import { displayNameFor } from '../utils/display-name.js';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import fsp from 'node:fs/promises';
@@ -213,7 +214,7 @@ export async function ingestWebUpload({ inputPath, name, size, guildId, channelI
   const guild = await client.guilds.fetch(guildId).catch(() => null);
   const member = guild ? await guild.members.fetch(creatorId).catch(() => null) : null;
   const user = await client.users.fetch(creatorId).catch(() => null);
-  const creatorName = member?.displayName || user?.username || 'creator';
+  const creatorName = member?.displayName || (user ? displayNameFor(user, guild) : null) || 'creator';
 
   const { id } = await ingest({ inputPath, name, size, kind, guildId, channelId, creatorId, creatorName, title });
 
@@ -243,7 +244,7 @@ export async function handleShowcaseMessage(message) {
       .filter(x => x.kind);
     if (!media.length) return false; // not media — leave it for normal handling
 
-    const creatorName = message.member?.displayName || message.author.username;
+    const creatorName = message.member?.displayName || displayNameFor(message.author, message.guild);
     const baseTitle = (message.content || '').trim().slice(0, 200);
     const posted = [];
     for (const { att, kind } of media) {
@@ -294,7 +295,7 @@ export async function handleShowcaseUploadCommand(interaction) {
   }
   await interaction.reply({ content: '⏳ Processing your upload privately — this can take a moment for video…', ephemeral: true });
   try {
-    const creatorName = interaction.member?.displayName || interaction.user.username;
+    const creatorName = interaction.member?.displayName || displayNameFor(interaction.user, interaction.guild);
     const title = (interaction.options.getString('title') || '').slice(0, 200);
     const { id } = await ingest({
       url: att.url, name: att.name, size: att.size, kind,

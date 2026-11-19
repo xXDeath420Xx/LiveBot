@@ -92,7 +92,7 @@ async function getKickUser(username) {
 
         if (response.data && response.data.data && response.data.data.length > 0) {
             const channelData = response.data.data[0];
-            logger.info(`[Kick API] Successfully retrieved channel data for ${username}`, {
+            logger.debug(`[Kick API] Successfully retrieved channel data for ${username}`, {
                 is_live: channelData.stream?.is_live,
                 viewer_count: channelData.stream?.viewer_count
             });
@@ -149,7 +149,7 @@ async function isStreamerLive(username) {
     try {
         const user = await getKickUser(username);
         const isLive = user?.livestream?.is_live || false;
-        logger.info(`[Kick API] isStreamerLive for ${username}: ${isLive}`, {
+        logger.debug(`[Kick API] isStreamerLive for ${username}: ${isLive}`, {
             hasLivestream: !!user?.livestream
         });
         return isLive;

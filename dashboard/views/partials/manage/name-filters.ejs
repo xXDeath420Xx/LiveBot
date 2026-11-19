@@ -1,0 +1,1022 @@
+<%# Name filters — phrase / regex filters on usernames, display names and nicknames, templates, generated-username check, Auto-Pilot, cleanse + review queue (core/name-filters.js). API-driven (dashboard/routes/api/features/name-filters.js); needs `guild` in locals. Laid out with the settings-row kit (cf-settings.css), like avatar-protection.ejs and nsfw-protection.ejs; every id the script below uses is unchanged. %>
+<div class="page-section" id="nameFiltersPage" data-guild-id="<%= guild.id %>">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-id-badge"></i>
+                <span>Name filters</span>
+            </div>
+            <div class="page-section-subtitle">Usernames, display names and nicknames, checked on join and on every rename.</div>
+        </div>
+    </div>
+
+    <div id="nfError" class="cf-notice is-bad" role="alert" hidden></div>
+    <div id="nfNotice" class="cf-notice is-info" role="status" hidden></div>
+
+    <div class="cf-kpis" id="nfStats" aria-label="Name filters at a glance">
+        <div class="cf-state cf-state--loading cf-state--compact" role="status" aria-live="polite"><span class="cf-spinner" aria-hidden="true"></span><p class="cf-state-title">Loading...</p></div>
+    </div>
+
+    <!-- Settings -->
+    <section class="cf-section" aria-labelledby="nf-settings-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="nf-settings-title">Settings</h2>
+                <p class="cf-section-desc">Members you mark safe are skipped too. Staff and allowlisted members are never acted on. The allowlist, and the pause that holds every protection, are on <a href="/manage/<%= guild.id %>?page=protection-settings">Protection settings</a>.</p>
+            </div>
+            <div class="cf-section-actions"><span id="nfOnBadge" class="cf-pill" hidden></span></div>
+        </header>
+        <div class="cf-rows">
+            <div id="nfPermWarn" class="cf-notice is-warn" hidden></div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="nfEnabled">Check names</label>
+                    <p class="cf-row-desc">On join and on every rename. Each filter's action is carried out when a name matches.</p>
+                </div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="nfEnabled" data-feature-switch></div>
+            </div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="nfFuzzy">Fuzzy matching</label>
+                    <p class="cf-row-desc">Fold lookalike letters, accents, zalgo, invisible characters and leetspeak before comparing.</p>
+                </div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="nfFuzzy"></div>
+            </div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="nfCollapse">Ignore separators and repeated letters</label>
+                    <p class="cf-row-desc">So <code>s.u.p.p.o.r.t</code> and <code>suuupport</code> both match <code>support</code>.</p>
+                </div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="nfCollapse"></div>
+            </div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="nfDm">Tell people why by DM</label>
+                    <p class="cf-row-desc">When they are kicked, banned or timed out. The filter itself is never shown.</p>
+                </div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="nfDm"></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="nfFlagRole">Role for the flag action</label>
+                    <p class="cf-row-desc">Given by filters set to Flag, and taken off again when the member changes to a clean name. It must sit below the bot's highest role.</p>
+                </div>
+                <div class="cf-row-control"><select id="nfFlagRole" class="form-select"></select></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="nfTimeout">Timeout length</label>
+                    <p class="cf-row-desc">Used by filters set to Timeout. From 1 to 40320 minutes (28 days).</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-unit"><input id="nfTimeout" type="number" min="1" max="40320" class="form-control"><span class="cf-unit">minutes</span></div>
+                </div>
+            </div>
+            <div class="cf-section-foot">
+                <span class="cf-foot-note">Log only posts to the server log and does nothing else.</span>
+                <button type="button" class="btn btn-primary" id="nfSaveSettings"><span>Save settings</span></button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Add / edit -->
+    <section class="cf-section" id="nfAddCard" aria-labelledby="nfAddTitle">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="nfAddTitle">Add a filter</h2>
+                <p class="cf-section-desc">Preview who a filter hits before you save it. Phrases need 3 or more letters.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--stack">
+                <div class="cf-fields nf-fields">
+                    <div class="cf-field">
+                        <label for="nfType">Filter type</label>
+                        <select id="nfType" class="form-select">
+                            <option value="phrase">Phrase (name contains)</option>
+                            <option value="regex">Regex</option>
+                            <option value="exact">Exact name</option>
+                        </select>
+                    </div>
+                    <div class="cf-field nf-field-wide">
+                        <label for="nfPattern">Phrase, regex or name</label>
+                        <input id="nfPattern" class="form-control" maxlength="200" placeholder="support team   or   ^mod(erator)?s?$">
+                    </div>
+                    <div class="cf-field">
+                        <label for="nfAction">Action</label>
+                        <select id="nfAction" class="form-select"></select>
+                    </div>
+                    <div class="cf-field nf-field-wide">
+                        <label for="nfNote">Note for staff</label>
+                        <input id="nfNote" class="form-control" maxlength="200" placeholder="Optional">
+                    </div>
+                </div>
+                <label class="cf-choice" for="nfCase"><input type="checkbox" id="nfCase"> <span>Case-sensitive<span class="cf-choice-desc">Regexes are case-insensitive unless this is ticked.</span></span></label>
+                <p class="cf-field-hint">A regex is refused if it could freeze the bot (nested repeats), has an empty alternative, matches an empty name, or matches ordinary names wholesale.</p>
+            </div>
+            <div class="cf-section-foot">
+                <button type="button" class="btn btn-secondary" id="nfCancelEdit" hidden>Cancel edit</button>
+                <button type="button" class="btn btn-secondary" id="nfPreviewBtn"><span>Preview who it hits</span></button>
+            </div>
+            <div id="nfPreview" hidden>
+                <div class="nf-preview-head" id="nfPreviewHead" role="status" aria-live="polite"></div>
+                <div id="nfPreviewList" class="nf-list"></div>
+                <div class="cf-section-foot">
+                    <button type="button" class="btn btn-danger" id="nfSaveActBtn" hidden><span>Save and act</span></button>
+                    <button type="button" class="btn btn-primary" id="nfSaveBtn"><span>Save</span></button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Filters -->
+    <section class="cf-section" aria-labelledby="nf-filters-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="nf-filters-title">Filters</h2>
+                <p class="cf-section-desc">Your own filters, template filters and the ones Auto-Pilot keeps. Removed template and Auto-Pilot filters are remembered so updates do not bring them back.</p>
+            </div>
+            <div class="cf-section-actions"><span id="nfFilterCount" class="cf-pill"></span></div>
+        </header>
+        <div class="cf-rows">
+            <div class="nf-bar"><div class="cf-segmented nf-tabs" id="nfFilterTabs" role="group" aria-label="Which filters"></div>
+                <div class="cf-search nf-search" id="cfk-nf-filter-search-wrap" hidden><i class="fas fa-magnifying-glass" aria-hidden="true"></i><input type="search" id="cfk-nf-filter-search" class="form-control form-control-sm" placeholder="Search filters" aria-label="Search filters"></div></div>
+            <div id="nfFilters" class="cf-table-wrap nf-table-wrap"></div>
+        </div>
+    </section>
+
+    <!-- Test -->
+    <section class="cf-section" aria-labelledby="nf-test-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="nf-test-title">Test a name or a member</h2>
+                <p class="cf-section-desc">Shows every form a name is compared in and which filters match. Nothing is acted on.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="nfTestText">Name</label>
+                    <p class="cf-row-desc">Any text, with lookalike letters if you like.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="nf-inline">
+                        <input id="nfTestText" class="form-control" maxlength="100" placeholder="ѕuррогt tеаm">
+                        <button type="button" class="btn btn-secondary" id="nfTestBtn"><span>Test name</span></button>
+                    </div>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="nfTestMember">Member</label>
+                    <p class="cf-row-desc">Their username, display name and nickname are all tested.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="nf-inline">
+                        <input id="nfTestMember" class="form-control" maxlength="64" placeholder="Name, @mention or ID">
+                        <button type="button" class="btn btn-secondary" id="nfFindBtn"><span>Find</span></button>
+                    </div>
+                </div>
+            </div>
+            <div id="nfFindResults" class="nf-list"></div>
+            <div id="nfTestResult" class="nf-out" role="status" aria-live="polite"></div>
+        </div>
+    </section>
+
+    <!-- Generated usernames -->
+    <section class="cf-section" aria-labelledby="nf-gen-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="nf-gen-title">Generated scam usernames</h2>
+                <p class="cf-section-desc">Names like <code>fluffy_panda_4821</code>: two words from the scam generators' vocabulary and a number. <code>john_smith_1234</code> passes.</p>
+            </div>
+            <div class="cf-section-actions"><span id="nfGenBadge" class="cf-pill"></span></div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="nfGenEnabled">Check for generated usernames</label>
+                    <p class="cf-row-desc">Start with log only and watch the recent hits.</p>
+                </div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="nfGenEnabled"></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="nfGenAction">Action for generated usernames</label>
+                </div>
+                <div class="cf-row-control"><select id="nfGenAction" class="form-select"></select></div>
+            </div>
+            <div class="cf-section-foot">
+                <button type="button" class="btn btn-primary" id="nfGenSave"><span>Save</span></button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Templates -->
+    <section class="cf-section" aria-labelledby="nf-templates-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="nf-templates-title">Templates</h2>
+                <p class="cf-section-desc">Curated filter packs, added on top of your own and kept up to date: new entries arrive automatically, and an entry you delete stays deleted. <code>{server}</code> entries use this server's name.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div id="nfTemplates" class="nf-packs"></div>
+        </div>
+    </section>
+
+    <!-- Auto-Pilot -->
+    <section class="cf-section" aria-labelledby="nf-ap-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="nf-ap-title">Auto-Pilot: protect staff names</h2>
+                <p class="cf-section-desc">Keeps an exact-name filter for each covered staff member's names and updates it when they rename. Names under 4 letters, and names someone else already uses, are skipped.</p>
+            </div>
+            <div class="cf-section-actions"><span id="nfApBadge" class="cf-pill"></span></div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="nfApEnabled">Auto-Pilot on</label>
+                    <p class="cf-row-desc">Shared with <a href="/manage/<%= guild.id %>?page=avatar-protection">Avatar protection</a>.</p>
+                </div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="nfApEnabled"></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="nfApAction">Action for impersonators</label>
+                </div>
+                <div class="cf-row-control"><select id="nfApAction" class="form-select"></select></div>
+            </div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="nfApManagers">Cover bot managers and allowlisted members</label>
+                </div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="nfApManagers"></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="nfApRolePick">Staff roles covered</label>
+                    <p class="cf-row-desc">Everyone with one of these roles has their names protected.</p>
+                    <div id="nfApRoles" class="cf-chips nf-chips"></div>
+                </div>
+                <div class="cf-row-control">
+                    <div class="nf-inline">
+                        <select id="nfApRolePick" class="form-select"></select>
+                        <button type="button" class="btn btn-secondary" id="nfApRoleAdd"><span>Cover role</span></button>
+                    </div>
+                </div>
+            </div>
+            <div class="cf-section-foot">
+                <span class="cf-foot-note" id="nfApSynced"></span>
+                <button type="button" class="btn btn-secondary" id="nfApSync"><span>Sync now</span></button>
+                <button type="button" class="btn btn-primary" id="nfApSave"><span>Save Auto-Pilot</span></button>
+            </div>
+            <div class="cf-rows-head" id="nf-ap-list-head">Protected names</div>
+            <div id="nfApList" class="nf-list"></div>
+        </div>
+    </section>
+
+    <!-- Cleanse -->
+    <section class="cf-section" id="nfCleanseCard" aria-labelledby="nf-cleanse-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="nf-cleanse-title">Cleanse: check everyone already here</h2>
+                <p class="cf-section-desc">Staff, exempt and marked-safe members are skipped either way.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--stack">
+                <div class="cf-choices">
+                    <p class="nf-line"><span class="nf-term">Review first</span> scans every member and puts matches in the review queue for you to decide.</p>
+                    <p class="nf-line"><span class="nf-term">Force</span> acts at once with each filter's own action. Log-only matches still go to the queue.</p>
+                </div>
+            </div>
+            <div class="cf-section-foot">
+                <span id="nfCleanseState" class="cf-foot-note" role="status" aria-live="polite"></span>
+                <button type="button" class="btn btn-danger" id="nfCleanseForce"><span>Force cleanse</span></button>
+                <button type="button" class="btn btn-primary" id="nfCleanseReview"><span>Start review cleanse</span></button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Review queue -->
+    <section class="cf-section" aria-labelledby="nf-review-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="nf-review-title">Review queue</h2>
+                <p class="cf-section-desc">Members a cleanse or a log-only filter found. Ban and kick re-check each member first; staff and exempt members are left alone.</p>
+            </div>
+            <div class="cf-section-actions"><span id="nfQueueCount" class="cf-pill"></span></div>
+        </header>
+        <div class="cf-rows">
+            <div class="nf-bar"><div class="cf-segmented nf-tabs" id="nfReviewTabs" role="group" aria-label="Which entries"></div></div>
+            <div class="nf-bar" id="nfBulk">
+                <label class="cf-choice nf-select-all" for="nfSelectAll"><input type="checkbox" id="nfSelectAll"> <span>Select all</span></label>
+                <span class="nf-muted" id="nfSelCount">0 selected</span>
+                <span class="nf-actions">
+                    <button type="button" class="btn btn-sm btn-danger" data-bulk="ban">Ban</button>
+                    <button type="button" class="btn btn-sm btn-secondary" data-bulk="kick">Kick</button>
+                    <button type="button" class="btn btn-sm btn-secondary" data-bulk="safe">Mark safe</button>
+                    <button type="button" class="btn btn-sm btn-secondary" data-bulk="skip">Skip</button>
+                </span>
+            </div>
+            <div id="nfReviews" class="cf-table-wrap nf-table-wrap"></div>
+        </div>
+    </section>
+
+    <!-- Recent hits -->
+    <section class="cf-section" aria-labelledby="nf-hits-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="nf-hits-title">Recent hits</h2>
+                <p class="cf-section-desc">What the filters did most recently.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div id="nfHits" class="nf-list"></div>
+        </div>
+    </section>
+
+    <!-- Export / import (versioned JSON) -->
+    <section class="cf-section" id="nfIoCard" aria-labelledby="nf-io-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="nf-io-title">Export and import</h2>
+                <p class="cf-section-desc">This server's own filters as a JSON file (not templates or Auto-Pilot entries). Also <code>/moderation namefilter export</code> and <code>/moderation namefilter import</code>.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <span class="cf-row-label">Download</span>
+                    <p class="cf-row-desc">Every filter you added on this server.</p>
+                </div>
+                <div class="cf-row-control nf-control-end"><a class="btn btn-secondary" id="nfExport" href="#" download><span>Download JSON</span></a></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="nfImportFile">Filter file to import</label>
+                    <p class="cf-row-desc">Previewed first: what would be added, what already exists, and what the safety rules refuse. Nothing changes until you press Import.</p>
+                </div>
+                <div class="cf-row-control"><input type="file" id="nfImportFile" accept="application/json,.json" class="form-control"></div>
+            </div>
+            <div id="nfImportPlan" class="nf-out" hidden></div>
+            <div class="cf-section-foot">
+                <button type="button" class="btn btn-secondary" id="nfImportPreview"><span>Preview import</span></button>
+                <button type="button" class="btn btn-primary" id="nfImportApply" hidden><span>Import</span></button>
+            </div>
+        </div>
+    </section>
+</div>
+
+<style>
+  /* Pieces the script draws (tabs, lists, chips, packs, preview and test output), on the kit's tokens. */
+  #nameFiltersPage .cf-kpis .cf-state { grid-column: 1 / -1; }
+  /* A tab bar the script has not filled is hidden by :has(), which the kit's panel dividers cannot see. */
+  #nameFiltersPage .cf-rows { overflow: clip; }
+  #nameFiltersPage .cf-rows > .nf-bar:first-child:has(> .nf-tabs:empty) + * { border-top-color: transparent; }
+  #nameFiltersPage .cf-kpi-value.nf-ok { color: var(--cf-success); }
+  #nameFiltersPage .cf-kpi-value.nf-hit { color: var(--cf-danger); }
+  #nameFiltersPage .cf-pill:empty { display: none; }
+  #nameFiltersPage .nf-muted { color: var(--cf-text-3); font-size: var(--cf-text-sm); }
+  #nameFiltersPage .nf-hit { color: var(--cf-danger); }
+  #nameFiltersPage .nf-ok { color: var(--cf-success); }
+  #nameFiltersPage .nf-out .nf-warn { color: var(--cf-warning); }
+  #nameFiltersPage .nf-line { margin: 0; font-size: var(--cf-text-sm); color: var(--cf-text-2); line-height: 1.5; }
+  #nameFiltersPage .nf-term { font-weight: 600; color: var(--cf-text); }
+  #nameFiltersPage .nf-field-wide { grid-column: span 2; }
+  #nameFiltersPage .nf-control-end { align-items: flex-end; }
+  #nameFiltersPage .nf-inline { display: flex; flex-wrap: wrap; gap: var(--cf-2); align-items: center; }
+  #nameFiltersPage .nf-inline > input, #nameFiltersPage .nf-inline > select { flex: 1 1 10rem; min-width: 0; width: auto; margin: 0; }
+
+  /* Toolbars above a list: segmented tabs, bulk actions. */
+  #nameFiltersPage .nf-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--cf-2) var(--cf-3); padding: var(--cf-3) var(--cf-5); }
+  #nameFiltersPage .nf-bar[hidden], #nameFiltersPage .nf-bar:has(> .nf-tabs:empty) { display: none; }
+  #nameFiltersPage .cf-rows-head:has(+ .nf-list:empty) { display: none; }
+  #nameFiltersPage .nf-tabs .cf-segment { font-variant-numeric: tabular-nums; }
+  #nameFiltersPage .nf-actions { display: inline-flex; flex-wrap: wrap; gap: var(--cf-1); align-items: center; }
+  #nameFiltersPage .nf-bar .nf-actions { margin-left: auto; }
+  #nameFiltersPage .nf-select-all { min-height: 0; }
+  #nameFiltersPage .nf-search { margin-left: auto; flex: 0 1 16rem; min-width: 0; }
+  #nameFiltersPage .nf-search[hidden] { display: none; }
+
+  /* Lists of members and entries. */
+  #nameFiltersPage .nf-list { max-height: 28rem; overflow-y: auto; }
+  #nameFiltersPage .nf-list:empty, #nameFiltersPage .nf-out:empty { display: none; }
+  #nameFiltersPage .nf-item { display: flex; align-items: center; flex-wrap: wrap; gap: var(--cf-2) var(--cf-3); font-size: var(--cf-text-sm); color: var(--cf-text); min-width: 0; }
+  #nameFiltersPage .nf-list > .nf-item { padding: var(--cf-2) var(--cf-5); }
+  #nameFiltersPage .nf-list > .nf-item + .nf-item { border-top: 1px solid var(--cf-border); }
+  #nameFiltersPage .nf-list > .nf-more { padding: var(--cf-2) var(--cf-5); }
+  #nameFiltersPage .nf-item.nf-off, #nameFiltersPage tr.nf-off td { opacity: 0.55; }
+  #nameFiltersPage .nf-item img, #nameFiltersPage .nf-av, #nameFiltersPage td img { width: 28px; height: 28px; border-radius: 50%; flex: none; object-fit: cover; vertical-align: middle; background: var(--cf-surface-3); }
+  #nameFiltersPage .nf-av { display: inline-flex; align-items: center; justify-content: center; color: var(--cf-text-3); font-size: 12px; }
+  #nameFiltersPage .nf-grow { flex: 1 1 12rem; min-width: 0; overflow-wrap: anywhere; }
+  #nameFiltersPage .nf-code { font-family: var(--cf-mono); font-size: 0.9em; padding: 1px 6px; border-radius: var(--cf-radius-sm); background: var(--cf-surface-2); border: 1px solid var(--cf-border); color: var(--cf-text); overflow-wrap: anywhere; }
+  #nameFiltersPage .nf-chips { margin-top: var(--cf-2); }
+  #nameFiltersPage .nf-sub { display: block; font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+
+  /* Preview, test output and import plan: padded blocks inside the panel. */
+  #nameFiltersPage .nf-preview-head { padding: var(--cf-3) var(--cf-5); font-size: var(--cf-text-sm); font-weight: 600; color: var(--cf-text); }
+  #nameFiltersPage .nf-out { display: grid; gap: var(--cf-2); padding: var(--cf-4) var(--cf-5); font-size: var(--cf-text-sm); min-width: 0; }
+  #nameFiltersPage .nf-out[hidden] { display: none; }
+  #nameFiltersPage .nf-out .nf-list { border: 1px solid var(--cf-border); border-radius: var(--cf-radius); }
+  #nameFiltersPage .nf-out .nf-list > .nf-item { padding: var(--cf-2) var(--cf-3); }
+  #nameFiltersPage .nf-forms { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px var(--cf-3); align-items: baseline; }
+  #nameFiltersPage .nf-out ul { margin: var(--cf-1) 0 0; padding-left: 1.2rem; color: var(--cf-text-2); }
+  #nameFiltersPage details summary { cursor: pointer; color: var(--cf-text-2); font-size: var(--cf-text-sm); }
+
+  /* Template packs: one row each. */
+  #nameFiltersPage .nf-pack { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--cf-2) var(--cf-5); align-items: start; padding: var(--cf-4) var(--cf-5); }
+  #nameFiltersPage .nf-pack + .nf-pack { border-top: 1px solid var(--cf-border); }
+  #nameFiltersPage .nf-pack-title { display: flex; flex-wrap: wrap; align-items: center; gap: var(--cf-2); margin: 0; font-size: var(--cf-text-md); font-weight: 500; color: var(--cf-text); }
+  #nameFiltersPage .nf-pack-desc { margin: 2px 0 0; font-size: var(--cf-text-sm); color: var(--cf-text-3); line-height: 1.45; }
+  #nameFiltersPage .nf-pack details { margin-top: var(--cf-2); }
+  #nameFiltersPage .nf-pack details .nf-list { margin-top: var(--cf-2); max-height: 14rem; display: grid; gap: 4px; }
+  #nameFiltersPage .nf-pack-actions { display: flex; flex-wrap: wrap; align-items: center; gap: var(--cf-2); }
+  #nameFiltersPage .nf-pack-actions select { width: auto; max-width: 12rem; }
+  #nameFiltersPage .nf-table-wrap select { width: auto; min-width: 8rem; }
+  #nameFiltersPage .nf-check { width: 16px; height: 16px; accent-color: var(--cf-accent); }
+
+  @media (max-width: 640px) {
+    #nameFiltersPage .nf-field-wide { grid-column: auto; }
+    #nameFiltersPage .nf-bar, #nameFiltersPage .nf-list > .nf-item, #nameFiltersPage .nf-pack, #nameFiltersPage .nf-out,
+    #nameFiltersPage .nf-preview-head { padding-left: var(--cf-4); padding-right: var(--cf-4); }
+    #nameFiltersPage .nf-bar .nf-actions, #nameFiltersPage .nf-search { margin-left: 0; flex: 1 1 100%; }
+    #nameFiltersPage .nf-pack { grid-template-columns: minmax(0, 1fr); }
+    #nameFiltersPage .nf-table-wrap select { min-width: 0; }
+  }
+</style>
+
+<script>
+(function () {
+  const root = document.getElementById('nameFiltersPage');
+  if (!root) return;
+  const guildId = root.dataset.guildId;
+  const api = (p) => `/api/guilds/${guildId}/name-filters${p}`;
+  const $ = (id) => document.getElementById(id);
+  const ACTION_LABEL = { log: 'Log only', flag: 'Flag with role', timeout: 'Timeout', kick: 'Kick', ban: 'Ban' };
+  const HIT_WORD = { name_banned: 'Banned', name_kicked: 'Kicked', name_timeout: 'Timed out', name_flagged: 'Flagged', name_logged: 'Logged', failed: 'Could not act' };
+  let state = null;
+  let filterTab = 'manual';
+  let reviewTab = 'pending';
+  let reviews = [];
+  const selected = new Set();
+  let editing = null;      // filter id being edited
+  let previewed = null;    // { body, hits }
+  let apRoles = [];
+  let loading = false;     // true while load() writes values into controls (header switch mirror)
+  let filterQuery = '';
+
+  // DOM builder: every server value goes in through textContent / attributes, never markup.
+  function el(tag, attrs = {}, ...kids) {
+    const n = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (v == null || v === false) continue;
+      if (k === 'class') n.className = v;
+      else if (k === 'text') n.textContent = v;
+      else if (k.startsWith('on')) n.addEventListener(k.slice(2), v);
+      else n.setAttribute(k, v === true ? '' : v);
+    }
+    for (const kid of kids.flat()) if (kid != null && kid !== false) n.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
+    return n;
+  }
+  const icon = (cls) => el('i', { class: cls, 'aria-hidden': 'true' });
+  const when = (t) => (t ? new Date(t).toLocaleString() : '');
+  const code = (t) => el('span', { class: 'nf-code', text: t });
+  const can = () => state && state.actor.canConfigure;
+  const avatar = (src) => (src ? el('img', { src, alt: '' }) : el('span', { class: 'nf-av' }, icon('fas fa-user')));
+  // Kit empty / loading / error states (cf-settings.css .cf-state).
+  function stateBox(title, text, kind = 'empty', compact = false) {
+    return el('div', { class: `cf-state cf-state--${kind}${compact ? ' cf-state--compact' : ''}`, role: kind === 'error' ? 'alert' : kind === 'loading' ? 'status' : null },
+      kind === 'loading' ? el('span', { class: 'cf-spinner', 'aria-hidden': 'true' }) : null,
+      el('p', { class: 'cf-state-title', text: title }), text ? el('p', { class: 'cf-state-text', text }) : null);
+  }
+  const tab = (label, active, onclick) => el('button', { type: 'button', class: 'cf-segment', 'aria-pressed': active ? 'true' : 'false', onclick }, label);
+
+  async function req(url, options = {}) {
+    const res = await fetch(url, { credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, ...options });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
+    return body;
+  }
+  const post = (p, body, method = 'POST') => req(api(p), { method, body: JSON.stringify(body || {}) });
+  const showError = (m) => { const e = $('nfError'); e.hidden = !m; e.textContent = m || ''; if (m) e.scrollIntoView({ block: 'nearest' }); };
+  const notice = (m) => { const e = $('nfNotice'); e.hidden = !m; e.textContent = m || ''; };
+  async function act(fn, done, reload = true) {
+    showError('');
+    try { const out = await fn(); if (done) notice(typeof done === 'function' ? done(out) : done); if (reload) await load(); return out; } catch (err) { showError(err.message); return null; }
+  }
+  function actionSelect(select, value, opts = {}) {
+    select.replaceChildren(...state.actions.map(a => el('option', { value: a, text: ACTION_LABEL[a] + (opts.permHint && a !== 'log' && !state.botPerms[a] ? ' (bot lacks permission)' : '') })));
+    select.value = value || 'log';
+  }
+  // gate: a role the bot gives (the flag role). Roles at or above the bot's highest role are listed but
+  // disabled and marked, except the one already saved (as on the Security page).
+  function roleOptions(select, roles, placeholder, value, gate = false) {
+    const top = state && typeof state.botTopPosition === 'number' ? state.botTopPosition : null;
+    select.replaceChildren(el('option', { value: '', text: placeholder }), ...roles.map(r => {
+      const above = gate && top !== null && typeof r.position === 'number' && r.position >= top;
+      return el('option', { value: r.id, text: r.name + (above ? ' (above the bot)' : ''), 'data-color': r.color || null, disabled: above && r.id !== value });
+    }));
+    select.value = value || '';
+  }
+
+  // ── status + settings ────────────────────────────────────────────────────
+  function stat(label, value, cls) {
+    const small = !/^\d/.test(String(value));
+    return el('div', { class: 'cf-kpi' }, el('div', { class: 'cf-kpi-label', text: label }),
+      el('div', { class: 'cf-kpi-value' + (small ? ' is-small' : '') + (cls ? ` ${cls}` : ''), text: String(value) }));
+  }
+  function renderStats() {
+    const o = state.overview; const f = o.filters || {};
+    const n = (k) => (f[k] ? f[k].active : 0);
+    $('nfStats').replaceChildren(
+      stat('Name checks', state.settings.enabled ? 'On' : 'Off', state.settings.enabled ? 'nf-ok' : ''),
+      stat('Your filters', n('manual')), stat('Template filters', n('template')), stat('Auto-Pilot filters', n('auto')),
+      stat('Hits, last 30 days', o.hits30d), stat('Waiting for review', (o.reviews && o.reviews.pending) || 0, (o.reviews && o.reviews.pending) ? 'nf-hit' : ''),
+      stat('Marked safe', (o.reviews && o.reviews.safe) || 0),
+      stat('Last hit', o.lastHitAt ? new Date(o.lastHitAt).toLocaleDateString() : 'Never'));
+  }
+  function renderSettings() {
+    const s = state.settings;
+    $('nfEnabled').checked = s.enabled; $('nfFuzzy').checked = s.fuzzy; $('nfCollapse').checked = s.collapse; $('nfDm').checked = s.dm;
+    $('nfTimeout').value = s.timeoutMinutes;
+    roleOptions($('nfFlagRole'), state.guildRoles, '"Flagged Name" (made when first needed)', s.flagRoleId, true);
+    const missing = Object.entries(state.botPerms).filter(([, ok]) => !ok).map(([a]) => ACTION_LABEL[a]);
+    $('nfPermWarn').hidden = !missing.length;
+    $('nfPermWarn').textContent = missing.length ? `The bot is missing the permission for: ${missing.join(', ')}. Filters with those actions will log "could not act" instead.` : '';
+    for (const id of ['nfEnabled', 'nfFuzzy', 'nfCollapse', 'nfDm', 'nfTimeout', 'nfFlagRole', 'nfSaveSettings']) $(id).disabled = !can();
+    loading = true; $('nfEnabled').dispatchEvent(new Event('change')); loading = false;   // mirror into the header switch
+  }
+  $('nfEnabled').addEventListener('change', () => {
+    const b = $('nfOnBadge');
+    b.hidden = false;
+    b.className = 'cf-pill' + ($('nfEnabled').checked ? ' is-ok' : '');
+    b.textContent = $('nfEnabled').checked ? 'On' : 'Off';
+  });
+  // The master switch lives in the page header (data-feature-switch); a toggle there saves at once.
+  $('nfEnabled').addEventListener('change', async (e) => {
+    if (loading || !state) return;
+    const on = e.target.checked;
+    if (on === state.settings.enabled) return;
+    if (on && !confirm('Switch name checks on? From now on every join and every rename is checked against the filters, and their actions are carried out.')) {
+      loading = true; e.target.checked = false; e.target.dispatchEvent(new Event('change')); loading = false; return;
+    }
+    const out = await act(() => post('/settings', { enabled: on }), on ? 'Name checks switched on.' : 'Name checks switched off.', false);
+    if (out) { state.settings.enabled = on; renderStats(); }
+    else { loading = true; e.target.checked = !on; e.target.dispatchEvent(new Event('change')); loading = false; }
+  });
+  $('nfSaveSettings').addEventListener('click', () => {
+    const enabling = $('nfEnabled').checked && !state.settings.enabled;
+    if (enabling && !confirm('Switch name checks on? From now on every join and every rename is checked against the filters, and their actions are carried out.')) return;
+    act(() => post('/settings', { enabled: $('nfEnabled').checked, fuzzy: $('nfFuzzy').checked, collapse: $('nfCollapse').checked,
+      dm: $('nfDm').checked, flagRoleId: $('nfFlagRole').value || null, timeoutMinutes: Number($('nfTimeout').value) }), 'Settings saved.');
+  });
+
+  // ── add / edit with preview ──────────────────────────────────────────────
+  function resetForm() {
+    editing = null; previewed = null;
+    $('nfAddTitle').textContent = 'Add a filter';
+    $('nfPattern').value = ''; $('nfNote').value = ''; $('nfCase').checked = false; $('nfType').value = 'phrase';
+    $('nfType').disabled = $('nfPattern').disabled = $('nfCase').disabled = false;
+    actionSelect($('nfAction'), 'log', { permHint: true });
+    $('nfPreview').hidden = true; $('nfCancelEdit').hidden = true;
+  }
+  $('nfCancelEdit').addEventListener('click', resetForm);
+  for (const id of ['nfType', 'nfPattern', 'nfCase']) $(id).addEventListener('input', () => { previewed = null; $('nfPreview').hidden = true; });
+  $('nfAction').addEventListener('change', () => { if (previewed) renderPreview(); });
+
+  $('nfPreviewBtn').addEventListener('click', async () => {
+    showError('');
+    const body = { type: $('nfType').value, pattern: $('nfPattern').value, caseSensitive: $('nfCase').checked };
+    if (editing && editing.origin !== 'manual') { previewed = { body, hits: [], count: 0, total: 0, complete: true, skipped: {} }; renderPreview(); return; }
+    $('nfPreviewBtn').disabled = true;
+    $('nfPreviewHead').textContent = 'Checking every member...'; $('nfPreview').hidden = false; $('nfPreviewList').replaceChildren();
+    try {
+      const out = await post('/preview', body);
+      previewed = { body: { ...body, pattern: out.value }, ...out };
+      renderPreview();
+    } catch (err) { $('nfPreview').hidden = true; showError(err.message); }
+    finally { $('nfPreviewBtn').disabled = false; }
+  });
+
+  function renderPreview() {
+    const p = previewed; const action = $('nfAction').value;
+    $('nfPreview').hidden = false;
+    const skipped = [p.skipped.staff && `${p.skipped.staff} staff`, p.skipped.exempt && `${p.skipped.exempt} exempt`].filter(Boolean).join(', ');
+    $('nfPreviewHead').textContent = editing && editing.origin !== 'manual' ? 'Template or Auto-Pilot filter: only its action and note change.'
+      : p.count ? `Matches ${p.count} of ${p.total} members right now${p.complete ? '' : ' (Discord did not return the full member list)'}${skipped ? `; leaves alone ${skipped}` : ''}.`
+        : `Matches nobody right now (${p.total} members checked${skipped ? `; leaves alone ${skipped}` : ''}).`;
+    $('nfPreviewList').replaceChildren(...p.hits.slice(0, 200).map(h => el('div', { class: 'nf-item' },
+      avatar(h.avatar),
+      el('span', { class: 'nf-grow' }, h.displayName || h.username, ' ', el('span', { class: 'nf-muted', text: `@${h.username}` })),
+      el('span', { class: 'nf-muted', text: `${h.fieldLabel}: ` }), code(h.text), el('span', { class: 'nf-muted', text: h.formLabel ? ` (${h.formLabel})` : '' }))));
+    if (p.hits.length > 200) $('nfPreviewList').append(el('div', { class: 'nf-muted nf-more', text: `...and ${p.hits.length - 200} more` }));
+    $('nfSaveBtn').querySelector('span').textContent = editing ? 'Save changes' : 'Save';
+    const showAct = !editing && p.count > 0;
+    $('nfSaveActBtn').hidden = !showAct;
+    if (showAct) {
+      $('nfSaveActBtn').className = 'btn ' + (action === 'log' ? 'btn-secondary' : 'btn-danger');
+      $('nfSaveActBtn').querySelector('span').textContent = action === 'log' ? `Save and queue these ${p.count} for review` : `Save and ${ACTION_LABEL[action].toLowerCase()} these ${p.count}`;
+    }
+    $('nfSaveBtn').disabled = $('nfSaveActBtn').disabled = !can();
+  }
+
+  $('nfSaveBtn').addEventListener('click', () => save(false));
+  $('nfSaveActBtn').addEventListener('click', () => save(true));
+  async function save(withAct) {
+    if (!previewed) return;
+    const action = $('nfAction').value;
+    if (editing) {
+      const patch = { action, note: $('nfNote').value.trim() || null };
+      if (editing.origin === 'manual') Object.assign(patch, { type: previewed.body.type, pattern: previewed.body.pattern, caseSensitive: previewed.body.caseSensitive });
+      const ok = await act(() => post(`/filters/${editing.id}`, patch, 'PATCH'), `Filter #${editing.id} updated.`);
+      if (ok) resetForm();
+      return;
+    }
+    const ids = withAct ? previewed.hits.map(h => h.id) : [];
+    if (withAct && action !== 'log' && !confirm(`${ACTION_LABEL[action]} ${ids.length} member(s) now? Each is re-checked first; staff and exempt members are left alone.`)) return;
+    const out = await act(() => post('/filters', { ...previewed.body, action, note: $('nfNote').value.trim() || null, actOn: ids }), (o) => {
+      if (!o.acted) return `Saved as filter #${o.id}.`;
+      const a = o.acted;
+      return a.action === 'log' ? `Saved as filter #${o.id}; ${a.queued} member(s) queued for review.`
+        : `Saved as filter #${o.id}; ${a.done} done, ${a.skipped} skipped${a.failed.length ? `, ${a.failed.length} failed (${a.failed.map(f => f.problem).slice(0, 2).join('; ')})` : ''}.`;
+    });
+    if (out) { resetForm(); loadReviews(); loadHits(); }
+  }
+
+  // ── filter list ──────────────────────────────────────────────────────────
+  const TABS = [['manual', 'Yours'], ['template', 'Templates'], ['auto', 'Auto-Pilot'], ['removed', 'Removed'], ['all', 'All']];
+  function renderFilterTabs() {
+    const count = (t) => state.filters.filter(f => (t === 'removed' ? f.removed : !f.removed && (t === 'all' || f.origin === t))).length;
+    $('nfFilterTabs').replaceChildren(...TABS.map(([t, label]) => tab(`${label} (${count(t)})`, t === filterTab, () => { filterTab = t; renderFilters(); })));
+  }
+  function originLabel(f) {
+    if (f.origin === 'template') { const p = state.templates.find(x => x.id === f.pack); return p ? p.title : f.pack; }
+    if (f.origin === 'auto') { const u = state.autoUsers[f.autoUserId]; return `Protects ${u ? (u.displayName || u.username || f.autoUserId) : f.autoUserId}`; }
+    return f.note || '';
+  }
+  function renderFilters() {
+    renderFilterTabs();
+    $('cfk-nf-filter-search-wrap').hidden = state.filters.length <= 15 && !filterQuery;
+    const q = filterQuery.toLowerCase();
+    const rows = state.filters.filter(f => (filterTab === 'removed' ? f.removed : !f.removed && (filterTab === 'all' || f.origin === filterTab)))
+      .filter(f => !q || `${f.pattern} ${f.note || ''} ${originLabel(f)} #${f.id}`.toLowerCase().includes(q));
+    $('nfFilterCount').textContent = `${state.filters.filter(f => !f.removed).length} of ${state.limits.total}`;
+    if (!rows.length) {
+      $('nfFilters').replaceChildren(q ? stateBox('No filters match', 'Try another word.') : filterTab === 'manual' ? stateBox('No filters yet', 'Add one above, or apply a template below.') : stateBox('Nothing here'));
+      return;
+    }
+    const table = el('table', { class: 'cf-table cf-table--stack' },
+      el('thead', {}, el('tr', {}, ...['#', 'Filter', 'Action', 'On', 'Hits', 'Last hit', 'Source'].map(h => el('th', { scope: 'col', text: h })),
+        el('th', { scope: 'col' }, el('span', { class: 'visually-hidden', text: 'Manage' })))));
+    const body = el('tbody');
+    for (const f of rows) {
+      const sel = el('select', { class: 'form-select form-select-sm', disabled: !can() || f.removed, 'aria-label': 'Action', onchange: (e) =>
+        act(() => post(`/filters/${f.id}`, { action: e.target.value }, 'PATCH'), `Filter #${f.id} now: ${ACTION_LABEL[e.target.value]}.`) });
+      sel.replaceChildren(...state.actions.map(a => el('option', { value: a, text: ACTION_LABEL[a] })));
+      sel.value = f.action;
+      const toggle = el('input', { type: 'checkbox', class: 'cf-switch', role: 'switch', checked: f.enabled, disabled: !can() || f.removed, 'aria-label': 'Enabled', onchange: (e) =>
+        act(() => post(`/filters/${f.id}`, { enabled: e.target.checked }, 'PATCH'), `Filter #${f.id} switched ${e.target.checked ? 'on' : 'off'}.`) });
+      const buttons = el('span', { class: 'nf-actions' });
+      if (f.removed) {
+        buttons.append(el('button', { type: 'button', class: 'btn btn-sm btn-secondary', disabled: !can(), onclick: () =>
+          act(() => post(`/filters/${f.id}/restore`), `Filter #${f.id} restored.`) }, 'Restore'));
+      } else {
+        buttons.append(el('button', { type: 'button', class: 'btn btn-sm btn-secondary', disabled: !can(), onclick: () => startEdit(f) }, 'Edit'));
+        buttons.append(el('button', { type: 'button', class: 'btn btn-sm btn-secondary', disabled: !can(), onclick: () => {
+          const extra = f.origin === 'manual' ? '' : ' It is remembered, so the next update will not bring it back (you can restore it).';
+          if (!confirm(`Remove filter #${f.id}?${extra}`)) return;
+          act(() => req(api(`/filters/${f.id}`), { method: 'DELETE' }), `Filter #${f.id} removed.`);
+        } }, 'Remove'));
+      }
+      body.append(el('tr', { class: f.enabled ? '' : 'nf-off' },
+        el('td', { 'data-label': '#', class: 'cf-cell-muted', text: `#${f.id}` }),
+        el('td', { 'data-label': 'Filter' }, el('div', {}, el('span', { class: 'nf-muted', text: `${f.type}${f.caseSensitive ? ', case-sensitive' : ''} ` }), code(f.pattern)),
+          f.disabledReason && !f.enabled ? el('div', { class: 'nf-sub', text: f.disabledReason }) : null),
+        el('td', { 'data-label': 'Action' }, sel), el('td', { 'data-label': 'On' }, toggle),
+        el('td', { 'data-label': 'Hits', text: String(f.hits) }), el('td', { 'data-label': 'Last hit', class: 'cf-cell-muted', text: f.lastHitAt ? when(f.lastHitAt) : 'Never' }),
+        el('td', { 'data-label': 'Source', class: 'cf-cell-muted', text: originLabel(f) }), el('td', { class: 'cf-cell-end' }, buttons)));
+    }
+    table.append(body);
+    $('nfFilters').replaceChildren(table);
+  }
+  $('cfk-nf-filter-search').addEventListener('input', (e) => { filterQuery = e.target.value.trim(); if (state) renderFilters(); });
+  function startEdit(f) {
+    editing = f;
+    $('nfAddTitle').textContent = `Edit filter #${f.id}`;
+    $('nfType').value = f.type; $('nfPattern').value = f.pattern; $('nfCase').checked = f.caseSensitive; $('nfNote').value = f.note || '';
+    $('nfType').disabled = $('nfPattern').disabled = $('nfCase').disabled = f.origin !== 'manual';
+    actionSelect($('nfAction'), f.action, { permHint: true });
+    $('nfCancelEdit').hidden = false; $('nfPreview').hidden = true; previewed = null;
+    $('nfAddCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    notice('Change the filter, then preview it again before saving.');
+  }
+
+  // ── test ─────────────────────────────────────────────────────────────────
+  async function runTest(body) {
+    $('nfTestResult').replaceChildren(el('div', { class: 'nf-muted', text: 'Testing...' }));
+    try { renderTest(await post('/test', body)); } catch (err) { $('nfTestResult').replaceChildren(el('div', { class: 'nf-hit', text: err.message })); }
+  }
+  function renderTest(r) {
+    const out = [];
+    if (r.member) out.push(el('div', { class: 'nf-item' }, r.member.avatar ? el('img', { src: r.member.avatar, alt: '' }) : null, el('strong', { text: r.member.displayName || r.member.username })));
+    out.push(el('div', { class: r.top ? 'nf-hit' : 'nf-ok', text: r.top ? `Matches ${r.matches.length} filter(s). The strongest: ${r.top.label}, action ${ACTION_LABEL[r.top.action] || ''}` : `No filter matches (${r.filterCount} active filter(s)).` }));
+    for (const f of r.fields) {
+      const grid = el('div', { class: 'nf-forms' });
+      const row = (k, v) => { if (v) grid.append(el('span', { class: 'nf-muted', text: k }), el('span', {}, code(v))); };
+      row(f.fieldLabel, f.text); row('lookalikes folded', f.forms.folded); row('leetspeak folded', f.forms.leet); row('compared as', f.forms.skeleton); row('separators removed', f.forms.collapsed);
+      out.push(grid);
+    }
+    if (r.matches.length) {
+      out.push(el('div', { class: 'nf-list' }, ...r.matches.map(m => el('div', { class: 'nf-item' },
+        el('span', { class: 'nf-grow' }, m.filterId ? `#${m.filterId} ` : '', m.label),
+        el('span', { class: 'nf-muted', text: `${m.fieldLabel}, ${m.formLabel}` }), el('span', { class: 'cf-pill', text: ACTION_LABEL[m.action] || '' })))));
+    }
+    if (r.generated) out.push(el('div', { class: r.generated.enabled ? 'nf-hit' : 'nf-muted', text: `Looks generated: "${r.generated.first}" + "${r.generated.second}" + ${r.generated.digits}. The check is ${r.generated.enabled ? `on (${ACTION_LABEL[r.generated.action]})` : 'off'}.` }));
+    for (const n of r.notes || []) out.push(el('div', { class: 'nf-muted', text: n }));
+    if (r.member && can()) {
+      out.push(el('div', { class: 'nf-actions' }, el('button', { type: 'button', class: 'btn btn-sm btn-secondary', onclick: () =>
+        act(() => post('/safe', { userId: r.member.id }), 'Marked safe while their names stay the same.').then(() => runTest({ userId: r.member.id })) }, 'Mark safe'),
+        el('button', { type: 'button', class: 'btn btn-sm btn-secondary', onclick: () =>
+          act(() => req(api(`/safe/${r.member.id}`), { method: 'DELETE' }), 'Safe mark removed.').then(() => runTest({ userId: r.member.id })) }, 'Remove safe mark')));
+    }
+    if (!r.settings.enabled) out.push(el('div', { class: 'nf-warn', text: 'Name checks are switched off, so nothing happens on join or rename yet.' }));
+    $('nfTestResult').replaceChildren(...out);
+  }
+  $('nfTestBtn').addEventListener('click', () => { const t = $('nfTestText').value.trim(); if (t) runTest({ text: t }); });
+  $('nfTestText').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('nfTestBtn').click(); } });
+  async function find() {
+    const q = $('nfTestMember').value.trim(); const box = $('nfFindResults');
+    if (!q) { box.replaceChildren(); return; }
+    box.replaceChildren(el('div', { class: 'nf-item nf-muted', text: 'Searching...' }));
+    try {
+      const { members } = await req(api(`/members?q=${encodeURIComponent(q)}`));
+      box.replaceChildren(...(members.length ? members.map(m => el('div', { class: 'nf-item' },
+        avatar(m.avatar),
+        el('span', { class: 'nf-grow' }, m.displayName, ' ', el('span', { class: 'nf-muted', text: `@${m.username}` })),
+        el('button', { type: 'button', class: 'btn btn-sm btn-secondary', onclick: () => { box.replaceChildren(); runTest({ userId: m.id }); } }, 'Test')))
+        : [el('div', { class: 'nf-item nf-muted', text: 'No one found. Try their user ID.' })]));
+    } catch (err) { box.replaceChildren(el('div', { class: 'nf-item nf-hit', text: err.message })); }
+  }
+  $('nfFindBtn').addEventListener('click', find);
+  $('nfTestMember').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); find(); } });
+
+  // ── generated ────────────────────────────────────────────────────────────
+  function renderGenerated() {
+    const g = state.settings.generated;
+    $('nfGenBadge').className = 'cf-pill ' + (g.enabled ? 'is-ok' : '');
+    $('nfGenBadge').textContent = g.enabled ? ACTION_LABEL[g.action] : 'Off';
+    $('nfGenEnabled').checked = g.enabled;
+    actionSelect($('nfGenAction'), g.action, { permHint: true });
+    $('nfGenEnabled').disabled = $('nfGenAction').disabled = $('nfGenSave').disabled = !can();
+  }
+  $('nfGenSave').addEventListener('click', () => {
+    const action = $('nfGenAction').value;
+    if ($('nfGenEnabled').checked && action !== 'log' && !confirm(`${ACTION_LABEL[action]} every joining account with a generated-looking username? Log only is the safer start.`)) return;
+    act(() => post('/settings', { generated: { enabled: $('nfGenEnabled').checked, action } }), 'Generated-username check saved.');
+  });
+
+  // ── templates ────────────────────────────────────────────────────────────
+  function renderTemplates() {
+    if (!state.templates.length) { $('nfTemplates').replaceChildren(stateBox('No templates available')); return; }
+    $('nfTemplates').replaceChildren(...state.templates.map(p => {
+      const sel = el('select', { class: 'form-select form-select-sm', 'aria-label': `Action for ${p.title}`, disabled: !can() });
+      sel.replaceChildren(...state.actions.map(a => el('option', { value: a, text: ACTION_LABEL[a] })));
+      sel.value = p.action || 'log';
+      const list = el('details', {}, el('summary', { text: `${p.entries.length} entries` }),
+        el('div', { class: 'nf-list' }, ...p.entries.map(e => el('div', {}, el('span', { class: 'nf-muted', text: `${e.type} ` }), code(e.value)))));
+      return el('div', { class: 'nf-pack' },
+        el('div', {},
+          el('p', { class: 'nf-pack-title' }, el('span', { text: p.title }),
+            el('span', { class: 'cf-pill' + (p.applied ? ' is-ok' : ''), text: p.applied ? `Applied, ${p.active} active${p.removed ? `, ${p.removed} removed` : ''}` : 'Not applied' })),
+          el('p', { class: 'nf-pack-desc', text: p.description }), list),
+        el('div', { class: 'nf-pack-actions' }, sel,
+          el('button', { type: 'button', class: 'btn btn-sm btn-primary', disabled: !can(), onclick: () => {
+            if (sel.value !== 'log' && !confirm(`Apply "${p.title}" with action "${ACTION_LABEL[sel.value]}"? Preview who it hits first with a cleanse in review mode if unsure.`)) return;
+            act(() => post(`/templates/${p.id}`, { action: sel.value }), (o) => `${p.title}: ${o.count} filter(s) active.`);
+          } }, p.applied ? 'Update' : 'Apply'),
+          p.applied ? el('button', { type: 'button', class: 'btn btn-sm btn-secondary', disabled: !can(), onclick: () => {
+            if (!confirm(`Remove "${p.title}" and all its filters?`)) return;
+            act(() => req(api(`/templates/${p.id}`), { method: 'DELETE' }), `${p.title} removed.`);
+          } }, 'Remove') : null));
+    }));
+  }
+
+  // ── Auto-Pilot ───────────────────────────────────────────────────────────
+  function renderAutoPilot() {
+    const a = state.settings.autopilot;
+    $('nfApBadge').className = 'cf-pill ' + (a.enabled ? 'is-ok' : '');
+    $('nfApBadge').textContent = a.enabled ? ACTION_LABEL[a.action] : 'Off';
+    $('nfApEnabled').checked = a.enabled; $('nfApManagers').checked = a.managers;
+    actionSelect($('nfApAction'), a.action, { permHint: true });
+    apRoles = state.autopilotRoles.map(r => r.id);
+    renderApRoles();
+    $('nfApSynced').textContent = state.overview.autoPilotSyncedAt ? `Last synced ${when(state.overview.autoPilotSyncedAt)}` : '';
+    for (const id of ['nfApEnabled', 'nfApManagers', 'nfApAction', 'nfApRolePick', 'nfApRoleAdd', 'nfApSave', 'nfApSync']) $(id).disabled = !can();
+    const autos = state.filters.filter(f => f.origin === 'auto');
+    $('nfApList').replaceChildren(...(autos.length ? autos.map(f => {
+      const u = state.autoUsers[f.autoUserId] || {};
+      return el('div', { class: 'nf-item' + (f.removed ? ' nf-off' : '') }, u.avatar ? el('img', { src: u.avatar, alt: '' }) : el('span', { class: 'nf-av' }, icon('fas fa-user-shield')),
+        el('span', { class: 'nf-grow' }, u.displayName || u.username || f.autoUserId, ' ', el('span', { class: 'nf-muted', text: 'name ' }), code(f.pattern)),
+        el('span', { class: 'nf-muted', text: f.removed ? 'Removed by staff' : `${f.hits} hit(s)` }),
+        f.removed ? el('button', { type: 'button', class: 'btn btn-sm btn-secondary', disabled: !can(), onclick: () => act(() => post(`/filters/${f.id}/restore`), 'Restored.') }, 'Restore')
+          : el('button', { type: 'button', class: 'btn btn-sm btn-secondary', title: 'Remove (remembered)', disabled: !can(), onclick: () => {
+            if (!confirm('Remove this Auto-Pilot filter? It will not be recreated.')) return;
+            act(() => req(api(`/filters/${f.id}`), { method: 'DELETE' }), 'Removed; Auto-Pilot will leave this name alone.');
+          } }, 'Remove'));
+    }) : [stateBox(a.enabled ? 'No protected names yet' : 'Auto-Pilot is off', a.enabled ? 'Press Sync now.' : null, 'empty', true)]));
+  }
+  function renderApRoles() {
+    const byId = new Map(state.guildRoles.map(r => [r.id, r]));
+    $('nfApRoles').replaceChildren(...apRoles.map(id => el('span', { class: 'cf-chip' }, el('span', { text: (byId.get(id) || {}).name || `deleted role ${id}` }),
+      el('button', { type: 'button', class: 'cf-chip-remove', 'aria-label': 'Remove role', disabled: !can(), onclick: () => { apRoles = apRoles.filter(x => x !== id); renderApRoles(); } }, icon('fas fa-times')))));
+    roleOptions($('nfApRolePick'), state.guildRoles.filter(r => !apRoles.includes(r.id)), 'Add a staff role to cover...');
+  }
+  $('nfApRoleAdd').addEventListener('click', () => { const id = $('nfApRolePick').value; if (id && !apRoles.includes(id)) { apRoles.push(id); renderApRoles(); } });
+  $('nfApSave').addEventListener('click', () => act(() => post('/settings', { autopilot: { enabled: $('nfApEnabled').checked, action: $('nfApAction').value, managers: $('nfApManagers').checked, roles: apRoles } }), 'Auto-Pilot saved; protected names update in a moment.'));
+  $('nfApSync').addEventListener('click', () => act(() => post('/autopilot/sync'), (o) => `Synced: ${o.protected} protected member(s), ${o.created} filter(s) added, ${o.retired} retired.`));
+
+  // ── cleanse ──────────────────────────────────────────────────────────────
+  let poll = null;
+  async function cleanseState() {
+    try {
+      const s = await req(api('/cleanse'));
+      const box = $('nfCleanseState');
+      $('nfCleanseReview').disabled = $('nfCleanseForce').disabled = !!s.running || !can();
+      if (s.running) {
+        box.textContent = `${s.mode === 'force' ? 'Force cleanse' : 'Cleanse'} running: ${s.checked || 0} of ${s.total || '?'} members checked...`;
+        clearTimeout(poll); poll = setTimeout(cleanseState, 2500);
+        return;
+      }
+      if (s.error) box.textContent = `The last cleanse stopped: ${s.error}`;
+      else if (s.result) {
+        const r = s.result;
+        box.textContent = `Last ${s.mode === 'force' ? 'force cleanse' : 'cleanse'} (${when(s.finishedAt)}): ${r.total} checked${r.complete ? '' : ' (list incomplete)'}, ${r.matched} matched, `
+          + `${r.queued} queued${s.mode === 'force' ? `, ${r.acted.done} acted on${r.acted.failed ? `, ${r.acted.failed} could not` : ''}` : ''}; skipped ${r.skipped.staff} staff, ${r.skipped.exempt} exempt, ${r.skipped.safe} marked safe.`;
+      } else box.textContent = '';
+      if (poll) { poll = null; load(); loadReviews(); loadHits(); }
+    } catch (err) { $('nfCleanseState').textContent = err.message; }
+  }
+  $('nfCleanseReview').addEventListener('click', () => act(() => post('/cleanse', { mode: 'review' }), 'Cleanse started. Matches will appear in the review queue.', false).then(() => cleanseState()));
+  $('nfCleanseForce').addEventListener('click', () => {
+    if (!confirm('Force cleanse: every member whose name matches is acted on NOW with that filter\'s action (ban, kick, timeout or flag). Log-only matches go to the queue. Continue?')) return;
+    act(() => post('/cleanse', { mode: 'force' }), 'Force cleanse started.', false).then(() => cleanseState());
+  });
+
+  // ── review queue ─────────────────────────────────────────────────────────
+  const RTABS = [['pending', 'Waiting'], ['safe', 'Marked safe'], ['banned,kicked', 'Removed'], ['skipped,gone,failed', 'Skipped or gone']];
+  async function loadReviews() {
+    try {
+      const out = await req(api(`/reviews?status=${encodeURIComponent(reviewTab)}`));
+      reviews = out.rows;
+      selected.clear();
+      const c = out.counts || {};
+      $('nfQueueCount').textContent = c.pending ? `${c.pending} waiting` : 'None waiting';
+      $('nfQueueCount').className = 'cf-pill' + (c.pending ? ' is-warn' : '');
+      $('nfReviewTabs').replaceChildren(...RTABS.map(([t, label]) => tab(`${label} (${t.split(',').reduce((n, s) => n + (c[s] || 0), 0)})`, t === reviewTab, () => { reviewTab = t; loadReviews(); })));
+      renderReviews();
+    } catch (err) { $('nfBulk').hidden = true; $('nfReviews').replaceChildren(stateBox('Could not load the review queue', err.message, 'error')); }
+  }
+  function renderReviews() {
+    const pending = reviewTab === 'pending';
+    $('nfBulk').hidden = !(pending || reviewTab === 'safe') || !reviews.length || !can();
+    for (const b of document.querySelectorAll('#nfBulk [data-bulk]')) b.hidden = reviewTab === 'safe' && b.dataset.bulk !== 'skip';
+    $('nfSelectAll').checked = false; updateSel();
+    if (!reviews.length) { $('nfReviews').replaceChildren(pending ? stateBox('Nothing waiting', 'Run a cleanse to scan the server.') : stateBox('Nothing here')); return; }
+    const table = el('table', { class: 'cf-table cf-table--stack' }, el('thead', {}, el('tr', {},
+      el('th', { scope: 'col' }, el('span', { class: 'visually-hidden', text: 'Select' })),
+      ...['Member', 'Names', 'Matched', 'Joined', 'Account', pending ? 'Found' : 'Decided'].map(h => el('th', { scope: 'col', text: h })),
+      el('th', { scope: 'col' }, el('span', { class: 'visually-hidden', text: 'Decide' })))));
+    const body = el('tbody');
+    for (const r of reviews) {
+      const box = el('input', { type: 'checkbox', class: 'nf-check', 'aria-label': 'Select', onchange: (e) => { if (e.target.checked) selected.add(r.id); else selected.delete(r.id); updateSel(); } });
+      const names = el('div', {}, r.username ? el('div', {}, el('span', { class: 'nf-muted', text: 'user ' }), code(r.username)) : null,
+        r.displayName ? el('div', {}, el('span', { class: 'nf-muted', text: 'display ' }), code(r.displayName)) : null,
+        r.nickname ? el('div', {}, el('span', { class: 'nf-muted', text: 'nick ' }), code(r.nickname)) : null);
+      const buttons = el('span', { class: 'nf-actions' });
+      if (pending && can()) {
+        buttons.append(
+          el('button', { type: 'button', class: 'btn btn-sm btn-danger', onclick: () => decide([r.id], 'ban') }, 'Ban'),
+          el('button', { type: 'button', class: 'btn btn-sm btn-secondary', onclick: () => decide([r.id], 'kick') }, 'Kick'),
+          el('button', { type: 'button', class: 'btn btn-sm btn-secondary', onclick: () => decide([r.id], 'safe') }, 'Safe'),
+          el('button', { type: 'button', class: 'btn btn-sm btn-secondary', onclick: () => decide([r.id], 'skip') }, 'Skip'));
+      } else if (reviewTab === 'safe' && can()) {
+        buttons.append(el('button', { type: 'button', class: 'btn btn-sm btn-secondary', onclick: () =>
+          act(() => req(api(`/safe/${r.id}`), { method: 'DELETE' }), 'Safe mark removed.', false).then(loadReviews) }, 'Unmark'));
+      } else {
+        buttons.append(el('span', { class: 'nf-muted', text: `${r.status}${r.detail ? `: ${r.detail}` : ''}` }));
+      }
+      const selectable = (pending || reviewTab === 'safe') && can();
+      body.append(el('tr', {},
+        el('td', { 'data-label': selectable ? 'Select' : '' }, selectable ? box : null),
+        el('td', { 'data-label': 'Member' }, el('div', { class: 'nf-item' }, avatar(r.avatar), el('span', { text: r.displayName || r.username || r.id })),
+          r.inServer ? null : el('div', { class: 'nf-sub', text: 'Not in the server' }), r.roles ? el('div', { class: 'nf-sub', text: `${r.roles} role(s)` }) : null),
+        el('td', { 'data-label': 'Names' }, names),
+        el('td', { 'data-label': 'Matched' }, el('div', { text: r.filterLabel || '' }), el('div', { class: 'nf-sub', text: r.fieldLabel || '' })),
+        el('td', { 'data-label': 'Joined', class: 'cf-cell-muted', text: r.joinedAt ? new Date(r.joinedAt).toLocaleDateString() : '' }),
+        el('td', { 'data-label': 'Account', class: 'cf-cell-muted', text: r.createdAt ? new Date(r.createdAt).toLocaleDateString() : '' }),
+        el('td', { 'data-label': pending ? 'Found' : 'Decided', class: 'cf-cell-muted', text: when(pending ? r.foundAt : r.decidedAt) }),
+        el('td', { class: 'cf-cell-end' }, buttons)));
+    }
+    table.append(body);
+    $('nfReviews').replaceChildren(table);
+  }
+  function updateSel() { $('nfSelCount').textContent = `${selected.size} selected`; }
+  $('nfSelectAll').addEventListener('change', (e) => {
+    selected.clear();
+    for (const box of document.querySelectorAll('#nfReviews tbody input[type=checkbox]')) box.checked = e.target.checked;
+    if (e.target.checked) reviews.forEach(r => selected.add(r.id));
+    updateSel();
+  });
+  for (const b of document.querySelectorAll('#nfBulk [data-bulk]')) {
+    b.addEventListener('click', () => {
+      if (!selected.size) { notice('Select some members first.'); return; }
+      if (reviewTab === 'safe') { Promise.all([...selected].map(id => req(api(`/safe/${id}`), { method: 'DELETE' }))).then(loadReviews).catch(err => showError(err.message)); return; }
+      decide([...selected], b.dataset.bulk);
+    });
+  }
+  async function decide(ids, decision) {
+    const word = { ban: 'Ban', kick: 'Kick', safe: 'Mark safe', skip: 'Skip' }[decision];
+    if ((decision === 'ban' || decision === 'kick') && !confirm(`${word} ${ids.length} member(s)? Each is re-checked first; staff and exempt members are left alone.`)) return;
+    const out = await act(() => post('/reviews/decide', { userIds: ids, decision }), (o) =>
+      `${word}: ${o.done} done${o.skipped ? `, ${o.skipped} skipped` : ''}${o.failed.length ? `, ${o.failed.length} failed (${o.failed.map(f => f.problem).slice(0, 2).join('; ')})` : ''}.`, false);
+    if (out) { loadReviews(); loadHits(); }
+  }
+
+  // ── hits ─────────────────────────────────────────────────────────────────
+  async function loadHits() {
+    try {
+      const { hits } = await req(api('/hits'));
+      $('nfHits').replaceChildren(...(hits.length ? hits.map(h => el('div', { class: 'nf-item' },
+        avatar(h.avatar),
+        el('span', { class: 'cf-pill' + (h.action === 'name_logged' ? '' : h.action === 'failed' ? ' is-warn' : ' is-bad'), text: HIT_WORD[h.action] || h.action }),
+        el('span', { class: 'nf-grow' }, (window.CFUser ? CFUser.cell({ id: h.userId, username: h.username, displayName: h.displayName || h.username, avatar: null, inServer: h.inServer }, { size: 'sm', plain: true }) : (h.username || h.userId)), ' ', el('span', { class: 'nf-muted', text: h.detail || '' })),
+        el('span', { class: 'nf-muted', text: when(h.at) }),
+        h.inServer && can() ? el('button', { type: 'button', class: 'btn btn-sm btn-secondary', onclick: () => runTest({ userId: h.userId }) }, 'Check') : null))
+        : [stateBox('No hits yet', 'Members caught by a filter are listed here.')]));
+    } catch (err) { $('nfHits').replaceChildren(stateBox('Could not load recent hits', err.message, 'error')); }
+  }
+
+  // ── export / import ──────────────────────────────────────────────────────
+  $('nfExport').href = api('/export');
+  async function importReq(apply) {
+    const f = $('nfImportFile').files[0];
+    if (!f) throw new Error('Choose an export file first.');
+    const fd = new FormData();
+    fd.append('file', f);
+    fd.append('apply', apply ? '1' : '0');
+    const res = await fetch(api('/import'), { method: 'POST', credentials: 'same-origin', body: fd });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
+    return body;
+  }
+  function renderImportPlan(plan) {
+    const describe = (x) => `${x.type} ${x.type === 'regex' ? `/${x.pattern}/` : `"${x.pattern}"`}${x.action ? `, action ${x.action}` : ''}`;
+    const group = (title, list, total, extra) => (total ? el('details', { open: title === 'Will be added' },
+      el('summary', { text: `${title}: ${total}` }),
+      el('ul', {}, ...list.map(x => el('li', { text: describe(x) + (extra ? extra(x) : '') })), total > list.length ? el('li', { text: `...and ${total - list.length} more` }) : null)) : null);
+    const c = plan.counts;
+    $('nfImportPlan').replaceChildren(
+      el('div', { class: 'nf-muted', text: plan.added != null ? `Imported: ${plan.added} added.` : 'Preview: nothing has been changed yet.' }),
+      group('Will be added', plan.add, c.add),
+      group('Skipped (already there)', plan.duplicates, c.duplicates),
+      group('Rejected', plan.rejected, c.rejected, (x) => ` (${x.why})`),
+      group('Over the limit (not added)', plan.overCap, c.overCap));
+    $('nfImportPlan').hidden = false;
+  }
+  $('nfImportFile').addEventListener('change', () => { $('nfImportApply').hidden = true; $('nfImportPlan').hidden = true; });
+  $('nfImportPreview').addEventListener('click', async () => {
+    showError('');
+    try {
+      const plan = await importReq(false);
+      renderImportPlan(plan);
+      $('nfImportApply').hidden = !plan.counts.add || !can();
+    } catch (err) { showError(err.message); }
+  });
+  $('nfImportApply').addEventListener('click', async () => {
+    if (!confirm(`Import ${$('nfImportPlan').querySelector('summary')?.textContent || 'filter(s)'}? Duplicates and rejected entries are left out.`)) return;
+    const out = await act(() => importReq(true), (o) => `Imported ${o.added} filter(s).`);
+    if (out) { renderImportPlan(out); $('nfImportApply').hidden = true; }
+  });
+
+  async function load() {
+    try {
+      state = await req(api('/'));
+      if (!state.actor.canConfigure) notice('This page is view-only for you.');
+      renderStats(); renderSettings(); renderFilters(); renderGenerated(); renderTemplates(); renderAutoPilot();
+      if (!editing && !previewed) actionSelect($('nfAction'), $('nfAction').value || 'log', { permHint: true });
+      $('nfPreviewBtn').disabled = !can();
+    } catch (err) {
+      showError(err.message);
+      if (!state) {
+        $('nfStats').replaceChildren(stateBox('Could not load name filters', 'Reload the page to try again.', 'error', true));
+        $('nfFilters').replaceChildren(stateBox('Filters not loaded', err.message, 'error'));
+        $('nfTemplates').replaceChildren(stateBox('Templates not loaded', null, 'empty', true));
+      }
+    }
+  }
+  load().then(() => { if (state) resetForm(); loadReviews(); loadHits(); cleanseState(); });
+})();
+</script>

@@ -10,6 +10,7 @@ import { getFullGameState, processOfflineCatchUp } from '../game/engine.js';
 import { trackStat } from './stats.js';
 import { checkAchievements } from './achievements.js';
 import { recordOfflineProgress } from './offline-progress.js';
+import { isFrozen } from '../freeze.js';
 
 const router = Router();
 
@@ -20,8 +21,8 @@ const router = Router();
  */
 router.get('/state', async (req, res) => {
     try {
-        // Record offline progress before loading state
-        try {
+        // Record offline progress before loading state (not while frozen, H-636: reads only)
+        if (!isFrozen()) try {
             const [[playerOnline]] = await pool.execute(
                 'SELECT last_online_at FROM cfx_players WHERE id = ?', [req.player.id]
             );
@@ -33,8 +34,8 @@ router.get('/state', async (req, res) => {
 
         const state = await getFullGameState(req.player.id);
 
-        // Track login and update last_login_at in stats
-        try {
+        // Track login and update last_login_at in stats (not while frozen)
+        if (!isFrozen()) try {
             await pool.execute(
                 `INSERT INTO cfx_player_stats (player_id, last_login_at, total_login_days)
                  VALUES (?, NOW(), 1)

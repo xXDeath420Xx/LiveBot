@@ -1,0 +1,727 @@
+<%# NSFW protection — NSFW avatars and chat images, two local models (core/nsfw-protection.js): model status, settings per surface, usage vs the daily cap, test box, member scan, review queue with overturn, safe pictures, recent detections. API-driven (dashboard/routes/api/features/nsfw-protection.js); needs `guild` in locals. Laid out with the settings-row kit (cf-settings.css), like name-filters.ejs and avatar-protection.ejs; every id the script below uses is unchanged. %>
+<div class="page-section" id="nsfwProtectionPage" data-guild-id="<%= guild.id %>">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-eye-slash"></i>
+                <span>NSFW protection</span>
+            </div>
+            <div class="page-section-subtitle">Two models that run on the bot's own server, so scans cost nothing.</div>
+        </div>
+    </div>
+
+    <div id="npError" class="cf-notice is-bad" role="alert" hidden></div>
+    <div id="npNotice" class="cf-notice is-info" role="status" hidden></div>
+
+    <div class="cf-kpis" id="npStats" aria-label="NSFW protection at a glance">
+        <div class="cf-state cf-state--loading cf-state--compact" role="status" aria-live="polite"><span class="cf-spinner" aria-hidden="true"></span><p class="cf-state-title">Loading...</p></div>
+    </div>
+
+    <!-- Model -->
+    <section class="cf-section" id="npModelCard" aria-labelledby="np-model-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="np-model-title">Models</h2>
+                <p class="cf-section-desc">Nothing is acted on unless both models score a picture at or above the act threshold. Anything above the review threshold goes to the review queue.</p>
+            </div>
+            <div class="cf-section-actions"><span id="npModelBadge" class="cf-pill">Loading</span></div>
+        </header>
+        <div class="cf-rows">
+            <div id="npModel" class="np-out"><div class="np-muted">Loading...</div></div>
+        </div>
+    </section>
+
+    <!-- Avatars -->
+    <section class="cf-section" aria-labelledby="np-av-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="np-av-title">Avatars</h2>
+                <p class="cf-section-desc">Staff and allowlisted members are never acted on. The allowlist, and the pause that holds every protection, are on <a href="/manage/<%= guild.id %>?page=protection-settings">Protection settings</a>. Avatar entries keep only Discord's own link, shown blurred.</p>
+            </div>
+            <div class="cf-section-actions"><span id="npAvOn" class="cf-pill"></span></div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="npAvEnabled">Check avatars</label>
+                    <p class="cf-row-desc">On join and on every avatar or server-avatar change.</p>
+                </div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="npAvEnabled"></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="npAvAction">When both models agree</label>
+                    <p class="cf-row-desc">Log only sends the member to the review queue. Flag gives the "Flagged Avatar" role from <a href="/manage/<%= guild.id %>?page=avatar-protection">Avatar protection</a>, taken off again when they change to a clean avatar.</p>
+                </div>
+                <div class="cf-row-control"><select id="npAvAction" class="form-select"></select></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="npAvAct">Act threshold</label>
+                    <p class="cf-row-desc">Both models must score the avatar at or above this.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-range"><input type="range" id="npAvAct" min="0.80" max="0.99" step="0.01"><span class="cf-range-value" id="npAvActVal"></span></div>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="npAvReview">Review threshold</label>
+                    <p class="cf-row-desc">At or above this, the avatar goes to the review queue.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-range"><input type="range" id="npAvReview" min="0.30" max="0.99" step="0.01"><span class="cf-range-value" id="npAvReviewVal"></span></div>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="npAvCap">Daily avatar scan limit</label>
+                    <p class="cf-row-desc">From 10 to 50000. Protects the server's CPU; resets at midnight UTC.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-unit"><input id="npAvCap" type="number" min="10" max="50000" class="form-control"><span class="cf-unit">scans</span></div>
+                </div>
+            </div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="npAvDm">Tell kicked or banned members why by DM</label>
+                </div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="npAvDm"></div>
+            </div>
+            <div class="cf-section-foot">
+                <button type="button" class="btn btn-primary" id="npAvSave"><span>Save avatar settings</span></button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Chat images -->
+    <section class="cf-section" aria-labelledby="np-im-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="np-im-title">Chat images</h2>
+                <p class="cf-section-desc">Up to 4 images per message. Age-restricted channels and channels on the <a href="/manage/<%= guild.id %>?page=message-threats">Message threats</a> ignore list are skipped. Only the scores are kept, never the image.</p>
+            </div>
+            <div class="cf-section-actions"><span id="npImOn" class="cf-pill"></span></div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="npImEnabled">Check images posted in chat</label>
+                </div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="npImEnabled"></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="npImAction">Action for chat images</label>
+                    <p class="cf-row-desc">Alert posts a card with a jump link to the Message threats card channel; the image is never re-posted. Delete removes the message; delete and timeout also times the member out.</p>
+                </div>
+                <div class="cf-row-control"><select id="npImAction" class="form-select"></select></div>
+            </div>
+            <div class="cf-row cf-row--sub">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="npImTimeout">Timeout length</label>
+                    <p class="cf-row-desc">Used by delete and timeout.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-unit"><input id="npImTimeout" type="number" min="1" max="40320" class="form-control"><span class="cf-unit">minutes</span></div>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="npImAct">Image act threshold</label>
+                    <p class="cf-row-desc">Both models must score the image at or above this.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-range"><input type="range" id="npImAct" min="0.80" max="0.99" step="0.01"><span class="cf-range-value" id="npImActVal"></span></div>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="npImReview">Image review threshold</label>
+                    <p class="cf-row-desc">At or above this, the image goes to the review queue.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-range"><input type="range" id="npImReview" min="0.30" max="0.99" step="0.01"><span class="cf-range-value" id="npImReviewVal"></span></div>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="npImCap">Daily image scan limit</label>
+                    <p class="cf-row-desc">Once reached, images are not scanned until midnight UTC.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-unit"><input id="npImCap" type="number" min="10" max="50000" class="form-control"><span class="cf-unit">scans</span></div>
+                </div>
+            </div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="npImAlerts">Alert cards for borderline images</label>
+                    <p class="cf-row-desc">Also post an alert card for images in the review band.</p>
+                </div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="npImAlerts"></div>
+            </div>
+            <div class="cf-section-foot">
+                <button type="button" class="btn btn-primary" id="npImSave"><span>Save chat-image settings</span></button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Test -->
+    <section class="cf-section" aria-labelledby="np-test-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="np-test-title">Test a member or an image</h2>
+                <p class="cf-section-desc">Scores are shown and nothing is stored or acted on. Use it to choose thresholds.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="npTestFind">Member</label>
+                    <p class="cf-row-desc">Their avatar and server avatar are both scored.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="np-inline">
+                        <input id="npTestFind" class="form-control" maxlength="64" placeholder="Name, @mention or ID">
+                        <button type="button" class="btn btn-secondary" id="npTestFindBtn"><span>Find</span></button>
+                    </div>
+                </div>
+            </div>
+            <div id="npTestFindResults" class="np-list"></div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="npTestFile">Image</label>
+                    <p class="cf-row-desc">PNG, JPEG, WebP or GIF.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="np-inline">
+                        <input type="file" id="npTestFile" class="form-control" accept="image/png,image/jpeg,image/webp,image/gif">
+                        <button type="button" class="btn btn-secondary" id="npTestFileBtn"><span>Test image</span></button>
+                    </div>
+                </div>
+            </div>
+            <div id="npTestResult" class="np-out" role="status" aria-live="polite"></div>
+        </div>
+    </section>
+
+    <!-- Scan -->
+    <section class="cf-section" aria-labelledby="np-scan-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="np-scan-title">Scan everyone already here</h2>
+                <p class="cf-section-desc">Checks every member's avatar in the background. It never acts: everything it finds goes to the review queue. It counts against the daily avatar limit and stops when the limit is reached; run it again tomorrow to carry on.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--stack">
+                <p id="npScanState" class="np-scan-state" role="status" aria-live="polite">No scan run since the last restart.</p>
+                <div class="np-progress" id="npProgressWrap" hidden><div class="np-progress-bar" id="npProgress"></div></div>
+            </div>
+            <div class="cf-section-foot">
+                <button type="button" class="btn btn-primary" id="npScanBtn"><span>Start scan</span></button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Review queue -->
+    <section class="cf-section" aria-labelledby="np-review-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="np-review-title">NSFW review queue</h2>
+                <p class="cf-section-desc">
+                    Waiting: borderline finds and log-only matches. Not NSFW remembers the picture as safe. Acted on: what the bot did automatically;
+                    Overturn unbans, lifts the timeout or takes the flag off, and remembers the picture as safe (a kick or a deleted message cannot
+                    be undone). Avatars are blurred: click one to see it.
+                </p>
+            </div>
+            <div class="cf-section-actions"><span id="npQueueCount" class="cf-pill"></span></div>
+        </header>
+        <div class="cf-rows">
+            <div class="np-bar">
+                <div class="cf-segmented np-tabs" id="npTabs" role="group" aria-label="Status"></div>
+                <div class="cf-segmented np-tabs" id="npKinds" role="group" aria-label="Kind"></div>
+            </div>
+            <div class="np-bar" id="npBulk">
+                <label class="cf-choice np-select-all" for="npSelectAll"><input type="checkbox" id="npSelectAll"> <span>Select all</span></label>
+                <span class="np-muted" id="npSelCount">0 selected</span>
+                <span class="np-actions">
+                    <button type="button" class="btn btn-sm btn-danger" data-bulk="ban">Ban</button>
+                    <button type="button" class="btn btn-sm btn-secondary" data-bulk="kick">Kick</button>
+                    <button type="button" class="btn btn-sm btn-secondary" data-bulk="safe">Not NSFW</button>
+                    <button type="button" class="btn btn-sm btn-secondary" data-bulk="skip">Skip</button>
+                    <button type="button" class="btn btn-sm btn-secondary" data-bulk="overturn">Overturn</button>
+                </span>
+            </div>
+            <div id="npReviews" class="np-reviews"></div>
+        </div>
+    </section>
+
+    <!-- Usage -->
+    <section class="cf-section" aria-labelledby="np-usage-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="np-usage-title">Scans per day</h2>
+                <p class="cf-section-desc">The last 14 days, with hits and skipped scans.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div id="npUsage" class="np-out"></div>
+        </div>
+    </section>
+
+    <!-- Recent -->
+    <section class="cf-section" aria-labelledby="np-recent-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="np-recent-title">Recent detections</h2>
+                <p class="cf-section-desc">What the checks found most recently, and what was done.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div id="npRecent" class="np-list"></div>
+        </div>
+    </section>
+
+    <!-- Safe -->
+    <section class="cf-section" aria-labelledby="np-safe-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="np-safe-title">Pictures remembered as safe</h2>
+                <p class="cf-section-desc">Added when you mark an entry Not NSFW or overturn an action. Only a fingerprint is kept, never the picture. Forget one to have it checked again.</p>
+            </div>
+            <div class="cf-section-actions"><span id="npSafeCount" class="cf-pill"></span></div>
+        </header>
+        <div class="cf-rows">
+            <div id="npSafe" class="np-list"></div>
+        </div>
+    </section>
+</div>
+
+<style>
+  /* Pieces the script draws (tabs, lists, review rows, usage bars, test output), on the kit's tokens. */
+  #nsfwProtectionPage .cf-kpis .cf-state { grid-column: 1 / -1; }
+  /* A tab bar the script has not filled is hidden by :has(), which the kit's panel dividers cannot see. */
+  #nsfwProtectionPage .cf-rows { overflow: clip; }
+  #nsfwProtectionPage .cf-rows > .np-bar:first-child:has(> .np-tabs:empty) + * { border-top-color: transparent; }
+  #nsfwProtectionPage .cf-kpis:empty { display: none; }
+  #nsfwProtectionPage .cf-kpi-value.np-ok { color: var(--cf-success); }
+  #nsfwProtectionPage .cf-kpi-value.np-hit { color: var(--cf-danger); }
+  #nsfwProtectionPage .cf-pill:empty { display: none; }
+  #nsfwProtectionPage .np-muted { color: var(--cf-text-3); font-size: var(--cf-text-sm); }
+  #nsfwProtectionPage .np-hit { color: var(--cf-danger); }
+  #nsfwProtectionPage .np-ok { color: var(--cf-success); }
+  #nsfwProtectionPage .np-mid { color: var(--cf-warning); }
+  #nsfwProtectionPage .np-warn { color: var(--cf-warning); font-size: var(--cf-text-sm); }
+  #nsfwProtectionPage .np-inline { display: flex; flex-wrap: wrap; gap: var(--cf-2); align-items: center; }
+  #nsfwProtectionPage .np-inline > input, #nsfwProtectionPage .np-inline > select { flex: 1 1 10rem; min-width: 0; width: auto; margin: 0; }
+
+  /* Toolbars above a list: segmented tabs, bulk actions. */
+  #nsfwProtectionPage .np-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--cf-2) var(--cf-4); padding: var(--cf-3) var(--cf-5); }
+  #nsfwProtectionPage .np-bar[hidden], #nsfwProtectionPage .np-bar:not(#npBulk):has(> .np-tabs:empty) { display: none; }
+  #nsfwProtectionPage .np-actions { display: inline-flex; flex-wrap: wrap; gap: var(--cf-1); align-items: center; }
+  #nsfwProtectionPage .np-bar .np-actions { margin-left: auto; }
+  #nsfwProtectionPage .np-select-all { min-height: 0; }
+
+  /* Lists of members and entries. */
+  #nsfwProtectionPage .np-list { max-height: 26rem; overflow-y: auto; }
+  #nsfwProtectionPage .np-list:empty, #nsfwProtectionPage .np-out:empty, #nsfwProtectionPage .np-reviews:empty { display: none; }
+  #nsfwProtectionPage .np-item { display: flex; align-items: center; flex-wrap: wrap; gap: var(--cf-2) var(--cf-3); font-size: var(--cf-text-sm); color: var(--cf-text); min-width: 0; }
+  #nsfwProtectionPage .np-list > .np-item { padding: var(--cf-2) var(--cf-5); }
+  #nsfwProtectionPage .np-list > .np-item + .np-item { border-top: 1px solid var(--cf-border); }
+  #nsfwProtectionPage .np-item > .fas { width: 28px; text-align: center; color: var(--cf-text-3); }
+  #nsfwProtectionPage .np-grow { flex: 1 1 12rem; min-width: 0; overflow-wrap: anywhere; }
+  #nsfwProtectionPage .np-sub { display: block; font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+  #nsfwProtectionPage .np-scan-state { margin: 0; font-size: var(--cf-text-sm); color: var(--cf-text-2); }
+  #nsfwProtectionPage .np-progress { height: 6px; background: var(--cf-surface-3); border-radius: 999px; overflow: hidden; }
+  #nsfwProtectionPage .np-progress[hidden] { display: none; }
+  #nsfwProtectionPage .np-progress-bar { height: 100%; width: 0; background: var(--cf-accent); transition: width 0.4s; }
+
+  /* Model status, test output and usage: padded blocks inside the panel. */
+  #nsfwProtectionPage .np-out { display: grid; gap: var(--cf-2); padding: var(--cf-4) var(--cf-5); font-size: var(--cf-text-sm); min-width: 0; overflow-wrap: anywhere; }
+  #nsfwProtectionPage .np-out .np-item + .np-item { border-top: 1px solid var(--cf-border); padding-top: var(--cf-2); }
+  #nsfwProtectionPage .np-model { display: flex; align-items: center; flex-wrap: wrap; gap: var(--cf-2); color: var(--cf-text-2); }
+
+  /* Review entries: blurred picture, scores and details, decisions. */
+  #nsfwProtectionPage .np-rev { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; gap: var(--cf-3) var(--cf-4); align-items: center; padding: var(--cf-3) var(--cf-5); }
+  #nsfwProtectionPage .np-rev + .np-rev { border-top: 1px solid var(--cf-border); }
+  #nsfwProtectionPage .np-rev .np-check { width: 16px; height: 16px; accent-color: var(--cf-accent); }
+  #nsfwProtectionPage .np-rev .np-grow { display: grid; gap: 2px; font-size: var(--cf-text-sm); }
+  #nsfwProtectionPage .np-blur { width: 64px; height: 64px; border-radius: var(--cf-radius); object-fit: cover; background: var(--cf-surface-3); filter: blur(14px); cursor: pointer; transition: filter 0.2s; }
+  #nsfwProtectionPage .np-blur.shown { filter: none; }
+  #nsfwProtectionPage .np-noimg { width: 64px; height: 64px; border-radius: var(--cf-radius); background: var(--cf-surface-3); display: flex; align-items: center; justify-content: center; color: var(--cf-text-3); font-size: 1.2rem; }
+  #nsfwProtectionPage .np-rev-actions { display: flex; flex-wrap: wrap; gap: var(--cf-1); justify-content: flex-end; }
+
+  /* Usage bars: avatar scans in the accent, image scans in the info tone. */
+  #nsfwProtectionPage .np-legend { display: flex; flex-wrap: wrap; gap: var(--cf-4); font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+  #nsfwProtectionPage .np-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+  #nsfwProtectionPage .np-dot.a, #nsfwProtectionPage .np-bar-track .a { background: var(--cf-accent); }
+  #nsfwProtectionPage .np-dot.i, #nsfwProtectionPage .np-bar-track .i { background: var(--cf-info); }
+  #nsfwProtectionPage .np-bars { display: grid; gap: 6px; }
+  #nsfwProtectionPage .np-bar-row { display: grid; grid-template-columns: 3.5rem minmax(0, 1fr) 9rem; gap: var(--cf-3); align-items: center; font-size: var(--cf-text-xs); font-variant-numeric: tabular-nums; }
+  #nsfwProtectionPage .np-bar-track { height: 8px; background: var(--cf-surface-3); border-radius: 999px; overflow: hidden; display: flex; }
+  #nsfwProtectionPage .np-bar-track span { display: block; height: 100%; }
+
+  @media (max-width: 800px) {
+    #nsfwProtectionPage .np-rev { grid-template-columns: auto auto minmax(0, 1fr); }
+    #nsfwProtectionPage .np-rev .np-rev-actions { grid-column: 1 / -1; justify-content: flex-start; }
+  }
+  @media (max-width: 640px) {
+    #nsfwProtectionPage .np-inline > input[type="file"] { flex-basis: 100%; }
+    #nsfwProtectionPage .np-bar, #nsfwProtectionPage .np-list > .np-item, #nsfwProtectionPage .np-out, #nsfwProtectionPage .np-rev { padding-left: var(--cf-4); padding-right: var(--cf-4); }
+    #nsfwProtectionPage .np-bar .np-actions { margin-left: 0; }
+    #nsfwProtectionPage .np-bar-row { grid-template-columns: 3rem minmax(0, 1fr); }
+    #nsfwProtectionPage .np-bar-row > :last-child { grid-column: 2; }
+    #nsfwProtectionPage .np-blur, #nsfwProtectionPage .np-noimg { width: 52px; height: 52px; }
+  }
+</style>
+
+<script>
+(function () {
+  const root = document.getElementById('nsfwProtectionPage');
+  if (!root) return;
+  const guildId = root.dataset.guildId;
+  const api = (p) => `/api/guilds/${guildId}/nsfw-protection${p}`;
+  const $ = (id) => document.getElementById(id);
+  const AV_LABEL = { log: 'Log only and review', flag: 'Flag with role', kick: 'Kick', ban: 'Ban' };
+  const IM_LABEL = { alert: 'Alert staff', delete: 'Delete', timeout: 'Delete and timeout' };
+  const AV_PERM = { flag: 'flag', kick: 'kick', ban: 'ban' };
+  const IM_PERM = { delete: 'delete', timeout: 'timeout' };
+  const STATUS_WORD = { pending: 'Waiting', actioned: 'Acted on', failed: 'Could not act', safe: 'Not NSFW', overturned: 'Overturned',
+    banned: 'Banned (review)', kicked: 'Kicked (review)', skipped: 'Skipped', gone: 'Gone' };
+  const TABS = [['open', 'Open'], ['pending', 'Waiting'], ['actioned', 'Acted on'], ['overturned', 'Overturned'], ['safe', 'Not NSFW'], ['all', 'All']];
+  const KINDS = [['all', 'Avatars and images'], ['avatar', 'Avatars'], ['image', 'Chat images']];
+  let state = null;
+  let tab = 'open';
+  let kind = 'all';
+  let rows = [];
+  const selected = new Map();   // `${surface}:${id}` -> { surface, id }
+  let scanTimer = null;
+
+  // DOM builder: every server value goes in through textContent / attributes, never markup.
+  function el(tag, attrs = {}, ...kids) {
+    const n = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (v == null || v === false) continue;
+      if (k === 'class') n.className = v;
+      else if (k === 'text') n.textContent = v;
+      else if (k.startsWith('on')) n.addEventListener(k.slice(2), v);
+      else n.setAttribute(k, v === true ? '' : v);
+    }
+    for (const kid of kids.flat()) if (kid != null && kid !== false) n.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
+    return n;
+  }
+  const icon = (cls) => el('i', { class: cls, 'aria-hidden': 'true' });
+  const when = (t) => (t ? new Date(t).toLocaleString() : '');
+  const pct = (s) => (s == null ? '–' : `${Math.round(Number(s) * 100)}%`);
+  const can = () => state && state.actor.canConfigure;
+  // Kit empty / loading / error states (cf-settings.css .cf-state).
+  function stateBox(title, text, kind = 'empty', compact = false) {
+    return el('div', { class: `cf-state cf-state--${kind}${compact ? ' cf-state--compact' : ''}`, role: kind === 'error' ? 'alert' : kind === 'loading' ? 'status' : null },
+      kind === 'loading' ? el('span', { class: 'cf-spinner', 'aria-hidden': 'true' }) : null,
+      el('p', { class: 'cf-state-title', text: title }), text ? el('p', { class: 'cf-state-text', text }) : null);
+  }
+  const tabBtn = (label, active, onclick) => el('button', { type: 'button', class: 'cf-segment', 'aria-pressed': active ? 'true' : 'false', onclick }, label);
+
+  async function req(url, options = {}) {
+    const res = await fetch(url, { credentials: 'same-origin', headers: options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }, ...options });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
+    return body;
+  }
+  const post = (p, body) => req(api(p), { method: 'POST', body: JSON.stringify(body || {}) });
+  const showError = (m) => { const e = $('npError'); e.hidden = !m; e.textContent = m || ''; if (m) e.scrollIntoView({ block: 'nearest' }); };
+  const notice = (m) => { const e = $('npNotice'); e.hidden = !m; e.textContent = m || ''; };
+  async function act(fn, done, reload = true) {
+    showError('');
+    try { const out = await fn(); if (done) notice(typeof done === 'function' ? done(out) : done); if (reload) await load(); return out; } catch (err) { showError(err.message); return null; }
+  }
+
+  // ── model + stats ────────────────────────────────────────────────────────
+  function renderModel() {
+    const m = state.model;
+    const badge = $('npModelBadge');
+    badge.className = 'cf-pill ' + (m.installed ? 'is-ok' : m.partial ? 'is-warn' : 'is-bad');
+    badge.textContent = m.installed ? 'Installed' : m.partial ? 'First model only' : 'Model not installed';
+    const lines = [];
+    if (!m.installed) {
+      lines.push(el('div', { class: 'np-warn', text: m.partial
+        ? 'Only the first model is installed: pictures are scored and queued for review, but nothing is ever acted on until the second model is installed.'
+        : 'The NSFW models are not installed on the bot\'s server yet. The settings below can be saved, but nothing is scanned until they are.' }));
+      if (m.missing && m.missing.length) lines.push(el('div', { class: 'np-muted', text: `Missing: ${m.missing.join('; ')}` }));
+    }
+    for (const x of state.models || []) {
+      const st = (m.models || []).find(y => y.id === x.id);
+      lines.push(el('div', { class: 'np-model' }, el('span', { class: 'cf-pill ' + (st && st.ok ? 'is-ok' : 'is-bad'), text: st && st.ok ? 'Loaded' : 'Missing' }), `${x.name}, ${x.licence}`));
+    }
+    const w = m.workers;
+    lines.push(el('div', { class: 'np-muted', text: `Classifier: ${w.running} of ${w.max} worker(s) running (${w.threadsEach} threads each; they start on the first scan and stop when idle). `
+      + `Queue: ${m.queue.priority + m.queue.normal} waiting. ${m.completed} scanned since restart${m.avgMs ? `, ${m.avgMs} ms average` : ''}; `
+      + `${m.queue.dropped + m.queue.expired} dropped because it was busy; ${m.failed} failed.` }));
+    if (m.paused) lines.push(el('div', { class: 'np-warn', text: `The model failed to load; retrying after ${when(m.paused)}.` }));
+    if (m.lastError) lines.push(el('div', { class: 'np-muted', text: `Last problem (${when(m.lastErrorAt)}): ${m.lastError}` }));
+    $('npModel').replaceChildren(...lines);
+  }
+  function stat(label, value, cls) {
+    const small = !/^\d/.test(String(value));
+    return el('div', { class: 'cf-kpi' }, el('div', { class: 'cf-kpi-label', text: label }),
+      el('div', { class: 'cf-kpi-value' + (small ? ' is-small' : '') + (cls ? ` ${cls}` : ''), text: String(value) }));
+  }
+  function renderStats() {
+    const c = state.counts; const cap = state.cap; const live = state.usage.today.sinceRestart;
+    const waiting = (c.avatar.pending || 0) + (c.image.pending || 0);
+    const acted = (c.avatar.actioned || 0) + (c.image.actioned || 0);
+    $('npStats').replaceChildren(
+      stat('Avatars', state.avatar.enabled ? 'On' : 'Off', state.avatar.enabled ? 'np-ok' : ''),
+      stat('Chat images', state.image.enabled ? 'On' : 'Off', state.image.enabled ? 'np-ok' : ''),
+      stat('Avatar scans today', `${cap.avatar.used} of ${cap.avatar.limit}`, cap.avatar.allowed ? '' : 'np-hit'),
+      stat('Image scans today', `${cap.image.used} of ${cap.image.limit}`, cap.image.allowed ? '' : 'np-hit'),
+      stat('NSFW found (since restart)', live.avatar.nsfw + live.image.nsfw),
+      stat('Skipped (limit or busy)', live.avatar.capped + live.avatar.dropped + live.image.capped + live.image.dropped),
+      stat('Waiting for review', waiting, waiting ? 'np-hit' : ''),
+      stat('Acted on (overturnable)', acted));
+  }
+
+  // ── settings ─────────────────────────────────────────────────────────────
+  function slider(act, review, actVal, reviewVal) {
+    const sync = () => { $(actVal).textContent = Number($(act).value).toFixed(2); $(reviewVal).textContent = Number($(review).value).toFixed(2); };
+    $(act).addEventListener('input', () => { if (Number($(review).value) > Number($(act).value)) $(review).value = $(act).value; sync(); });
+    $(review).addEventListener('input', () => { if (Number($(review).value) > Number($(act).value)) $(act).value = $(review).value; sync(); });
+    return sync;
+  }
+  const syncAv = slider('npAvAct', 'npAvReview', 'npAvActVal', 'npAvReviewVal');
+  const syncIm = slider('npImAct', 'npImReview', 'npImActVal', 'npImReviewVal');
+  function options(select, list, labels, perms, value) {
+    select.replaceChildren(...list.map(a => el('option', { value: a, text: labels[a] + (perms[a] && !state.botPerms[perms[a]] ? ' (bot lacks permission)' : '') })));
+    select.value = value;
+  }
+  function renderSettings() {
+    const a = state.avatar; const i = state.image;
+    $('npAvOn').className = 'cf-pill ' + (a.enabled ? 'is-ok' : ''); $('npAvOn').textContent = a.enabled ? `On, ${AV_LABEL[a.action]}` : 'Off';
+    $('npImOn').className = 'cf-pill ' + (i.enabled ? 'is-ok' : ''); $('npImOn').textContent = i.enabled ? `On, ${IM_LABEL[i.action]}` : 'Off';
+    $('npAvEnabled').checked = a.enabled; $('npAvDm').checked = a.dm; $('npAvCap').value = a.dailyCap;
+    $('npAvAct').value = a.act; $('npAvReview').value = a.review; syncAv();
+    options($('npAvAction'), state.actions.avatar, AV_LABEL, AV_PERM, a.action);
+    $('npImEnabled').checked = i.enabled; $('npImAlerts').checked = i.reviewAlerts; $('npImCap').value = i.dailyCap; $('npImTimeout').value = i.timeoutMinutes;
+    $('npImAct').value = i.act; $('npImReview').value = i.review; syncIm();
+    options($('npImAction'), state.actions.image, IM_LABEL, IM_PERM, i.action);
+    for (const id of ['npAvEnabled', 'npAvDm', 'npAvCap', 'npAvAct', 'npAvReview', 'npAvAction', 'npAvSave', 'npImEnabled', 'npImAlerts', 'npImCap',
+      'npImTimeout', 'npImAct', 'npImReview', 'npImAction', 'npImSave', 'npScanBtn']) $(id).disabled = !can();
+  }
+  $('npAvSave').addEventListener('click', () => {
+    const action = $('npAvAction').value;
+    if ($('npAvEnabled').checked && !state.avatar.enabled && !confirm(`Switch NSFW avatar checks on? Every join and every avatar change is scanned. When both models agree: ${AV_LABEL[action]}.`)) return;
+    if (action !== 'log' && action !== state.avatar.action && !confirm(`${AV_LABEL[action]} members whose avatar both models score ${Number($('npAvAct').value).toFixed(2)} or more? Log only (review queue) is the safer start.`)) return;
+    act(() => post('/settings', { surface: 'avatar', enabled: $('npAvEnabled').checked, dm: $('npAvDm').checked, action, act: Number($('npAvAct').value),
+      review: Number($('npAvReview').value), dailyCap: Number($('npAvCap').value) }), 'Avatar settings saved.');
+  });
+  $('npImSave').addEventListener('click', () => {
+    const action = $('npImAction').value;
+    if ($('npImEnabled').checked && !state.image.enabled && !confirm(`Switch NSFW chat-image checks on? Images in every channel that is not age-restricted or ignored are scanned. When both models agree: ${IM_LABEL[action]}.`)) return;
+    if (action !== 'alert' && action !== state.image.action && !confirm(`${IM_LABEL[action]} when both models score an image ${Number($('npImAct').value).toFixed(2)} or more?`)) return;
+    act(() => post('/settings', { surface: 'image', enabled: $('npImEnabled').checked, reviewAlerts: $('npImAlerts').checked, action, act: Number($('npImAct').value),
+      review: Number($('npImReview').value), dailyCap: Number($('npImCap').value), timeoutMinutes: Number($('npImTimeout').value) }), 'Chat-image settings saved.');
+  });
+
+  // ── test ─────────────────────────────────────────────────────────────────
+  const VERDICT = { nsfw: ['NSFW: both models agree, the action applies', 'np-hit'], review: ['Borderline: review queue only', 'np-mid'],
+    clean: ['Clean', 'np-ok'], minor: ['A label suggesting minors', 'np-hit'], safe: ['Remembered as safe', 'np-ok'], skipped: ['Not scored', ''], capped: ['Over the daily limit', ''] };
+  function renderTest(r, title) {
+    if (!r.installed) { $('npTestResult').replaceChildren(el('div', { class: 'np-warn', text: `The model is not installed: ${(r.missing || []).join('; ')}` })); return; }
+    const items = r.results.map(x => {
+      const [word, cls] = VERDICT[x.status] || [x.status, ''];
+      return el('div', { class: 'np-item' },
+        el('span', { class: 'np-grow' }, el('strong', { text: x.scope === 'server' ? 'Server avatar' : x.scope === 'upload' ? 'Image' : 'Avatar' }), ': ',
+          el('span', { class: cls, text: word }), x.line ? el('span', { class: 'np-sub', text: x.line }) : null, x.why ? el('span', { class: 'np-sub', text: x.why }) : null));
+    });
+    $('npTestResult').replaceChildren(el('div', { class: 'np-muted', text: `${title}: act at ${pct(r.thresholds.act)} on both models, review at ${pct(r.thresholds.review)}` }),
+      ...items, ...(r.notes || []).map(n => el('div', { class: 'np-muted', text: n })), r.results.length ? null : el('div', { class: 'np-muted', text: 'Nothing to test.' }));
+  }
+  $('npTestFindBtn').addEventListener('click', async () => {
+    const q = $('npTestFind').value.trim(); const box = $('npTestFindResults');
+    if (!q) { box.replaceChildren(); return; }
+    box.replaceChildren(el('div', { class: 'np-item np-muted', text: 'Searching...' }));
+    try {
+      const { members } = await req(`/api/guilds/${guildId}/avatar-protection/members?q=${encodeURIComponent(q)}`);
+      box.replaceChildren(...(members.length ? members.map(m => el('div', { class: 'np-item' },
+        el('span', { class: 'np-grow' }, m.displayName, ' ', el('span', { class: 'np-muted', text: `@${m.username}` })),
+        el('button', { type: 'button', class: 'btn btn-sm btn-secondary', onclick: async () => {
+          $('npTestResult').replaceChildren(el('div', { class: 'np-muted', text: 'Scoring...' }));
+          const r = await act(() => post('/test', { userId: m.id }), null, false);
+          if (r) renderTest(r, m.displayName);
+        } }, 'Test'))) : [el('div', { class: 'np-item np-muted', text: 'No one found. Try their user ID.' })]));
+    } catch (err) { box.replaceChildren(el('div', { class: 'np-item np-hit', text: err.message })); }
+  });
+  $('npTestFind').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('npTestFindBtn').click(); } });
+  $('npTestFileBtn').addEventListener('click', async () => {
+    const file = $('npTestFile').files[0]; if (!file) { notice('Choose an image first.'); return; }
+    const fd = new FormData(); fd.append('image', file);
+    $('npTestResult').replaceChildren(el('div', { class: 'np-muted', text: 'Scoring...' }));
+    const r = await act(() => req(api('/test/upload'), { method: 'POST', body: fd }), null, false);
+    if (r) renderTest(r, file.name);
+  });
+
+  // ── scan ─────────────────────────────────────────────────────────────────
+  function renderScan(s) {
+    const running = !!(s && s.running);
+    $('npProgressWrap').hidden = !running;
+    if (running && s.total) $('npProgress').style.width = `${Math.round((s.checked / s.total) * 100)}%`;
+    $('npScanBtn').disabled = running || !can();
+    $('npScanState').textContent = !s || (!s.running && !s.finishedAt) ? 'No scan run since the last restart.'
+      : running ? `Checking... ${s.checked} of ${s.total ?? '?'} members, ${s.found} queued.`
+        : s.error ? `The last scan failed: ${s.error}`
+          : `Last scan ${when(s.finishedAt)}: ${s.checked} of ${s.total} checked, ${s.found} queued${s.capped ? ' (stopped at the daily limit)' : ''}.`;
+    clearTimeout(scanTimer);
+    if (running) {
+      scanTimer = setTimeout(async () => {
+        try {
+          const next = await req(api('/scan'));
+          renderScan(next);
+          if (!next.running) loadReviews();
+        } catch { /* next poll */ }
+      }, 3000);
+    }
+  }
+  $('npScanBtn').addEventListener('click', () => {
+    if (!confirm('Scan every member\'s avatar now? Nothing is acted on: finds go to the review queue. It counts against the avatar daily cap.')) return;
+    act(() => post('/scan'), 'Scan started.').then(async () => renderScan(await req(api('/scan'))));
+  });
+
+  // ── review queue ─────────────────────────────────────────────────────────
+  const keyOf = (r) => `${r.surface}:${r.id}`;
+  function decisionsFor(r) {
+    if (r.status === 'pending' || r.status === 'failed') return ['ban', 'kick', 'safe', 'skip'];
+    if (r.status === 'actioned' || r.status === 'banned' || r.status === 'kicked') return ['overturn'];
+    return [];
+  }
+  const DEC = { ban: ['Ban', 'btn-danger'], kick: ['Kick', 'btn-secondary'], safe: ['Not NSFW', 'btn-secondary'],
+    skip: ['Skip', 'btn-secondary'], overturn: ['Overturn', 'btn-secondary'] };
+  async function decide(list, decision) {
+    const bySurface = { avatar: [], image: [] };
+    for (const x of list) bySurface[x.surface].push(x.id);
+    const names = { ban: 'Ban', kick: 'Kick', safe: 'Mark not NSFW (and remember the picture as safe) for', skip: 'Skip', overturn: 'Overturn the action on (unban / lift timeout / remove flag, and remember the picture as safe)' };
+    if (!confirm(`${names[decision]} ${list.length} member(s)?`)) return;
+    showError('');
+    const notes = [];
+    let done = 0;
+    for (const surface of ['avatar', 'image']) {
+      if (!bySurface[surface].length) continue;
+      try {
+        const out = await post('/reviews/decide', { surface, userIds: bySurface[surface], decision });
+        done += out.done;
+        if (out.failed && out.failed.length) notes.push(`${out.failed.length} could not: ${out.failed.slice(0, 3).map(f => f.problem).join('; ')}`);
+        if (out.notes && out.notes.length) notes.push(...new Set(out.notes));
+        if (out.skipped) notes.push(`${out.skipped} skipped (left, changed avatar, staff or exempt)`);
+      } catch (err) { showError(err.message); }
+    }
+    selected.clear();
+    notice(`${done} done.${notes.length ? ` ${notes.join('. ')}` : ''}`);
+    await load();
+  }
+  function scoreSpan(v) {
+    const cls = v == null ? '' : v >= 0.9 ? 'np-hit' : v >= 0.6 ? 'np-mid' : 'np-ok';
+    return el('span', { class: cls, text: pct(v) });
+  }
+  function renderReviews() {
+    const c = state.counts;
+    const n = (s) => (c.avatar[s] || 0) + (c.image[s] || 0);
+    $('npQueueCount').textContent = `${n('pending')} waiting, ${n('actioned')} acted on`;
+    $('npQueueCount').className = 'cf-pill' + (n('pending') ? ' is-warn' : '');
+    $('npTabs').replaceChildren(...TABS.map(([t, label]) => tabBtn(label, t === tab, () => { tab = t; selected.clear(); loadReviews(); })));
+    $('npKinds').replaceChildren(...KINDS.map(([k, label]) => tabBtn(label, k === kind, () => { kind = k; selected.clear(); loadReviews(); })));
+    $('npSelCount').textContent = `${selected.size} selected`;
+    $('npSelectAll').checked = rows.length > 0 && rows.every(r => selected.has(keyOf(r)));
+    if (!rows.length) { $('npReviews').replaceChildren(stateBox('Nothing here', tab === 'open' || tab === 'pending' ? 'Borderline finds and automatic actions are listed here.' : null)); return; }
+    $('npReviews').replaceChildren(...rows.map(r => {
+      const box = el('input', { type: 'checkbox', class: 'np-check', 'aria-label': 'Select', onchange: (e) => { if (e.target.checked) selected.set(keyOf(r), r); else selected.delete(keyOf(r)); $('npSelCount').textContent = `${selected.size} selected`; } });
+      box.checked = selected.has(keyOf(r));
+      const pic = r.avatarUrl
+        ? el('img', { src: r.avatarUrl, alt: 'Avatar (click to show)', title: 'Click to show or hide', class: 'np-blur', loading: 'lazy', onclick: (e) => e.target.classList.toggle('shown') })
+        : el('div', { class: 'np-noimg', title: r.surface === 'image' ? 'Chat image: not kept' : 'No avatar' }, icon(r.surface === 'image' ? 'fas fa-image' : 'fas fa-user'));
+      const who = el('div', { class: 'np-grow' },
+        el('div', {}, el('strong', { text: r.displayName || r.username || r.id }), ' ', el('span', { class: 'np-muted', text: `@${r.username || r.id}${r.inServer ? '' : ', not in the server'}` })),
+        el('div', { class: 'np-muted' }, `${r.surface === 'avatar' ? (r.scope === 'server' ? 'Server avatar' : 'Avatar') : 'Chat image'}. First model `, scoreSpan(r.screen), ', second model ', scoreSpan(r.judge)),
+        el('div', { class: 'np-muted', text: `${STATUS_WORD[r.status] || r.status}${r.actionTaken ? ` (${r.actionTaken})` : ''}, ${when(r.foundAt)}${r.decidedAt ? `, decided ${when(r.decidedAt)}` : ''}` }),
+        r.detail ? el('div', { class: 'np-muted', text: r.detail }) : null,
+        r.ai ? el('div', { class: 'np-muted', text: `AI third opinion (advice only): ${({ match: 'Same picture (impersonation)', no_match: 'Not the same picture', scam: 'Scam', not_scam: 'Not a scam', nsfw: 'Explicit', not_nsfw: 'Not explicit' })[r.ai.verdict] || r.ai.verdict}${r.ai.confidence != null ? `, ${Math.round(r.ai.confidence * 100)}%` : ''}${r.ai.reason ? `: ${r.ai.reason}` : ''}` }) : null,
+        r.createdAt ? el('div', { class: 'np-muted', text: `Account created ${new Date(r.createdAt).toLocaleDateString()}${r.joinedAt ? `, joined ${new Date(r.joinedAt).toLocaleDateString()}` : ''}${r.roles && r.roles.length ? `. Roles: ${r.roles.join(', ')}` : ''}` }) : null);
+      const actions = el('div', { class: 'np-rev-actions' }, ...decisionsFor(r).map(d => el('button', { type: 'button', class: `btn btn-sm ${DEC[d][1]}`, disabled: !can(),
+        onclick: () => decide([r], d) }, DEC[d][0])));
+      return el('div', { class: 'np-rev' }, box, pic, who, actions);
+    }));
+  }
+  $('npSelectAll').addEventListener('change', (e) => { selected.clear(); if (e.target.checked) for (const r of rows) selected.set(keyOf(r), r); renderReviews(); });
+  for (const b of $('npBulk').querySelectorAll('[data-bulk]')) {
+    b.addEventListener('click', () => {
+      const d = b.dataset.bulk;
+      const list = [...selected.values()].filter(r => decisionsFor(r).includes(d));
+      if (!list.length) { notice(`None of the selected entries can take "${DEC[d][0]}".`); return; }
+      decide(list, d);
+    });
+  }
+  async function loadReviews() {
+    try {
+      const out = await req(api(`/reviews?status=${tab}&kind=${kind}`));
+      rows = out.rows;
+      if (state) state.counts = out.counts;
+      renderReviews();
+    } catch (err) { showError(err.message); }
+  }
+
+  // ── usage, recent, safe ──────────────────────────────────────────────────
+  function renderUsage() {
+    const days = state.usage.days;
+    if (!days.length) { $('npUsage').replaceChildren(el('div', { class: 'np-muted', text: 'Nothing scanned yet.' })); return; }
+    const max = Math.max(1, ...days.map(d => d.nsfw_avatar_scans + d.nsfw_image_scans));
+    $('npUsage').replaceChildren(
+      el('div', { class: 'np-legend' }, el('span', {}, el('span', { class: 'np-dot a' }), 'Avatar scans'), el('span', {}, el('span', { class: 'np-dot i' }), 'Image scans')),
+      el('div', { class: 'np-bars' }, ...days.map(d => el('div', { class: 'np-bar-row' },
+        el('span', { class: 'np-muted', text: d.date.slice(5) }),
+        el('div', { class: 'np-bar-track', title: `${d.nsfw_avatar_scans} avatar, ${d.nsfw_image_scans} image scans` },
+          el('span', { class: 'a', style: `width:${(d.nsfw_avatar_scans / max) * 100}%` }), el('span', { class: 'i', style: `width:${(d.nsfw_image_scans / max) * 100}%` })),
+        el('span', { class: 'np-muted', text: `${d.nsfw_avatar_hits + d.nsfw_image_hits} hit, ${d.nsfw_avatar_skipped + d.nsfw_image_skipped} skipped` })))));
+  }
+  const OUTCOME = { banned: 'banned', kicked: 'kicked', flagged: 'flagged', logged: 'logged', queued: 'sent to review', overturned: 'overturned',
+    deleted: 'message deleted', timeout: 'deleted and timed out', review: 'alert posted', held: 'held (exempt or paused)', staff: 'logged (staff)', failed: 'could not act' };
+  async function loadRecent() {
+    try {
+      const { recent } = await req(api('/recent'));
+      $('npRecent').replaceChildren(...(recent.length ? recent.map(r => el('div', { class: 'np-item' },
+        icon(r.surface === 'avatar' ? 'fas fa-user-circle' : 'fas fa-image'),
+        el('span', { class: 'np-grow' }, (window.CFUser ? CFUser.cell(r.username ? { id: r.userId, username: r.username } : r.userId, { size: 'sm' }) : el('span', { text: r.username || r.userId })), ' ', el('span', { class: 'cf-pill', text: OUTCOME[r.outcome] || r.outcome || '' }),
+          r.detail ? el('span', { class: 'np-sub', text: r.detail }) : null, el('span', { class: 'np-sub', text: when(r.at) })),
+        r.jump ? el('a', { href: r.jump, target: '_blank', rel: 'noopener', class: 'btn btn-sm btn-secondary' }, 'Jump') : null))
+        : [stateBox('Nothing yet', 'Detections are listed here.')]));
+    } catch (err) { $('npRecent').replaceChildren(stateBox('Could not load recent detections', err.message, 'error')); }
+  }
+  async function loadSafe() {
+    try {
+      const { safe } = await req(api('/safe'));
+      $('npSafeCount').textContent = String(safe.length);
+      $('npSafe').replaceChildren(...(safe.length ? safe.map(s => el('div', { class: 'np-item' },
+        el('span', { class: 'np-grow' }, el('span', { text: `#${s.id} ${s.label || ''}` }), el('span', { class: 'np-sub', text: when(s.created_at) })),
+        el('button', { type: 'button', class: 'btn btn-sm btn-secondary', disabled: !can(), onclick: () => {
+          if (!confirm('Forget this picture? It will be checked again the next time it appears.')) return;
+          act(() => req(api(`/safe/${s.id}`), { method: 'DELETE' }), 'Forgotten.').then(loadSafe);
+        } }, 'Forget'))) : [stateBox('None yet', 'Pictures you mark Not NSFW are remembered here.')]));
+    } catch (err) { $('npSafe').replaceChildren(stateBox('Could not load safe pictures', err.message, 'error')); }
+  }
+
+  async function load() {
+    try {
+      state = await req(api('/'));
+      renderModel(); renderStats(); renderSettings(); renderUsage(); renderScan(state.scan);
+      await Promise.all([loadReviews(), loadRecent(), loadSafe()]);
+    } catch (err) {
+      showError(err.message);
+      if (!state) {
+        $('npStats').replaceChildren(stateBox('Could not load NSFW protection', 'Reload the page to try again.', 'error', true));
+        $('npModelBadge').textContent = 'Unknown';
+        $('npModel').replaceChildren(el('div', { class: 'np-muted', text: 'Model status not loaded.' }));
+        for (const id of ['npReviews', 'npRecent', 'npSafe']) $(id).replaceChildren(stateBox('Not loaded', null, 'empty', true));
+        $('npUsage').replaceChildren(el('div', { class: 'np-muted', text: 'Not loaded.' }));
+      }
+    }
+  }
+  load();
+})();
+</script>

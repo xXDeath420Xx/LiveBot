@@ -1,0 +1,137 @@
+<%#
+  GET /studio/faq (dashboard/routes/legal-pages.js). Locals: user, facts (STUDIO_FACTS).
+  Answers checked against desktop/studio/src (local-key.js, config.js, obs-config.js, vod-safe.js) and design §5, §8.3.
+%>
+<!DOCTYPE html>
+<html lang="en" data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>">
+<head>
+<%- include('partials/site-head', { title: 'CertiFried Studio questions · CertiFried', description: 'Answers about CertiFried Studio: the SmartScreen warning, antivirus alerts, saved passwords, the OBS port and password, Kick VODs and music in clips.', path: '/studio/faq' }) %>
+    <link rel="stylesheet" href="/css/cf-studio-pages.css">
+</head>
+<body class="cfs-body">
+<%- include('partials/site-header', { active: '', user: locals.user || null, returnTo: '/studio/faq' }) %>
+<% const _f = locals.facts || {}; %>
+    <main id="main-content" tabindex="-1" class="cfs-main cfs-main--narrow">
+        <div class="cfs-pagehead">
+            <span class="cfs-eyebrow">CertiFried Studio</span>
+            <h1>Questions</h1>
+            <p class="cfs-lede">The things people ask about most. Anything else: the <a href="/discord">support server</a> or <a href="mailto:support@certifriedmultitool.com">support@certifriedmultitool.com</a>.</p>
+        </div>
+        <%- include('partials/studio-nav', { current: 'faq' }) %>
+
+        <section class="cfs-section" aria-labelledby="faq-install-h">
+            <h2 id="faq-install-h">Installing</h2>
+            <div class="sp-faq">
+                <details id="smartscreen">
+                    <summary>Why does Windows say "Windows protected your PC"?</summary>
+                    <div class="sp-answer">
+                        <p>Studio is not code-signed. SmartScreen shows this warning for new programs without a signature until enough people have run them. Click <strong>More info</strong>, then <strong>Run anyway</strong>.</p>
+                        <p>Studio will stay unsigned: a signing certificate is a yearly cost, and CertiFried is free with no paid tiers. Instead, every build has a SHA-256 checksum on the <a href="/downloads/studio">download page</a> and in <code>SHA256SUMS.txt</code>, and the source code is public.</p>
+                    </div>
+                </details>
+                <details id="checksum">
+                    <summary>How do I check that the file is really yours?</summary>
+                    <div class="sp-answer">
+                        <p>Open PowerShell in the folder with the download and run <code>Get-FileHash .\CertiFried-Studio-Setup-x.y.z.exe</code> (with the real file name). The Hash it prints must match the SHA-256 shown on the download page exactly. If it does not, delete the file and download it again from certifriedmultitool.com only.</p>
+                        <p>Updates installed by Studio itself are checked against the SHA-512 hash in the update feed before they are installed.</p>
+                    </div>
+                </details>
+                <details id="antivirus">
+                    <summary>My antivirus flags Studio. Is it safe?</summary>
+                    <div class="sp-answer">
+                        <p>New unsigned programs are sometimes flagged by antivirus tools that judge files by how common they are rather than by what they do. Studio also does things such tools watch for: it presses keys for your hotkey actions, listens for global hotkeys, and starts Windows PowerShell for voice commands.</p>
+                        <p>Check the checksum first. If it matches, you can allow the file in your antivirus, and we would be glad if you reported the false positive to your antivirus vendor. If the checksum does not match, do not run the file; tell us on the support server.</p>
+                    </div>
+                </details>
+                <details id="portable">
+                    <summary>Installer or portable?</summary>
+                    <div class="sp-answer">
+                        <p>The installer puts Studio in your Windows account (no administrator rights needed), adds it to the Start menu and updates itself. The portable app is one file you can run from any folder; it does not update itself, but tells you when a new version is out.</p>
+                    </div>
+                </details>
+            </div>
+        </section>
+
+        <section class="cfs-section" aria-labelledby="faq-setup-h">
+            <h2 id="faq-setup-h">Setting up</h2>
+            <div class="sp-faq">
+                <details id="obs-port-password">
+                    <summary>Where do I find the OBS port and password?</summary>
+                    <div class="sp-answer">
+                        <p>The easy way: in Studio's Settings, choose <strong>Use my OBS settings</strong>. Studio reads them from OBS on the same PC, only when you click.</p>
+                        <p>By hand: in OBS open <strong>Tools</strong>, <strong>WebSocket Server Settings</strong>, tick <strong>Enable WebSocket server</strong>, then choose <strong>Show Connect Info</strong>. The default port is <%= _f.obsPort %>. Studio connects to <code>127.0.0.1</code> unless you change it. The OBS WebSocket is built into OBS <%= _f.obsWebsocket %> and newer.</p>
+                    </div>
+                </details>
+                <details id="password-again">
+                    <summary>Studio asks for my OBS password every time it starts</summary>
+                    <div class="sp-answer">
+                        <p>Studio encrypts saved passwords with Windows' own protection (DPAPI). After some Windows updates, DPAPI stops working until the PC is restarted. Studio then uses its own key in your Windows profile instead and switches back by itself later. Only if it cannot even write that key does it keep passwords in memory for one run, and then it shows a notice and asks again next time.</p>
+                        <p>Restarting Windows usually fixes it. <a href="/studio/privacy#on-your-pc">Studio privacy</a> explains how the fallback key compares with DPAPI.</p>
+                    </div>
+                </details>
+                <details id="pc-name">
+                    <summary>Why does the Devices page show my PC's name?</summary>
+                    <div class="sp-answer">
+                        <p>When you pair, Studio names the device <code><%= _f.deviceName %></code> unless you type another name, so you can tell your PCs apart. That name is the only thing about your PC Studio sends when pairing.</p>
+                    </div>
+                </details>
+                <details id="obs-changes">
+                    <summary>Will Studio change my OBS settings?</summary>
+                    <div class="sp-answer">
+                        <p>Only what keeps song requests out of your VODs, and only while you are not live: it adds a CertiFried Music browser source, sets its audio tracks, and turns on the Twitch VOD track in your OBS profile, after copying the profile file. Docks, the theme, starter scenes and anything that touches your other sources happen only when you click. <a href="/studio/how-it-works#changes-to-obs">How it works</a> has the full list.</p>
+                    </div>
+                </details>
+            </div>
+        </section>
+
+        <section class="cfs-section" aria-labelledby="faq-music-h">
+            <h2 id="faq-music-h">Music and copyright</h2>
+            <div class="sp-faq">
+                <details id="kick-vods">
+                    <summary>Are song requests kept out of Kick VODs?</summary>
+                    <div class="sp-answer">
+                        <p>Not automatically. Kick has no separate VOD track, so whatever Kick receives live is saved in its VODs. If you stream to Kick with the obs-multi-rtmp plugin, give the Kick output its own audio encoder on the VOD track; then Kick gets the audio without the music, live and in VODs. Studio's Music on Kick setting shows the steps and remembers your choice; it does not change the plugin for you.</p>
+                    </div>
+                </details>
+                <details id="clips">
+                    <summary>Do clips contain the music?</summary>
+                    <div class="sp-answer">
+                        <p>Yes. Twitch clips are cut from the live stream, not the VOD, so songs playing at the time are in the clip. Local recordings also contain the music unless you turn on <strong>Record without music</strong> in Studio. VOD protection is best effort: you are still responsible for the music you play on stream.</p>
+                    </div>
+                </details>
+                <details id="dmca">
+                    <summary>Does VOD protection stop copyright strikes?</summary>
+                    <div class="sp-answer">
+                        <p>No tool can promise that. It keeps requested songs off your saved Twitch VODs, which is where most takedowns happen, but live streams, clips, Kick VODs and recordings can still contain them, and so can other audio on your VOD track. Play music you have the right to stream. The <a href="/terms#stream-bot-studio-and-song-requests">Terms of Service</a> say more.</p>
+                    </div>
+                </details>
+            </div>
+        </section>
+
+        <section class="cfs-section" aria-labelledby="faq-data-h">
+            <h2 id="faq-data-h">Data and cost</h2>
+            <div class="sp-faq">
+                <details id="telemetry">
+                    <summary>Does Studio track me?</summary>
+                    <div class="sp-answer">
+                        <p>No. Studio has no analytics, telemetry or crash reporting. It sends CertiFried what your automations need (the names of your OBS scenes and sources, OBS events, recognised voice phrases, action results) and nothing else. <a href="/studio/privacy">Studio privacy</a> lists every item.</p>
+                    </div>
+                </details>
+                <details id="cost">
+                    <summary>What does it cost?</summary>
+                    <div class="sp-answer">
+                        <p>Nothing. CertiFried and Studio are free and open source under the <a href="<%= _f.license %>" rel="noopener">GNU AGPL-3.0-or-later</a>, with no paid tiers. Donations are voluntary and unlock nothing. The <a href="<%= _f.githubRepo %>" rel="noopener">source code</a> is on GitHub.</p>
+                    </div>
+                </details>
+                <details id="remove">
+                    <summary>How do I remove Studio and my data?</summary>
+                    <div class="sp-answer">
+                        <p>Revoke the PC on the dashboard's Devices page, uninstall Studio from Windows Settings, and delete <code><%= _f.dataDir %></code>. To delete what the server keeps, use <code>/privacy delete</code> with the CertiFried bot. <a href="/studio/privacy#unpair">Studio privacy</a> has the details.</p>
+                    </div>
+                </details>
+            </div>
+        </section>
+    </main>
+<%- include('partials/site-footer') %>
+</body>
+</html>

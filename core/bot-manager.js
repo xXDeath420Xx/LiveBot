@@ -1,6 +1,65 @@
 import { Client, Collection, GatewayIntentBits, Partials, REST, Routes, Options } from 'discord.js';
 import logger from '../utils/logger.js';
+import fs from 'fs';
+import path from 'path';
 import encryption from '../utils/encryption.js';
+import { localizeCommands } from '../utils/command-localization.js';
+import { fitCustomBotCommands, fitSlashLimit, MAX_SLASH_COMMANDS } from './custom-bot-commands.js';
+import { buildShortcutJson, shortcutNamesByGuild, forgetMainBotGuilds } from './guild-shortcuts.js';
+import { buildDeployJson } from './command-mounts.js';
+import { jellyfinGuildCommandData } from '../cf-jellyfin/cf-jellyfin-commands.js';
+import { logFeatureEvent } from './feature-log.js';
+import { parseUnexpected429 } from '../utils/announcement-edit-governor.js';
+
+/**
+ * Turn an opaque discord.js login failure into something an operator can act on.
+ *
+ * The one that matters most here is gateway close 4014. Every bot in this
+ * network requests three privileged intents (GuildMembers, MessageContent,
+ * GuildPresences) and all three are load-bearing. Discord's policy changed on
+ * 2026-06-10: the gate is now a 10,000-user threshold rather than a server
+ * count, and approval must be renewed annually — per application, and this
+ * network runs 41 separate applications.
+ *
+ * When approval lapses the bot does not degrade, it fails to connect at all,
+ * and the raw message ("Used disallowed intents") gives no hint that the cause
+ * is an expired approval on the developer portal rather than a code change.
+ *
+ * See docs/privileged-intents-compliance.md.
+ *
+ * @returns {{summary: string, remediation: string}|null} null when the failure
+ *          is not one we have a specific diagnosis for.
+ */
+function diagnoseLoginFailure(error) {
+    const code = error?.code;
+    const message = String(error?.message || '');
+
+    if (code === 4014 || /disallowed intent/i.test(message)) {
+        return {
+            summary: 'Disallowed intents (gateway 4014) — a privileged intent is not approved for this application',
+            remediation:
+                'Check Privileged Gateway Intents for this application in the Discord developer portal. ' +
+                'We request GuildMembers, MessageContent and GuildPresences. Since 2026-06-10 approval ' +
+                'expires annually and must be reapplied for per application. ' +
+                'See docs/privileged-intents-compliance.md.',
+        };
+    }
+
+    if (code === 4004 || /invalid token/i.test(message)) {
+        return {
+            summary: 'Invalid token (gateway 4004) — the stored token was rejected',
+            remediation:
+                'The bot token was reset or the encrypted value in custom_bots is stale. ' +
+                'Re-enter the token; it is stored AES-256-GCM encrypted and decrypted via utils/encryption.js.',
+        };
+    }
+
+    return null;
+}
+
+// Dashboard startup window (isStarting): grace after the last custom bot's login, and a cap.
+const STARTUP_GRACE_MS = 30_000;
+const STARTUP_MAX_MS = 5 * 60_000;
 
 /**
  * Bot Manager - Manages multiple Discord client connections
@@ -14,8 +73,84 @@ class BotManager {
         this.defaultBotId = 'default';
         this.commandLoader = null;
         this.eventLoader = null;
+        this.managerInitializer = null;
         // Shared command collection - loaded once, used by all bots
         this.sharedCommands = null;
+        // Startup window, for the dashboard (services/bot-readiness.js): until index.js has
+        // logged in every custom bot, "no bot has this guild" may only mean "not yet".
+        this.startedAt = Date.now();
+        this.startupCompleteAt = null;
+        // Auxiliary bots: clients logged in by a feature of their own (the audit bot in
+        // events/globalBanReportWatcher.js) that run only that feature. Kept OUT of `clients` on
+        // purpose: everything that loops over `clients` (event loaders, command deploys, guild
+        // counts, scheduled jobs) must not pick them up. Only the dashboard looks here, so the
+        // owner can manage the few settings these bots do use.
+        this.auxClients = new Map(); // Map<key, { client, label, page }>
+        // Last thing that went wrong per bot, for the dashboard's bot list (/bot-management):
+        // a bot that failed to log in is not in `clients`, so without this the page could only
+        // say "offline" with no reason. { message, kind: 'start'|'error'|'disconnect'|'invalidated', at }
+        this.botErrors = new Map();
+    }
+
+    /** Register a feature-owned bot for dashboard management only (see auxClients above). */
+    registerAuxiliaryClient(key, client, meta = {}) {
+        this.auxClients.set(key, { key, client, label: meta.label || key, page: meta.page || key });
+    }
+
+    /** The auxiliary bot that is in this guild, when no regular bot is: { key, client, label, page } or null. */
+    getAuxiliaryForGuild(guildId) {
+        for (const aux of this.auxClients.values()) {
+            if (aux.client?.isReady?.() && aux.client.guilds.cache.has(guildId)) return aux;
+        }
+        return null;
+    }
+
+    /**
+     * Log Discord REST rate limits per bot. Before this nothing recorded them, so when one bot's
+     * requests stalled (KumaCord, 2026-11-17 22:04) there was no evidence of why. Throttled to one
+     * line per bot + route per minute.
+     */
+    attachRestDiagnostics(client, label) {
+        const last = new Map();
+        client.rest.on('rateLimited', (info) => {
+            const key = `${info.global ? 'global' : info.route}`;
+            if (Date.now() - (last.get(key) || 0) < 60_000) return;
+            last.set(key, Date.now());
+            logger.warn(`[DiscordREST] ${label} rate limited`, {
+                route: info.route, method: info.method, global: info.global, scope: info.scope,
+                limit: info.limit, retryAfterMs: info.retryAfter ?? info.timeToReset, category: 'discord-rest'
+            });
+        });
+        // A 429 discord.js did not see coming (shared / sub-limits, e.g. message edits) does not emit
+        // 'rateLimited': discord.js just sleeps for Retry-After and every later request on that route
+        // waits behind it. It is only visible in the debug stream (H-311).
+        client.rest.on('restDebug', (message) => {
+            const hit = parseUnexpected429(message);
+            if (!hit) return;
+            const key = `429:${hit.global ? 'global' : hit.route}`;
+            if (Date.now() - (last.get(key) || 0) < 60_000) return;
+            last.set(key, Date.now());
+            logger.warn(`[DiscordREST] ${label} got an unexpected 429`, {
+                route: hit.route, method: hit.method, global: hit.global, scope: hit.scope,
+                majorParameter: hit.majorParameter, retryAfterMs: hit.retryAfterMs, sublimitMs: hit.sublimitMs,
+                category: 'discord-rest'
+            });
+        });
+    }
+
+    /** index.js calls this once every custom bot has had its login attempt. */
+    markStartupComplete() {
+        if (!this.startupCompleteAt) this.startupCompleteAt = Date.now();
+    }
+
+    /**
+     * True while bots are still coming online: before markStartupComplete() (capped at
+     * STARTUP_MAX_MS in case startup threw before reaching it) and for STARTUP_GRACE_MS after,
+     * while the last bots' guild caches fill.
+     */
+    isStarting(now = Date.now()) {
+        if (this.startupCompleteAt) return now - this.startupCompleteAt < STARTUP_GRACE_MS;
+        return now - this.startedAt < STARTUP_MAX_MS;
     }
 
     /**
@@ -37,6 +172,8 @@ class BotManager {
                 GatewayIntentBits.GuildIntegrations,
                 GatewayIntentBits.AutoModerationConfiguration,
                 GatewayIntentBits.AutoModerationExecution,
+                // Without it no guildScheduledEvent* event ever arrives (event logs, event reminders).
+                GatewayIntentBits.GuildScheduledEvents,
                 GatewayIntentBits.DirectMessages
             ],
             partials: [
@@ -44,15 +181,24 @@ class BotManager {
                 Partials.Channel,
                 Partials.Reaction,
                 Partials.User,
-                Partials.GuildMember
+                Partials.GuildMember,
+                Partials.GuildScheduledEvent
             ],
             makeCache: Options.cacheWithLimits({
                 ...Options.DefaultMakeCacheSettings,
                 MessageManager: 50,           // 50 messages per channel (default unlimited)
-                GuildMemberManager: 200,      // 200 members per guild (default unlimited)
+                GuildMemberManager: {         // 200 members per guild (default unlimited)
+                    maxSize: 200,
+                    // The object form is required: a plain number drops this, the bot's own member gets
+                    // evicted in larger servers, and guild.members.me comes back as a blank partial with no
+                    // roles, so every permission check says no.
+                    keepOverLimit: (member) => member.id === member.client.user.id,
+                },
                 PresenceManager: 200,         // Limit cached presences per guild (startup scan reads from cache)
-                GuildEmojiManager: 0,         // Rarely needed from cache
-                GuildStickerManager: 0,       // Rarely needed from cache
+                // Emojis and stickers stay cached (the default). With a 0 limit discord.js could not diff
+                // emoji/sticker updates: every update fired a create for every existing one (a log storm)
+                // and deletes/renames never fired, and everything reading guild.emojis.cache (/server,
+                // backups, /emoji, takeover, emoji hunts) saw an empty list. A few hundred small objects.
                 ThreadManager: 0,             // Rarely needed from cache
             }),
             sweepers: {
@@ -70,6 +216,7 @@ class BotManager {
      */
     async initializeDefaultBot(token) {
         const client = this.createClient();
+        this.attachRestDiagnostics(client, 'main');
         client.botId = this.defaultBotId;
         client.isDefaultBot = true;
 
@@ -85,10 +232,42 @@ class BotManager {
 
         this.setupReconnectionHandler(client);
 
-        await client.login(token);
+        try {
+            await client.login(token);
+        } catch (loginError) {
+            // The default bot previously logged in bare, so an intent or token
+            // failure surfaced as an unannotated stack trace at startup.
+            const diagnosis = diagnoseLoginFailure(loginError);
+            logger.error('[BotManager] ❌ Default bot login failed:', {
+                error: loginError.message,
+                code: loginError.code,
+                ...(diagnosis ? { diagnosis: diagnosis.summary, remediation: diagnosis.remediation } : {})
+            });
+            throw loginError;
+        }
 
         this.clients.set(this.defaultBotId, client);
         logger.info('[BotManager] Default bot initialized');
+
+        // Deploy global slash commands for the default bot. Custom bots get this
+        // in addCustomBot(), but the default path used to skip it and required a
+        // manual push. Hash-cached in DB (guild_id = '') so we only PUT when
+        // command set actually changes.
+        //
+        // deployCommandsForBot needs the actual Discord application snowflake
+        // (numeric) to build the Routes.applicationCommands URL — NOT the
+        // string label 'default' that we store in this.defaultBotId.
+        // client.application.id (set post-login) is the true bot snowflake.
+        try {
+            const realBotId = client.application?.id || client.user?.id;
+            if (realBotId) {
+                await this.deployCommandsForBot(client, realBotId);
+            } else {
+                logger.warn('[BotManager] Default bot: no application/user id — cannot deploy commands');
+            }
+        } catch (e) {
+            logger.error('[BotManager] Default bot command deploy failed:', { error: e.message });
+        }
 
         return client;
     }
@@ -122,6 +301,7 @@ class BotManager {
 
             logger.info(`[BotManager] Step 2/7: Creating Discord client for ${bot_name}...`);
             const client = this.createClient();
+            this.attachRestDiagnostics(client, bot_name || bot_id);
             client.botId = bot_id;
             client.botName = bot_name; // Add bot name to client
             client.isDefaultBot = false;
@@ -158,13 +338,15 @@ class BotManager {
                 await client.login(decryptedToken);
                 logger.info(`[BotManager] Step 5/7: ✅ Successfully logged in to Discord as ${bot_name}`);
             } catch (loginError) {
+                const diagnosis = diagnoseLoginFailure(loginError);
                 logger.error(`[BotManager] Step 5/7: ❌ Login failed for ${bot_name}:`, {
                     error: loginError.message,
                     code: loginError.code,
                     bot_id,
-                    tokenLength: decryptedToken ? decryptedToken.length : 0
+                    tokenLength: decryptedToken ? decryptedToken.length : 0,
+                    ...(diagnosis ? { diagnosis: diagnosis.summary, remediation: diagnosis.remediation } : {})
                 });
-                throw new Error(`Discord login failed: ${loginError.message}`);
+                throw new Error(`Discord login failed: ${diagnosis ? diagnosis.summary : loginError.message}`);
             }
 
             logger.info(`[BotManager] Step 6/7: Registering bot ${bot_name} in bot manager...`);
@@ -181,7 +363,25 @@ class BotManager {
             await this.deployCommandsForBot(client, bot_id);
             logger.info(`[BotManager] Step 7/7: ✅ Command deployment completed for ${bot_name}`);
 
+            // Managers last: until they exist the client cannot actually serve a command, and
+            // events/interactionCreate.js refuses interactions until this sets managersReady.
+            if (this.managerInitializer) {
+                logger.info(`[BotManager] Step 8/8: Attaching feature managers for ${bot_name}...`);
+                try {
+                    await this.managerInitializer(client);
+                    logger.info(`[BotManager] Step 8/8: ✅ Managers attached for ${bot_name}`);
+                } catch (managerError) {
+                    // initializeManagers flags readiness in a finally, so the bot still opens for
+                    // business — but a partial manager set is worth shouting about.
+                    logger.error(`[BotManager] Step 8/8: ❌ Manager init failed for ${bot_name}: ${managerError.message}`, { stack: managerError.stack });
+                }
+            } else {
+                logger.error(`[BotManager] No manager initializer registered — ${bot_name} would serve nothing. `
+                    + 'Call botManager.setManagerInitializer() during startup.');
+            }
+
             logger.info(`[BotManager] 🎉 Custom bot ${bot_name} (${bot_id}) fully initialized and ready!`);
+            this.botErrors.delete(bot_id);
 
             return client;
         } catch (error) {
@@ -192,18 +392,54 @@ class BotManager {
                 bot_id,
                 bot_name
             });
+            this.recordBotError(bot_id, error.message, 'start');
             throw error;
         }
     }
 
     /**
-     * Deploy slash commands to Discord API for a specific bot
+     * Deploy slash commands to Discord API for a specific bot. Runs one at a time per bot: two
+     * PUTs racing on a guild left a duplicate command on Discord. A queued run skips on the hash.
      */
-    async deployCommandsForBot(client, botId) {
+    deployCommandsForBot(client, botId) {
+        this.deployQueues ??= new Map();
+        const run = (this.deployQueues.get(botId) || Promise.resolve()).then(() => this.runCommandDeploy(client, botId));
+        this.deployQueues.set(botId, run.catch(() => {}));
+        return run;
+    }
+
+    async runCommandDeploy(client, botId) {
+        // Operator switch: while a .deploy-paused file exists in the repo root, slash commands are not pushed to
+        // Discord (used 2026-11-18 to ship urgent fixes while the slash/text command split was mid-way).
+        if (fs.existsSync(path.join(process.cwd(), '.deploy-paused'))) {
+            logger.warn(`[Deploy] command deploy for ${botId} skipped: .deploy-paused is present`);
+            return;
+        }
         try {
             // Extract command data from client.commands collection
-            const commandData = Array.from(client.commands.values())
-                .map(cmd => cmd.data.toJSON());
+            // localizeCommands mutates in place and returns the same array. Applied
+            // here so every custom bot gets the same localized payload the default
+            // bot does — and so the deploy hash reflects the localized content,
+            // which means adding a translation correctly triggers a re-push.
+            // guildScoped commands (cannabis features) are held back from the DEFAULT bot's
+            // payload, which is global and is what the App Directory reviews. Custom bots
+            // deploy per-guild and go through fitCustomBotCommands, because Discord rejects the
+            // whole payload past 100 slash commands. Filtering before the hash keeps the
+            // deploy-skip check honest.
+            // buildDeployJson folds moved commands into their parents (core/command-mounts.js).
+            const builtCommands = buildDeployJson(Array.from(client.commands.values())
+                .filter(cmd => !(client.isDefaultBot && cmd.guildScoped))
+                .filter(cmd => cmd.data?.toJSON));
+            const localized = localizeCommands(builtCommands);
+            const fit = (reserve = 0) => {
+                // The default bot's global payload has the same 100 cap; it reached exactly 100 on 2026-11-05.
+                const fitted = client.isDefaultBot ? fitSlashLimit(localized, reserve) : fitCustomBotCommands(localized, reserve);
+                if (fitted.overBy) {
+                    logger.error(`[BotManager] bot ${botId}: ${fitted.overBy} slash command(s) over Discord's limit — add more to OVERFLOW_ORDER in core/custom-bot-commands.js`);
+                }
+                return fitted.commands;
+            };
+            const commandData = fit();
 
             if (commandData.length === 0) {
                 logger.warn(`[BotManager] No commands found to deploy for bot ${botId}`);
@@ -214,7 +450,8 @@ class BotManager {
             // Discord rate-limits command creates at ~200/day per guild — every
             // PM2 restart used to burn through that budget for no benefit.
             const { createHash } = await import('crypto');
-            const hash = createHash('sha256').update(JSON.stringify(commandData)).digest('hex');
+            const hashOf = (data) => createHash('sha256').update(JSON.stringify(data)).digest('hex');
+            const hash = hashOf(commandData);
             const pool = (await import('../utils/db.js')).default;
 
             // retries: 0 — without this, discord.js silently auto-retries 429s
@@ -240,13 +477,47 @@ class BotManager {
 
             if (!client.isDefaultBot && client.assignedGuilds && client.assignedGuilds.length > 0) {
                 let successCount = 0, skipped = 0, blocked = 0;
+                // Per-server shortcuts (/confess for /fun confess), core/guild-shortcuts.js.
+                const shortcutNames = await shortcutNamesByGuild(client.assignedGuilds).catch(e => {
+                    logger.warn(`[BotManager] bot ${botId}: shortcut lookup failed, deploying without them: ${e.message}`);
+                    return new Map();
+                });
+                this.shortcutSigs ??= new Map();
                 for (const guildId of client.assignedGuilds) {
                     try {
+                        // A guild_bot_mapping row outlives the bot's membership: when a bot
+                        // is kicked, the mapping stays and every restart then tries to PUT
+                        // commands into a guild it isn't in, failing with "Missing Access".
+                        // Checking this bot's own cache is self-correcting — a re-invite puts
+                        // the guild back in cache and deploys resume with no manual cleanup.
+                        //
+                        // Gated on isReady() rather than a non-empty cache: discord.js fills
+                        // guilds.cache during READY, so once ready the cache is authoritative
+                        // even when it's empty — and empty is exactly the case here, a bot
+                        // kicked from the only guild it was mapped to.
+                        if (client.isReady() && !client.guilds.cache.has(guildId)) {
+                            skipped++;
+                            logger.warn(`[BotManager] bot ${botId} is not a member of guild ${guildId} — skipping deploy (stale guild_bot_mapping row?)`);
+                            continue;
+                        }
+
+                        // The PUT below replaces the guild's whole list, so a guild-only command left
+                        // out is wiped, and with the list at 100 it could not be added back.
+                        const extras = jellyfinGuildCommandData(guildId);
+                        const base = extras.length ? fit(extras.length) : commandData;
+                        // Shortcuts only take slots the real commands leave free; they never push one out.
+                        const free = MAX_SLASH_COMMANDS - base.filter(c => (c.type ?? 1) === 1).length - extras.length;
+                        const names = shortcutNames.get(String(guildId)) || [];
+                        const shortcuts = buildShortcutJson(localized, names).slice(0, Math.max(0, free));
+                        this.shortcutSigs.set(`${botId}:${guildId}`, names.join(','));
+                        const guildData = [...base, ...extras, ...shortcuts];
+                        const guildHash = (extras.length || shortcuts.length) ? hashOf(guildData) : hash;
+
                         const [[prev]] = await pool.execute(
                             'SELECT hash, blocked_until FROM command_deploy_hashes WHERE bot_id = ? AND guild_id = ?',
                             [botId, guildId]
                         );
-                        if (prev?.hash === hash) { skipped++; continue; }
+                        if (prev?.hash === guildHash) { skipped++; continue; }
                         // Honor active block (rate-limited recently — don't pile on)
                         if (prev?.blocked_until && new Date(prev.blocked_until) > new Date()) {
                             blocked++;
@@ -254,7 +525,7 @@ class BotManager {
                             continue;
                         }
                         await withTimeout(
-                            rest.put(Routes.applicationGuildCommands(botId, guildId), { body: commandData }),
+                            rest.put(Routes.applicationGuildCommands(botId, guildId), { body: guildData }),
                             DEPLOY_TIMEOUT_MS,
                             `deploy ${botId}/${guildId}`
                         );
@@ -262,10 +533,11 @@ class BotManager {
                             `INSERT INTO command_deploy_hashes (bot_id, guild_id, hash, blocked_until, last_block_reason)
                              VALUES (?, ?, ?, NULL, NULL)
                              ON DUPLICATE KEY UPDATE hash = VALUES(hash), deployed_at = NOW(), blocked_until = NULL, last_block_reason = NULL`,
-                            [botId, guildId, hash]
+                            [botId, guildId, guildHash]
                         );
                         successCount++;
                     } catch (guildError) {
+                        this.shortcutSigs.delete(`${botId}:${guildId}`);   // not deployed: let the shortcut check retry
                         const isTimeout = /timeout/i.test(guildError.message);
                         const isRateLimit = guildError.code === 429 || guildError.status === 429 || /rate.?limit/i.test(guildError.message);
                         // Discord error 30034 = daily command-create budget exhausted.
@@ -283,6 +555,12 @@ class BotManager {
                                 [botId, guildId, until, `DAILY-LIMIT-30034: ${guildError.message}`.slice(0, 240)]
                             );
                             logger.error(`[BotManager] bot ${botId} guild ${guildId}: DAILY COMMAND-CREATE BUDGET EXHAUSTED (200/day Discord cap) — blocking deploys for 25h until ${until.toISOString()}`);
+                            void logFeatureEvent(() => (client.guilds.cache.get(guildId)), 'system.commandsFailed', () => ({
+                                title: '❌ Command Registration Failed',
+                                description: 'Discord refused to update this server\'s slash commands: the bot hit Discord\'s daily limit for registering commands. The bot will try again automatically.',
+                                fields: [['Bot', client.user?.tag || botId], ['Retrying', `<t:${Math.floor(until.getTime() / 1000)}:R>`]],
+                                throttle: { key: 'cmds-fail:' + guildId, ms: 6 * 3600e3 },
+                            }));
                         } else if (isTimeout || isRateLimit) {
                             const until = new Date(Date.now() + BLOCK_BACKOFF_MS);
                             await pool.execute(
@@ -296,6 +574,12 @@ class BotManager {
                             logger.error(`[BotManager] Failed to deploy commands to guild ${guildId}:`, {
                                 error: guildError.message, botId, guildId
                             });
+                            void logFeatureEvent(() => (client.guilds.cache.get(guildId)), 'system.commandsFailed', () => ({
+                                title: '❌ Command Registration Failed',
+                                description: 'Discord refused to update this server\'s slash commands, so new or changed commands may be missing. The bot tries again the next time it updates its commands.',
+                                fields: [['Bot', client.user?.tag || botId], ['Why', String(guildError.message || 'Unknown error').slice(0, 300)]],
+                                throttle: { key: 'cmds-fail:' + guildId, ms: 6 * 3600e3 },
+                            }));
                         }
                     }
                 }
@@ -362,6 +646,9 @@ class BotManager {
                     { body: [] }
                 );
                 logger.info(`[BotManager] Hidden default bot commands in guild ${guildId} (custom bot active)`);
+                // That PUT also removed the main bot's shortcuts here; forget them so they come back if the
+                // server returns to the main bot.
+                await forgetMainBotGuilds(defaultAppId, [guildId]).catch(() => {});
             } catch (error) {
                 // "Missing Access" means the default bot isn't in this guild,
                 // so its global commands won't show there anyway - not a problem
@@ -525,6 +812,30 @@ class BotManager {
     }
 
     /**
+     * Register the function that attaches the feature managers to a client.
+     *
+     * Startup used to call this itself after addCustomBot() returned, but the dashboard's
+     * "add bot" routes (dashboard/routes/bots.js, super-admin.js) call addCustomBot directly
+     * and never did — so a bot added while the process was running had NO managers until the
+     * next restart, and every feature that goes through one silently did nothing while the
+     * command still reported success. Owning the call here means every path gets managers.
+     */
+    setManagerInitializer(initFn) {
+        this.managerInitializer = initFn;
+    }
+
+    /** Remember the latest problem for a bot (shown on /bot-management). */
+    recordBotError(botId, message, kind = 'error') {
+        if (!botId) return;
+        this.botErrors.set(botId, { message: String(message || 'Unknown error').slice(0, 300), kind, at: new Date().toISOString() });
+    }
+
+    /** The latest recorded problem for a bot, or null. */
+    getBotError(botId) {
+        return this.botErrors.get(botId) || null;
+    }
+
+    /**
      * Handle bot reconnection and errors
      */
     setupReconnectionHandler(client) {
@@ -534,6 +845,16 @@ class BotManager {
 
         client.on('error', (error) => {
             logger.error(`[BotManager] Bot ${client.botId} error:`, error);
+            this.recordBotError(client.botId, error?.message || error, 'error');
+        });
+
+        // discord.js v14 has no 'disconnect' event; these are what fire when a gateway session drops.
+        client.on('shardDisconnect', (event, shardId) => {
+            if (event?.code === 1000) return; // our own destroy() (disable / delete / reconnect)
+            this.recordBotError(client.botId, `Gateway closed (code ${event?.code ?? '?'}) on shard ${shardId}`, 'disconnect');
+        });
+        client.on('invalidated', () => {
+            this.recordBotError(client.botId, 'Discord invalidated the session (token reset or revoked)', 'invalidated');
         });
 
         client.on('warn', (warning) => {

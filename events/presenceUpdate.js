@@ -202,6 +202,10 @@ async function autoRegisterStreamer(oldPresence, newPresence) {
                     } catch { /* swallow — link write is best-effort */ }
                 }
                 if (twitchUserId) {
+                    // Identity only. Never write is_affiliate or affiliate_checked_at here:
+                    // this path has no broadcaster_type, so is_affiliate stays at its
+                    // DEFAULT 0 placeholder and affiliate_checked_at stays NULL, which is
+                    // what tells checkAffiliateStatus the status is still unverified.
                     await pool.execute(
                         `INSERT INTO community_twitch_links (guild_id, discord_user_id, twitch_username, twitch_user_id, last_checked)
                          VALUES (?, ?, ?, ?, NOW())
@@ -310,7 +314,9 @@ async function autoRegisterStreamer(oldPresence, newPresence) {
 
         // Create subscription for this guild
         await pool.execute(
-            'INSERT INTO subscriptions (guild_id, streamer_id, announcement_channel_id, live_role_id, delete_on_end, edit_on_end) VALUES (?, ?, ?, ?, ?, ?)',
+            // 'member': auto-track fires off a MEMBER's Discord presence, so membership is
+            // precisely why this subscription exists and departure should retire it.
+            "INSERT INTO subscriptions (guild_id, streamer_id, announcement_channel_id, live_role_id, delete_on_end, edit_on_end, tracking_origin) VALUES (?, ?, ?, ?, ?, ?, 'member')",
             [guildId, streamerId, matchingConfig.announcement_channel_id, matchingConfig.live_role_id || null,
              matchingConfig.delete_on_end ?? 1, matchingConfig.edit_on_end ?? 0]
         );
@@ -332,7 +338,7 @@ async function autoRegisterStreamer(oldPresence, newPresence) {
         }
 
         // Cross-PLATFORM sync: pull in this user's other linked platforms
-        // (kick/youtube/trovo/…) to the same channel so all platforms ride along.
+        // (kick/youtube/tiktok/…) to the same channel so all platforms ride along.
         try {
             const synced = await syncLinkedPlatforms(newPresence.guild, userId, matchingConfig.announcement_channel_id, {
                 liveRoleId: matchingConfig.live_role_id,

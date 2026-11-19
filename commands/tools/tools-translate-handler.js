@@ -1,5 +1,6 @@
 import { EmbedBuilder } from 'discord.js';
 import { translate } from '@vitalets/google-translate-api';
+import { themeColor } from '../../core/guild-theme.js';
 
 function detectLanguage(text) {
     const hasJapanese = /[\u3040-\u309F\u30A0-\u30FF]/.test(text);
@@ -101,7 +102,7 @@ export async function handleTranslateText(interaction) {
         }
 
         const embed = new EmbedBuilder()
-            .setColor('#3498DB')
+            .setColor(themeColor(interaction.guildId, 'primary'))
             .setTitle('\ud83c\udf10 Translation')
             .addFields(
                 { name: '\ud83d\udcdd Original Text', value: text.length > 1024 ? text.substring(0, 1021) + '...' : text, inline: false },
@@ -135,7 +136,7 @@ export async function handleTranslateDetect(interaction) {
     const detectedLang = detectLanguage(text);
 
     const embed = new EmbedBuilder()
-        .setColor('#9B59B6')
+        .setColor(themeColor(interaction.guildId, 'accent'))
         .setTitle('\ud83d\udd0d Language Detection')
         .addFields(
             { name: '\ud83d\udcdd Text', value: text.length > 1024 ? text.substring(0, 1021) + '...' : text, inline: false },

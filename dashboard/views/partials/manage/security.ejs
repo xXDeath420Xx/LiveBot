@@ -1,313 +1,768 @@
-<div class="page-section">
+<%#
+  Security: anti-nuke (POST security/antinuke), the verification quick switch (POST security/joingate;
+  the full settings are on the Verification page), the account age gate (POST security/agegate), the
+  rejoin limit summary, and the Discord-flagged spammer check (POST security/spammer; scan, allowlist
+  and activity from /api/guilds/:id/spammer-scan). The raid tools live on Advanced protection. Built on
+  the settings-row kit (cf-settings.css); field names and ids are unchanged.
+%>
+<%
+  const raidOn = !!(antiRaidConfig && antiRaidConfig.enabled);
+  const nukeOn = !!(antiNukeConfig && antiNukeConfig.enabled);
+  const gateOn = !!(joinGateConfig && joinGateConfig.enabled);
+  const securityScore = (raidOn ? 1 : 0) + (nukeOn ? 1 : 0) + (gateOn ? 1 : 0);
+  const scoreText = securityScore === 3 ? 'High' : securityScore >= 1 ? 'Medium' : 'Low';
+  // Alert/log pickers list text and announcement channels only (the channels local also has voice chats).
+  const secText = (locals.channels || []).filter(c => c.type === 0 || c.type === 5);
+  // Roles the bot gives (verification, spammer flag): it cannot give managed roles or any at or above its own.
+  const secBotTop = (guild && guild.members && guild.members.me && guild.members.me.roles && guild.members.me.roles.highest) ? guild.members.me.roles.highest.position : null;
+  const secCantAssign = (r) => !!(r.managed || (secBotTop !== null && r.position >= secBotTop));
+  const secRoleColor = (r) => (r.hexColor && r.hexColor !== '#000000') ? r.hexColor : '';
+%>
+<div class="page-section sec-page">
     <div class="page-section-header">
         <div>
             <div class="page-section-title">
                 <i class="fas fa-shield-halved"></i>
                 <span>Security</span>
             </div>
-            <div class="page-section-subtitle">
-                Protect your server from raids, malicious users, and coordinated attacks
-            </div>
+            <div class="page-section-subtitle">Anti-nuke, verification, the age gate, Discord's spammer flag and network intel.</div>
         </div>
     </div>
 
-    <!-- Security Status Overview -->
-    <div class="grid grid-cols-4" style="margin-bottom: var(--spacing-6);">
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Anti-Raid</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: <%= antiRaidConfig && antiRaidConfig.enabled ? 'var(--color-success)' : 'var(--color-text-muted)' %>;">
-                <%= antiRaidConfig && antiRaidConfig.enabled ? 'Active' : 'Disabled' %>
-            </div>
+    <dl class="cf-kpis" aria-label="Security at a glance">
+        <div class="cf-kpi"><dt>Anti-raid</dt><dd class="cf-kpi-value is-small"><span class="cf-pill <%= raidOn ? 'is-ok' : '' %>"><%= raidOn ? 'On' : 'Off' %></span></dd></div>
+        <div class="cf-kpi"><dt>Anti-nuke</dt><dd class="cf-kpi-value is-small"><span class="cf-pill <%= nukeOn ? 'is-ok' : '' %>"><%= nukeOn ? 'On' : 'Off' %></span></dd></div>
+        <div class="cf-kpi"><dt>Verification</dt><dd class="cf-kpi-value is-small"><span class="cf-pill <%= gateOn ? 'is-ok' : '' %>"><%= gateOn ? (joinGateConfig.verify_mode === 'captcha' ? 'CAPTCHA' : 'On') : 'Off' %></span></dd></div>
+        <div class="cf-kpi">
+            <dt>Security score</dt>
+            <dd class="cf-kpi-value is-small" id="securityScoreValue"><%= scoreText %></dd>
+            <a id="securityScoreDetail" class="cf-kpi-sub sec-kpi-link" href="/manage/<%= guild.id %>?page=protection-settings"></a>
         </div>
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Anti-Nuke</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: <%= antiNukeConfig && antiNukeConfig.enabled ? 'var(--color-success)' : 'var(--color-text-muted)' %>;">
-                <%= antiNukeConfig && antiNukeConfig.enabled ? 'Active' : 'Disabled' %>
-            </div>
-        </div>
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Join Gate</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: <%= joinGateConfig && joinGateConfig.enabled ? 'var(--color-success)' : 'var(--color-text-muted)' %>;">
-                <%= joinGateConfig && joinGateConfig.enabled ? 'Active' : 'Disabled' %>
-            </div>
-        </div>
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Security Score</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-primary-400);">
-                <%
-                    const securityScore = ((antiRaidConfig && antiRaidConfig.enabled ? 1 : 0) +
-                                          (antiNukeConfig && antiNukeConfig.enabled ? 1 : 0) +
-                                          (joinGateConfig && joinGateConfig.enabled ? 1 : 0));
-                    const scoreText = securityScore === 3 ? 'High' : securityScore >= 1 ? 'Medium' : 'Low';
-                %>
-                <%= scoreText %>
-            </div>
-        </div>
-    </div>
+    </dl>
 
-    <!-- Anti-Raid Configuration -->
-    <div style="margin-bottom: var(--spacing-6);">
-        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
-            <i class="fas fa-users-slash" style="color: var(--color-danger); margin-right: var(--spacing-2);"></i>
-            Anti-Raid Protection
-        </h3>
-        <form action="/manage/<%= guild.id %>/security/antiraid" method="POST" style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6);">
-            <div style="margin-bottom: var(--spacing-4);">
-                <div class="form-check form-switch" style="display: flex; align-items: center; gap: var(--spacing-3); padding: var(--spacing-4); background: var(--color-dark-700); border-radius: var(--radius-md);">
-                    <input class="form-check-input" type="checkbox" role="switch" id="antiRaidEnabled" name="enabled" <%= antiRaidConfig && antiRaidConfig.enabled ? 'checked' : '' %> style="width: 48px; height: 24px; cursor: pointer;">
-                    <label class="form-check-label" for="antiRaidEnabled" style="cursor: pointer; flex: 1;">
-                        <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-1);">Enable Anti-Raid</div>
-                        <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">Automatically detect and take action against potential raid attempts</div>
-                    </label>
+    <%# Anti-raid: the raid lockdown auto-trigger and the rest of the raid system live on Advanced protection. %>
+    <section class="cf-section" aria-labelledby="sec-raid-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="sec-raid-title">Anti-raid</h2>
+                <p class="cf-section-desc">A summary. Lockdown, raid detection and same-name floods are set up on Advanced protection.</p>
+            </div>
+            <div class="cf-section-actions"><span class="cf-pill<%= raidOn ? ' is-ok' : '' %>"><%= raidOn ? 'On' : 'Off' %></span></div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <span class="cf-row-label">Auto-lockdown on a join spike</span>
+                    <p class="cf-row-desc">
+                        <%= antiRaidConfig && antiRaidConfig.auto_lockdown
+                            ? `${antiRaidConfig.threshold} joins in ${antiRaidConfig.time_period}s, then ${antiRaidConfig.action} every join for ${antiRaidConfig.duration_minutes} min`
+                            : 'Not set to start on its own.' %>
+                    </p>
+                </div>
+                <div class="cf-row-control sec-status"><span class="cf-pill <%= antiRaidConfig && antiRaidConfig.auto_lockdown ? 'is-ok' : '' %>"><%= antiRaidConfig && antiRaidConfig.auto_lockdown ? 'On' : 'Off' %></span></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <span class="cf-row-label">Raid detection</span>
+                    <p class="cf-row-desc">Surges of new accounts joining together.</p>
+                </div>
+                <div class="cf-row-control sec-status"><span class="cf-pill <%= antiRaidConfig && antiRaidConfig.raid_detection ? 'is-ok' : '' %>"><%= antiRaidConfig && antiRaidConfig.raid_detection ? 'On' : 'Off' %></span></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <span class="cf-row-label">Same-name join floods</span>
+                    <p class="cf-row-desc">Many accounts joining under one name.</p>
+                </div>
+                <div class="cf-row-control sec-status"><span class="cf-pill <%= antiRaidConfig && antiRaidConfig.same_name ? 'is-ok' : '' %>"><%= antiRaidConfig && antiRaidConfig.same_name ? 'On' : 'Off' %></span></div>
+            </div>
+            <div class="cf-section-foot">
+                <a class="btn btn-primary" href="/manage/<%= guild.id %>?page=advanced-protection#raid-lockdown">Open raid lockdown</a>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="sec-nuke-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="sec-nuke-title">Anti-nuke</h2>
+                <p class="cf-section-desc">Stops someone with high permissions from wrecking the server in seconds. It keeps its own trusted list and ignores the shared allowlist, but the pause on <a href="/manage/<%= guild.id %>?page=protection-settings">Protection settings</a> holds it too.</p>
+            </div>
+            <div class="cf-section-actions"><span class="cf-pill<%= nukeOn ? ' is-ok' : '' %>"><%= nukeOn ? 'On' : 'Off' %></span></div>
+        </header>
+        <form class="cf-rows" action="/manage/<%= guild.id %>/security/antinuke" method="POST">
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="antiNukeEnabled">Anti-nuke</label>
+                    <p class="cf-row-desc" id="antiNukeEnabled-desc">Protect against rapid channel or role deletions and mass bans.</p>
+                </div>
+                <div class="cf-row-control">
+                    <input class="cf-switch" type="checkbox" role="switch" id="antiNukeEnabled" name="enabled" aria-describedby="antiNukeEnabled-desc" <%= antiNukeConfig && antiNukeConfig.enabled ? 'checked' : '' %>>
                 </div>
             </div>
-
-            <div class="grid grid-cols-3" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
-                <div>
-                    <label class="form-label">
-                        <i class="fas fa-hashtag" style="margin-right: var(--spacing-1); color: var(--color-danger);"></i>
-                        Join Threshold
-                    </label>
-                    <input type="number" class="form-control" id="antiRaidThreshold" name="threshold" value="<%= antiRaidConfig ? antiRaidConfig.threshold : '10' %>" min="3" max="50" required>
-                    <div class="form-help">Number of joins to trigger anti-raid</div>
+            <div class="cf-row cf-row--stack">
+                <div class="cf-row-text">
+                    <%
+                      // Unsaved servers get the column defaults (3, 3, 3, kick), as /protection antinuke enable does.
+                      const an = antiNukeConfig || {};
+                      const anN = (v) => (v == null || v === '' ? 3 : Number(v));
+                      const anAct = { kick: 'kicks them', ban: 'bans them', strip: 'removes their roles', alert: 'only alerts' };
+                      const anRaw = String(an.action_on_trigger || 'kick').toLowerCase();
+                      const anKey = anAct[anRaw] ? anRaw : (['strip_roles', 'remove_roles', 'strip_permissions'].includes(anRaw) ? 'strip' : 'alert');
+                    %>
+                    <span class="cf-row-label">What it watches</span>
+                    <ul class="sec-points">
+                        <li>Channel deletions: <%= anN(an.max_channel_deletes) %> or more by one person within 5 minutes</li>
+                        <li>Role deletions: <%= anN(an.max_role_deletes) %> or more by one person within 5 minutes</li>
+                        <li>Bans: <%= anN(an.max_kick_bans) %> or more by one person within 5 minutes</li>
+                    </ul>
+                    <p class="cf-row-desc">Then it <%= anAct[anKey] %>. The server owner and people on the anti-nuke trusted list are never acted on. Change the limits, the action and the trusted list with <code>/protection antinuke config</code> and <code>/protection antinuke whitelist</code>.</p>
                 </div>
-                <div>
-                    <label class="form-label">
-                        <i class="fas fa-stopwatch" style="margin-right: var(--spacing-1); color: var(--color-accent-orange);"></i>
-                        Time Period (seconds)
-                    </label>
-                    <input type="number" class="form-control" id="antiRaidTimePeriod" name="timePeriod" value="<%= antiRaidConfig ? antiRaidConfig.time_period : '10' %>" min="5" max="300" required>
-                    <div class="form-help">Time frame to count joins</div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="f-security-alert_channel_id-2">Anti-nuke alert channel</label>
+                    <p class="cf-row-desc" id="f-security-alert_channel_id-2-desc">Where alerts go when destructive actions are detected.</p>
                 </div>
-                <div>
-                    <label class="form-label">
-                        <i class="fas fa-hammer" style="margin-right: var(--spacing-1); color: var(--color-accent-purple);"></i>
-                        Action
-                    </label>
-                    <select class="form-select" name="action" required>
-                        <option value="kick" <%= antiRaidConfig && antiRaidConfig.action === 'kick' ? 'selected' : '' %>>Kick Members</option>
-                        <option value="ban" <%= antiRaidConfig && antiRaidConfig.action === 'ban' ? 'selected' : '' %>>Ban Members</option>
+                <div class="cf-row-control">
+                    <select id="f-security-alert_channel_id-2" class="form-select" name="alert_channel_id" aria-describedby="f-security-alert_channel_id-2-desc">
+                        <option value="">No alerts (use logging settings)</option>
+                        <% secText.forEach(ch => { %>
+                        <option value="<%= ch.id %>" data-kind="text" <%= antiNukeConfig && antiNukeConfig.alert_channel_id === ch.id ? 'selected' : '' %>>#<%= ch.name %></option>
+                        <% }); %>
                     </select>
-                    <div class="form-help">Action to take on raiders</div>
                 </div>
             </div>
-
-            <div style="background: var(--color-dark-700); border-left: 4px solid var(--color-primary-400); padding: var(--spacing-4); border-radius: var(--radius-sm); margin-bottom: var(--spacing-4);">
-                <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">
-                    <i class="fas fa-info-circle" style="color: var(--color-primary-400); margin-right: var(--spacing-2);"></i>
-                    <strong>Example:</strong> If threshold is 10 and time period is 10 seconds, anti-raid will trigger when 10 users join within 10 seconds.
-                </div>
+            <div class="cf-section-foot">
+                <button type="submit" class="btn btn-primary">Save</button>
             </div>
-
-            <div style="margin-bottom: var(--spacing-4);">
-                <label class="form-label">
-                    <i class="fas fa-bell" style="margin-right: var(--spacing-1); color: var(--color-warning);"></i>
-                    Alert Channel
-                </label>
-                <select class="form-select" name="alert_channel_id">
-                    <option value="">No alerts (use logging settings)</option>
-                    <% if (typeof channels !== 'undefined') { channels.forEach(ch => { %>
-                        <option value="<%= ch.id %>" <%= antiRaid && antiRaid.alert_channel_id === ch.id ? 'selected' : '' %>>#<%= ch.name %></option>
-                    <% }); } %>
-                </select>
-                <div class="form-help">Send raid alerts to this channel when action is taken. Leave blank to use your unified logging settings instead.</div>
-            </div>
-
-            <button type="submit" class="btn btn-primary">
-                <i class="fas fa-save"></i>
-                <span>Save Anti-Raid Settings</span>
-            </button>
         </form>
+    </section>
+
+    <%# Verification quick switch: the one verification config is verify_config (core/verification.js);
+        the full settings, setup wizard, stats and auto-prune are on the Verification page. %>
+    <section class="cf-section" aria-labelledby="sec-verify-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="sec-verify-title">Verification</h2>
+                <p class="cf-section-desc">A quick switch. The CAPTCHA, the setup wizard, stats and auto-prune are on the <a href="/manage/<%= guild.id %>?page=verification">Verification page</a>.</p>
+            </div>
+            <div class="cf-section-actions"><span class="cf-pill<%= gateOn ? ' is-ok' : '' %>"><%= gateOn ? 'On' : 'Off' %></span></div>
+        </header>
+        <form class="cf-rows" action="/manage/<%= guild.id %>/security/joingate" method="POST">
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="joinGateEnabled">Verification</label>
+                    <p class="cf-row-desc" id="joinGateEnabled-desc">New members press the verification panel's button (I agree or CAPTCHA) before they get the role below.</p>
+                </div>
+                <div class="cf-row-control">
+                    <input class="cf-switch" type="checkbox" role="switch" id="joinGateEnabled" name="enabled" aria-describedby="joinGateEnabled-desc" <%= joinGateConfig && joinGateConfig.enabled ? 'checked' : '' %>>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="joinGateRole">Verification role</label>
+                    <p class="cf-row-desc" id="joinGateRole-desc">Given to members who complete verification. It must sit below the bot's highest role.</p>
+                </div>
+                <div class="cf-row-control">
+                    <select class="form-select" id="joinGateRole" name="roleId" aria-describedby="joinGateRole-desc">
+                        <option value="">Select a role to grant after verification</option>
+                        <% roles.forEach(role => { const sel = !!(joinGateConfig && joinGateConfig.role_id === role.id); const high = secCantAssign(role); %>
+                        <option value="<%= role.id %>"<% if (secRoleColor(role)) { %> data-color="<%= secRoleColor(role) %>"<% } %><%= sel ? ' selected' : '' %><%= (high && !sel) ? ' disabled' : '' %>><%= role.name %><%= high ? ' (above the bot)' : '' %></option>
+                        <% }) %>
+                    </select>
+                </div>
+            </div>
+            <div class="cf-section-foot">
+                <button type="submit" class="btn btn-primary">Save</button>
+            </div>
+        </form>
+    </section>
+
+    <%
+      const ag = locals.joinGateConfig || {};
+      const agOn = !!ag.age_gate_enabled;
+      const agHours = ag.kick_under_hours == null ? 24 : ag.kick_under_hours;
+      const agDays = ag.apply_under_days == null ? 7 : ag.apply_under_days;
+      const agAction = ag.action && ['kick','ban','none'].includes(ag.action) ? ag.action : 'kick';
+      const agText = (locals.channels || []).filter(c => c.type === 0 || c.type === 5);
+      // The legacy day field and the hour field are the same setting; setConfig keeps them in step.
+      const agLegacyDays = ag.min_account_age_days;
+      const agMismatch = agLegacyDays != null && Math.ceil(agHours / 24) !== agLegacyDays;
+    %>
+    <section class="cf-section" aria-labelledby="sec-age-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="sec-age-title">Account age gate</h2>
+                <p class="cf-section-desc">Brand new accounts are removed on join with a DM explaining why. Slightly older ones may apply instead.</p>
+            </div>
+            <div class="cf-section-actions"><span class="cf-pill<%= agOn ? ' is-ok' : '' %>"><%= agOn ? 'On' : 'Off' %></span></div>
+        </header>
+        <form class="cf-rows" action="/manage/<%= guild.id %>/security/agegate" method="POST">
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="ageGateEnabled">Account age gate</label>
+                    <p class="cf-row-desc" id="ageGateEnabled-desc">Checks every new member's account age when they join.</p>
+                </div>
+                <div class="cf-row-control">
+                    <input class="cf-switch" type="checkbox" role="switch" id="ageGateEnabled" name="ageGateEnabled" aria-describedby="ageGateEnabled-desc" <%= agOn ? 'checked' : '' %>>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="kickUnderHours">Remove accounts younger than</label>
+                    <p class="cf-row-desc" id="kickUnderHours-desc">No application is offered below this age; they are told when to come back. From 1 to 720.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-unit"><input class="form-control" type="number" id="kickUnderHours" name="kickUnderHours" min="1" max="720" value="<%= agHours %>" aria-describedby="kickUnderHours-desc"><span class="cf-unit">hours</span></div>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="applyUnderDays">Application required under</label>
+                    <p class="cf-row-desc" id="applyUnderDays-desc">Between the two ages they are removed with an Apply button. 0 turns applications off.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-unit"><input class="form-control" type="number" id="applyUnderDays" name="applyUnderDays" min="0" max="365" value="<%= agDays %>" aria-describedby="applyUnderDays-desc"><span class="cf-unit">days</span></div>
+                </div>
+            </div>
+            <% if (agDays * 24 <= agHours) { %>
+            <div class="cf-notice is-bad" role="alert">
+                <strong>The application window is closed.</strong> No account is old enough to apply but too young to join, so every new account is
+                simply removed with no way back in. Raise the days, or lower the hours.
+            </div>
+            <% } %>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="ageGateAction">What to do</label>
+                    <p class="cf-row-desc" id="ageGateAction-desc">Start on Nothing for a day if you want to see who it would have caught.</p>
+                </div>
+                <div class="cf-row-control">
+                    <select class="form-select" id="ageGateAction" name="ageGateAction" aria-describedby="ageGateAction-desc">
+                        <option value="kick" <%= agAction === 'kick' ? 'selected' : '' %>>Kick (they may return later)</option>
+                        <option value="ban"  <%= agAction === 'ban'  ? 'selected' : '' %>>Ban (permanent)</option>
+                        <option value="none" <%= agAction === 'none' ? 'selected' : '' %>>Nothing (log only, for trialling)</option>
+                    </select>
+                </div>
+            </div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="blockDefaultAvatar">Require a profile picture to apply</label>
+                    <p class="cf-row-desc" id="blockDefaultAvatar-desc">Refuse the application route to new accounts with no picture set. Only affects accounts already inside the age window, never long-standing members.</p>
+                </div>
+                <div class="cf-row-control">
+                    <input class="cf-switch" type="checkbox" role="switch" id="blockDefaultAvatar" name="blockDefaultAvatar" aria-describedby="blockDefaultAvatar-desc" <%= ag.block_default_avatar ? 'checked' : '' %>>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="reviewChannelId">Applications appear in</label>
+                    <p class="cf-row-desc" id="reviewChannelId-desc">Staff approve or decline on buttons here. Approving DMs the applicant a single-use invite.</p>
+                </div>
+                <div class="cf-row-control">
+                    <select class="form-select" id="reviewChannelId" name="reviewChannelId" aria-describedby="reviewChannelId-desc">
+                        <option value="">Not set: applications will have nowhere to go</option>
+                        <% agText.forEach(c => { %>
+                        <option value="<%= c.id %>" data-kind="text" <%= ag.review_channel_id === c.id ? 'selected' : '' %>>#<%= c.name %></option>
+                        <% }) %>
+                    </select>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="inviteChannelId">Approval invite points at</label>
+                    <p class="cf-row-desc">The channel an approved applicant lands in.</p>
+                </div>
+                <div class="cf-row-control">
+                    <select class="form-select" id="inviteChannelId" name="inviteChannelId">
+                        <option value="">Rules or system channel</option>
+                        <% agText.forEach(c => { %>
+                        <option value="<%= c.id %>" data-kind="text" <%= ag.invite_channel_id === c.id ? 'selected' : '' %>>#<%= c.name %></option>
+                        <% }) %>
+                    </select>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="logChannelId">Log removals to</label>
+                    <p class="cf-row-desc">Every removal by the age gate is posted here.</p>
+                </div>
+                <div class="cf-row-control">
+                    <select class="form-select" id="logChannelId" name="logChannelId">
+                        <option value="">Same as the applications channel</option>
+                        <% agText.forEach(c => { %>
+                        <option value="<%= c.id %>" data-kind="text" <%= ag.log_channel_id === c.id ? 'selected' : '' %>>#<%= c.name %></option>
+                        <% }) %>
+                    </select>
+                </div>
+            </div>
+            <div class="cf-section-foot">
+                <% if (agMismatch) { %><span class="cf-foot-note">An older setting stored <%= agLegacyDays %> day<%= agLegacyDays === 1 ? '' : 's' %>, which does not match the hours above. Saving brings them back in step.</span><% } %>
+                <button type="submit" class="btn btn-primary">Save</button>
+            </div>
+        </form>
+    </section>
+
+    <%
+      const rjc = locals.joinGateConfig || {};
+      const rjcOn = !!rjc.rejoin_limit_enabled;
+      const rjcText = { ban: 'ban', kick: 'kick every time', apply: 'remove with an application', none: 'log only' }[rjc.rejoin_action] || 'ban';
+    %>
+    <section class="cf-section" aria-labelledby="sec-rejoin-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="sec-rejoin-title">Rejoin limit</h2>
+                <p class="cf-section-desc">Settings, join history and removals are on the <a href="/manage/<%= guild.id %>?page=rejoin">Rejoin limit page</a>.</p>
+            </div>
+            <div class="cf-section-actions"><span class="cf-pill<%= rjcOn ? ' is-ok' : '' %>"><%= rjcOn ? 'On' : 'Off' %></span></div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <span class="cf-row-label">Current rule</span>
+                    <p class="cf-row-desc"><%= rjcOn ? `${rjcText.charAt(0).toUpperCase()}${rjcText.slice(1)} after ${rjc.rejoin_max_joins} joins${Number(rjc.rejoin_window_days) > 0 ? ` in ${rjc.rejoin_window_days} days` : ''}.` : 'The rejoin limit is off.' %></p>
+                </div>
+                <div class="cf-row-control sec-status">
+                    <a class="btn btn-sm btn-secondary" href="/manage/<%= guild.id %>?page=rejoin">Open</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <%# Discord-flagged spammers: core/spammer-guard.js. Settings post a form; scan and allowlist are JSON. %>
+    <%
+      const sp = locals.joinGateConfig || {};
+      const spOn = !!sp.spammer_enabled;
+      const spAction = ['kick','ban','flag','none'].includes(sp.spammer_action) ? sp.spammer_action : 'kick';
+    %>
+    <div id="spammerSection">
+        <section class="cf-section" aria-labelledby="sec-spammer-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="sec-spammer-title">Discord-flagged spammers</h2>
+                    <p class="cf-section-desc">Acts on accounts Discord's own spam system has flagged, the moment they join. Members on the <a href="/manage/<%= guild.id %>?page=protection-settings">Protection settings</a> allowlist are skipped, and the pause there stops every action.</p>
+                </div>
+                <div class="cf-section-actions"><span class="cf-pill<%= spOn ? ' is-ok' : '' %>"><%= spOn ? 'On' : 'Off' %></span></div>
+            </header>
+            <form class="cf-rows" action="/manage/<%= guild.id %>/security/spammer" method="POST">
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="spammerEnabled">Act on flagged spammers when they join</label>
+                        <p class="cf-row-desc" id="spammerEnabled-desc">Uses the action below on every flagged account that joins.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input class="cf-switch" type="checkbox" role="switch" id="spammerEnabled" name="spammerEnabled" aria-describedby="spammerEnabled-desc" <%= spOn ? 'checked' : '' %>>
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="spammerAction">Action for flagged spammers</label>
+                        <p class="cf-row-desc" id="spammerAction-desc">The member scan below uses this too.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <select class="form-select" id="spammerAction" name="spammerAction" aria-describedby="spammerAction-desc">
+                            <option value="kick" <%= spAction === 'kick' ? 'selected' : '' %>>Kick (removed)</option>
+                            <option value="ban"  <%= spAction === 'ban'  ? 'selected' : '' %>>Ban (permanent)</option>
+                            <option value="flag" <%= spAction === 'flag' ? 'selected' : '' %>>Flag (give them a role to review)</option>
+                            <option value="none" <%= spAction === 'none' ? 'selected' : '' %>>Nothing (log only, for trialling)</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--sub">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="spammerRoleId">Role for flagged members</label>
+                        <p class="cf-row-desc">Used when the action is Flag.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <select class="form-select" id="spammerRoleId" name="spammerRoleId">
+                            <option value="">Make a "Flagged Spammer" role when first needed</option>
+                            <% (locals.roles || []).forEach(role => { const sel = sp.spammer_role_id === role.id; const high = secCantAssign(role); %>
+                            <option value="<%= role.id %>"<% if (secRoleColor(role)) { %> data-color="<%= secRoleColor(role) %>"<% } %><%= sel ? ' selected' : '' %><%= (high && !sel) ? ' disabled' : '' %>><%= role.name %><%= high ? ' (above the bot)' : '' %></option>
+                            <% }) %>
+                        </select>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="spammerSilent">Silent</label>
+                        <p class="cf-row-desc" id="spammerSilent-desc">Do not post a log for each one. The action still happens.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input class="cf-switch" type="checkbox" role="switch" id="spammerSilent" name="spammerSilent" aria-describedby="spammerSilent-desc" <%= sp.spammer_silent ? 'checked' : '' %>>
+                    </div>
+                </div>
+                <div class="cf-section-foot">
+                    <button type="submit" class="btn btn-primary">Save</button>
+                </div>
+            </form>
+        </section>
+
+        <section class="cf-section" aria-labelledby="sec-scan-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="sec-scan-title">Scan current members</h2>
+                    <p class="cf-section-desc">Find flagged accounts already inside. Nothing happens until you confirm. Staff and allowlisted members are left alone.</p>
+                </div>
+                <div class="cf-section-actions">
+                    <button type="button" class="btn btn-secondary" id="spamScanBtn">Scan</button>
+                </div>
+            </header>
+            <div class="cf-rows">
+                <div id="spamScanResult" class="sec-out"><p class="sec-muted">Run a scan to see who it would act on.</p></div>
+            </div>
+        </section>
+
+        <section class="cf-section" aria-labelledby="sec-allow-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="sec-allow-title">Allowlisted users</h2>
+                    <p class="cf-section-desc">The same shared allowlist as on <a href="/manage/<%= guild.id %>?page=protection-settings">Protection settings</a>, where roles and the pause also live. A wrongly flagged member can appeal to Discord at dis.gd/request.</p>
+                </div>
+            </header>
+            <div class="cf-rows">
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="spamAllowInput">Add a user</label>
+                        <p class="cf-row-desc">By user ID.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="cf-input-group">
+                            <input class="form-control" id="spamAllowInput" placeholder="User ID" inputmode="numeric" autocomplete="off">
+                            <button type="button" class="btn btn-primary" id="spamAllowAdd">Add</button>
+                        </div>
+                    </div>
+                </div>
+                <div id="spamAllowList" class="sec-list"><p class="sec-muted">Loading...</p></div>
+            </div>
+        </section>
+
+        <section class="cf-section" aria-labelledby="sec-activity-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="sec-activity-title">Recent activity</h2>
+                    <p class="cf-section-desc" id="spamActivitySummary">What the check did on joins and scans, newest first.</p>
+                </div>
+                <div class="cf-section-actions">
+                    <button type="button" class="btn btn-secondary btn-sm" id="spamActivityRefresh">Refresh</button>
+                </div>
+            </header>
+            <div class="cf-rows">
+                <div id="spamActivityList" class="sec-list sec-activity"><p class="sec-muted">Loading...</p></div>
+            </div>
+        </section>
     </div>
 
-    <!-- Anti-Nuke Configuration -->
-    <div style="margin-bottom: var(--spacing-6);">
-        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
-            <i class="fas fa-radiation" style="color: var(--color-danger); margin-right: var(--spacing-2);"></i>
-            Anti-Nuke Protection
-        </h3>
-        <form action="/manage/<%= guild.id %>/security/antinuke" method="POST" style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6);">
-            <div style="margin-bottom: var(--spacing-4);">
-                <div class="form-check form-switch" style="display: flex; align-items: center; gap: var(--spacing-3); padding: var(--spacing-4); background: var(--color-dark-700); border-radius: var(--radius-md);">
-                    <input class="form-check-input" type="checkbox" role="switch" id="antiNukeEnabled" name="enabled" <%= antiNukeConfig && antiNukeConfig.enabled ? 'checked' : '' %> style="width: 48px; height: 24px; cursor: pointer;">
-                    <label class="form-check-label" for="antiNukeEnabled" style="cursor: pointer; flex: 1;">
-                        <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-1);">Enable Anti-Nuke</div>
-                        <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">Protect against rapid channel/role deletions and mass bans</div>
-                    </label>
+    <%# CertiFried Network Intel: cross-guild member graph + DM-spam reports (core/network-gate.js,
+        core/dm-spam-reports.js). Opt-in per server; the shared blacklist is written automatically
+        when N guilds in the network have reported the same user via /engage report-dm. %>
+    <%
+      const ni = locals.joinGateConfig || {};
+      const niOn = !!ni.network_intel_enabled;
+      const niAction = ['ban','kick','flag','log'].includes(ni.network_blacklist_action) ? ni.network_blacklist_action : 'ban';
+      const niLurkOn = !!ni.network_lurker_enabled;
+      const niLurkAction = ['ban','kick','flag','log'].includes(ni.network_lurker_action) ? ni.network_lurker_action : 'flag';
+      const niReportOn = ni.dm_report_enabled === undefined ? true : !!ni.dm_report_enabled;
+    %>
+    <section class="cf-section" aria-labelledby="sec-network-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="sec-network-title">Network intel</h2>
+                <p class="cf-section-desc">Commission spammers join many servers, never post, and DM your members. One server cannot see that pattern; the network can. Reports and the shared blacklist are on <a href="/manage/<%= guild.id %>?page=network-intel">Network intel</a>.</p>
+            </div>
+            <div class="cf-section-actions"><span class="cf-pill<%= (niOn || niLurkOn) ? ' is-ok' : '' %>"><%= (niOn || niLurkOn) ? 'On' : 'Off' %></span></div>
+        </header>
+        <form class="cf-rows" action="/manage/<%= guild.id %>/security/network-intel" method="POST">
+            <div class="cf-rows-head" id="sec-ni-blacklist-head">Network blacklist</div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="networkIntelEnabled">Act on blacklisted users when they join</label>
+                    <p class="cf-row-desc" id="networkIntelEnabled-desc">The list fills automatically when enough servers report the same user, so no entry is one server's opinion.</p>
+                </div>
+                <div class="cf-row-control">
+                    <input class="cf-switch" type="checkbox" role="switch" id="networkIntelEnabled" name="networkIntelEnabled" aria-describedby="networkIntelEnabled-desc" <%= niOn ? 'checked' : '' %>>
                 </div>
             </div>
 
-            <div style="background: var(--color-dark-700); border-left: 4px solid var(--color-danger); padding: var(--spacing-4); border-radius: var(--radius-sm); margin-bottom: var(--spacing-4);">
-                <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-2);">
-                    <i class="fas fa-shield-alt" style="margin-right: var(--spacing-2);"></i>
-                    Protected Actions:
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="networkBlacklistAction">Action</label>
+                    <p class="cf-row-desc">What happens when a blacklisted account joins.</p>
                 </div>
-                <ul style="margin: 0; padding-left: var(--spacing-6); color: var(--color-text-secondary); font-size: var(--font-size-sm);">
-                    <li style="margin-bottom: var(--spacing-1);">Channel deletions (more than 3 in 10 seconds)</li>
-                    <li style="margin-bottom: var(--spacing-1);">Role deletions (more than 3 in 10 seconds)</li>
-                    <li style="margin-bottom: var(--spacing-1);">Mass bans (more than 5 in 10 seconds)</li>
-                    <li style="margin-bottom: var(--spacing-1);">Webhook spam (more than 5 created in 10 seconds)</li>
-                </ul>
+                <div class="cf-row-control">
+                    <select class="form-select" id="networkBlacklistAction" name="networkBlacklistAction">
+                        <option value="ban"  <%= niAction === 'ban'  ? 'selected' : '' %>>Ban (permanent)</option>
+                        <option value="kick" <%= niAction === 'kick' ? 'selected' : '' %>>Kick (can rejoin)</option>
+                        <option value="flag" <%= niAction === 'flag' ? 'selected' : '' %>>Flag (logged, same as log only)</option>
+                        <option value="log"  <%= niAction === 'log'  ? 'selected' : '' %>>Log only (observe, for trialling)</option>
+                    </select>
+                </div>
             </div>
 
-            <div style="margin-bottom: var(--spacing-4);">
-                <label class="form-label">
-                    <i class="fas fa-bell" style="margin-right: var(--spacing-1); color: var(--color-warning);"></i>
-                    Alert Channel
-                </label>
-                <select class="form-select" name="alert_channel_id">
-                    <option value="">No alerts (use logging settings)</option>
-                    <% if (typeof channels !== 'undefined') { channels.forEach(ch => { %>
-                        <option value="<%= ch.id %>" <%= antiNuke && antiNuke.alert_channel_id === ch.id ? 'selected' : '' %>>#<%= ch.name %></option>
-                    <% }); } %>
-                </select>
-                <div class="form-help">Send nuke alerts to this channel when destructive actions are detected.</div>
+            <div class="cf-row cf-row--sub">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="networkReportThreshold">Reports needed to auto-blacklist</label>
+                    <p class="cf-row-desc">Counted in separate servers, not reports, and a report counts until it is marked a false positive. When several servers reported the same person, the lowest number any of them set applies.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-unit"><input class="form-control" type="number" min="1" max="20" id="networkReportThreshold" name="networkReportThreshold" value="<%= ni.network_report_threshold ?? 3 %>"><span class="cf-unit">servers</span></div>
+                </div>
             </div>
 
-            <button type="submit" class="btn btn-primary">
-                <i class="fas fa-save"></i>
-                <span>Save Anti-Nuke Settings</span>
-            </button>
+            <div class="cf-row cf-row--sub">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="networkReportWindowHours">Within</label>
+                    <p class="cf-row-desc">Older reports do not count.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-unit"><input class="form-control" type="number" min="1" max="720" id="networkReportWindowHours" name="networkReportWindowHours" value="<%= ni.network_report_window_hours ?? 72 %>"><span class="cf-unit">hours</span></div>
+                </div>
+            </div>
+
+            <div class="cf-rows-head" id="sec-ni-lurker-head">Lurkers across servers</div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="networkLurkerEnabled">Act on cross-guild lurkers</label>
+                    <p class="cf-row-desc" id="networkLurkerEnabled-desc">People who joined many servers using this bot but post in almost none.</p>
+                </div>
+                <div class="cf-row-control">
+                    <input class="cf-switch" type="checkbox" role="switch" id="networkLurkerEnabled" name="networkLurkerEnabled" aria-describedby="networkLurkerEnabled-desc" <%= niLurkOn ? 'checked' : '' %>>
+                </div>
+            </div>
+
+            <div class="cf-row cf-row--sub">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="networkLurkerMinGuilds">Minimum servers joined</label>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-unit"><input class="form-control" type="number" min="2" max="50" id="networkLurkerMinGuilds" name="networkLurkerMinGuilds" value="<%= ni.network_lurker_min_guilds ?? 5 %>"><span class="cf-unit">servers</span></div>
+                </div>
+            </div>
+
+            <div class="cf-row cf-row--sub">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="networkLurkerMaxActivePct">Active in at most</label>
+                    <p class="cf-row-desc">The share of those servers they have posted in.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-unit"><input class="form-control" type="number" min="0" max="100" id="networkLurkerMaxActivePct" name="networkLurkerMaxActivePct" value="<%= ni.network_lurker_max_active_pct ?? 10 %>"><span class="cf-unit">%</span></div>
+                </div>
+            </div>
+
+            <div class="cf-row cf-row--sub">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="networkLurkerMinAccountDays">Minimum account age</label>
+                    <p class="cf-row-desc">Younger accounts are left to the account age gate.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-unit"><input class="form-control" type="number" min="0" max="3650" id="networkLurkerMinAccountDays" name="networkLurkerMinAccountDays" value="<%= ni.network_lurker_min_account_days ?? 30 %>"><span class="cf-unit">days</span></div>
+                </div>
+            </div>
+
+            <div class="cf-row cf-row--sub">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="networkLurkerAction">Action</label>
+                    <p class="cf-row-desc">A weaker signal than the blacklist, so log only is the safe choice.</p>
+                </div>
+                <div class="cf-row-control">
+                    <select class="form-select" id="networkLurkerAction" name="networkLurkerAction">
+                        <option value="log"  <%= niLurkAction === 'log'  ? 'selected' : '' %>>Log only</option>
+                        <option value="flag" <%= niLurkAction === 'flag' ? 'selected' : '' %>>Flag (logged, same as log only)</option>
+                        <option value="kick" <%= niLurkAction === 'kick' ? 'selected' : '' %>>Kick</option>
+                        <option value="ban"  <%= niLurkAction === 'ban'  ? 'selected' : '' %>>Ban</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="cf-rows-head" id="sec-ni-reports-head">Member reports</div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="dmReportEnabled">Accept scam DM reports from members</label>
+                    <p class="cf-row-desc" id="dmReportEnabled-desc">Members run <code>/engage report-dm</code> to send evidence of a DM they received. Needed for this server to add to the blacklist.</p>
+                </div>
+                <div class="cf-row-control">
+                    <input class="cf-switch" type="checkbox" role="switch" id="dmReportEnabled" name="dmReportEnabled" aria-describedby="dmReportEnabled-desc" <%= niReportOn ? 'checked' : '' %>>
+                </div>
+            </div>
+
+            <div class="cf-row cf-row--sub">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="dmReportChannelId">Review channel</label>
+                    <p class="cf-row-desc">Staff confirm or reject each report here, or on the Network intel page. Empty uses the account age gate's log channel (Log removals to); with neither set, reports are only on the Network intel page.</p>
+                </div>
+                <div class="cf-row-control">
+                    <select class="form-select" id="dmReportChannelId" name="dmReportChannelId">
+                        <option value="">Use log channel</option>
+                        <% secText.forEach(ch => { %>
+                        <option value="<%= ch.id %>" data-kind="text" <%= ni.dm_report_channel_id === ch.id ? 'selected' : '' %>>#<%= ch.name %></option>
+                        <% }) %>
+                    </select>
+                </div>
+            </div>
+
+            <div class="cf-section-foot">
+                <button type="submit" class="btn btn-primary">Save</button>
+            </div>
         </form>
-    </div>
+    </section>
 
-    <!-- Join Gate Configuration -->
-    <div>
-        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
-            <i class="fas fa-door-open" style="color: var(--color-success); margin-right: var(--spacing-2);"></i>
-            Join Gate
-        </h3>
-        <form action="/manage/<%= guild.id %>/security/joingate" method="POST" style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6);">
-            <div style="margin-bottom: var(--spacing-4);">
-                <div class="form-check form-switch" style="display: flex; align-items: center; gap: var(--spacing-3); padding: var(--spacing-4); background: var(--color-dark-700); border-radius: var(--radius-md);">
-                    <input class="form-check-input" type="checkbox" role="switch" id="joinGateEnabled" name="enabled" <%= joinGateConfig && joinGateConfig.enabled ? 'checked' : '' %> style="width: 48px; height: 24px; cursor: pointer;">
-                    <label class="form-check-label" for="joinGateEnabled" style="cursor: pointer; flex: 1;">
-                        <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-1);">Enable Join Gate</div>
-                        <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">Require new members to pass verification before accessing the server</div>
-                    </label>
-                </div>
-            </div>
+    <script>
+    (function () {
+        const base = '/api/guilds/<%= guild.id %>/spammer-scan';
+        // Build nodes, never HTML strings: every name shown here comes from Discord users.
+        const el = (tag, props, ...kids) => {
+            const node = document.createElement(tag);
+            Object.assign(node, props || {});
+            if (props && props.style) node.style.cssText = props.style;
+            for (const k of kids) if (k != null) node.append(k);
+            return node;
+        };
+        const call = async (path, options = {}) => {
+            const res = await fetch(base + path, { credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, ...options });
+            const body = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(body.error || ('Request failed (' + res.status + ')'));
+            return body;
+        };
+        const muted = (text) => el('p', { className: 'sec-muted', textContent: text });
+        const SEP = ', ';
+        const out = document.getElementById('spamScanResult');
+        const btn = document.getElementById('spamScanBtn');
+        const VERB = { kick: 'Kick', ban: 'Ban', flag: 'Flag' };
+        const SKIP = { allowlisted: 'allowlisted', staff: 'staff', unremovable: 'above the bot', already: 'already flagged' };
+        const showError = (target, e) => target.replaceChildren(el('p', { className: 'sec-error', role: 'alert', textContent: e.message }));
 
-            <div style="margin-bottom: var(--spacing-4);">
-                <label class="form-label">
-                    <i class="fas fa-user-check" style="margin-right: var(--spacing-1); color: var(--color-success);"></i>
-                    Verification Role
-                </label>
-                <select class="form-select" id="joinGateRole" name="roleId">
-                    <option value="">Select a role to grant after verification</option>
-                    <% roles.forEach(role => { %>
-                        <option value="<%= role.id %>" <%= joinGateConfig && joinGateConfig.role_id === role.id ? 'selected' : '' %>>
-                            <%= role.name %>
-                        </option>
-                    <% }) %>
-                </select>
-                <div class="form-help">This role will be granted to members who complete verification</div>
-            </div>
-
-            <div style="background: var(--color-dark-700); border-left: 4px solid var(--color-success); padding: var(--spacing-4); border-radius: var(--radius-sm); margin-bottom: var(--spacing-4);">
-                <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">
-                    <i class="fas fa-lightbulb" style="color: var(--color-warning); margin-right: var(--spacing-2);"></i>
-                    <strong>Tip:</strong> Use Join Gate with Discord's built-in verification system or custom verification channels for maximum protection.
-                </div>
-            </div>
-
-            <button type="submit" class="btn btn-primary">
-                <i class="fas fa-save"></i>
-                <span>Save Join Gate Settings</span>
-            </button>
-        </form>
-    </div>
-</div>
-
-<style>
-.form-label {
-    display: block;
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-primary);
-    margin-bottom: var(--spacing-2);
-}
-
-.form-control, .form-select {
-    width: 100%;
-    padding: var(--spacing-3);
-    background: var(--color-dark-700);
-    border: 1px solid var(--color-dark-400);
-    border-radius: var(--radius-md);
-    color: var(--color-text-primary);
-    font-size: var(--font-size-sm);
-    transition: all var(--transition-base);
-}
-
-.form-control:focus, .form-select:focus {
-    outline: none;
-    border-color: var(--color-primary-500);
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
-}
-
-.form-help {
-    font-size: var(--font-size-xs);
-    color: var(--color-text-muted);
-    margin-top: var(--spacing-2);
-}
-
-.form-check-input {
-    appearance: none;
-    background-color: var(--color-dark-500);
-    border: 2px solid var(--color-dark-400);
-    border-radius: 12px;
-    position: relative;
-    transition: all 0.3s ease;
-}
-
-.form-check-input:checked {
-    background-color: var(--color-success);
-    border-color: var(--color-success);
-}
-
-.form-check-input::before {
-    content: '';
-    position: absolute;
-    width: 18px;
-    height: 18px;
-    background: white;
-    border-radius: 50%;
-    top: 1px;
-    left: 1px;
-    transition: transform 0.3s ease;
-}
-
-.form-check-input:checked::before {
-    transform: translateX(24px);
-}
-
-.form-check-label {
-    margin: 0;
-}
-</style>
-
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-    // Add interactive feedback for switches
-    const switches = document.querySelectorAll('.form-check-input[type="checkbox"][role="switch"]');
-
-    switches.forEach(switchEl => {
-        switchEl.addEventListener('change', function() {
-            const label = this.closest('.form-check').querySelector('.form-check-label > div:first-child');
-            if (label) {
-                if (this.checked) {
-                    label.style.color = 'var(--color-success)';
-                } else {
-                    label.style.color = 'var(--color-text-primary)';
+        btn.addEventListener('click', async () => {
+            btn.disabled = true;
+            out.replaceChildren(muted('Scanning the member list... large servers take a minute.'));
+            try {
+                const r = await call('/scan');
+                const skipped = Object.entries(r.skipped).filter(([, n]) => n).map(([k, n]) => n + ' ' + SKIP[k]).join(SEP);
+                const summary = 'Checked ' + r.total + ' members'
+                    + (r.complete ? '' : ' (Discord did not return the full list; run it again later)')
+                    + '. Found ' + r.targets.length + ' to act on.'
+                    + (skipped ? ' Left alone: ' + skipped + '.' : '')
+                    + (r.unknown ? ' Could not check ' + r.unknown + '.' : '');
+                const parts = [el('p', { className: 'sec-summary', textContent: summary })];
+                if (r.targets.length) {
+                    parts.push(el('div', { className: 'sec-scan-list' },
+                        ...r.targets.map(t => el('div', { className: 'sec-item' },
+                            el('img', { src: t.avatar, alt: '' }),
+                            el('span', { className: 'sec-grow' }, t.displayName + ' ', el('span', { className: 'sec-dim', textContent: '@' + t.username + ', ' + t.id }))))));
+                    if (r.action === 'none') {
+                        parts.push(muted('The action is set to "Nothing", so there is nothing to confirm. Change it above to act on them.'));
+                    } else {
+                        const apply = el('button', { type: 'button', className: 'btn btn-danger', textContent: VERB[r.action] + ' all ' + r.targets.length });
+                        apply.addEventListener('click', async () => {
+                            apply.disabled = true;
+                            apply.textContent = 'Working...';
+                            try {
+                                const a = await call('/apply', { method: 'POST', body: JSON.stringify({ userIds: r.targets.map(t => t.id) }) });
+                                const failed = a.failed.slice(0, 10).map(f => (f.id === '*' ? f.problem : f.id + ' (' + f.problem + ')')).join('; ');
+                                out.replaceChildren(el('p', { className: 'sec-summary', textContent: a.done + ' done'
+                                    + (a.skipped ? ', ' + a.skipped + ' skipped (gone, cleared or staff)' : '')
+                                    + (a.failed.length ? ', ' + a.failed.length + ' failed: ' + failed : '') + '.' }));
+                            } catch (e) { showError(out, e); }
+                        });
+                        parts.push(el('div', { className: 'sec-apply' }, apply));
+                    }
                 }
+                out.replaceChildren(...parts);
+            } catch (e) {
+                showError(out, e);
+            } finally {
+                btn.disabled = false;
             }
         });
 
-        // Initialize state
-        const label = switchEl.closest('.form-check').querySelector('.form-check-label > div:first-child');
-        if (label && switchEl.checked) {
-            label.style.color = 'var(--color-success)';
+        const list = document.getElementById('spamAllowList');
+        async function loadAllow() {
+            try {
+                const r = await call('/allowlist');
+                if (!r.users.length) { list.replaceChildren(muted('Nobody is allowlisted.')); return; }
+                list.replaceChildren(...r.users.map(u => {
+                    const remove = el('button', { type: 'button', className: 'btn btn-sm btn-secondary', textContent: 'Remove' });
+                    remove.addEventListener('click', async () => {
+                        try { await call('/allowlist/' + encodeURIComponent(u.id), { method: 'DELETE' }); } catch (e) { showError(list, e); return; }
+                        loadAllow();
+                    });
+                    return el('div', { className: 'sec-item' },
+                        el('span', { className: 'sec-grow' }, (u.username || 'Unknown user') + ' ', el('span', { className: 'sec-dim', textContent: u.id })),
+                        remove);
+                }));
+            } catch (e) {
+                showError(list, e);
+            }
         }
-    });
-});
-</script>
+        // Recent activity: join_gate_events spammer_* rows (+ failures), GET /activity.
+        const ACT = { spammer_banned: ['Banned', 'is-bad'], spammer_kicked: ['Kicked', 'is-warn'], spammer_flagged: ['Flagged', 'is-warn'],
+            spammer_observed: ['Logged only', ''], failed: ['Could not act', 'is-bad'] };
+        const actList = document.getElementById('spamActivityList');
+        async function loadActivity() {
+            try {
+                const r = await call('/activity');
+                const c = r.last30 || {};
+                document.getElementById('spamActivitySummary').textContent = 'Last 30 days: '
+                    + ['spammer_banned', 'spammer_kicked', 'spammer_flagged', 'spammer_observed']
+                        .map(k => (c[k] || 0) + ' ' + ACT[k][0].toLowerCase()).join(SEP) + '.';
+                if (!r.events.length) { actList.replaceChildren(muted('Nothing yet. No flagged account has joined since the check was set up.')); return; }
+                actList.replaceChildren(...r.events.map(e => el('div', { className: 'sec-item sec-act' },
+                    el('span', { className: 'sec-act-what' }, el('span', { className: 'cf-pill ' + ((ACT[e.action] || [])[1] || ''), textContent: (ACT[e.action] || [e.action])[0] })),
+                    el('span', { className: 'sec-act-who' }, window.CFUser ? CFUser.cell({ id: e.userId, username: e.username, displayName: e.displayName || e.username, avatar: e.avatar })
+                        : el('span', { textContent: e.username || e.userId })),
+                    el('span', { className: 'sec-grow sec-dim', textContent: e.detail || '' }),
+                    el('span', { className: 'sec-when', textContent: new Date(e.at).toLocaleString() }))));
+            } catch (e) { showError(actList, e); }
+        }
+        document.getElementById('spamActivityRefresh').addEventListener('click', loadActivity);
+        loadActivity();
+
+        // The score tile reads the same protections grid as the overview (core/security-overview.js).
+        fetch('/api/guilds/<%= guild.id %>/insight/score', { credentials: 'same-origin' })
+            .then(r => (r.ok ? r.json() : null))
+            .then(d => {
+                if (!d || !d.score) return;
+                document.getElementById('securityScoreValue').textContent = d.score.level + ' (' + d.score.percent + '%)';
+                document.getElementById('securityScoreDetail').textContent = d.score.on + ' of ' + d.score.total + ' protections on';
+            })
+            .catch(() => {});
+
+        document.getElementById('spamAllowAdd').addEventListener('click', async () => {
+            const input = document.getElementById('spamAllowInput');
+            try {
+                await call('/allowlist', { method: 'POST', body: JSON.stringify({ userId: input.value }) });
+                input.value = '';
+            } catch (e) { showError(list, e); return; }
+            loadAllow();
+        });
+        loadAllow();
+    })();
+    </script>
+</div>
+
+<style>
+  .sec-page .sec-kpi-link { text-decoration: none; }
+  .sec-page .sec-kpi-link:hover { color: var(--cf-text); text-decoration: underline; }
+  .sec-page .sec-status { flex-direction: row; align-items: center; justify-content: flex-end; gap: var(--cf-3); }
+  .sec-page .sec-points { margin: var(--cf-2) 0 0; padding-left: 1.2rem; display: grid; gap: 2px; font-size: var(--cf-text-sm); color: var(--cf-text-2); line-height: 1.5; }
+
+  /* Lists and results the script draws. */
+  .sec-page .sec-muted { margin: 0; padding: var(--cf-4) var(--cf-5); font-size: var(--cf-text-sm); color: var(--cf-text-3); }
+  .sec-page .sec-error { margin: 0; padding: var(--cf-4) var(--cf-5); font-size: var(--cf-text-sm); color: var(--cf-danger); }
+  .sec-page .sec-summary { margin: 0; padding: var(--cf-4) var(--cf-5) var(--cf-3); font-size: var(--cf-text-sm); color: var(--cf-text-2); line-height: 1.5; }
+  .sec-page .sec-list { max-height: 360px; overflow-y: auto; }
+  .sec-page .sec-scan-list { max-height: 320px; overflow-y: auto; border-top: 1px solid var(--cf-border); border-bottom: 1px solid var(--cf-border); }
+  .sec-page .sec-apply { padding: var(--cf-3) var(--cf-5); display: flex; justify-content: flex-end; }
+  .sec-page .sec-item { display: flex; align-items: center; gap: var(--cf-3); min-width: 0; padding: var(--cf-3) var(--cf-5); font-size: var(--cf-text-sm); color: var(--cf-text); }
+  .sec-page .sec-item + .sec-item { border-top: 1px solid var(--cf-border); }
+  .sec-page .sec-item img { width: 24px; height: 24px; border-radius: 50%; flex: none; object-fit: cover; }
+  .sec-page .sec-grow { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+  .sec-page .sec-dim { color: var(--cf-text-3); }
+  .sec-page .sec-act-what { flex: none; min-width: 6.5rem; }
+  .sec-page .sec-act-who { flex: none; min-width: 0; max-width: 16rem; }
+  .sec-page .sec-when { flex: none; font-size: var(--cf-text-xs); color: var(--cf-text-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  @media (max-width: 640px) {
+    .sec-page .sec-muted, .sec-page .sec-error, .sec-page .sec-summary, .sec-page .sec-item, .sec-page .sec-apply { padding-left: var(--cf-4); padding-right: var(--cf-4); }
+    .sec-page .sec-act { flex-wrap: wrap; gap: var(--cf-1) var(--cf-3); }
+    .sec-page .sec-act .sec-grow { flex-basis: 100%; }
+    .sec-page .sec-apply .btn { flex: 1 1 auto; }
+    .sec-page .sec-status { justify-content: flex-start; }
+  }
+</style>

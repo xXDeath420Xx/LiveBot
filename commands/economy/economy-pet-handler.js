@@ -1,5 +1,6 @@
 import { EmbedBuilder } from 'discord.js';
 import pool from '../../utils/db.js';
+import { themeColor } from '../../core/guild-theme.js';
 
 export const PET_TYPES = ['dog', 'cat', 'dragon', 'fox', 'bird', 'bunny'];
 
@@ -58,7 +59,7 @@ export async function handleAdopt(interaction) {
     );
 
     const embed = new EmbedBuilder()
-        .setColor('#57F287')
+        .setColor(themeColor(interaction.guildId, 'success'))
         .setTitle('\ud83c\udf89 Pet Adopted!')
         .setDescription(`Congratulations! You've adopted **${petName}** the ${petType}!`)
         .addFields(
@@ -87,7 +88,7 @@ export async function handleView(interaction) {
     const emoji = PET_EMOJIS[pet.pet_type] || '\ud83d\udc3e';
 
     const embed = new EmbedBuilder()
-        .setColor('#5865F2')
+        .setColor(themeColor(interaction.guildId, 'primary'))
         .setTitle(`${emoji} ${pet.pet_name}`)
         .setDescription(`Level ${pet.level} ${pet.pet_type}`)
         .addFields(

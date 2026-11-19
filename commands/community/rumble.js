@@ -2,6 +2,7 @@ import {
     SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, ChannelType,
 } from 'discord.js';
 import pool from '../../utils/db.js';
+import { isSnowflake } from '../../core/streamer-departure.js';
 import logger from '../../utils/logger.js';
 import encryption from '../../utils/encryption.js';
 import * as rumbleApi from '../../utils/platforms/rumble.js';
@@ -20,6 +21,14 @@ async function ensureTable() {
 }
 
 async function upsertStreamerSub(guildId, username, channelId, pingRoleId, message, discordUserId, channelPlatformId) {
+    /*
+     * A Discord USERNAME reaching this column is not hypothetical — two rows carried the literal
+     * string 'SuperMike242', which made every membership check on them fail with 400/50035 forever.
+     * Coerced to NULL rather than thrown, so the subscription is still created; it is simply
+     * unlinked, and honestly so, instead of carrying an id that can never resolve.
+     */
+    discordUserId = isSnowflake(String(discordUserId ?? '')) ? String(discordUserId) : null;
+
     // streamers row (unique on platform+username)
     let [ex] = await pool.execute('SELECT streamer_id FROM streamers WHERE platform=? AND username=?', ['rumble', username]);
     let streamerId;
@@ -135,7 +144,10 @@ export default {
             await interaction.deferReply({ ephemeral: true });
             const [st] = await pool.execute('SELECT streamer_id FROM streamers WHERE platform=? AND username=?', ['rumble', username]);
             if (st.length) {
-                await pool.execute('DELETE FROM subscriptions WHERE guild_id=? AND streamer_id=?', [interaction.guildId, st[0].streamer_id]);
+                // Soft-delete so Dashboard > Streaming > "Recently removed" can quick-restore it.
+                await pool.execute(
+                    "UPDATE subscriptions SET paused = 1, departed_at = NOW(), departed_reason = 'manual' WHERE guild_id = ? AND streamer_id = ? AND departed_at IS NULL",
+                    [interaction.guildId, st[0].streamer_id]);
                 // if no subscriptions remain anywhere, drop the stored key too
                 const [remain] = await pool.execute('SELECT COUNT(*) n FROM subscriptions WHERE streamer_id=?', [st[0].streamer_id]);
                 if (remain[0].n === 0) await pool.execute('DELETE FROM rumble_stream_keys WHERE LOWER(rumble_username)=LOWER(?)', [username]);
@@ -148,7 +160,7 @@ export default {
             const [rows] = await pool.execute(
                 `SELECT s.username, sub.announcement_channel_id, sub.ping_role_id FROM subscriptions sub
                  JOIN streamers s ON sub.streamer_id=s.streamer_id WHERE sub.guild_id=? AND s.platform='rumble'`, [interaction.guildId]);
-            if (!rows.length) return interaction.editReply('No Rumble streamers tracked here yet. Add one with `/rumble add`.');
+            if (!rows.length) return interaction.editReply('No Rumble streamers tracked here yet. Add one with `/socials rumble add`.');
             const lines = rows.map(r => `• **${r.username}** → <#${r.announcement_channel_id}>${r.ping_role_id ? ` (pings <@&${r.ping_role_id}>)` : ''}`);
             return interaction.editReply({ embeds: [new EmbedBuilder().setColor(0x85c742).setTitle('🟢 Rumble streamers').setDescription(lines.join('\n'))] });
         }

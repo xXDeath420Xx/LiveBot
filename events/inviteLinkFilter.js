@@ -13,6 +13,8 @@
 import { EmbedBuilder } from 'discord.js';
 import logger from '../utils/logger.js';
 import { getConfig, isAllowed } from '../utils/link-whitelist.js';
+import { themeColor } from '../core/guild-theme.js';
+import { protectionHold, isIgnoredChannel } from '../core/protection-exempt.js';
 
 const INVITE_PATTERNS = [
     /discord\.gg\/[a-zA-Z0-9]+/i,
@@ -36,6 +38,9 @@ export default {
         const config = await getConfig(message.guild.id);
         if (!config.enabled) return;
 
+        // Channels and categories on the message protections' ignore list (core/protection-exempt.js).
+        if (await isIgnoredChannel(message.channel)) return;
+
         // Hard permission floor — admins/mods always bypass
         const member = message.member || await message.guild.members.fetch(message.author.id).catch(() => null);
         if (member && (member.permissions.has('ManageGuild') || member.permissions.has('ManageMessages'))) {
@@ -51,6 +56,9 @@ export default {
             });
             if (allowed) return;
         }
+
+        // Unified allowlist / global pause (core/protection-exempt.js logs the skip).
+        if (member && await protectionHold(member, 'delete', 'Invite filter')) return;
 
         // Apply configured action
         try {
@@ -77,7 +85,7 @@ export default {
                 const logChannel = message.guild.channels.cache.get(config.log_channel_id);
                 if (logChannel) {
                     const embed = new EmbedBuilder()
-                        .setColor(0x9B59B6)
+                        .setColor(themeColor(member.guild?.id, 'accent'))
                         .setTitle('🔗 Invite Link Blocked')
                         .addFields(
                             { name: 'User', value: `${message.author} (${message.author.tag})`, inline: true },

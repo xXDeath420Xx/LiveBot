@@ -10,7 +10,30 @@ const __dirname = path.dirname(__filename);
 
 // ==================== CONFIGURATION ====================
 
-const logDir = path.join(__dirname, '..', 'logs');
+const logDir = process.env.LOG_DIR || path.join(__dirname, '..', 'logs');
+
+/**
+ * Delete rotated app logs older than the retention (LOG_MAX_FILES, e.g. "3d"), plus orphaned audit
+ * files. Runs at load and hourly; cheap (one readdir). winston-daily-rotate-file only prunes files it
+ * created itself, so files from exited processes were never removed (H-319).
+ */
+function sweepOldLogs() {
+    try {
+        const m = String(process.env.LOG_MAX_FILES || '30d').match(/^(\d+)d$/);
+        const days = m ? Number(m[1]) : 3;
+        const cutoff = Date.now() - days * 86400000;
+        const LOG = /^(combined|error|exceptions|rejections|performance|requests|music-update)-\d{4}-\d{2}-\d{2}\.log(\.\d+)?(\.gz)?$/;
+        const AUDIT = /^\.[0-9a-f]{40}-audit\.json$/;
+        for (const name of fs.readdirSync(logDir)) {
+            if (!LOG.test(name) && !AUDIT.test(name)) continue;
+            const full = path.join(logDir, name);
+            const st = fs.statSync(full);
+            if (st.isFile() && st.mtimeMs < cutoff) fs.unlinkSync(full);
+        }
+    } catch { /* never let log housekeeping break logging */ }
+}
+if (fs.existsSync(logDir)) sweepOldLogs();
+setInterval(sweepOldLogs, 3600000).unref();
 const colours = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'colours.json'), 'utf-8'));
 
 if (!fs.existsSync(logDir)) {
@@ -22,7 +45,9 @@ const defaultConfig = {
   prettyPrint: process.env.NODE_ENV !== 'production',
   jsonOutput: process.env.LOG_JSON === 'true',
   enableRotation: process.env.LOG_ROTATION !== 'false',
-  maxFiles: process.env.LOG_MAX_FILES || '3d',      // Keep 3 days of logs
+  // 30 days, gzip-compressed after rotation: the owner wants longer history (2026-11-18), and with routine
+  // per-cycle INFO lines demoted the volume is small. Command usage is also tracked in the database.
+  maxFiles: process.env.LOG_MAX_FILES || '30d',
   maxSize: process.env.LOG_MAX_SIZE || '50m',       // 50MB per file to keep disk usage reasonable
   enablePerformanceMetrics: process.env.LOG_PERFORMANCE === 'true',
   enableRequestLogging: process.env.LOG_REQUESTS !== 'false',
@@ -304,8 +329,10 @@ function createBaseLogger(config = defaultConfig) {
       new DailyRotateFile({
         dirname: logDir,
         filename: 'combined-%DATE%.log',
+        auditFile: path.join(logDir, '.audit-combined.json'),
         datePattern: 'YYYY-MM-DD',
         maxSize: config.maxSize,
+        zippedArchive: true,
         maxFiles: config.maxFiles,
         format: winston.format.combine(
           winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss.SSS' }),
@@ -320,9 +347,11 @@ function createBaseLogger(config = defaultConfig) {
       new DailyRotateFile({
         dirname: logDir,
         filename: 'error-%DATE%.log',
+        auditFile: path.join(logDir, '.audit-error.json'),
         datePattern: 'YYYY-MM-DD',
         level: 'error',
         maxSize: config.maxSize,
+        zippedArchive: true,
         maxFiles: config.maxFiles,
         format: winston.format.combine(
           winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss.SSS' }),
@@ -338,8 +367,10 @@ function createBaseLogger(config = defaultConfig) {
         new DailyRotateFile({
           dirname: logDir,
           filename: 'performance-%DATE%.log',
+        auditFile: path.join(logDir, '.audit-performance.json'),
           datePattern: 'YYYY-MM-DD',
           maxSize: config.maxSize,
+          zippedArchive: true,
           maxFiles: config.maxFiles,
           format: winston.format.combine(
             winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss.SSS' }),
@@ -356,8 +387,10 @@ function createBaseLogger(config = defaultConfig) {
         new DailyRotateFile({
           dirname: logDir,
           filename: 'requests-%DATE%.log',
+        auditFile: path.join(logDir, '.audit-requests.json'),
           datePattern: 'YYYY-MM-DD',
           maxSize: config.maxSize,
+          zippedArchive: true,
           maxFiles: config.maxFiles,
           format: winston.format.combine(
             winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss.SSS' }),
@@ -378,8 +411,10 @@ function createBaseLogger(config = defaultConfig) {
       new DailyRotateFile({
         dirname: logDir,
         filename: 'exceptions-%DATE%.log',
+        auditFile: path.join(logDir, '.audit-exceptions.json'),
         datePattern: 'YYYY-MM-DD',
         maxSize: config.maxSize,
+        zippedArchive: true,
         maxFiles: config.maxFiles,
         format: winston.format.combine(
           winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss.SSS' }),
@@ -392,8 +427,10 @@ function createBaseLogger(config = defaultConfig) {
       new DailyRotateFile({
         dirname: logDir,
         filename: 'rejections-%DATE%.log',
+        auditFile: path.join(logDir, '.audit-rejections.json'),
         datePattern: 'YYYY-MM-DD',
         maxSize: config.maxSize,
+        zippedArchive: true,
         maxFiles: config.maxFiles,
         format: winston.format.combine(
           winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss.SSS' }),
@@ -423,6 +460,13 @@ function createContextLogger(context) {
   };
 }
 
+// Listeners told about every warning and error (jobs/health-digest.js counts them for the daily DM).
+const warnErrorListeners = [];
+export function onWarnError(fn) { if (typeof fn === 'function') warnErrorListeners.push(fn); }
+function notifyWarnError(level, message) {
+  for (const fn of warnErrorListeners) { try { fn(level, message); } catch { /* never break logging */ } }
+}
+
 /**
  * Enhanced logger implementation
  */
@@ -440,8 +484,8 @@ const logger = {
   // Standard logging methods. Suppressed categories (emoji/sticker/soundboard)
   // are dropped entirely — never console, never file.
   info: (message, meta) => { if (_suppressedLog(meta)) return; baseLogger.info(message, meta); },
-  warn: (message, meta) => { if (_suppressedLog(meta)) return; baseLogger.warn(message, meta); },
-  error: (message, meta) => baseLogger.error(message, meta),
+  warn: (message, meta) => { if (_suppressedLog(meta)) return; notifyWarnError('warn', message); baseLogger.warn(message, meta); },
+  error: (message, meta) => { notifyWarnError('error', message); baseLogger.error(message, meta); },
   debug: (message, meta) => { if (_suppressedLog(meta)) return; baseLogger.debug(message, meta); },
   verbose: (message, meta) => { if (_suppressedLog(meta)) return; baseLogger.verbose(message, meta); },
   http: (message, meta) => baseLogger.http(message, meta),

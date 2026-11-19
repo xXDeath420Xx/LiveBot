@@ -2,6 +2,7 @@ import { Events, EmbedBuilder } from 'discord.js';
 import logger from '../utils/logger.js';
 import { sendLogEmbed, saveAuditLog } from '../core/log-manager.js';
 import { shouldIgnoreGuild } from '../utils/custom-bot-check.js';
+import { themeColor } from '../core/guild-theme.js';
 
 export default {
     name: Events.MessagePollVoteAdd,
@@ -21,7 +22,7 @@ export default {
             });
 
             const embed = new EmbedBuilder()
-                .setColor(0x57F287)
+                .setColor(themeColor(message.guild?.id, 'success'))
                 .setTitle('🗳️ Poll Vote')
                 .setDescription(`<@${userId}> voted in a poll`)
                 .addFields(
@@ -31,7 +32,8 @@ export default {
                 )
                 .setTimestamp();
 
-            await sendLogEmbed(message.guild, 'pollVoteAdd', embed);
+            await sendLogEmbed(message.guild, 'pollVoteAdd', embed, 'pollVoteAdd',
+                { channel: message.channel, userId });
 
             await saveAuditLog(message.guild.id, 'POLL_VOTE_ADD', userId, message.id, null, message.channel.id, 'Poll vote', null, null, pollAnswer.text, {});
         } catch (error) {

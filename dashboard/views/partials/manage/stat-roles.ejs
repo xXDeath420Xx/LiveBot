@@ -1,297 +1,283 @@
 <%
-const configs = statroleConfigs || [];
+// Rules come from statrole_configs via the 'stat-roles' page loader (dashboard/services/manage-sections.js).
+// Field names match what core/statrole-manager.js#replaceGuildRules validates:
+//   configs[i][role_id], configs[i][stat_type], configs[i][required_amount], configs[i][remove_below]
+// Keep STAT_OPTIONS in step with STAT_TYPES in core/statrole-rules.js (MAX_RULES_PER_GUILD = 50).
+// Laid out with the settings-row kit (cf-settings.css); every id, name and hook the script uses is unchanged.
+const configs = (typeof statroles !== 'undefined' && Array.isArray(statroles)) ? statroles
+    : ((typeof statroleConfigs !== 'undefined' && Array.isArray(statroleConfigs)) ? statroleConfigs : []);
+const grantCounts = locals.statroleGrantCounts || {};
+const STAT_OPTIONS = [
+    // max: the largest required value core/statrole-rules.js STAT_TYPES accepts.
+    { value: 'messages', label: 'Messages sent', unit: 'messages', max: 100000000, hint: 'Every message counts, in every channel.' },
+    { value: 'voice_minutes', label: 'Minutes in voice', unit: 'minutes', max: 100000000, hint: 'Counted when a voice session ends.' },
+    { value: 'level', label: 'Level', unit: 'level', max: 10000, hint: 'Needs the leveling system turned on.' },
+    { value: 'invites', label: 'Members invited', unit: 'invites', max: 1000000, hint: 'Joins through their invites in the last 180 days.' },
+    { value: 'account_age_days', label: 'Account age (days)', unit: 'days', max: 36500, hint: 'Age of the Discord account.' },
+    { value: 'server_days', label: 'Days in this server', unit: 'days', max: 36500, hint: 'Since they last joined.' },
+];
+const statOf = (v) => STAT_OPTIONS.find(o => o.value === v) || STAT_OPTIONS[0];
+const totalGranted = Object.values(grantCounts).reduce((a, b) => a + Number(b || 0), 0);
+// Roles the bot cannot give: managed by an integration, or at/above the bot's highest role.
+const srBotTop = (guild && guild.members && guild.members.me && guild.members.me.roles && guild.members.me.roles.highest)
+    ? guild.members.me.roles.highest.position : null;
+const srBlocked = (r) => !!r.managed || (typeof srBotTop === 'number' && Number(r.position) >= srBotTop);
 %>
+
+<style>
+    .sr-item { display: grid; gap: var(--cf-3); }
+    .sr-item-head { display: flex; align-items: center; justify-content: space-between; gap: var(--cf-3); min-width: 0; }
+    .sr-item-head > div { min-width: 0; }
+    .sr-item-title { display: block; font-size: var(--cf-text-md); font-weight: 600; color: var(--cf-text); }
+    .sr-item-meta { display: block; font-size: var(--cf-text-sm); color: var(--cf-text-3); overflow-wrap: anywhere; }
+    .sr-item .cf-field > .cf-choice { margin-top: 2px; font-weight: 400; }
+    .sr-count { font-weight: 400; color: var(--cf-text-3); }
+    .sr-filter-row { padding: var(--cf-3) var(--cf-5); }
+    .sr-filter-row .cf-search { width: 100%; }
+    @media (max-width: 640px) { .sr-filter-row { padding: var(--cf-3) var(--cf-4); } }
+</style>
 
 <div class="page-section">
     <div class="page-section-header">
         <div>
             <div class="page-section-title">
                 <i class="fas fa-award"></i>
-                <span>Stat Roles</span>
+                <span>Stat roles</span>
             </div>
-            <div class="page-section-subtitle">
-                Automatically assign roles when users reach statistical milestones
-            </div>
-        </div>
-        <button type="button" class="btn btn-primary" id="add-stat-role">
-            <i class="fas fa-plus"></i>
-            <span>Add Stat Role</span>
-        </button>
-    </div>
-
-    <!-- Stats Overview -->
-    <div class="grid grid-cols-4" style="margin-bottom: var(--spacing-6);">
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Total Stat Roles</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary);"><%= configs.length %></div>
-        </div>
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Message Milestones</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-primary-400);"><%= configs.filter(c => c.stat_type === 'messages').length %></div>
-        </div>
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Voice Milestones</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-accent-purple);"><%= configs.filter(c => c.stat_type === 'voice_minutes').length %></div>
-        </div>
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Highest Requirement</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-success);"><%= configs.length > 0 ? Math.max(...configs.map(c => c.required_value)) : 0 %></div>
+            <div class="page-section-subtitle">Checked as members are active, and for everyone every 15 minutes.</div>
         </div>
     </div>
 
-    <!-- Stat Role Configuration Form -->
-    <form action="/manage/<%= guild.id %>/stat-roles/update" method="POST" id="stat-roles-form">
-        <div id="stat-roles-container" style="margin-bottom: var(--spacing-4);">
-            <% if (configs.length > 0) { %>
-                <% configs.forEach((config, index) => { %>
-                    <div class="stat-role-card" data-index="<%= index %>">
-                        <div class="stat-role-header">
-                            <div style="display: flex; align-items: center; gap: var(--spacing-3);">
-                                <div style="width: 40px; height: 40px; border-radius: var(--radius-md); background: var(--color-primary-500); display: flex; align-items: center; justify-content: center;">
-                                    <i class="fas fa-award" style="color: white; font-size: var(--font-size-lg);"></i>
-                                </div>
-                                <div>
-                                    <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary);">Stat Role #<%= index + 1 %></div>
-                                    <div style="font-size: var(--font-size-sm); color: var(--color-text-muted);">
-                                        <%= config.stat_type === 'messages' ? 'Message Milestone' : 'Voice Time Milestone' %>
-                                    </div>
-                                </div>
-                            </div>
-                            <button type="button" class="btn btn-sm btn-danger remove-stat-role">
-                                <i class="fas fa-trash"></i>
-                                <span>Remove</span>
-                            </button>
+    <%- include('../kit/_kpis', { label: 'Stat roles at a glance', items: [
+        { label: 'Rules', value: configs.length + ' of 50' , small: false },
+        { label: 'Message milestones', value: configs.filter(c => c.stat_type === 'messages').length },
+        { label: 'Voice milestones', value: configs.filter(c => c.stat_type === 'voice_minutes').length },
+        { label: 'Roles given by the bot', value: totalGranted },
+    ] }) %>
+
+    <section class="cf-section" aria-labelledby="sr-rules-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="sr-rules-title">Milestone rules <span class="sr-count">(<%= configs.length %>)</span></h2>
+                <p class="cf-section-desc">
+                    The bot needs Manage Roles, and its own role must sit above every role used here.
+                    A role is only taken back when "Remove if no longer met" is ticked, and only if the bot gave it.
+                </p>
+            </div>
+            <div class="cf-section-actions">
+                <button type="button" class="btn btn-secondary" id="add-stat-role">
+                    <i class="fas fa-plus" aria-hidden="true"></i>
+                    <span>Add rule</span>
+                </button>
+            </div>
+        </header>
+
+        <form class="cf-rows" action="/manage/<%= guild.id %>/stat-roles/update" method="POST" id="stat-roles-form">
+            <% if (configs.length > 15) { %>
+            <div class="sr-filter-row">
+                <span class="cf-search"><i class="fas fa-search" aria-hidden="true"></i><input type="search" class="form-control sr-filter" placeholder="Filter rules by role or statistic" aria-label="Filter rules"></span>
+            </div>
+            <% } %>
+            <div id="stat-roles-container"><% configs.forEach((config, index) => { const roleNow = roles.find(r => String(r.id) === String(config.role_id)); const st = statOf(config.stat_type); %>
+                <div class="cf-row cf-row--stack sr-item stat-role-item" data-index="<%= index %>">
+                    <div class="sr-item-head">
+                        <div>
+                            <span class="sr-item-title stat-role-title">Rule <%= index + 1 %></span>
+                            <span class="sr-item-meta">
+                                <%= roleNow ? '@' + roleNow.name : 'No role' %> at <%= Number(config.required_amount || 0).toLocaleString('en-US') %> <%= st.unit %><% if (grantCounts[config.role_id]) { %>, given to <%= grantCounts[config.role_id] %> member<%= Number(grantCounts[config.role_id]) === 1 ? '' : 's' %><% } %>
+                            </span>
                         </div>
-
-                        <div class="stat-role-body">
-                            <div class="grid grid-cols-3" style="gap: var(--spacing-4);">
-                                <div>
-                                    <label class="form-label">Role to Award</label>
-                                    <select class="form-select" name="configs[<%= index %>][roleId]" required>
-                                        <option value="">Select a role</option>
-                                        <% roles.forEach(role => { %>
-                                            <option value="<%= role.id %>" <%= config.role_id === role.id ? 'selected' : '' %>><%= role.name %></option>
-                                        <% }) %>
-                                    </select>
-                                    <div class="form-help">Role given when milestone is reached</div>
-                                </div>
-
-                                <div>
-                                    <label class="form-label">Statistic to Track</label>
-                                    <select class="form-select" name="configs[<%= index %>][stat]" required>
-                                        <option value="messages" <%= config.stat_type === 'messages' ? 'selected' : '' %>>Messages Sent</option>
-                                        <option value="voice_minutes" <%= config.stat_type === 'voice_minutes' ? 'selected' : '' %>>Minutes in Voice</option>
-                                    </select>
-                                    <div class="form-help">Type of activity to track</div>
-                                </div>
-
-                                <div>
-                                    <label class="form-label">Required Value</label>
-                                    <input type="number" class="form-control" name="configs[<%= index %>][requiredValue]" value="<%= config.required_value %>" placeholder="1000" min="1" required>
-                                    <div class="form-help">Number required for role</div>
-                                </div>
+                        <button type="button" class="btn btn-sm btn-secondary remove-stat-role">Remove</button>
+                    </div>
+                    <div class="cf-fields">
+                        <div class="cf-field">
+                            <label for="sr-role-<%= index %>">Role to give</label>
+                            <select class="form-select" id="sr-role-<%= index %>" name="configs[<%= index %>][role_id]" required>
+                                <option value="">Select a role</option>
+                                <% roles.forEach(role => { const sel = String(config.role_id) === String(role.id); const blocked = srBlocked(role); %>
+                                    <%# A saved rule keeps its role selectable so the form still saves; the bot just cannot give it. %>
+                                    <option value="<%= role.id %>"<%= sel ? ' selected' : '' %><%= blocked && !sel ? ' disabled' : '' %>><%= role.name %><%= blocked ? ' (above the bot)' : '' %></option>
+                                <% }) %>
+                                <% if (config.role_id && !roleNow) { %>
+                                    <option value="" selected disabled>Deleted role (<%= config.role_id %>), pick another</option>
+                                <% } %>
+                            </select>
+                            <span class="cf-field-hint"><%= roleNow && srBlocked(roleNow) ? 'The bot cannot give this role. Move the bot\'s role above it.' : 'Given when the milestone is reached.' %></span>
+                        </div>
+                        <div class="cf-field">
+                            <label for="sr-stat-<%= index %>">Statistic</label>
+                            <select class="form-select" id="sr-stat-<%= index %>" name="configs[<%= index %>][stat_type]" required>
+                                <% STAT_OPTIONS.forEach(opt => { %>
+                                    <option value="<%= opt.value %>" <%= config.stat_type === opt.value ? 'selected' : '' %>><%= opt.label %></option>
+                                <% }) %>
+                            </select>
+                            <span class="cf-field-hint sr-stat-hint"><%= st.hint %></span>
+                        </div>
+                        <div class="cf-field">
+                            <label for="sr-amount-<%= index %>">Required value</label>
+                            <div class="cf-input-unit">
+                                <input type="number" class="form-control" id="sr-amount-<%= index %>" name="configs[<%= index %>][required_amount]" value="<%= config.required_amount %>" placeholder="1000" min="1" max="<%= st.max %>" step="1" required>
+                                <span class="cf-unit sr-unit"><%= st.unit %></span>
                             </div>
+                            <label class="cf-choice">
+                                <input type="checkbox" name="configs[<%= index %>][remove_below]" value="1" <%= Number(config.remove_below) === 1 ? 'checked' : '' %>>
+                                <span>Remove if no longer met</span>
+                            </label>
                         </div>
                     </div>
-                <% }) %>
-            <% } %>
-        </div>
+                </div><% }) %></div>
 
-        <!-- Empty State -->
-        <% if (configs.length === 0) { %>
-            <div class="empty-state" id="empty-state">
-                <div class="empty-state-icon">
-                    <i class="fas fa-award"></i>
-                </div>
-                <div class="empty-state-title">No Stat Roles Configured</div>
-                <div class="empty-state-description">
-                    Create stat roles to automatically reward active members with roles
-                </div>
+            <div class="cf-state cf-state--empty" id="empty-state"<%= configs.length === 0 ? '' : ' hidden' %>>
+                <p class="cf-state-title">No stat roles yet</p>
+                <p class="cf-state-text">Give a role when members send enough messages, spend time in voice or reach a level.</p>
                 <button type="button" class="btn btn-primary" id="add-first-stat-role">
-                    <i class="fas fa-plus"></i>
-                    <span>Add First Stat Role</span>
+                    <i class="fas fa-plus" aria-hidden="true"></i>
+                    <span>Add the first rule</span>
                 </button>
             </div>
-        <% } %>
 
-        <!-- Submit Button -->
-        <% if (configs.length > 0) { %>
-            <div style="display: flex; justify-content: flex-end; gap: var(--spacing-3); padding-top: var(--spacing-4); border-top: 1px solid var(--color-dark-400);">
-                <button type="submit" class="btn btn-primary">
-                    <i class="fas fa-save"></i>
-                    <span>Save All Stat Roles</span>
-                </button>
+            <%# Always present so removing the last rule can be saved. %>
+            <div class="cf-section-foot" id="stat-roles-submit"<%= configs.length > 0 ? '' : ' hidden' %>>
+                <span class="cf-foot-note">Saving replaces every rule with the list above.</span>
+                <button type="submit" class="btn btn-primary">Save</button>
             </div>
-        <% } %>
-    </form>
+        </form>
+    </section>
+
+    <!-- Rule template for new rules (cloned by the script; __INDEX__ is replaced) -->
+    <template id="stat-role-template">
+        <div class="cf-row cf-row--stack sr-item stat-role-item" data-index="__INDEX__">
+            <div class="sr-item-head">
+                <div>
+                    <span class="sr-item-title stat-role-title">Rule</span>
+                    <span class="sr-item-meta">New milestone</span>
+                </div>
+                <button type="button" class="btn btn-sm btn-secondary remove-stat-role">Remove</button>
+            </div>
+            <div class="cf-fields">
+                <div class="cf-field">
+                    <label>Role to give</label>
+                    <select class="form-select" name="configs[__INDEX__][role_id]" required>
+                        <option value="">Select a role</option>
+                        <% roles.forEach(role => { const blocked = srBlocked(role); %>
+                            <option value="<%= role.id %>"<%= blocked ? ' disabled' : '' %>><%= role.name %><%= blocked ? ' (above the bot)' : '' %></option>
+                        <% }) %>
+                    </select>
+                    <span class="cf-field-hint">Given when the milestone is reached.</span>
+                </div>
+                <div class="cf-field">
+                    <label>Statistic</label>
+                    <select class="form-select" name="configs[__INDEX__][stat_type]" required>
+                        <% STAT_OPTIONS.forEach(opt => { %>
+                            <option value="<%= opt.value %>"><%= opt.label %></option>
+                        <% }) %>
+                    </select>
+                    <span class="cf-field-hint sr-stat-hint"><%= STAT_OPTIONS[0].hint %></span>
+                </div>
+                <div class="cf-field">
+                    <label>Required value</label>
+                    <div class="cf-input-unit">
+                        <input type="number" class="form-control" name="configs[__INDEX__][required_amount]" placeholder="1000" min="1" max="<%= STAT_OPTIONS[0].max %>" step="1" required>
+                        <span class="cf-unit sr-unit"><%= STAT_OPTIONS[0].unit %></span>
+                    </div>
+                    <label class="cf-choice">
+                        <input type="checkbox" name="configs[__INDEX__][remove_below]" value="1">
+                        <span>Remove if no longer met</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+    </template>
 </div>
-
-<style>
-.stat-role-card {
-    background: var(--color-dark-600);
-    border: 1px solid var(--color-dark-400);
-    border-radius: var(--radius-lg);
-    margin-bottom: var(--spacing-4);
-    overflow: hidden;
-}
-
-.stat-role-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: var(--spacing-4);
-    border-bottom: 1px solid var(--color-dark-400);
-    background: var(--color-dark-700);
-}
-
-.stat-role-body {
-    padding: var(--spacing-4);
-}
-
-.empty-state {
-    text-align: center;
-    padding: var(--spacing-12) var(--spacing-8);
-}
-
-.empty-state-icon {
-    font-size: 4rem;
-    color: var(--color-text-muted);
-    margin-bottom: var(--spacing-4);
-}
-
-.empty-state-title {
-    font-size: var(--font-size-xl);
-    font-weight: var(--font-weight-bold);
-    color: var(--color-text-primary);
-    margin-bottom: var(--spacing-2);
-}
-
-.empty-state-description {
-    font-size: var(--font-size-base);
-    color: var(--color-text-secondary);
-    margin-bottom: var(--spacing-6);
-}
-</style>
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
     const container = document.getElementById('stat-roles-container');
     const emptyState = document.getElementById('empty-state');
-    const addButton = document.getElementById('add-stat-role');
-    const addFirstButton = document.getElementById('add-first-stat-role');
+    const submitRow = document.getElementById('stat-roles-submit');
+    const template = document.getElementById('stat-role-template');
+    if (!container || !template) return;
+    const MAX_RULES = 50;
+    const STATS = <%- JSON.stringify(STAT_OPTIONS).replace(/</g, '\\u003c') %>;
+    const statOf = (v) => STATS.find(o => o.value === v) || STATS[0];
+    const count = document.querySelector('#sr-rules-title .sr-count');
+    const addBtn = document.getElementById('add-stat-role');
 
-    function createStatRoleCard(index) {
-        const card = document.createElement('div');
-        card.className = 'stat-role-card';
-        card.setAttribute('data-index', index);
-        card.innerHTML = `
-            <div class="stat-role-header">
-                <div style="display: flex; align-items: center; gap: var(--spacing-3);">
-                    <div style="width: 40px; height: 40px; border-radius: var(--radius-md); background: var(--color-primary-500); display: flex; align-items: center; justify-content: center;">
-                        <i class="fas fa-award" style="color: white; font-size: var(--font-size-lg);"></i>
-                    </div>
-                    <div>
-                        <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary);">Stat Role #${index + 1}</div>
-                        <div style="font-size: var(--font-size-sm); color: var(--color-text-muted);">New Milestone</div>
-                    </div>
-                </div>
-                <button type="button" class="btn btn-sm btn-danger remove-stat-role">
-                    <i class="fas fa-trash"></i>
-                    <span>Remove</span>
-                </button>
-            </div>
+    // One line under each rule's title: "@Role at 1,000 messages".
+    function summarise(item) {
+        const [roleSel, statSel] = item.querySelectorAll('select');
+        const amount = item.querySelector('input[type=number]');
+        const st = statOf(statSel.value);
+        item.querySelector('.sr-stat-hint').textContent = st.hint;
+        item.querySelector('.sr-unit').textContent = st.unit;
+        amount.max = String(st.max);
+        const role = roleSel.selectedOptions[0] && roleSel.value ? roleSel.selectedOptions[0].textContent.trim() : '';
+        const n = Number(amount.value);
+        item.querySelector('.sr-item-meta').textContent =
+            (role ? '@' + role.replace(/ \(above the bot\)$/, '') : 'No role picked') + ' at ' + (n > 0 ? n.toLocaleString('en-US') : '?') + ' ' + st.unit;
+    }
 
-            <div class="stat-role-body">
-                <div class="grid grid-cols-3" style="gap: var(--spacing-4);">
-                    <div>
-                        <label class="form-label">Role to Award</label>
-                        <select class="form-select" name="configs[${index}][roleId]" required>
-                            <option value="">Select a role</option>
-                            <% roles.forEach(role => { %>
-                                <option value="<%= role.id %>"><%= role.name %></option>
-                            <% }) %>
-                        </select>
-                        <div class="form-help">Role given when milestone is reached</div>
-                    </div>
-
-                    <div>
-                        <label class="form-label">Statistic to Track</label>
-                        <select class="form-select" name="configs[${index}][stat]" required>
-                            <option value="messages">Messages Sent</option>
-                            <option value="voice_minutes">Minutes in Voice</option>
-                        </select>
-                        <div class="form-help">Type of activity to track</div>
-                    </div>
-
-                    <div>
-                        <label class="form-label">Required Value</label>
-                        <input type="number" class="form-control" name="configs[${index}][requiredValue]" placeholder="1000" min="1" required>
-                        <div class="form-help">Number required for role</div>
-                    </div>
-                </div>
-            </div>
-        `;
-        return card;
+    // Renumber every rule so the posted configs[i][...] indexes are contiguous; new rules get
+    // their label/field ids here.
+    function reindex() {
+        const items = container.querySelectorAll('.stat-role-item');
+        items.forEach((item, idx) => {
+            item.setAttribute('data-index', String(idx));
+            const title = item.querySelector('.stat-role-title');
+            if (title) title.textContent = 'Rule ' + (idx + 1);
+            item.querySelectorAll('select, input').forEach((el) => {
+                if (el.name) el.name = el.name.replace(/configs\[[^\]]*\]/, 'configs[' + idx + ']');
+            });
+            const fields = item.querySelectorAll('.cf-field');
+            ['sr-role-', 'sr-stat-', 'sr-amount-'].forEach((prefix, i) => {
+                const ctl = fields[i] && fields[i].querySelector('select, input[type=number]');
+                const label = fields[i] && fields[i].querySelector(':scope > label:not(.cf-choice)');
+                if (ctl) { ctl.id = prefix + idx; if (label) label.htmlFor = ctl.id; }
+            });
+        });
+        const any = items.length > 0;
+        if (!any) container.textContent = '';   // leftover whitespace would keep :empty from matching
+        if (emptyState) emptyState.hidden = any;
+        // The save row stays visible once the form has been touched, so deleting the last rule saves.
+        if (submitRow && any) submitRow.hidden = false;
+        if (count) count.textContent = '(' + items.length + ')';
+        if (addBtn) addBtn.disabled = items.length >= MAX_RULES;
     }
 
     function addStatRole() {
-        const existingCards = container.querySelectorAll('.stat-role-card');
-        const newIndex = existingCards.length;
-        const newCard = createStatRoleCard(newIndex);
-
-        if (emptyState) {
-            emptyState.style.display = 'none';
-        }
-
-        container.appendChild(newCard);
-
-        // Show submit button
-        const existingSubmit = document.querySelector('#stat-roles-form > div:last-child');
-        if (!existingSubmit || !existingSubmit.querySelector('button[type="submit"]')) {
-            const submitDiv = document.createElement('div');
-            submitDiv.style.cssText = 'display: flex; justify-content: flex-end; gap: var(--spacing-3); padding-top: var(--spacing-4); border-top: 1px solid var(--color-dark-400);';
-            submitDiv.innerHTML = `
-                <button type="submit" class="btn btn-primary">
-                    <i class="fas fa-save"></i>
-                    <span>Save All Stat Roles</span>
-                </button>
-            `;
-            document.getElementById('stat-roles-form').appendChild(submitDiv);
-        }
+        if (container.querySelectorAll('.stat-role-item').length >= MAX_RULES) return;
+        const fragment = template.content.cloneNode(true);
+        container.appendChild(fragment);
+        reindex();
+        const items = container.querySelectorAll('.stat-role-item');
+        const last = items[items.length - 1];
+        const firstSelect = last && last.querySelector('select');
+        if (firstSelect) firstSelect.focus();
     }
 
-    if (addButton) {
-        addButton.addEventListener('click', addStatRole);
-    }
-
-    if (addFirstButton) {
-        addFirstButton.addEventListener('click', addStatRole);
-    }
+    addBtn?.addEventListener('click', addStatRole);
+    document.getElementById('add-first-stat-role')?.addEventListener('click', addStatRole);
 
     container.addEventListener('click', (e) => {
-        if (e.target.closest('.remove-stat-role')) {
-            const card = e.target.closest('.stat-role-card');
-            card.remove();
-
-            // Reindex remaining cards
-            const remainingCards = container.querySelectorAll('.stat-role-card');
-            remainingCards.forEach((card, idx) => {
-                card.setAttribute('data-index', idx);
-                const titleEl = card.querySelector('.stat-role-header div div');
-                if (titleEl) titleEl.textContent = `Stat Role #${idx + 1}`;
-
-                // Update input names
-                card.querySelectorAll('select, input').forEach(input => {
-                    const name = input.name;
-                    input.name = name.replace(/\[\d+\]/, `[${idx}]`);
-                });
-            });
-
-            // Show empty state if no cards left
-            if (remainingCards.length === 0 && emptyState) {
-                emptyState.style.display = 'block';
-            }
-        }
+        const btn = e.target.closest('.remove-stat-role');
+        if (!btn) return;
+        btn.closest('.stat-role-item')?.remove();
+        if (submitRow) submitRow.hidden = false;
+        reindex();
     });
+    ['change', 'input'].forEach(type => container.addEventListener(type, (e) => {
+        const item = e.target.closest('.stat-role-item');
+        if (item && e.target.matches('select, input[type=number]')) summarise(item);
+    }));
+
+    const filter = document.querySelector('.sr-filter');
+    if (filter) filter.addEventListener('input', () => {
+        const q = filter.value.trim().toLowerCase();
+        container.querySelectorAll('.stat-role-item').forEach(item => {
+            const text = item.querySelector('.sr-item-meta').textContent + ' ' + item.querySelectorAll('select')[1].selectedOptions[0].textContent;
+            item.hidden = !!q && !text.toLowerCase().includes(q);
+        });
+    });
+    reindex();
 });
 </script>

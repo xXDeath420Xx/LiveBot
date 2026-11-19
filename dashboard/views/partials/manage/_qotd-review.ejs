@@ -1,0 +1,280 @@
+<%#
+  Question of the Day: member suggestions and the post queue. Included by feature-config.ejs on the
+  qotd page only, under the generated settings. Talks to /api/guilds/:id/qotd
+  (dashboard/routes/api/features/qotd.js).
+  Suggestions: what members sent with /qotd suggest (qotd_suggestions). Approve adds the text as a
+  card to one of the server's decks (default: a "Member suggestions" deck, created on first use) and
+  marks it approved; Deny marks it denied.
+  Queue: qotd_queue, which core/qotd-poster.js reads before anything else, one entry per post.
+  Added 2026-11-18; before that nothing read the suggestions and nothing could fill the queue.
+  DOM is built with createElement/textContent only.
+  Locals: guild, channels.
+%>
+<%
+const qrChannels = (typeof channels !== 'undefined' && Array.isArray(channels) ? channels : []).map(c => ({ id: c.id, name: c.name }));
+%>
+<style>
+    .qr-page .qr-meta-user { display: inline-flex; align-items: center; }
+    .qr-page .qr-actions select { max-width: 14rem; }
+    .qr-page .qr-add select { max-width: 16rem; }
+    .qr-page .qr-add input[type="text"] { flex: 1 1 18rem; min-width: 12rem; max-width: 32rem; }
+    .qr-page .qr-add .cf-status-line { margin-right: auto; }
+    @media (max-width: 640px) {
+        .qr-page .qr-add select, .qr-page .qr-add input[type="text"], .qr-page .qr-actions select { max-width: none; width: 100%; }
+    }
+</style>
+
+<div class="qr-page" id="qr-page">
+    <section class="cf-section" aria-labelledby="qr-sugg-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="qr-sugg-title">Member suggestions</h2>
+                <p class="cf-section-desc">Sent with /qotd suggest. Approving one adds it to a deck as a card. To post it soon, add it to the queue below.</p>
+            </div>
+        </header>
+        <div class="cf-rows" id="qr-sugg">
+            <%- include('../kit/_state', { kind: 'loading', title: 'Loading suggestions', text: null, id: null, boxed: false, compact: true }) %>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="qr-queue-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="qr-queue-title">Queue</h2>
+                <p class="cf-section-desc">A queued question is posted next in its channel, ahead of the library and decks. Each post uses one.</p>
+            </div>
+        </header>
+        <div class="cf-rows" id="qr-queue">
+            <%- include('../kit/_state', { kind: 'loading', title: 'Loading the queue', text: null, id: null, boxed: false, compact: true }) %>
+        </div>
+    </section>
+</div>
+
+<script>
+(function () {
+    var GID = '<%= guild.id %>';
+    var API = '/api/guilds/' + GID + '/qotd';
+    var CHANNELS = <%- JSON.stringify(qrChannels).replace(/</g, '\\u003c') %>;
+    var SUGGESTION_DECK = 'Member suggestions';
+    var suggBox = document.getElementById('qr-sugg');
+    var queueBox = document.getElementById('qr-queue');
+    // Nothing to fill without its markup (the generated-page tests run every page script in a bare DOM).
+    if (!suggBox || !queueBox) return;
+
+    function el(tag, attrs) {
+        var e = document.createElement(tag);
+        Object.keys(attrs || {}).forEach(function (k) {
+            var v = attrs[k];
+            if (v == null || v === false) return;
+            if (k === 'className') e.className = v;
+            else if (k === 'text') e.textContent = v;
+            else e.setAttribute(k, v === true ? '' : v);
+        });
+        for (var i = 2; i < arguments.length; i++) {
+            var c = arguments[i];
+            if (c == null || c === false) continue;
+            e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+        }
+        return e;
+    }
+    function state(kind, title, text) {
+        return el('div', { className: 'cf-state cf-state--' + kind + ' cf-state--compact', role: kind === 'error' ? 'alert' : null },
+            el('p', { className: 'cf-state-title', text: title }),
+            text ? el('p', { className: 'cf-state-text', text: text }) : null);
+    }
+    function chName(id) {
+        for (var i = 0; i < CHANNELS.length; i++) if (CHANNELS[i].id === id) return '#' + CHANNELS[i].name;
+        return 'Deleted channel ' + id;
+    }
+    function when(v) {
+        var d = new Date(v);
+        return isNaN(d) ? '' : d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+    }
+    function person(bits) {
+        if (!bits) return null;
+        if (window.CFUser && typeof window.CFUser.cell === 'function') return window.CFUser.cell(bits, { size: 'sm' });
+        // cf-user.js loads deferred; its observer upgrades this placeholder once it runs.
+        var s = el('span', { className: 'qr-meta-user', 'data-user-id': bits.id, text: bits.displayName || bits.username || bits.id });
+        if (bits.displayName || bits.username) s.setAttribute('data-user-name', bits.displayName || bits.username);
+        return s;
+    }
+    async function call(method, path, body) {
+        var opts = { method: method, credentials: 'same-origin', headers: { Accept: 'application/json' } };
+        if (body) { opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(body); }
+        var r = await fetch(API + path, opts);
+        var j = await r.json().catch(function () { return {}; });
+        if (!r.ok) throw new Error(j.error || 'Something went wrong.');
+        return j;
+    }
+    function setStatus(node, msg, tone) {
+        node.textContent = msg || '';
+        node.className = 'cf-status-line' + (tone ? ' is-' + tone : '');
+    }
+
+    /* ------------------------------------------------------------ suggestions */
+
+    var TYPE_LABEL = { fact: 'Fact', quote: 'Quote', other: 'Other' };
+
+    function suggestionItem(s, decks) {
+        var item = el('div', { className: 'cf-list-item cf-list-item--multi' });
+        var meta = el('p', { className: 'cf-list-meta' }, person(s.user), el('span', { text: when(s.created_at) }));
+        if (TYPE_LABEL[s.suggestion_type]) meta.appendChild(el('span', { className: 'cf-chip', text: TYPE_LABEL[s.suggestion_type] }));
+        var main = el('div', { className: 'cf-list-main' },
+            el('p', { className: 'cf-list-body is-pre', text: s.content }),
+            meta);
+
+        var deckSel = el('select', { className: 'form-select form-select-sm', 'aria-label': 'Deck to add it to' });
+        // Default: the server's "Member suggestions" deck, or a new one by that name on first approval.
+        var suggestionDeck = decks.filter(function (d) { return d.deck_name === SUGGESTION_DECK; })[0];
+        if (!suggestionDeck) deckSel.add(new Option(SUGGESTION_DECK + ' (new deck)', ''));
+        decks.forEach(function (d) { deckSel.add(new Option(d.deck_name + ' (' + d.card_count + ' cards)', String(d.deck_id))); });
+        deckSel.value = suggestionDeck ? String(suggestionDeck.deck_id) : '';
+        var approve = el('button', { type: 'button', className: 'btn btn-primary btn-sm', text: 'Approve' });
+        var deny = el('button', { type: 'button', className: 'btn btn-secondary btn-sm', text: 'Deny' });
+        var status = el('span', { className: 'cf-status-line', role: 'status', 'aria-live': 'polite' });
+        var actions = el('div', { className: 'cf-list-actions qr-actions' }, deckSel, approve, deny, status);
+        item.appendChild(main);
+        item.appendChild(actions);
+
+        function busy(on) { approve.disabled = deny.disabled = deckSel.disabled = on; }
+        approve.addEventListener('click', async function () {
+            busy(true); setStatus(status, 'Approving');
+            try {
+                await call('POST', '/suggestions/' + s.suggestion_id + '/approve', deckSel.value ? { deck_id: Number(deckSel.value) } : {});
+                loadSuggestions('Approved. It is now a card you can queue below.');
+                loadQueue();
+            } catch (e) { setStatus(status, e.message, 'bad'); busy(false); }
+        });
+        deny.addEventListener('click', async function () {
+            busy(true); setStatus(status, 'Denying');
+            try {
+                await call('POST', '/suggestions/' + s.suggestion_id + '/deny');
+                loadSuggestions('Denied.');
+            } catch (e) { setStatus(status, e.message, 'bad'); busy(false); }
+        });
+        return item;
+    }
+
+    function renderSuggestions(data, note) {
+        suggBox.replaceChildren();
+        var list = data.suggestions || [];
+        if (!list.length) {
+            suggBox.appendChild(state('empty', 'No suggestions waiting',
+                data.reviewed ? data.reviewed + ' reviewed so far. New ones from /qotd suggest show up here.' : 'Members can send one with /qotd suggest.'));
+        } else {
+            var wrap = el('div', { className: 'cf-list' });
+            list.forEach(function (s) { wrap.appendChild(suggestionItem(s, data.decks || [])); });
+            suggBox.appendChild(wrap);
+        }
+        if (note) {
+            var foot = el('div', { className: 'cf-section-foot' });
+            var st = el('span', { className: 'cf-status-line is-ok', role: 'status', 'aria-live': 'polite' });
+            st.textContent = note;
+            foot.appendChild(st);
+            suggBox.appendChild(foot);
+        }
+    }
+
+    async function loadSuggestions(note) {
+        try { renderSuggestions(await call('GET', '/suggestions'), note); }
+        catch (e) { suggBox.replaceChildren(state('error', 'Could not load suggestions', e.message)); }
+    }
+
+    /* ------------------------------------------------------------ queue */
+
+    // rank: 1-based place in its channel's queue. Stored positions can have gaps (a deleted card
+    // takes its queue row with it), and the API returns rows in channel, position order.
+    function queueItem(q, rank) {
+        var meta = el('p', { className: 'cf-list-meta' },
+            el('span', { text: chName(q.channel_id) }),
+            el('span', { text: rank === 1 ? 'Next up' : 'Number ' + rank + ' in line' }),
+            q.deck_name ? el('span', { text: q.deck_name }) : null,
+            q.added_by ? el('span', { className: 'qr-meta-user' }, 'Added by ', person(q.added_by)) : null);
+        var remove = el('button', { type: 'button', className: 'btn btn-secondary btn-sm', text: 'Remove' });
+        var status = el('span', { className: 'cf-status-line', role: 'status', 'aria-live': 'polite' });
+        remove.addEventListener('click', async function () {
+            remove.disabled = true; setStatus(status, 'Removing');
+            try { await call('DELETE', '/queue/' + q.queue_id); loadQueue('Removed.'); }
+            catch (e) { setStatus(status, e.message, 'bad'); remove.disabled = false; }
+        });
+        return el('div', { className: 'cf-list-item cf-list-item--multi' },
+            el('div', { className: 'cf-list-main' }, el('p', { className: 'cf-list-body is-pre', text: q.content || '' }), meta),
+            el('div', { className: 'cf-list-actions' }, remove, status));
+    }
+
+    function addRow(data, note) {
+        var foot = el('div', { className: 'cf-section-foot qr-add' });
+        var status = el('span', { className: 'cf-status-line' + (note ? ' is-ok' : ''), role: 'status', 'aria-live': 'polite' });
+        status.textContent = note || '';
+        var channels = data.channels || [];
+        if (!channels.length) {
+            setStatus(status, 'Add a channel under Channels above, then queue questions for it here.');
+            foot.appendChild(status);
+            return foot;
+        }
+
+        var chSel = el('select', { className: 'form-select form-select-sm', 'aria-label': 'Channel' });
+        channels.forEach(function (c) { chSel.add(new Option(chName(c.channel_id) + (c.enabled ? '' : ' (paused)'), c.channel_id)); });
+
+        var cardSel = el('select', { className: 'form-select form-select-sm', 'aria-label': 'Question to queue' });
+        cardSel.add(new Option('Write a new question', ''));
+        var byDeck = {};
+        (data.cards || []).forEach(function (c) { (byDeck[c.deck_id] = byDeck[c.deck_id] || []).push(c); });
+        (data.decks || []).forEach(function (d) {
+            var cards = byDeck[d.deck_id];
+            if (!cards || !cards.length) return;
+            var group = el('optgroup', { label: d.deck_name + (d.community ? ' (shared)' : '') });
+            cards.forEach(function (c) {
+                var t = c.content.replace(/\s+/g, ' ');
+                group.appendChild(new Option(t.length > 90 ? t.slice(0, 89) + '…' : t, String(c.card_id)));
+            });
+            cardSel.appendChild(group);
+        });
+
+        var input = el('input', { type: 'text', className: 'form-control form-control-sm', maxlength: '2000', placeholder: 'Type the question', 'aria-label': 'New question' });
+        var add = el('button', { type: 'button', className: 'btn btn-primary btn-sm', text: 'Add to queue' });
+        cardSel.addEventListener('change', function () { input.hidden = !!cardSel.value; });
+
+        add.addEventListener('click', async function () {
+            var body = { channel_id: chSel.value };
+            if (cardSel.value) body.card_id = Number(cardSel.value);
+            else {
+                body.content = input.value.trim();
+                if (!body.content) { setStatus(status, 'Type a question or pick one from a deck.', 'warn'); input.focus(); return; }
+            }
+            add.disabled = true; setStatus(status, 'Adding');
+            try { await call('POST', '/queue', body); loadQueue('Queued.'); }
+            catch (e) { setStatus(status, e.message, 'bad'); add.disabled = false; }
+        });
+
+        foot.appendChild(status);
+        foot.appendChild(chSel);
+        foot.appendChild(cardSel);
+        foot.appendChild(input);
+        foot.appendChild(add);
+        return foot;
+    }
+
+    function renderQueue(data, note) {
+        queueBox.replaceChildren();
+        var list = data.queue || [];
+        if (!list.length) {
+            queueBox.appendChild(state('empty', 'Nothing queued', 'Until something is queued, each channel picks its question as set under Channels.'));
+        } else {
+            var wrap = el('div', { className: 'cf-list' });
+            var seen = {};
+            list.forEach(function (q) { seen[q.channel_id] = (seen[q.channel_id] || 0) + 1; wrap.appendChild(queueItem(q, seen[q.channel_id])); });
+            queueBox.appendChild(wrap);
+        }
+        queueBox.appendChild(addRow(data, note));
+    }
+
+    async function loadQueue(note) {
+        try { renderQueue(await call('GET', '/queue'), note); }
+        catch (e) { queueBox.replaceChildren(state('error', 'Could not load the queue', e.message)); }
+    }
+
+    loadSuggestions();
+    loadQueue();
+})();
+</script>

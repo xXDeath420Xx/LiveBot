@@ -1,744 +1,219 @@
+<%#
+  /super-admin — the owner console (super-admin only; dashboard/server.js checks isSuperAdmin).
+  Sections switched in place: Servers (#guilds), Global bans (#globalbans), Greenhouse game (#greenhouse), Tools (#tools).
+  The other console pages share partials/site/_owner-nav.ejs. APIs: dashboard/routes/super-admin.js.
+%>
 <!DOCTYPE html>
-<html lang="en">
+<html data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>" lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="csrf-token" content="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
-    <meta name="description" content="Super Admin panel for CertiFried MultiTool">
-    <meta name="robots" content="noindex">
-    <title>Super Admin - CertiFried MultiTool</title>
-    <link rel="icon" type="image/png" href="/images/CertiFried.png">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<%- include('partials/site-head', { title: ('Owner console') + ' · CertiFried', noindex: true }) %>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <style>
-        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-        :root {
-            --bg-primary: #0b0f11;
-            --bg-secondary: #0f1316;
-            --bg-card: rgba(255, 255, 255, 0.03);
-            --bg-card-hover: rgba(255, 255, 255, 0.06);
-            --border-color: rgba(255, 255, 255, 0.08);
-            --text-primary: #ffffff;
-            --text-secondary: rgba(255, 255, 255, 0.7);
-            --text-muted: rgba(255, 255, 255, 0.5);
-            --accent-purple: #a78bfa;
-            --accent-blue: #60a5fa;
-            --accent-green: #34d399;
-            --accent-cyan: #22d3ee;
-            --accent-yellow: #fbbf24;
-            --accent-red: #f87171;
-            --accent-orange: #fb923c;
-        }
-        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg-primary); color: var(--text-primary); min-height: 100vh; overflow-x: hidden; }
-
-        /* Background Effects */
-        .bg-effects { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; overflow: hidden; }
-        .orb { position: absolute; border-radius: 50%; filter: blur(100px); opacity: 0.15; animation: float 25s ease-in-out infinite; }
-        .orb-1 { width: 500px; height: 500px; background: linear-gradient(135deg, #7c3aed, #a78bfa); top: -15%; right: -10%; }
-        .orb-2 { width: 400px; height: 400px; background: linear-gradient(135deg, #3b82f6, #60a5fa); bottom: -15%; left: -10%; animation-delay: -12s; }
-        @keyframes float { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(30px, 30px) scale(1.05); } }
-
-        /* Navbar */
-        .navbar { position: fixed; top: 0; left: 0; right: 0; z-index: 1000; padding: 1rem 0; background: rgba(11, 15, 17, 0.9); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-bottom: 1px solid var(--border-color); }
-        .container { width: 100%; max-width: 1200px; margin: 0 auto; padding: 0 clamp(1rem, 4vw, 2rem); }
-        .navbar-container { max-width: 1200px; margin: 0 auto; padding: 0 clamp(1rem, 4vw, 2rem); display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
-        .navbar-brand { display: flex; align-items: center; gap: 0.75rem; text-decoration: none; color: var(--text-primary); font-weight: 700; }
-        .navbar-logo { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 2px solid var(--accent-purple); }
-        .navbar-links { display: flex; align-items: center; gap: 1.5rem; }
-        .navbar-links a { color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; font-weight: 500; transition: color 0.2s; }
-        .navbar-links a:hover { color: var(--text-primary); }
-        .user-menu-container { position: relative; }
-        .user-menu { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 1rem; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 50px; cursor: pointer; transition: all 0.2s; }
-        .user-menu:hover { background: var(--bg-card-hover); border-color: var(--accent-purple); }
-        .user-avatar { width: 28px; height: 28px; border-radius: 50%; }
-        .user-name { color: var(--text-primary); font-size: 0.875rem; font-weight: 500; }
-        .user-menu-chevron { font-size: 0.7rem; color: var(--text-muted); transition: transform 0.2s; }
-        .user-menu-container.open .user-menu-chevron { transform: rotate(180deg); }
-        .user-dropdown { position: absolute; top: calc(100% + 8px); right: 0; min-width: 220px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 14px; box-shadow: 0 20px 50px rgba(0,0,0,0.5); opacity: 0; visibility: hidden; transform: translateY(-10px); transition: all 0.2s ease; z-index: 1001; overflow: hidden; }
-        .user-menu-container.open .user-dropdown { opacity: 1; visibility: visible; transform: translateY(0); }
-        .dropdown-header { padding: 1rem; border-bottom: 1px solid var(--border-color); }
-        .dropdown-user-info { font-size: 0.8rem; color: var(--text-muted); }
-        .dropdown-divider { height: 1px; background: var(--border-color); margin: 0.5rem 0; }
-        .dropdown-item { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem; color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; transition: all 0.15s; }
-        .dropdown-item:hover { background: var(--bg-card-hover); color: var(--text-primary); }
-        .dropdown-item i { width: 18px; text-align: center; }
-        .dropdown-item.text-warning { color: var(--accent-yellow); }
-        .dropdown-item.text-warning:hover { background: rgba(251, 191, 36, 0.1); }
-        .dropdown-item.text-danger { color: var(--accent-red); }
-        .dropdown-item.text-danger:hover { background: rgba(248, 113, 113, 0.1); }
-
-        /* Mobile Menu */
-        .mobile-menu-btn { display: none; background: none; border: none; color: var(--text-secondary); padding: 0.5rem; cursor: pointer; }
-        @media (max-width: 768px) {
-            .navbar-links { display: none; }
-            .mobile-menu-btn { display: block; }
-        }
-
-        /* Main Content */
-        main { position: relative; z-index: 1; padding: 100px 0 4rem; min-height: 100vh; }
-
-        /* Page Header */
-        .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem; }
-        .page-header-content { display: flex; align-items: center; gap: 1rem; }
-        .page-icon { width: 56px; height: 56px; background: linear-gradient(135deg, rgba(167, 139, 250, 0.2), rgba(124, 58, 237, 0.2)); border: 1px solid rgba(167, 139, 250, 0.3); border-radius: 16px; display: flex; align-items: center; justify-content: center; }
-        .page-icon i { font-size: 1.5rem; color: var(--accent-purple); }
-        .page-title { font-size: clamp(1.5rem, 4vw, 2rem); font-weight: 800; background: linear-gradient(135deg, var(--text-primary), var(--accent-purple)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
-        .page-subtitle { color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.25rem; }
-        .admin-badge { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; background: rgba(167, 139, 250, 0.1); border: 1px solid rgba(167, 139, 250, 0.3); border-radius: 50px; font-size: 0.75rem; font-weight: 600; color: var(--accent-purple); }
-
-        /* Stats Grid */
-        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
-        .stat-card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 14px; padding: 1.25rem; text-align: center; transition: all 0.2s; backdrop-filter: blur(10px); }
-        .stat-card:hover { border-color: var(--accent-purple); transform: translateY(-2px); }
-        .stat-icon { margin-bottom: 0.75rem; }
-        .stat-icon i { font-size: 1.5rem; }
-        .stat-value { font-size: 1.5rem; font-weight: 800; margin-bottom: 0.25rem; background: linear-gradient(135deg, var(--accent-purple), var(--accent-blue)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
-        .stat-label { font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
-
-        /* Cards */
-        .card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; overflow: hidden; backdrop-filter: blur(10px); transition: all 0.2s; }
-        .card:hover { border-color: rgba(167, 139, 250, 0.3); }
-        .card-header { display: flex; align-items: center; justify-content: space-between; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border-color); }
-        .card-title { display: flex; align-items: center; gap: 0.75rem; font-weight: 600; font-size: 0.95rem; }
-        .card-title-icon { width: 40px; height: 40px; border-radius: 10px; display: flex; align-items: center; justify-content: center; }
-        .card-title-icon i { font-size: 1rem; }
-        .card-body { padding: 1.25rem; }
-
-        /* Section Title */
-        .section-title { display: flex; align-items: center; gap: 0.75rem; font-size: 1.25rem; font-weight: 700; margin-bottom: 1.25rem; }
-        .section-title i { color: var(--accent-purple); }
-
-        /* Grid Layouts */
-        .grid-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1.5rem; margin-bottom: 2rem; }
-        .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 2rem; }
-        @media (max-width: 1024px) { .grid-2, .grid-3 { grid-template-columns: 1fr; } }
-
-        /* Buttons */
-        .btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.625rem 1rem; border-radius: 10px; font-size: 0.875rem; font-weight: 600; text-decoration: none; transition: all 0.2s; cursor: pointer; border: none; font-family: inherit; width: 100%; }
-        .btn-primary { background: linear-gradient(135deg, var(--accent-purple), var(--accent-blue)); color: white; }
-        .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 15px rgba(167, 139, 250, 0.3); }
-        .btn-warning { background: rgba(251, 191, 36, 0.15); border: 1px solid rgba(251, 191, 36, 0.3); color: var(--accent-yellow); }
-        .btn-warning:hover { background: rgba(251, 191, 36, 0.25); }
-        .btn-danger { background: rgba(248, 113, 113, 0.15); border: 1px solid rgba(248, 113, 113, 0.3); color: var(--accent-red); }
-        .btn-danger:hover { background: rgba(248, 113, 113, 0.25); }
-        .btn-ghost { background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); color: var(--text-primary); }
-        .btn-ghost:hover { background: var(--bg-card-hover); border-color: var(--accent-purple); }
-        .btn-sm { padding: 0.5rem 0.875rem; font-size: 0.8rem; width: auto; }
-
-        /* Inputs */
-        .input { width: 100%; padding: 0.625rem 0.875rem; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); border-radius: 10px; color: var(--text-primary); font-size: 0.875rem; font-family: inherit; transition: all 0.2s; }
-        .input:focus { outline: none; border-color: var(--accent-purple); background: rgba(255, 255, 255, 0.08); }
-        .input::placeholder { color: var(--text-muted); }
-        .input-group { display: flex; gap: 0.75rem; margin-bottom: 0.75rem; }
-        .input-group .input { flex: 1; }
-        .input-group .btn { width: auto; flex-shrink: 0; }
-        select.input { cursor: pointer; }
-        select.input option { background: var(--bg-primary); color: var(--text-primary); }
-
-        /* Progress */
-        .progress-container { padding: 1rem; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-color); border-radius: 12px; margin-top: 1rem; }
-        .progress-header { display: flex; justify-content: space-between; margin-bottom: 0.5rem; font-size: 0.8rem; }
-        .progress-bar { height: 6px; background: rgba(255, 255, 255, 0.1); border-radius: 6px; overflow: hidden; margin-bottom: 0.75rem; }
-        .progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent-purple), var(--accent-blue)); transition: width 0.3s ease; }
-        .progress-messages { max-height: 120px; overflow-y: auto; font-size: 0.75rem; color: var(--text-muted); }
-        .progress-messages::-webkit-scrollbar { width: 4px; }
-        .progress-messages::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
-
-        /* Results */
-        .results-container { padding: 1rem; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-color); border-radius: 12px; margin-top: 1rem; max-height: 280px; overflow-y: auto; }
-        .results-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.75rem; font-size: 0.8rem; }
-        .result-item { display: flex; justify-content: space-between; }
-        .result-label { color: var(--text-muted); }
-        .result-value { font-weight: 600; }
-        .result-card { padding: 0.875rem; background: rgba(255, 255, 255, 0.02); border-left: 3px solid var(--accent-purple); border-radius: 8px; margin-bottom: 0.5rem; }
-        .result-card-title { font-weight: 600; margin-bottom: 0.25rem; }
-        .result-card-meta { font-size: 0.75rem; color: var(--text-muted); }
-
-        /* Manager/Bot List Items */
-        .list-item { display: flex; align-items: center; justify-content: space-between; padding: 0.875rem; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-color); border-radius: 12px; margin-bottom: 0.75rem; transition: all 0.2s; }
-        .list-item:hover { background: var(--bg-card-hover); }
-        .list-item-info { display: flex; align-items: center; gap: 0.75rem; }
-        .list-item-avatar { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; }
-        .list-item-name { font-weight: 600; font-size: 0.9rem; }
-        .list-item-id { font-size: 0.75rem; color: var(--text-muted); }
-
-        /* Bot Card */
-        .bot-card { padding: 1rem; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-color); border-left: 4px solid var(--text-muted); border-radius: 12px; margin-bottom: 0.75rem; }
-        .bot-card.online { border-left-color: var(--accent-green); }
-        .bot-card.ready { border-left-color: var(--accent-yellow); }
-        .bot-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem; }
-        .bot-avatar { width: 44px; height: 44px; border-radius: 50%; }
-        .bot-name { font-weight: 600; }
-        .bot-id { font-size: 0.75rem; color: var(--text-muted); }
-        .bot-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; font-size: 0.8rem; }
-        .bot-stat-label { color: var(--text-muted); }
-        .bot-stat-value { font-weight: 500; }
-
-        /* Stats Detail Row */
-        .stat-row { display: flex; align-items: center; justify-content: space-between; padding: 1rem; background: rgba(255, 255, 255, 0.02); border: 1px solid var(--border-color); border-radius: 12px; margin-bottom: 0.5rem; transition: all 0.2s; }
-        .stat-row:hover { background: var(--bg-card-hover); transform: translateX(4px); }
-        .stat-row-label { display: flex; align-items: center; gap: 0.625rem; font-size: 0.875rem; color: var(--text-secondary); }
-        .stat-row-label i { color: var(--accent-purple); }
-        .stat-row-value { font-weight: 700; font-size: 1rem; }
-        .stat-badge { padding: 0.375rem 0.75rem; border-radius: 50px; font-size: 0.75rem; font-weight: 600; }
-        .stat-badge.green { background: rgba(52, 211, 153, 0.15); color: var(--accent-green); }
-        .stat-badge.purple { background: rgba(167, 139, 250, 0.15); color: var(--accent-purple); }
-        .stat-badge.yellow { background: rgba(251, 191, 36, 0.15); color: var(--accent-yellow); }
-
-        /* Modal */
-        .modal { display: none; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.8); z-index: 9999; align-items: center; justify-content: center; padding: 1.5rem; }
-        .modal.show { display: flex; }
-        .modal-content { background: #0f1316; border: 1px solid var(--border-color); border-radius: 16px; padding: 1.5rem; max-width: 400px; width: 100%; }
-        .modal-title { font-size: 1.125rem; font-weight: 700; margin-bottom: 1rem; }
-        .modal-label { font-size: 0.875rem; font-weight: 500; color: var(--text-secondary); margin-bottom: 0.5rem; display: block; }
-        .modal-actions { display: flex; gap: 0.75rem; margin-top: 1.25rem; }
-        .modal-actions .btn { flex: 1; }
-
-        /* Guild Table */
-        .guild-table-wrapper { overflow-x: auto; }
-        .guild-table { width: 100%; border-collapse: separate; border-spacing: 0; }
-        .guild-table th { text-align: left; padding: 0.75rem 1rem; font-size: 0.75rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; border-bottom: 1px solid var(--border-color); white-space: nowrap; }
-        .guild-table td { padding: 0.75rem 1rem; border-bottom: 1px solid rgba(255, 255, 255, 0.04); vertical-align: middle; }
-        .guild-table tr:hover td { background: var(--bg-card-hover); }
-        .guild-table tr:last-child td { border-bottom: none; }
-
-        /* Global Ban table — compact cells */
-        #gb-tab-entries .guild-table th { padding: 0.5rem 0.5rem; font-size: 0.7rem; }
-        #gb-tab-entries .guild-table td { padding: 0.5rem 0.5rem; font-size: 0.8rem; }
-        /* Sticky actions column so it never scrolls off */
-        #gb-tab-entries .guild-table th:last-child,
-        #gb-tab-entries .guild-table td:last-child { position: sticky; right: 0; background: var(--bg-card); z-index: 1; }
-        #gb-tab-entries .guild-table tr:hover td:last-child { background: var(--bg-card-hover); }
-        /* Global Ban expanded row styling */
-        .gb-expand-row td { padding: 0 !important; border-bottom: 1px solid rgba(255,255,255,0.08) !important; }
-        .gb-expand-row:hover td { background: transparent !important; }
-        .gb-detail-panel { padding: 1rem 1.5rem 1.25rem; background: rgba(255,255,255,0.02); border-top: 1px solid rgba(255,255,255,0.06); }
-        .gb-detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-        .gb-detail-label { font-size: 0.7rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.25rem; }
-        .gb-detail-value { font-size: 0.85rem; color: var(--text-primary); line-height: 1.5; word-break: break-word; }
-        .gb-detail-value.mono { font-family: monospace; font-size: 0.8rem; }
-        .gb-evidence-gallery { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.25rem; }
-        .gb-evidence-gallery a { display: block; border-radius: 6px; overflow: hidden; border: 1px solid var(--border-color); transition: border-color 0.2s, transform 0.15s; }
-        .gb-evidence-gallery a:hover { border-color: var(--accent-blue); transform: scale(1.05); }
-        .gb-evidence-gallery img { width: 80px; height: 80px; object-fit: cover; display: block; }
-        .gb-row-clickable { cursor: pointer; }
-        .gb-row-clickable td:last-child { cursor: default; }
-        .gb-sortable { cursor: pointer; user-select: none; white-space: nowrap; }
-        .gb-sortable:hover { color: var(--accent-purple); }
-        .gb-sort-icon { font-size: 0.65rem; margin-left: 3px; opacity: 0.3; transition: all 0.15s; }
-        .gb-sort-icon.gb-sort-active { opacity: 1; color: var(--accent-purple); }
-        .gb-chevron { transition: transform 0.2s; display: inline-block; color: var(--text-muted); font-size: 0.7rem; margin-right: 0.5rem; }
-        .gb-chevron.open { transform: rotate(90deg); }
-        .guild-info { display: flex; align-items: center; gap: 0.75rem; }
-        .guild-icon { width: 36px; height: 36px; border-radius: 10px; object-fit: cover; background: rgba(255, 255, 255, 0.05); flex-shrink: 0; }
-        .guild-icon-placeholder { width: 36px; height: 36px; border-radius: 10px; background: linear-gradient(135deg, rgba(167, 139, 250, 0.2), rgba(96, 165, 250, 0.2)); display: flex; align-items: center; justify-content: center; font-size: 0.875rem; font-weight: 700; color: var(--accent-purple); flex-shrink: 0; }
-        .guild-name { font-weight: 600; font-size: 0.9rem; white-space: nowrap; }
-        .guild-id { font-size: 0.7rem; color: var(--text-muted); }
-        .badge { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.25rem 0.625rem; border-radius: 50px; font-size: 0.7rem; font-weight: 600; white-space: nowrap; }
-        .badge-owner { background: rgba(251, 191, 36, 0.15); color: var(--accent-yellow); }
-        .badge-admin { background: rgba(167, 139, 250, 0.15); color: var(--accent-purple); }
-        .badge-mod { background: rgba(96, 165, 250, 0.15); color: #60a5fa; }
-        .badge-bot-yes { background: rgba(52, 211, 153, 0.15); color: var(--accent-green); }
-        .badge-bot-no { background: rgba(255, 255, 255, 0.05); color: var(--text-muted); }
-        .role-section-header td { padding: 0.75rem 1rem !important; background: var(--bg-card) !important; border-bottom: 1px solid var(--border-color) !important; }
-        .role-section-header .section-label { display: inline-flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; }
-        .btn-invite { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.4rem 0.875rem; border-radius: 8px; font-size: 0.8rem; font-weight: 600; text-decoration: none; transition: all 0.2s; cursor: pointer; border: none; font-family: inherit; background: linear-gradient(135deg, #5865F2, #7289da); color: white; }
-        .btn-invite:hover { transform: translateY(-1px); box-shadow: 0 4px 15px rgba(88, 101, 242, 0.3); }
-        .btn-manage { display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.4rem 0.875rem; border-radius: 8px; font-size: 0.8rem; font-weight: 600; text-decoration: none; transition: all 0.2s; cursor: pointer; border: 1px solid rgba(52, 211, 153, 0.3); font-family: inherit; background: rgba(52, 211, 153, 0.1); color: var(--accent-green); }
-        .btn-manage:hover { background: rgba(52, 211, 153, 0.2); transform: translateY(-1px); }
-        .guild-filter-bar { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
-        .guild-filter-btn { padding: 0.4rem 0.875rem; border-radius: 50px; font-size: 0.75rem; font-weight: 600; cursor: pointer; border: 1px solid var(--border-color); background: transparent; color: var(--text-muted); transition: all 0.2s; font-family: inherit; }
-        .guild-filter-btn.active { background: rgba(167, 139, 250, 0.15); border-color: rgba(167, 139, 250, 0.3); color: var(--accent-purple); }
-        .guild-filter-btn:hover { border-color: var(--accent-purple); color: var(--text-secondary); }
-        .guild-search { padding: 0.4rem 0.75rem; border-radius: 50px; font-size: 0.8rem; background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); color: var(--text-primary); font-family: inherit; width: 200px; transition: all 0.2s; }
-        .guild-search:focus { outline: none; border-color: var(--accent-purple); }
-        .guild-search::placeholder { color: var(--text-muted); }
-        .guild-count { font-size: 0.75rem; color: var(--text-muted); margin-left: auto; }
-
-        /* Empty State */
-        .empty-state { text-align: center; padding: 2rem; color: var(--text-muted); }
-        .empty-state i { font-size: 2rem; margin-bottom: 0.75rem; opacity: 0.4; }
-        .hidden { display: none !important; }
-
-        /* Footer */
-        .footer { padding: clamp(2rem, 5vh, 3.5rem) 0; background: var(--bg-primary); border-top: 1px solid var(--border-color); text-align: center; margin-top: 3rem; }
-        .footer .container { max-width: 1400px; margin: 0 auto; padding: 0 1.5rem; }
-        .footer-links { display: flex; gap: clamp(1.25rem, 2.5vw, 2.5rem); justify-content: center; flex-wrap: wrap; margin-bottom: 1.5rem; }
-        .footer-link { color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; transition: color 0.3s ease; }
-        .footer-link:hover { color: var(--accent-purple); }
-        .footer-copyright { color: var(--text-muted); font-size: 0.85rem; }
-
-        /* Mobile Menu */
-        .mobile-menu-btn { display: none; background: none; border: none; color: var(--text-primary); font-size: 1.5rem; cursor: pointer; padding: 0.5rem; }
-        .mobile-menu { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(11, 15, 17, 0.98); z-index: 9999; flex-direction: column; padding: 1.5rem; }
-        .mobile-menu.open { display: flex; }
-        .mobile-menu-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2rem; padding-bottom: 1rem; border-bottom: 1px solid var(--border-color); }
-        .mobile-menu-close { background: none; border: none; color: var(--text-primary); font-size: 1.5rem; cursor: pointer; padding: 0.5rem; }
-        .mobile-menu-links { display: flex; flex-direction: column; gap: 0.5rem; }
-        .mobile-menu-links a { color: var(--text-secondary); text-decoration: none; font-size: 1.1rem; font-weight: 500; padding: 1rem; border-radius: 10px; transition: all 0.2s; }
-        .mobile-menu-links a:hover { background: var(--bg-card); color: var(--text-primary); }
-
-        /* Section Nav */
-        .section-nav { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 14px; padding: 0.5rem; margin-bottom: 1.5rem; }
-        .section-nav-inner { display: flex; gap: 0.25rem; overflow-x: auto; scrollbar-width: none; -ms-overflow-style: none; }
-        .section-nav-inner::-webkit-scrollbar { display: none; }
-        .section-nav-btn { flex: 1; padding: 0.625rem 0.75rem; border-radius: 10px; font-size: 0.8rem; font-weight: 600; cursor: pointer; border: none; background: transparent; color: var(--text-muted); transition: all 0.2s; font-family: inherit; white-space: nowrap; display: flex; align-items: center; justify-content: center; gap: 0.5rem; }
-        .section-nav-btn:hover { color: var(--text-secondary); background: rgba(255, 255, 255, 0.04); }
-        .section-nav-btn.active { color: var(--text-primary); background: rgba(167, 139, 250, 0.15); border: 1px solid rgba(167, 139, 250, 0.25); box-shadow: 0 2px 8px rgba(167, 139, 250, 0.1); }
-        .section-nav-btn .nav-badge { background: rgba(248, 113, 113, 0.2); color: var(--accent-red); font-size: 0.65rem; padding: 0.1rem 0.4rem; border-radius: 50px; font-weight: 700; min-width: 18px; text-align: center; }
-        .section-nav-btn i { font-size: 0.8rem; }
-        .admin-section { display: none; animation: fadeInSection 0.2s ease; }
-        .admin-section.active { display: block; }
-        @keyframes fadeInSection { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
-
-        @media (max-width: 768px) {
-            .navbar-links { display: none; }
-            .mobile-menu-btn { display: block; }
-            main { padding: 90px 1rem 3rem; }
-            .page-header { flex-direction: column; align-items: flex-start; }
-            .stats-grid { grid-template-columns: repeat(2, 1fr); }
-            .input-group { flex-direction: column; }
-            .input-group .btn { width: 100%; }
-            .footer-links { flex-direction: column; gap: 0.75rem; }
-            .section-nav-btn { padding: 0.5rem 0.5rem; font-size: 0.7rem; gap: 0.35rem; }
-            .section-nav-btn .nav-label { display: none; }
-            .section-nav-btn i { font-size: 0.9rem; }
-            #gb-stats-grid { grid-template-columns: repeat(2, 1fr) !important; }
-        }
-    </style>
+    <link rel="stylesheet" href="/css/cf-settings.css">
+    <link rel="stylesheet" href="/css/super-admin-console.css">
 </head>
-<body>
-    <div class="bg-effects"><div class="orb orb-1"></div><div class="orb orb-2"></div></div>
+<body class="cfs-body cf-site">
+<%- include('partials/site-header', { user }) %>
+<main id="main-content" class="cf-main sa" tabindex="-1">
+<div class="cf-page is-wide">
+    <%- include('partials/site/_owner-nav', { ownerActive: 'overview' }) %>
 
-    <nav class="navbar">
-        <div class="navbar-container">
-            <a href="/" class="navbar-brand">
-                <img src="/images/CertiFried.png" alt="CertiFried" class="navbar-logo">
-                <span>CertiFried</span>
-            </a>
-            <div class="navbar-links">
-                <a href="/">Home</a>
-                <a href="/servers">Servers</a>
-                <a href="/commands">Commands</a>
-                <a href="/cards">Cards</a>
-                <a href="/cah">🃏 CAH</a>
-                    <a href="/sprites">👾 Sprites</a>
-                <a href="/status">Status</a>
-            </div>
-            <% if (user) { %>
-                <div class="user-menu-container" id="userMenuContainer">
-                    <div class="user-menu" id="userMenuBtn">
-                        <img src="https://cdn.discordapp.com/avatars/<%= user.id %>/<%= user.avatar %>.png?size=64" alt="Avatar" class="user-avatar" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
-                        <span class="user-name"><%= user.username %></span>
-                        <i class="fas fa-chevron-down user-menu-chevron"></i>
-                    </div>
-                    <div class="user-dropdown">
-                        <div class="dropdown-header">
-                            <div class="dropdown-user-info">Signed in as <strong><%= user.username %></strong></div>
-                        </div>
-                        <a href="/profile" class="dropdown-item">
-                            <i class="fas fa-user"></i>
-                            <span>Profile</span>
-                        </a>
-                        <a href="/servers" class="dropdown-item">
-                            <i class="fas fa-server"></i>
-                            <span>My Servers</span>
-                        </a>
-                        <div class="dropdown-divider"></div>
-                        <a href="/bot-management" class="dropdown-item text-warning">
-                            <i class="fas fa-robot"></i>
-                            <span>Bot Management</span>
-                        </a>
-                        <a href="/super-admin" class="dropdown-item text-warning">
-                            <i class="fas fa-shield-alt"></i>
-                            <span>Super Admin</span>
-                        </a>
-                        <a href="/admin/cah" class="dropdown-item text-warning">
-                            <span style="display:inline-block;width:1em;text-align:center;">🃏</span>
-                            <span>CAH Admin</span>
-                        </a>
-                        <div class="dropdown-divider"></div>
-                        <a href="/logout" class="dropdown-item text-danger">
-                            <i class="fas fa-sign-out-alt"></i>
-                            <span>Log Out</span>
-                        </a>
-                    </div>
-                </div>
-            <% } %>
-            <button class="mobile-menu-btn" id="mobile-menu-btn" aria-label="Open menu">
-                <i class="fas fa-bars"></i>
-            </button>
-        </div>
-    </nav>
-
-    <div class="mobile-menu" id="mobile-menu">
-        <div class="mobile-menu-header">
-            <a href="/" class="navbar-brand">
-                <img src="/images/CertiFried.png" alt="CertiFried" class="navbar-logo">
-                <span>CertiFried</span>
-            </a>
-            <button class="mobile-menu-close" id="mobile-menu-close" aria-label="Close menu">
-                <i class="fas fa-times"></i>
-            </button>
-        </div>
-        <div class="mobile-menu-links">
-            <a href="/">Home</a>
-            <a href="/servers">Servers</a>
-            <a href="/commands">Commands</a>
-            <a href="/cards">Cards</a>
-            <a href="/cah">🃏 CAH</a>
-            <a href="/status">Status</a>
-            <% if (user) { %>
-                <a href="/profile">Profile</a>
-                <% if (user.isSuperAdmin) { %>
-                    <a href="/admin/cah">🃏 CAH Admin</a>
-                <% } %>
-            <% } %>
+    <div class="cf-page-head">
+        <div class="cf-page-icon"><i class="fas fa-shield-halved" aria-hidden="true"></i></div>
+        <div>
+            <h1 class="cf-page-title">Owner console</h1>
+            <p class="cf-page-sub">The whole network: servers, custom bots, global bans and owner tools.</p>
         </div>
     </div>
 
-    <main>
-    <div class="container">
-        <div class="page-header">
-            <div class="page-header-content">
-                <div class="page-icon"><i class="fas fa-user-shield"></i></div>
-                <div>
-                    <h1 class="page-title">Super Admin Panel</h1>
-                    <p class="page-subtitle">Global system management and control center</p>
-                </div>
-            </div>
-            <span class="admin-badge"><i class="fas fa-shield-alt"></i> Admin Access</span>
-        </div>
-
-        <!-- Stats Grid -->
-        <div class="stats-grid">
-            <div class="stat-card">
-                <div class="stat-icon"><i class="fas fa-server" style="color: var(--accent-purple)"></i></div>
-                <div class="stat-value" id="total-guilds">...</div>
-                <div class="stat-label">Total Guilds</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-icon"><i class="fas fa-robot" style="color: #a78bfa"></i></div>
-                <div class="stat-value" id="custom-bots">...</div>
-                <div class="stat-label">Custom Bots</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-icon"><i class="fas fa-users-cog" style="color: var(--accent-green)"></i></div>
-                <div class="stat-value" id="bot-creators">...</div>
-                <div class="stat-label">Bot Creators</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-icon"><i class="fas fa-users" style="color: var(--accent-blue)"></i></div>
-                <div class="stat-value" id="total-users">...</div>
-                <div class="stat-label">Total Users</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-icon"><i class="fas fa-video" style="color: var(--accent-red)"></i></div>
-                <div class="stat-value" id="live-streamers">...</div>
-                <div class="stat-label">Live Streamers</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-icon"><i class="fas fa-clock" style="color: var(--accent-green)"></i></div>
-                <div class="stat-value" id="bot-uptime">...</div>
-                <div class="stat-label">Bot Uptime</div>
-            </div>
-            <div class="stat-card">
-                <div class="stat-icon"><i class="fas fa-memory" style="color: var(--accent-yellow)"></i></div>
-                <div class="stat-value" id="memory-usage">...</div>
-                <div class="stat-label">Memory Usage</div>
-            </div>
-        </div>
-
-        <!-- Section Navigation -->
-        <div class="section-nav">
-            <div class="section-nav-inner">
-                <button class="section-nav-btn active" data-section="guilds" onclick="switchSection('guilds', this)"><i class="fas fa-server"></i> <span class="nav-label">Guilds</span></button>
-                <button class="section-nav-btn" data-section="system" onclick="switchSection('system', this)"><i class="fas fa-cogs"></i> <span class="nav-label">System</span></button>
-                <button class="section-nav-btn" data-section="users" onclick="switchSection('users', this)"><i class="fas fa-users-cog"></i> <span class="nav-label">Users</span></button>
-                <button class="section-nav-btn" data-section="bots" onclick="switchSection('bots', this)"><i class="fas fa-robot"></i> <span class="nav-label">Bots</span></button>
-                <button class="section-nav-btn" data-section="globalbans" onclick="switchSection('globalbans', this)"><i class="fas fa-globe"></i> <span class="nav-label">Global Bans</span> <span class="nav-badge" id="gb-nav-badge" style="display:none;">0</span></button>
-                <button class="section-nav-btn" data-section="stats" onclick="switchSection('stats', this)"><i class="fas fa-chart-bar"></i> <span class="nav-label">Stats</span></button>
-            </div>
-        </div>
+    <dl class="cf-kpis" aria-label="Network at a glance">
+        <div class="cf-kpi"><dt>Servers</dt><dd class="cf-kpi-value" id="total-guilds">–</dd></div>
+        <div class="cf-kpi"><dt>Members</dt><dd class="cf-kpi-value" id="total-users">–</dd></div>
+        <div class="cf-kpi"><dt>Custom bots</dt><dd class="cf-kpi-value" id="custom-bots">–</dd><dd class="cf-kpi-sub" id="custom-bots-sub"></dd></div>
+        <div class="cf-kpi"><dt>Bot creators</dt><dd class="cf-kpi-value" id="bot-creators">–</dd></div>
+        <div class="cf-kpi"><dt>Live now</dt><dd class="cf-kpi-value" id="live-streamers">–</dd></div>
+        <div class="cf-kpi"><dt>Uptime</dt><dd class="cf-kpi-value" id="bot-uptime">–</dd></div>
+        <div class="cf-kpi"><dt>Memory</dt><dd class="cf-kpi-value" id="memory-usage">–</dd></div>
+    </dl>
 
         <!-- Guilds Section -->
         <div id="section-guilds" class="admin-section active">
-        <div class="card" style="margin-bottom: 2rem;">
-            <div class="card-header">
-                <div class="card-title">
-                    <div class="card-title-icon" style="background: rgba(88, 101, 242, 0.15);"><i class="fas fa-server" style="color: #5865F2"></i></div>
-                    <span>My Guilds</span>
+        <section class="cf-section" aria-labelledby="sa-servers-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="sa-servers-title">Servers</h2>
+                    <p class="cf-section-desc">Servers you are in, your role there and whether a bot serves them. "Bot only" lists servers a bot is in that you are not.</p>
                 </div>
-                <div class="guild-filter-bar">
-                    <input type="text" class="guild-search" id="guild-search" placeholder="Search guilds...">
-                    <button class="guild-filter-btn active" data-filter="all" onclick="filterGuilds('all', this)">All</button>
-                    <button class="guild-filter-btn" data-filter="owner" onclick="filterGuilds('owner', this)">Owner</button>
-                    <button class="guild-filter-btn" data-filter="admin" onclick="filterGuilds('admin', this)">Admin</button>
-                    <button class="guild-filter-btn" data-filter="with-bot" onclick="filterGuilds('with-bot', this)">With Bot</button>
-                    <button class="guild-filter-btn" data-filter="without-bot" onclick="filterGuilds('without-bot', this)">Without Bot</button>
-                    <button class="guild-filter-btn" data-filter="bot-only" onclick="filterGuilds('bot-only', this)">Bot Only</button>
-                    <button class="btn-ghost btn-sm" id="refresh-guilds-btn" style="padding:0.4rem 0.75rem;border-radius:50px;font-size:0.75rem;font-weight:600;cursor:pointer;border:1px solid var(--border-color);background:transparent;color:var(--text-muted);transition:all 0.2s;font-family:inherit;" title="Refresh guild list from Discord"><i class="fas fa-sync-alt"></i></button>
-                    <span class="guild-count" id="guild-count"></span>
+                <div class="cf-section-actions">
+                    <button type="button" class="btn btn-secondary btn-sm" id="refresh-guilds-btn" title="Fetch your server list from Discord again"><i class="fas fa-rotate" aria-hidden="true"></i> Refresh</button>
                 </div>
-            </div>
-            <div class="card-body" style="padding: 0;">
-                <div class="guild-table-wrapper">
-                    <table class="guild-table">
+            </header>
+            <div class="cf-rows">
+                <div class="cf-toolbar guild-filter-bar">
+                    <label class="cf-search"><i class="fas fa-magnifying-glass" aria-hidden="true"></i><input type="search" id="guild-search" placeholder="Search by name or ID" aria-label="Search servers"></label>
+                    <div class="cf-segmented" role="group" aria-label="Filter servers" id="guild-filters">
+                        <button type="button" class="guild-filter-btn active" aria-pressed="true" data-filter="all" onclick="filterGuilds('all', this)">All</button>
+                        <button type="button" class="guild-filter-btn" aria-pressed="false" data-filter="owner" onclick="filterGuilds('owner', this)">Owner</button>
+                        <button type="button" class="guild-filter-btn" aria-pressed="false" data-filter="admin" onclick="filterGuilds('admin', this)">Admin</button>
+                        <button type="button" class="guild-filter-btn" aria-pressed="false" data-filter="with-bot" onclick="filterGuilds('with-bot', this)">With a bot</button>
+                        <button type="button" class="guild-filter-btn" aria-pressed="false" data-filter="without-bot" onclick="filterGuilds('without-bot', this)">Without</button>
+                        <button type="button" class="guild-filter-btn" aria-pressed="false" data-filter="bot-only" onclick="filterGuilds('bot-only', this)">Bot only</button>
+                    </div>
+                    <span class="cf-toolbar-end guild-count" id="guild-count"></span>
+                </div>
+                <div class="cf-table-wrap sa-table-wrap">
+                    <table class="cf-table guild-table">
                         <thead>
                             <tr>
                                 <th>Server</th>
-                                <th>Role</th>
+                                <th>Your role</th>
                                 <th>Members</th>
-                                <th>Bot Status</th>
-                                <th style="text-align: right;">Action</th>
+                                <th>Bot</th>
+                                <th class="cf-cell-end">Action</th>
                             </tr>
                         </thead>
                         <tbody id="guild-table-body">
-                            <tr><td colspan="5"><div class="empty-state"><i class="fas fa-spinner fa-spin"></i><p>Loading guilds...</p></div></td></tr>
+                            <tr><td colspan="5"><div class="empty-state"><span class="cf-spinner" aria-hidden="true"></span><p>Loading servers</p></div></td></tr>
                         </tbody>
                     </table>
                 </div>
             </div>
-        </div>
-
+        </section>
         </div><!-- /#section-guilds -->
 
-        <!-- System Section -->
-        <div id="section-system" class="admin-section">
-        <h2 class="section-title"><i class="fas fa-cogs" style="color: var(--accent-yellow)"></i> System Actions</h2>
-        <div class="grid-2">
-            <div class="card">
-                <div class="card-header">
-                    <div class="card-title">
-                        <div class="card-title-icon" style="background: rgba(251, 191, 36, 0.15);"><i class="fas fa-cogs" style="color: var(--accent-yellow)"></i></div>
-                        <span>System Actions</span>
-                    </div>
+        <!-- Tools Section -->
+        <div id="section-tools" class="admin-section">
+        <section class="cf-section" aria-labelledby="sa-leave-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="sa-leave-title">Remove the bots from a server</h2>
+                    <p class="cf-section-desc">Every one of our bots in that server leaves it. Its settings stay in the database.</p>
                 </div>
-                <div class="card-body">
-                    <p style="color: var(--text-muted); font-size: 0.875rem; margin-bottom: 1rem;">Perform global operations on the bot system. Use with caution.</p>
-                    <button class="btn btn-warning" style="margin-bottom: 0.75rem;" id="reinitialize-bot-btn">
-                        <i class="fas fa-sync-alt"></i> Re-initialize Bot (Global)
-                    </button>
-                    <button class="btn btn-danger" id="reset-database-btn">
-                        <i class="fas fa-trash"></i> Reset Database
-                    </button>
-                </div>
-            </div>
-
-            <div class="card">
-                <div class="card-header">
-                    <div class="card-title">
-                        <div class="card-title-icon" style="background: rgba(167, 139, 250, 0.15);"><i class="fas fa-server" style="color: var(--accent-purple)"></i></div>
-                        <span>Guild-Specific Actions</span>
+            </header>
+            <div class="cf-rows">
+                <form class="cf-row" id="sa-leave-form">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="leave-guild-id-input">Server ID</label>
+                        <p class="cf-row-desc">Right-click the server in Discord, Copy Server ID.</p>
                     </div>
-                </div>
-                <div class="card-body">
-                    <p style="color: var(--text-muted); font-size: 0.875rem; margin-bottom: 1rem;">Perform operations on a specific guild using its ID.</p>
-                    <div class="input-group">
-                        <input type="text" class="input" id="guild-id-input" placeholder="Enter Guild ID...">
-                        <button class="btn btn-primary btn-sm" id="reinitialize-guild-btn"><i class="fas fa-sync"></i> Re-init</button>
-                    </div>
-                    <div class="input-group">
-                        <input type="text" class="input" id="leave-guild-id-input" placeholder="Enter Guild ID...">
-                        <button class="btn btn-danger btn-sm" id="leave-guild-btn"><i class="fas fa-sign-out-alt"></i> Leave</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        </div><!-- /#section-system -->
-
-        <!-- Users Section -->
-        <div id="section-users" class="admin-section">
-        <h2 class="section-title"><i class="fas fa-users-cog"></i> Smart User Management</h2>
-        <div class="grid-3">
-            <div class="card">
-                <div class="card-header">
-                    <div class="card-title">
-                        <div class="card-title-icon" style="background: rgba(167, 139, 250, 0.15);"><i class="fas fa-search" style="color: var(--accent-purple)"></i></div>
-                        <span>Audit Users</span>
-                    </div>
-                </div>
-                <div class="card-body">
-                    <p style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 1rem;">Scan all guilds to find and link Discord users to their streamer profiles.</p>
-                    <button class="btn btn-primary" id="audit-users-btn"><i class="fas fa-search"></i> Run Full Audit</button>
-                    <div id="audit-progress" class="progress-container hidden">
-                        <div class="progress-header">
-                            <span id="audit-status">Initializing...</span>
-                            <span id="audit-percentage">0%</span>
-                        </div>
-                        <div class="progress-bar"><div class="progress-fill" id="audit-progress-bar" style="width: 0%"></div></div>
-                        <div class="progress-messages" id="audit-messages"></div>
-                    </div>
-                    <div id="audit-results" class="results-container hidden">
-                        <div class="results-grid">
-                            <div class="result-item"><span class="result-label">Guilds:</span><span class="result-value" id="audit-guilds">-</span></div>
-                            <div class="result-item"><span class="result-label">Members:</span><span class="result-value" id="audit-members">-</span></div>
-                            <div class="result-item"><span class="result-label">Exact:</span><span class="result-value" id="audit-exact">-</span></div>
-                            <div class="result-item"><span class="result-label">Fuzzy:</span><span class="result-value" id="audit-fuzzy">-</span></div>
-                            <div class="result-item"><span class="result-label">New Links:</span><span class="result-value" id="audit-new-links">-</span></div>
-                            <div class="result-item"><span class="result-label">Existing:</span><span class="result-value" id="audit-existing">-</span></div>
+                    <div class="cf-row-control">
+                        <div class="cf-input-group">
+                            <input type="text" id="leave-guild-id-input" inputmode="numeric" pattern="\d{17,20}" maxlength="20" placeholder="123456789012345678" autocomplete="off" required>
+                            <button type="submit" class="btn btn-danger btn-sm" id="leave-guild-btn">Leave</button>
                         </div>
                     </div>
-                </div>
+                </form>
             </div>
+        </section>
 
-            <div class="card">
-                <div class="card-header">
-                    <div class="card-title">
-                        <div class="card-title-icon" style="background: rgba(167, 139, 250, 0.15);"><i class="fas fa-user-search" style="color: var(--accent-purple)"></i></div>
-                        <span>Search Streamer</span>
+        <section class="cf-section" aria-labelledby="sa-streamer-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="sa-streamer-title">Find a streamer</h2>
+                    <p class="cf-section-desc">Tracked streamer profiles matching a name, the Discord account each is linked to, and the servers that follow them.</p>
+                </div>
+            </header>
+            <div class="cf-rows">
+                <form class="cf-row" id="sa-streamer-form">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="search-streamer-input">Streamer name</label>
+                        <p class="cf-row-desc">Part of the name is enough.</p>
                     </div>
-                </div>
-                <div class="card-body">
-                    <p style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 1rem;">Find all platforms and Discord users linked to a specific streamer.</p>
-                    <input type="text" class="input" style="margin-bottom: 0.75rem;" id="search-streamer-input" placeholder="Enter streamer username...">
-                    <select class="input" style="margin-bottom: 0.75rem;" id="search-platform-select">
-                        <option value="">All Platforms</option>
-                        <option value="twitch">Twitch</option>
-                        <option value="kick">Kick</option>
-                        <option value="youtube">YouTube</option>
-                        <option value="tiktok">TikTok</option>
-                        <option value="trovo">Trovo</option>
-                        <option value="facebook">Facebook</option>
-                        <option value="instagram">Instagram</option>
-                    </select>
-                    <button class="btn btn-primary" id="search-streamer-btn"><i class="fas fa-search"></i> Search</button>
-                    <div id="search-results" class="results-container hidden"><div id="search-results-content"></div></div>
-                </div>
-            </div>
-
-            <div class="card">
-                <div class="card-header">
-                    <div class="card-title">
-                        <div class="card-title-icon" style="background: rgba(167, 139, 250, 0.15);"><i class="fas fa-link" style="color: var(--accent-purple)"></i></div>
-                        <span>View User Links</span>
+                    <div class="cf-row-control">
+                        <div class="cf-input-group">
+                            <input type="text" id="search-streamer-input" minlength="2" maxlength="64" placeholder="Name" autocomplete="off" required>
+                            <select id="search-platform-select" aria-label="Platform">
+                                <option value="">All platforms</option>
+                                <option value="twitch">Twitch</option>
+                                <option value="kick">Kick</option>
+                                <option value="youtube">YouTube</option>
+                                <option value="tiktok">TikTok</option>
+                                <option value="rumble">Rumble</option>
+                            </select>
+                            <button type="submit" class="btn btn-primary btn-sm" id="search-streamer-btn">Search</button>
+                        </div>
                     </div>
+                </form>
+                <div class="cf-list" id="search-results-content"></div>
+            </div>
+        </section>
+
+        <section class="cf-section" aria-labelledby="sa-links-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="sa-links-title">Look up a member's links</h2>
+                    <p class="cf-section-desc">Streamer profiles linked to a Discord account, and the Twitch accounts it linked for Mod and VIP roles.</p>
                 </div>
-                <div class="card-body">
-                    <p style="color: var(--text-muted); font-size: 0.8rem; margin-bottom: 1rem;">Display all streamers linked to a specific Discord user.</p>
-                    <input type="text" class="input" style="margin-bottom: 0.75rem;" id="user-id-input" placeholder="Enter Discord User ID...">
-                    <button class="btn btn-primary" id="view-links-btn"><i class="fas fa-link"></i> View Links</button>
-                    <div id="links-results" class="results-container hidden"><div id="links-results-content"></div></div>
-                </div>
+            </header>
+            <div class="cf-rows">
+                <form class="cf-row" id="sa-links-form">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="user-id-input">Discord user ID</label>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="cf-input-group">
+                            <input type="text" id="user-id-input" inputmode="numeric" pattern="\d{17,20}" maxlength="20" placeholder="123456789012345678" autocomplete="off" required>
+                            <button type="submit" class="btn btn-primary btn-sm" id="view-links-btn">Look up</button>
+                        </div>
+                    </div>
+                </form>
+                <div class="cf-list" id="links-results-content"></div>
             </div>
-        </div>
-
-        </div><!-- /#section-users -->
-
-        <!-- Bots Section -->
-        <div id="section-bots" class="admin-section">
-        <h2 class="section-title"><i class="fas fa-robot" style="color: #a78bfa"></i> Bot Management</h2>
-
-        <div class="card" style="margin-bottom: 1.5rem;">
-            <div class="card-header">
-                <div class="card-title"><i class="fas fa-user-shield" style="color: var(--accent-purple)"></i> Bot Managers</div>
-                <button class="btn btn-primary btn-sm" onclick="document.getElementById('add-manager-modal').classList.add('show')"><i class="fas fa-plus"></i> Add Manager</button>
-            </div>
-            <div class="card-body" id="bot-managers-list">
-                <div class="empty-state"><i class="fas fa-spinner fa-spin"></i><p>Loading managers...</p></div>
-            </div>
-        </div>
-
-        <div class="card" style="margin-bottom: 2rem;">
-            <div class="card-header">
-                <div class="card-title"><i class="fas fa-robot" style="color: var(--accent-purple)"></i> All Custom Bots</div>
-                <button class="btn btn-ghost btn-sm" onclick="loadAllBots()"><i class="fas fa-refresh"></i> Refresh</button>
-            </div>
-            <div class="card-body" id="all-bots-list">
-                <div class="empty-state"><i class="fas fa-spinner fa-spin"></i><p>Loading bots...</p></div>
-            </div>
-        </div>
-
-        </div><!-- /#section-bots -->
+        </section>
+        </div><!-- /#section-tools -->
 
         <!-- Global Bans Section -->
         <div id="section-globalbans" class="admin-section">
-        <h2 class="section-title"><i class="fas fa-globe" style="color: var(--accent-red)"></i> Global Ban Management</h2>
+        <dl class="cf-kpis" id="gb-stats-grid" aria-label="Global bans at a glance">
+            <div class="cf-kpi"><dt>Active bans</dt><dd class="cf-kpi-value" id="gb-stat-entries">–</dd></div>
+            <div class="cf-kpi"><dt>Reports waiting</dt><dd class="cf-kpi-value" id="gb-stat-reports">–</dd></div>
+            <div class="cf-kpi"><dt>Appeals waiting</dt><dd class="cf-kpi-value" id="gb-stat-appeals">–</dd></div>
+            <div class="cf-kpi"><dt>Servers enforcing</dt><dd class="cf-kpi-value" id="gb-stat-guilds">–</dd></div>
+            <div class="cf-kpi"><dt>Report watcher</dt><dd class="cf-kpi-value is-small" id="gb-stat-watcher">–</dd></div>
+        </dl>
 
-        <!-- Global Ban Stats -->
-        <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 1rem; margin-bottom: 1.5rem;" id="gb-stats-grid">
-            <div class="card" style="margin-bottom: 0;">
-                <div class="card-body" style="text-align: center; padding: 1rem;">
-                    <div style="font-size: 1.5rem; font-weight: 700; color: var(--accent-red);" id="gb-stat-entries">0</div>
-                    <div style="font-size: 0.75rem; color: var(--text-muted);">Active Entries</div>
-                </div>
-            </div>
-            <div class="card" style="margin-bottom: 0;">
-                <div class="card-body" style="text-align: center; padding: 1rem;">
-                    <div style="font-size: 1.5rem; font-weight: 700; color: var(--accent-yellow);" id="gb-stat-reports">0</div>
-                    <div style="font-size: 0.75rem; color: var(--text-muted);">Pending Reports</div>
-                </div>
-            </div>
-            <div class="card" style="margin-bottom: 0;">
-                <div class="card-body" style="text-align: center; padding: 1rem;">
-                    <div style="font-size: 1.5rem; font-weight: 700; color: var(--accent-blue);" id="gb-stat-appeals">0</div>
-                    <div style="font-size: 0.75rem; color: var(--text-muted);">Pending Appeals</div>
-                </div>
-            </div>
-            <div class="card" style="margin-bottom: 0;">
-                <div class="card-body" style="text-align: center; padding: 1rem;">
-                    <div style="font-size: 1.5rem; font-weight: 700; color: var(--accent-green);" id="gb-stat-guilds">0</div>
-                    <div style="font-size: 0.75rem; color: var(--text-muted);">Enabled Guilds</div>
-                </div>
-            </div>
-            <div class="card" style="margin-bottom: 0;">
-                <div class="card-body" style="text-align: center; padding: 1rem;">
-                    <div style="font-size: 1.5rem; font-weight: 700;" id="gb-stat-watcher">
-                        <i class="fas fa-circle" style="font-size: 0.6rem; color: var(--text-muted);"></i>
-                    </div>
-                    <div style="font-size: 0.75rem; color: var(--text-muted);">Live Watcher</div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Category/Severity Breakdown -->
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
-            <div class="card" style="margin-bottom: 0;">
-                <div class="card-header" style="padding: 0.5rem 0.75rem;">
-                    <span style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">By Category</span>
-                </div>
-                <div class="card-body" style="padding: 0.5rem 0.75rem;" id="gb-breakdown-category">
-                    <span style="color: var(--text-muted); font-size: 0.8rem;">Loading...</span>
-                </div>
-            </div>
-            <div class="card" style="margin-bottom: 0;">
-                <div class="card-header" style="padding: 0.5rem 0.75rem;">
-                    <span style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;">By Severity</span>
-                </div>
-                <div class="card-body" style="padding: 0.5rem 0.75rem;" id="gb-breakdown-severity">
-                    <span style="color: var(--text-muted); font-size: 0.8rem;">Loading...</span>
-                </div>
-            </div>
+        <div class="sa-breakdowns">
+            <section class="cf-section" aria-labelledby="gb-cat-title">
+                <header class="cf-section-head"><div><h2 class="cf-section-title" id="gb-cat-title">By category</h2></div></header>
+                <div class="cf-rows"><div class="sa-breakdown" id="gb-breakdown-category"><p class="cf-muted">Loading</p></div></div>
+            </section>
+            <section class="cf-section" aria-labelledby="gb-sev-title">
+                <header class="cf-section-head"><div><h2 class="cf-section-title" id="gb-sev-title">By severity</h2></div></header>
+                <div class="cf-rows"><div class="sa-breakdown" id="gb-breakdown-severity"><p class="cf-muted">Loading</p></div></div>
+            </section>
         </div>
 
         <!-- Global Ban Tabs -->
-        <div class="card" style="margin-bottom: 1.5rem;">
-            <div class="card-header">
-                <div style="display: flex; gap: 0.5rem;">
-                    <button class="guild-filter-btn active" onclick="switchGBTab('entries', this)">Ban Entries</button>
-                    <button class="guild-filter-btn" onclick="switchGBTab('reports', this)">Reports</button>
-                    <button class="guild-filter-btn" onclick="switchGBTab('appeals', this)">Appeals</button>
-                    <button class="guild-filter-btn" onclick="switchGBTab('action-log', this)">Action Log</button>
+        <section class="cf-section" aria-labelledby="gb-list-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="gb-list-title">Global ban list</h2>
+                    <p class="cf-section-desc">Servers with global bans on refuse these users. Reports come from the audit bot and /globalban report; appeals from the people banned.</p>
                 </div>
-                <div style="display: flex; gap: 0.5rem;">
-                    <button class="btn btn-primary btn-sm" id="gb-add-entry-btn" onclick="document.getElementById('gb-entry-modal').classList.add('show')"><i class="fas fa-plus"></i> Add Entry</button>
-                    <button class="btn btn-ghost btn-sm" id="gb-import-csv-btn" onclick="document.getElementById('gb-csv-modal').classList.add('show')"><i class="fas fa-file-csv"></i> Import CSV</button>
+                <div class="cf-section-actions">
+                    <button type="button" class="btn btn-primary btn-sm" id="gb-add-entry-btn" onclick="openGBEntryModal()"><i class="fas fa-plus" aria-hidden="true"></i> Add a ban</button>
+                    <button type="button" class="btn btn-secondary btn-sm" id="gb-import-csv-btn" onclick="document.getElementById('gb-csv-modal').classList.add('show')"><i class="fas fa-file-csv" aria-hidden="true"></i> Import CSV</button>
                 </div>
+            </header>
+            <div class="cf-rows">
+            <div class="cf-tabs gb-tabs" role="tablist" aria-label="Global bans">
+                <button type="button" class="cf-tab active" role="tab" aria-selected="true" onclick="switchGBTab('entries', this)">Bans</button>
+                <button type="button" class="cf-tab" role="tab" aria-selected="false" onclick="switchGBTab('reports', this)">Reports</button>
+                <button type="button" class="cf-tab" role="tab" aria-selected="false" onclick="switchGBTab('appeals', this)">Appeals</button>
+                <button type="button" class="cf-tab" role="tab" aria-selected="false" onclick="switchGBTab('action-log', this)">Action log</button>
             </div>
-            <div class="card-body">
+            <div class="sa-gb-body">
                 <!-- Entries Tab -->
                 <div id="gb-tab-entries">
-                    <div style="display: flex; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap; align-items: center;">
-                        <input type="text" class="input" style="flex: 1; min-width: 200px;" id="gb-entries-search" placeholder="Search by User ID or username..." oninput="loadGBEntries()">
-                        <select class="input" style="width: auto;" id="gb-entries-severity" onchange="loadGBEntries()">
+                    <div class="sa-filters">
+                        <input type="text" class="input sa-grow" id="gb-entries-search" aria-label="Search bans" placeholder="Search by User ID or username..." oninput="loadGBEntries()">
+                        <select class="input sa-auto" id="gb-entries-severity" onchange="loadGBEntries()">
                             <option value="">All Severities</option>
                             <option value="critical">Critical</option>
                             <option value="high">High</option>
                             <option value="medium">Medium</option>
                             <option value="low">Low</option>
                         </select>
-                        <select class="input" style="width: auto;" id="gb-entries-category" onchange="loadGBEntries()">
+                        <select class="input sa-auto" id="gb-entries-category" onchange="loadGBEntries()">
                             <option value="">All Categories</option>
                             <option value="phishing">Phishing</option>
                             <option value="scam">Scam</option>
@@ -750,15 +225,15 @@
                             <option value="impersonation">Impersonation</option>
                             <option value="other">Other</option>
                         </select>
-                        <select class="input" style="width: auto;" id="gb-entries-perpage" onchange="gbEntriesLimit = +this.value; gbEntriesPage = 1; loadGBEntries()">
+                        <select class="input sa-auto" id="gb-entries-perpage" onchange="gbEntriesLimit = +this.value; gbEntriesPage = 1; loadGBEntries()">
                             <option value="20" selected>20 / page</option>
                             <option value="50">50 / page</option>
                             <option value="100">100 / page</option>
                             <option value="250">250 / page</option>
                         </select>
                     </div>
-                    <div class="guild-table-wrapper">
-                        <table class="guild-table">
+                    <div class="cf-table-wrap sa-table-wrap">
+                        <table class="cf-table guild-table">
                             <thead>
                                 <tr>
                                     <th style="width:1.5rem;"></th>
@@ -777,21 +252,21 @@
                             </tbody>
                         </table>
                     </div>
-                    <div id="gb-entries-pagination" style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.75rem; font-size: 0.8rem; color: var(--text-muted);"></div>
+                    <div id="gb-entries-pagination" class="sa-pagination"></div>
                 </div>
 
                 <!-- Reports Tab -->
                 <div id="gb-tab-reports" style="display: none;">
-                    <div style="display: flex; gap: 0.75rem; margin-bottom: 1rem;">
-                        <select class="input" style="width: auto;" id="gb-reports-status" onchange="loadGBReports()">
+                    <div class="sa-filters">
+                        <select class="input sa-auto" id="gb-reports-status" onchange="loadGBReports()">
                             <option value="pending">Pending</option>
                             <option value="">All Statuses</option>
                             <option value="approved">Approved</option>
                             <option value="denied">Denied</option>
                         </select>
                     </div>
-                    <div class="guild-table-wrapper">
-                        <table class="guild-table">
+                    <div class="cf-table-wrap sa-table-wrap">
+                        <table class="cf-table guild-table">
                             <thead>
                                 <tr>
                                     <th>ID</th>
@@ -809,13 +284,13 @@
                             </tbody>
                         </table>
                     </div>
-                    <div id="gb-reports-pagination" style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.75rem; font-size: 0.8rem; color: var(--text-muted);"></div>
+                    <div id="gb-reports-pagination" class="sa-pagination"></div>
                 </div>
 
                 <!-- Appeals Tab -->
                 <div id="gb-tab-appeals" style="display: none;">
-                    <div style="display: flex; gap: 0.75rem; margin-bottom: 1rem;">
-                        <select class="input" style="width: auto;" id="gb-appeals-status" onchange="loadGBAppeals()">
+                    <div class="sa-filters">
+                        <select class="input sa-auto" id="gb-appeals-status" onchange="loadGBAppeals()">
                             <option value="pending">Pending</option>
                             <option value="">All Statuses</option>
                             <option value="under_review">Under Review</option>
@@ -823,8 +298,8 @@
                             <option value="denied">Denied</option>
                         </select>
                     </div>
-                    <div class="guild-table-wrapper">
-                        <table class="guild-table">
+                    <div class="cf-table-wrap sa-table-wrap">
+                        <table class="cf-table guild-table">
                             <thead>
                                 <tr>
                                     <th>ID</th>
@@ -841,13 +316,13 @@
                             </tbody>
                         </table>
                     </div>
-                    <div id="gb-appeals-pagination" style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.75rem; font-size: 0.8rem; color: var(--text-muted);"></div>
+                    <div id="gb-appeals-pagination" class="sa-pagination"></div>
                 </div>
 
                 <!-- Action Log Tab -->
                 <div id="gb-tab-action-log" style="display: none;">
-                    <div class="guild-table-wrapper">
-                        <table class="guild-table">
+                    <div class="cf-table-wrap sa-table-wrap">
+                        <table class="cf-table guild-table">
                             <thead>
                                 <tr>
                                     <th>Action</th>
@@ -863,60 +338,172 @@
                             </tbody>
                         </table>
                     </div>
-                    <div id="gb-actionlog-pagination" style="display: flex; justify-content: space-between; align-items: center; margin-top: 0.75rem; font-size: 0.8rem; color: var(--text-muted);"></div>
-                </div>
+                    <div id="gb-actionlog-pagination" class="sa-pagination"></div>
             </div>
-        </div>
+            </div>
+        </section>
 
         </div><!-- /#section-globalbans -->
 
-        <!-- Stats Section -->
-        <div id="section-stats" class="admin-section">
-        <h2 class="section-title"><i class="fas fa-chart-bar" style="color: var(--accent-purple)"></i> System Statistics</h2>
-        <div class="card">
-            <div class="card-header">
-                <div class="card-title"><i class="fas fa-chart-bar" style="color: var(--accent-purple)"></i> Global System Statistics</div>
-                <button class="btn btn-ghost btn-sm" onclick="loadStats()"><i class="fas fa-refresh"></i> Refresh</button>
+        <!-- Greenhouse Tycoon Section (game jobs and the Twitch review save; dashboard/routes/greenhouse-admin.js) -->
+        <div id="section-greenhouse" class="admin-section">
+        <div id="gh-sa-notready" class="cf-notice is-info" role="status" hidden>Greenhouse Tycoon is not set up yet (its tables do not exist). These controls work once migration 437 is applied.</div>
+        <div id="gh-sa-error" class="cf-notice is-bad" role="alert" hidden></div>
+        <section class="cf-section" aria-labelledby="gh-sa-jobs-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="gh-sa-jobs-title">Game jobs</h2>
+                    <p class="cf-section-desc">The game's background jobs: seasons and challenges, market days, clean-ups and the review save reset. Switching a job off takes effect at its next run (within 15 seconds of the check), with no restart.</p>
+                </div>
+            </header>
+            <div class="cf-rows">
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <span class="cf-row-label">All jobs</span>
+                        <p class="cf-row-desc" id="gh-sa-jobs-state">Loading</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <button type="button" class="btn btn-secondary btn-sm" id="gh-sa-jobs-all-off">Stop all</button>
+                        <button type="button" class="btn btn-secondary btn-sm" id="gh-sa-jobs-all-on">Run all</button>
+                    </div>
+                </div>
+                <div class="cf-table-wrap sa-table-wrap">
+                    <table class="cf-table">
+                        <thead><tr><th>Job</th><th>Last run</th><th>Result</th><th>Runs / failures</th><th class="cf-cell-end">Runs?</th></tr></thead>
+                        <tbody id="gh-sa-jobs-body"><tr><td colspan="5"><div class="empty-state"><p>Loading</p></div></td></tr></tbody>
+                    </table>
+                </div>
+                <p class="cf-row-desc" id="gh-sa-env-note"></p>
             </div>
-            <div class="card-body">
-                <div class="stat-row"><span class="stat-row-label"><i class="fas fa-server"></i> Total Guilds</span><span class="stat-row-value" id="total-guilds-detail">...</span></div>
-                <div class="stat-row"><span class="stat-row-label"><i class="fas fa-users"></i> Total Users</span><span class="stat-row-value" id="total-users-detail">...</span></div>
-                <div class="stat-row"><span class="stat-row-label"><i class="fas fa-video"></i> Live Streamers</span><span class="stat-badge green" id="live-streamers-detail">...</span></div>
-                <div class="stat-row"><span class="stat-row-label"><i class="fas fa-clock"></i> Bot Uptime</span><span class="stat-badge purple" id="bot-uptime-detail">...</span></div>
-                <div class="stat-row"><span class="stat-row-label"><i class="fas fa-memory"></i> Memory Usage</span><span class="stat-badge yellow" id="memory-usage-detail">...</span></div>
-            </div>
-        </div>
-        </div><!-- /#section-stats -->
+        </section>
 
-    </div><!-- /.container -->
-    </main>
-
-    <footer class="footer">
-        <div class="container">
-            <div class="footer-links">
-                <a href="/commands" class="footer-link">Commands</a>
-                <a href="/cards" class="footer-link">Cards</a>
-                <a href="/status" class="footer-link">Status</a>
-                <a href="/docs" class="footer-link">Documentation</a>
-                <a href="/terms" class="footer-link">Terms</a>
-                <a href="/privacy" class="footer-link">Privacy</a>
+        <section class="cf-section" aria-labelledby="gh-sa-review-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="gh-sa-review-title">Twitch review save</h2>
+                    <p class="cf-section-desc">A shared example save so Twitch reviewers see a mid-game greenhouse. While this is on, the panel offers "Try the review save" in Hosted Test and review; anyone switching to it plays a sandbox that is never ranked, cannot link or rename, and is put back every night at 04:00 UTC. Turn it off once the review is done.</p>
+                </div>
+            </header>
+            <div class="cf-rows">
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="gh-sa-review-on">Review save open</label>
+                        <p class="cf-row-desc" id="gh-sa-review-state">Loading</p>
+                    </div>
+                    <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="gh-sa-review-on"></div>
+                </div>
+                <form class="cf-row" id="gh-sa-review-form">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="gh-sa-review-channels">Only on these channels</label>
+                        <p class="cf-row-desc">Twitch channel ids, separated by commas. Leave empty to allow any channel the extension is on.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="cf-input-group">
+                            <input type="text" id="gh-sa-review-channels" maxlength="440" placeholder="123456789" autocomplete="off">
+                            <button type="submit" class="btn btn-primary btn-sm">Save</button>
+                        </div>
+                    </div>
+                </form>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <span class="cf-row-label">Put the save back now</span>
+                        <p class="cf-row-desc">Restores the example greenhouse (level 12, six benches, staff, a cross nearly done).</p>
+                    </div>
+                    <div class="cf-row-control"><button type="button" class="btn btn-secondary btn-sm" id="gh-sa-review-reset">Reset</button></div>
+                </div>
             </div>
-            <p class="footer-copyright">&copy; <%= new Date().getFullYear() %> CertiFried MultiTool. All rights reserved.</p>
-        </div>
-    </footer>
+        </section>
+        </div><!-- /#section-greenhouse -->
 
-    <!-- Add Manager Modal -->
-    <div class="modal" id="add-manager-modal">
-        <div class="modal-content">
-            <h3 class="modal-title">Add Bot Manager</h3>
-            <label class="modal-label">User ID</label>
-            <input type="text" class="input" id="manager-user-id" placeholder="Enter Discord User ID">
-            <div class="modal-actions">
-                <button class="btn btn-primary" onclick="addBotManager()">Add</button>
-                <button class="btn btn-ghost" onclick="document.getElementById('add-manager-modal').classList.remove('show')">Cancel</button>
-            </div>
-        </div>
-    </div>
+        <script>
+        (function () {
+          const $ = (id) => document.getElementById(id);
+          let jobs = [];
+          let disabled = false;
+          const when = (ms) => ms ? new Date(ms).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : 'never';
+          const cell = (text, cls) => { const td = document.createElement('td'); if (cls) td.className = cls; td.textContent = text; return td; };
+          const isOff = (name) => disabled === true || (Array.isArray(disabled) && disabled.includes(name));
+
+          function showError(msg) { const e = $('gh-sa-error'); e.textContent = msg || ''; e.hidden = !msg; }
+
+          async function call(method, url, body) {
+            const res = await fetch(url, { method, credentials: 'same-origin', headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+            return data;
+          }
+
+          function draw(d) {
+            if (!d.ready) { $('gh-sa-notready').hidden = false; document.querySelectorAll('#section-greenhouse .cf-section').forEach(s => { s.hidden = true; }); return; }
+            jobs = d.jobs || [];
+            disabled = d.disabled;
+            $('gh-sa-jobs-state').textContent = disabled === true ? 'Every job is stopped.' : Array.isArray(disabled) && disabled.length ? `${disabled.length} stopped: ${disabled.join(', ')}.` : 'Every job runs.';
+            $('gh-sa-env-note').textContent = d.envNote || '';
+            const runs = new Map((d.runs || []).map(r => [r.name, r]));
+            const body = $('gh-sa-jobs-body');
+            body.replaceChildren();
+            jobs.forEach(name => {
+              const r = runs.get(name);
+              const tr = document.createElement('tr');
+              tr.append(cell(name), cell(r ? when(r.lastStartedAtMs) : 'not run yet'),
+                cell(r ? (r.lastStatus || '–') + (r.lastError ? `: ${r.lastError}` : '') : '–'),
+                cell(r ? `${r.runs} / ${r.failures}` : '0 / 0'));
+              const td = document.createElement('td');
+              td.className = 'cf-cell-end';
+              const box = document.createElement('input');
+              box.type = 'checkbox'; box.className = 'cf-switch'; box.setAttribute('role', 'switch');
+              box.setAttribute('aria-label', `Run ${name}`);
+              box.checked = !isOff(name);
+              box.disabled = disabled === true;
+              box.addEventListener('change', () => {
+                const off = new Set(Array.isArray(disabled) ? disabled : []);
+                if (box.checked) off.delete(name); else off.add(name);
+                save([...off]);
+              });
+              td.append(box);
+              tr.append(td);
+              body.append(tr);
+            });
+            const rv = d.review || {};
+            $('gh-sa-review-on').checked = !!rv.enabled;
+            $('gh-sa-review-state').textContent = `${rv.enabled ? 'Open' : 'Closed'}. Last put back: ${when(rv.lastResetAtMs)}.`;
+            $('gh-sa-review-channels').value = (rv.channelIds || []).join(', ');
+          }
+
+          async function load() {
+            try { showError(''); draw(await call('GET', '/api/super-admin/greenhouse')); } catch (err) { showError(err.message); }
+          }
+          async function save(value) {
+            try { showError(''); await call('POST', '/api/super-admin/greenhouse/jobs', { disabled: value }); } catch (err) { showError(err.message); }
+            load();
+          }
+          async function saveReview(includeChannels) {
+            const body = { enabled: $('gh-sa-review-on').checked };
+            if (includeChannels) body.channelIds = $('gh-sa-review-channels').value;
+            try { showError(''); await call('POST', '/api/super-admin/greenhouse/review', body); } catch (err) { showError(err.message); }
+            load();
+          }
+
+          $('gh-sa-jobs-all-off').addEventListener('click', () => save(true));
+          $('gh-sa-jobs-all-on').addEventListener('click', () => save(false));
+          $('gh-sa-review-on').addEventListener('change', () => saveReview(false));
+          $('gh-sa-review-form').addEventListener('submit', (e) => { e.preventDefault(); saveReview(true); });
+          $('gh-sa-review-reset').addEventListener('click', async (e) => {
+            const btn = e.currentTarget; btn.disabled = true;
+            try { showError(''); const r = await call('POST', '/api/super-admin/greenhouse/review/reset'); if (r.ready && !r.reset) showError('There is no review save yet: turn it on first.'); } catch (err) { showError(err.message); }
+            btn.disabled = false; load();
+          });
+          let loaded = false;
+          const maybeLoad = () => { if (!loaded && location.hash === '#greenhouse') { loaded = true; load(); } };
+          window.addEventListener('hashchange', maybeLoad);
+          document.addEventListener('DOMContentLoaded', maybeLoad);
+          document.querySelectorAll('.cf-owner-nav-item[data-sa-section="greenhouse"]').forEach(a => a.addEventListener('click', () => { if (!loaded) { loaded = true; load(); } }));
+        })();
+        </script>
+
+</div>
+</main>
+
 
     <!-- Deploy Bot Modal -->
     <div class="modal" id="deploy-bot-modal">
@@ -934,7 +521,7 @@
 
             <!-- Existing Bot Tab -->
             <div id="deploy-existing-tab">
-                <label class="modal-label">Select a Custom Bot</label>
+                <label class="modal-label" for="deploy-bot-select">Select a Custom Bot</label>
                 <select class="input" id="deploy-bot-select" style="margin-bottom: 0.75rem;">
                     <option value="">Loading bots...</option>
                 </select>
@@ -946,9 +533,9 @@
 
             <!-- New Bot Tab -->
             <div id="deploy-new-tab" style="display: none;">
-                <label class="modal-label">Bot Name</label>
+                <label class="modal-label" for="deploy-new-name">Bot Name</label>
                 <input type="text" class="input" id="deploy-new-name" placeholder="My Custom Bot" style="margin-bottom: 0.75rem;">
-                <label class="modal-label">Bot Token</label>
+                <label class="modal-label" for="deploy-new-token">Bot Token</label>
                 <input type="password" class="input" id="deploy-new-token" placeholder="Paste token from Discord Developer Portal" style="margin-bottom: 0.75rem;">
                 <p style="font-size: 0.7rem; color: var(--text-muted); margin-bottom: 0.75rem;">
                     <i class="fas fa-shield-alt"></i> Token is encrypted with AES-256-GCM before storage.
@@ -969,16 +556,16 @@
         <div class="modal-content" style="max-width: 500px;">
             <h3 class="modal-title" id="gb-entry-modal-title">Add Global Ban Entry</h3>
             <input type="hidden" id="gb-entry-id">
-            <label class="modal-label">User ID</label>
+            <label class="modal-label" for="gb-entry-user-id">User ID</label>
             <input type="text" class="input" id="gb-entry-user-id" placeholder="Enter Discord User ID" style="margin-bottom: 0.75rem;">
-            <label class="modal-label">Severity</label>
+            <label class="modal-label" for="gb-entry-severity">Severity</label>
             <select class="input" id="gb-entry-severity" style="margin-bottom: 0.75rem;">
                 <option value="critical">Critical</option>
                 <option value="high">High</option>
                 <option value="medium" selected>Medium</option>
                 <option value="low">Low</option>
             </select>
-            <label class="modal-label">Category</label>
+            <label class="modal-label" for="gb-entry-category">Category</label>
             <select class="input" id="gb-entry-category" style="margin-bottom: 0.75rem;">
                 <option value="phishing">Phishing</option>
                 <option value="scam">Scam</option>
@@ -990,9 +577,9 @@
                 <option value="impersonation">Impersonation</option>
                 <option value="other">Other</option>
             </select>
-            <label class="modal-label">Reason</label>
+            <label class="modal-label" for="gb-entry-reason">Reason</label>
             <textarea class="input" id="gb-entry-reason" rows="2" placeholder="Reason for ban..." style="margin-bottom: 0.75rem; resize: vertical;"></textarea>
-            <label class="modal-label">Evidence (JSON array, optional)</label>
+            <label class="modal-label" for="gb-entry-evidence">Evidence (JSON array, optional)</label>
             <textarea class="input" id="gb-entry-evidence" rows="2" placeholder='["screenshot_url", "log_entry"]' style="margin-bottom: 0.75rem; resize: vertical;"></textarea>
             <div class="modal-actions">
                 <button class="btn btn-primary" onclick="saveGBEntry()">Save</button>
@@ -1005,7 +592,7 @@
     <div class="modal" id="gb-csv-modal">
         <div class="modal-content" style="max-width: 700px;">
             <h3 class="modal-title"><i class="fas fa-file-csv" style="margin-right: 0.5rem;"></i> Import CSV</h3>
-            <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">Upload a CSV file with ban entries. Minimum column: <code style="background: rgba(255,255,255,0.1); padding: 0.15rem 0.4rem; border-radius: 4px;">user_id</code>. Optional: <code style="background: rgba(255,255,255,0.1); padding: 0.15rem 0.4rem; border-radius: 4px;">severity</code>, <code style="background: rgba(255,255,255,0.1); padding: 0.15rem 0.4rem; border-radius: 4px;">category</code>, <code style="background: rgba(255,255,255,0.1); padding: 0.15rem 0.4rem; border-radius: 4px;">reason</code>, <code style="background: rgba(255,255,255,0.1); padding: 0.15rem 0.4rem; border-radius: 4px;">evidence</code></p>
+            <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">Upload a CSV file with ban entries. Minimum column: <code style="background: var(--bg-card-hover); padding: 0.15rem 0.4rem; border-radius: 4px;">user_id</code>. Optional: <code style="background: var(--bg-card-hover); padding: 0.15rem 0.4rem; border-radius: 4px;">severity</code>, <code style="background: var(--bg-card-hover); padding: 0.15rem 0.4rem; border-radius: 4px;">category</code>, <code style="background: var(--bg-card-hover); padding: 0.15rem 0.4rem; border-radius: 4px;">reason</code>, <code style="background: var(--bg-card-hover); padding: 0.15rem 0.4rem; border-radius: 4px;">evidence</code></p>
 
             <!-- Step 1: File Upload -->
             <div id="csv-step-upload">
@@ -1020,29 +607,29 @@
             <div id="csv-step-preview" style="display: none;">
                 <div style="display: flex; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap;">
                     <div style="flex: 1; min-width: 140px;">
-                        <label class="modal-label">User ID Column</label>
+                        <label class="modal-label" for="csv-col-user-id">User ID Column</label>
                         <select class="input" id="csv-col-user-id" onchange="updateCSVPreview()"></select>
                     </div>
                     <div style="flex: 1; min-width: 140px;">
-                        <label class="modal-label">Severity Column</label>
+                        <label class="modal-label" for="csv-col-severity">Severity Column</label>
                         <select class="input" id="csv-col-severity" onchange="updateCSVPreview()"><option value="">— Use default —</option></select>
                     </div>
                     <div style="flex: 1; min-width: 140px;">
-                        <label class="modal-label">Category Column</label>
+                        <label class="modal-label" for="csv-col-category">Category Column</label>
                         <select class="input" id="csv-col-category" onchange="updateCSVPreview()"><option value="">— Use default —</option></select>
                     </div>
                     <div style="flex: 1; min-width: 140px;">
-                        <label class="modal-label">Reason Column</label>
+                        <label class="modal-label" for="csv-col-reason">Reason Column</label>
                         <select class="input" id="csv-col-reason" onchange="updateCSVPreview()"><option value="">— Use default —</option></select>
                     </div>
                     <div style="flex: 1; min-width: 140px;">
-                        <label class="modal-label">Evidence Column</label>
+                        <label class="modal-label" for="csv-col-evidence">Evidence Column</label>
                         <select class="input" id="csv-col-evidence" onchange="updateCSVPreview()"><option value="">— None —</option></select>
                     </div>
                 </div>
-                <div style="display: flex; gap: 0.75rem; margin-bottom: 1rem;">
+                <div class="sa-filters">
                     <div style="flex: 1;">
-                        <label class="modal-label">Default Severity</label>
+                        <label class="modal-label" for="csv-default-severity">Default Severity</label>
                         <select class="input" id="csv-default-severity">
                             <option value="medium" selected>Medium</option>
                             <option value="critical">Critical</option>
@@ -1051,7 +638,7 @@
                         </select>
                     </div>
                     <div style="flex: 1;">
-                        <label class="modal-label">Default Category</label>
+                        <label class="modal-label" for="csv-default-category">Default Category</label>
                         <select class="input" id="csv-default-category">
                             <option value="scam" selected>Scam</option>
                             <option value="phishing">Phishing</option>
@@ -1067,7 +654,7 @@
                 </div>
                 <p style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.5rem;">Preview (first 5 rows of <span id="csv-total-rows">0</span> total):</p>
                 <div class="guild-table-wrapper" style="max-height: 200px; overflow-y: auto;">
-                    <table class="guild-table" style="font-size: 0.8rem;">
+                    <table class="cf-table guild-table" style="font-size: 0.8rem;">
                         <thead><tr><th>User ID</th><th>Severity</th><th>Category</th><th>Reason</th><th>Evidence</th></tr></thead>
                         <tbody id="csv-preview-body"></tbody>
                     </table>
@@ -1077,20 +664,20 @@
             <!-- Step 3: Results -->
             <div id="csv-step-results" style="display: none;">
                 <div style="display: flex; gap: 1rem; margin-bottom: 1rem;">
-                    <div style="flex: 1; background: rgba(52,211,153,0.1); border: 1px solid rgba(52,211,153,0.3); border-radius: 10px; padding: 1rem; text-align: center;">
+                    <div style="flex: 1; background: color-mix(in srgb, var(--cf-success) 10%, transparent); border: 1px solid color-mix(in srgb, var(--cf-success) 30%, transparent); border-radius: 10px; padding: 1rem; text-align: center;">
                         <div style="font-size: 1.5rem; font-weight: 700; color: var(--accent-green);" id="csv-result-imported">0</div>
                         <div style="font-size: 0.75rem; color: var(--text-muted);">Imported</div>
                     </div>
-                    <div style="flex: 1; background: rgba(251,191,36,0.1); border: 1px solid rgba(251,191,36,0.3); border-radius: 10px; padding: 1rem; text-align: center;">
+                    <div style="flex: 1; background: color-mix(in srgb, var(--cf-warning) 10%, transparent); border: 1px solid color-mix(in srgb, var(--cf-warning) 30%, transparent); border-radius: 10px; padding: 1rem; text-align: center;">
                         <div style="font-size: 1.5rem; font-weight: 700; color: var(--accent-yellow);" id="csv-result-skipped">0</div>
                         <div style="font-size: 0.75rem; color: var(--text-muted);">Skipped (duplicates)</div>
                     </div>
-                    <div style="flex: 1; background: rgba(248,113,113,0.1); border: 1px solid rgba(248,113,113,0.3); border-radius: 10px; padding: 1rem; text-align: center;">
+                    <div style="flex: 1; background: color-mix(in srgb, var(--cf-danger) 10%, transparent); border: 1px solid color-mix(in srgb, var(--cf-danger) 30%, transparent); border-radius: 10px; padding: 1rem; text-align: center;">
                         <div style="font-size: 1.5rem; font-weight: 700; color: var(--accent-red);" id="csv-result-errors">0</div>
                         <div style="font-size: 0.75rem; color: var(--text-muted);">Errors</div>
                     </div>
                 </div>
-                <div id="csv-error-list" style="display: none; max-height: 150px; overflow-y: auto; font-size: 0.8rem; background: rgba(0,0,0,0.2); border-radius: 8px; padding: 0.75rem; margin-bottom: 1rem;"></div>
+                <div id="csv-error-list" style="display: none; max-height: 150px; overflow-y: auto; font-size: 0.8rem; background: var(--cf-inset); border-radius: 8px; padding: 0.75rem; margin-bottom: 1rem;"></div>
             </div>
 
             <div class="modal-actions">
@@ -1106,10 +693,10 @@
             <h3 class="modal-title">Review Appeal</h3>
             <input type="hidden" id="gb-appeal-id">
             <div id="gb-appeal-details" style="margin-bottom: 1rem; font-size: 0.85rem; color: var(--text-secondary);"></div>
-            <label class="modal-label">Response</label>
+            <label class="modal-label" for="gb-appeal-response">Response</label>
             <textarea class="input" id="gb-appeal-response" rows="3" placeholder="Your response to the appeal..." style="margin-bottom: 0.75rem; resize: vertical;"></textarea>
             <div class="modal-actions">
-                <button class="btn btn-primary" onclick="reviewGBAppeal(true)" style="background: rgba(52, 211, 153, 0.15); border: 1px solid rgba(52, 211, 153, 0.3); color: var(--accent-green);"><i class="fas fa-check"></i> Approve</button>
+                <button class="btn btn-primary" onclick="reviewGBAppeal(true)" style="background: color-mix(in srgb, var(--cf-success) 15%, transparent); border: 1px solid color-mix(in srgb, var(--cf-success) 30%, transparent); color: var(--cf-success-ink);"><i class="fas fa-check"></i> Approve</button>
                 <button class="btn btn-danger" onclick="reviewGBAppeal(false)"><i class="fas fa-times"></i> Deny</button>
                 <button class="btn btn-ghost" onclick="document.getElementById('gb-appeal-modal').classList.remove('show')">Cancel</button>
             </div>
@@ -1117,30 +704,6 @@
     </div>
 
     <script>
-    // Mobile Menu
-    const mobileMenuBtn = document.getElementById('mobile-menu-btn');
-    const mobileMenu = document.getElementById('mobile-menu');
-    const mobileMenuClose = document.getElementById('mobile-menu-close');
-
-    if (mobileMenuBtn && mobileMenu && mobileMenuClose) {
-        mobileMenuBtn.addEventListener('click', () => {
-            mobileMenu.classList.add('open');
-            document.body.style.overflow = 'hidden';
-        });
-
-        mobileMenuClose.addEventListener('click', () => {
-            mobileMenu.classList.remove('open');
-            document.body.style.overflow = '';
-        });
-
-        mobileMenu.addEventListener('click', (e) => {
-            if (e.target === mobileMenu) {
-                mobileMenu.classList.remove('open');
-                document.body.style.overflow = '';
-            }
-        });
-    }
-
     // Guild list state
     let allGuilds = [];
     let currentFilter = 'all';
@@ -1152,8 +715,6 @@
 
     document.addEventListener('DOMContentLoaded', () => {
         loadStats();
-        loadBotManagers();
-        loadAllBots();
         loadMyGuilds(); // Use passport login data directly — no refresh overwrite
         loadGBStats();
         loadGBEntries();
@@ -1169,163 +730,89 @@
             refreshAndLoadGuilds(this);
         });
 
-        // Reinitialize Bot
-        document.getElementById('reinitialize-bot-btn').addEventListener('click', async function() {
-            if (!confirm('Re-initialize the entire bot? This will restart the bot process.')) return;
-            this.disabled = true;
-            this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Re-initializing...';
+        // Owner tools (dashboard/routes/super-admin.js). These three called routes that did not
+        // exist until 2026-11-18; Re-initialize bot, Reset database, Re-init guild and Run full
+        // audit had no route at all and were removed.
+        document.getElementById('sa-leave-form').addEventListener('submit', async function (e) {
+            e.preventDefault();
+            const input = document.getElementById('leave-guild-id-input');
+            const guildId = input.value.trim();
+            if (!/^\d{17,20}$/.test(guildId)) return saToast('Enter a server ID (17-20 digits).', 'bad');
+            const known = allGuilds.concat(allBotOnlyGuilds).find(g => g.id === guildId);
+            if (!confirm('Make every CertiFried bot leave ' + (known ? known.name : 'server ' + guildId) + '? Inviting it back is the only undo.')) return;
+            const btn = document.getElementById('leave-guild-btn');
+            btn.disabled = true;
             try {
-                const r = await fetch('/api/admin/reinit-bot', { method: 'POST', headers: { 'Content-Type': 'application/json' }});
-                const d = await r.json();
-                alert(d.success ? (d.message || 'Bot re-initialized') : `Error: ${d.error}`);
-            } catch(e) { alert('Error re-initializing bot'); }
-            finally { this.disabled = false; this.innerHTML = '<i class="fas fa-sync-alt"></i> Re-initialize Bot (Global)'; }
+                const d = await saApi('/api/admin/leave-guild', { method: 'POST', body: JSON.stringify({ guildId }) });
+                saToast(d.message || 'Left the server.', 'ok');
+                input.value = '';
+                loadMyGuilds();
+            } catch (err) { saToast(err.message, 'bad'); }
+            finally { btn.disabled = false; }
         });
 
-        // Reinitialize Guild
-        document.getElementById('reinitialize-guild-btn').addEventListener('click', async function() {
-            const guildId = document.getElementById('guild-id-input').value.trim();
-            if (!guildId) return alert('Please enter a Guild ID');
-            if (!confirm(`Re-initialize guild ${guildId}?`)) return;
-            this.disabled = true;
-            this.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-            try {
-                const r = await fetch('/api/admin/reinit-guild', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ guildId })});
-                const d = await r.json();
-                if (d.success) { alert(d.message || 'Guild re-initialized'); document.getElementById('guild-id-input').value = ''; }
-                else alert(`Error: ${d.error}`);
-            } catch(e) { alert('Error re-initializing guild'); }
-            finally { this.disabled = false; this.innerHTML = '<i class="fas fa-sync"></i> Re-init'; }
-        });
-
-        // Leave Guild
-        document.getElementById('leave-guild-btn').addEventListener('click', async function() {
-            const guildId = document.getElementById('leave-guild-id-input').value.trim();
-            if (!guildId) return alert('Please enter a Guild ID');
-            if (!confirm(`Force bot to leave guild ${guildId}?`)) return;
-            this.disabled = true;
-            this.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
-            try {
-                const r = await fetch('/api/admin/leave-guild', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ guildId })});
-                const d = await r.json();
-                if (d.success) { alert(d.message || 'Left guild'); document.getElementById('leave-guild-id-input').value = ''; }
-                else alert(`Error: ${d.error}`);
-            } catch(e) { alert('Error leaving guild'); }
-            finally { this.disabled = false; this.innerHTML = '<i class="fas fa-sign-out-alt"></i> Leave'; }
-        });
-
-        // Reset Database
-        document.getElementById('reset-database-btn').addEventListener('click', async function() {
-            if (!confirm('WARNING: Reset the entire database? This is irreversible!')) return;
-            const confirmText = prompt('Type "RESET DATABASE" to confirm:');
-            if (confirmText !== 'RESET DATABASE') return alert('Cancelled.');
-            this.disabled = true;
-            this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Resetting...';
-            try {
-                const r = await fetch('/api/admin/reset-database', { method: 'POST', headers: { 'Content-Type': 'application/json' }});
-                const d = await r.json();
-                alert(d.success ? (d.message || 'Database reset') : `Error: ${d.error}`);
-            } catch(e) { alert('Error resetting database'); }
-            finally { this.disabled = false; this.innerHTML = '<i class="fas fa-trash"></i> Reset Database'; }
-        });
-
-        // Audit Users
-        document.getElementById('audit-users-btn').addEventListener('click', function() {
-            this.disabled = true;
-            this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Running Audit...';
-            document.getElementById('audit-progress').classList.remove('hidden');
-            document.getElementById('audit-results').classList.add('hidden');
-            document.getElementById('audit-messages').innerHTML = '';
-            const es = new EventSource('/api/admin/audit-users');
-            let totalGuilds = 0;
-            es.onmessage = (e) => {
-                try {
-                    const data = JSON.parse(e.data);
-                    if (data.totalGuilds) totalGuilds = data.totalGuilds;
-                    if (data.currentGuild) {
-                        const pct = Math.round((data.currentGuild / totalGuilds) * 100);
-                        document.getElementById('audit-progress-bar').style.width = `${pct}%`;
-                        document.getElementById('audit-percentage').textContent = `${pct}%`;
-                    }
-                    if (data.message) {
-                        document.getElementById('audit-status').textContent = data.message;
-                        const div = document.createElement('div');
-                        div.style.padding = '4px 0';
-                        div.style.borderBottom = '1px solid rgba(255,255,255,0.05)';
-                        let color = 'var(--text-muted)';
-                        if (data.type === 'error') color = 'var(--accent-red)';
-                        if (data.type === 'match') color = 'var(--accent-green)';
-                        if (data.type === 'info') color = 'var(--accent-purple)';
-                        div.innerHTML = `<span style="color:${color}">${data.message}</span>`;
-                        document.getElementById('audit-messages').appendChild(div);
-                        document.getElementById('audit-messages').scrollTop = document.getElementById('audit-messages').scrollHeight;
-                    }
-                    if (data.type === 'complete' && data.results) {
-                        es.close();
-                        document.getElementById('audit-progress-bar').style.width = '100%';
-                        document.getElementById('audit-percentage').textContent = '100%';
-                        document.getElementById('audit-status').textContent = 'Audit completed!';
-                        setTimeout(() => {
-                            document.getElementById('audit-results').classList.remove('hidden');
-                            document.getElementById('audit-guilds').textContent = data.results.totalGuilds;
-                            document.getElementById('audit-members').textContent = data.results.totalMembers;
-                            document.getElementById('audit-exact').textContent = data.results.exactMatches;
-                            document.getElementById('audit-fuzzy').textContent = data.results.fuzzyMatches;
-                            document.getElementById('audit-new-links').textContent = data.results.newLinks;
-                            document.getElementById('audit-existing').textContent = data.results.existingLinks;
-                        }, 500);
-                        document.getElementById('audit-users-btn').disabled = false;
-                        document.getElementById('audit-users-btn').innerHTML = '<i class="fas fa-search"></i> Run Full Audit';
-                    }
-                } catch(err) {}
-            };
-            es.onerror = () => {
-                es.close();
-                document.getElementById('audit-status').textContent = 'Error occurred';
-                document.getElementById('audit-users-btn').disabled = false;
-                document.getElementById('audit-users-btn').innerHTML = '<i class="fas fa-search"></i> Run Full Audit';
-            };
-        });
-
-        // Search Streamer
-        document.getElementById('search-streamer-btn').addEventListener('click', async function() {
+        document.getElementById('sa-streamer-form').addEventListener('submit', async function (e) {
+            e.preventDefault();
             const username = document.getElementById('search-streamer-input').value.trim();
             const platform = document.getElementById('search-platform-select').value;
-            if (!username) return alert('Enter a streamer username');
-            this.disabled = true;
-            this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Searching...';
+            const out = document.getElementById('search-results-content');
+            const btn = document.getElementById('search-streamer-btn');
+            btn.disabled = true;
             try {
-                const r = await fetch('/api/admin/search-streamer', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, platform })});
-                const d = await r.json();
-                if (d.success) {
-                    document.getElementById('search-results').classList.remove('hidden');
-                    document.getElementById('search-results-content').innerHTML = d.matches.length > 0 ?
-                        d.matches.map(m => `<div class="result-card"><div class="result-card-title">${m.streamerUsername} <span style="color:var(--text-muted)">(${m.platform})</span></div><div class="result-card-meta">Discord: ${m.discordUsername} (${m.discordUserId})<br>Guild: ${m.guildName}</div></div>`).join('') :
-                        '<div class="empty-state"><p>No matches found</p></div>';
-                } else alert(`Error: ${d.error}`);
-            } catch(e) { alert('Error searching'); }
-            finally { this.disabled = false; this.innerHTML = '<i class="fas fa-search"></i> Search'; }
+                const d = await saApi('/api/admin/search-streamer', { method: 'POST', body: JSON.stringify({ username, platform }) });
+                if (!d.matches.length) { out.replaceChildren(saEl('div', { class: 'cf-state cf-state--compact' }, [saEl('p', { class: 'cf-state-title', text: 'No tracked streamer matches.' })])); return; }
+                out.replaceChildren(...d.matches.map(m => saEl('div', { class: 'cf-list-item cf-list-item--multi' }, [
+                    saEl('div', { class: 'cf-list-main' }, [
+                        saEl('p', { class: 'cf-list-title' }, [saEl('span', { text: m.streamerUsername }), saEl('span', { class: 'cf-pill', text: m.platform })]),
+                        saEl('p', { class: 'cf-list-meta' }, [
+                            saEl('span', { text: m.discordUserId ? 'Discord: ' + (m.discordUsername || 'unknown') + ' (' + m.discordUserId + ')' : 'Not linked to a Discord account' }),
+                            saEl('span', { text: m.guilds.length + (m.guilds.length === 1 ? ' server follows' : ' servers follow') }),
+                        ]),
+                        m.guilds.length ? saEl('div', { class: 'cf-chips' }, m.guilds.slice(0, 12).map(g => saEl('span', { class: 'cf-chip', title: g.id, text: g.name || g.id }))) : null,
+                    ]),
+                ])));
+            } catch (err) { saToast(err.message, 'bad'); }
+            finally { btn.disabled = false; }
         });
 
-        // View Links
-        document.getElementById('view-links-btn').addEventListener('click', async function() {
+        document.getElementById('sa-links-form').addEventListener('submit', async function (e) {
+            e.preventDefault();
             const userId = document.getElementById('user-id-input').value.trim();
-            if (!userId) return alert('Enter a Discord User ID');
-            this.disabled = true;
-            this.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...';
+            const out = document.getElementById('links-results-content');
+            const btn = document.getElementById('view-links-btn');
+            btn.disabled = true;
             try {
-                const r = await fetch('/api/admin/view-links', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId })});
-                const d = await r.json();
-                if (d.success) {
-                    document.getElementById('links-results').classList.remove('hidden');
-                    document.getElementById('links-results-content').innerHTML = d.links.length > 0 ?
-                        d.links.map(l => `<div class="result-card"><div class="result-card-title">${l.streamer_username} <span style="color:var(--text-muted)">(${l.platform})</span> ${l.verified ? '<span style="color:var(--accent-green);font-size:0.7rem">Verified</span>' : '<span style="color:var(--accent-yellow);font-size:0.7rem">Pending</span>'}</div><div class="result-card-meta">Linked: ${new Date(l.linked_at).toLocaleDateString()}</div></div>`).join('') :
-                        '<div class="empty-state"><p>No links found</p></div>';
-                } else alert(`Error: ${d.error}`);
-            } catch(e) { alert('Error viewing links'); }
-            finally { this.disabled = false; this.innerHTML = '<i class="fas fa-link"></i> View Links'; }
+                const d = await saApi('/api/admin/view-links', { method: 'POST', body: JSON.stringify({ userId }) });
+                if (!d.links.length) { out.replaceChildren(saEl('div', { class: 'cf-state cf-state--compact' }, [saEl('p', { class: 'cf-state-title', text: 'Nothing is linked to that account.' })])); return; }
+                out.replaceChildren(...d.links.map(l => saEl('div', { class: 'cf-list-item' }, [
+                    saEl('div', { class: 'cf-list-main' }, [
+                        saEl('span', { class: 'cf-em', text: l.streamer_username }), ' ',
+                        saEl('span', { class: 'cf-pill', text: l.platform }), ' ',
+                        saEl('span', { class: 'cf-muted', text: l.kind === 'profile'
+                            ? 'Streamer profile · ' + l.servers + (l.servers === 1 ? ' server' : ' servers')
+                            : 'Member link in ' + (l.guild_name || l.guild_id) + (l.source ? ' · ' + l.source : '') }),
+                    ]),
+                ])));
+            } catch (err) { saToast(err.message, 'bad'); }
+            finally { btn.disabled = false; }
         });
     });
+
+    // Small helpers for the owner tools.
+    function saEl(tag, attrs, kids) {
+        const el = document.createElement(tag);
+        Object.entries(attrs || {}).forEach(([k, v]) => { if (v == null) return; if (k === 'class') el.className = v; else if (k === 'text') el.textContent = v; else el.setAttribute(k, v); });
+        (kids || []).forEach(c => { if (c != null) el.append(c); });
+        return el;
+    }
+    function saToast(text, tone) { if (window.cfSite) window.cfSite.toast(text, tone); else alert(text); }
+    async function saApi(url, opts) {
+        const r = await fetch(url, Object.assign({ headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' } }, opts || {}));
+        let d = {};
+        try { d = await r.json(); } catch (e) { throw new Error(r.status === 401 ? 'Your session expired. Reload the page.' : 'Unexpected response (' + r.status + ').'); }
+        if (!r.ok || d.success === false) throw new Error(d.error || ('Request failed (' + r.status + ')'));
+        return d;
+    }
 
     // ─── Deploy Bot Modal Functions ─────────────────────────────
 
@@ -1470,7 +957,7 @@
                 setTimeout(function() {
                     closeDeployModal();
                     loadMyGuilds();
-                    loadAllBots();
+                    loadStats();
                 }, 1500);
             } else {
                 showDeployStatus(d.error || 'Failed to register bot', 'error');
@@ -1494,7 +981,7 @@
         var icons = { error: 'fa-exclamation-circle', success: 'fa-check-circle', info: 'fa-info-circle' };
         el.replaceChildren();
         var wrapper = document.createElement('div');
-        wrapper.style.cssText = 'padding:0.625rem;border-radius:8px;font-size:0.8rem;background:rgba(255,255,255,0.03);border:1px solid ' + colors[type] + '30;color:' + colors[type];
+        wrapper.style.cssText = 'padding:0.625rem;border-radius:8px;font-size:0.8rem;background:color-mix(in srgb, var(--cf-text) 3%, transparent);border:1px solid color-mix(in srgb, ' + colors[type] + ' 19%, transparent);color:' + colors[type];
         var icon = document.createElement('i');
         icon.className = 'fas ' + icons[type];
         wrapper.appendChild(icon);
@@ -1522,27 +1009,20 @@
             const icon = btn.querySelector('i');
             if (icon) icon.classList.remove('fa-spin');
         }
-        // Resolve actual permissions for without-bot guilds in background, then refresh
-        if (allGuilds.some(g => !g.botPresent && g.roleCategory === 'Member')) {
-            fetch('/api/super-admin/resolve-permissions', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
-                .then(r => r.json())
-                .then(d => { if (d.success && d.resolved > 0) loadMyGuilds(); })
-                .catch(() => {});
-        }
     }
 
     function showTokenExpiredBanner() {
         if (document.getElementById('token-expired-banner')) return;
         const banner = document.createElement('div');
         banner.id = 'token-expired-banner';
-        banner.style.cssText = 'background:rgba(251,191,36,0.15);border:1px solid rgba(251,191,36,0.4);border-radius:12px;padding:1rem 1.5rem;margin-bottom:1.5rem;display:flex;align-items:center;gap:0.75rem;color:var(--accent-yellow);font-size:0.9rem;';
+        banner.style.cssText = 'background:color-mix(in srgb, var(--cf-warning) 15%, transparent);border:1px solid color-mix(in srgb, var(--cf-warning) 40%, transparent);border-radius:12px;padding:1rem 1.5rem;margin-bottom:1.5rem;display:flex;align-items:center;gap:0.75rem;color:var(--cf-warning-ink);font-size:0.9rem;';
         const icon = document.createElement('i');
         icon.className = 'fas fa-exclamation-triangle';
         const span = document.createElement('span');
         span.textContent = 'Your Discord session has expired. Guild list may be incomplete. ';
         const link = document.createElement('a');
         link.href = '/auth/discord';
-        link.style.cssText = 'color:var(--accent-yellow);text-decoration:underline;font-weight:600;';
+        link.style.cssText = 'color:var(--cf-warning-ink);text-decoration:underline;font-weight:600;';
         link.textContent = 'Re-login to refresh';
         span.appendChild(link);
         banner.appendChild(icon);
@@ -1609,16 +1089,17 @@
 
     function filterGuilds(filter, btn) {
         currentFilter = filter;
-        document.querySelectorAll('.guild-filter-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('#guild-filters .guild-filter-btn').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-pressed', 'false'); });
         btn.classList.add('active');
+        btn.setAttribute('aria-pressed', 'true');
         renderGuilds();
     }
 
     const roleCategoryMeta = {
         'Owner':         { badge: 'badge-owner', icon: 'fa-crown',      color: 'var(--accent-yellow)', label: 'Owner' },
         'Administrator': { badge: 'badge-admin', icon: 'fa-shield-alt', color: 'var(--accent-purple)', label: 'Administrator' },
-        'Moderator':     { badge: 'badge-mod',   icon: 'fa-gavel',      color: '#60a5fa',              label: 'Moderator' },
-        'Member':        { badge: 'badge-bot-yes', icon: 'fa-user',    color: '#10b981',              label: 'Member' }
+        'Moderator':     { badge: 'badge-mod',   icon: 'fa-gavel',      color: 'var(--cf-info)',        label: 'Moderator' },
+        'Member':        { badge: 'badge-bot-yes', icon: 'fa-user',    color: 'var(--cf-success)',     label: 'Member' }
     };
 
     function renderGuilds() {
@@ -1653,7 +1134,7 @@
             headerTd.colSpan = 5;
             const label = document.createElement('span');
             label.className = 'section-label';
-            label.style.color = '#ed8936';
+            label.style.color = 'var(--sa-owner)';
             const hIcon = document.createElement('i');
             hIcon.className = 'fas fa-eye';
             label.appendChild(hIcon);
@@ -1715,17 +1196,17 @@
                     roleBadge.appendChild(roleIcon);
                     roleBadge.append(' Administrator');
                 } else if (g.roleCategory === 'Moderator') {
-                    roleBadge.style.cssText = 'background:rgba(96,165,250,0.15);color:#60a5fa;';
+                    roleBadge.style.cssText = 'background:color-mix(in srgb, var(--cf-info) 15%, transparent);color:var(--cf-info-ink);';
                     roleIcon.className = 'fas fa-gavel';
                     roleBadge.appendChild(roleIcon);
                     roleBadge.append(' Moderator');
                 } else if (g.isMember) {
-                    roleBadge.style.cssText = 'background:rgba(16,185,129,0.15);color:#10b981;';
+                    roleBadge.style.cssText = 'background:color-mix(in srgb, var(--cf-success) 15%, transparent);color:var(--cf-success-ink);';
                     roleIcon.className = 'fas fa-user-check';
                     roleBadge.appendChild(roleIcon);
                     roleBadge.append(' Member');
                 } else {
-                    roleBadge.style.cssText = 'background:rgba(239,68,68,0.15);color:#ef4444;';
+                    roleBadge.style.cssText = 'background:color-mix(in srgb, var(--cf-danger) 15%, transparent);color:var(--cf-danger-ink);';
                     roleIcon.className = 'fas fa-user-slash';
                     roleBadge.appendChild(roleIcon);
                     roleBadge.append(' Not a Member');
@@ -1736,7 +1217,7 @@
                     ownerBadge.style.cssText = 'margin-top:4px;';
                     var ownerInner = document.createElement('span');
                     ownerInner.className = 'badge';
-                    ownerInner.style.cssText = 'background:rgba(237,137,54,0.15);color:#ed8936;font-size:0.7rem;padding:2px 6px;';
+                    ownerInner.style.cssText = 'background:color-mix(in srgb, #ed8936 15%, transparent);color:var(--sa-owner);font-size:0.7rem;padding:2px 6px;';
                     var ownerIcon = document.createElement('i');
                     ownerIcon.className = 'fas fa-user';
                     ownerInner.appendChild(ownerIcon);
@@ -1763,7 +1244,7 @@
                 } else {
                     var mBadge = document.createElement('span');
                     mBadge.className = 'badge';
-                    mBadge.style.cssText = 'background:rgba(88,101,242,0.15);color:#5865F2;';
+                    mBadge.style.cssText = 'background:color-mix(in srgb, #5865f2 15%, transparent);color:var(--sa-blurple);';
                     var mIcon = document.createElement('i');
                     mIcon.className = 'fas fa-robot';
                     mBadge.appendChild(mIcon);
@@ -1892,7 +1373,7 @@
                 ownerWrap.style.cssText = 'margin-top:4px;';
                 const ownerBdg = document.createElement('span');
                 ownerBdg.className = 'badge';
-                ownerBdg.style.cssText = 'background:rgba(237,137,54,0.15);color:#ed8936;font-size:0.7rem;padding:2px 6px;';
+                ownerBdg.style.cssText = 'background:color-mix(in srgb, #ed8936 15%, transparent);color:var(--sa-owner);font-size:0.7rem;padding:2px 6px;';
                 const oIcon = document.createElement('i');
                 oIcon.className = 'fas fa-user';
                 ownerBdg.appendChild(oIcon);
@@ -1972,111 +1453,61 @@
                 document.getElementById('total-guilds').textContent = d.stats.totalGuilds.toLocaleString();
                 document.getElementById('total-users').textContent = d.stats.totalUsers.toLocaleString();
                 document.getElementById('live-streamers').textContent = d.stats.liveStreamers.toLocaleString();
-                const h = Math.floor(d.stats.uptime / 3600), m = Math.floor((d.stats.uptime % 3600) / 60);
-                const uptime = `${h}h ${m}m`;
-                document.getElementById('bot-uptime').textContent = uptime;
-                document.getElementById('memory-usage').textContent = `${d.stats.memoryUsage || 0} MB`;
-                document.getElementById('total-guilds-detail').textContent = d.stats.totalGuilds.toLocaleString();
-                document.getElementById('total-users-detail').textContent = d.stats.totalUsers.toLocaleString();
-                document.getElementById('live-streamers-detail').textContent = d.stats.liveStreamers.toLocaleString();
-                document.getElementById('bot-uptime-detail').textContent = uptime;
-                document.getElementById('memory-usage-detail').textContent = `${d.stats.memoryUsage || 0} MB`;
+                const days = Math.floor(d.stats.uptime / 86400), h = Math.floor((d.stats.uptime % 86400) / 3600), m = Math.floor((d.stats.uptime % 3600) / 60);
+                document.getElementById('bot-uptime').textContent = days ? days + 'd ' + h + 'h' : h + 'h ' + m + 'm';
+                document.getElementById('memory-usage').textContent = (d.stats.memoryUsage || 0) + ' MB';
+                document.getElementById('custom-bots-sub').textContent = (d.stats.customBotsOnline || 0) + ' online';
             }
             const r2 = await fetch('/api/super-admin/stats');
             const d2 = await r2.json();
             if (d2.bots && d2.creators) {
-                document.getElementById('custom-bots').textContent = d2.bots.total_bots.toLocaleString();
-                document.getElementById('bot-creators').textContent = d2.creators.total_creators.toLocaleString();
+                document.getElementById('custom-bots').textContent = Number(d2.bots.total_bots || 0).toLocaleString();
+                document.getElementById('bot-creators').textContent = Number(d2.creators.total_creators || 0).toLocaleString();
             }
-        } catch(e) {}
-    }
-
-    async function loadBotManagers() {
-        try {
-            const r = await fetch('/api/super-admin/bot-managers');
-            const d = await r.json();
-            const c = document.getElementById('bot-managers-list');
-            if (!d.success || !d.managers || d.managers.length === 0) {
-                c.innerHTML = '<div class="empty-state"><p>No bot managers yet. Add one to get started!</p></div>';
-                return;
-            }
-            c.innerHTML = d.managers.map(m => `<div class="list-item"><div class="list-item-info"><i class="fas fa-user-shield" style="color:var(--accent-purple);font-size:1.25rem"></i><div><div class="list-item-name">${m.username || 'Unknown User'}</div><div class="list-item-id">ID: ${m.user_id}</div></div></div><button class="btn btn-danger btn-sm" style="width:auto" onclick="removeBotManager('${m.user_id}')"><i class="fas fa-trash"></i></button></div>`).join('');
-        } catch(e) { document.getElementById('bot-managers-list').innerHTML = '<div class="empty-state" style="color:var(--accent-red)"><p>Error loading managers</p></div>'; }
-    }
-
-    async function addBotManager() {
-        const userId = document.getElementById('manager-user-id').value.trim();
-        if (!userId) return alert('Enter a user ID');
-        try {
-            const r = await fetch('/api/super-admin/bot-managers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId })});
-            const d = await r.json();
-            if (d.success) { document.getElementById('add-manager-modal').classList.remove('show'); document.getElementById('manager-user-id').value = ''; loadBotManagers(); }
-            else alert(d.error || 'Failed to add manager');
-        } catch(e) { alert('An error occurred'); }
-    }
-
-    async function removeBotManager(userId) {
-        if (!confirm('Remove this bot manager?')) return;
-        try {
-            const r = await fetch(`/api/super-admin/bot-managers/${userId}`, { method: 'DELETE' });
-            const d = await r.json();
-            if (d.success) loadBotManagers();
-            else alert(d.error || 'Failed to remove manager');
-        } catch(e) { alert('An error occurred'); }
-    }
-
-    async function loadAllBots() {
-        try {
-            const r = await fetch('/api/super-admin/all-bots');
-            const d = await r.json();
-            const c = document.getElementById('all-bots-list');
-            if (!d.success || !d.bots || d.bots.length === 0) {
-                c.innerHTML = '<div class="empty-state"><p>No custom bots found</p></div>';
-                return;
-            }
-            c.innerHTML = d.bots.map(b => `<div class="bot-card ${b.status === 'online' ? 'online' : b.status === 'ready' ? 'ready' : ''}"><div class="bot-header">${b.avatar ? `<img src="${b.avatar}" class="bot-avatar">` : '<i class="fas fa-robot" style="font-size:2rem;color:var(--text-muted)"></i>'}<div><div class="bot-name">${b.username || 'Unknown Bot'}</div><div class="bot-id">ID: ${b.bot_id}</div></div></div><div class="bot-stats"><div><span class="bot-stat-label">Status:</span> <span class="bot-stat-value" style="color:${b.status === 'online' ? 'var(--accent-green)' : b.status === 'ready' ? 'var(--accent-yellow)' : 'var(--text-muted)'}">${b.status || 'offline'}</span></div><div><span class="bot-stat-label">Guilds:</span> <span class="bot-stat-value">${b.guilds || 0}</span></div><div><span class="bot-stat-label">Owner:</span> <span class="bot-stat-value">${b.owner_username || 'Unknown'}</span></div></div></div>`).join('');
-        } catch(e) { document.getElementById('all-bots-list').innerHTML = '<div class="empty-state" style="color:var(--accent-red)"><p>Error loading bots</p></div>'; }
+        } catch(e) { console.warn('[owner console] stats', e); }
     }
 
     // ========== Section Navigation ==========
     let currentSection = 'guilds';
-    const sectionNames = ['guilds', 'system', 'users', 'bots', 'globalbans', 'stats'];
+    const sectionNames = ['guilds', 'globalbans', 'greenhouse', 'tools'];
+    // Old bookmarks: #system / #users became Tools, #stats the KPI strip, #bots /bot-management.
+    const sectionAliases = { system: 'tools', users: 'tools', stats: 'guilds', overview: 'guilds' };
 
-    function switchSection(name, btn) {
-        if (currentSection === name) return;
+    function switchSection(name) {
+        if (!sectionNames.includes(name)) name = 'guilds';
         currentSection = name;
-
-        // Hide all sections, show the selected one
         sectionNames.forEach(s => {
             const el = document.getElementById('section-' + s);
             if (el) el.classList.toggle('active', s === name);
         });
-
-        // Update nav buttons
-        document.querySelectorAll('.section-nav-btn').forEach(b => b.classList.remove('active'));
-        if (btn) btn.classList.add('active');
-
-        // Update URL hash
+        document.querySelectorAll('.cf-owner-nav-item[data-sa-section]').forEach(a => {
+            const on = a.dataset.saSection === name;
+            a.classList.toggle('is-active', on);
+            if (on) a.setAttribute('aria-current', 'page'); else a.removeAttribute('aria-current');
+        });
         history.replaceState(null, '', '#' + name);
-
-        // Scroll to top of content
-        window.scrollTo({ top: 0, behavior: 'instant' });
-
-        // Lazy-load section data
-        if (name === 'globalbans') {
-            loadGBStats();
-            loadGBEntries();
-        }
+        if (name === 'globalbans') { loadGBStats(); loadGBEntries(); }
     }
 
-    // Handle hash on page load
-    (function() {
-        const hash = window.location.hash.replace('#', '');
-        if (hash && sectionNames.includes(hash)) {
-            const btn = document.querySelector(`.section-nav-btn[data-section="${hash}"]`);
-            switchSection(hash, btn);
-        }
-    })();
+    document.querySelectorAll('.cf-owner-nav-item[data-sa-section]').forEach(a => {
+        a.addEventListener('click', e => { e.preventDefault(); switchSection(a.dataset.saSection); });
+    });
+
+    // Runs after the whole script: the global-ban state (let gbEntriesPage…) is declared further
+    // down, and opening /super-admin#globalbans used to throw on it and stop the rest of the script.
+    document.addEventListener('DOMContentLoaded', function () {
+        let hash = window.location.hash.replace('#', '');
+        if (hash === 'bots') { window.location.replace('/bot-management?scope=all'); return; }
+        hash = sectionAliases[hash] || hash;
+        switchSection(sectionNames.includes(hash) ? hash : 'guilds');
+    });
+    // A link to another section of this page (e.g. from a notice) only changes the hash.
+    window.addEventListener('hashchange', function () {
+        const h = window.location.hash.replace('#', '');
+        if (h === 'bots') { window.location.replace('/bot-management?scope=all'); return; }
+        const name = sectionAliases[h] || h;
+        if (sectionNames.includes(name) && name !== currentSection) switchSection(name);
+    });
 
     // ========== Global Ban Management ==========
     let gbEntriesPage = 1;
@@ -2110,8 +1541,9 @@
         ['entries', 'reports', 'appeals', 'action-log'].forEach(t => {
             document.getElementById('gb-tab-' + t).style.display = t === tab ? 'block' : 'none';
         });
-        btn.parentElement.querySelectorAll('.guild-filter-btn').forEach(b => b.classList.remove('active'));
+        btn.parentElement.querySelectorAll('.cf-tab').forEach(b => { b.classList.remove('active'); b.setAttribute('aria-selected', 'false'); });
         btn.classList.add('active');
+        btn.setAttribute('aria-selected', 'true');
         document.getElementById('gb-add-entry-btn').style.display = tab === 'entries' ? '' : 'none';
         document.getElementById('gb-import-csv-btn').style.display = tab === 'entries' ? '' : 'none';
         if (tab === 'entries') loadGBEntries();
@@ -2120,11 +1552,11 @@
         else if (tab === 'action-log') loadGBActionLog();
     }
 
-    const severityColors = { critical: 'var(--accent-red)', high: '#f97316', medium: 'var(--accent-yellow)', low: 'var(--accent-green)' };
-    const severityBg = { critical: 'rgba(248,113,113,0.15)', high: 'rgba(249,115,22,0.15)', medium: 'rgba(251,191,36,0.15)', low: 'rgba(52,211,153,0.15)' };
+    const severityColors = { critical: 'var(--accent-red)', high: 'var(--sa-high)', medium: 'var(--accent-yellow)', low: 'var(--accent-green)' };
+    const severityBg = { critical: 'color-mix(in srgb, var(--cf-danger) 15%, transparent)', high: 'color-mix(in srgb, #f97316 15%, transparent)', medium: 'color-mix(in srgb, var(--cf-warning) 15%, transparent)', low: 'color-mix(in srgb, var(--cf-success) 15%, transparent)' };
 
     function severityBadge(s) {
-        return `<span class="badge" style="background:${severityBg[s] || 'rgba(255,255,255,0.05)'};color:${severityColors[s] || 'var(--text-muted)'}">${s || 'unknown'}</span>`;
+        return `<span class="cf-pill sa-sev sa-sev-${escapeHtml(s || 'unknown')}">${escapeHtml(s || 'unknown')}</span>`;
     }
 
     function timeAgo(dateStr) {
@@ -2138,14 +1570,16 @@
         return Math.floor(diff / 86400) + 'd ago';
     }
 
+    // Returns HTML-escaped text: every caller inserts it into markup.
     function truncate(str, len) {
         if (!str) return '-';
-        return str.length > len ? str.substring(0, len) + '...' : str;
+        str = String(str);
+        return escapeHtml(str.length > len ? str.substring(0, len) + '...' : str);
     }
 
     function escapeHtml(str) {
-        if (!str) return '';
-        return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        if (str == null || str === '') return '';
+        return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
     }
 
     function toggleGBDetail(id, row) {
@@ -2169,47 +1603,31 @@
                 // Update nav badge with pending items count
                 const pending = (d.stats.pendingReports || 0) + (d.stats.pendingAppeals || 0);
                 const badge = document.getElementById('gb-nav-badge');
-                if (pending > 0) {
+                if (badge) {
                     badge.textContent = pending;
-                    badge.style.display = '';
-                } else {
-                    badge.style.display = 'none';
+                    badge.hidden = !(pending > 0);
                 }
 
-                // Render category breakdown
-                if (d.stats.byCategory && d.stats.byCategory.length > 0) {
-                    document.getElementById('gb-breakdown-category').innerHTML = d.stats.byCategory.map(c =>
-                        '<div style="display:flex;justify-content:space-between;align-items:center;padding:0.2rem 0;font-size:0.8rem;">' +
-                        '<span style="color:var(--text-secondary);">' + c.category + '</span>' +
-                        '<span class="badge" style="background:rgba(255,255,255,0.05);color:var(--text-primary);font-size:0.7rem;">' + c.count + '</span>' +
-                        '</div>'
-                    ).join('');
-                }
-                // Render severity breakdown
-                if (d.stats.bySeverity && d.stats.bySeverity.length > 0) {
-                    document.getElementById('gb-breakdown-severity').innerHTML = d.stats.bySeverity.map(s =>
-                        '<div style="display:flex;justify-content:space-between;align-items:center;padding:0.2rem 0;font-size:0.8rem;">' +
-                        '<span style="color:' + (severityColors[s.severity] || 'var(--text-secondary)') + ';">' + s.severity + '</span>' +
-                        '<span class="badge" style="background:' + (severityBg[s.severity] || 'rgba(255,255,255,0.05)') + ';color:' + (severityColors[s.severity] || 'var(--text-primary)') + ';font-size:0.7rem;">' + s.count + '</span>' +
-                        '</div>'
-                    ).join('');
-                }
+                const breakdown = (el, rows, key) => {
+                    if (!rows || !rows.length) { el.replaceChildren(saEl('p', { class: 'cf-muted', text: 'None' })); return; }
+                    el.replaceChildren(...rows.map(x => saEl('div', { class: 'sa-breakdown-row' }, [
+                        key === 'severity' ? saEl('span', { class: 'cf-pill sa-sev sa-sev-' + x.severity, text: x.severity }) : saEl('span', { text: x.category }),
+                        saEl('span', { class: 'cf-em', text: Number(x.count).toLocaleString() }),
+                    ])));
+                };
+                breakdown(document.getElementById('gb-breakdown-category'), d.stats.byCategory, 'category');
+                breakdown(document.getElementById('gb-breakdown-severity'), d.stats.bySeverity, 'severity');
             }
 
-            // Also load watcher status
+            // Report watcher (the audit bot, events/globalBanReportWatcher.js)
             try {
                 const wr = await fetch('/api/super-admin/global-ban/watcher-status');
                 const wd = await wr.json();
                 if (wd.success) {
                     const el = document.getElementById('gb-stat-watcher');
-                    if (wd.status.connected) {
-                        el.innerHTML = '<i class="fas fa-circle" style="font-size: 0.6rem; color: var(--accent-green); vertical-align: middle;"></i> <span style="font-size: 0.85rem; vertical-align: middle;">Online</span>';
-                        if (wd.status.processedCount > 0) {
-                            el.innerHTML += '<div style="font-size: 0.65rem; color: var(--text-muted); margin-top: 2px;">' + wd.status.processedCount + ' processed</div>';
-                        }
-                    } else {
-                        el.innerHTML = '<i class="fas fa-circle" style="font-size: 0.6rem; color: var(--accent-red); vertical-align: middle;"></i> <span style="font-size: 0.85rem; vertical-align: middle;">Offline</span>';
-                    }
+                    const st = wd.status || {};
+                    el.replaceChildren(saEl('span', { class: 'cf-pill ' + (st.connected ? 'is-ok' : 'is-bad'), text: st.connected ? 'Online' : 'Offline' }));
+                    if (st.connected && st.processedCount > 0) el.append(saEl('span', { class: 'cf-kpi-sub', text: st.processedCount + ' handled since start' }));
                 }
             } catch(e) { console.error('Failed to load watcher status:', e); }
         } catch (e) { console.error('Failed to load GB stats:', e); }
@@ -2256,10 +1674,10 @@
 
                 // Evidence badge for summary row
                 const imageBadge = evidenceCount > 0
-                    ? '<span class="badge" style="background:rgba(52,211,153,0.15);color:var(--accent-green)"><i class="fas fa-image" style="margin-right:3px"></i>' + evidenceCount + '</span>'
+                    ? '<span class="badge" style="background:color-mix(in srgb, var(--cf-success) 15%, transparent);color:var(--cf-success-ink)"><i class="fas fa-image" style="margin-right:3px"></i>' + evidenceCount + '</span>'
                     : '';
                 const linkBadge = discordLinks.length > 0
-                    ? '<span class="badge" style="background:rgba(114,137,218,0.15);color:#7289da"><i class="fab fa-discord" style="margin-right:3px"></i>' + discordLinks.length + '</span>'
+                    ? '<span class="badge" style="background:color-mix(in srgb, #7289da 15%, transparent);color:var(--sa-discord-legacy)"><i class="fab fa-discord" style="margin-right:3px"></i>' + discordLinks.length + '</span>'
                     : '';
                 const evidenceBadge = (imageBadge || linkBadge)
                     ? '<div style="display:flex;gap:4px;flex-wrap:wrap">' + imageBadge + linkBadge + '</div>'
@@ -2271,7 +1689,7 @@
                 // Discord message links section
                 const discordLinksHtml = discordLinks.length > 0
                     ? '<div style="margin-bottom:0.5rem;">' + discordLinks.map((url, i) =>
-                        '<a href="' + encodeURI(url) + '" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:4px;font-size:0.8rem;color:#7289da;text-decoration:none;margin-right:0.75rem;margin-bottom:0.25rem;" title="View original report"><i class="fab fa-discord"></i>Source message ' + (i+1) + '</a>'
+                        '<a href="' + encodeURI(url) + '" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:4px;font-size:0.8rem;color:var(--sa-discord-legacy);text-decoration:none;margin-right:0.75rem;margin-bottom:0.25rem;" title="View original report"><i class="fab fa-discord"></i>Source message ' + (i+1) + '</a>'
                     ).join('') + '</div>'
                     : '';
                 // Image evidence gallery
@@ -2308,10 +1726,10 @@
                 + '<td style="width:1.5rem;text-align:center;"><i class="fas fa-chevron-right gb-chevron" id="gb-chev-' + e.id + '"></i></td>'
                 + '<td>'
                 +   '<div style="font-size:0.8rem;font-weight:500;color:var(--text-primary);white-space:nowrap;">' + (safeUsername || '<span style="color:var(--text-muted)">Unknown</span>') + '</div>'
-                +   '<div style="font-family:monospace;font-size:0.65rem;color:var(--text-muted);margin-top:1px;">' + e.user_id + '</div>'
+                +   '<div class="cf-mono cf-muted sa-uid">' + escapeHtml(e.user_id) + '</div>'
                 + '</td>'
                 + '<td>' + severityBadge(e.severity) + '</td>'
-                + '<td><span class="badge" style="background:rgba(255,255,255,0.05);color:var(--text-secondary);font-size:0.7rem;">' + escapeHtml(e.category) + '</span></td>'
+                + '<td><span class="badge" style="background:color-mix(in srgb, var(--cf-text) 5%, transparent);color:var(--text-secondary);font-size:0.7rem;">' + escapeHtml(e.category) + '</span></td>'
                 + '<td style="max-width:200px;"><div style="font-size:0.75rem;color:var(--text-secondary);line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;">' + safeReason + '</div></td>'
                 + '<td><div style="font-size:0.75rem;color:var(--text-primary);font-weight:500;white-space:nowrap;">' + reporterName + '</div></td>'
                 + '<td>' + evidenceBadge + '</td>'
@@ -2341,7 +1759,7 @@
                 +       '</div>'
                 +       '<div>'
                 +         '<div class="gb-detail-label">Source</div>'
-                +         '<div class="gb-detail-value"><span class="badge" style="background:rgba(167,139,250,0.15);color:var(--accent-purple)">' + escapeHtml(e.source) + '</span></div>'
+                +         '<div class="gb-detail-value"><span class="badge" style="background:var(--cf-accent-soft);color:var(--cf-accent-ink)">' + escapeHtml(e.source) + '</span></div>'
                 +         '<div class="gb-detail-label" style="margin-top:0.75rem;">Created</div>'
                 +         '<div class="gb-detail-value" style="font-size:0.8rem;">' + new Date(e.created_at).toLocaleString() + '</div>'
                 +       '</div>'
@@ -2373,16 +1791,16 @@
                 return;
             }
             tbody.innerHTML = d.reports.map(r => `<tr>
-                <td>#${r.id}</td>
-                <td style="font-family:monospace;font-size:0.75rem;">${r.target_user_id}</td>
-                <td><span class="badge" style="background:rgba(255,255,255,0.05);color:var(--text-secondary)">${r.category}</span></td>
+                <td>#${escapeHtml(r.id)}</td>
+                <td class="cf-mono">${escapeHtml(r.target_user_id)}</td>
+                <td><span class="cf-pill">${escapeHtml(r.category)}</span></td>
                 <td>${severityBadge(r.severity)}</td>
-                <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(r.reason || '').replace(/"/g, '&quot;')}">${truncate(r.reason, 35)}</td>
-                <td>${r.votes_approve || 0}/${r.votes_required || 3}</td>
-                <td><span class="badge" style="background:${r.status === 'pending' ? 'rgba(251,191,36,0.15)' : r.status === 'approved' ? 'rgba(52,211,153,0.15)' : 'rgba(248,113,113,0.15)'};color:${r.status === 'pending' ? 'var(--accent-yellow)' : r.status === 'approved' ? 'var(--accent-green)' : 'var(--accent-red)'}">${r.status}</span></td>
+                <td class="sa-clip" title="${escapeHtml(r.reason || '')}">${truncate(r.reason, 35)}</td>
+                <td>${Number(r.votes_approve) || 0}/${Number(r.votes_required) || 3}</td>
+                <td><span class="cf-pill ${r.status === 'pending' ? 'is-warn' : r.status === 'approved' ? 'is-ok' : 'is-bad'}">${escapeHtml(r.status)}</span></td>
                 <td style="text-align:right;">${r.status === 'pending' ? `
-                    <button class="btn btn-ghost btn-sm" style="width:auto;padding:0.35rem 0.5rem;color:var(--accent-green);" onclick="reviewGBReport(${r.id}, 'approved')" title="Approve"><i class="fas fa-check"></i></button>
-                    <button class="btn btn-ghost btn-sm" style="width:auto;padding:0.35rem 0.5rem;color:var(--accent-red);" onclick="reviewGBReport(${r.id}, 'denied')" title="Deny"><i class="fas fa-times"></i></button>
+                    <button class="btn btn-ghost btn-sm" style="width:auto;padding:0.35rem 0.5rem;color:var(--accent-green);" onclick="reviewGBReport(${Number(r.id)}, 'approved')" title="Approve"><i class="fas fa-check"></i></button>
+                    <button class="btn btn-ghost btn-sm" style="width:auto;padding:0.35rem 0.5rem;color:var(--accent-red);" onclick="reviewGBReport(${Number(r.id)}, 'denied')" title="Deny"><i class="fas fa-times"></i></button>
                 ` : '-'}</td>
             </tr>`).join('');
             renderPagination('gb-reports-pagination', d.pagination, (p) => { gbReportsPage = p; loadGBReports(); });
@@ -2406,16 +1824,17 @@
                 return;
             }
             tbody.innerHTML = d.appeals.map(a => `<tr>
-                <td>#${a.id}</td>
-                <td style="font-family:monospace;font-size:0.75rem;">${a.user_id}</td>
-                <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(a.ban_reason || '').replace(/"/g, '&quot;')}">${truncate(a.ban_reason || 'N/A', 30)}</td>
-                <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(a.reason || '').replace(/"/g, '&quot;')}">${truncate(a.reason, 35)}</td>
-                <td><span class="badge" style="background:${a.status === 'pending' ? 'rgba(251,191,36,0.15)' : a.status === 'approved' ? 'rgba(52,211,153,0.15)' : a.status === 'under_review' ? 'rgba(96,165,250,0.15)' : 'rgba(248,113,113,0.15)'};color:${a.status === 'pending' ? 'var(--accent-yellow)' : a.status === 'approved' ? 'var(--accent-green)' : a.status === 'under_review' ? 'var(--accent-blue)' : 'var(--accent-red)'}">${a.status}</span></td>
-                <td style="font-size:0.75rem;color:var(--text-muted)">${timeAgo(a.created_at)}</td>
+                <td>#${escapeHtml(a.id)}</td>
+                <td class="cf-mono">${escapeHtml(a.user_id)}</td>
+                <td class="sa-clip" title="${escapeHtml(a.ban_reason || '')}">${truncate(a.ban_reason || 'N/A', 30)}</td>
+                <td class="sa-clip" title="${escapeHtml(a.reason || '')}">${truncate(a.reason, 35)}</td>
+                <td><span class="cf-pill ${a.status === 'pending' ? 'is-warn' : a.status === 'approved' ? 'is-ok' : a.status === 'under_review' ? 'is-info' : 'is-bad'}">${escapeHtml(a.status)}</span></td>
+                <td class="cf-cell-muted">${timeAgo(a.created_at)}</td>
                 <td style="text-align:right;">${(a.status === 'pending' || a.status === 'under_review') ? `
-                    <button class="btn btn-ghost btn-sm" style="width:auto;padding:0.35rem 0.5rem;" onclick="openAppealReview(${a.id}, '${(a.reason || '').replace(/'/g, "\\'")}', '${a.user_id}')" title="Review"><i class="fas fa-gavel"></i></button>
+                    <button type="button" class="btn btn-secondary btn-sm sa-appeal-review" data-id="${escapeHtml(a.id)}" data-user="${escapeHtml(a.user_id)}" data-reason="${escapeHtml(a.reason || '')}" title="Review"><i class="fas fa-gavel" aria-hidden="true"></i> Review</button>
                 ` : '-'}</td>
             </tr>`).join('');
+            tbody.querySelectorAll('.sa-appeal-review').forEach(b => b.addEventListener('click', () => openAppealReview(b.dataset.id, b.dataset.reason, b.dataset.user)));
             renderPagination('gb-appeals-pagination', d.pagination, (p) => { gbAppealsPage = p; loadGBAppeals(); });
         } catch (e) {
             document.getElementById('gb-appeals-body').innerHTML = '<tr><td colspan="7" class="empty-state" style="color:var(--accent-red)">Error loading appeals</td></tr>';
@@ -2434,12 +1853,12 @@
                 return;
             }
             tbody.innerHTML = d.logs.map(l => `<tr>
-                <td><span class="badge" style="background:rgba(167,139,250,0.15);color:var(--accent-purple)">${l.action}</span></td>
-                <td style="font-family:monospace;font-size:0.75rem;">${l.user_id}</td>
-                <td style="font-family:monospace;font-size:0.75rem;">${l.guild_id}</td>
-                <td style="font-size:0.75rem;">${l.performed_by || 'system'}</td>
-                <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${(l.details || '').replace(/"/g, '&quot;')}">${truncate(l.details, 40)}</td>
-                <td style="font-size:0.75rem;color:var(--text-muted)">${timeAgo(l.created_at)}</td>
+                <td><span class="cf-pill is-accent">${escapeHtml(l.action)}</span></td>
+                <td class="cf-mono">${escapeHtml(l.user_id)}</td>
+                <td class="cf-mono">${escapeHtml(l.guild_id)}</td>
+                <td>${escapeHtml(l.performed_by || 'system')}</td>
+                <td class="sa-clip" title="${escapeHtml(l.details || '')}">${truncate(l.details, 40)}</td>
+                <td class="cf-cell-muted">${timeAgo(l.created_at)}</td>
             </tr>`).join('');
             renderPagination('gb-actionlog-pagination', d.pagination, (p) => { gbActionLogPage = p; loadGBActionLog(); });
         } catch (e) {
@@ -2562,7 +1981,8 @@
 
     function openAppealReview(id, reason, userId) {
         document.getElementById('gb-appeal-id').value = id;
-        document.getElementById('gb-appeal-details').innerHTML = `<strong>User:</strong> ${userId}<br><strong>Appeal reason:</strong> ${reason}`;
+        const det = document.getElementById('gb-appeal-details');
+        det.replaceChildren(saEl('p', {}, [saEl('strong', { text: 'User: ' }), String(userId)]), saEl('p', {}, [saEl('strong', { text: 'Appeal: ' }), String(reason || '')]));
         document.getElementById('gb-appeal-response').value = '';
         document.getElementById('gb-appeal-modal').classList.add('show');
     }
@@ -2702,7 +2122,7 @@
                 if (d.errors.length > 0) {
                     const el = document.getElementById('csv-error-list');
                     el.style.display = 'block';
-                    el.innerHTML = d.errors.map(e => `<div style="color: var(--accent-red); margin-bottom: 0.25rem;">Row ${e.row}: ${e.error}${e.user_id ? ` (${e.user_id})` : ''}</div>`).join('');
+                    el.replaceChildren(...d.errors.map(e => saEl('div', { class: 'sa-csv-error', text: 'Row ' + e.row + ': ' + e.error + (e.user_id ? ' (' + e.user_id + ')' : '') })));
                 }
                 loadGBEntries();
                 loadGBStats();
@@ -2740,30 +2160,10 @@
         csvDropZone.addEventListener('drop', (e) => { e.preventDefault(); csvDropZone.style.borderColor = 'var(--border-color)'; if (e.dataTransfer.files.length) handleCSVFile(e.dataTransfer.files[0]); });
     }
 
-    // User menu dropdown toggle
-    const userMenuContainer = document.getElementById('userMenuContainer');
-    const userMenuBtn = document.getElementById('userMenuBtn');
-
-    if (userMenuBtn && userMenuContainer) {
-        userMenuBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            userMenuContainer.classList.toggle('open');
-        });
-
-        document.addEventListener('click', (e) => {
-            if (!userMenuContainer.contains(e.target)) {
-                userMenuContainer.classList.remove('open');
-            }
-        });
-
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') {
-                userMenuContainer.classList.remove('open');
-            }
-        });
-    }
     </script>
-    <script src="/js/csrf.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<%- include('partials/site-footer') %>
+<script src="/js/csrf.js"></script>
 </body>
 </html>
+

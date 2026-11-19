@@ -1,346 +1,23 @@
+<%#
+  Achievements: the on/off switch and announcement channel (JSON POST achievements/config), the
+  leaderboard, every achievement and the latest unlocks (all loaded from GET achievements).
+  Built on the settings-row kit (cf-settings.css); ids, field names and script hooks unchanged.
+%>
 <style>
-/* Achievements Page Styles */
-.achievements-stats-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 20px;
-    margin-bottom: 32px;
-}
-
-.achievement-stat-card {
-    background: rgba(255, 255, 255, 0.04);
-    border: 1px solid rgba(167, 139, 250, 0.2);
-    border-radius: 14px;
-    padding: 24px 20px;
-    transition: all 0.3s ease;
-    position: relative;
-    overflow: hidden;
-}
-
-.achievement-stat-card::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 3px;
-    background: linear-gradient(90deg, #f59e0b 0%, #fbbf24 100%);
-    opacity: 0;
-    transition: opacity 0.3s ease;
-}
-
-.achievement-stat-card:hover {
-    background: rgba(255, 255, 255, 0.08);
-    border-color: rgba(251, 191, 36, 0.4);
-    transform: translateY(-4px);
-    box-shadow: 0 12px 32px rgba(251, 191, 36, 0.15);
-}
-
-.achievement-stat-card:hover::before {
-    opacity: 1;
-}
-
-.achievement-stat-label {
-    font-size: 0.8rem;
-    color: rgba(255, 255, 255, 0.6);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin-bottom: 8px;
-    font-weight: 500;
-}
-
-.achievement-stat-value {
-    font-size: 2rem;
-    font-weight: 800;
-    background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-}
-
-/* Section Cards */
-.achievements-section {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(167, 139, 250, 0.15);
-    border-radius: 16px;
-    margin-bottom: 24px;
-    overflow: hidden;
-}
-
-.achievements-section-header {
-    background: rgba(167, 139, 250, 0.08);
-    padding: 20px 24px;
-    border-bottom: 1px solid rgba(167, 139, 250, 0.15);
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
-
-.achievements-section-header i {
-    color: #fbbf24;
-    font-size: 1.25rem;
-}
-
-.achievements-section-header h3 {
-    font-size: 1.1rem;
-    font-weight: 700;
-    color: #ffffff;
-    margin: 0;
-}
-
-.achievements-section-body {
-    padding: 24px;
-}
-
-/* Configuration Form */
-.config-form-group {
-    margin-bottom: 20px;
-}
-
-.config-form-group:last-child {
-    margin-bottom: 0;
-}
-
-.config-label {
-    display: block;
-    font-size: 0.875rem;
-    font-weight: 600;
-    color: rgba(255, 255, 255, 0.9);
-    margin-bottom: 8px;
-}
-
-.config-help {
-    font-size: 0.75rem;
-    color: rgba(255, 255, 255, 0.5);
-    margin-top: 6px;
-}
-
-.toggle-container {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 16px;
-    background: rgba(0, 0, 0, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 12px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.toggle-container:hover {
-    background: rgba(0, 0, 0, 0.3);
-    border-color: rgba(167, 139, 250, 0.3);
-}
-
-.toggle-container input[type="checkbox"] {
-    width: 44px;
-    height: 24px;
-    appearance: none;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 24px;
-    position: relative;
-    cursor: pointer;
-    transition: all 0.3s ease;
-}
-
-.toggle-container input[type="checkbox"]::before {
-    content: '';
-    position: absolute;
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    background: white;
-    top: 3px;
-    left: 3px;
-    transition: transform 0.3s ease;
-}
-
-.toggle-container input[type="checkbox"]:checked {
-    background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%);
-}
-
-.toggle-container input[type="checkbox"]:checked::before {
-    transform: translateX(20px);
-}
-
-.toggle-label {
-    font-size: 0.95rem;
-    font-weight: 500;
-    color: rgba(255, 255, 255, 0.9);
-}
-
-/* Achievement Item */
-.achievement-item {
-    padding: 20px;
-    background: rgba(0, 0, 0, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 12px;
-    margin-bottom: 12px;
-    display: flex;
-    align-items: center;
-    gap: 16px;
-    transition: all 0.2s ease;
-}
-
-.achievement-item:last-child {
-    margin-bottom: 0;
-}
-
-.achievement-item:hover {
-    background: rgba(0, 0, 0, 0.3);
-    border-color: rgba(251, 191, 36, 0.3);
-    transform: translateX(4px);
-}
-
-.achievement-icon-wrapper {
-    width: 56px;
-    height: 56px;
-    background: linear-gradient(135deg, rgba(251, 191, 36, 0.2), rgba(245, 158, 11, 0.2));
-    border-radius: 14px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border: 2px solid rgba(251, 191, 36, 0.3);
-    font-size: 1.75rem;
-    flex-shrink: 0;
-}
-
-.achievement-info {
-    flex: 1;
-}
-
-.achievement-name {
-    font-size: 1rem;
-    font-weight: 600;
-    color: #ffffff;
-    margin: 0 0 4px 0;
-}
-
-.achievement-description {
-    font-size: 0.875rem;
-    color: rgba(255, 255, 255, 0.6);
-    margin: 0 0 8px 0;
-}
-
-.achievement-category {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 10px;
-    background: rgba(167, 139, 250, 0.15);
-    border: 1px solid rgba(167, 139, 250, 0.25);
-    border-radius: 6px;
-    color: #a78bfa;
-    font-size: 0.75rem;
-    font-weight: 500;
-    text-transform: capitalize;
-}
-
-/* Leaderboard Entry */
-.leaderboard-entry {
-    padding: 16px 20px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-    transition: all 0.2s ease;
-}
-
-.leaderboard-entry:last-child {
-    border-bottom: none;
-}
-
-.leaderboard-entry:hover {
-    background: rgba(167, 139, 250, 0.06);
-}
-
-.leaderboard-rank {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 32px;
-    height: 32px;
-    background: linear-gradient(135deg, rgba(251, 191, 36, 0.2), rgba(245, 158, 11, 0.2));
-    border: 1px solid rgba(251, 191, 36, 0.3);
-    border-radius: 8px;
-    font-weight: 700;
-    color: #fbbf24;
-    font-size: 0.85rem;
-    margin-right: 14px;
-}
-
-.leaderboard-user {
-    font-weight: 500;
-    color: rgba(255, 255, 255, 0.9);
-}
-
-.leaderboard-progress {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    color: rgba(255, 255, 255, 0.6);
-    font-size: 0.85rem;
-}
-
-.leaderboard-progress-bar {
-    width: 80px;
-    height: 6px;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 3px;
-    overflow: hidden;
-}
-
-.leaderboard-progress-fill {
-    height: 100%;
-    background: linear-gradient(90deg, #7c3aed 0%, #a78bfa 100%);
-    border-radius: 3px;
-}
-
-/* Loading & Empty States */
-.loading-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 48px;
-    color: rgba(255, 255, 255, 0.5);
-}
-
-.loading-state i {
-    font-size: 2rem;
-    margin-bottom: 12px;
-    color: #a78bfa;
-}
-
-.empty-message {
-    text-align: center;
-    padding: 32px;
-    color: rgba(255, 255, 255, 0.5);
-    font-size: 0.95rem;
-}
-
-.achievements-list-container {
-    max-height: 500px;
-    overflow-y: auto;
-}
-
-.achievements-list-container::-webkit-scrollbar {
-    width: 6px;
-}
-
-.achievements-list-container::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 3px;
-}
-
-.achievements-list-container::-webkit-scrollbar-thumb {
-    background: rgba(167, 139, 250, 0.3);
-    border-radius: 3px;
-}
-
-.achievements-list-container::-webkit-scrollbar-thumb:hover {
-    background: rgba(167, 139, 250, 0.5);
-}
+    .ach-who { display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .ach-rank { min-width: 1.5rem; font-weight: 600; color: var(--cf-text-3); font-variant-numeric: tabular-nums; }
+    .ach-avatar { width: 28px; height: 28px; border-radius: 50%; flex: none; display: inline-flex; align-items: center; justify-content: center;
+        background: var(--cf-surface-2); color: var(--cf-text-3); font-size: var(--cf-text-xs); }
+    .ach-avatar.is-sm { width: 18px; height: 18px; font-size: 9px; }
+    .ach-progress { display: flex; align-items: center; gap: 8px; color: var(--cf-text-2); font-size: var(--cf-text-sm); font-variant-numeric: tabular-nums; flex: none; }
+    .ach-bar { width: 80px; height: 6px; border-radius: 3px; background: var(--cf-surface-3); overflow: hidden; }
+    .ach-bar > span { display: block; height: 100%; background: var(--cf-accent); }
+    .ach-icon { width: 36px; height: 36px; flex: none; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--cf-radius);
+        background: var(--cf-surface-2); border: 1px solid var(--cf-border); font-size: 1.1rem; color: var(--cf-text-3); }
+    .ach-name { margin: 0; font-weight: 600; color: var(--cf-text); }
+    .ach-desc { margin: 2px 0 0; color: var(--cf-text-3); }
+    .ach-meta { font-size: var(--cf-text-xs); color: var(--cf-text-3); display: flex; align-items: center; gap: 6px; }
+    .ach-list-scroll { max-height: 520px; overflow-y: auto; }
 </style>
 
 <div class="page-section">
@@ -350,122 +27,148 @@
                 <i class="fas fa-medal"></i>
                 <span>Achievements</span>
             </div>
-            <div class="page-section-subtitle">
-                Track and reward user accomplishments with custom achievements
-            </div>
+            <div class="page-section-subtitle">The leaderboard, every badge and the latest unlocks.</div>
         </div>
     </div>
 
-    <!-- Stats Overview -->
-    <div class="achievements-stats-grid">
-        <div class="achievement-stat-card">
-            <div class="achievement-stat-label">Total Achievements</div>
-            <div class="achievement-stat-value" id="stat-total">-</div>
-        </div>
-        <div class="achievement-stat-card">
-            <div class="achievement-stat-label">Users Tracked</div>
-            <div class="achievement-stat-value" id="stat-users">-</div>
-        </div>
-        <div class="achievement-stat-card">
-            <div class="achievement-stat-label">Total Unlocks</div>
-            <div class="achievement-stat-value" id="stat-unlocks">-</div>
-        </div>
-    </div>
+    <dl class="cf-kpis" aria-label="Achievements at a glance">
+        <div class="cf-kpi"><dt>Achievements</dt><dd class="cf-kpi-value" id="stat-total">-</dd></div>
+        <div class="cf-kpi"><dt>Members tracked</dt><dd class="cf-kpi-value" id="stat-users">-</dd></div>
+        <div class="cf-kpi"><dt>Unlocks</dt><dd class="cf-kpi-value" id="stat-unlocks">-</dd></div>
+    </dl>
 
-    <!-- Configuration -->
-    <div class="achievements-section">
-        <div class="achievements-section-header">
-            <i class="fas fa-cog"></i>
-            <h3>Configuration</h3>
-        </div>
-        <div class="achievements-section-body">
-            <form id="achievement-config-form" onsubmit="saveAchievementConfig(event)">
-                <div class="config-form-group">
-                    <label class="toggle-container">
-                        <input type="checkbox" id="enabled" name="enabled">
-                        <span class="toggle-label">Enable Achievement System</span>
-                    </label>
+    <form id="achievement-config-form" onsubmit="saveAchievementConfig(event)">
+        <section class="cf-section" aria-labelledby="ach-config-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="ach-config-title">Settings</h2>
+                    <p class="cf-section-desc">Whether unlocks are announced, and where. Progress is tracked and rewards are paid either way.</p>
                 </div>
-
-                <div class="config-form-group">
-                    <label class="config-label">Announcement Channel</label>
-                    <select id="announcement-channel" name="announcement_channel_id" class="form-select">
-                        <option value="">Select a channel...</option>
-                        <% if (channels) { %>
-                            <% channels.filter(c => c.type === 0).forEach(channel => { %>
-                                <option value="<%= channel.id %>">#<%= channel.name %></option>
-                            <% }); %>
-                        <% } %>
-                    </select>
-                    <div class="config-help">Channel where achievement unlocks will be announced</div>
+            </header>
+            <div class="cf-rows">
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="enabled">Announce unlocks</label>
+                        <p class="cf-row-desc" id="enabled-desc">Post each unlock in the announcement channel below. Nothing is posted while this is off or no channel is set.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="checkbox" class="cf-switch" role="switch" id="enabled" name="enabled" data-feature-switch aria-describedby="enabled-desc">
+                    </div>
                 </div>
-
-                <button type="submit" class="btn btn-primary">
-                    <i class="fas fa-save"></i>
-                    <span>Save Settings</span>
-                </button>
-            </form>
-        </div>
-    </div>
-
-    <!-- Leaderboard -->
-    <div class="achievements-section">
-        <div class="achievements-section-header">
-            <i class="fas fa-trophy"></i>
-            <h3>Achievement Leaderboard</h3>
-        </div>
-        <div id="achievement-leaderboard">
-            <div class="loading-state">
-                <i class="fas fa-spinner fa-spin"></i>
-                <span>Loading leaderboard...</span>
-            </div>
-        </div>
-    </div>
-
-    <!-- All Achievements -->
-    <div class="achievements-section">
-        <div class="achievements-section-header">
-            <i class="fas fa-list"></i>
-            <h3>All Achievements (<span id="stat-total-list">-</span> Total)</h3>
-        </div>
-        <div class="achievements-section-body">
-            <div class="achievements-list-container" id="achievements-list">
-                <div class="loading-state">
-                    <i class="fas fa-spinner fa-spin"></i>
-                    <span>Loading achievements...</span>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="announcement-channel">Announcement channel</label>
+                        <p class="cf-row-desc" id="announcement-channel-desc">Where unlocks are posted. With no channel, unlocks are not announced.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <select id="announcement-channel" name="announcement_channel_id" class="form-select" aria-describedby="announcement-channel-desc">
+                            <%- include('../kit/_pick-options', { items: (typeof channels !== 'undefined' && channels) || [], selected: null, kind: 'channel', only: 'text', empty: 'No announcements' }) %>
+                        </select>
+                    </div>
+                </div>
+                <div class="cf-section-foot">
+                    <span class="cf-status-line cf-foot-note" id="ach-save-status" role="status"></span>
+                    <button type="submit" class="btn btn-primary">Save</button>
                 </div>
             </div>
-        </div>
-    </div>
+        </section>
+    </form>
 
-    <!-- Recent Unlocks -->
-    <div class="achievements-section">
-        <div class="achievements-section-header">
-            <i class="fas fa-history"></i>
-            <h3>Recent Unlocks</h3>
-        </div>
-        <div id="recent-achievements">
-            <div class="loading-state">
-                <i class="fas fa-spinner fa-spin"></i>
-                <span>Loading recent unlocks...</span>
+    <section class="cf-section" aria-labelledby="ach-board-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="ach-board-title">Leaderboard</h2>
+                <p class="cf-section-desc">Members with the most achievements unlocked.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-list" id="achievement-leaderboard">
+                <%- include('../kit/_state', { kind: 'loading', title: 'Loading the leaderboard', text: null, id: null, boxed: false, compact: true }) %>
             </div>
         </div>
-    </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="ach-all-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="ach-all-title">All achievements (<span id="stat-total-list">-</span>)</h2>
+                <p class="cf-section-desc">Every achievement members can unlock in this server.</p>
+            </div>
+            <div class="cf-section-actions" id="ach-search-head" hidden>
+                <label class="cf-search"><i class="fas fa-search" aria-hidden="true"></i><input type="search" class="form-control" id="ach-search" placeholder="Search achievements" aria-label="Search achievements"></label>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-list ach-list-scroll" id="achievements-list">
+                <%- include('../kit/_state', { kind: 'loading', title: 'Loading achievements', text: null, id: null, boxed: false, compact: true }) %>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="ach-recent-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="ach-recent-title">Recent unlocks</h2>
+                <p class="cf-section-desc">The last ten achievements members unlocked.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-list" id="recent-achievements">
+                <%- include('../kit/_state', { kind: 'loading', title: 'Loading recent unlocks', text: null, id: null, boxed: false, compact: true }) %>
+            </div>
+        </div>
+    </section>
 </div>
 
 <script>
-function escapeHtml(s) {
-    return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+// Everything from the API (achievement names, descriptions, categories, icons, member names) goes
+// in as text: rows are built with createElement / textContent, never as HTML strings.
+function achEl(tag, className, text) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text != null) node.textContent = text;
+    return node;
 }
 function userLabel(row) {
-    // Resolved display name, or a short ID fallback for members who left the server.
-    return row.username ? escapeHtml(row.username) : ('User ' + String(row.user_id).slice(0, 6) + '…');
+    // Resolved display name, or the ID (cf-user.js names it) for members who left the server.
+    if (row.username) return achEl('span', null, row.username);
+    const span = achEl('span', null, String(row.user_id ?? ''));
+    span.dataset.userId = String(row.user_id ?? '');
+    span.setAttribute('data-user-plain', '');
+    return span;
 }
 function userAvatar(row, size) {
-    if (row.avatar) {
-        return `<img src="${escapeHtml(row.avatar)}" alt="" width="${size}" height="${size}" style="border-radius:50%;flex-shrink:0;" />`;
+    if (row.avatar && /^https:\/\//.test(String(row.avatar))) {
+        const img = achEl('img', `ach-avatar${size < 24 ? ' is-sm' : ''}`);
+        img.src = String(row.avatar);
+        img.alt = '';
+        img.width = size;
+        img.height = size;
+        return img;
     }
-    return `<span style="width:${size}px;height:${size}px;border-radius:50%;background:rgba(167,139,250,0.2);display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;">👤</span>`;
+    const span = achEl('span', `ach-avatar${size < 24 ? ' is-sm' : ''}`);
+    span.setAttribute('aria-hidden', 'true');
+    span.append(achEl('i', 'fas fa-user'));
+    return span;
+}
+function achIcon(emoji) {
+    // An achievement's own icon is an emoji (text); without one, a trophy.
+    const box = achEl('span', 'ach-icon');
+    box.setAttribute('aria-hidden', 'true');
+    if (emoji) box.textContent = String(emoji);
+    else box.append(achEl('i', 'fas fa-trophy'));
+    return box;
+}
+function achState(title, isError) {
+    const box = achEl('div', `cf-state cf-state--${isError ? 'error' : 'empty'} cf-state--compact`);
+    if (isError) box.setAttribute('role', 'alert');
+    box.append(achEl('p', 'cf-state-title', title));
+    return box;
+}
+function fillList(box, rows, emptyTitle, build) {
+    if (!box) return;
+    if (!Array.isArray(rows) || !rows.length) box.replaceChildren(achState(emptyTitle, false));
+    else box.replaceChildren(...rows.map(build));
 }
 
 async function loadAchievements() {
@@ -476,6 +179,7 @@ async function loadAchievements() {
         // Load config
         if (data.config) {
             document.getElementById('enabled').checked = data.config.enabled || false;
+            document.getElementById('enabled').dispatchEvent(new Event('change'));
             document.getElementById('announcement-channel').value = data.config.announcement_channel_id || '';
         }
 
@@ -488,75 +192,65 @@ async function loadAchievements() {
         const totalListEl = document.getElementById('stat-total-list');
         if (totalListEl) totalListEl.textContent = totalDefs;
 
-        // Load leaderboard
-        if (data.topUsers && data.topUsers.length > 0) {
-            const leaderboardHtml = data.topUsers.map((user, index) => {
-                const percent = user.total_achievements > 0
-                    ? Math.round((user.completed_achievements / user.total_achievements) * 100)
-                    : 0;
-                return `
-                    <div class="leaderboard-entry">
-                        <div style="display: flex; align-items: center; gap: 10px;">
-                            <span class="leaderboard-rank">${index + 1}</span>
-                            ${userAvatar(user, 28)}
-                            <span class="leaderboard-user">${userLabel(user)}</span>
-                        </div>
-                        <div class="leaderboard-progress">
-                            <div class="leaderboard-progress-bar">
-                                <div class="leaderboard-progress-fill" style="width: ${percent}%"></div>
-                            </div>
-                            <span>${user.completed_achievements}/${user.total_achievements}</span>
-                        </div>
-                    </div>
-                `;
-            }).join('');
-            document.getElementById('achievement-leaderboard').innerHTML = leaderboardHtml;
-        } else {
-            document.getElementById('achievement-leaderboard').innerHTML = '<div class="empty-message">No achievements unlocked yet</div>';
-        }
+        fillList(document.getElementById('achievement-leaderboard'), data.topUsers, 'No achievements unlocked yet', (user, index) => {
+            const done = Number(user.completed_achievements) || 0;
+            const total = Number(user.total_achievements) || 0;
+            const percent = total > 0 ? Math.round((done / total) * 100) : 0;
+            const row = achEl('div', 'cf-list-item');
+            const who = achEl('div', 'cf-list-main ach-who');
+            who.append(achEl('span', 'ach-rank', String(index + 1)), userAvatar(user, 28), userLabel(user));
+            const progress = achEl('div', 'ach-progress');
+            const bar = achEl('span', 'ach-bar');
+            const fill = achEl('span');
+            fill.style.width = `${percent}%`;
+            bar.append(fill);
+            progress.append(bar, achEl('span', null, `${done}/${total}`));
+            row.append(who, progress);
+            return row;
+        });
 
-        // Load all achievements
-        if (data.achievements && data.achievements.length > 0) {
-            const achievementsHtml = data.achievements.map(achievement => `
-                <div class="achievement-item">
-                    <div class="achievement-icon-wrapper">${achievement.icon_emoji || '🏆'}</div>
-                    <div class="achievement-info">
-                        <h4 class="achievement-name">${achievement.name}</h4>
-                        <p class="achievement-description">${achievement.description}</p>
-                        <span class="achievement-category">${achievement.category}</span>
-                    </div>
-                </div>
-            `).join('');
-            document.getElementById('achievements-list').innerHTML = achievementsHtml;
-        } else {
-            document.getElementById('achievements-list').innerHTML = '<div class="empty-message">No achievements found</div>';
-        }
+        fillList(document.getElementById('achievements-list'), data.achievements, 'No achievements yet', (achievement) => {
+            const row = achEl('div', 'cf-list-item');
+            const who = achEl('div', 'cf-list-main ach-who');
+            const text = achEl('div');
+            text.append(achEl('p', 'ach-name', achievement.name), achEl('p', 'ach-desc', achievement.description || ''));
+            who.append(achIcon(achievement.icon_emoji), text);
+            row.append(who);
+            if (achievement.category) row.append(achEl('span', 'cf-pill', achievement.category));
+            return row;
+        });
 
-        // Load recent achievements
-        if (data.recentAchievements && data.recentAchievements.length > 0) {
-            const recentHtml = data.recentAchievements.slice(0, 10).map(unlock => `
-                <div class="leaderboard-entry">
-                    <div style="display: flex; align-items: center; gap: 12px;">
-                        <span style="font-size: 1.5rem;">${unlock.icon || '🏆'}</span>
-                        <div>
-                            <div style="font-weight: 500; color: #ffffff;">${escapeHtml(unlock.name)}</div>
-                            <div style="display:flex; align-items:center; gap:6px; font-size: 0.8rem; color: rgba(255,255,255,0.5);">${userAvatar(unlock, 18)} ${userLabel(unlock)}</div>
-                        </div>
-                    </div>
-                    <div style="color: rgba(255,255,255,0.5); font-size: 0.85rem;">
-                        ${new Date(unlock.completed_at).toLocaleDateString()}
-                    </div>
-                </div>
-            `).join('');
-            document.getElementById('recent-achievements').innerHTML = recentHtml;
-        } else {
-            document.getElementById('recent-achievements').innerHTML = '<div class="empty-message">No recent achievements</div>';
-        }
+        // A search box once the list is long enough to need one.
+        const all = document.getElementById('achievements-list');
+        const search = document.getElementById('ach-search');
+        document.getElementById('ach-search-head').hidden = totalDefs <= 15;
+        search.oninput = () => {
+            const q = search.value.trim().toLowerCase();
+            Array.from(all.children).forEach((row) => { row.hidden = !!q && !row.textContent.toLowerCase().includes(q); });
+        };
 
+        fillList(document.getElementById('recent-achievements'), (data.recentAchievements || []).slice(0, 10), 'No recent unlocks', (unlock) => {
+            const row = achEl('div', 'cf-list-item');
+            const who = achEl('div', 'cf-list-main ach-who');
+            const text = achEl('div');
+            const meta = achEl('div', 'ach-meta');
+            meta.append(userAvatar(unlock, 18), userLabel(unlock));
+            text.append(achEl('p', 'ach-name', unlock.name), meta);
+            who.append(achIcon(unlock.icon), text);
+            row.append(who, achEl('span', 'ach-meta', new Date(unlock.completed_at).toLocaleDateString()));
+            return row;
+        });
     } catch (error) {
         console.error('Error loading achievements:', error);
-        document.getElementById('achievement-leaderboard').innerHTML = '<div class="empty-message" style="color: #f87171;">Error loading data</div>';
+        document.getElementById('achievement-leaderboard').replaceChildren(achState('Could not load achievements', true));
     }
+}
+
+function achStatus(text, ok) {
+    const line = document.getElementById('ach-save-status');
+    line.textContent = text;
+    line.classList.toggle('is-ok', !!ok);
+    line.classList.toggle('is-bad', !ok);
 }
 
 async function saveAchievementConfig(event) {
@@ -574,14 +268,10 @@ async function saveAchievementConfig(event) {
             body: JSON.stringify(config)
         });
 
-        if (response.ok) {
-            alert('Configuration saved successfully!');
-        } else {
-            alert('Failed to save configuration');
-        }
+        achStatus(response.ok ? 'Saved' : 'Could not save the settings.', response.ok);
     } catch (error) {
         console.error('Error saving config:', error);
-        alert('Error saving configuration');
+        achStatus('Could not reach the server.', false);
     }
 }
 

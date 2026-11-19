@@ -1,0 +1,57 @@
+<%#
+  The one shared <head> partial for every standalone page (public site, cards, CAH, owner console,
+  analytics, tools). Pair with partials/site-header.ejs and partials/site-footer.ejs.
+  Include it first inside <head> and put page-specific <style> after it. Older pages whose own
+  stylesheets must stay under the design system include it LAST in <head> instead, after those.
+  Page-specific stylesheets (Font Awesome, /css/cf-settings.css, a page's own CSS) are plain
+  <link> tags in the page, right after this include.
+  Locals: title (required; the full <title> text), description, path (canonical path, e.g. '/docs'), noindex.
+  The <html> tag itself stays in the page, with data-theme / data-density / data-style
+  taken from locals.uiTheme, locals.uiDensity and locals.uiStyle (set by the preferences middleware).
+%>
+<%
+  const _siteTitle = (typeof title !== 'undefined' && title) ? title : 'CertiFried';
+  const _siteDesc = (typeof description !== 'undefined' && description) ? description : 'CertiFried: a free Discord bot for moderation, protection, stream alerts, levels, music and games, managed from a web dashboard.';
+  const _sitePath = (typeof path !== 'undefined' && path) ? path : null;
+
+%>
+    <script>
+    // Theme before first paint. Signed in, the server rendered the theme saved in Settings:
+    // that value is the authority (Dark included) and is copied to storage. Signed out, the
+    // choice made with the footer's theme switch is read from storage; with none, Dark.
+    (function () {
+        try {
+            var d = document.documentElement, saved = <%= locals.userPrefs ? 'true' : 'false' %>;
+            var t = localStorage.getItem('ui-theme');
+            var n = localStorage.getItem('ui-density');
+            if (saved) {
+                localStorage.setItem('ui-theme', d.getAttribute('data-theme') || 'dark');
+                localStorage.setItem('ui-density', d.getAttribute('data-density') || 'comfortable');
+            } else {
+                if (t && /^[a-z]{3,12}$/.test(t)) d.setAttribute('data-theme', t);
+                if (n && /^[a-z]{3,12}$/.test(n)) d.setAttribute('data-density', n);
+            }
+        } catch (e) { /* storage disabled: the server value stands */ }
+    })();
+    </script>
+    <script>(function(){var d=document.documentElement,m=window.matchMedia?matchMedia('(prefers-color-scheme: light)'):null;function a(){if(d.getAttribute('data-theme')==='auto'||d.getAttribute('data-theme-mode')==='auto'){d.setAttribute('data-theme-mode','auto');d.setAttribute('data-theme',m&&m.matches?'light':'dark');}}a();if(m&&m.addEventListener)m.addEventListener('change',a);})();</script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="darkreader-lock">
+    <meta name="csrf-token" content="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
+    <title><%= _siteTitle %></title>
+    <meta name="description" content="<%= _siteDesc %>">
+    <% if (typeof noindex !== 'undefined' && noindex) { %><meta name="robots" content="noindex"><% } %>
+    <meta property="og:site_name" content="CertiFried">
+    <meta property="og:title" content="<%= _siteTitle %>">
+    <meta property="og:description" content="<%= _siteDesc %>">
+    <meta property="og:image" content="https://certifriedmultitool.com/images/CertiFried.png">
+    <% if (_sitePath) { %><link rel="canonical" href="https://certifriedmultitool.com<%= _sitePath %>"><meta property="og:url" content="https://certifriedmultitool.com<%= _sitePath %>"><% } %>
+    <% const _tcMeta = { light: '#f6f7f8', sand: '#faf6ef' }[locals.uiTheme] || '#0e0f11'; %>
+    <% if (locals.uiTheme === 'auto') { %><meta name="theme-color" media="(prefers-color-scheme: light)" content="#f6f7f8"><meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0e0f11"><% } else { %><meta name="theme-color" content="<%= _tcMeta %>"><% } %>
+    <link rel="icon" type="image/png" href="/images/CertiFried.png">
+    <link rel="stylesheet" href="/css/a11y.css">
+    <link rel="stylesheet" href="/css/themes.css">
+    <% if (locals.uiCustomCss) { %><style id="custom-theme"><%- uiCustomCss %></style><% } %>
+    <link rel="stylesheet" href="/css/cf-ui.css">
+    <link rel="stylesheet" href="/css/cf-site.css">

@@ -8,14 +8,26 @@
 import express from 'express';
 import pool from '../../utils/db.js';
 import logger from '../../utils/logger.js';
-import { requireTokesAuth, requireKickAuth } from './auth-tokes-bot.js';
+import { requireTokesAuth, requireKickAuth, forgetTokesBanStatus } from './auth-tokes-bot.js';
+import { isSuperAdmin } from '../../utils/constants.js';
 import * as banlist from '../../services/certifried-bot/defender/banlist.js';
 import * as managers from '../../services/certifried-bot/defender/managers.js';
 import { channelStats, listEvents, listAllEvents, networkStats, dailyActivity } from '../../services/certifried-bot/defender/enforcement-log.js';
 import { size as phishingSize, isDomainBlocked } from '../../services/certifried-bot/defender/phishing-domains.js';
 import { resolveOwnedChannel } from '../../services/certifried-bot/defender/owned-channel.js';
+import { listSubscriptions, ensureSubscribed, lastChatAt, KICK_EVENT_TYPES } from '../../services/certifried-bot/kick-event-subscriptions.js';
 
 const router = express.Router();
+
+// Error and "not allowed" pages for the /kick HTML routes: the site's styled message page
+// (views/kick/message.ejs) instead of a bare line of text.
+function kickPage(req, res, status, heading, message) {
+    return res.status(status).render('kick/message', {
+        heading, message,
+        kickUser: req.session?.tokesUser || null,
+        actionHref: '/kick', actionLabel: 'Back to your channels'
+    });
+}
 
 // Bot-owner platform ids (same source as tokes-admin / defender commands).
 const OWNER_PLATFORM_IDS = new Set(
@@ -72,7 +84,7 @@ router.get('/kick', requireKickAuth, async (req, res) => {
         });
     } catch (error) {
         logger.error('[KBD Dashboard] panel error', { error: error.message });
-        res.status(500).send('Failed to load defender panel.');
+        kickPage(req, res, 500, 'Could not load your channels', 'Something went wrong loading this page. Try again in a moment.');
     }
 });
 
@@ -90,7 +102,12 @@ router.post('/kick/api/enroll', requireTokesAuth, async (req, res) => {
             "UPDATE tokes_channels SET defender_enabled = ? WHERE platform = 'kick' AND channel_id = ?",
             [enabled ? 1 : 0, channelId]
         );
-        res.json({ success: true });
+        let chat = null;
+        if (enabled) {
+            const sub = await ensureSubscribed(channelId).catch(e => ({ ok: false, error: e.message }));
+            chat = { ok: !!sub.ok, error: sub.ok ? null : (sub.error || null) };
+        }
+        res.json({ success: true, chat });
     } catch (error) {
         logger.error('[KBD Dashboard] enroll error', { error: error.message });
         res.status(500).json({ error: 'Failed to update enrollment' });
@@ -104,7 +121,7 @@ router.post('/kick/api/enroll', requireTokesAuth, async (req, res) => {
 // them" control panel.
 router.get('/kick/admin', requireKickAuth, async (req, res) => {
     if (!isAdminUser(req)) {
-        return res.status(403).send('Admins only.');
+        return kickPage(req, res, 403, 'Owner only', 'Connected accounts is only open to the Kick Defender owner.');
     }
     try {
         // Kick connections only — this is the Kick Defender admin surface. A
@@ -174,9 +191,15 @@ router.get('/kick/admin', requireKickAuth, async (req, res) => {
             });
         }
 
+        // Viewer submissions from `!elevated submit` waiting for the owner (oldest first).
+        const [pendingThoughts] = await pool.execute(
+            `SELECT id, thought, submitted_by, created_at FROM tokes_thoughts
+              WHERE is_approved = 0 ORDER BY created_at, id LIMIT 100`);
+
         res.render('kick/admin', {
             user: req.session.tokesUser,
             accounts,
+            pendingThoughts,
             totals: {
                 accounts: accounts.length,
                 kick: accounts.filter(a => a.platform === 'kick').length,
@@ -187,7 +210,34 @@ router.get('/kick/admin', requireKickAuth, async (req, res) => {
         });
     } catch (error) {
         logger.error('[KBD Dashboard] admin overview error', { error: error.message });
-        res.status(500).send('Failed to load admin overview.');
+        kickPage(req, res, 500, 'Could not load connected accounts', 'Something went wrong loading this page. Try again in a moment.');
+    }
+});
+
+// Owner-only review of `!elevated submit` thoughts: approve puts one in the rotation,
+// reject deletes it. Only still-pending rows change, so a double click can't undo a review.
+router.post('/kick/api/thoughts/review', requireTokesAuth, async (req, res) => {
+    if (!isAdminUser(req)) return res.status(403).json({ error: 'Admins only' });
+    const id = Number(req.body.id);
+    const { action } = req.body;
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'id required' });
+    try {
+        let result;
+        if (action === 'approve') {
+            [result] = await pool.execute(
+                `UPDATE tokes_thoughts SET is_approved = 1, reviewed_by = ?, reviewed_at = NOW()
+                  WHERE id = ? AND is_approved = 0`, [req.session.tokesUser.id, id]);
+        } else if (action === 'reject') {
+            [result] = await pool.execute('DELETE FROM tokes_thoughts WHERE id = ? AND is_approved = 0', [id]);
+        } else {
+            return res.status(400).json({ error: 'action must be approve or reject' });
+        }
+        if (!result.affectedRows) return res.status(404).json({ error: 'That thought was already reviewed.' });
+        logger.info('[KBD Dashboard] thought reviewed', { id, action, by: req.session.tokesUser.id });
+        res.json({ success: true });
+    } catch (error) {
+        logger.error('[KBD Dashboard] thought review error', { id, action, error: error.message });
+        res.status(500).json({ error: 'Failed to review thought' });
     }
 });
 
@@ -203,6 +253,8 @@ router.get('/kick/features', requireKickAuth, async (req, res) => {
         );
         res.render('kick/features', {
             user: req.session.tokesUser,
+            isManager: await isManagerUser(req),
+            isAdmin: isAdminUser(req),
             hasChannels: Number(c.n) > 0,
             phishingCount: phishingSize(),
             reauthHref: '/tokes-bot/auth/kick',
@@ -210,13 +262,13 @@ router.get('/kick/features', requireKickAuth, async (req, res) => {
         });
     } catch (error) {
         logger.error('[KBD Dashboard] features page error', { error: error.message });
-        res.status(500).send('Failed to load features page.');
+        kickPage(req, res, 500, 'Could not load this page', 'Something went wrong loading this page. Try again in a moment.');
     }
 });
 
 router.get('/kick/managers', requireKickAuth, async (req, res) => {
     if (!await isManagerUser(req)) {
-        return res.status(403).send('Managers only.');
+        return kickPage(req, res, 403, 'Managers only', 'The manager console is open to network managers and the owner.');
     }
     try {
         res.render('kick/managers', {
@@ -232,7 +284,7 @@ router.get('/kick/managers', requireKickAuth, async (req, res) => {
         });
     } catch (error) {
         logger.error('[KBD Dashboard] managers console error', { error: error.message });
-        res.status(500).send('Failed to load manager console.');
+        kickPage(req, res, 500, 'Could not load the manager console', 'Something went wrong loading this page. Try again in a moment.');
     }
 });
 
@@ -242,7 +294,12 @@ router.get('/kick/api/check-domain', requireTokesAuth, async (req, res) => {
     if (!await isManagerUser(req)) return res.status(403).json({ error: 'Managers only' });
     const q = req.query.q;
     if (!q) return res.status(400).json({ error: 'q (domain) required' });
-    res.json({ query: String(q), ...isDomainBlocked(q) });
+    try {
+        res.json({ query: String(q).slice(0, 300), ...isDomainBlocked(String(q).slice(0, 300)) });
+    } catch (error) {
+        logger.error('[KBD Dashboard] check-domain error', { error: error.message });
+        res.status(500).json({ error: 'Check failed' });
+    }
 });
 
 // Manager banlist add/remove.
@@ -250,21 +307,31 @@ router.post('/kick/api/ban', requireTokesAuth, async (req, res) => {
     if (!await isManagerUser(req)) return res.status(403).json({ error: 'Managers only' });
     const { username, reason, listType } = req.body;
     if (!username) return res.status(400).json({ error: 'username required' });
-    await banlist.addBan({
-        platform: 'kick', username,
-        reason: reason || null,
-        listType: listType === 'sublist' ? 'sublist' : 'ban',
-        addedBy: req.session.tokesUser.id
-    });
-    res.json({ success: true });
+    try {
+        await banlist.addBan({
+            platform: 'kick', username: String(username).trim().slice(0, 60),
+            reason: reason ? String(reason).slice(0, 200) : null,
+            listType: listType === 'sublist' ? 'sublist' : 'ban',
+            addedBy: req.session.tokesUser.id
+        });
+        res.json({ success: true });
+    } catch (error) {
+        logger.error('[KBD Dashboard] ban add error', { error: error.message });
+        res.status(500).json({ error: 'Failed to add the ban' });
+    }
 });
 
 router.delete('/kick/api/ban', requireTokesAuth, async (req, res) => {
     if (!await isManagerUser(req)) return res.status(403).json({ error: 'Managers only' });
     const { username } = req.body;
     if (!username) return res.status(400).json({ error: 'username required' });
-    await banlist.removeBan('kick', null, username);
-    res.json({ success: true });
+    try {
+        await banlist.removeBan('kick', null, String(username).trim());
+        res.json({ success: true });
+    } catch (error) {
+        logger.error('[KBD Dashboard] ban remove error', { error: error.message });
+        res.status(500).json({ error: 'Failed to remove the ban' });
+    }
 });
 
 // Manager malicious-site add/remove.
@@ -272,16 +339,26 @@ router.post('/kick/api/site', requireTokesAuth, async (req, res) => {
     if (!await isManagerUser(req)) return res.status(403).json({ error: 'Managers only' });
     const { uri } = req.body;
     if (!uri) return res.status(400).json({ error: 'uri required' });
-    await banlist.addSite(uri, req.session.tokesUser.id);
-    res.json({ success: true });
+    try {
+        await banlist.addSite(String(uri).trim().slice(0, 300), req.session.tokesUser.id);
+        res.json({ success: true });
+    } catch (error) {
+        logger.error('[KBD Dashboard] site add error', { error: error.message });
+        res.status(500).json({ error: 'Failed to add the site' });
+    }
 });
 
 router.delete('/kick/api/site', requireTokesAuth, async (req, res) => {
     if (!await isManagerUser(req)) return res.status(403).json({ error: 'Managers only' });
     const { uri } = req.body;
     if (!uri) return res.status(400).json({ error: 'uri required' });
-    await banlist.removeSite(uri);
-    res.json({ success: true });
+    try {
+        await banlist.removeSite(String(uri));
+        res.json({ success: true });
+    } catch (error) {
+        logger.error('[KBD Dashboard] site remove error', { error: error.message });
+        res.status(500).json({ error: 'Failed to remove the site' });
+    }
 });
 
 // Resolve a manager identifier (numeric tokes_user_id, Kick/Twitch username, or
@@ -322,20 +399,143 @@ router.post('/kick/api/managers', requireTokesAuth, async (req, res) => {
     const identifier = req.body.user ?? req.body.tokesUserId;
     const { action } = req.body;
     if (!identifier) return res.status(400).json({ error: 'user (id or username) required' });
-
-    const resolved = await resolveTokesUserId(identifier);
-    if (!resolved) {
-        return res.status(404).json({ error: `No user found matching "${identifier}". They must have logged in to the bot at least once.` });
+    if (action !== 'add' && action !== 'remove') return res.status(400).json({ error: 'action must be add or remove' });
+    try {
+        const resolved = await resolveTokesUserId(String(identifier).slice(0, 100));
+        if (!resolved) {
+            return res.status(404).json({ error: `No user found matching "${String(identifier).slice(0, 100)}". They must have logged in to the bot at least once.` });
+        }
+        if (action === 'add') await managers.addManager(resolved.id, req.session.tokesUser.id);
+        else await managers.removeManager(resolved.id);
+        res.json({ success: true, user: resolved.name, id: resolved.id });
+    } catch (error) {
+        logger.error('[KBD Dashboard] manager change error', { error: error.message });
+        res.status(500).json({ error: 'Failed to update managers' });
     }
+});
 
-    if (action === 'add') {
-        await managers.addManager(resolved.id, req.session.tokesUser.id);
-    } else if (action === 'remove') {
-        await managers.removeManager(resolved.id);
-    } else {
-        return res.status(400).json({ error: 'action must be add or remove' });
+// ── Admin: site bans (tokes_users.is_banned + tokes_moderation_actions) ─────
+// A banned account cannot sign in to /kick (requireTokesAuth/requireKickAuth refuse it); a ban
+// with an expiry is lifted by isTokesUserBanned() once it has passed. Only the owner: the owner's
+// Kick/Twitch account (isAdminUser) or a dashboard super-admin signed in with Discord on the same
+// session. This is the site login only; Kick chat bans are the banlist above.
+const BAN_LENGTHS_H = new Set([1, 24, 72, 168, 720, 2160]);   // 1h, 1d, 3d, 7d, 30d, 90d; none = permanent
+
+function isSiteBanAdmin(req) {
+    return isAdminUser(req) || isSuperAdmin(req.user?.id);
+}
+
+async function isOwnerAccount(tokesUserId) {
+    if (!OWNER_PLATFORM_IDS.size) return false;
+    const [rows] = await pool.execute('SELECT platform_id FROM tokes_platform_connections WHERE user_id = ?', [tokesUserId]);
+    return rows.some(r => OWNER_PLATFORM_IDS.has(String(r.platform_id)));
+}
+
+router.get('/kick/api/site-bans', requireTokesAuth, async (req, res) => {
+    if (!isSiteBanAdmin(req)) return res.status(403).json({ error: 'Admins only' });
+    try {
+        const [active] = await pool.execute(`
+            SELECT u.id AS user_id, u.primary_name, u.ban_reason,
+                   (SELECT GROUP_CONCAT(DISTINCT CONCAT(pc.platform, ':', pc.platform_name) SEPARATOR ', ')
+                      FROM tokes_platform_connections pc WHERE pc.user_id = u.id) AS accounts,
+                   a.id AS action_id, a.reason, a.issued_at, a.expires_at, ib.primary_name AS issued_by_name
+              FROM tokes_users u
+              LEFT JOIN tokes_moderation_actions a
+                     ON a.id = (SELECT MAX(a2.id) FROM tokes_moderation_actions a2
+                                 WHERE a2.user_id = u.id AND a2.action_type = 'ban' AND a2.is_active = 1)
+              LEFT JOIN tokes_users ib ON ib.id = a.issued_by
+             WHERE u.is_banned = 1
+             ORDER BY a.issued_at DESC, u.id`);
+        const [history] = await pool.execute(`
+            SELECT a.id, a.user_id, u.primary_name, a.action_type, a.reason, a.issued_at, a.expires_at, a.is_active,
+                   ib.primary_name AS issued_by_name
+              FROM tokes_moderation_actions a
+              JOIN tokes_users u ON u.id = a.user_id
+              LEFT JOIN tokes_users ib ON ib.id = a.issued_by
+             WHERE a.action_type IN ('ban', 'unban')
+             ORDER BY a.id DESC LIMIT 20`);
+        res.json({ success: true, active, history });
+    } catch (error) {
+        logger.error('[KBD Dashboard] site bans list error', { error: error.message });
+        res.status(500).json({ error: 'Failed to load bans' });
     }
-    res.json({ success: true, user: resolved.name, id: resolved.id });
+});
+
+router.post('/kick/api/site-bans', requireTokesAuth, async (req, res) => {
+    if (!isSiteBanAdmin(req)) return res.status(403).json({ error: 'Admins only' });
+    const identifier = typeof req.body.user === 'string' ? req.body.user.trim().slice(0, 100) : '';
+    const reason = typeof req.body.reason === 'string' ? req.body.reason.trim() : '';
+    const hoursRaw = req.body.hours;
+    const hours = hoursRaw === null || hoursRaw === undefined || hoursRaw === '' ? null : Number(hoursRaw);
+    if (!identifier) return res.status(400).json({ error: 'Enter a Kick username or user id.' });
+    if (!reason) return res.status(400).json({ error: 'Give a reason.' });
+    if (reason.length > 500) return res.status(400).json({ error: 'The reason can be up to 500 characters.' });
+    if (hours !== null && !BAN_LENGTHS_H.has(hours)) return res.status(400).json({ error: 'Choose a ban length from the list.' });
+
+    let conn;
+    try {
+        const target = await resolveTokesUserId(identifier);
+        if (!target) return res.status(404).json({ error: `No account found matching "${identifier}". They must have signed in at least once.` });
+        const actorId = req.session.tokesUser?.id ?? null;
+        if (actorId != null && String(target.id) === String(actorId)) return res.status(400).json({ error: 'You cannot ban your own account.' });
+        if (await isOwnerAccount(target.id)) return res.status(400).json({ error: 'The owner account cannot be banned.' });
+
+        conn = await pool.getConnection();
+        await conn.beginTransaction();
+        // A new ban replaces any earlier one, so its length is the one that counts.
+        await conn.execute(
+            "UPDATE tokes_moderation_actions SET is_active = 0 WHERE user_id = ? AND action_type = 'ban' AND is_active = 1",
+            [target.id]);
+        await conn.execute('UPDATE tokes_users SET is_banned = 1, ban_reason = ? WHERE id = ?', [reason, target.id]);
+        const [ins] = await conn.execute(
+            `INSERT INTO tokes_moderation_actions (user_id, action_type, reason, details, issued_by, expires_at, is_active)
+             VALUES (?, 'ban', ?, ?, ?, ${hours === null ? 'NULL' : 'DATE_ADD(NOW(), INTERVAL ? HOUR)'}, 1)`,
+            [target.id, reason, JSON.stringify({ via: 'kick-admin', discord_id: req.user?.id || null }), actorId,
+                ...(hours === null ? [] : [hours])]);
+        await conn.commit();
+        forgetTokesBanStatus(target.id);
+        logger.warn('[KBD Dashboard] site ban issued', { target: target.id, hours, by: actorId, discordBy: req.user?.id || null });
+        res.json({ success: true, id: target.id, name: target.name, action_id: ins.insertId });
+    } catch (error) {
+        if (conn) await conn.rollback().catch(() => {});
+        logger.error('[KBD Dashboard] site ban error', { error: error.message });
+        res.status(500).json({ error: 'Failed to ban the account' });
+    } finally {
+        conn?.release();
+    }
+});
+
+router.post('/kick/api/site-bans/unban', requireTokesAuth, async (req, res) => {
+    if (!isSiteBanAdmin(req)) return res.status(403).json({ error: 'Admins only' });
+    const userId = Number(req.body.user_id);
+    const reason = typeof req.body.reason === 'string' ? req.body.reason.trim().slice(0, 500) : '';
+    if (!Number.isInteger(userId) || userId <= 0) return res.status(400).json({ error: 'user_id required' });
+    let conn;
+    try {
+        conn = await pool.getConnection();
+        await conn.beginTransaction();
+        const [upd] = await conn.execute('UPDATE tokes_users SET is_banned = 0, ban_reason = NULL WHERE id = ? AND is_banned = 1', [userId]);
+        if (!upd.affectedRows) {
+            await conn.rollback();
+            return res.status(404).json({ error: 'That account is not banned.' });
+        }
+        await conn.execute(
+            "UPDATE tokes_moderation_actions SET is_active = 0 WHERE user_id = ? AND action_type = 'ban' AND is_active = 1", [userId]);
+        await conn.execute(
+            `INSERT INTO tokes_moderation_actions (user_id, action_type, reason, details, issued_by, is_active)
+             VALUES (?, 'unban', ?, ?, ?, 0)`,
+            [userId, reason || null, JSON.stringify({ via: 'kick-admin', discord_id: req.user?.id || null }), req.session.tokesUser?.id ?? null]);
+        await conn.commit();
+        forgetTokesBanStatus(userId);
+        logger.warn('[KBD Dashboard] site ban lifted', { target: userId, by: req.session.tokesUser?.id ?? null });
+        res.json({ success: true });
+    } catch (error) {
+        if (conn) await conn.rollback().catch(() => {});
+        logger.error('[KBD Dashboard] site unban error', { error: error.message });
+        res.status(500).json({ error: 'Failed to lift the ban' });
+    } finally {
+        conn?.release();
+    }
 });
 
 // ── Sublist (manager) ──────────────────────────────────────────────────────
@@ -428,6 +628,16 @@ router.get('/kick/api/channel-settings', requireKickAuth, async (req, res) => {
     }
 });
 
+// "https://www.Example.com/path" -> "www.example.com"; "*.example.com" -> "example.com". Hostnames only.
+function normalizeAllowedDomain(raw) {
+    let d = String(raw || '').trim().toLowerCase();
+    if (!d) return null;
+    d = d.replace(/^[a-z][a-z0-9+.-]*:\/\//, '').replace(/^\*\./, '');
+    d = d.split(/[/?#]/)[0].split('@').pop().split(':')[0].replace(/\.+$/, '');
+    if (d.length > 253 || !d.includes('.') || !/^[a-z0-9.-]+$/.test(d) || d.startsWith('.') || d.includes('..')) return null;
+    return d;
+}
+
 router.post('/kick/api/channel-settings', requireKickAuth, async (req, res) => {
     try {
         const userId = req.session.tokesUser.id;
@@ -438,13 +648,10 @@ router.post('/kick/api/channel-settings', requireKickAuth, async (req, res) => {
         if (dur != null) dur = dur <= 0 ? null : Math.min(dur, 525600);
         const thr = Math.min(Math.max(parseInt(phishingThreshold, 10) || 2, 1), 10);
         const warn = (warningTemplate && String(warningTemplate).trim()) ? String(warningTemplate).slice(0, 400) : null;
-        let safe = null;
-        if (Array.isArray(safeDomains)) {
-            const cleaned = safeDomains.map(d => String(d).trim()).filter(Boolean).filter(d => d.length <= 253).slice(0, 50);
-            safe = cleaned.length ? cleaned.join(',') : null;
-        } else if (safeDomains) {
-            safe = String(safeDomains).slice(0, 2000);
-        }
+        const list = Array.isArray(safeDomains) ? safeDomains
+            : (typeof safeDomains === 'string' ? safeDomains.split(/[\s,]+/) : []);
+        const cleaned = [...new Set(list.map(normalizeAllowedDomain).filter(Boolean))].slice(0, 50);
+        const safe = cleaned.length ? cleaned.join(',') : null;
         await pool.execute(
             `INSERT INTO kbd_channel_settings (channel_id, ban_duration_min, phishing_threshold, warning_template, safe_domains)
              VALUES (?, ?, ?, ?, ?)
@@ -453,7 +660,7 @@ router.post('/kick/api/channel-settings', requireKickAuth, async (req, res) => {
                 warning_template = VALUES(warning_template), safe_domains = VALUES(safe_domains)`,
             [String(channelId || ''), dur, thr, warn, safe]
         );
-        res.json({ success: true });
+        res.json({ success: true, safeDomains: cleaned });
     } catch (error) {
         logger.error('[KBD Dashboard] save channel-settings error', { error: error.message });
         res.status(500).json({ error: 'Failed to save settings' });
@@ -519,22 +726,28 @@ router.get('/kick/api/managers', requireKickAuth, async (req, res) => {
 // channel scope/token state, so the dashboard can show operational status.
 router.get('/kick/api/bot-health', requireKickAuth, async (req, res) => {
     try {
-        const bot = global.kickBot;
-        const connected = !!(bot && bot.isConnected);
-        const joinedChannels = bot && bot.channels && typeof bot.channels.size === 'number' ? bot.channels.size : 0;
-        // This user's enrolled Kick channels + whether each has a live join.
+        const { map, error: listError } = await listSubscriptions();
         const userId = req.session.tokesUser.id;
         const [chans] = await pool.execute(
             "SELECT channel_id, channel_name, defender_enabled FROM tokes_channels WHERE platform = 'kick' AND owner_id = ?",
             [userId]
         );
-        const channels = chans.map(c => ({
-            channelId: c.channel_id,
-            channelName: c.channel_name,
-            enrolled: c.defender_enabled === 1,
-            joined: !!(bot && bot.channels && bot.channels.has(String(c.channel_id)))
-        }));
-        res.json({ connected, joinedChannels, channels });
+        const channels = chans.map(c => {
+            const have = map ? (map.get(String(c.channel_id)) || new Set()) : null;
+            const chatSubscribed = have ? have.has('chat.message.sent') : null;
+            return {
+                channelId: c.channel_id,
+                channelName: c.channel_name,
+                enrolled: c.defender_enabled === 1,
+                chatSubscribed,
+                missingEvents: have ? KICK_EVENT_TYPES.filter(e => !have.has(e.name)).map(e => e.name) : null,
+                lastChatAt: lastChatAt(c.channel_id),
+                joined: chatSubscribed === true   // kept for older callers: "chat reaches the bot"
+            };
+        });
+        let joinedChannels = 0;
+        if (map) for (const set of map.values()) if (set.has('chat.message.sent')) joinedChannels++;
+        res.json({ connected: !!map, feed: 'webhook', statusError: map ? null : (listError || 'unknown'), joinedChannels, channels });
     } catch (error) {
         logger.error('[KBD Dashboard] bot-health error', { error: error.message });
         res.status(500).json({ error: 'Failed to load bot health' });

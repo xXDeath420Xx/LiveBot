@@ -1,7 +1,25 @@
-<%- include('partials/modern-header', {
-    pageTitle: 'CAH Admin',
-    additionalCSS: []
-}) %>
+<!DOCTYPE html>
+<html data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>" lang="en">
+<head>
+    <%# Older page styles (Bootstrap and the pre-design-system sheets) first; partials/site-head.ejs
+        loads the design system after them so its tokens and the site frame win. %>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/modern-framework.css">
+    <link rel="stylesheet" href="/css/unified-dark-theme.css">
+    <link rel="stylesheet" href="/css/unified-components.css">
+    <link rel="stylesheet" href="/css/text-readability.css">
+    <link rel="stylesheet" href="/css/dropdown-fix.css">
+    <link rel="stylesheet" href="/css/output.css">
+    <link rel="stylesheet" href="/css/dropdowns.css">
+<%- include('partials/site-head', { title: 'CAH admin · Owner console · CertiFried', description: 'CertiFried MultiTool - Professional Discord bot with live streaming notifications, moderation, and more' }) %>
+    <script src="/js/csrf.js"></script>
+</head>
+<body class="dark-theme">
+<%- include('partials/site-header', { user }) %>
 
 <style>
 /* CAH Admin Page — matches super-admin-modern visual language */
@@ -33,10 +51,10 @@
     justify-content: center;
     font-size: var(--font-size-lg);
     margin-bottom: var(--spacing-3);
-    background: rgba(79, 172, 254, 0.15);
+    background: var(--cf-surface-2);
     color: var(--color-primary-400);
 }
-.cah-stat-card.alert .cah-stat-card-icon { background: rgba(240, 71, 71, 0.15); color: var(--color-danger); }
+.cah-stat-card.alert .cah-stat-card-icon { background: color-mix(in srgb, var(--cf-danger) 15%, transparent); color: var(--color-danger); }
 .cah-stat-card-value { font-size: var(--font-size-3xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary); line-height: 1; }
 .cah-stat-card.alert .cah-stat-card-value { color: var(--color-danger); }
 .cah-stat-card-label { color: var(--color-text-muted); font-size: var(--font-size-sm); margin-top: var(--spacing-2); text-transform: uppercase; letter-spacing: 0.05em; font-weight: var(--font-weight-semibold); }
@@ -105,9 +123,11 @@
     font-weight: var(--font-weight-semibold);
     background: var(--color-dark-600);
 }
-.cah-table tr:hover td { background: rgba(79, 172, 254, 0.04); }
-.cah-table tr.row-stuck { background: rgba(240, 71, 71, 0.06); }
-.cah-table tr.row-stuck:hover td { background: rgba(240, 71, 71, 0.1); }
+.cah-table tr:hover td { background: var(--cf-surface-2); }
+.cah-table tr.row-stuck { background: color-mix(in srgb, var(--cf-danger) 6%, transparent); }
+.cah-table tr.row-stuck:hover td { background: color-mix(in srgb, var(--cf-danger) 10%, transparent); }
+.cah-table tr.row-blocked td { background: color-mix(in srgb, var(--cf-danger) 5%, transparent); }
+.cah-table td.is-blocked { color: var(--color-danger); }
 .cah-table .empty-cell { color: var(--color-text-muted); font-style: italic; text-align: center; padding: var(--spacing-6); }
 
 .pill-state {
@@ -119,13 +139,13 @@
     text-transform: uppercase;
     letter-spacing: 0.04em;
 }
-.pill-state.LOBBY      { background: rgba(168, 139, 250, 0.15); color: #a78bfa; }
-.pill-state.SUBMITTING { background: rgba(35, 245, 107, 0.15); color: var(--color-success); }
-.pill-state.JUDGING    { background: rgba(251, 191, 36, 0.15); color: var(--color-warning); }
-.pill-state.SCORING    { background: rgba(99, 102, 241, 0.15); color: #818cf8; }
-.pill-state.DEALING    { background: rgba(96, 165, 250, 0.15); color: #60a5fa; }
+.pill-state.LOBBY      { background: var(--cf-accent-soft); color: var(--cf-accent-fg); }
+.pill-state.SUBMITTING { background: color-mix(in srgb, var(--cf-success) 15%, transparent); color: var(--color-success); }
+.pill-state.JUDGING    { background: color-mix(in srgb, var(--cf-warning) 15%, transparent); color: var(--color-warning); }
+.pill-state.SCORING    { background: color-mix(in srgb, var(--cf-info) 15%, transparent); color: var(--cf-info); }
+.pill-state.DEALING    { background: color-mix(in srgb, var(--cf-info) 15%, transparent); color: var(--cf-info); }
 .pill-state.GAME_END   { background: var(--color-dark-500); color: var(--color-text-muted); }
-.pill-state.ABANDONED  { background: rgba(240, 71, 71, 0.12); color: var(--color-danger); }
+.pill-state.ABANDONED  { background: color-mix(in srgb, var(--cf-danger) 12%, transparent); color: var(--color-danger); }
 .pill-flag {
     display: inline-block;
     padding: 0.1rem 0.45rem;
@@ -136,10 +156,10 @@
     letter-spacing: 0.04em;
     margin-left: var(--spacing-1);
 }
-.pill-flag.live    { background: rgba(35, 245, 107, 0.15); color: var(--color-success); }
-.pill-flag.stuck   { background: rgba(240, 71, 71, 0.2);  color: var(--color-danger); }
-.pill-flag.notimer { background: rgba(251, 191, 36, 0.2); color: var(--color-warning); }
-.pill-flag.pw      { background: rgba(168, 139, 250, 0.2); color: #a78bfa; }
+.pill-flag.live    { background: color-mix(in srgb, var(--cf-success) 15%, transparent); color: var(--color-success); }
+.pill-flag.stuck   { background: color-mix(in srgb, var(--cf-danger) 20%, transparent);  color: var(--color-danger); }
+.pill-flag.notimer { background: color-mix(in srgb, var(--cf-warning) 20%, transparent); color: var(--color-warning); }
+.pill-flag.pw      { background: var(--cf-accent-soft); color: var(--cf-accent-fg); }
 
 .id-cell { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: var(--font-size-sm); }
 .id-cell a { color: var(--color-primary-400); text-decoration: none; font-weight: var(--font-weight-semibold); }
@@ -149,8 +169,8 @@
 
 .players-mini { font-size: var(--font-size-xs); color: var(--color-text-secondary); display: flex; flex-wrap: wrap; gap: var(--spacing-1) var(--spacing-3); margin-top: var(--spacing-1); }
 .players-mini .p { white-space: nowrap; }
-.players-mini .p.czar::before { content: '👑 '; }
-.players-mini .p.submitted::after { content: ' ✅'; }
+.players-mini .p.czar::before { content: 'Czar · '; color: var(--color-warning); }
+.players-mini .p.submitted::after { content: ' · played'; color: var(--color-success); }
 .players-mini .p sup { color: var(--color-primary-400); font-weight: var(--font-weight-bold); margin-left: 2px; }
 
 .btn-action {
@@ -168,7 +188,7 @@
     gap: var(--spacing-2);
 }
 .btn-action:hover { background: var(--color-dark-500); border-color: var(--color-primary-400); }
-.btn-action.danger:hover { border-color: var(--color-danger); color: var(--color-danger); background: rgba(240, 71, 71, 0.08); }
+.btn-action.danger:hover { border-color: var(--color-danger); color: var(--color-danger); background: color-mix(in srgb, var(--cf-danger) 8%, transparent); }
 .btn-action:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .refresh-status { font-size: var(--font-size-xs); color: var(--color-text-muted); font-variant-numeric: tabular-nums; }
@@ -193,36 +213,26 @@
 .cah-toast.show { opacity: 1; transform: translateY(0); }
 .cah-toast.ok { border-color: var(--color-success); }
 .cah-toast.err { border-color: var(--color-danger); }
+@media (max-width: 992px) {
+    .page-header-top { flex-wrap: wrap; gap: var(--spacing-3); }
+}
+@media (max-width: 560px) { .admin-stats-grid { grid-template-columns: 1fr 1fr; gap: var(--spacing-3); } .cah-panel-header { flex-wrap: wrap; } }
 </style>
 
-<div class="app-layout">
-    <%- include('partials/sidebar', {
-        user: user,
-        currentPage: 'cah'
-    }) %>
-
-    <div class="main-content">
-        <%- include('partials/topbar', {
-            breadcrumbs: [
-                { label: 'Dashboard', url: '/dashboard' },
-                { label: 'CAH', url: '/cah' },
-                { label: 'Admin', url: '/admin/cah' }
-            ],
-            user: user
-        }) %>
-
+<main id="main-content" tabindex="-1">
         <div class="content">
             <div class="content-container">
+                <%- include('partials/site/_owner-nav', { ownerActive: 'cah' }) %>
 
                 <!-- Page Header -->
                 <div class="page-header">
                     <div class="page-header-top">
                         <div>
                             <h1 class="page-title">
-                                🃏 CAH Admin Panel
+                                CAH admin
                             </h1>
                             <p class="page-description">
-                                Real-time observability and control for all active Cards Against Humanity games across Discord + web.
+                                Every running Cards Against Humanity game, on Discord and the web.
                             </p>
                         </div>
                         <div style="display: flex; gap: var(--spacing-3); align-items: center; flex-wrap: wrap;">
@@ -237,31 +247,31 @@
                     <div class="cah-stat-card" id="card-live">
                         <div class="cah-stat-card-icon"><i class="fas fa-play-circle"></i></div>
                         <div class="cah-stat-card-value" id="stat-active">—</div>
-                        <div class="cah-stat-card-label">Live in Memory</div>
+                        <div class="cah-stat-card-label">Running now</div>
                     </div>
                     <div class="cah-stat-card" id="card-stuck">
                         <div class="cah-stat-card-icon"><i class="fas fa-exclamation-triangle"></i></div>
                         <div class="cah-stat-card-value" id="stat-stuck">—</div>
-                        <div class="cah-stat-card-label">Stuck (DB-only)</div>
+                        <div class="cah-stat-card-label">Stuck (database only)</div>
                     </div>
                     <div class="cah-stat-card">
                         <div class="cah-stat-card-icon"><i class="fas fa-layer-group"></i></div>
                         <div class="cah-stat-card-value"><%= deckCount.n.toLocaleString() %></div>
-                        <div class="cah-stat-card-label">English Packs</div>
+                        <div class="cah-stat-card-label">English packs</div>
                     </div>
                     <div class="cah-stat-card">
                         <div class="cah-stat-card-icon"><i class="fas fa-ban"></i></div>
                         <div class="cah-stat-card-value"><%= deployState.filter(d => d.blocked_until && new Date(d.blocked_until) > new Date()).length %></div>
-                        <div class="cah-stat-card-label">Blocked Deploys</div>
+                        <div class="cah-stat-card-label">Blocked deploys</div>
                     </div>
                 </div>
 
                 <!-- Active Games Panel -->
                 <div class="cah-panel">
                     <div class="cah-panel-header">
-                        <h2 class="cah-panel-title"><span class="live-dot"></span> Active Card Tables</h2>
+                        <h2 class="cah-panel-title"><span class="live-dot"></span> Active games</h2>
                         <div class="cah-panel-controls">
-                            <label><input type="checkbox" id="auto-refresh" checked> auto-refresh (5s)</label>
+                            <label><input type="checkbox" id="auto-refresh" checked> Refresh every 5 s</label>
                             <button class="btn-action" id="btn-refresh"><i class="fas fa-sync-alt"></i> Refresh</button>
                             <span class="refresh-status" id="last-refresh"></span>
                         </div>
@@ -289,7 +299,7 @@
                 <!-- Recent Endings Panel -->
                 <div class="cah-panel">
                     <div class="cah-panel-header">
-                        <h2 class="cah-panel-title"><i class="fas fa-history"></i> Recent Endings (last 25)</h2>
+                        <h2 class="cah-panel-title"><i class="fas fa-history"></i> Recently ended (last 25)</h2>
                     </div>
                     <div class="cah-table-wrap">
                         <table class="cah-table">
@@ -316,7 +326,7 @@
                 <!-- Deploy Pipeline Panel -->
                 <div class="cah-panel">
                     <div class="cah-panel-header">
-                        <h2 class="cah-panel-title"><i class="fas fa-rocket"></i> Command Deploy Pipeline</h2>
+                        <h2 class="cah-panel-title"><i class="fas fa-rocket"></i> Command deploys</h2>
                     </div>
                     <div class="cah-table-wrap">
                         <table class="cah-table">
@@ -326,11 +336,11 @@
                                     <tr><td colspan="5" class="empty-cell">No deploy history.</td></tr>
                                 <% } else { %>
                                     <% deployState.forEach(d => { const isBlocked = d.blocked_until && new Date(d.blocked_until) > new Date(); %>
-                                        <tr style="<%= isBlocked ? 'background: rgba(240, 71, 71, 0.05);' : '' %>">
+                                        <tr class="<%= isBlocked ? 'row-blocked' : '' %>">
                                             <td class="meta-line"><%= d.bot_id %></td>
                                             <td class="meta-line"><%= d.guild_id || '(global)' %></td>
                                             <td class="meta-line"><%= new Date(d.deployed_at).toLocaleString() %></td>
-                                            <td class="meta-line" style="color: <%= isBlocked ? 'var(--color-danger)' : 'var(--color-text-muted)' %>;">
+                                            <td class="meta-line<%= isBlocked ? ' is-blocked' : '' %>">
                                                 <%= d.blocked_until ? new Date(d.blocked_until).toLocaleString() : '—' %>
                                             </td>
                                             <td style="font-size: var(--font-size-xs); color: var(--color-text-muted);"><%= d.last_block_reason || '' %></td>
@@ -344,14 +354,14 @@
 
             </div>
         </div>
-    </div>
-</div>
+</main>
 
 <div class="cah-toast" id="toast"></div>
 
-<%- include('partials/modern-footer', {
-    additionalScripts: []
-}) %>
+<%- include('partials/site-footer') %>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="/js/modal-fix.js"></script>
 
 <script>
 (function() {
@@ -409,7 +419,7 @@
         $('card-stuck').classList.toggle('alert', stuck > 0);
 
         if (!games.length) {
-            TBODY.replaceChildren(el('tr', {}, el('td', { colspan: '7', class: 'empty-cell' }, 'No active card tables. Time to deal someone in. 🎴')));
+            TBODY.replaceChildren(el('tr', {}, el('td', { colspan: '7', class: 'empty-cell' }, 'No games running.')));
             return;
         }
 
@@ -422,7 +432,7 @@
                 g.inMemory ? el('span', { class: 'pill-flag live' }, 'live') : null,
                 g.stuck ? el('span', { class: 'pill-flag stuck' }, 'stuck') : null,
                 (g.inMemory && g.live && !g.live.timerArmed && (state === 'SUBMITTING' || state === 'JUDGING')) ? el('span', { class: 'pill-flag notimer' }, 'no-timer') : null,
-                g.live?.hasPassword ? el('span', { class: 'pill-flag pw' }, '🔒') : null
+                g.live?.hasPassword ? el('span', { class: 'pill-flag pw' }, 'password') : null
             );
 
             const idCell = el('td', {},
@@ -453,7 +463,7 @@
             if (g.live) {
                 roundCell.appendChild(document.createTextNode(`R${g.live.round} · ${g.live.submissions}/${players.filter(p => !p.isCzar).length} submitted`));
                 roundCell.appendChild(el('br'));
-                roundCell.appendChild(el('span', { class: 'meta-line' }, g.live.timerArmed ? '⏱ timer armed' : 'no timer'));
+                roundCell.appendChild(el('span', { class: 'meta-line' }, g.live.timerArmed ? 'timer running' : 'no timer'));
             } else {
                 roundCell.appendChild(el('span', { class: 'meta-line' }, '—'));
             }
@@ -496,7 +506,7 @@
             const r = await fetch(`/admin/cah/${gameId}/force-end`, {
                 method: 'POST',
                 credentials: 'same-origin',
-                headers: { 'Content-Type': 'application/json', 'CSRF-Token': csrf },
+                headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
                 body: JSON.stringify({ reason: 'admin_force_end' })
             });
             const d = await r.json();

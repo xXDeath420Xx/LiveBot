@@ -53,6 +53,21 @@ var geminiApi = require("../utils/gemini-api.cjs");
 var musicMetrics = require("./music-metrics.cjs");
 var db_1 = require("../utils/db.cjs");
 var musicErrorReasons = require("../utils/music-error-reasons.cjs");
+var djLibrary = require("./dj-blocklist.cjs");
+// Voice ids / sample rates for the two TTS engines (Piper, Kokoro): utils/kokoro-logic.cjs.
+var ttsLogic = require("../utils/kokoro-logic.cjs");
+// Piper model path -> its output sample rate (from the model's .onnx.json; raw PCM carries none).
+var piperRateCache = new Map();
+function piperModelRate(modelPath) {
+    if (!piperRateCache.has(modelPath)) {
+        var config = null;
+        try { config = JSON.parse(fs.readFileSync(modelPath + '.json', 'utf8')); } catch (e) { /* no config: Piper's usual rate */ }
+        piperRateCache.set(modelPath, ttsLogic.piperSampleRate(config));
+    }
+    return piperRateCache.get(modelPath);
+}
+// --- AI DJ blocklist / favourites cache (per guild; /music settings djblock|djfavorite invalidate it) ---
+var DJ_LIBRARY_TTL_MS = 60 * 1000;
 // --- Piper TTS Configuration ---
 var PIPER_PATH = process.env.PIPER_PATH || '/home/death/.local/bin/piper';
 var PIPER_MODEL_DIR = process.env.PIPER_MODEL_DIR || '/home/death/CertiFriedUtility/piper_models';
@@ -67,7 +82,55 @@ var DJManager = /** @class */ (function () {
         this.player.events.on("playerFinish", function (queue, finishedTrack) { return _this.onPlayerFinish(queue, finishedTrack); });
         this.player.events.on("emptyQueue", function (queue) { return _this.onQueueEnd(queue); });
         this.player.events.on("playerError", function (queue, error) { return _this.onPlayerError(queue, error); });
+        this._blocklistCache = new Map(); // guildId -> { at, entries }
+        this._favoritesCache = new Map(); // guildId -> { at, rows }
     }
+    /**
+     * The guild's DJ blocklist (ai_dj_blacklist) as matchable entries, cached for a minute.
+     * A read failure is logged and treated as "nothing blocked" for this batch (the DJ keeps playing).
+     */
+    DJManager.prototype.getBlocklist = async function (guildId) {
+        var hit = this._blocklistCache.get(guildId);
+        if (hit && Date.now() - hit.at < DJ_LIBRARY_TTL_MS) return hit.entries;
+        try {
+            var result = await db_1.default.execute("SELECT id, entry_type, song_identifier, title, artist, reason FROM ai_dj_blacklist WHERE guild_id = ?", [guildId]);
+            var entries = (result[0] || []).map(djLibrary.entryFromRow).filter(Boolean);
+            this._blocklistCache.set(guildId, { at: Date.now(), entries: entries });
+            return entries;
+        } catch (error) {
+            logger_1.default.error("[DJ] Could not load the blocklist for guild ".concat(guildId, ": ").concat(error.message));
+            return hit ? hit.entries : [];
+        }
+    };
+    /** The guild's favourite songs (ai_dj_favorites), cached for a minute. */
+    DJManager.prototype.getFavorites = async function (guildId) {
+        var hit = this._favoritesCache.get(guildId);
+        if (hit && Date.now() - hit.at < DJ_LIBRARY_TTL_MS) return hit.rows;
+        try {
+            var result = await db_1.default.execute("SELECT id, song_title, artist, url, priority FROM ai_dj_favorites WHERE guild_id = ? ORDER BY priority DESC, id ASC LIMIT 200", [guildId]);
+            var rows = result[0] || [];
+            this._favoritesCache.set(guildId, { at: Date.now(), rows: rows });
+            return rows;
+        } catch (error) {
+            logger_1.default.error("[DJ] Could not load favourites for guild ".concat(guildId, ": ").concat(error.message));
+            return hit ? hit.rows : [];
+        }
+    };
+    /** Called after /music settings djblock|djfavorite changes so the next batch sees them immediately. */
+    DJManager.prototype.invalidateDJLibrary = function (guildId) {
+        this._blocklistCache.delete(guildId);
+        this._favoritesCache.delete(guildId);
+    };
+    /** Drop blocked items (Gemini {title, artist} or Tracks), logging what was dropped. */
+    DJManager.prototype.filterBlocked = function (items, entries, guildId, what) {
+        if (!entries || !entries.length || !items || !items.length) return items || [];
+        var res = djLibrary.filterBlocked(items, entries);
+        if (res.blocked.length) {
+            logger_1.default.info("[DJ] Blocklist removed ".concat(res.blocked.length, " ").concat(what, " in guild ").concat(guildId, ": ")
+                .concat(res.blocked.map(function (b) { return "\"".concat(b.item.title, "\" (").concat(b.entry.type, " ").concat(b.entry.type === 'artist' ? b.entry.artist : b.entry.title, ")"); }).join(", ")));
+        }
+        return res.kept;
+    };
     DJManager.prototype.getDJVoiceModel = async function (guildId) {
         var _this = this;
         try {
@@ -76,7 +139,11 @@ var DJManager = /** @class */ (function () {
             var voiceModel = PIPER_DEFAULT_MODEL;
 
             if (config && config.dj_voice) {
-                if (config.dj_voice.includes('/') || config.dj_voice.includes('.onnx')) {
+                if (ttsLogic.isKokoroVoiceId(config.dj_voice)) {
+                    // Kept even while the Kokoro model is missing: generatePiperAudio falls back (and logs it).
+                    var kokoro = ttsLogic.parseVoiceId(config.dj_voice);
+                    voiceModel = kokoro.known ? "kokoro:" + kokoro.voice : PIPER_DEFAULT_MODEL;
+                } else if (config.dj_voice.includes('/') || config.dj_voice.includes('.onnx')) {
                     voiceModel = config.dj_voice;
                 } else {
                     var voiceMap = this.getAllVoices();
@@ -114,50 +181,70 @@ var DJManager = /** @class */ (function () {
             };
         });
     };
-    DJManager.prototype.generatePiperAudio = function (text, modelName, finalOutputPath) {
-        return __awaiter(this, void 0, void 0, function () {
-            var modelPath;
-            return __generator(this, function (_a) {
-                modelPath = path.join(PIPER_MODEL_DIR, modelName);
-                if (!fs.existsSync(modelPath)) {
-                    throw new Error("Piper model not found at: ".concat(modelPath));
+    /**
+     * DJ speech -> 48 kHz stereo WAV at finalOutputPath. modelName is a Piper model path relative to
+     * piper_models, or "kokoro:<voice>" for a Kokoro voice (synthesised to a 24 kHz WAV, then
+     * converted); a Kokoro failure falls back to the default Piper model and is logged.
+     * Piper's raw output has no header, so ffmpeg is told the model's own sample rate (22.05 kHz for
+     * medium/high voices, 16 kHz for low ones) — it used to be told 22050 for every voice, which
+     * played the low-quality voices ~38% too fast and high.
+     */
+    DJManager.prototype.generatePiperAudio = async function (text, modelName, finalOutputPath) {
+        if (String(modelName).startsWith('kokoro:')) {
+            var voiceId = ttsLogic.kokoroId(String(modelName).slice('kokoro:'.length));
+            var wavPath = finalOutputPath + '.kokoro.wav';
+            try {
+                var kokoroTts = await import('../utils/kokoro-tts.js');
+                await kokoroTts.kokoroToFile(text, voiceId, wavPath);
+                return await this.convertToDiscordWav(['-i', wavPath], null, finalOutputPath);
+            } catch (error) {
+                logger_1.default.warn("[DJ] Kokoro voice ".concat(voiceId, " unavailable (").concat(error.message, "); using the default Piper voice"));
+                return this.generatePiperAudio(text, PIPER_DEFAULT_MODEL, finalOutputPath);
+            } finally {
+                fs.promises.unlink(wavPath).catch(function () { });
+            }
+        }
+        var modelPath = path.join(PIPER_MODEL_DIR, modelName);
+        if (!fs.existsSync(modelPath)) {
+            throw new Error("Piper model not found at: ".concat(modelPath));
+        }
+        logger_1.default.info("[DJ/Pipeline] Starting Piper -> WAV audio generation for: ".concat(finalOutputPath));
+        var piper = (0, child_process_1.spawn)(PIPER_PATH, ['--model', modelPath, '--output-raw']);
+        piper.stdin.write(text);
+        piper.stdin.end();
+        return this.convertToDiscordWav(ttsLogic.rawPcmInputArgs(piperModelRate(modelPath)), piper, finalOutputPath);
+    };
+    /** ffmpeg: the given input (raw PCM piped from `source`, or a file) -> 48 kHz stereo 16-bit WAV. */
+    DJManager.prototype.convertToDiscordWav = function (inputArgs, source, finalOutputPath) {
+        return new Promise(function (resolve, reject) {
+            var piper = source;
+            var ffmpeg = (0, child_process_1.spawn)(FFMPEG_PATH, inputArgs.concat([
+                '-af', 'aresample=resampler=soxr,pan=stereo|FL=FC|FR=FC',
+                '-ar', '48000',
+                '-ac', '2',
+                '-acodec', 'pcm_s16le',
+                '-y',
+                finalOutputPath
+            ]));
+            var piperStderr = '';
+            if (piper) {
+                piper.stdout.pipe(ffmpeg.stdin);
+                piper.stderr.on('data', function (data) { piperStderr += data; });
+                piper.on('error', function (err) { logger_1.default.error("[DJ/Piper] Failed to start Piper process: ".concat(err.message)); reject(err); });
+            }
+            var ffmpegStderr = '';
+            ffmpeg.stderr.on('data', function (data) { ffmpegStderr += data; });
+            ffmpeg.on('error', function (err) { logger_1.default.error("[DJ/FFmpeg] Failed to start FFmpeg process: ".concat(err.message)); reject(err); });
+            ffmpeg.on('close', function (code) {
+                if (code === 0) {
+                    logger_1.default.info("[DJ/FFmpeg] WAV generation finished successfully. Audio saved to ".concat(finalOutputPath));
+                    resolve(finalOutputPath);
                 }
-                return [2 /*return*/, new Promise(function (resolve, reject) {
-                        logger_1.default.info("[DJ/Pipeline] Starting Piper -> WAV audio generation for: ".concat(finalOutputPath));
-                        var piper = (0, child_process_1.spawn)(PIPER_PATH, ['--model', modelPath, '--output-raw']);
-                        var ffmpeg = (0, child_process_1.spawn)(FFMPEG_PATH, [
-                            '-f', 's16le',
-                            '-ar', '22050',
-                            '-ac', '1',
-                            '-i', 'pipe:0',
-                            '-af', 'aresample=resampler=soxr,pan=stereo|FL=FC|FR=FC',
-                            '-ar', '48000',
-                            '-ac', '2',
-                            '-acodec', 'pcm_s16le',
-                            '-y',
-                            finalOutputPath
-                        ]);
-                        piper.stdin.write(text);
-                        piper.stdin.end();
-                        piper.stdout.pipe(ffmpeg.stdin);
-                        var piperStderr = '';
-                        piper.stderr.on('data', function (data) { piperStderr += data; });
-                        var ffmpegStderr = '';
-                        ffmpeg.stderr.on('data', function (data) { ffmpegStderr += data; });
-                        piper.on('error', function (err) { logger_1.default.error("[DJ/Piper] Failed to start Piper process: ".concat(err.message)); reject(err); });
-                        ffmpeg.on('error', function (err) { logger_1.default.error("[DJ/FFmpeg] Failed to start FFmpeg process: ".concat(err.message)); reject(err); });
-                        ffmpeg.on('close', function (code) {
-                            if (code === 0) {
-                                logger_1.default.info("[DJ/FFmpeg] WAV generation finished successfully. Audio saved to ".concat(finalOutputPath));
-                                resolve(finalOutputPath);
-                            }
-                            else {
-                                logger_1.default.error("[DJ/FFmpeg] FFmpeg process exited with code ".concat(code, ". Stderr: ").concat(ffmpegStderr));
-                                logger_1.default.error("[DJ/Piper] Piper Stderr (for context): ".concat(piperStderr));
-                                reject(new Error("FFmpeg failed with code ".concat(code)));
-                            }
-                        });
-                    })];
+                else {
+                    logger_1.default.error("[DJ/FFmpeg] FFmpeg process exited with code ".concat(code, ". Stderr: ").concat(ffmpegStderr));
+                    if (piper) logger_1.default.error("[DJ/Piper] Piper Stderr (for context): ".concat(piperStderr));
+                    reject(new Error("FFmpeg failed with code ".concat(code)));
+                }
             });
         });
     };
@@ -474,7 +561,7 @@ var DJManager = /** @class */ (function () {
                         return [3 /*break*/, 11];
                     case 11:
                         console.log("[DJ DEBUG] Calling getRecommendationsWithFallback with song:", inputSong, "artist:", inputArtist);
-                        return [4 /*yield*/, this.getRecommendationsWithFallback(inputSong, inputArtist, inputGenre, playedTracks, prompt_1)];
+                        return [4 /*yield*/, this.getRecommendationsWithFallback(inputSong, inputArtist, inputGenre, playedTracks, prompt_1, queue)];
                     case 12:
                         geminiRecommendedTracks = _c.sent();
                         console.log("[DJ DEBUG] Gemini returned:", geminiRecommendedTracks ? geminiRecommendedTracks.length : 0, "tracks");
@@ -508,19 +595,27 @@ var DJManager = /** @class */ (function () {
                                         console.log("[DJ] Player search failed, trying direct yt-dlp for: " + query);
                                         return [4 /*yield*/, new Promise(function(resolve) {
                                             var spawn = require('child_process').spawn;
-                                            var args = ['--cookies', '/home/death/CertiFriedUtility/cookies.txt', '-j', '--no-playlist', '--default-search', 'ytsearch1', query];
+                                            // Flat search: hits only YouTube's search page, which works even while the
+                                            // player endpoint bot-walls us. NEVER pass the master cookies.txt — yt-dlp
+                                            // rewrites it and strips the auth cookies on a bot challenge.
+                                            var args = ['--no-update', '--flat-playlist', '-j', '--no-warnings', 'ytsearch1:' + query];
                                             var proc = spawn('yt-dlp', args);
                                             var output = '';
                                             proc.stdout.on('data', function(d) { output += d.toString(); });
-                                            proc.stderr.on('data', function(d) { console.log("[DJ] yt-dlp stderr: " + d.toString()); });
+                                            var stderr = '';
+                                            proc.stderr.on('data', function(d) { stderr += d.toString(); });
                                             proc.on('close', function(code) {
                                                 if (code === 0 && output.trim()) {
                                                     try {
                                                         var data = JSON.parse(output.trim());
                                                         console.log("[DJ] yt-dlp found: " + data.title);
-                                                        resolve({ title: data.title, url: data.webpage_url || data.url, author: data.uploader || data.channel, duration: data.duration });
+                                                        var u = data.webpage_url || (data.url && data.url.indexOf('http') === 0 ? data.url : (data.id ? 'https://www.youtube.com/watch?v=' + data.id : null));
+                                                        resolve({ title: data.title, url: u, author: data.uploader || data.channel, duration: data.duration });
                                                     } catch(e) { resolve(null); }
-                                                } else { resolve(null); }
+                                                } else {
+                                                    if (stderr.trim()) console.log("[DJ] yt-dlp failed (code " + code + "): " + stderr.trim().slice(0, 300));
+                                                    resolve(null);
+                                                }
                                             });
                                             proc.on('error', function() { resolve(null); });
                                             setTimeout(function() { try { proc.kill(); } catch(e) {} resolve(null); }, 15000);
@@ -552,6 +647,10 @@ var DJManager = /** @class */ (function () {
                         i += BATCH_SIZE;
                         return [3 /*break*/, 13];
                     case 16:
+                        // The blocklist is a guarantee, not a request: a search can resolve a recommendation
+                        // to a different upload (a cover, a feature) — check what actually got resolved.
+                        // (getRecommendationsWithFallback just refreshed the cached list for this guild.)
+                        resolvedTracks = this.filterBlocked(resolvedTracks, (this._blocklistCache.get(queue.guild.id) || {}).entries, queue.guild.id, "resolved tracks");
                         if (!(resolvedTracks.length > 0)) return [3 /*break*/, 20];
                         // Store tracks with timestamps for 1-hour cooldown
                         var now = Date.now();
@@ -602,65 +701,70 @@ var DJManager = /** @class */ (function () {
     };
     /**
      * Get recommendations with fallback for niche/comedy/novelty content
-     * If primary recommendations fail, tries genre-based fallback
+     * If primary recommendations fail, tries genre-based fallback.
+     *
+     * With `queue`, the guild's AI DJ library applies:
+     *   - favourites-seeded sessions (no seed given) re-pick a few favourites for every batch;
+     *   - the blocklist is named to Gemini as exclusions, and blocked recommendations are dropped
+     *     before anything is searched (onQueueEnd checks the resolved tracks again).
      */
-    DJManager.prototype.getRecommendationsWithFallback = function (inputSong, inputArtist, inputGenre, playedTracks, prompt) {
-        return __awaiter(this, void 0, void 0, function () {
-            var recommendations, fallbackPrompt;
-            return __generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0:
-                        // First attempt: normal recommendations
-                        console.log("[DJ DEBUG] getRecommendationsWithFallback: calling geminiApi.generatePlaylistRecommendations");
-                        console.log("[DJ DEBUG] params - song:", inputSong, "artist:", inputArtist, "genre:", inputGenre);
-                        return [4 /*yield*/, geminiApi.generatePlaylistRecommendations(inputSong, inputArtist, inputGenre, playedTracks, prompt)];
-                    case 1:
-                        recommendations = _a.sent();
+    DJManager.prototype.getRecommendationsWithFallback = async function (inputSong, inputArtist, inputGenre, playedTracks, prompt, queue) {
+        var guildId = queue && queue.guild ? queue.guild.id : null;
+        var _this = this;
+        var blocked = guildId ? await this.getBlocklist(guildId) : [];
+        if (guildId && queue.metadata && queue.metadata.favoritesSeed) {
+            var favorites = await this.getFavorites(guildId);
+            var picks = djLibrary.pickWeighted(favorites, 3);
+            if (picks.length) {
+                prompt = djLibrary.joinPrompt(queue.metadata.basePrompt, djLibrary.favoritesSeedText(picks));
+                queue.metadata.prompt = prompt;
+                logger_1.default.info("[DJ] Favourite seeds for guild ".concat(guildId, ": ").concat(picks.map(function (f) { return f.song_title; }).join(", ")));
+            }
+        }
+        var exclusion = djLibrary.exclusionText(blocked);
+        var seeds = { inputSong: inputSong, inputArtist: inputArtist, inputGenre: inputGenre };
+        var keep = function (recs) { return _this.filterBlocked(recs || [], blocked, guildId, "recommendations"); };
 
-                        // If we got results, return them
-                        if (recommendations && recommendations.length > 0) {
-                            return [2 /*return*/, recommendations];
-                        }
+        // First attempt: normal recommendations
+        console.log("[DJ DEBUG] getRecommendationsWithFallback: calling geminiApi.generatePlaylistRecommendations");
+        console.log("[DJ DEBUG] params - song:", inputSong, "artist:", inputArtist, "genre:", inputGenre, "blocked:", blocked.length);
+        var recommendations = keep(await geminiApi.generatePlaylistRecommendations(inputSong, inputArtist, inputGenre, playedTracks, djLibrary.withExclusions(prompt, seeds, exclusion)));
 
-                        // Fallback: If Gemini returns empty and we have song/artist info, try comedy/novelty genre
-                        if (inputSong || inputArtist) {
-                            logger_1.default.info("[DJ] Initial recommendations empty. Trying fallback with comedy/novelty genre...");
+        // If we got results, return them
+        if (recommendations.length > 0) {
+            return recommendations;
+        }
 
-                            fallbackPrompt = "The song \"".concat(inputSong || 'Unknown', "\" by \"").concat(inputArtist || 'Unknown', "\" appears to be a ");
-                            fallbackPrompt += "comedy, parody, novelty, or adult humor song. Please recommend 10-15 similar songs from ANY artist. ";
-                            fallbackPrompt += "Consider artists like: Weird Al Yankovic, Tim Minchin, Flight of the Conchords, Tenacious D, ";
-                            fallbackPrompt += "The Lonely Island, Stephen Lynch, Rodney Carrington, Bob Rivers, Adam Sandler, Denis Leary, ";
-                            fallbackPrompt += "Kevin Bloody Wilson, Monty Python, Tom Lehrer, Bo Burnham, or similar comedic musicians. ";
-                            fallbackPrompt += "Also consider Australian comedy musicians, British comedy acts, and holiday parody songs if relevant. ";
-                            fallbackPrompt += "Focus on songs that are actually available on YouTube.";
+        // Fallback: If Gemini returns empty and we have song/artist info, try comedy/novelty genre
+        if (!(inputSong || inputArtist)) {
+            return [];
+        }
+        logger_1.default.info("[DJ] Initial recommendations empty. Trying fallback with comedy/novelty genre...");
 
-                            return [4 /*yield*/, geminiApi.generatePlaylistRecommendations(null, null, 'comedy/novelty', playedTracks, fallbackPrompt)];
-                        }
-                        return [3 /*break*/, 4];
-                    case 2:
-                        recommendations = _a.sent();
-                        if (recommendations && recommendations.length > 0) {
-                            logger_1.default.info("[DJ] Fallback succeeded with ".concat(recommendations.length, " comedy/novelty recommendations"));
-                            return [2 /*return*/, recommendations];
-                        }
+        var fallbackPrompt = "The song \"".concat(inputSong || 'Unknown', "\" by \"").concat(inputArtist || 'Unknown', "\" appears to be a ");
+        fallbackPrompt += "comedy, parody, novelty, or adult humor song. Please recommend 10-15 similar songs from ANY artist. ";
+        fallbackPrompt += "Consider artists like: Weird Al Yankovic, Tim Minchin, Flight of the Conchords, Tenacious D, ";
+        fallbackPrompt += "The Lonely Island, Stephen Lynch, Rodney Carrington, Bob Rivers, Adam Sandler, Denis Leary, ";
+        fallbackPrompt += "Kevin Bloody Wilson, Monty Python, Tom Lehrer, Bo Burnham, or similar comedic musicians. ";
+        fallbackPrompt += "Also consider Australian comedy musicians, British comedy acts, and holiday parody songs if relevant. ";
+        fallbackPrompt += "Focus on songs that are actually available on YouTube.";
 
-                        // Second fallback: try general "fun/party" songs
-                        logger_1.default.info("[DJ] Comedy fallback empty. Trying general fun/party music fallback...");
-                        fallbackPrompt = "Generate 10-15 fun, upbeat party songs that would appeal to someone who enjoys comedy and novelty music. ";
-                        fallbackPrompt += "Include a mix of classic party songs, funny songs, and feel-good tracks. Focus on songs available on YouTube.";
+        recommendations = keep(await geminiApi.generatePlaylistRecommendations(null, null, 'comedy/novelty', playedTracks, djLibrary.joinPrompt(fallbackPrompt, exclusion)));
+        if (recommendations.length > 0) {
+            logger_1.default.info("[DJ] Fallback succeeded with ".concat(recommendations.length, " comedy/novelty recommendations"));
+            return recommendations;
+        }
 
-                        return [4 /*yield*/, geminiApi.generatePlaylistRecommendations(null, null, 'party/fun', playedTracks, fallbackPrompt)];
-                    case 3:
-                        recommendations = _a.sent();
-                        if (recommendations && recommendations.length > 0) {
-                            logger_1.default.info("[DJ] Party music fallback succeeded with ".concat(recommendations.length, " recommendations"));
-                        }
-                        return [2 /*return*/, recommendations || []];
-                    case 4:
-                        return [2 /*return*/, []];
-                }
-            });
-        });
+        // Second fallback: try general "fun/party" songs
+        logger_1.default.info("[DJ] Comedy fallback empty. Trying general fun/party music fallback...");
+        fallbackPrompt = "Generate 10-15 fun, upbeat party songs that would appeal to someone who enjoys comedy and novelty music. ";
+        fallbackPrompt += "Include a mix of classic party songs, funny songs, and feel-good tracks. Focus on songs available on YouTube.";
+
+        recommendations = keep(await geminiApi.generatePlaylistRecommendations(null, null, 'party/fun', playedTracks, djLibrary.joinPrompt(fallbackPrompt, exclusion)));
+        if (recommendations.length > 0) {
+            logger_1.default.info("[DJ] Party music fallback succeeded with ".concat(recommendations.length, " recommendations"));
+        }
+        return recommendations;
     };
 
     DJManager.prototype.onPlayerError = function (queue, error) {

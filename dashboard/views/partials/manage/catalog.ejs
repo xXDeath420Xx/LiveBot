@@ -1,0 +1,246 @@
+<%#
+  Feature catalog: every feature grouped by category, with its On/Off state and a link to its page.
+  Needs `guild` and `catalog` (Map<category, feature[]>) in locals. A searchable list of kit rows
+  (cf-settings.css); the script below filters `.catalog-item` rows by text and state.
+%>
+<%
+let total = 0, active = 0;
+for (const [, list] of (locals.catalog || new Map())) {
+    total += list.length;
+    active += list.filter(f => f.active).length;
+}
+%>
+<style>
+    #catalogPage .catalog-summary { font-size: var(--cf-text-sm); color: var(--cf-text-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
+    #catalogPage .catalog-summary strong { color: var(--cf-text); font-weight: 600; }
+    #catalogPage .catalog-controls { display: flex; flex-wrap: wrap; align-items: center; gap: var(--cf-3); margin: 0 0 var(--cf-6); }
+    #catalogPage .catalog-controls .cf-search { flex: 1 1 16rem; width: auto; }
+    #catalogPage .catalog-filters { flex: none; }
+    #catalogPage .catalog-name { display: block; font-size: var(--cf-text-md); font-weight: 500; color: var(--cf-text); }
+    #catalogPage .catalog-desc { display: block; margin-top: 2px; color: var(--cf-text-3); }
+    #catalogPage .catalog-cmd { display: inline-block; margin-top: 6px; font-family: var(--cf-mono); font-size: var(--cf-text-xs); color: var(--cf-text-2); }
+    #catalogPage .catalog-item .cf-list-actions { align-items: center; }
+    #catalogPage .catalog-item .cf-pill { min-width: 2.75rem; justify-content: center; }
+    #catalogPage .catalog-msg { display: block; margin-top: 6px; font-size: var(--cf-text-xs); color: var(--cf-text-2); }
+    @media (max-width: 640px) {
+        #catalogPage .catalog-filters { flex: 1 1 100%; }
+        #catalogPage .catalog-item .cf-list-actions { justify-content: space-between; }
+    }
+</style>
+
+<div class="page-section" id="catalogPage" data-guild-id="<%= guild.id %>">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-compass" aria-hidden="true"></i>
+                <span>Feature catalog</span>
+            </div>
+            <div class="page-section-subtitle">Most features need nothing more than switching on.</div>
+        </div>
+        <div class="catalog-summary"><strong class="catalog-active-count"><%= active %></strong> of <strong><%= total %></strong> on</div>
+    </div>
+
+    <div class="catalog-controls">
+        <div class="cf-search">
+            <i class="fas fa-magnifying-glass" aria-hidden="true"></i>
+            <input type="search"
+                   id="catalogSearch"
+                   class="form-control"
+                   placeholder="Search by name, description or command"
+                   autocomplete="off"
+                   aria-label="Search features">
+        </div>
+        <div class="catalog-filters cf-segmented" role="group" aria-label="Filter features">
+            <button type="button" class="catalog-filter" data-filter="all" aria-pressed="true">All</button>
+            <button type="button" class="catalog-filter" data-filter="active" aria-pressed="false">On (<span class="catalog-on-count"><%= active %></span>)</button>
+            <button type="button" class="catalog-filter" data-filter="inactive" aria-pressed="false">Not on (<span class="catalog-off-count"><%= total - active %></span>)</button>
+        </div>
+    </div>
+
+    <div class="cf-state cf-state--boxed" id="catalogEmpty" role="status" hidden>
+        <p class="cf-state-title">No matching features</p>
+        <p class="cf-state-text">Try a different search, or switch the filter back to All.</p>
+    </div>
+
+    <% if (!total) { %>
+    <section class="cf-section" aria-labelledby="catalog-none-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="catalog-none-title">Features</h2>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <%- include('../kit/_state', { kind: 'empty', title: 'No features to show', text: 'The feature list could not be loaded for this server. Reload the page to try again.' }) %>
+        </div>
+    </section>
+    <% } %>
+
+    <% for (const [category, features] of (locals.catalog || new Map())) { %>
+    <% const catOn = features.filter(f => f.active).length; %>
+    <section class="cf-section catalog-category" data-category="<%= category %>">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title"><%= category %></h2>
+                <p class="cf-section-desc"><span class="catalog-cat-on"><%= catOn %></span> of <%= features.length %> on</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-list">
+                <% features.forEach(f => {
+                    // On; switched off (its own switch or the catalog flag says off, or it has settings but
+                    // is not running: the same rule as core/page-status.js); or never set up.
+                    const fState = f.active ? 'on' : ((f.configured || f.explicitFlag === false) ? 'off' : 'none');
+                    // core/feature-flags.js SWITCHES decides whether the catalog can switch it, and how.
+                    const canToggle = Boolean(f.control) && (fState !== 'none' || f.canEnableFromNothing);
+                %>
+                <div class="cf-list-item catalog-item<%= f.active ? ' is-active' : '' %>"
+                     data-key="<%= f.key %>"
+                     data-active="<%= f.active ? '1' : '0' %>"
+                     data-search="<%= (f.name + ' ' + f.description + ' ' + (f.command || '') + ' ' + category).toLowerCase() %>">
+                    <div class="cf-list-main">
+                        <span class="catalog-name"><%= f.name %></span>
+                        <span class="catalog-desc"><%= f.description %></span>
+                        <% if (f.command) { %><code class="catalog-cmd"><%= f.command %></code><% } %>
+                        <span class="catalog-msg" role="status" hidden></span>
+                    </div>
+                    <div class="cf-list-actions">
+                        <span class="cf-pill catalog-state<%= fState === 'on' ? ' is-ok' : '' %>"><%= fState === 'on' ? 'On' : (fState === 'off' ? 'Off' : 'Not set up') %></span>
+                        <% if (f.control) { %>
+                        <button type="button"
+                                class="btn btn-sm btn-secondary catalog-toggle"
+                                data-key="<%= f.key %>"
+                                <%= canToggle ? '' : 'hidden' %>><%= f.active ? 'Turn off' : 'Turn on' %></button>
+                        <% } %>
+                        <% if (f.page) { %>
+                        <a class="btn btn-sm btn-secondary catalog-link" href="/manage/<%= guild.id %>?page=<%= f.page %>"><%= f.active ? 'Configure' : 'Set up' %></a>
+                        <% } %>
+                    </div>
+                </div>
+                <% }) %>
+            </div>
+        </div>
+    </section>
+    <% } %>
+</div>
+
+<script>
+(function () {
+    const root = document.getElementById('catalogPage');
+    if (!root) return;
+
+    const search = document.getElementById('catalogSearch');
+    const empty = document.getElementById('catalogEmpty');
+    const cards = [...root.querySelectorAll('.catalog-item')];
+    const categories = [...root.querySelectorAll('.catalog-category')];
+    let filter = 'all';
+
+    function apply() {
+        const q = search.value.trim().toLowerCase();
+        let shown = 0;
+
+        for (const card of cards) {
+            const matchesText = !q || card.dataset.search.includes(q);
+            const isActive = card.dataset.active === '1';
+            const matchesFilter =
+                filter === 'all' || (filter === 'active' ? isActive : !isActive);
+
+            const visible = matchesText && matchesFilter;
+            card.hidden = !visible;
+            if (visible) shown++;
+        }
+
+        // Hide a category heading when nothing under it survives the filter,
+        // so the page doesn't show empty section titles.
+        for (const cat of categories) {
+            cat.hidden = ![...cat.querySelectorAll('.catalog-item')].some((c) => !c.hidden);
+        }
+
+        empty.hidden = shown > 0;
+    }
+
+    search.addEventListener('input', apply);
+
+    // On/off switches. POST /api/guilds/:id/feature-catalog/:key; the server switches the feature's
+    // own setting or the catalog flag (core/feature-flags.js SWITCHES) and answers with its new state.
+    const guildId = root.dataset.guildId;
+    const stateOf = (f) => f.active ? 'on' : ((f.configured || f.explicitFlag === false) ? 'off' : 'none');
+
+    function recount() {
+        const on = cards.filter((c) => c.dataset.active === '1').length;
+        const setText = (cls, n) => { const el = root.querySelector('.' + cls); if (el) el.textContent = String(n); };
+        setText('catalog-active-count', on);
+        setText('catalog-on-count', on);
+        setText('catalog-off-count', cards.length - on);
+        for (const cat of categories) {
+            const el = cat.querySelector('.catalog-cat-on');
+            if (el) el.textContent = String([...cat.querySelectorAll('.catalog-item')].filter((c) => c.dataset.active === '1').length);
+        }
+    }
+
+    function showMsg(card, text) {
+        const msg = card.querySelector('.catalog-msg');
+        if (!msg) return;
+        msg.textContent = text || '';
+        msg.hidden = !text;
+    }
+
+    function render(card, f) {
+        const state = stateOf(f);
+        card.dataset.active = f.active ? '1' : '0';
+        card.classList.toggle('is-active', Boolean(f.active));
+        const pill = card.querySelector('.catalog-state');
+        if (pill) {
+            pill.textContent = state === 'on' ? 'On' : (state === 'off' ? 'Off' : 'Not set up');
+            pill.classList.toggle('is-ok', state === 'on');
+        }
+        const btn = card.querySelector('.catalog-toggle');
+        if (btn) {
+            btn.textContent = f.active ? 'Turn off' : 'Turn on';
+            btn.hidden = !(state !== 'none' || f.canEnableFromNothing);
+        }
+        const link = card.querySelector('.catalog-link');
+        if (link) link.textContent = f.active ? 'Configure' : 'Set up';
+    }
+
+    for (const btn of root.querySelectorAll('.catalog-toggle')) {
+        btn.addEventListener('click', async () => {
+            const card = btn.closest('.catalog-item');
+            const turnOn = card.dataset.active !== '1';
+            const name = (card.querySelector('.catalog-name') || {}).textContent || 'This feature';
+            btn.disabled = true;
+            showMsg(card, '');
+            try {
+                const res = await fetch('/api/guilds/' + encodeURIComponent(guildId) + '/feature-catalog/' + encodeURIComponent(btn.dataset.key), {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enabled: turnOn }),
+                });
+                const data = await res.json().catch(() => ({}));
+                if (!res.ok || !data.ok) {
+                    showMsg(card, data.error || 'Could not change that feature. Try again.');
+                    return;
+                }
+                if (data.feature) render(card, data.feature);
+                showMsg(card, name + (turnOn ? ' is on.' : ' is off.'));
+                recount();
+                apply();
+            } catch (err) {
+                showMsg(card, 'Could not reach the server. Try again.');
+            } finally {
+                btn.disabled = false;
+            }
+        });
+    }
+
+    for (const btn of root.querySelectorAll('.catalog-filter')) {
+        btn.addEventListener('click', () => {
+            filter = btn.dataset.filter;
+            root.querySelectorAll('.catalog-filter').forEach((b) => {
+                b.setAttribute('aria-pressed', b === btn ? 'true' : 'false');
+            });
+            apply();
+        });
+    }
+})();
+</script>

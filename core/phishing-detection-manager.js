@@ -10,66 +10,161 @@ import {
     USER_ID_REGEX
 } from '../utils/report-patterns.js';
 import { isWhitelisted } from '../utils/automod-whitelist.js';
-import { extractImageText } from './scam-image-ocr.js';
-import { scoreScamText } from './scam-text-classifier.js';
+import { scanImages } from './scam-image-ocr.js';
+import { hasImageAttachment, imageAttachments } from './message-images.js';
+import { learnScamImages } from './image-blocklist.js';
+import { imageStage as nsfwImageStage } from './nsfw-protection.js';
+import { protectionHold, isIgnoredChannel } from './protection-exempt.js';
+import {
+    getSettings as getThreatSettings, loadOcrRules, obfuscationStage, qrStage, imageRulesStage, aiScamTextReview,
+} from './message-threats.js';
+import { textOpinion } from './ai-judge.js';
+import { whyCannot, whyFailed, reportManualAction } from './manual-action.js';
+import { mightContainLink } from './obfuscated-url.js';
+import { scoreScamText, MATCH_THRESHOLD } from './scam-text-classifier.js';
+import { themeColor } from './guild-theme.js';
+import { isSafeDomain, normalizeHost, setOverrideSafeDomains } from './safe-domains.js';
 
 /**
  * Phishing Detection Manager - Checks messages against known phishing domains
  * Maintains an in-memory Set of domains for O(1) lookups on every message.
  * Domain list is synced from community GitHub lists every 4 hours.
+ *
+ * The never-flag list lives in core/safe-domains.js, shared with the Kick
+ * defender — see the rationale there for why embed fixers are on it.
+ *
+ * checkMessage is also the message-threat pipeline (core/message-threats.js, migration 327): the
+ * obfuscated-URL scam stage, QR codes and per-server image-text rules run here, each behind its own
+ * switch on the same phishing_config row, so a message's images are read once (scanImages: OCR + QR)
+ * and the hosts an obfuscated link or a QR code was hiding go through the same phishing list.
  */
-// Domains that must never be flagged as phishing, even if present in community lists
-const SAFE_DOMAINS = new Set([
-    'discord.com',
-    'discordapp.com',
-    'cdn.discordapp.com',
-    'cdn.discord.com',
-    'media.discordapp.net',
-    'images-ext-1.discordapp.net',
-    'images-ext-2.discordapp.net',
-    'discord.gg',
-    'discord.media',
-    'discordstatus.com',
-    'twitch.tv',
-    'kick.com',
-    'youtube.com',
-    'youtu.be',
-    'twitter.com',
-    'x.com',
-    'steamcommunity.com',
-    'store.steampowered.com',
-    'github.com',
-    'tenor.com',
-    'giphy.com',
-    'imgur.com',
-]);
+
+/**
+ * The phishing domain list, shared by every bot in the process.
+ *
+ * initializeManagers() runs once per bot client, so this manager is constructed
+ * 41 times. When the Set lived on the instance, each of those 41 copies held
+ * ~390,000 domain strings — the same 390,000 strings, loaded 41 times, from the
+ * same table. That is the single largest avoidable allocation in a process
+ * sitting at ~2.5GB RSS.
+ *
+ * The list is global threat intelligence, not per-guild state: there is no
+ * version of it that differs between bots. So it belongs to the module, and the
+ * instances share it.
+ *
+ * Load is idempotent and guarded, so the 41 constructor calls result in one
+ * query rather than 41 racing ones.
+ */
+let sharedDomainSet = new Set();
+let domainLoadPromise = null;
+let domainsLoadedAt = 0;
+
+/** How long a freshly-loaded list is considered current. */
+const DOMAIN_TTL_MS = 30 * 60 * 1000;
+
+/**
+ * The listed domain a host falls under — itself, or a parent domain (login.evil.example → evil.example) —
+ * or null. Never-flag domains are never listed (they are skipped at load). Used by the message-threat QR
+ * stage and /tools checkurl; message scanning itself keeps its exact-host lookup.
+ */
+export function phishingLookup(host) {
+    const h = normalizeHost(host);
+    if (!h || isSafeDomain(h)) return null;
+    if (sharedDomainSet.has(h)) return h;
+    const parts = h.split('.');
+    for (let i = 1; i < parts.length - 1; i++) {
+        const parent = parts.slice(i).join('.');
+        if (sharedDomainSet.has(parent)) return parent;
+    }
+    return null;
+}
+
+/** How many domains the shared list holds right now (0 = not loaded in this process). */
+export function phishingListSize() {
+    return sharedDomainSet.size;
+}
+
+/**
+ * A domain-report decision (core/domain-reports.js), applied to the in-memory list at once — the full
+ * reload that follows can take a while on 390k rows. block: add it; allow: drop it (and any listed
+ * subdomain is left to the reload, which now skips it as safe).
+ */
+export function applyDomainDecision(domain, kind) {
+    const h = normalizeHost(domain);
+    if (!h) return;
+    if (kind === 'block') sharedDomainSet.add(h);
+    else sharedDomainSet.delete(h);
+}
+
+/** Reload the shared list now (after a domain-report decision). */
+export async function reloadPhishingList() {
+    return new PhishingDetectionManager(null).loadDomains({ force: true });
+}
 
 class PhishingDetectionManager {
     constructor(client) {
         this.client = client;
-        this.domainSet = new Set();
+    }
+
+    /** Shared across every bot in this process — see sharedDomainSet above. */
+    get domainSet() {
+        return sharedDomainSet;
     }
 
     /**
-     * Load all known phishing domains from DB into the in-memory Set.
+     * Load all known phishing domains from DB into the shared in-memory Set.
      * Excludes SAFE_DOMAINS to prevent false positives from community lists.
+     *
+     * Concurrent callers await the same promise rather than each issuing their
+     * own 390k-row SELECT.
      */
-    async loadDomains() {
+    async loadDomains({ force = false } = {}) {
+        // Bots start in sequence, so each of the 41 calls this — but the promise
+        // guard only collapses *concurrent* callers. Without a freshness check
+        // the list would still be re-fetched once per bot, 41 times, seconds
+        // apart, for data that changes daily.
+        if (!force && sharedDomainSet.size && Date.now() - domainsLoadedAt < DOMAIN_TTL_MS) {
+            return sharedDomainSet;
+        }
+        if (domainLoadPromise) return domainLoadPromise;
+
+        domainLoadPromise = this._loadDomains().finally(() => { domainLoadPromise = null; });
+        return domainLoadPromise;
+    }
+
+    async _loadDomains() {
         try {
+            // Approved disputes first (core/domain-reports.js): the global allow list overrides the feeds.
+            try {
+                const [allow] = await pool.execute("SELECT domain FROM link_policy_domains WHERE guild_id = '0' AND kind = 'allow'");
+                setOverrideSafeDomains(allow.map(r => r.domain));
+            } catch (error) {
+                logger.warn('[PhishingDetection] Could not load the global allow list, keeping the previous one', { error: error.message });
+            }
             const [rows] = await pool.execute('SELECT domain FROM phishing_domains');
-            this.domainSet.clear();
+
+            // Build a replacement and swap it in, rather than clearing the live
+            // Set and refilling it. The old code left a window — the length of a
+            // 390k-row loop — during which every other bot sharing this Set saw
+            // it empty and would have waved phishing links straight through.
+            const next = new Set();
             let skipped = 0;
             for (const row of rows) {
-                const domain = row.domain.toLowerCase();
-                if (SAFE_DOMAINS.has(domain)) {
-                    skipped++;
-                    continue;
-                }
-                this.domainSet.add(domain);
+                const domain = normalizeHost(row.domain);
+                if (!domain) continue;
+                if (isSafeDomain(domain)) { skipped++; continue; }
+                next.add(domain);
             }
-            logger.info(`[PhishingDetection] Loaded ${this.domainSet.size} domains into memory${skipped ? ` (skipped ${skipped} safe domains)` : ''}`);
+
+            sharedDomainSet = next;
+            domainsLoadedAt = Date.now();
+
+            logger.info(`[PhishingDetection] Loaded ${next.size} domains into memory${skipped ? ` (skipped ${skipped} safe domains)` : ''}`);
+            return next;
         } catch (error) {
-            logger.error('[PhishingDetection] Failed to load domains', { error: error.message });
+            // Keep serving the previous list rather than dropping protection.
+            logger.error('[PhishingDetection] Failed to load domains, keeping previous list', { error: error.message });
+            return sharedDomainSet;
         }
     }
 
@@ -133,9 +228,14 @@ class PhishingDetectionManager {
 
         if (!Array.isArray(whitelist)) return false;
 
+        // Entries are normalised on the way in, because what an admin actually
+        // pastes into the allowlist box is the address bar contents. Comparing
+        // the raw entry meant "https://www.kkinstagram.com/" never equalled the
+        // extracted host "kkinstagram.com", so the allowlist looked correct in
+        // the dashboard and did nothing at all.
         return whitelist.some(safe => {
-            const safeLower = safe.toLowerCase();
-            return domain === safeLower || domain.endsWith('.' + safeLower);
+            const safeHost = normalizeHost(safe);
+            return !!safeHost && (domain === safeHost || domain.endsWith('.' + safeHost));
         });
     }
 
@@ -171,7 +271,7 @@ class PhishingDetectionManager {
         if (REPORT_PATTERNS.some(p => p.test(content))) return true;
 
         const hasUserId = USER_ID_REGEX.test(content);
-        const hasImages = message.attachments.some(a => a.contentType?.startsWith('image/'));
+        const hasImages = hasImageAttachment(message);
         if (hasUserId && hasImages) return true;
 
         if (message.member) {
@@ -204,7 +304,7 @@ class PhishingDetectionManager {
                 const reportChannel = guild.channels.cache.get(config.report_channel_id);
                 if (reportChannel) {
                     const embed = new EmbedBuilder()
-                        .setColor(0xF39C12)
+                        .setColor(themeColor(message.guild?.id, 'warning'))
                         .setTitle('Possible Evidence Post Redirected')
                         .setDescription(
                             'This message was removed from its original channel because it contained a known phishing domain, ' +
@@ -239,7 +339,7 @@ class PhishingDetectionManager {
                 const alertChannel = guild.channels.cache.get(config.alert_channel_id);
                 if (alertChannel) {
                     const embed = new EmbedBuilder()
-                        .setColor(0xF39C12)
+                        .setColor(themeColor(message.guild?.id, 'warning'))
                         .setTitle('Phishing Detection — Evidence Post Flagged')
                         .setDescription(
                             `A message in ${channel} contained phishing domain \`${matchedDomain}\` but appeared to be an evidence/report post. ` +
@@ -298,22 +398,62 @@ class PhishingDetectionManager {
         }
         if (await isWhitelisted(message.guild.id, message.author.id)) return false;
 
-        // Fast bail: nothing to scan unless there's a URL in text OR an image attachment.
-        const hasImages = message.attachments.some(a => a.contentType?.startsWith('image/'));
+        // Fast bail: nothing to scan unless there's a URL in text, something that could be an
+        // obfuscated link, OR an image attachment.
+        //
+        // What counts as an image is isImageAttachment's call, not a content-type prefix test — see
+        // core/message-images.js. Reading the poster-supplied type here is what made the whole scan
+        // skippable, and the skip was indistinguishable from a clean scan.
+        const hasImages = hasImageAttachment(message);
         const hasUrlInText = /https?:\/\//i.test(message.content || '');
-        if (!hasImages && !hasUrlInText) return false;
+        const maybeObfuscated = mightContainLink(message.content || '');
+        if (!hasImages && !hasUrlInText && !maybeObfuscated) return false;
 
-        // Get guild config
+        // Phishing detection itself (null when off), and the message-threat stages that share this row.
         const config = await this.getConfig(message.guild.id);
-        if (!config) return false;
+        const threats = await getThreatSettings(message.guild.id);
+        const t = threats.settings;
+        const ocrRules = hasImages && t.ocrRules.enabled ? await loadOcrRules(message.guild.id) : [];
+        const anyThreatStage = t.obf.enabled || t.qr.enabled || ocrRules.length > 0 || (hasImages && t.nsfw.enabled);
+        if (!config && !anyThreatStage) return false;
 
-        // Layer 1: Channel exemption — skip entirely (covers reports/red-flags channels)
-        if (this.isExemptChannel(message.channel, config)) return false;
+        // Layer 1: Channel exemption — skip entirely (covers reports/red-flags channels), and the
+        // channels / categories on the message protections' ignore list.
+        if (this.isExemptChannel(message.channel, config || threats.row || {})) return false;
+        if (await isIgnoredChannel(message.channel)) return false;
 
-        // OCR image attachments (only when enabled) and fold the text into the scan.
+        // Obfuscated-URL "fake support" scam. Runs on text only, before any image is downloaded.
+        let obfuscation = null;
+        if (maybeObfuscated) {
+            const stage = await obfuscationStage(message, t);
+            if (stage.acted) return true;
+            obfuscation = stage.analysis;
+        }
+
+        // NSFW chat images (core/nsfw-protection.js): the local models, through the same shared download as
+        // the scans below. Age-restricted channels are skipped there. Before OCR: a removed image needs no OCR.
+        if (hasImages && t.nsfw.enabled && await nsfwImageStage(message, t)) return true;
+
+        // Read each image once for every image check: OCR (phishing genre classifier, image-text rules)
+        // and QR codes.
         let ocrText = '';
-        if (hasImages && config.scan_images) {
-            ocrText = await extractImageText(message.attachments.values());
+        const wantOcr = hasImages && ((config && config.scan_images) || ocrRules.length > 0);
+        const wantQr = hasImages && t.qr.enabled;
+        let qrScan = null;
+        if (wantOcr || wantQr) {
+            const scan = await scanImages(imageAttachments(message), { ocr: wantOcr, qr: wantQr });
+            ocrText = scan.text;
+            qrScan = scan.qr;
+        }
+
+        // QR codes: decoded links through the phishing list and the obfuscation check; strict mode
+        // removes any QR image.
+        if (qrScan?.codes && await qrStage(message, t, qrScan, (h) => (this.isWhitelisted(h, config || threats.row || {}) ? null : phishingLookup(h)))) {
+            return true;
+        }
+
+        if (!config) {
+            return ocrText ? imageRulesStage(message, t, ocrText) : false;
         }
 
         // Domains the user actually TYPED (vs. ones only read out of an image). The
@@ -323,9 +463,19 @@ class PhishingDetectionManager {
         // hardened — see the image-path note below.
         const textDomainSet = new Set(this.extractDomains(message.content || '').map(d => d.domain));
         const domains = this.extractDomains(`${message.content || ''}\n${ocrText}`);
+        // Hosts an obfuscated link was hiding ("https://@evil。com") are typed links too.
+        for (const host of obfuscation?.hiddenHosts || []) {
+            if (domains.some(d => d.domain === host)) continue;
+            domains.push({ domain: host, url: `(obfuscated) ${host}` });
+            textDomainSet.add(host);
+        }
 
         // Known phishing domain (in text OR image) — high confidence.
         for (const { domain, url } of domains) {
+            // Re-checked here and not only at load: the in-memory list can be up
+            // to 30 minutes stale, and a false positive that survives a sync is
+            // a deleted message, not a slow lookup.
+            if (isSafeDomain(domain)) continue;
             if (this.domainSet.has(domain) && !this.isWhitelisted(domain, config)) {
                 const inText = textDomainSet.has(domain);
                 // Image-path hardening: the evidence DOWNGRADE (delete-but-don't-punish)
@@ -349,9 +499,56 @@ class PhishingDetectionManager {
             if (genre.matched) {
                 const reason = `image-scam (${genre.groups.join('+')})`;
                 await this.takeAction(message, reason, '(text inside image)', config, 'image-genre');
+
+                // Remember the picture, not the post. OCR costs seconds per image and runs behind a
+                // process-wide mutex, so a burst across a dozen channels outruns it; the fingerprint
+                // path in checkBlockedImage costs one download and runs BEFORE this one. Handing it
+                // the images that just scored means copies two through nine die on arrival, and the
+                // existing 3-channel auto-ban starts counting. Scoped to this guild: a hash learned
+                // from one server's spam should not be able to delete another's posts.
+                learnScamImages({
+                    guildId: message.guild.id,
+                    attachments: imageAttachments(message),
+                    label: reason,
+                }).catch(err => logger.warn('[PhishingDetection] could not learn scam image', { error: err.message }));
+
                 return true;
             }
+
+            // One group short of the bar: the AI second opinion (core/ai-judge.js), when the server has it on.
+            // act + the AI agreeing at the server's confidence → this pipeline's own action; a scam verdict below
+            // that (or advise mode) → a review alert with the verdict. No verdict → as before (nothing).
+            if (genre.groups.length === MATCH_THRESHOLD - 1) {
+                const ai = await textOpinion(message, {
+                    text: [message.content, ocrText].filter(Boolean).join('\n'),
+                    detector: 'Scam text in an image (one signal group short of the bar)', signals: genre.groups,
+                });
+                if (ai.decision === 'act') {
+                    await this.takeAction(message, `image-scam-ai (${genre.groups.join('+')})`, '(text inside image)', config, 'image-genre-ai');
+                    learnScamImages({ guildId: message.guild.id, attachments: imageAttachments(message), label: 'image-scam (AI confirmed)' })
+                        .catch(err => logger.warn('[PhishingDetection] could not learn scam image', { error: err.message }));
+                    return true;
+                }
+                if (ai.verdict?.positive && ai.decision === 'advise') {
+                    await aiScamTextReview(message, { ocrText, groups: genre.groups, ai });
+                }
+            }
+
+            // Below the bar, but the text WAS read. Logged because the alternative — the silence
+            // that followed the 2026-09-13 wave — leaves no way to tell a clean scan from a scan
+            // that never happened. Info level: debug is not written in production, which hid exactly this.
+            logger.info('[PhishingDetection] image text scanned, below scam threshold', {
+                guildId: message.guild.id, userId: message.author.id,
+                groups: genre.groups, chars: ocrText.length,
+            });
+        } else if (hasImages && config.scan_images) {
+            logger.info('[PhishingDetection] image post produced no readable text', {
+                guildId: message.guild.id, userId: message.author.id,
+            });
         }
+
+        // The server's own rules for text inside images (message threats).
+        if (ocrText && await imageRulesStage(message, t, ocrText)) return true;
 
         return false;
     }
@@ -362,11 +559,17 @@ class PhishingDetectionManager {
     async takeAction(message, matchedDomain, matchedUrl, config, source = null) {
         const { guild, author, channel, member } = message;
 
-        // Always try to delete the message
-        try {
-            await message.delete();
-        } catch (error) {
-            logger.error('[PhishingDetection] Failed to delete message', { error: error.message });
+        // Unified allowlist / global pause: still recorded and alerted below, but the message stays
+        // and nothing is done to the member (core/protection-exempt.js logs the skip).
+        const held = member ? await protectionHold(member, 'delete', 'Phishing detection') : null;
+
+        // Otherwise always try to delete the message
+        if (!held) {
+            try {
+                await message.delete();
+            } catch (error) {
+                logger.error('[PhishingDetection] Failed to delete message', { error: error.message });
+            }
         }
 
         // Never apply mute/kick/ban to the protected bot owner — just stop after the delete
@@ -381,15 +584,19 @@ class PhishingDetectionManager {
                 await pool.execute(
                     `INSERT INTO phishing_detections (guild_id, user_id, channel_id, matched_domain, matched_url, source, action_taken)
                      VALUES (?, ?, ?, ?, ?, ?, ?)`,
-                    [guild.id, author.id, channel.id, matchedDomain, matchedUrl, detectionSource, config.action]
+                    [guild.id, author.id, channel.id, matchedDomain, matchedUrl, detectionSource, held ? 'none' : config.action]
                 );
             } catch (error) {
                 logger.error('[PhishingDetection] Failed to log detection', { error: error.message });
             }
         }
 
-        // Apply secondary action
-        try {
+        // Apply secondary action. When the bot cannot (permission or role order) it says exactly why
+        // ("Manual action needed", core/manual-action.js) instead of skipping silently.
+        const verb = { mute: 'timeout', kick: 'kick', ban: 'ban' }[config.action];
+        const cannot = !held && verb && member ? whyCannot(guild, verb, { member, channel }) : null;
+        if (cannot) await reportManualAction(guild, { action: verb, member, channel, source: 'Phishing detection', problem: cannot });
+        if (!held && !cannot) try {
             switch (config.action) {
                 case 'mute':
                     if (member && member.moderatable) {
@@ -419,6 +626,8 @@ class PhishingDetectionManager {
                 action: config.action,
                 error: error.message
             });
+            const cause = verb && member ? whyFailed(error, guild, verb, { member, channel }) : null;
+            if (cause) await reportManualAction(guild, { action: verb, member, channel, source: 'Phishing detection', problem: cause });
         }
 
         // Send alert to configured channel
@@ -428,13 +637,13 @@ class PhishingDetectionManager {
                 if (alertChannel) {
                     const accountAge = Math.floor(author.createdAt.getTime() / 1000);
                     const embed = new EmbedBuilder()
-                        .setColor(0xE74C3C)
+                        .setColor(themeColor(member.guild?.id, 'danger'))
                         .setTitle('Phishing Link Detected')
                         .setDescription(`A message in ${channel} contained a known phishing domain.`)
                         .addFields(
                             { name: 'User', value: `${author} (${author.tag})`, inline: true },
                             { name: 'Account Age', value: `<t:${accountAge}:R>`, inline: true },
-                            { name: 'Action Taken', value: config.action, inline: true },
+                            { name: 'Action Taken', value: held ? `none — ${held.why === 'paused' ? 'protections paused' : 'member is exempt'}` : config.action, inline: true },
                             { name: 'Matched Domain', value: `\`${matchedDomain}\``, inline: true },
                             { name: 'Full URL', value: matchedUrl.length > 500 ? matchedUrl.substring(0, 500) + '...' : matchedUrl, inline: false },
                             { name: 'Channel', value: `${channel}`, inline: true }

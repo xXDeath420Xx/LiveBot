@@ -21,7 +21,9 @@ import pool from '../utils/db.js';
 import logger from '../utils/logger.js';
 import botManager from './bot-manager.js';
 import fourthwallScraper from '../utils/scrapers/fourthwall-scraper.js';
+import fourthwallApi from '../utils/fourthwall-api.js';
 import { sanitizeUserText, truncate, formatCurrency, EMBED_DEFAULT_COLOR } from './fourthwall-helpers.js';
+import crypto from 'node:crypto';
 
 const SHOP_HANDLE_RE = /^[a-z0-9-]{1,100}$/i;
 const MAX_ANNOUNCE_PER_SHOP_PER_CYCLE = 8; // avoid flooding a channel if a shop drops 50 products at once
@@ -44,7 +46,7 @@ export async function subscribe({ guildId, shopHandle, channelId, addedBy, flags
     // Touch the shop once to confirm it exists & cache its name.
     let shopName = null;
     try {
-        const shop = await fourthwallScraper.getShop(handle);
+        const shop = await fetchShopPreferringApi(handle);
         shopName = shop.name || null;
     } catch (err) {
         throw new Error(`Couldn't reach shop "${handle}": ${err.message}`);
@@ -108,49 +110,83 @@ export async function listSubscriptions(guildId) {
 
 async function loadPreviousSnapshot(shopHandle) {
     const [rows] = await pool.execute(
-        `SELECT slug, name, image_url, price_minor_units, currency, last_status
+        `SELECT slug, internal_product_id, name, image_url, images_json, price_minor_units, currency,
+                variants_json, last_variant_signature, last_status
          FROM fourthwall_tracked_products WHERE shop_handle = ?`,
         [shopHandle]);
-    const map = new Map();
+    const map = new Map();                        // slug -> prev snapshot
+    const byInternalId = new Map();               // internal_product_id -> slug (for rename detection)
     for (const r of rows) {
-        map.set(r.slug, {
+        let variants = [];
+        try { variants = r.variants_json ? JSON.parse(r.variants_json) : []; } catch { variants = []; }
+        let images = [];
+        try { images = r.images_json ? JSON.parse(r.images_json) : []; } catch { images = []; }
+        const prev = {
             slug: r.slug,
+            internalId: r.internal_product_id || null,
             name: r.name,
             image: r.image_url,
+            images,
             price: r.price_minor_units != null
                 ? { amount: r.price_minor_units, currency: r.currency || 'USD' }
                 : null,
-            status: r.last_status
-        });
+            variants,
+            variantSignature: r.last_variant_signature || null,
+            status: r.last_status,
+        };
+        map.set(r.slug, prev);
+        if (prev.internalId) byInternalId.set(prev.internalId, r.slug);
     }
+    map.__byInternalId = byInternalId;            // non-enumerable-ish attached map for rename detection
     return map;
+}
+
+function variantSignature(variants) {
+    // Deterministic hash of (id, availability, price) per variant — cheap "did anything move"
+    // check without re-walking the list. Sorted so order doesn't matter.
+    if (!Array.isArray(variants) || !variants.length) return null;
+    const parts = variants
+        .map(v => `${v.id || v.name || '?'}|${v.availability || '?'}|${v.price ?? '?'}`)
+        .sort()
+        .join('\n');
+    return crypto.createHash('sha256').update(parts).digest('hex').slice(0, 32);
 }
 
 async function writeCurrentSnapshot(shopHandle, currentProducts, removedSlugs) {
     if (currentProducts.length) {
-        // Bulk upsert: one row per current product, status=active.
-        const placeholders = currentProducts.map(() => '(?, ?, ?, ?, ?, ?, ?)').join(', ');
+        // Bulk upsert: now includes internal_product_id + variants_json + images_json +
+        // last_variant_signature. All nullable — pre-enrichment rows just write NULL.
+        const placeholders = currentProducts.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').join(', ');
         const params = [];
         for (const p of currentProducts) {
             params.push(
                 shopHandle,
                 p.slug.slice(0, 200),
+                p.internalId || null,
                 p.name ? p.name.slice(0, 255) : null,
                 p.image || null,
+                p.images ? JSON.stringify(p.images).slice(0, 65535) : null,
                 p.price?.amount ?? null,
                 p.price?.currency || null,
+                p.variants ? JSON.stringify(p.variants).slice(0, 65535) : null,
+                variantSignature(p.variants),
                 'active'
             );
         }
         await pool.execute(
             `INSERT INTO fourthwall_tracked_products
-                (shop_handle, slug, name, image_url, price_minor_units, currency, last_status)
+                (shop_handle, slug, internal_product_id, name, image_url, images_json,
+                 price_minor_units, currency, variants_json, last_variant_signature, last_status)
              VALUES ${placeholders}
              ON DUPLICATE KEY UPDATE
+                internal_product_id = COALESCE(VALUES(internal_product_id), internal_product_id),
                 name = VALUES(name),
                 image_url = VALUES(image_url),
+                images_json = COALESCE(VALUES(images_json), images_json),
                 price_minor_units = VALUES(price_minor_units),
                 currency = VALUES(currency),
+                variants_json = COALESCE(VALUES(variants_json), variants_json),
+                last_variant_signature = COALESCE(VALUES(last_variant_signature), last_variant_signature),
                 last_status = VALUES(last_status)`,
             params);
     }
@@ -162,6 +198,58 @@ async function writeCurrentSnapshot(shopHandle, currentProducts, removedSlugs) {
              WHERE shop_handle = ? AND slug IN (${inClause})`,
             [shopHandle, ...removedSlugs]);
     }
+}
+
+// Low-stock cooldown: don't re-fire variant_low_stock for the same variant more often than
+// once per LOW_STOCK_COOLDOWN_DAYS. Reads/writes fourthwall_variant_state.
+const LOW_STOCK_COOLDOWN_DAYS = 7;
+
+async function filterLowStockByCooldown(shopHandle, lowEvents) {
+    if (!lowEvents.length) return lowEvents;
+    const [rows] = await pool.execute(
+        `SELECT slug, variant_id, last_low_stock_announced_at FROM fourthwall_variant_state
+          WHERE shop_handle = ? AND last_low_stock_announced_at IS NOT NULL
+            AND last_low_stock_announced_at > DATE_SUB(NOW(), INTERVAL ? DAY)`,
+        [shopHandle, LOW_STOCK_COOLDOWN_DAYS]);
+    const suppressed = new Set(rows.map(r => `${r.slug}:${r.variant_id}`));
+    const kept = [];
+    for (const e of lowEvents) {
+        const key = `${e.product.slug}:${e.variant?.id || e.variant?.name || '?'}`;
+        if (suppressed.has(key)) continue;
+        kept.push(e);
+        // Record the announcement timestamp — fire-and-forget so a DB blip never blocks the post.
+        pool.execute(
+            `INSERT INTO fourthwall_variant_state (shop_handle, slug, variant_id, last_low_stock_announced_at)
+             VALUES (?, ?, ?, NOW())
+             ON DUPLICATE KEY UPDATE last_low_stock_announced_at = NOW()`,
+            [shopHandle, e.product.slug, String(e.variant?.id || e.variant?.name || '?')]).catch(() => {});
+    }
+    return kept;
+}
+
+// Price history writer — snapshots a product-level price on every change so we can detect
+// "sale" (price drop > SALE_PCT below 30-day baseline). Fire-and-forget.
+const SALE_PCT = 15;
+const SALE_BASELINE_DAYS = 30;
+
+async function recordPriceHistory(shopHandle, slug, priceMinor, currency) {
+    if (!Number.isFinite(priceMinor)) return;
+    pool.execute(
+        `INSERT INTO fourthwall_price_history (shop_handle, slug, price_minor_units, currency) VALUES (?, ?, ?, ?)`,
+        [shopHandle, slug, priceMinor, currency || 'USD']).catch(() => {});
+}
+
+async function isPriceDropASale(shopHandle, slug, newPriceMinor) {
+    try {
+        const [rows] = await pool.execute(
+            `SELECT MAX(price_minor_units) AS baseline FROM fourthwall_price_history
+              WHERE shop_handle = ? AND slug = ? AND recorded_at > DATE_SUB(NOW(), INTERVAL ? DAY)`,
+            [shopHandle, slug, SALE_BASELINE_DAYS]);
+        const baseline = Number(rows[0]?.baseline);
+        if (!Number.isFinite(baseline) || baseline <= 0) return false;
+        const dropPct = ((baseline - newPriceMinor) / baseline) * 100;
+        return dropPct >= SALE_PCT;
+    } catch { return false; }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -198,62 +286,120 @@ async function writeCurrentSnapshot(shopHandle, currentProducts, removedSlugs) {
  *
  * TODO(you): implement this. See learning-mode request below.
  */
+// FW_TRACKER_V2 — enhanced diff: variant-aware + priority-sorted + price threshold +
+// slug-rename detection via internal_product_id.
+
+const MIN_PRICE_CHANGE_PCT = 1;    // ignore sub-1% wobbles
+const MIN_PRICE_CHANGE_ABS = 100;  // and sub-$1.00 absolute
+
+function priceChangeIsSignificant(oldAmt, newAmt) {
+    if (oldAmt == null || newAmt == null || oldAmt === newAmt) return false;
+    const absDelta = Math.abs(newAmt - oldAmt);
+    if (absDelta < MIN_PRICE_CHANGE_ABS) return false;
+    return (absDelta / oldAmt) * 100 >= MIN_PRICE_CHANGE_PCT;
+}
+
+function normaliseText(x) {
+    return String(x ?? '').trim().replace(/\s+/g, ' ');
+}
+
+function diffVariants(prevVariants, currentVariants) {
+    const keyOf = (v) => v.id || normaliseText(v.name).toLowerCase();
+    const prevMap = new Map((prevVariants || []).map(v => [keyOf(v), v]));
+    const currentMap = new Map((currentVariants || []).map(v => [keyOf(v), v]));
+    const added = [], removed = [], backInStock = [], wentOutOfStock = [], lowStock = [];
+    for (const [k, v] of currentMap) {
+        const p = prevMap.get(k);
+        if (!p) { added.push(v); continue; }
+        const prevAvail = String(p.availability || '').toLowerCase();
+        const curAvail  = String(v.availability || '').toLowerCase();
+        const prevIn = prevAvail.includes('instock') || prevAvail.includes('preorder');
+        const curIn  = curAvail.includes('instock')  || curAvail.includes('preorder');
+        if (!prevIn && curIn) backInStock.push(v);
+        if (prevIn && !curIn) wentOutOfStock.push(v);
+        if (curAvail.includes('limitedavailability')) lowStock.push(v);
+    }
+    for (const [k, v] of prevMap) if (!currentMap.has(k)) removed.push(v);
+    return { added, removed, backInStock, wentOutOfStock, lowStock };
+}
+
 export function computeProductDiff(previous, current, isFirstScrape) {
-    // Decision 4: first scrape is silent — we just record the catalog without
-    // firing 18 "new product!" pings into the channel on day 1.
     if (isFirstScrape) return [];
 
     const events = [];
     const currentSlugs = new Set(current.map(p => p.slug));
+    const byInternalId = previous.__byInternalId || new Map();
+    const consumedPrevSlugs = new Set();   // slugs we matched via internal_product_id (rename)
 
-    // Walk current products, classifying each against the previous snapshot.
     for (const p of current) {
-        const prev = previous.get(p.slug);
+        let prev = previous.get(p.slug);
 
-        if (!prev) {
-            // Slug never seen → genuinely new product
-            events.push({ type: 'new_product', product: p });
-            continue;
+        // Rename detection: no slug match, but internalId matches a previous row with a
+        // different slug — treat as a rename, not a new product.
+        if (!prev && p.internalId && byInternalId.has(p.internalId)) {
+            const oldSlug = byInternalId.get(p.internalId);
+            if (oldSlug !== p.slug) {
+                const oldPrev = previous.get(oldSlug);
+                if (oldPrev) {
+                    events.push({ type: 'product_renamed', product: p, oldSlug, oldName: oldPrev.name });
+                    consumedPrevSlugs.add(oldSlug);
+                    prev = oldPrev;
+                }
+            }
         }
+
+        if (!prev) { events.push({ type: 'new_product', product: p }); continue; }
 
         if (prev.status === 'removed') {
-            // Decision 3: previously visible, then disappeared, now back → restocked
-            // (rather than re-announcing as 'new_product'). Subscribers with
-            // notify_restocked see 🔄; subscribers who toggled it off don't.
             events.push({ type: 'restocked', product: p });
-            continue;
         }
 
-        // Same slug, still active — check price movement (decision 2: any diff).
         const oldAmt = prev.price?.amount;
         const newAmt = p.price?.amount;
-        if (oldAmt != null && newAmt != null && oldAmt !== newAmt) {
+        if (priceChangeIsSignificant(oldAmt, newAmt)) {
             events.push({
                 type: newAmt < oldAmt ? 'price_drop' : 'price_increase',
-                product: p,
-                oldPrice: prev.price,
-                newPrice: p.price
+                product: p, oldPrice: prev.price, newPrice: p.price,
             });
+        }
+
+        if (prev.name && p.name && normaliseText(prev.name) !== normaliseText(p.name)) {
+            events.push({ type: 'name_changed', product: p, oldName: prev.name, newName: p.name });
+        }
+        if (prev.image && p.image && prev.image !== p.image) {
+            events.push({ type: 'image_changed', product: p, oldImage: prev.image, newImage: p.image });
+        }
+
+        if (Array.isArray(p.variants)) {
+            const v = diffVariants(prev.variants, p.variants);
+            for (const a of v.added)         events.push({ type: 'variant_added',          product: p, variant: a });
+            for (const r of v.removed)       events.push({ type: 'variant_removed',        product: p, variant: r });
+            for (const b of v.backInStock)   events.push({ type: 'variant_back_in_stock',  product: p, variant: b });
+            for (const g of v.wentOutOfStock)events.push({ type: 'variant_sold_out',       product: p, variant: g });
+            for (const l of v.lowStock)      events.push({ type: 'variant_low_stock',      product: p, variant: l });
         }
     }
 
-    // Decision 1: products that vanished from the catalog → sold_out, but ONLY
-    // if they had a real price last time we saw them. Skips "coming soon"
-    // placeholders the owner pulled before launching.
     for (const [slug, prev] of previous) {
+        if (consumedPrevSlugs.has(slug)) continue;    // already surfaced as a rename
         if (prev.status === 'active' && !currentSlugs.has(slug) && prev.price?.amount != null) {
             events.push({
                 type: 'sold_out',
-                product: {
-                    slug: prev.slug,
-                    name: prev.name,
-                    image: prev.image,
-                    price: prev.price
-                }
+                product: { slug: prev.slug, name: prev.name, image: prev.image, price: prev.price },
             });
         }
     }
 
+    const PRIORITY = {
+        price_drop: 0, back_in_stock: 1, restocked: 1, variant_back_in_stock: 1,
+        new_product: 2, product_renamed: 2, variant_added: 3,
+        sold_out: 4, variant_sold_out: 4,
+        variant_low_stock: 5,
+        price_increase: 6,
+        name_changed: 7, image_changed: 7,
+        variant_removed: 8,
+    };
+    events.sort((a, b) => (PRIORITY[a.type] ?? 99) - (PRIORITY[b.type] ?? 99));
     return events;
 }
 
@@ -288,7 +434,8 @@ export function buildEventEmbed(shopHandle, shopName, event) {
                 .addFields({ name: 'Price', value: priceText(p.price), inline: true });
         case 'price_drop':
             return base
-                .setTitle(`📉 Price drop: ${sanitizeUserText(p.name || p.slug)}`)
+                .setTitle(`${event.isSale ? '🏷️ SALE' : '📉 Price drop'}: ${sanitizeUserText(p.name || p.slug)}`)
+                .setColor(event.isSale ? 0xE74C3C : EMBED_DEFAULT_COLOR)
                 .addFields(
                     { name: 'Was', value: `~~${priceText(event.oldPrice)}~~`, inline: true },
                     { name: 'Now', value: `**${priceText(event.newPrice)}**`, inline: true });
@@ -304,6 +451,38 @@ export function buildEventEmbed(shopHandle, shopName, event) {
             return base
                 .setTitle(`🔄 Restocked: ${sanitizeUserText(p.name || p.slug)}`)
                 .addFields({ name: 'Price', value: priceText(p.price), inline: true });
+        case 'product_renamed':
+            return base
+                .setTitle(`✏️ Renamed: ${sanitizeUserText(p.name || p.slug)}`)
+                .setDescription(`Was previously \`${sanitizeUserText(event.oldName || event.oldSlug || '?')}\`.`);
+        case 'name_changed':
+            return base
+                .setTitle(`✏️ Name changed: ${sanitizeUserText(event.newName || p.name || p.slug)}`)
+                .addFields({ name: 'Was', value: sanitizeUserText(event.oldName || '?'), inline: false });
+        case 'image_changed':
+            return base
+                .setTitle(`🖼️ New image: ${sanitizeUserText(p.name || p.slug)}`);
+        case 'variant_added':
+            return base
+                .setTitle(`➕ New variant: ${sanitizeUserText(event.variant?.name || '?')}`)
+                .setDescription(sanitizeUserText(p.name || p.slug));
+        case 'variant_removed':
+            return base
+                .setTitle(`➖ Variant removed: ${sanitizeUserText(event.variant?.name || '?')}`)
+                .setDescription(sanitizeUserText(p.name || p.slug));
+        case 'variant_back_in_stock':
+            return base
+                .setTitle(`🔁 Back in stock: ${sanitizeUserText(event.variant?.name || '?')}`)
+                .setDescription(sanitizeUserText(p.name || p.slug))
+                .addFields({ name: 'Price', value: priceText({ amount: event.variant?.price, currency: event.variant?.currency }), inline: true });
+        case 'variant_sold_out':
+            return base
+                .setTitle(`❌ Sold out: ${sanitizeUserText(event.variant?.name || '?')}`)
+                .setDescription(sanitizeUserText(p.name || p.slug));
+        case 'variant_low_stock':
+            return base
+                .setTitle(`⚠️ Low stock: ${sanitizeUserText(event.variant?.name || '?')}`)
+                .setDescription(sanitizeUserText(p.name || p.slug));
         default:
             return base.setTitle(sanitizeUserText(p.name || p.slug));
     }
@@ -314,7 +493,16 @@ const EVENT_FLAG_MAP = {
     price_drop: 'notify_price_drops',
     price_increase: 'notify_price_increases',
     sold_out: 'notify_sold_out',
-    restocked: 'notify_restocked'
+    restocked: 'notify_restocked',
+    // v2 additions — all tied to new columns from migration 341.
+    product_renamed: 'notify_product_renamed',
+    name_changed: 'notify_name_changed',
+    image_changed: 'notify_image_changed',
+    variant_added: 'notify_variant_added',
+    variant_removed: 'notify_variant_added',           // reuse the "variant changes" opt-in
+    variant_back_in_stock: 'notify_variant_restocked',
+    variant_sold_out: 'notify_variant_sold_out',
+    variant_low_stock: 'notify_variant_low_stock',
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -343,12 +531,135 @@ export async function runCycle() {
     return { shopsScanned: shopRows.length, eventsFired };
 }
 
+
+
+// FW_API_PATH_V2 — try the authenticated Storefront API first for shops with a
+// storefront_token on fourthwall_connections; fall back to the public scraper on any
+// failure. The adapter normalises the API response into the scraper's shape so
+// downstream code (computeProductDiff etc.) doesn't need to care which path produced
+// the catalog.
+
+async function getConnectedStorefrontToken(shopHandle) {
+    try {
+        const [rows] = await pool.execute(
+            `SELECT storefront_token FROM fourthwall_connections
+              WHERE shop_handle = ? AND storefront_token IS NOT NULL AND storefront_token <> ''
+              ORDER BY connected_at DESC LIMIT 1`,
+            [shopHandle]);
+        return rows[0]?.storefront_token || null;
+    } catch { return null; }
+}
+
+/** Normalise a Storefront-API shop response into the shape fourthwall-scraper.getShop
+ *  returns — so computeProductDiff + the enrichment hook see the same object shape no
+ *  matter which path fetched it. Defensive: unknown fields become null; unexpected
+ *  shapes return null to force the fallback.
+ */
+function adaptStorefrontShop(handle, apiResponse) {
+    if (!apiResponse || typeof apiResponse !== 'object') return null;
+    // The Storefront API's /v1/shop may return either { shop, products } or just the shop
+    // with an embedded products array. Normalise.
+    const shopMeta = apiResponse.shop || apiResponse;
+    let products = apiResponse.products || shopMeta.products || [];
+    if (!Array.isArray(products)) return null;
+
+    const out = {
+        handle,
+        name: shopMeta.name || shopMeta.title || null,
+        products: products.map(prod => {
+            if (!prod || typeof prod !== 'object') return null;
+            const slug = String(prod.slug || prod.handle || prod.id || '').toLowerCase();
+            if (!slug) return null;
+            const firstVariant = Array.isArray(prod.variants) ? prod.variants[0] : null;
+            const priceObj = prod.price || firstVariant?.price || null;
+            const amountCents = Number.isFinite(priceObj?.value)
+                ? Math.round(priceObj.value * 100)
+                : (Number.isFinite(priceObj?.amount) ? priceObj.amount : null);
+            const currency = priceObj?.currency || priceObj?.currencyCode || 'USD';
+            const image = Array.isArray(prod.images) && prod.images[0]
+                ? (prod.images[0].url || prod.images[0])
+                : (prod.image || null);
+            return {
+                slug,
+                name: prod.name || prod.title || slug,
+                image: image || null,
+                price: amountCents != null ? { amount: amountCents, currency } : null,
+                internalId: prod.id || null,
+                images: Array.isArray(prod.images) ? prod.images.map(i => i?.url || i).filter(Boolean) : [],
+                variants: Array.isArray(prod.variants) ? prod.variants.map(v => ({
+                    id: v.id || null,
+                    name: v.name || v.title || v.sku || null,
+                    price: Number.isFinite(v.price?.value) ? Math.round(v.price.value * 100)
+                        : (Number.isFinite(v.price?.amount) ? v.price.amount : amountCents),
+                    currency: v.price?.currency || currency,
+                    availability: v.inStock === false ? 'OutOfStock' : (v.inStock === true ? 'InStock' : (v.availability || null)),
+                    url: v.url || null,
+                })) : [],
+            };
+        }).filter(Boolean),
+    };
+    return out;
+}
+
+async function fetchShopPreferringApi(handle) {
+    const token = await getConnectedStorefrontToken(handle);
+    if (token) {
+        try {
+            const client = fourthwallApi.storefrontClient(token);
+            const apiResp = await client.getShop();
+            const adapted = adaptStorefrontShop(handle, apiResp);
+            if (adapted && Array.isArray(adapted.products) && adapted.products.length) {
+                logger.info('[FW Tracker] used storefront API path', { handle, products: adapted.products.length });
+                return { ...adapted, _source: 'api' };
+            }
+            logger.warn('[FW Tracker] storefront API returned empty/invalid shape — falling back to scraper', { handle });
+        } catch (err) {
+            logger.warn('[FW Tracker] storefront API fetch failed — falling back to scraper', { handle, err: err.message });
+        }
+    }
+    const shop = await fourthwallScraper.getShop(handle);
+    return { ...shop, _source: 'scraper' };
+}
+
+
 async function processShop(handle, addEvents) {
     const previous = await loadPreviousSnapshot(handle);
     const isFirstScrape = previous.size === 0;
 
-    const shop = await fourthwallScraper.getShop(handle);
+    const shop = await fetchShopPreferringApi(handle);
     const current = shop.products || [];
+
+    // v2 enrichment: fetch JSON-LD for any slug that is NEW to us or whose tile price moved
+    // from last cycle. Stable catalogs cost zero per-product requests; a catalog with 1 price
+    // change this cycle costs 1 extra request. Protects per-request cost from scaling with the
+    // size of the catalog.
+    const enrichSlugs = new Set();
+    for (const p of current) {
+        const prev = previous.get(p.slug);
+        if (!prev) enrichSlugs.add(p.slug);
+        else if (prev.price?.amount !== p.price?.amount) enrichSlugs.add(p.slug);
+        else if (prev.variants && prev.variants.length === 0) enrichSlugs.add(p.slug);  // backfill once
+    }
+    for (const p of current) {
+        if (!enrichSlugs.has(p.slug)) continue;
+        try {
+            const d = await fourthwallScraper.getProductDetails(handle, p.slug);
+            if (d) {
+                p.internalId = d.internalId || null;
+                p.images = d.images || [];
+                p.variants = d.variants || [];
+            }
+        } catch (err) {
+            logger.warn('[FW Tracker] enrichment failed', { handle, slug: p.slug, err: err.message });
+        }
+    }
+    // Fallback: carry forward previously-stored variants when we skipped enrichment this cycle,
+    // so the diff can still compare variant arrays.
+    for (const p of current) {
+        if (p.variants) continue;
+        const prev = previous.get(p.slug);
+        if (prev?.variants?.length) p.variants = prev.variants;
+    }
 
     const currentSlugs = new Set(current.map(p => p.slug));
     const removedSlugs = [];
@@ -356,7 +667,29 @@ async function processShop(handle, addEvents) {
         if (prev.status !== 'removed' && !currentSlugs.has(slug)) removedSlugs.push(slug);
     }
 
-    const events = computeProductDiff(previous, current, isFirstScrape);
+    let events = computeProductDiff(previous, current, isFirstScrape);
+
+    // v2: filter low-stock events through the 7-day cooldown so chronically-low variants
+    // don't spam every cycle.
+    const lowEvents = events.filter(e => e.type === 'variant_low_stock');
+    if (lowEvents.length) {
+        const kept = await filterLowStockByCooldown(handle, lowEvents);
+        const keptSet = new Set(kept);
+        events = events.filter(e => e.type !== 'variant_low_stock' || keptSet.has(e));
+    }
+
+    // v2: record price_drop + price_increase into fourthwall_price_history and, if the drop
+    // beats the 15% / 30-day baseline threshold, upgrade the event type to 'sale'. The embed
+    // then renders the dedicated SALE badge.
+    for (const e of events) {
+        if (e.type === 'price_drop' || e.type === 'price_increase') {
+            recordPriceHistory(handle, e.product.slug, e.newPrice?.amount, e.newPrice?.currency);
+        }
+        if (e.type === 'price_drop' && Number.isFinite(e.newPrice?.amount)) {
+            const sale = await isPriceDropASale(handle, e.product.slug, e.newPrice.amount);
+            if (sale) e.isSale = true;
+        }
+    }
 
     // Persist the snapshot BEFORE announcing — if Discord sends fail, we don't
     // re-announce the same event next cycle.

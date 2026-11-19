@@ -1,6 +1,5 @@
 import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import axios from 'axios';
-import pool from '../../utils/db.js';
 
 // Import existing entertainment handlers (games group)
 import entertainmentCommand from './entertainment-handlers.js';
@@ -14,6 +13,58 @@ import * as partygamesHandler from './fun-partygames-handler.js';
 import * as quotesHandler from './fun-quotes-handler.js';
 import * as randomHandler from './fun-random-handler.js';
 import * as icebreakersHandler from './fun-icebreakers-handler.js';
+import * as insultHandler from './fun-insult-handler.js';
+import { LANGUAGES as EVIL_INSULT_LANGUAGES } from '../../core/evil-insults.js';
+import { themeColor } from '../../core/guild-theme.js';
+import { getConfig } from '../../core/feature-config.js';
+
+function isOn(v) {
+  return v === true || v === 1 || v === '1';
+}
+
+/*
+ * Fun & Party Games page settings that apply to the whole command.
+ *
+ * "Disabled sections": the subcommand groups, plus `jokes` for /fun joke and /fun dadjoke. The flat
+ * subcommands that repeat something a section already has count as that section, so turning a
+ * section off cannot be side-stepped through its flat twin.
+ */
+export const FUN_SECTIONS = ['games', 'animals', 'astrology', 'creative', 'partygames', 'quotes', 'random', 'icebreakers', 'jokes'];
+const FLAT_SECTION = {
+  wouldyourather: 'partygames',
+  meme: 'creative',
+  creatememe: 'creative',
+  fact: 'random',
+  '8ball': 'random',
+  joke: 'jokes',
+  dadjoke: 'jokes',
+};
+
+export function funSectionFor(group, subcommand) {
+  return group || FLAT_SECTION[subcommand] || null;
+}
+
+export function parseDisabledSections(text) {
+  return new Set(String(text || '').toLowerCase().split(/[\s,]+/).map(s => s.trim()).filter(s => FUN_SECTIONS.includes(s)));
+}
+
+// "Cooldown per user": `${guildId}:${userId}` -> when they last used /fun. Confessions are left
+// out (they have their own cooldown on the Confessions page).
+const lastUse = new Map();
+
+/** Seconds left on a member's /fun cooldown (0 = free to go), recording this use when free. */
+export function takeFunCooldown(guildId, userId, seconds, now = Date.now()) {
+  const wait = Math.max(0, Math.min(600, Math.trunc(Number(seconds)) || 0)) * 1000;
+  if (!wait) return 0;
+  const key = `${guildId}:${userId}`;
+  const last = lastUse.get(key) || 0;
+  if (now - last < wait) return Math.ceil((wait - (now - last)) / 1000);
+  lastUse.set(key, now);
+  if (lastUse.size > 5000) {
+    for (const [k, t] of lastUse) if (now - t > 600_000) lastUse.delete(k);
+  }
+  return 0;
+}
 
 export default {
   category: 'fun',
@@ -30,9 +81,10 @@ export default {
           .addStringOption(opt => opt.setName('rarity').setDescription('Try for a specific rarity (costs more energy)').setRequired(false)
             .addChoices({ name: 'Any (1 energy)', value: 'any' }, { name: 'Rare+ (3 energy)', value: 'rare' }, { name: 'Epic+ (5 energy)', value: 'epic' }, { name: 'Legendary (10 energy)', value: 'legendary' })))
         .addSubcommand(sub => sub.setName('collection').setDescription('View your card collection and stats'))
-        .addSubcommand(sub => sub.setName('trade').setDescription('Trade a card with another player')
+        .addSubcommand(sub => sub.setName('trade').setDescription('Offer a card to another player - as a gift or a swap for one of theirs')
           .addUserOption(opt => opt.setName('user').setDescription('User to trade with').setRequired(true))
-          .addIntegerOption(opt => opt.setName('cardid').setDescription('Your card ID to trade').setRequired(true)))
+          .addIntegerOption(opt => opt.setName('cardid').setDescription('Your card ID to trade').setRequired(true).setMinValue(1))
+          .addIntegerOption(opt => opt.setName('want').setDescription('Their card ID you want in return (leave empty to gift)').setRequired(false).setMinValue(1)))
         .addSubcommand(sub => sub.setName('trivia').setDescription('Quick trivia question')
           .addStringOption(opt => opt.setName('category').setDescription('Trivia category').setRequired(false)
             .addChoices({ name: 'General Knowledge', value: 'general' }, { name: 'Science', value: 'science' }, { name: 'History', value: 'history' }, { name: 'Geography', value: 'geography' }, { name: 'Pop Culture', value: 'popculture' })))
@@ -188,13 +240,30 @@ export default {
     .addSubcommand(sub => sub.setName('8ball').setDescription('Ask the magic 8-ball a question')
       .addStringOption(opt => opt.setName('question').setDescription('Your yes/no question').setRequired(true)))
     // ── NEW flat: confess (from confess.js) ──
-    .addSubcommand(sub => sub.setName('confess').setDescription('Submit an anonymous confession')),
+    .addSubcommand(sub => sub.setName('confess').setDescription('Send a confession: anonymous to members, server admins can see the sender for 30 days'))
+    // Opt-in per server (Fun & Party Games settings); see fun-insult-handler.js
+    .addSubcommand(sub => sub.setName('insult').setDescription('Roast someone with a playful insult (if this server has it turned on)')
+      .addUserOption(opt => opt.setName('user').setDescription('Who to roast (default: you)').setRequired(false))
+      .addStringOption(opt => opt.setName('language').setDescription('Language, when this server uses the Evil Insult source (default: the server setting)')
+        .setRequired(false).addChoices(...EVIL_INSULT_LANGUAGES.map(l => ({ name: l.name, value: l.code }))))),
 
   async execute(interaction) {
     const group = interaction.options.getSubcommandGroup(false);
     const subcommand = interaction.options.getSubcommand();
 
     try {
+      const funCfg = interaction.guildId ? await getConfig('fun', interaction.guildId) : {};
+      const section = funSectionFor(group, subcommand);
+      if (section && parseDisabledSections(funCfg.disabled_groups).has(section)) {
+        return await interaction.reply({ content: `The **${section}** part of /fun is turned off in this server.`, ephemeral: true });
+      }
+      if (interaction.guildId && subcommand !== 'confess') {
+        const wait = takeFunCooldown(interaction.guildId, interaction.user.id, funCfg.cooldown_seconds);
+        if (wait > 0) {
+          return await interaction.reply({ content: `Slow down a little. You can use /fun again in ${wait} second${wait === 1 ? '' : 's'}.`, ephemeral: true });
+        }
+      }
+
       // ── Subcommand groups ──
       if (group === 'games') {
         switch (subcommand) {
@@ -285,6 +354,16 @@ export default {
         return await confessHandler.handleConfess(interaction);
       }
 
+      // Insult — checks the server's opt-in itself and defers only when it will answer publicly
+      if (subcommand === 'insult') {
+        return await insultHandler.handleInsult(interaction);
+      }
+
+      // Would You Rather — same game as /fun partygames wouldyourather (it replies itself, no defer)
+      if (subcommand === 'wouldyourather') {
+        return await partygamesHandler.handleWouldYouRather(interaction);
+      }
+
       // Everything below defers
       await interaction.deferReply();
 
@@ -292,7 +371,7 @@ export default {
         const category = interaction.options.getString('category') || 'Any';
         const response = await axios.get(`https://v2.jokeapi.dev/joke/${category}`, { timeout: 10000 });
         const joke = response.data;
-        const embed = new EmbedBuilder().setColor('#FFD700').setTitle('😂 Random Joke').setFooter({ text: `Category: ${joke.category}` }).setTimestamp();
+        const embed = new EmbedBuilder().setColor(themeColor(interaction.guildId, 'warning')).setTitle('😂 Random Joke').setFooter({ text: `Category: ${joke.category}` }).setTimestamp();
         if (joke.type === 'single') embed.setDescription(joke.joke);
         else embed.addFields({ name: 'Setup', value: joke.setup }, { name: 'Delivery', value: joke.delivery });
         return interaction.editReply({ embeds: [embed] });
@@ -306,9 +385,15 @@ export default {
         const subreddit = interaction.options.getString('subreddit') || 'random';
         let apiUrl = 'https://meme-api.com/gimme';
         if (subreddit && subreddit !== 'random') apiUrl = `https://meme-api.com/gimme/${subreddit}`;
-        const response = await axios.get(apiUrl, { timeout: 10000 });
-        const meme = response.data;
-        if (!meme.url) return interaction.editReply({ content: '❌ No meme found. Please try again.' });
+        // "Allow adult content": posts Reddit marks NSFW are shown only when the server allows them
+        // AND the channel is age-restricted (Discord's own rule); otherwise another one is fetched.
+        const adultOk = isOn(funCfg.nsfw_allowed) && interaction.channel?.nsfw === true;
+        let meme = null;
+        for (let attempt = 0; attempt < 4 && !meme; attempt++) {
+          const response = await axios.get(apiUrl, { timeout: 10000 });
+          if (response.data?.url && (adultOk || !response.data.nsfw)) meme = response.data;
+        }
+        if (!meme) return interaction.editReply({ content: '❌ Could not find a meme suitable for this channel. Please try again.' });
         const embed = new EmbedBuilder().setColor('#FF4500').setTitle(meme.title.length > 256 ? meme.title.substring(0, 253) + '...' : meme.title).setURL(meme.postLink).setImage(meme.url).setFooter({ text: `👍 ${meme.ups} upvotes • r/${meme.subreddit}` }).setTimestamp();
         return interaction.editReply({ embeds: [embed] });
 
@@ -334,22 +419,6 @@ export default {
         const embed = new EmbedBuilder().setColor('#4169E1').setTitle('💡 Random Fact').setDescription(factText).setFooter({ text: `Category: ${category.charAt(0).toUpperCase() + category.slice(1)}` }).setTimestamp();
         return interaction.editReply({ embeds: [embed] });
 
-      } else if (subcommand === 'wouldyourather') {
-        const [questions] = await pool.execute('SELECT * FROM would_you_rather_questions ORDER BY RAND() LIMIT 1');
-        let questionText, option1, option2;
-        if (questions.length > 0) { questionText = questions[0].question; option1 = questions[0].option1; option2 = questions[0].option2; }
-        else {
-          const hardcoded = [{ question: 'Would you rather...', option1: 'Fight 100 duck-sized horses', option2: 'Fight 1 horse-sized duck' }, { question: 'Would you rather...', option1: 'Always be 10 minutes late', option2: 'Always be 20 minutes early' }, { question: 'Would you rather...', option1: 'Have the ability to fly', option2: 'Have the ability to be invisible' }];
-          const r = hardcoded[Math.floor(Math.random() * hardcoded.length)];
-          questionText = r.question; option1 = r.option1; option2 = r.option2;
-        }
-        const embed = new EmbedBuilder().setColor('#9B59B6').setTitle('🤔 Would You Rather?').setDescription(questionText)
-          .addFields({ name: '🅰️ Option A', value: option1, inline: true }, { name: '🅱️ Option B', value: option2, inline: true })
-          .setFooter({ text: 'React with 🅰️ or 🅱️ to vote!' }).setTimestamp();
-        const message = await interaction.editReply({ embeds: [embed] });
-        await message.react('🅰️');
-        await message.react('🅱️');
-
       } else if (subcommand === '8ball') {
         const question = interaction.options.getString('question');
         const responses = ['It is certain.', 'It is decidedly so.', 'Without a doubt.', 'Yes definitely.', 'You may rely on it.', 'As I see it, yes.', 'Most likely.', 'Outlook good.', 'Yes.', 'Signs point to yes.', 'Reply hazy, try again.', 'Ask again later.', 'Better not tell you now.', 'Cannot predict now.', 'Concentrate and ask again.', 'Don\'t count on it.', 'My reply is no.', 'My sources say no.', 'Outlook not so good.', 'Very doubtful.'];
@@ -364,15 +433,8 @@ export default {
       const replyMethod = interaction.deferred ? 'editReply' : 'reply';
       return interaction[replyMethod]({ content: '❌ An error occurred while processing your fun command.', ephemeral: true });
     }
-  },
-
-  // Modal handler for confessions
-  async handleModal(interaction) {
-    try {
-      return await confessHandler.handleConfessModal(interaction);
-    } catch (error) {
-      console.error('[Fun Modal Error]', error);
-      return interaction.editReply({ content: '❌ An error occurred while submitting your confession.' });
-    }
   }
+
+  // The confession modal is dispatched by interactions/handlerRegistry.js ('confession_modal'),
+  // not from here — nothing ever looked up a `confess` command to call a handleModal on.
 };

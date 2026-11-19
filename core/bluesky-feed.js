@@ -4,6 +4,8 @@ import { EmbedBuilder } from 'discord.js';
 import pool from '../utils/db.js';
 import logger from '../utils/logger.js';
 import { getAuthorFeed, getProfile, normalizeActor, postUrlFor } from '../utils/platforms/bluesky.js';
+import { buildFeedContent } from './feed-message.js';
+import { pollsGuild } from './guild-presence-logic.js';
 
 const BLUESKY_COLOR = 0x0085FF;
 const MAX_NEW_PER_TICK = 3; // don't flood a channel when a feed has accumulated many
@@ -16,8 +18,10 @@ export async function checkBlueskyFeeds(client) {
         if (e.code === 'ER_NO_SUCH_TABLE') return; // table not created yet
         throw e;
     }
+    // Only the feeds of servers this bot serves (H-315): every bot used to fetch every feed.
+    feeds = feeds.filter(f => pollsGuild(client, f.guild_id, global.botManager));
     if (!feeds.length) return;
-    logger.info(`[BlueskyFeed] Checking ${feeds.length} Bluesky feeds…`);
+    logger.debug(`[BlueskyFeed] Checking ${feeds.length} Bluesky feeds…`);
 
     for (let i = 0; i < feeds.length; i += 3) {
         const batch = feeds.slice(i, i + 3);
@@ -50,7 +54,7 @@ async function processFeed(feed, client) {
     // Post oldest-first, cap at MAX_NEW_PER_TICK to avoid flood on first-ever sync.
     const toPost = newOnes.reverse().slice(-MAX_NEW_PER_TICK);
 
-    const channel = await resolveChannel(client, feed.channel_id);
+    const channel = await resolveChannel(client, feed.channel_id, feed.guild_id);
     if (!channel) {
         logger.warn(`[BlueskyFeed] channel ${feed.channel_id} not resolvable (feed id ${feed.id})`);
         return;
@@ -59,8 +63,18 @@ async function processFeed(feed, client) {
     for (const item of toPost) {
         try {
             const embed = buildEmbed(item);
-            const content = (feed.custom_message || '').trim() || undefined;
-            await channel.send({ content, embeds: [embed] });
+            // Custom message with its variables filled, ping role in front. Neither set: no content.
+            const author = item.post?.author;
+            const { content, allowedMentions } = buildFeedContent({
+                template: feed.custom_message,
+                pingRoleId: feed.ping_role_id,
+                vars: {
+                    handle: `@${author?.handle || handle}`,
+                    name: author?.displayName || author?.handle || handle,
+                    url: postUrlFor(item) || '',
+                },
+            });
+            await channel.send({ content, allowedMentions, embeds: [embed] });
         } catch (err) {
             logger.error(`[BlueskyFeed] send failed for ${feed.id}: ${err.message}`);
         }
@@ -106,17 +120,23 @@ function buildEmbed(item) {
     return embed;
 }
 
-async function resolveChannel(client, channelId) {
+/**
+ * The feed's channel, from any bot client, but only when it belongs to the feed's own server: the
+ * add routes take a channel id from the form, so a channel of another server is never posted to.
+ */
+export async function resolveChannel(client, channelId, guildId) {
+    const ok = (ch) => (ch && (!guildId || String(ch.guildId) === String(guildId)) ? ch : null);
     // Works for both the main bot and custom bots — check all bot clients
-    if (client?.channels?.cache?.get(channelId)) return client.channels.cache.get(channelId);
+    const own = ok(client?.channels?.cache?.get(channelId));
+    if (own) return own;
     if (global.botManager?.clients) {
         for (const [, c] of global.botManager.clients) {
-            const ch = c.channels.cache.get(channelId);
+            const ch = ok(c.channels.cache.get(channelId));
             if (ch) return ch;
         }
     }
     try {
-        return await client.channels.fetch(channelId);
+        return ok(await client.channels.fetch(channelId));
     } catch {
         return null;
     }

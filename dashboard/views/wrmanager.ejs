@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>" lang="en">
+<head>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg-primary: #0b0f11; --bg-card: rgba(255,255,255,0.03); --bg-card-hover: rgba(255,255,255,0.06);
+            --bg-inset: rgba(255,255,255,0.04); --border-color: rgba(255,255,255,0.08); --border-strong: rgba(255,255,255,0.14);
+            --text-primary: #fff; --text-secondary: rgba(255,255,255,0.7); --text-muted: rgba(255,255,255,0.5);
+            --accent-green: #34d399; --accent-yellow: #fbbf24; --accent-red: #f87171; --accent-blue: #60a5fa;
+            --accent-brass: #d4a04a;
+        }
+        /* Light and Sand: brass darkened to read on a light page, the dark wells and toasts as theme surfaces.
+           Dark keeps the values above. */
+        :root { --wr-shade: #000000; --wr-toast: #141a1d; }
+        :root:is([data-theme="light"], [data-theme="sand"]) { --accent-brass: color-mix(in srgb, #d4a04a 55%, var(--cf-text)); --bg-inset: var(--cf-veil-1); --wr-shade: color-mix(in srgb, var(--cf-text) 15%, transparent); --wr-toast: var(--cf-surface); }
+        body { font-family: 'Inter', -apple-system, sans-serif; background: var(--bg-primary); color: var(--text-primary); min-height: 100vh; }
+        a { color: inherit; }
+
+
+
+        main { padding: 2rem 1.5rem 4rem; max-width: 1240px; margin: 0 auto; }
+        @media (max-width: 640px) { main { padding: 1.5rem 1rem 3rem; } }
+        .page-header { display: flex; align-items: center; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+        .page-title { font-size: 1.8rem; font-weight: 800; }
+
+
+        .banner { display: flex; align-items: center; gap: 0.7rem; padding: 0.8rem 1rem; border-radius: 10px; font-size: 0.85rem; margin-bottom: 1.25rem; }
+        .banner-warn { background: rgba(251,191,36,0.1); border: 1px solid rgba(251,191,36,0.28); color: var(--cf-warning-ink); }
+        .banner-err { background: rgba(248,113,113,0.1); border: 1px solid rgba(248,113,113,0.28); color: var(--cf-danger-ink); }
+
+        .tabs { display: flex; gap: 0.4rem; margin-bottom: 1.25rem; flex-wrap: wrap; border-bottom: 1px solid var(--border-color); padding-bottom: 0.75rem; }
+        .tab { padding: 0.5rem 0.95rem; border-radius: 8px; border: 1px solid transparent; background: none; color: var(--text-secondary); font-family: inherit; font-size: 0.875rem; font-weight: 600; cursor: pointer; }
+        .tab:hover { background: var(--bg-card-hover); color: var(--text-primary); }
+        .tab.active { background: var(--bg-card); border-color: var(--accent-brass); color: var(--accent-brass); }
+
+        .panel { display: none; }
+        .panel.active { display: block; }
+
+        .card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 14px; padding: 1.3rem; margin-bottom: 1.15rem; }
+        .card-title { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); font-weight: 700; margin-bottom: 0.95rem; display: flex; align-items: center; gap: 0.5rem; justify-content: space-between; }
+        .card-title span.left { display: flex; align-items: center; gap: 0.5rem; }
+        .hint { color: var(--text-muted); font-size: 0.8rem; line-height: 1.55; margin-top: 0.6rem; }
+
+        .btn { display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.6rem 0.95rem; border-radius: 9px; border: 1px solid var(--border-strong); background: var(--bg-card); color: var(--text-primary); font-family: inherit; font-size: 0.83rem; font-weight: 600; cursor: pointer; transition: all .18s; }
+        .btn:hover:not(:disabled) { background: var(--bg-card-hover); border-color: var(--accent-brass); }
+        .btn:disabled { opacity: .45; cursor: not-allowed; }
+        .btn-primary { background: linear-gradient(135deg,#b4802a,#d4a04a); border-color: transparent; color: #1a1206; }
+        .btn-danger { border-color: rgba(248,113,113,0.4); color: var(--cf-danger-ink); }
+        .btn-sm { padding: 0.4rem 0.7rem; font-size: 0.78rem; }
+
+        table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+        th { text-align: left; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); font-weight: 700; padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--border-color); }
+        td { padding: 0.6rem; border-bottom: 1px solid var(--border-color); vertical-align: middle; }
+        tr:last-child td { border-bottom: none; }
+        .mono { font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; }
+
+        input, select, textarea { font-family: inherit; font-size: 0.85rem; padding: 0.5rem 0.7rem; background: color-mix(in srgb, var(--wr-shade) 30%, transparent); border: 1px solid var(--border-strong); border-radius: 8px; color: var(--text-primary); }
+        input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent-brass); }
+        select option { background: var(--cf-surface); }
+        textarea { width: 100%; font-family: 'JetBrains Mono', monospace; resize: vertical; }
+        label { display: block; font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 0.3rem; font-weight: 600; }
+        .field { margin-bottom: 0.85rem; }
+        .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 0.9rem; }
+
+        .pending { background: rgba(251,191,36,0.07); border: 1px solid rgba(251,191,36,0.25); border-radius: 10px; padding: 0.8rem 0.95rem; margin-bottom: 0.6rem; font-size: 0.84rem; }
+        .pre { font-family: 'JetBrains Mono', monospace; font-size: 0.75rem; background: color-mix(in srgb, var(--wr-shade) 35%, transparent); border: 1px solid var(--border-color); border-radius: 8px; padding: 0.75rem; max-height: 320px; overflow: auto; white-space: pre-wrap; word-break: break-word; color: var(--text-secondary); }
+
+        .meter { height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--cf-text) 8%, transparent); overflow: hidden; margin-top: 0.4rem; }
+        .meter-fill { height: 100%; border-radius: 4px; transition: width .4s ease; }
+        .stat-row { display: grid; grid-template-columns: repeat(auto-fit,minmax(190px,1fr)); gap: 0.9rem; }
+        .stat { background: var(--bg-inset); border: 1px solid var(--border-color); border-radius: 11px; padding: 0.85rem 0.95rem; }
+        .stat-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--text-muted); font-weight: 700; }
+        .stat-value { font-size: 1.25rem; font-weight: 700; margin-top: 0.2rem; font-variant-numeric: tabular-nums; }
+
+        .toast { position: fixed; bottom: 1.4rem; right: 1.4rem; z-index: 2000; display: flex; flex-direction: column; gap: 0.5rem; }
+        .toast-item { padding: 0.75rem 1rem; border-radius: 9px; font-size: 0.84rem; background: color-mix(in srgb, var(--wr-toast) 97%, transparent); border: 1px solid var(--border-strong); max-width: 400px; }
+        .toast-ok { border-color: rgba(52,211,153,0.42); }
+        .toast-err { border-color: rgba(248,113,113,0.42); }
+        .ini-sec { border: 1px solid var(--border-color); border-radius: 10px; margin-bottom: 0.5rem; overflow: hidden; }
+        .ini-sec-head { display: flex; justify-content: space-between; align-items: center; padding: 0.6rem 0.85rem; background: var(--bg-inset); cursor: pointer; font-size: 0.85rem; font-weight: 600; }
+        .ini-sec-head:hover { background: var(--bg-card-hover); }
+        .ini-sec-body { padding: 0.6rem 0.85rem; display: none; }
+        .ini-sec.open .ini-sec-body { display: block; }
+        .ini-row { display: grid; grid-template-columns: 1fr 170px auto; gap: 0.6rem; align-items: center; padding: 0.45rem 0; border-bottom: 1px solid var(--border-color); }
+        .ini-row:last-child { border-bottom: none; }
+        .ini-name { font-family: 'JetBrains Mono', monospace; font-size: 0.78rem; word-break: break-all; }
+        .ini-desc { color: var(--text-muted); font-size: 0.72rem; margin-top: 0.15rem; }
+        .ini-row input, .ini-row select { width: 100%; font-size: 0.8rem; padding: 0.35rem 0.5rem; }
+        .ini-dirty input { border-color: var(--cf-warning-ink); }
+        .ini-over { color: var(--accent-brass); font-size: 0.68rem; white-space: nowrap; }
+        @media (max-width: 700px) { .ini-row { grid-template-columns: 1fr; } }
+        .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; margin-right: 0.45rem; }
+        .dot-on { background: var(--accent-green); box-shadow: 0 0 9px var(--accent-green); }
+        .dot-off { background: var(--accent-red); box-shadow: 0 0 9px var(--accent-red); }
+        .dot-warn { background: var(--accent-yellow); box-shadow: 0 0 9px var(--accent-yellow); }
+        .crumb { font-family: 'JetBrains Mono', monospace; font-size: 0.8rem; color: var(--accent-brass); margin-bottom: 0.6rem; word-break: break-all; }
+    </style>
+<%- include('partials/site-head', { title: 'Windrose Manager | CertiFried MultiTool', noindex: true }) %>
+    <style>
+        /* After cf-ui.css: the design system draws the header, buttons and cards; the
+           brass accent stays only on Windrose-specific highlights (connect string, chips). */
+
+        .card { border-radius: var(--cf-radius-lg) !important; }
+        .page-icon { background: var(--cf-surface-2) !important; box-shadow: none !important; border-color: var(--cf-border) !important; border-radius: var(--cf-radius-lg) !important; }
+        .page-title { background: none !important; color: var(--cf-text) !important; font-weight: 600 !important; }
+        .join-card { background: var(--cf-surface) !important; border-color: color-mix(in srgb, var(--accent-brass) 40%, var(--cf-border)) !important; }
+
+    </style>
+</head>
+<body>
+<%- include('partials/site-header', { user: locals.user || null }) %>
+<%- include('partials/section-tabs', { label: 'Windrose', active: 'manager', tabNote: 'Your access: owner', tabs: [['panel', '/windrose', 'Friend panel'], ['manager', '/wrmanager', 'Manager'], ['multicast', '/stream', 'Multicast']] }) %>
+
+<main id="main-content" tabindex="-1">
+    <div class="page-header">
+        <h1 class="page-title">Windrose Manager</h1>
+        <span class="mono" style="color:var(--text-muted)"><%= initialStatus?.connectAddress || '' %></span>
+    </div>
+
+    <div class="card" id="server-control" style="padding:0.9rem 1.1rem;margin-bottom:1.1rem">
+        <div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap;justify-content:space-between">
+            <div style="display:flex;align-items:center;gap:0.9rem;flex-wrap:wrap">
+                <span style="font-size:1rem;font-weight:700" id="ctl-state"><span class="dot dot-warn"></span>…</span>
+                <span class="mono" style="color:var(--text-muted);font-size:0.8rem" id="ctl-players"></span>
+            </div>
+            <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+                <button class="btn btn-sm" id="ctl-start"><i class="fas fa-play"></i> Start</button>
+                <button class="btn btn-sm btn-danger" id="ctl-stop"><i class="fas fa-stop"></i> Stop</button>
+                <button class="btn btn-sm" id="ctl-restart"><i class="fas fa-rotate"></i> Restart (warns players)</button>
+                <button class="btn btn-sm" id="ctl-refresh" title="Refresh" aria-label="Refresh"><i class="fas fa-arrows-rotate" aria-hidden="true"></i></button>
+            </div>
+        </div>
+    </div>
+
+    <div id="offline-banner" class="banner banner-err" style="<%= agentOffline ? '' : 'display:none' %>">
+        <i class="fas fa-triangle-exclamation"></i><span>The Windrose agent isn't responding. Controls are unavailable until it returns.</span>
+    </div>
+
+    <div class="tabs">
+        <button class="tab active" data-tab="ops">Overview</button>
+        <button class="tab" data-tab="settings-server">Server</button>
+        <button class="tab" data-tab="people">People</button>
+        <button class="tab" data-tab="players">Players</button>
+        <button class="tab" data-tab="settings">World &amp; multipliers</button>
+        <button class="tab" data-tab="backups">Backups</button>
+        <button class="tab" data-tab="worlds">Worlds &amp; saves</button>
+        <button class="tab" data-tab="files">Files &amp; mods</button>
+        <button class="tab" data-tab="advanced">Advanced</button>
+        <button class="tab" data-tab="audit">Audit</button>
+    </div>
+
+    <!-- ---------------------------------------------------------- Overview -->
+    <section class="panel active" id="panel-ops">
+        <div id="watchdog-banner" class="banner banner-warn" style="display:none">
+            <i class="fas fa-triangle-exclamation"></i><span id="watchdog-text"></span>
+        </div>
+
+        <div class="card">
+            <div class="card-title"><span class="left"><i class="fas fa-shield-halved"></i> Watchdog</span><span class="mono" id="watchdog-when" style="color:var(--text-muted);font-size:0.75rem"></span></div>
+            <div class="stat-row">
+                <div class="stat"><div class="stat-label">Backup mirror</div><div class="stat-value" id="wd-mirror" style="font-size:1rem">–</div></div>
+                <div class="stat"><div class="stat-label">Swap used</div><div class="stat-value" id="wd-swap" style="font-size:1rem">–</div></div>
+                <div class="stat"><div class="stat-label">Warnings</div><div class="stat-value" id="wd-warn" style="font-size:1rem">–</div></div>
+            </div>
+            <p class="hint">Runs from cron every 15 minutes, outside the agent — so it still reports when the agent itself is down. Mirrors snapshots to <span class="mono">/home</span> (a different disk array). That survives an array failure, <strong>not</strong> loss of this host.</p>
+        </div>
+
+        <div class="card">
+            <div class="card-title"><span class="left"><i class="fas fa-gauge-high"></i> Resources</span><button class="btn btn-sm" id="stats-refresh">Refresh</button></div>
+            <div class="stat-row">
+                <div class="stat"><div class="stat-label">CPU</div><div class="stat-value" id="s-cpu">–</div></div>
+                <div class="stat">
+                    <div class="stat-label">Memory</div><div class="stat-value" id="s-mem">–</div>
+                    <div class="meter"><div class="meter-fill" id="s-mem-bar" style="width:0%;background:var(--accent-green)"></div></div>
+                </div>
+                <div class="stat"><div class="stat-label">Players</div><div class="stat-value" id="s-players">–</div></div>
+                <div class="stat"><div class="stat-label">State</div><div class="stat-value" id="s-state" style="font-size:1rem">–</div></div>
+            </div>
+            <p class="hint">Memory is measured against the 16&nbsp;GB container cap. Sustained pressure here means fewer player slots, not a bigger cap — the cap is what stops Windrose from starving the bot process.</p>
+        </div>
+
+        <div class="card">
+            <div class="card-title"><span class="left"><i class="fas fa-clock-rotate-left"></i> Scheduled restart</span></div>
+            <div class="grid2">
+                <div class="field"><label>Hour (0–23)</label><input type="number" id="sched-hour" min="0" max="23" value="5" style="width:100%"></div>
+                <div class="field"><label>Minute</label><input type="number" id="sched-min" min="0" max="59" value="0" style="width:100%"></div>
+            </div>
+            <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+                <button class="btn btn-primary" id="sched-set">Schedule daily</button>
+                <button class="btn" id="sched-cancel">Cancel</button>
+                <span class="mono" id="sched-status" style="align-self:center;color:var(--text-muted)"></span>
+            </div>
+            <p class="hint">Players are warned at 5 minutes and 1 minute, and a snapshot is taken, before the server bounces.</p>
+        </div>
+
+        <div class="card">
+            <div class="card-title"><span class="left"><i class="fas fa-cloud-arrow-down"></i> Updates</span></div>
+
+            <div class="stat-row" style="margin-bottom:0.9rem">
+                <div class="stat">
+                    <div class="stat-label">Game build (what players check)</div>
+                    <div class="stat-value mono" id="game-build" style="font-size:0.9rem">–</div>
+                </div>
+                <div class="stat">
+                    <div class="stat-label">Container image</div>
+                    <div class="stat-value mono" id="image-info" style="font-size:0.9rem">–</div>
+                </div>
+            </div>
+
+            <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center">
+                <button class="btn btn-primary" id="update-game"><i class="fas fa-download"></i> Update game</button>
+                <span style="color:var(--text-muted);font-size:0.78rem">← use this when players get a version mismatch</span>
+            </div>
+            <p class="hint">
+                Windrose patches change the <strong>game build</strong>. If a player's client is newer than the server they are
+                rejected outright with a <span class="mono">DeploymentId mismatch</span> — the password and world are irrelevant.
+                This downloads the new build (can be several GB), restarts, and takes a snapshot first.
+                <br><br>
+                <span class="mono">UPDATE_ON_START</span> stays <strong>false</strong> the rest of the time so an unattended restart
+                can never pull a build that breaks Windrose+ at 4am; this flips it on for exactly one boot.
+            </p>
+
+            <div style="margin-top:1rem;padding-top:0.9rem;border-top:1px solid var(--border-color)">
+                <div style="display:flex;align-items:center;gap:0.8rem;flex-wrap:wrap;justify-content:space-between">
+                    <label style="display:flex;align-items:center;gap:0.5rem;margin:0;font-size:0.85rem;font-weight:600">
+                        <input type="checkbox" id="auto-toggle" style="width:auto"> Auto-update when Steam publishes a new build
+                    </label>
+                    <span style="display:flex;gap:0.4rem">
+                        <button class="btn btn-sm" id="auto-check">Check now</button>
+                        <button class="btn btn-sm btn-danger" id="auto-force">Force update</button>
+                    </span>
+                </div>
+                <div class="mono" id="auto-status" style="color:var(--text-muted);font-size:0.76rem;margin-top:0.5rem">–</div>
+                <p class="hint">
+                    Checks every 30 minutes using two signals: Steam's published build id, and any
+                    <span class="mono">DeploymentId mismatch</span> in our own logs — the second needs no network and cannot be a
+                    false positive, because the game itself just refused a real player.
+                    <br><br>
+                    <strong>It will not update while anyone is playing</strong>, always snapshots first, verifies the server came
+                    back, and waits an hour between updates so a flapping build cannot restart the server in a loop.
+                    Off by default — an unattended update of a modded server can break Windrose+ with no warning.
+                </p>
+            </div>
+
+            <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:1rem;padding-top:0.9rem;border-top:1px solid var(--border-color)">
+                <button class="btn btn-sm" id="update-check">Check image</button>
+                <button class="btn btn-sm btn-danger" id="update-apply">Update image</button>
+                <span style="color:var(--text-muted);font-size:0.78rem;align-self:center">the Wine/SteamCMD wrapper — rarely what you want</span>
+            </div>
+            <div class="pre" id="update-out" style="display:none;margin-top:0.8rem"></div>
+        </div>
+
+        <div class="card">
+            <div class="card-title"><span class="left"><i class="fas fa-file-lines"></i> Container log</span><button class="btn btn-sm" id="logs-refresh">Refresh</button></div>
+            <div class="pre" id="logs-out">Not loaded.</div>
+        </div>
+    </section>
+
+    <!-- ---------------------------------------------------------- People -->
+    <section class="panel" id="panel-people">
+        <div class="card">
+            <div class="card-title"><span class="left"><i class="fas fa-user-shield"></i> Roles</span></div>
+            <table>
+                <thead><tr><th>Discord ID</th><th>Name</th><th>Role</th><th>Steam ID</th><th></th></tr></thead>
+                <tbody id="users-body"><tr><td colspan="5" style="color:var(--text-muted)">Loading…</td></tr></tbody>
+            </table>
+            <p class="hint">
+                <strong>viewer</strong> sees status and the map · <strong>player</strong> adds their own stats ·
+                <strong>admin</strong> gets lifecycle, moderation and the console · <strong>owner</strong> gets everything here.
+                Steam IDs link a Discord account to an in-game player, which is what makes per-player features possible.
+            </p>
+        </div>
+        <div class="card">
+            <div class="card-title"><span class="left"><i class="fas fa-user-plus"></i> Add or change</span></div>
+            <div class="grid2">
+                <div class="field"><label>Discord ID</label><input id="grant-id" placeholder="365905620060340224" style="width:100%"></div>
+                <div class="field"><label>Role</label><select id="grant-role" style="width:100%"><% roles.forEach(r => { %><option value="<%= r %>"><%= r %></option><% }) %></select></div>
+            </div>
+            <button class="btn btn-primary" id="grant-go">Set role</button>
+        </div>
+    </section>
+
+
+
+    <!-- ---------------------------------------------------------- Server settings -->
+    <section class="panel" id="panel-settings-server">
+        <div class="banner banner-warn">
+            <i class="fas fa-circle-info"></i>
+            <span>Docker bakes environment in when the container is created, so these apply only after <strong>Save &amp; recreate</strong> — a plain restart keeps the old values.</span>
+        </div>
+        <div class="card">
+            <div class="card-title"><span class="left"><i class="fas fa-sliders"></i> Server identity &amp; connection</span><button class="btn btn-sm" id="settings-refresh">Reload</button></div>
+            <div id="settings-fields" class="grid2"></div>
+            <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.6rem">
+                <button class="btn" id="settings-save">Save (apply on next recreate)</button>
+                <button class="btn btn-danger" id="settings-apply">Save &amp; recreate now</button>
+            </div>
+            <div class="pre" id="settings-out" style="display:none;margin-top:0.8rem"></div>
+        </div>
+    </section>
+
+    <!-- ---------------------------------------------------------- Players -->
+    <section class="panel" id="panel-players">
+        <div id="mod-status-banner" class="banner banner-warn" style="display:none">
+            <i class="fas fa-triangle-exclamation"></i><span id="mod-status-text"></span>
+        </div>
+
+        <div class="card">
+            <div class="card-title">
+                <span class="left"><i class="fas fa-users"></i> Online now</span>
+                <span style="display:flex;gap:0.4rem">
+                    <button class="btn btn-sm" id="players-refresh">Refresh</button>
+                    <button class="btn btn-sm" id="players-positions">With positions (RCON)</button>
+                </span>
+            </div>
+            <table>
+                <thead><tr><th>Player</th><th>Actor / Steam</th><th>Position</th><th>Actions</th></tr></thead>
+                <tbody id="players-body"><tr><td colspan="4" style="color:var(--text-muted)">Loading…</td></tr></tbody>
+            </table>
+            <p class="hint">The online list is read from disk and costs nothing. “With positions” spends one RCON call (~4&nbsp;s).</p>
+        </div>
+
+        <div class="card">
+            <div class="card-title"><span class="left"><i class="fas fa-gavel"></i> Moderation</span></div>
+            <div class="grid2">
+                <div class="field"><label>Player name (exact, case-insensitive)</label><input id="mod-target" placeholder="CaptainMorgan" style="width:100%"></div>
+                <div class="field"><label>Reason (optional)</label><input id="mod-reason" placeholder="griefing" style="width:100%"></div>
+            </div>
+            <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+                <button class="btn" id="mod-kick"><i class="fas fa-door-open"></i> Kick</button>
+                <button class="btn btn-danger" id="mod-ban"><i class="fas fa-ban"></i> Ban</button>
+                <button class="btn" id="mod-unban"><i class="fas fa-rotate-left"></i> Unban</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title"><span class="left"><i class="fas fa-list"></i> Ban list</span></div>
+            <div id="bans-list"><div style="color:var(--text-muted);font-size:0.85rem">Loading…</div></div>
+        </div>
+    </section>
+
+    <!-- ---------------------------------------------------------- Settings -->
+    <section class="panel" id="panel-settings">
+        <div class="banner banner-warn">
+            <i class="fas fa-circle-info"></i>
+            <span>These files are rewritten by the server as it shuts down, so edits only stick while it is stopped. Changes are staged here and applied during a controlled stop&nbsp;→&nbsp;write&nbsp;→&nbsp;start.</span>
+        </div>
+
+        <div class="card">
+            <div class="card-title"><span class="left"><i class="fas fa-hourglass-half"></i> Staged changes</span><button class="btn btn-sm btn-primary" id="apply-pending">Apply &amp; restart</button></div>
+            <div id="pending-list"><div style="color:var(--text-muted);font-size:0.85rem">Nothing staged.</div></div>
+        </div>
+
+        <div class="card">
+            <div class="card-title"><span class="left"><i class="fas fa-flask"></i> Multipliers</span></div>
+            <div class="grid2" id="mult-fields"></div>
+            <button class="btn" id="mult-stage">Stage multipliers</button>
+            <p class="hint">
+                Only these five do anything. <span class="mono">stack_size</span>, <span class="mono">weight</span>,
+                <span class="mono">inventory_size</span>, <span class="mono">crop_speed</span> and <span class="mono">points_per_level</span>
+                parse but are ignored upstream — they can crash Windrose's save validators, so they are rejected rather than shown.
+                <br><strong style="color:var(--accent-yellow)">XP is a one-way door:</strong> once raised above 1 and baked into a PAK,
+                lowering it is refused because the shrunken reward curve can lock existing characters out at next login.
+            </p>
+        </div>
+
+        <div class="card">
+            <div class="card-title"><span class="left"><i class="fas fa-earth-americas"></i> World settings</span></div>
+            <div class="grid2" id="world-fields"></div>
+            <button class="btn" id="world-stage">Stage world settings</button>
+            <p class="hint">Setting any value here switches the world preset to <span class="mono">Custom</span>.</p>
+        </div>
+    </section>
+
+    <!-- ---------------------------------------------------------- Backups -->
+    <section class="panel" id="panel-backups">
+        <div class="card">
+            <div class="card-title">
+                <span class="left"><i class="fas fa-box-archive"></i> Snapshots</span>
+                <span style="display:flex;gap:0.4rem">
+                    <button class="btn btn-sm btn-primary" id="backup-now">Take snapshot</button>
+                    <button class="btn btn-sm" id="backup-prune">Prune to 30</button>
+                </span>
+            </div>
+            <table>
+                <thead><tr><th>File</th><th>Size</th><th>Created</th><th>By</th><th>Why</th><th></th></tr></thead>
+                <tbody id="backups-body"><tr><td colspan="6" style="color:var(--text-muted)">Loading…</td></tr></tbody>
+            </table>
+            <p class="hint">
+                Snapshots copy the engine's own sealed zips, so they are safe to take while people are playing and cost only kilobytes.
+                <strong style="color:var(--accent-red)">Restoring is destructive</strong> — it replaces the live world, requires a stopped
+                server, and takes a pre-restore snapshot first so a mistaken restore is itself undoable.
+            </p>
+        </div>
+    </section>
+
+
+    <!-- ---------------------------------------------------------- Worlds -->
+    <section class="panel" id="panel-worlds">
+        <div class="banner banner-warn">
+            <i class="fas fa-circle-info"></i>
+            <span>Importing or switching worlds requires a <strong>stopped</strong> server — use <strong>Stop</strong> in the control bar at the top of this page, import, then <strong>Start</strong>. The outgoing world is snapshotted first, so the change is undoable.</span>
+        </div>
+
+        <div class="card">
+            <div class="card-title"><span class="left"><i class="fas fa-earth-oceania"></i> Worlds on this server</span><button class="btn btn-sm" id="worlds-refresh">Refresh</button></div>
+            <table>
+                <thead><tr><th>World ID</th><th>Version</th><th>Size</th><th>Active</th><th></th></tr></thead>
+                <tbody id="worlds-body"><tr><td colspan="5" style="color:var(--text-muted)">Loading…</td></tr></tbody>
+            </table>
+        </div>
+
+        <div class="card">
+            <div class="card-title"><span class="left"><i class="fas fa-upload"></i> Import a world</span></div>
+            <p class="hint" style="margin-top:0">
+                Upload a zip the game wrote into <span class="mono">SaveProfiles/Default/RocksDB_v2_Backups/Worlds/&lt;id&gt;/</span>
+                on the machine you are migrating from. Those archives are RocksDB checkpoints and carry the world's own
+                <span class="mono">WorldDescription.json</span> inside, so the import knows which world it is adopting.
+                A plain copy of the <span class="mono">Worlds</span> folder will not work.
+            </p>
+            <div class="field" style="margin-top:0.85rem">
+                <label>World backup (.zip, max 512&nbsp;MB)</label>
+                <input type="file" id="save-file" accept=".zip" style="width:100%">
+            </div>
+            <button class="btn" id="save-upload">Upload &amp; inspect</button>
+            <div id="save-preview" style="display:none;margin-top:1rem">
+                <div class="pre" id="save-info"></div>
+                <div style="margin-top:0.7rem;display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center">
+                    <label style="display:flex;align-items:center;gap:0.4rem;margin:0">
+                        <input type="checkbox" id="save-activate" checked style="width:auto"> Make this the active world
+                    </label>
+                    <button class="btn btn-primary" id="save-import">Import</button>
+                    <button class="btn" id="save-cancel">Discard upload</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-title"><span class="left"><i class="fas fa-download"></i> Export a world</span></div>
+            <p class="hint" style="margin-top:0">Download any snapshot to keep off-box or move to another host. Snapshots live under the Backups tab.</p>
+            <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.7rem">
+                <select id="export-pick" style="flex:1;min-width:240px"></select>
+                <button class="btn" id="export-go">Download</button>
+            </div>
+        </div>
+    </section>
+
+    <!-- ---------------------------------------------------------- Files -->
+    <section class="panel" id="panel-files">
+        <div class="card">
+            <div class="card-title"><span class="left"><i class="fas fa-folder-open"></i> server-files</span>
+                <span style="display:flex;gap:0.4rem">
+                    <button class="btn btn-sm" id="files-up">Up</button>
+                    <button class="btn btn-sm" id="files-mkdir">New folder</button>
+                </span>
+            </div>
+            <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.8rem;align-items:center">
+                <input type="file" id="file-upload-input" style="flex:1;min-width:220px">
+                <button class="btn btn-sm" id="file-upload-go">Upload here</button>
+            </div>
+            <div class="crumb" id="files-crumb">.</div>
+            <table><tbody id="files-body"><tr><td style="color:var(--text-muted)">Loading…</td></tr></tbody></table>
+            <p class="hint">
+                Jailed to <span class="mono">server-files</span>, symlinks resolved. Credential files can't be read here, and
+                Wine-executable types (<span class="mono">.dll .exe .bat .ps1 .pak</span>) can't be written — that would be code execution inside the container.
+            </p>
+        </div>
+        <div class="card" id="file-editor" style="display:none">
+            <div class="card-title"><span class="left"><i class="fas fa-pen"></i> <span id="edit-name"></span></span><button class="btn btn-sm" id="edit-close">Close</button></div>
+            <textarea id="edit-body" rows="16"></textarea>
+            <div style="margin-top:0.7rem"><button class="btn btn-primary" id="edit-save">Save</button></div>
+        </div>
+        <div class="card">
+            <div class="card-title"><span class="left"><i class="fas fa-puzzle-piece"></i> Lua mods</span></div>
+            <div id="mods-list" style="margin-bottom:0.9rem"><div style="color:var(--text-muted);font-size:0.85rem">Loading…</div></div>
+            <div class="grid2">
+                <div class="field"><label>Mod name</label><input id="mod-name" placeholder="welcome-message" style="width:100%"></div>
+            </div>
+            <div class="field"><label>init.lua</label><textarea id="mod-lua" rows="7" placeholder='API.onPlayerJoin(function(p) API.say("Ahoy, "..p.name) end)'></textarea></div>
+            <button class="btn btn-primary" id="mod-install">Install mod</button>
+            <p class="hint">Windrose+ hot-reloads mods on change — no restart needed.</p>
+        </div>
+    </section>
+
+
+    <!-- ---------------------------------------------------------- Advanced INI -->
+    <section class="panel" id="panel-advanced">
+        <div class="banner banner-warn">
+            <i class="fas fa-circle-info"></i>
+            <span>2,461 tunables. Only values you actually change are written — anything untouched keeps tracking the game's defaults through future patches. Changes apply on <strong>next start</strong> (they are compiled into a PAK at launch).</span>
+        </div>
+
+        <div class="card">
+            <div class="card-title"><span class="left"><i class="fas fa-magnifying-glass"></i> Find a setting</span></div>
+            <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+                <input id="ini-search" placeholder="e.g. melee, kraken, loot, stamina…" style="flex:1;min-width:240px">
+                <button class="btn" id="ini-search-go">Search all files</button>
+            </div>
+            <div id="ini-search-results" style="margin-top:0.9rem"></div>
+        </div>
+
+        <div class="card">
+            <div class="card-title">
+                <span class="left"><i class="fas fa-sliders"></i> Browse by file</span>
+                <span style="display:flex;gap:0.4rem;align-items:center">
+                    <label style="display:flex;align-items:center;gap:0.35rem;margin:0;font-size:0.78rem">
+                        <input type="checkbox" id="ini-only-overrides" style="width:auto"> only overridden
+                    </label>
+                    <button class="btn btn-sm btn-danger" id="ini-reset">Reset file</button>
+                    <button class="btn btn-sm btn-primary" id="ini-save">Save changes</button>
+                </span>
+            </div>
+            <div id="ini-files" style="display:flex;gap:0.4rem;flex-wrap:wrap;margin-bottom:0.9rem"></div>
+            <div id="ini-sections"><div style="color:var(--text-muted);font-size:0.85rem">Pick a file above.</div></div>
+        </div>
+    </section>
+
+    <!-- ---------------------------------------------------------- Audit -->
+    <section class="panel" id="panel-audit">
+        <div class="card">
+            <div class="card-title"><span class="left"><i class="fas fa-clipboard-list"></i> Audit log</span><button class="btn btn-sm" id="audit-refresh">Refresh</button></div>
+            <table>
+                <thead><tr><th>When</th><th>Who</th><th>Action</th><th>Result</th><th>Detail</th></tr></thead>
+                <tbody id="audit-body"><tr><td colspan="5" style="color:var(--text-muted)">Loading…</td></tr></tbody>
+            </table>
+        </div>
+    </section>
+</main>
+<%- include('partials/site-footer') %>
+
+<div class="toast" id="toast"></div>
+<script>window.WRM = { csrf: document.querySelector('meta[name="csrf-token"]')?.content || '' };</script>
+<script src="/js/wrmanager.js?v=2"></script>
+</body>
+</html>

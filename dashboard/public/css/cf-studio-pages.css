@@ -1,0 +1,93 @@
+/*
+ * cf-studio-pages.css: the public CertiFried Studio pages (/studio, /studio/how-it-works, /studio/privacy,
+ * /studio/faq) and the legal hub (/legal, /legal/data). Routes: dashboard/routes/legal-pages.js.
+ * Load after /css/cf-site.css. Only --cf-* tokens, so Dark (default), Light and Sand all work.
+ */
+
+/* Sub-navigation under the page head (partials/studio-nav.ejs). */
+.sp-subnav { display: flex; flex-wrap: wrap; gap: 2px; margin: calc(var(--cf-4) * -1) 0 var(--cf-8); padding: 3px; background: var(--cf-surface); border: 1px solid var(--cf-border); border-radius: var(--cf-radius-lg); }
+.sp-subnav a { display: inline-flex; align-items: center; min-height: 34px; padding: 0 12px; border-radius: var(--cf-radius); font-size: var(--cf-text-sm); font-weight: 500; color: var(--cf-text-2); text-decoration: none; white-space: nowrap; }
+.sp-subnav a:hover { color: var(--cf-text); background: var(--cf-surface-2); }
+.sp-subnav a[aria-current="page"] { color: var(--cf-text); background: var(--cf-surface-3); }
+.sp-subnav a:focus-visible { outline: 2px solid var(--cf-accent); outline-offset: 1px; }
+@media (max-width: 600px) { .sp-subnav a { min-height: 40px; } }
+
+/* Screenshots: the guide figure style, so cf-site.css gives them the Light/Sand mat. */
+.gd-figure { margin: 0 0 var(--cf-6); }
+.gd-figure a { display: block; border-radius: var(--cf-radius-lg); }
+.gd-figure a:focus-visible { outline: 2px solid var(--cf-accent); outline-offset: 3px; }
+.gd-figure img { display: block; width: 100%; height: auto; border: 1px solid var(--cf-border); border-radius: var(--cf-radius-lg); background: var(--cf-shot-bg); }
+.gd-figure figcaption { margin-top: var(--cf-2); font-size: var(--cf-text-sm); color: var(--cf-text-3); }
+.sp-shots { display: grid; gap: var(--cf-5); grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 760px) { .sp-shots { grid-template-columns: minmax(0, 1fr); } }
+
+/* Two columns of text: what it replaces / what it is not. */
+.sp-split { display: grid; gap: var(--cf-8); grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 760px) { .sp-split { grid-template-columns: minmax(0, 1fr); gap: var(--cf-4); } }
+.sp-split h3 { margin: 0 0 var(--cf-2); font-size: var(--cf-text-md); font-weight: 600; color: var(--cf-text); }
+.sp-split p, .sp-split ul { margin: 0 0 var(--cf-3); color: var(--cf-text-2); line-height: 1.6; }
+.sp-split ul { padding-left: 1.2em; }
+.sp-split li { margin-bottom: 4px; }
+
+/* Requirements and facts as label/value rows. */
+.sp-facts { margin: 0; background: var(--cf-surface); border: 1px solid var(--cf-border); border-radius: var(--cf-radius-lg); overflow: hidden; }
+.sp-facts > div { display: grid; grid-template-columns: minmax(10rem, 14rem) minmax(0, 1fr); gap: var(--cf-4); padding: var(--cf-3) var(--cf-4); border-top: 1px solid var(--cf-border); }
+.sp-facts > div:first-child { border-top: 0; }
+.sp-facts dt { font-size: var(--cf-text-sm); font-weight: 500; color: var(--cf-text); }
+.sp-facts dd { margin: 0; font-size: var(--cf-text-sm); line-height: 1.55; color: var(--cf-text-2); }
+@media (max-width: 600px) { .sp-facts > div { grid-template-columns: minmax(0, 1fr); gap: 2px; } }
+
+/* The architecture picture: four boxes in a row with the link between each pair. */
+.sp-flow { display: grid; grid-template-columns: repeat(7, auto); align-items: stretch; gap: 0; margin: 0 0 var(--cf-6); }
+.sp-flow-node { display: flex; flex-direction: column; gap: 4px; padding: var(--cf-3) var(--cf-4); background: var(--cf-surface); border: 1px solid var(--cf-border); border-radius: var(--cf-radius-lg); min-width: 0; }
+.sp-flow-node b { font-size: var(--cf-text-sm); font-weight: 600; color: var(--cf-text); }
+.sp-flow-node span { font-size: var(--cf-text-xs); line-height: 1.45; color: var(--cf-text-3); }
+.sp-flow-node .sp-where { color: var(--cf-text-2); }
+.sp-flow-link { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 0 var(--cf-2); min-width: 72px; text-align: center; font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+.sp-flow-link::before { content: ""; display: block; width: 100%; min-width: 40px; border-top: 1px dashed var(--cf-border-strong); }
+@media (max-width: 900px) {
+    .sp-flow { grid-template-columns: minmax(0, 1fr); }
+    .sp-flow-link { flex-direction: row; justify-content: flex-start; min-height: 32px; padding: 0 0 0 var(--cf-5); text-align: left; }
+    .sp-flow-link::before { width: 0; min-width: 0; height: 24px; border-top: 0; border-left: 1px dashed var(--cf-border-strong); margin-right: var(--cf-2); }
+}
+
+/* Data inventory tables (/legal/data, /studio/privacy). */
+.sp-data td, .sp-data th { min-width: 8rem; }
+.sp-data td:first-child { min-width: 12rem; }
+.sp-data .sp-ret { white-space: nowrap; }
+.sp-data .sp-src { display: block; margin-top: 2px; font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+@media (max-width: 600px) { .sp-data td, .sp-data th, .sp-data td:first-child { min-width: 0; } .sp-data .sp-ret { white-space: normal; } }
+.sp-anchor-list { display: flex; flex-wrap: wrap; gap: var(--cf-2); margin: 0 0 var(--cf-8); padding: 0; list-style: none; }
+.sp-anchor-list a { display: inline-flex; align-items: center; min-height: 32px; padding: 0 12px; border: 1px solid var(--cf-border); border-radius: 999px; font-size: var(--cf-text-sm); color: var(--cf-text-2); text-decoration: none; }
+.sp-anchor-list a:hover { color: var(--cf-text); border-color: var(--cf-border-strong); }
+.sp-anchor-list a:focus-visible { outline: 2px solid var(--cf-accent); outline-offset: 2px; }
+@media (max-width: 600px) { .sp-anchor-list a { min-height: 40px; } }
+
+/* FAQ: native <details>, one per question. */
+.sp-faq { margin: 0 0 var(--cf-8); background: var(--cf-surface); border: 1px solid var(--cf-border); border-radius: var(--cf-radius-lg); overflow: hidden; }
+.sp-faq details { border-top: 1px solid var(--cf-border); }
+.sp-faq details:first-child { border-top: 0; }
+.sp-faq summary { display: flex; align-items: center; min-height: 48px; padding: var(--cf-3) var(--cf-4); cursor: pointer; font-weight: 500; color: var(--cf-text); list-style: none; }
+.sp-faq summary::-webkit-details-marker { display: none; }
+.sp-faq summary::after { content: "+"; margin-left: auto; padding-left: var(--cf-4); color: var(--cf-text-3); font-weight: 400; }
+.sp-faq details[open] summary::after { content: "\2212"; }
+.sp-faq summary:hover { background: var(--cf-surface-2); }
+.sp-faq summary:focus-visible { outline: 2px solid var(--cf-accent); outline-offset: -2px; }
+.sp-faq .sp-answer { padding: 0 var(--cf-4) var(--cf-4); color: var(--cf-text-2); line-height: 1.65; }
+.sp-faq .sp-answer p { margin: 0 0 var(--cf-3); }
+.sp-faq .sp-answer p:last-child { margin-bottom: 0; }
+
+/* Legal hub list. */
+.sp-docs { margin: 0; padding: 0; list-style: none; background: var(--cf-surface); border: 1px solid var(--cf-border); border-radius: var(--cf-radius-lg); overflow: hidden; }
+.sp-docs li { display: grid; grid-template-columns: minmax(12rem, 18rem) minmax(0, 1fr) auto; align-items: baseline; gap: var(--cf-4); padding: var(--cf-4); border-top: 1px solid var(--cf-border); }
+.sp-docs li:first-child { border-top: 0; }
+.sp-docs a.sp-doc-title { font-weight: 600; color: var(--cf-text); text-decoration: none; }
+.sp-docs a.sp-doc-title:hover { text-decoration: underline; text-underline-offset: 2px; }
+.sp-docs a.sp-doc-title:focus-visible { outline: 2px solid var(--cf-accent); outline-offset: 2px; }
+.sp-docs p { margin: 0; font-size: var(--cf-text-sm); line-height: 1.55; color: var(--cf-text-2); }
+.sp-docs .sp-doc-date { font-size: var(--cf-text-xs); color: var(--cf-text-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
+@media (max-width: 720px) { .sp-docs li { grid-template-columns: minmax(0, 1fr); gap: 4px; } }
+
+.sp-cta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--cf-3) var(--cf-5); padding: var(--cf-5); background: var(--cf-surface); border: 1px solid var(--cf-border); border-radius: var(--cf-radius-lg); }
+.sp-cta p { margin: 0; flex: 1 1 22rem; color: var(--cf-text-2); }
+.sp-cta strong { color: var(--cf-text); }

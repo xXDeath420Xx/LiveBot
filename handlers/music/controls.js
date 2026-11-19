@@ -1,10 +1,12 @@
 import { QueueRepeatMode } from 'discord-player';
 import { EmbedBuilder, PermissionsBitField, ChannelType, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
-import { checkMusicPermissions, updateMusicConfig, getMusicConfig, isVoteSkipEnabled, getVoteSkipPercentage, applyLeaveOptionsToQueue } from '../../utils/music_helpers.js';
+import { checkMusicPermissions, updateMusicConfig, getMusicConfig, isVoteSkipEnabled, getVoteSkipPercentage } from '../../utils/music_helpers.js';
+import { manageLeave, leaveIfIdle } from '../../core/music-leave-policy.js';
 import { rejoinCamp } from '../../core/voice-camp-manager.js';
 import { isVoiceChannelType } from '../../core/voice-camp-helpers.js';
 import pool from '../../utils/db.js';
 import logger from '../../utils/logger.js';
+import { findFilter, filterLabel, allowedFilterNames, isFilterAllowed, offeredFilters } from '../../core/music-filters.js';
 
 // Active vote skip sessions
 const activeVoteSkips = new Map();
@@ -85,15 +87,31 @@ export async function handleFilter(interaction) {
 
     const filterName = interaction.options.getString("filter");
     const action = interaction.options.getString("action");
+    const want = action === "enable";
+
+    // The option autocompletes, so anything can be typed: only known filters are applied.
+    const filter = findFilter(filterName);
+    if (!filter) {
+        return interaction.reply({ content: `There is no filter called **${String(filterName).slice(0, 50)}**. Pick one from the list.`, ephemeral: true, allowedMentions: { parse: [] } });
+    }
+    // The Music page's allow-list (music_config.enabled_filters; none ticked = all). Turning a filter
+    // off is always allowed, so one left on from before a restriction can still be removed.
+    if (want) {
+        const allowed = allowedFilterNames((await getMusicConfig(interaction.guildId))?.enabled_filters);
+        if (!isFilterAllowed(filter.value, allowed)) {
+            return interaction.reply({
+                content: `The **${filter.label}** filter is not allowed in this server. Allowed filters: ${offeredFilters(allowed).map(f => f.label).join(', ')}. Admins choose them on the dashboard's Music page.`,
+                ephemeral: true,
+            });
+        }
+    }
 
     try {
-        if (action === "enable") {
-            queue.filters.ffmpeg.toggle(filterName);
-            await interaction.reply({ content: `**${filterName}** filter enabled.` });
-        } else {
-            queue.filters.ffmpeg.toggle(filterName);
-            await interaction.reply({ content: `**${filterName}** filter disabled.` });
-        }
+        // toggle() FLIPS the state — only call it when the filter isn't already where the user
+        // asked, or "enable" on an enabled filter would turn it off.
+        const ff = queue.filters.ffmpeg;
+        if (ff.isEnabled(filter.value) !== want) await ff.toggle(filter.value);
+        await interaction.reply({ content: `**${filter.label}** filter ${want ? "enabled" : "disabled"}.` });
     } catch (e) {
         await interaction.reply({ content: `Error: ${e.message}` });
     }
@@ -143,19 +161,14 @@ export async function handle247(interaction) {
     try {
         await updateMusicConfig(interaction.guildId, { twenty_four_seven: enabled ? 1 : 0 });
 
-        // Apply to the live session so the toggle takes effect without re-queueing.
-        // discord-player re-reads queue.options.leaveOnEmpty when its leave timer
-        // fires, so flipping the flag here rescues (or arms) the current session.
-        const queue = interaction.client.player.nodes.get(interaction.guildId);
+        // core/music-leave-policy.js reads 24/7 each time it decides, so enabling needs nothing more.
+        // Disabling while idle leaves now — unless a transcription, the chat reader or camp still needs voice.
+        const player = interaction.client.player;
+        const queue = player.nodes.get(interaction.guildId);
         if (queue) {
-            if (!enabled && !queue.isPlaying()) {
-                // 24/7 disabled while idle: leave the channel immediately instead
-                // of lingering for the 5-minute cooldown.
-                queue.delete();
-            } else {
-                // Otherwise update the live leave flags: stay when enabling, or
-                // resume normal auto-leave-on-cooldown when disabling mid-playback.
-                applyLeaveOptionsToQueue(queue, enabled);
+            manageLeave(queue);
+            if (!enabled) {
+                await leaveIfIdle(queue, { reason: '24/7 turned off while idle', player });
             }
         }
 
@@ -306,7 +319,8 @@ export async function handleRequestChannel(interaction) {
  * Handles vote skip
  */
 export async function handleVoteSkip(interaction) {
-    const permissionCheck = await checkMusicPermissions(interaction);
+    // Any listener may start a vote, DJ role or not (H-667); the vote itself decides.
+    const permissionCheck = await checkMusicPermissions(interaction, { requireDJ: false });
     if (!permissionCheck.permitted) {
         return interaction.reply({ content: permissionCheck.message, ephemeral: true });
     }
@@ -379,6 +393,8 @@ export async function handleVoteSkip(interaction) {
 
     // Set up collector
     const collector = message.createMessageComponentCollector({ time: 30000 });
+    // A lone listener (or a low threshold) has already passed — don't make them wait 30s.
+    if (votes.size >= requiredVotes) collector.stop('skipped');
 
     collector.on('collect', async (i) => {
         if (i.customId === 'voteskip_yes') {
@@ -409,9 +425,10 @@ export async function handleVoteSkip(interaction) {
         activeVoteSkips.delete(interaction.guildId);
 
         if (reason === 'skipped' || votes.size >= requiredVotes) {
-            // Skip the song
+            // Skip the song — but only if it's still the one voted on. If it ended during the
+            // vote, skipping now would throw out the NEXT song.
             try {
-                queue.node.skip();
+                if (queue.currentTrack?.id === currentTrack.id) queue.node.skip();
                 embed.setColor('#00ff00')
                     .setDescription(`Vote passed! Skipping **${currentTrack.title}**`)
                     .setFooter({ text: `Skipped with ${votes.size}/${requiredVotes} votes` });
@@ -519,16 +536,20 @@ export async function handleEqualizer(interaction) {
         return interaction.reply({ content: 'Invalid preset.', ephemeral: true });
     }
 
-    try {
-        // Clear existing filters
-        await queue.filters.ffmpeg.setFilters([]);
+    // A preset is a set of filters, so the Music page's allow-list applies to it too ('flat' has none).
+    const allowedForEq = allowedFilterNames((await getMusicConfig(interaction.guildId))?.enabled_filters);
+    const blockedForEq = selectedPreset.filters.filter(name => !isFilterAllowed(name, allowedForEq));
+    if (blockedForEq.length) {
+        return interaction.reply({
+            content: `The **${preset}** preset uses ${blockedForEq.map(filterLabel).join(' and ')}, which ${blockedForEq.length === 1 ? 'is' : 'are'} not allowed in this server. Admins choose the allowed filters on the dashboard's Music page.`,
+            ephemeral: true,
+        });
+    }
 
-        // Apply new filters
-        if (selectedPreset.filters.length > 0) {
-            for (const filter of selectedPreset.filters) {
-                queue.filters.ffmpeg.toggle(filter);
-            }
-        }
+    try {
+        // One call replaces the whole set. Clearing then toggling each filter un-awaited fired a
+        // separate stream replay per filter, all racing each other.
+        await queue.filters.ffmpeg.setFilters(selectedPreset.filters);
 
         const embed = new EmbedBuilder()
             .setColor('#00ff00')

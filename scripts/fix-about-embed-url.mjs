@@ -4,11 +4,12 @@ import 'dotenv/config';
 import mysql from 'mysql2/promise';
 
 const TARGETS = [
-    { name: 'Lair', channelId: '1496641274151698673', msgId: '1496641284218163452', botId: '1496406792417185802' },
-    { name: 'Pac',  channelId: '1496641417173532683', msgId: '1496641422562955384', botId: '1496352090950467595' },
+    // The acting bot comes from guild_bot_mapping — never pinned here.
+    { name: 'Lair', guildId: '1216126780767731722', channelId: '1496641274151698673', msgId: '1496641284218163452' },
+    { name: 'Pac',  guildId: '1099732505243959407', channelId: '1496641417173532683', msgId: '1496641422562955384' },
 ];
 
-const INVITE_URL     = 'https://discord.com/api/oauth2/authorize?client_id=1409904443125665875&permissions=8&scope=bot+applications.commands';
+const INVITE_URL     = 'https://discord.com/api/oauth2/authorize?client_id=1409904443125665875&permissions=8&scope=bot+applications.commands';  // bot-id-ok: the main bot's public invite link, not a credential
 const DASHBOARD_URL  = 'https://certifriedmultitool.com/dashboard';
 const SITE_URL       = 'https://certifriedmultitool.com';
 const THUMB_URL      = 'https://certifriedmultitool.com/images/CertiFried.png';
@@ -17,12 +18,11 @@ const pool = mysql.createPool({
     host: process.env.DB_HOST, user: process.env.DB_USER,
     password: process.env.DB_PASSWORD, database: process.env.DB_NAME,
 });
-const enc = (await import('/home/death/CertiFriedUtility/utils/encryption.js')).default;
+const { resolveBotForGuild } = await import('/home/death/CertiFriedUtility/utils/bot-resolver.js');
 
-async function tokenFor(botId) {
-    if (botId === '1409904443125665875') return process.env.DISCORD_TOKEN;
-    const [r] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id = ?', [botId]);
-    return enc.decrypt(JSON.parse(r[0].bot_token));
+async function tokenFor(guildId) {
+    const bot = await resolveBotForGuild(guildId, { db: pool });
+    return bot.token;
 }
 
 function buildInfoEmbed() {
@@ -63,7 +63,7 @@ function buildInfoEmbed() {
 }
 
 for (const t of TARGETS) {
-    const token = await tokenFor(t.botId);
+    const token = await tokenFor(t.guildId);
     const r = await fetch(
         `https://discord.com/api/v10/channels/${t.channelId}/messages/${t.msgId}`,
         {

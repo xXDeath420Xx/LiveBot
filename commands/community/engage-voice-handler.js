@@ -1,4 +1,6 @@
 import { EmbedBuilder } from 'discord.js';
+import { displayNameFor } from '../../utils/display-name.js';
+import { themeColor } from '../../core/guild-theme.js';
 
 export async function handleStats(interaction) {
     const voiceActivityManager = interaction.client.voiceActivityManager;
@@ -26,8 +28,8 @@ export async function handleStats(interaction) {
                       period === 'weekly' ? 'Weekly' : 'Monthly';
 
     const embed = new EmbedBuilder()
-        .setColor('#5865F2')
-        .setTitle(`${user.username}'s Voice Stats (${periodText})`)
+        .setColor(themeColor(interaction.guildId, 'primary'))
+        .setTitle(`${displayNameFor(user, interaction.guild)}'s Voice Stats (${periodText})`)
         .setThumbnail(user.displayAvatarURL({ size: 256 }))
         .addFields(
             { name: 'Total Time', value: voiceActivityManager.formatDuration(stats.total_time), inline: true },
@@ -78,7 +80,7 @@ export async function handleLeaderboard(interaction) {
                       period === 'weekly' ? 'Weekly' : 'Monthly';
 
     const embed = new EmbedBuilder()
-        .setColor('#FFD700')
+        .setColor(themeColor(interaction.guildId, 'warning'))
         .setTitle(`Voice Activity Leaderboard (${periodText})`)
         .setFooter({ text: `${interaction.guild.name} Voice Activity` })
         .setTimestamp();
@@ -92,7 +94,7 @@ export async function handleLeaderboard(interaction) {
 
         try {
             const user = await interaction.client.users.fetch(userData.user_id).catch(() => null);
-            const username = user ? user.username : `Unknown User`;
+            const username = displayNameFor(user, interaction.guild);
             const timeFormatted = voiceActivityManager.formatDuration(userData.total_time);
 
             description += `${medal} **${username}** - ${timeFormatted} (${userData.sessions} sessions)\n`;
@@ -138,7 +140,7 @@ export async function handleChannels(interaction) {
                       period === 'weekly' ? 'Weekly' : 'Monthly';
 
     const embed = new EmbedBuilder()
-        .setColor('#5865F2')
+        .setColor(themeColor(interaction.guildId, 'primary'))
         .setTitle(`Most Active Voice Channels (${periodText})`)
         .setFooter({ text: `${interaction.guild.name} Voice Activity` })
         .setTimestamp();

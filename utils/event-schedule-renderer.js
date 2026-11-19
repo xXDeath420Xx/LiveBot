@@ -424,3 +424,51 @@ function drawCalendarGlyph(ctx, x, y, w, h) {
     }
   }
 }
+
+/**
+ * Plain-text rendering of the same model the canvas draws.
+ *
+ * The weekly board is the densest image the network produces — a Gantt grid of
+ * every event, grouped by category, positioned by weekday and duration. None of
+ * that survives as an image, so without this a screen-reader user gets "an
+ * image" where a sighted user gets the whole week.
+ *
+ * Lives next to renderEventSchedule deliberately: if the drawing changes shape,
+ * the description has to change with it, and that is much likelier to be noticed
+ * when the two sit in the same file.
+ *
+ * Reads the same `model` object renderEventSchedule takes, so it stays correct
+ * without re-deriving anything from the database.
+ *
+ * @param {object} model
+ * @returns {string} Description suitable for an attachment's alt text.
+ */
+export function describeEventSchedule(model) {
+  const { title = 'Event Calendar', weekDays = [], sections = [] } = model || {};
+
+  const range = weekDays.length
+    ? ` for the week of ${weekDays[0].date} to ${weekDays[weekDays.length - 1].date}`
+    : '';
+
+  const totalEvents = sections.reduce((n, sec) => n + (sec.items?.length || 0), 0);
+  if (totalEvents === 0) return `${title}${range}. No events scheduled.`;
+
+  const dayName = (i) => weekDays[i]?.label || `day ${i + 1}`;
+
+  const described = sections
+    .filter((sec) => sec.items?.length)
+    .map((sec) => {
+      const items = sec.items.map((item) => {
+        // span is in whole days; 1 means a single-day event.
+        const when =
+          item.span > 1
+            ? `${dayName(item.startCol)} to ${dayName(item.startCol + item.span - 1)}`
+            : dayName(item.startCol);
+        return `${item.title} on ${when}${item.timeLabel ? `, ${item.timeLabel}` : ''}`;
+      });
+      return `${sec.name}: ${items.join('; ')}`;
+    });
+
+  const plural = totalEvents === 1 ? 'event' : 'events';
+  return `${title}${range}. ${totalEvents} ${plural}. ${described.join('. ')}.`;
+}

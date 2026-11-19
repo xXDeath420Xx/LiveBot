@@ -3,6 +3,7 @@
  * CustomId: `cah_pwjoin:<gameId>`
  */
 import { getGame, STATES } from '../../core/cah-manager.js';
+import { displayNameFor } from '../../utils/display-name.js';
 
 export async function handleCahPasswordJoin(interaction) {
     const [, gameId] = interaction.customId.split(':');
@@ -13,7 +14,7 @@ export async function handleCahPasswordJoin(interaction) {
     const r = game.addPlayer({
         userId: interaction.user.id,
         platform: 'discord',
-        displayName: interaction.user.displayName || interaction.user.username,
+        displayName: displayNameFor(interaction.user, interaction.guild),
         password
     });
     if (!r.ok) {

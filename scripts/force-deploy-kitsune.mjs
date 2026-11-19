@@ -9,12 +9,16 @@
 import { readdirSync, statSync } from 'fs';
 import { resolve, join } from 'path';
 import { pathToFileURL } from 'url';
-import enc from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 import pool from '../utils/db.js';
+// Same payload as core/bot-manager.js: mounts (core/command-mounts.js), only slash-registered commands
+// (core/command-registration.js), fitted to Discord's 100 cap. Raw module JSON went over it.
+import { buildDeployJson } from '../core/command-mounts.js';
+import { fitCustomBotCommands } from '../core/custom-bot-commands.js';
 
 const log = (...a) => { process.stdout.write(a.join(' ') + '\n'); };
 
-const BOT_ID = '1498486251576229958';
+// The acting bot comes from guild_bot_mapping — never pinned here.
 const GUILD_ID = '1469931133981687873';
 const MAX_ATTEMPTS = 10;
 
@@ -31,7 +35,7 @@ async function loadAllCommands() {
         const mod = await import(pathToFileURL(full).href);
         const cmd = mod.default || mod;
         if (cmd?.data && typeof cmd.data.toJSON === 'function') {
-          out.push(cmd.data.toJSON());
+          out.push(cmd);
         } else if (cmd?.data) {
           out.push(cmd.data);
         }
@@ -40,12 +44,13 @@ async function loadAllCommands() {
       }
     }
   }
-  return out;
+  return fitCustomBotCommands(buildDeployJson(out.filter(c => c?.data?.toJSON))).commands;
 }
 
 async function main() {
-  const [[row]] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id=?', [BOT_ID]);
-  const token = enc.decrypt(JSON.parse(row.bot_token));
+  const acting = await resolveBotForGuild(GUILD_ID, { db: pool });
+  const BOT_ID = acting.botId;
+  const token = acting.token;
   await pool.end(); // close DB before HTTP loop so we don't hold the connection
 
   log('Loading commands from disk...');

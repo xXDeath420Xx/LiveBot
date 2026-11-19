@@ -1,0 +1,59 @@
+<%#
+  /manage/:guildId/api-overview — super-admin only (dashboard/routes/api-overview-page.js checks
+  isSuperAdmin after checkGuildAdmin). A hand-kept catalogue of feature API routes.
+  Locals: catalog [{ group, path, methods, auth, desc }], groups, guildId, guildName, user.
+%>
+<!DOCTYPE html>
+<html data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>" lang="en">
+<head>
+<%- include('partials/site-head', { title: ('API overview') + ' · CertiFried', noindex: true }) %>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="/css/cf-settings.css">
+</head>
+<body class="cfs-body cf-site">
+<%- include('partials/site-header', { user: locals.user || null }) %>
+<main id="main-content" class="cf-main" tabindex="-1">
+<div class="cf-page">
+    <% if (locals.user) { %><%- include('partials/site/_owner-nav', { ownerActive: '' }) %><% } %>
+    <a class="cf-back" href="/manage/<%= guildId %>"><i class="fas fa-arrow-left" aria-hidden="true"></i> <%= guildName %></a>
+    <div class="cf-page-head">
+        <div class="cf-page-icon"><i class="fas fa-code" aria-hidden="true"></i></div>
+        <div>
+            <h1 class="cf-page-title">API overview</h1>
+            <p class="cf-page-sub">Feature APIs the dashboard mounts. All use the dashboard session cookie unless noted; :id is a server ID.</p>
+        </div>
+    </div>
+
+    <% groups.forEach(function (g) { %>
+        <% const items = catalog.filter(function (c) { return c.group === g; }); %>
+        <% if (items.length) { %>
+        <section class="cf-section" aria-label="<%= g %>">
+            <header class="cf-section-head">
+                <div><h2 class="cf-section-title"><%= g %><span class="cf-count"><%= items.length %></span></h2></div>
+            </header>
+            <div class="cf-rows">
+                <div class="cf-list">
+                <% items.forEach(function (item) { %>
+                    <div class="cf-list-item cf-list-item--multi">
+                        <div class="cf-list-main">
+                            <p class="cf-list-title"><code class="cf-mono api-path"><%= item.path %></code></p>
+                            <div class="cf-chips"><% item.methods.forEach(function (m) { %><span class="cf-chip"><code><%= m %></code></span><% }); %></div>
+                            <p class="cf-list-body"><%= item.desc %></p>
+                            <p class="cf-list-meta"><span>Who can call it: <%= item.auth %></span></p>
+                        </div>
+                    </div>
+                <% }); %>
+                </div>
+            </div>
+        </section>
+        <% } %>
+    <% }); %>
+</div>
+</main>
+<style>
+    .api-path { font-size: var(--cf-text-sm); color: var(--cf-text); background: none; padding: 0; overflow-wrap: anywhere; }
+</style>
+<%- include('partials/site-footer') %>
+<script src="/js/csrf.js"></script>
+</body>
+</html>

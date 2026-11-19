@@ -1,0 +1,203 @@
+<%#
+  Messages: bot messages recorded from a known template (core/bot-messages.js, bot_messages table),
+  newest 50, with an editor for the message text. GET /manage/:guildId/bot-message/:id/content loads
+  the live text; POST /manage/:guildId/bot-message/:id/edit swaps it on Discord (embeds are kept).
+  `data` carries { items, total, features, filter }. Built on the settings-row kit (cf-settings.css).
+%>
+<%
+const bmData = (typeof data !== 'undefined' && data) || {};
+const bmItems = bmData.items || [];
+const bmFeatures = bmData.features || [];
+const bmFilter = bmData.filter || '';
+const bmChannelName = new Map((locals.channels || []).map(c => [String(c.id), c.name]));
+// "log.member_join" -> "Member join"; the raw key stays visible as a quiet code chip.
+const bmPretty = (key) => { const s = String(key || '').split(/[.:/]/).pop().replace(/[_-]+/g, ' ').trim(); return s ? s.charAt(0).toUpperCase() + s.slice(1) : 'Message'; };
+const bmFeat = (f) => { const s = String(f || '').replace(/[_-]+/g, ' '); return s.charAt(0).toUpperCase() + s.slice(1); };
+const bmShown = bmFilter ? ((bmFeatures.find(f => f.feature === bmFilter) || {}).n || bmItems.length) : (bmData.total || 0);
+%>
+<style>
+    #bmPage .bm-key { font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+    #bmPage .bm-filter { overflow-x: auto; max-width: 100%; }
+    #bmPage .bm-filter .cf-tab-count { margin-left: 4px; color: var(--cf-text-3); font-variant-numeric: tabular-nums; }
+    #bmEditModal .bm-note { font-size: var(--cf-text-xs); color: var(--cf-text-3); margin: 0; }
+    #bmEditModal textarea { width: 100%; min-height: 10rem; }
+</style>
+
+<div class="page-section" id="bmPage">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-pen-to-square"></i>
+                <span>Messages</span>
+            </div>
+            <div class="page-section-subtitle">Fix the text of a message the bot has already posted, without reposting it.</div>
+        </div>
+    </div>
+
+    <section class="cf-section" aria-labelledby="bm-list-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="bm-list-title">Recent bot messages</h2>
+                <p class="cf-section-desc">The newest 50. Log entries and welcome, leave and ban messages are recorded; other messages the bot posts are not.</p>
+            </div>
+            <div class="cf-section-actions"><span class="cf-pill"><%= bmShown %> recorded</span></div>
+        </header>
+        <div class="cf-rows">
+            <% if (bmFeatures.length) { %>
+            <div class="cf-row cf-row--stack">
+                <nav class="cf-segmented bm-filter" aria-label="Filter by feature">
+                    <a class="cf-segment" href="?page=messages"<% if (!bmFilter) { %> aria-current="page" aria-pressed="true"<% } %>>All<span class="cf-tab-count"><%= bmData.total || 0 %></span></a>
+                    <% bmFeatures.forEach(f => { %>
+                    <a class="cf-segment" href="?page=messages&feature=<%= encodeURIComponent(f.feature) %>"<% if (bmFilter === f.feature) { %> aria-current="page" aria-pressed="true"<% } %>><%= bmFeat(f.feature) %><span class="cf-tab-count"><%= f.n %></span></a>
+                    <% }); %>
+                </nav>
+            </div>
+            <% } %>
+            <% if (bmItems.length > 15) { %>
+            <div class="cf-row cf-row--stack">
+                <div class="cf-search">
+                    <i class="fas fa-magnifying-glass" aria-hidden="true"></i>
+                    <label class="visually-hidden" for="bmSearch">Search messages</label>
+                    <input type="search" id="bmSearch" class="form-control" placeholder="Search by message type, feature or channel" autocomplete="off">
+                </div>
+            </div>
+            <% } %>
+            <% if (!bmItems.length) { %>
+            <%- include('../kit/_state', { kind: 'empty', title: 'No recorded messages yet', text: 'Log entries and welcome, leave and ban messages are recorded as the bot posts them. Set up logging or welcome messages to start.', id: null, boxed: false, compact: false }) %>
+            <% } else { %>
+            <div class="cf-list" id="bmList">
+                <% bmItems.forEach(m => { const ch = bmChannelName.get(String(m.channel_id)); %>
+                <div class="cf-list-item cf-list-item--multi" data-bm-id="<%= m.id %>" data-bm-search="<%= [bmPretty(m.template_key), m.template_key, m.feature || '', ch || ''].join(' ').toLowerCase() %>">
+                    <div class="cf-list-main">
+                        <div class="cf-list-title">
+                            <%= bmPretty(m.template_key) %>
+                            <% if (m.feature) { %> <span class="cf-pill"><%= bmFeat(m.feature) %></span><% } %>
+                            <% if (m.last_edited_at) { %> <span class="cf-pill is-info">Edited</span><% } %>
+                        </div>
+                        <div class="cf-list-meta">
+                            <%= ch ? '#' + ch : 'Unknown channel' %> · <%= new Date(m.created_at).toLocaleString() %>
+                            <% if (m.last_edited_at) { %> · edited <%= new Date(m.last_edited_at).toLocaleString() %><% } %>
+                            · <code class="bm-key"><%= m.template_key %></code>
+                        </div>
+                    </div>
+                    <div class="cf-list-actions">
+                        <a class="btn btn-sm btn-secondary" href="https://discord.com/channels/<%= guild.id %>/<%= m.channel_id %>/<%= m.message_id %>" target="_blank" rel="noopener">Open in Discord</a>
+                        <button type="button" class="btn btn-sm btn-primary bm-edit-btn" data-bm-id="<%= m.id %>" data-bm-title="<%= bmPretty(m.template_key) %>">Edit text</button>
+                    </div>
+                </div>
+                <% }); %>
+            </div>
+            <div id="bmNoMatch" hidden>
+                <%- include('../kit/_state', { kind: 'empty', title: 'No message matches that search', text: null, id: null, boxed: false, compact: true }) %>
+            </div>
+            <% } %>
+        </div>
+    </section>
+</div>
+
+<div id="bmEditModal" class="cf-modal" role="dialog" aria-modal="true" aria-labelledby="bmEditTitle" hidden>
+    <div class="cf-modal-dialog">
+        <header class="cf-modal-head">
+            <div>
+                <h3 class="cf-modal-title" id="bmEditTitle">Edit message text</h3>
+                <p class="cf-modal-desc">Changes the message on Discord straight away. Any embed on it stays as it is.</p>
+            </div>
+            <button type="button" class="cf-modal-close" data-bm-close aria-label="Close"><i class="fas fa-times" aria-hidden="true"></i></button>
+        </header>
+        <div class="cf-modal-body">
+            <label class="visually-hidden" for="bmEditContent">Message text</label>
+            <textarea id="bmEditContent" class="form-control" maxlength="2000" rows="8"></textarea>
+            <p class="bm-note" id="bmEditNote" hidden>This message has an embed. Only the text above the embed is edited here.</p>
+        </div>
+        <footer class="cf-modal-foot">
+            <span class="cf-foot-note" id="bmEditStatus" role="status" aria-live="polite"></span>
+            <button type="button" class="btn btn-secondary" data-bm-close>Cancel</button>
+            <button type="button" id="bmEditSave" class="btn btn-primary">Save</button>
+        </footer>
+    </div>
+</div>
+
+<script>
+(function () {
+    const guildId = <%- JSON.stringify(String(guild.id)).replace(/</g, '\\u003c') %>;
+    const modal = document.getElementById('bmEditModal');
+    const ta = document.getElementById('bmEditContent');
+    const saveBtn = document.getElementById('bmEditSave');
+    const status = document.getElementById('bmEditStatus');
+    const note = document.getElementById('bmEditNote');
+    const title = document.getElementById('bmEditTitle');
+    const base = '/manage/' + guildId + '/bot-message/';
+    const why = { 'not found': 'This message is no longer recorded.', 'channel gone': 'The channel has been deleted.',
+        'message gone': 'The message has been deleted on Discord.', 'no bot client': 'The bot cannot see this server right now.' };
+    let currentId = null;
+    let opener = null;
+
+    function close() {
+        modal.hidden = true;
+        currentId = null;
+        if (opener) opener.focus();
+    }
+    document.querySelectorAll('[data-bm-close]').forEach(b => b.addEventListener('click', close));
+    modal.addEventListener('click', e => { if (e.target === modal) close(); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && !modal.hidden) close(); });
+
+    document.querySelectorAll('.bm-edit-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            opener = btn;
+            currentId = btn.dataset.bmId;
+            title.textContent = 'Edit: ' + (btn.dataset.bmTitle || 'message');
+            ta.value = '';
+            ta.disabled = true;
+            saveBtn.disabled = true;
+            note.hidden = true;
+            status.textContent = 'Loading the current text...';
+            modal.hidden = false;
+            try {
+                const res = await fetch(base + encodeURIComponent(currentId) + '/content', { credentials: 'same-origin' });
+                const d = await res.json().catch(() => ({}));
+                if (!res.ok || !d.ok) throw new Error(why[d.error] || d.error || ('Request failed (' + res.status + ')'));
+                ta.value = d.content || '';
+                note.hidden = !d.hasEmbeds;
+                ta.disabled = false;
+                saveBtn.disabled = false;
+                status.textContent = '';
+                ta.focus();
+            } catch (err) {
+                status.textContent = 'Could not load it: ' + err.message;
+            }
+        });
+    });
+
+    saveBtn.addEventListener('click', async () => {
+        if (!currentId) return;
+        saveBtn.disabled = true;
+        status.textContent = 'Saving...';
+        try {
+            const res = await fetch(base + encodeURIComponent(currentId) + '/edit', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'same-origin',
+                body: JSON.stringify({ content: ta.value }),
+            });
+            const d = await res.json().catch(() => ({}));
+            if (!res.ok || !d.ok) throw new Error(why[d.error] || d.error || ('Request failed (' + res.status + ')'));
+            status.textContent = 'Saved.';
+            location.reload();
+        } catch (err) {
+            status.textContent = 'Could not save: ' + err.message;
+            saveBtn.disabled = false;
+        }
+    });
+
+    const search = document.getElementById('bmSearch');
+    if (search) {
+        const items = Array.from(document.querySelectorAll('#bmList [data-bm-search]'));
+        search.addEventListener('input', () => {
+            const q = search.value.trim().toLowerCase();
+            let shown = 0;
+            items.forEach(it => { const hit = !q || it.dataset.bmSearch.includes(q); it.hidden = !hit; if (hit) shown += 1; });
+            document.getElementById('bmNoMatch').hidden = shown > 0;
+        });
+    }
+})();
+</script>

@@ -1,6 +1,7 @@
 import logger from '../logger.js';
-import { WebcastPushConnection } from 'tiktok-live-connector';
+import { TikTokLiveConnection } from 'tiktok-live-connector';
 import axios from 'axios';
+import { resolverGroups, resolverSecret } from '../music-resolver-config.js';
 import puppeteer from 'puppeteer-extra';
 import StealthPlugin from 'puppeteer-extra-plugin-stealth';
 
@@ -10,6 +11,9 @@ puppeteer.use(StealthPlugin());
 // Cache for live status to avoid excessive API calls
 const liveStatusCache = new Map();
 const CACHE_DURATION = 60 * 1000; // 1 minute
+const liveCheckWarnedAt = new Map(); // username -> ms; rate-limits the failed-lookup log per user
+// The connector needs the lowercase handle: "NorseRekkr" finds no room, "norserekkr" does.
+const liveUniqueId = (username) => String(username).trim().replace(/^@/, '').toLowerCase();
 
 // Cache for access tokens (official API)
 let accessTokenCache = {
@@ -76,13 +80,11 @@ async function isStreamerLive(username) {
 
         logger.info(`[TikTok API] Checking if ${username} is live`);
 
-        // Try to get room info
-        const tiktokLiveConnection = new WebcastPushConnection(username);
-
+        // tiktok-live-connector 2.x: fetchIsLive() replaces 1.x's getRoomInfo(), which 2.x removed.
+        // Calling the missing method threw a TypeError that this catch reported as "offline", so
+        // every TikTok live check said offline. The constructor needs an options object in 2.x.
         try {
-            // getRoomInfo will throw if user is not live or doesn't exist
-            const roomInfo = await tiktokLiveConnection.getRoomInfo();
-            const isLive = roomInfo && roomInfo.status === 2; // Status 2 = Live
+            const isLive = await new TikTokLiveConnection(liveUniqueId(username), {}).fetchIsLive();
 
             // Cache the result
             liveStatusCache.set(username, {
@@ -93,11 +95,24 @@ async function isStreamerLive(username) {
             logger.info(`[TikTok API] ${username} live status: ${isLive}`);
             return isLive;
         } catch (error) {
-            // User is not live or doesn't exist
+            // The lookup itself failed (unknown account, TikTok refusing us): treat as offline, as
+            // before, but say so. The stream checker needs several offline answers in a row before
+            // it ends an announcement, so one failed lookup does not end a live stream.
             liveStatusCache.set(username, {
                 isLive: false,
                 timestamp: Date.now()
             });
+            // "Failed to retrieve ... from all sources" is what TikTok gives for an account with no LIVE
+            // room, i.e. one that has never streamed (checked 2026-10-06: all four such accounts exist,
+            // with videos). That is simply offline, so it gets one info line a day; anything else is a
+            // real failure and warns hourly.
+            const noRoom = /from all sources/i.test(error.message || '');
+            const lastWarned = liveCheckWarnedAt.get(username) || 0;
+            if (Date.now() - lastWarned > (noRoom ? 24 : 1) * 60 * 60 * 1000) {
+                liveCheckWarnedAt.set(username, Date.now());
+                if (noRoom) logger.info(`[TikTok API] ${username} has no TikTok LIVE room (never streamed); treating as offline`, { category: 'streams' });
+                else logger.warn(`[TikTok API] Live check failed for ${username}, treating as offline: ${error.message}`, { category: 'streams' });
+            }
             return false;
         }
     } catch (error) {
@@ -116,8 +131,9 @@ async function getStreamDetails(username) {
     try {
         logger.info(`[TikTok API] Fetching stream details for ${username}`);
 
-        const tiktokLiveConnection = new WebcastPushConnection(username);
-        const roomInfo = await tiktokLiveConnection.getRoomInfo();
+        // 2.x: resolve the room id, then fetch the room; the room itself is under .data
+        const connection = new TikTokLiveConnection(liveUniqueId(username), {});
+        const roomInfo = (await connection.fetchRoomInfo(await connection.fetchRoomId()))?.data;
 
         if (!roomInfo || roomInfo.status !== 2) {
             return null;
@@ -368,16 +384,79 @@ async function getUserVideosViaEnsembleData(username, limit = 10) {
 const ytdlpCache = new Map();
 const YTDLP_CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
+// TikTok throttles this server's datacenter IP (2 of 12 profiles loaded here in a test; 12 of 12 from a
+// residential music resolver), so profile listings ask the resolvers' /tiktok endpoint first.
+const TIKTOK_USERNAME_RE = /^[a-z0-9._]{1,32}$/;
+const YTDLP_BIN = () => process.env.YTDLP_PATH || '/home/death/yt-dlp-venv/bin/yt-dlp'; // the auto-updated venv
+
+/** A yt-dlp --flat-playlist TikTok entry (local, or trimmed by a resolver) -> a video. */
+function ytdlpEntryToVideo(item, cleanUsername) {
+    return {
+        video_id: item.id,
+        url: item.url || `https://www.tiktok.com/@${cleanUsername}/video/${item.id}`,
+        title: item.title || '',
+        // yt-dlp cuts `title` to ~70 chars + "..."; the full caption is in
+        // `description`, and caption routing needs the trailing hashtags.
+        description: item.description || item.title || '',
+        thumbnail: item.thumbnail || item.thumbnails?.[0]?.url || '',
+        view_count: item.view_count || 0,
+        like_count: item.like_count || 0,
+        posted_at: item.timestamp ? new Date(item.timestamp * 1000).toISOString() : null,
+        duration: item.duration || 0
+    };
+}
+
 /**
- * Get recent videos using yt-dlp (free, reliable - PRIMARY METHOD)
- * Uses yt-dlp to extract video list from TikTok profile
+ * Recent videos via a residential music resolver's /tiktok endpoint (resolver-3.6+). Each resolver may be
+ * reachable through several tunnels: a tunnel that answers at all settles that resolver; one that cannot
+ * be reached hands over to the next tunnel. [] when no resolver had the videos.
+ */
+async function getUserVideosViaResolver(username, limit = 10) {
+    const cleanUsername = username.replace(/^@/, '').toLowerCase();
+    if (!TIKTOK_USERNAME_RE.test(cleanUsername)) return [];
+    const cached = ytdlpCache.get(cleanUsername);
+    if (cached && (Date.now() - cached.timestamp) < YTDLP_CACHE_DURATION) return cached.videos;
+
+    for (const group of resolverGroups()) {
+        const secret = resolverSecret(group.name);
+        if (!secret) continue;
+        for (const base of group.bases) {
+            let res, body;
+            try {
+                res = await fetch(`${base}/tiktok`, {
+                    method: 'POST',
+                    headers: { 'content-type': 'application/json', authorization: `Bearer ${secret}` },
+                    body: JSON.stringify({ username: cleanUsername, limit, timeoutMs: 45000 }),
+                    signal: AbortSignal.timeout(55000),
+                });
+                body = await res.json().catch(() => null);
+            } catch (error) {
+                logger.debug(`[TikTok API] ${group.name} resolver unreachable via ${base}: ${error.message}`);
+                continue; // this tunnel is down; the next one reaches the same resolver
+            }
+            if (res.ok && body?.ok && Array.isArray(body.entries) && body.entries.length) {
+                const videos = body.entries.map(item => ytdlpEntryToVideo(item, cleanUsername));
+                ytdlpCache.set(cleanUsername, { videos, timestamp: Date.now() });
+                logger.info(`[TikTok API] ${group.name} resolver found ${videos.length} videos for ${cleanUsername}`);
+                return videos;
+            }
+            logger.debug(`[TikTok API] ${group.name} resolver had no videos for ${cleanUsername}: ${res.status} ${body?.reason || ''}`);
+            break; // it answered; try the next resolver
+        }
+    }
+    return [];
+}
+
+/**
+ * Get recent videos using yt-dlp on this server (the fallback when no resolver has them).
  */
 async function getUserVideosViaYtDlp(username, limit = 10) {
-    const { exec } = await import('child_process');
+    const { execFile } = await import('child_process');
     const { promisify } = await import('util');
-    const execAsync = promisify(exec);
+    const execFileAsync = promisify(execFile);
 
     const cleanUsername = username.replace(/^@/, '').toLowerCase();
+    if (!TIKTOK_USERNAME_RE.test(cleanUsername)) return [];
 
     // Check cache first
     const cached = ytdlpCache.get(cleanUsername);
@@ -389,11 +468,12 @@ async function getUserVideosViaYtDlp(username, limit = 10) {
     try {
         logger.info(`[TikTok API] Fetching videos via yt-dlp for ${cleanUsername}`);
 
-        // Use yt-dlp to get video list as JSON
-        const { stdout } = await execAsync(
-            `yt-dlp --flat-playlist --dump-json "https://www.tiktok.com/@${cleanUsername}" 2>/dev/null | head -${limit}`,
-            { timeout: 60000 }
-        );
+        // An argument list, not a shell string: the username never reaches a shell. --playlist-end stops
+        // yt-dlp itself (piping into `head` used to kill it with a broken pipe). A non-zero exit can still
+        // carry the entries it listed, so keep its stdout.
+        const { stdout } = await execFileAsync(YTDLP_BIN(), ['--flat-playlist', '--dump-json', '--ignore-errors', '--no-warnings',
+            '--playlist-end', String(limit), `https://www.tiktok.com/@${cleanUsername}`], { timeout: 60000, maxBuffer: 20 * 1024 * 1024 })
+            .catch(error => ({ stdout: error.stdout || '' }));
 
         if (!stdout.trim()) {
             return [];
@@ -402,18 +482,7 @@ async function getUserVideosViaYtDlp(username, limit = 10) {
         // Parse each line as separate JSON object
         const videos = stdout.trim().split('\n').map(line => {
             try {
-                const item = JSON.parse(line);
-                return {
-                    video_id: item.id,
-                    url: item.url || `https://www.tiktok.com/@${cleanUsername}/video/${item.id}`,
-                    title: item.title || '',
-                    description: item.title || '',
-                    thumbnail: item.thumbnail || item.thumbnails?.[0]?.url || '',
-                    view_count: item.view_count || 0,
-                    like_count: item.like_count || 0,
-                    posted_at: item.timestamp ? new Date(item.timestamp * 1000).toISOString() : null,
-                    duration: item.duration || 0
-                };
+                return ytdlpEntryToVideo(JSON.parse(line), cleanUsername);
             } catch (e) {
                 return null;
             }
@@ -443,7 +512,13 @@ async function getUserVideos(username, limit = 10) {
     try {
         logger.info(`[TikTok API] Fetching recent videos for ${username}`);
 
-        // PRIMARY METHOD: yt-dlp (free, reliable, no Cloudflare issues)
+        // PRIMARY: a residential music resolver (TikTok throttles this server's datacenter IP)
+        const resolverVideos = await getUserVideosViaResolver(username, limit);
+        if (resolverVideos.length > 0) {
+            return resolverVideos;
+        }
+
+        // FALLBACK 0: yt-dlp on this server
         const ytdlpVideos = await getUserVideosViaYtDlp(username, limit);
         if (ytdlpVideos.length > 0) {
             return ytdlpVideos;
@@ -527,7 +602,14 @@ async function getUserVideos(username, limit = 10) {
             return ensembleVideos;
         }
 
-        // FALLBACK 5: Use Puppeteer browser rendering as last resort
+        // FALLBACK 5: Use Puppeteer browser rendering as last resort, but not while this profile is serving
+        // a captcha: a headless browser cannot get past it, so it only cost ~15 s and a browser every check
+        const captchaUntil = puppeteerCaptchaUntil.get(username.toLowerCase()) || 0;
+        if (Date.now() < captchaUntil) {
+            logger.debug(`[TikTok API] Skipping Puppeteer for ${username}: captcha seen, retry after ${new Date(captchaUntil).toISOString()}`);
+            logger.warn(`[TikTok API] No videos found for ${username} via any method`);
+            return [];
+        }
         logger.info(`[TikTok API] Trying Puppeteer fallback for ${username}`);
         const puppeteerVideos = await getUserVideosWithPuppeteer(username, limit);
         if (puppeteerVideos.length > 0) {
@@ -640,6 +722,10 @@ async function queryVideosOfficial(username, startDate, endDate, limit = 10) {
  * Get user videos using Puppeteer (browser rendering)
  * This is a fallback when the API methods don't work
  */
+// username (lower case) -> until when the Puppeteer fallback is skipped after TikTok served it a captcha
+const puppeteerCaptchaUntil = new Map();
+const CAPTCHA_COOLDOWN_MS = 3 * 60 * 60 * 1000;
+
 async function getUserVideosWithPuppeteer(username, limit = 10) {
     let browser = null;
 
@@ -769,8 +855,9 @@ async function getUserVideosWithPuppeteer(username, limit = 10) {
         // Check if we hit a challenge page
         const pageContent = await page.content();
         if (pageContent.includes('captcha') || pageContent.includes('verify')) {
-            logger.warn(`[TikTok API] Detected challenge/captcha page for ${username}`);
-            await page.screenshot({ path: '/tmp/tiktok_captcha.png' });
+            logger.warn(`[TikTok API] Detected challenge/captcha page for ${username}; skipping the browser for this profile for 3 hours`);
+            puppeteerCaptchaUntil.set(username.toLowerCase(), Date.now() + CAPTCHA_COOLDOWN_MS);
+            return []; // the finally below closes the browser
         }
 
         // Wait for initial page load

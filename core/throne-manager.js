@@ -45,6 +45,10 @@ export async function refreshAllCachedData() {
             await cacheProfileAndWishlist(username);
         } catch (error) {
             if (error instanceof ThroneUserNotFoundError) {
+                // Log it. This branch used to write silently, which is why every tracked user
+                // sitting at fetch_status='error' — and /throne answering "Could not find X on
+                // Throne" for all of them — left no trace beyond the cycle's opening line.
+                logger.warn(`${LOG_TAG} "${username}" reported not found — marking profile errored`);
                 await pool.execute(
                     `INSERT INTO throne_cached_profiles (throne_username, fetch_status) VALUES (?, 'error')
                      ON DUPLICATE KEY UPDATE fetch_status = 'error', last_fetched_at = CURRENT_TIMESTAMP`,
@@ -67,18 +71,52 @@ export async function cacheProfileAndWishlist(username, { force = false } = {}) 
     const profile = await fetchThroneProfile(username, { force });
 
     // Cache profile
+    // Persist both the core profile fields (unchanged shape — the dashboard reads these)
+    // and the new Firestore-sourced visibility flags + internal_id (consumed by the
+    // visibility gate in checkUserNotifications below). NULL where the creator has not set
+    // the field; the gate reads NULL as "default visible" per Throne's own behaviour.
+    const bFlag = v => (v == null ? null : (v ? 1 : 0));
     await pool.execute(
         `INSERT INTO throne_cached_profiles
-         (throne_username, display_name, bio, birthday, picture_url, background_url, platform, social_links, interests, profile_url, created_at_throne, fetch_status)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ok')
+         (throne_username, internal_id, display_name, bio, birthday, picture_url, background_url,
+          platform, social_links, interests, profile_url, created_at_throne,
+          updated_at_throne, wishlist_enabled_at, creator_page_customization,
+          allow_gifter_name, allow_gift_messages, allow_suggestion_messages, allow_suggestions,
+          allow_previous_gift_product_links,
+          show_leaderboard, show_leaderboard_amounts, show_previous_gifts, show_recent_gifters,
+          show_wishlist, show_storefront, hide_gifter_messages, hide_own_purchases,
+          is_nsfw, blur_nsfw_products, is_off_waitlist, needs_verification,
+          fetch_status)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'ok')
          ON DUPLICATE KEY UPDATE
+         internal_id = VALUES(internal_id),
          display_name = VALUES(display_name), bio = VALUES(bio), birthday = VALUES(birthday),
          picture_url = VALUES(picture_url), background_url = VALUES(background_url),
          platform = VALUES(platform), social_links = VALUES(social_links), interests = VALUES(interests),
          profile_url = VALUES(profile_url), created_at_throne = VALUES(created_at_throne),
+         updated_at_throne = VALUES(updated_at_throne), wishlist_enabled_at = VALUES(wishlist_enabled_at),
+         creator_page_customization = VALUES(creator_page_customization),
+         allow_gifter_name = VALUES(allow_gifter_name),
+         allow_gift_messages = VALUES(allow_gift_messages),
+         allow_suggestion_messages = VALUES(allow_suggestion_messages),
+         allow_suggestions = VALUES(allow_suggestions),
+         allow_previous_gift_product_links = VALUES(allow_previous_gift_product_links),
+         show_leaderboard = VALUES(show_leaderboard),
+         show_leaderboard_amounts = VALUES(show_leaderboard_amounts),
+         show_previous_gifts = VALUES(show_previous_gifts),
+         show_recent_gifters = VALUES(show_recent_gifters),
+         show_wishlist = VALUES(show_wishlist),
+         show_storefront = VALUES(show_storefront),
+         hide_gifter_messages = VALUES(hide_gifter_messages),
+         hide_own_purchases = VALUES(hide_own_purchases),
+         is_nsfw = VALUES(is_nsfw),
+         blur_nsfw_products = VALUES(blur_nsfw_products),
+         is_off_waitlist = VALUES(is_off_waitlist),
+         needs_verification = VALUES(needs_verification),
          fetch_status = 'ok', last_fetched_at = CURRENT_TIMESTAMP`,
         [
             username,
+            profile.id,
             profile.displayName,
             profile.bio,
             profile.birthday,
@@ -89,38 +127,82 @@ export async function cacheProfileAndWishlist(username, { force = false } = {}) 
             JSON.stringify(profile.interests),
             profile.profileUrl,
             profile.createdAt ? profile.createdAt.getTime() : null,
+            profile.updatedAt ? profile.updatedAt.getTime() : null,
+            profile.wishlistEnabledAt ? profile.wishlistEnabledAt.getTime() : null,
+            profile.creatorPageCustomization ? JSON.stringify(profile.creatorPageCustomization) : null,
+            bFlag(profile.allowGifterName),
+            bFlag(profile.allowGiftMessages),
+            bFlag(profile.allowSuggestionMessages),
+            bFlag(profile.allowSuggestions),
+            bFlag(profile.allowPreviousGiftProductLinks),
+            bFlag(profile.showLeaderboard),
+            bFlag(profile.showLeaderboardAmounts),
+            bFlag(profile.showPreviousGifts),
+            bFlag(profile.showRecentGifters),
+            bFlag(profile.showWishlist),
+            bFlag(profile.showStorefront),
+            bFlag(profile.hideGifterMessages),
+            bFlag(profile.hideOwnPurchases),
+            bFlag(profile.isNSFW),
+            bFlag(profile.blurNSFWProducts),
+            bFlag(profile.isOffWaitlist),
+            bFlag(profile.needsVerification),
         ]
     );
 
-    // Cache wishlist
+    // Cache wishlist.
+    //
+    // The delete + re-insert runs in ONE transaction. It used to run as loose statements, so a
+    // single row the schema rejected (one item name over the old VARCHAR(255)) aborted the loop
+    // after the DELETE had already committed — leaving a partial wishlist that looked authentic
+    // and that the change-notification diff then treated as the baseline. Either the whole list
+    // lands or the previous one stays.
+    let conn;
     try {
         const items = await fetchThroneWishlist(username, { force });
 
-        // Clear old items and insert new
-        await pool.execute('DELETE FROM throne_cached_wishlists WHERE throne_username = ?', [username]);
+        conn = await pool.getConnection();
+        await conn.beginTransaction();
+        await conn.execute('DELETE FROM throne_cached_wishlists WHERE throne_username = ?', [username]);
 
+        // Individual rows are still allowed to fail without taking the list with them — a
+        // surprise from Throne's payload shouldn't cost the user their entire cached wishlist.
+        let skipped = 0;
         for (const item of items) {
-            await pool.execute(
-                `INSERT INTO throne_cached_wishlists
-                 (throne_username, item_id, item_name, price_formatted, price_raw, currency, quantity,
-                  is_digital, is_available, not_in_stock, is_featured, is_crowdfunded, funding_percentage,
-                  image_url, link, collection_ids, total_contribution_formatted, created_at_throne)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [
-                    username, item.id, item.name, item.priceFormatted, item.priceRaw,
-                    item.currency, item.quantity, item.isDigital ? 1 : 0,
-                    item.isAvailable ? 1 : 0, item.notInStock ? 1 : 0, item.isFeatured ? 1 : 0,
-                    item.isCrowdfunded ? 1 : 0, item.fundingPercentage || 0,
-                    item.imageUrl, item.link, JSON.stringify(item.collectionIds),
-                    item.totalContributionFormatted, item.createdAt ? item.createdAt.getTime() : null,
-                ]
-            );
+            try {
+                await conn.execute(
+                    `INSERT INTO throne_cached_wishlists
+                     (throne_username, item_id, item_name, price_formatted, price_raw, currency, quantity,
+                      is_digital, is_available, not_in_stock, is_featured, is_crowdfunded, funding_percentage,
+                      image_url, link, collection_ids, total_contribution_formatted, created_at_throne)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                    [
+                        username, item.id, item.name, item.priceFormatted, item.priceRaw,
+                        item.currency, item.quantity, item.isDigital ? 1 : 0,
+                        item.isAvailable ? 1 : 0, item.notInStock ? 1 : 0, item.isFeatured ? 1 : 0,
+                        item.isCrowdfunded ? 1 : 0, item.fundingPercentage || 0,
+                        item.imageUrl, item.link, JSON.stringify(item.collectionIds),
+                        item.totalContributionFormatted, item.createdAt ? item.createdAt.getTime() : null,
+                    ]
+                );
+            } catch (itemError) {
+                skipped++;
+                logger.warn(`${LOG_TAG} Skipped wishlist item "${item.id}" for "${username}": ${itemError.message}`);
+            }
         }
 
-        logger.info(`${LOG_TAG} Cached ${items.length} wishlist items for "${username}"`);
+        await conn.commit();
+        logger.info(
+            `${LOG_TAG} Cached ${items.length - skipped} wishlist items for "${username}"` +
+            (skipped > 0 ? ` (${skipped} skipped)` : '')
+        );
     } catch (error) {
-        // Profile cached ok, wishlist failed — that's fine
-        logger.warn(`${LOG_TAG} Could not cache wishlist for "${username}": ${error.message}`);
+        // Roll back so a half-written list can't be mistaken for the real one. The profile row
+        // is already committed and stays — only the wishlist reverts to its previous contents.
+        if (conn) await conn.rollback().catch(() => {});
+        logger.warn(`${LOG_TAG} Could not cache wishlist for "${username}", keeping previous: ${error.message}`);
+    } finally {
+        if (conn) conn.release();
     }
 }
 
@@ -248,16 +330,73 @@ export async function checkThroneNotifications() {
 }
 
 async function checkUserNotifications(username) {
-    // Get per-guild tracking configs
-    const [configs] = await pool.execute(
-        'SELECT n.guild_id, n.channel_id, s.* FROM throne_notifications n LEFT JOIN throne_guild_settings s ON n.guild_id = s.guild_id WHERE n.throne_username = ?',
+    // Get per-guild tracking configs.
+    //
+    // Columns are listed out rather than using `s.*`: both tables have guild_id, and `s.*`
+    // overwrote n.guild_id with the settings row's — NULL for any guild that never opened the
+    // dashboard. findChannel(null, ...) then matched no guild, so nothing could post even when
+    // the toggles were right.
+    const [rows] = await pool.execute(
+        `SELECT n.guild_id, n.channel_id,
+                n.notify_new_items, n.notify_gifts, n.notify_contributions,
+                s.guild_id AS settings_guild_id,
+                s.notify_item_added, s.notify_item_removed, s.notify_gift_received,
+                s.notify_contribution, s.notify_price_change, s.notify_milestone,
+                s.notify_gift_thankyou, s.notification_channel_id, s.price_change_threshold
+           FROM throne_notifications n
+           LEFT JOIN throne_guild_settings s ON n.guild_id = s.guild_id
+          WHERE n.throne_username = ?`,
         [username]
     );
-    if (configs.length === 0) return;
+    if (rows.length === 0) return;
+
+    // Two tables describe what to post, and only one of them is reachable from Discord.
+    // `/creator throne track` writes throne_notifications (notify_new_items / _gifts / _contributions);
+    // the finer-grained throne_guild_settings toggles exist only if someone used the dashboard,
+    // and every one of them defaults to 0. Gating purely on the settings row meant a guild that
+    // tracked a creator with `/creator throne track` and never touched the dashboard got silence —
+    // no rows in throne_seen_items, nothing in throne_notification_log, ever.
+    //
+    // So: the settings row wins where it exists, and the subscription's own flags are the
+    // fallback where it doesn't. Toggles with no `/creator throne track` equivalent stay off by default
+    // rather than switching themselves on for guilds that never asked for them.
+    const configs = rows.map(r => {
+        const hasSettings = r.settings_guild_id !== null;
+        return {
+            ...r,
+            notify_item_added:    hasSettings ? !!r.notify_item_added    : !!r.notify_new_items,
+            notify_item_removed:  hasSettings ? !!r.notify_item_removed  : false,
+            notify_gift_received: hasSettings ? !!r.notify_gift_received : !!r.notify_gifts,
+            notify_contribution:  hasSettings ? !!r.notify_contribution  : !!r.notify_contributions,
+            notify_price_change:  hasSettings ? !!r.notify_price_change  : false,
+            notify_milestone:     hasSettings ? !!r.notify_milestone     : false,
+            notify_gift_thankyou: hasSettings ? !!r.notify_gift_thankyou : false,
+        };
+    });
+
+    // Respect the creator's own Throne visibility choices before deciding what to fetch.
+    // show_* columns use SQL tri-state: 1 (visible), 0 (hidden), NULL (never populated / default
+    // visible per Throne's own convention). Any 0 short-circuits the matching fetch — we do not
+    // post, store, or diff data the creator has explicitly asked Throne not to show on their own
+    // page. New in Track A alongside the Firestore-direct refetch.
+    let creatorHidesGifts = false;
+    let creatorHidesWishlist = false;
+    try {
+        const [prow] = await pool.execute(
+            'SELECT show_previous_gifts, show_wishlist FROM throne_cached_profiles WHERE throne_username = ?',
+            [username]);
+        const row = prow[0];
+        if (row) {
+            creatorHidesGifts = row.show_previous_gifts === 0;
+            creatorHidesWishlist = row.show_wishlist === 0;
+        }
+    } catch { /* best effort — a missing column must not block notifications */ }
 
     // Determine what data we need to fetch
-    const needItems = configs.some(c => c.notify_item_added || c.notify_item_removed || c.notify_price_change);
-    const needGifts = configs.some(c => c.notify_gift_received || c.notify_contribution || c.notify_gift_thankyou);
+    const needItems = !creatorHidesWishlist && configs.some(c => c.notify_item_added || c.notify_item_removed || c.notify_price_change);
+    const needGifts = !creatorHidesGifts    && configs.some(c => c.notify_gift_received || c.notify_contribution || c.notify_gift_thankyou);
+    if (creatorHidesWishlist) logger.info(`${LOG_TAG} ${username} hides their wishlist on Throne — skipping item/price notifications`);
+    if (creatorHidesGifts)    logger.info(`${LOG_TAG} ${username} hides previous gifts on Throne — skipping gift/contribution notifications`);
 
     let newItems = [], removedItems = [], priceChanges = [], newGifts = [], contributionUpdates = [];
 
@@ -330,6 +469,22 @@ async function checkForItemChanges(username, configs) {
     const [knownRows] = await pool.execute('SELECT item_id, item_name, still_present FROM throne_seen_items WHERE throne_username = ?', [username]);
     const knownMap = new Map(knownRows.map(r => [r.item_id, r]));
     const currentIds = new Set(items.map(i => i.id));
+
+    // First observation: this creator has never been seen before (no rows in
+    // throne_seen_items) and they already have a wishlist. Seed every current item without
+    // announcing — otherwise a fresh `/creator throne track` would spam one "New Item Added" embed
+    // per pre-existing item. Same convention as checkForNewGiftsAndContributions which
+    // already seed-silents on first fetch ("N gift(s) recorded without announcing").
+    if (knownRows.length === 0 && items.length > 0) {
+        const values = items.map(item => [username, item.id, item.name]);
+        const placeholders = values.map(() => '(?, ?, ?)').join(', ');
+        await pool.execute(
+            `INSERT IGNORE INTO throne_seen_items (throne_username, item_id, item_name) VALUES ${placeholders}`,
+            values.flat()
+        );
+        logger.info(`${LOG_TAG} "${username}": ${items.length} wishlist item(s) recorded without announcing (first observation)`);
+        return { newItems: [], removedItems: [], priceChanges: [] };
+    }
 
     const newItems = [];
     const removedItems = [];
@@ -450,6 +605,27 @@ async function checkForNewItems(username) {
     return newItems;
 }
 
+/**
+ * Two guards decide whether an unseen gift is worth announcing. "Have we seen this id before?"
+ * on its own is not enough: Throne publishes its public gift feed late and unevenly, and any
+ * outage here means a backlog of perfectly old gifts all arrive unseen at once. On 2026-09-11
+ * that replayed seven gifts going back months into a live server the moment the feed was
+ * repaired. The pre-existing first-run guard missed it because it only suppresses when the
+ * table is entirely empty, and that creator already had rows.
+ *
+ * BURST is the guard that actually catches a backfill. Real activity trickles in — one gift,
+ * occasionally two. A poll that suddenly discovers a pile of them is catching up, not watching
+ * something happen, so the pile is recorded silently and only genuine movement is announced
+ * from then on.
+ *
+ * AGE is the backstop for a single ancient straggler that slips in under the burst limit. It
+ * is deliberately generous: Throne's feed ran more than 18 hours behind a known contribution,
+ * so a tight window would silently swallow real gifts. Better to allow a slightly late
+ * announcement than to announce nothing at all.
+ */
+const GIFT_NOTIFY_MAX_AGE_MS = 14 * 24 * 60 * 60 * 1000;   // 14 days
+const GIFT_NOTIFY_MAX_BURST  = 3;                          // more than this = a backfill
+
 async function checkForNewGiftsAndContributions(username) {
     const gifts = await fetchThroneGiftHistory(username);
     if (gifts.length === 0) return { newGifts: [], contributionUpdates: [] };
@@ -460,19 +636,43 @@ async function checkForNewGiftsAndContributions(username) {
     const newGifts = [];
     const contributionUpdates = [];
 
+    let stale = 0;
+    const unseen = [];
     for (const gift of gifts) {
         const known = knownMap.get(gift.id);
-        if (!known) newGifts.push(gift);
-        else if (gift.isCrowdfunded && gift.contributorCount > known.contributor_count) {
+        if (!known) {
+            // Unseen is not the same as recent. A gift carrying no date at all counts as old:
+            // staying quiet is recoverable, a false "just gifted!" in a live server is not.
+            const age = gift.purchasedAt ? Date.now() - gift.purchasedAt.getTime() : Infinity;
+            if (age > GIFT_NOTIFY_MAX_AGE_MS) { stale++; continue; }
+            unseen.push(gift);
+        } else if (gift.isCrowdfunded && gift.contributorCount > known.contributor_count) {
+            // A contribution carries no date of its own — only the item's original purchase
+            // date, which is old by definition on a crowdfund. The count rising since our last
+            // poll IS the recency signal, so this is deliberately not age-gated.
             contributionUpdates.push({ ...gift, previousContributorCount: known.contributor_count });
         }
     }
+    if (unseen.length > GIFT_NOTIFY_MAX_BURST) {
+        logger.warn(`${LOG_TAG} "${username}": ${unseen.length} unseen gifts in one poll — treating as a backfill, recording silently`);
+        stale += unseen.length;
+    } else {
+        newGifts.push(...unseen);
+    }
+    if (stale > 0) {
+        logger.info(`${LOG_TAG} "${username}": ${stale} gift(s) recorded without announcing (too old, or part of a backfill)`);
+    }
 
     for (const gift of gifts) {
+        // Amazon product names can exceed 500 chars. Column is widened to varchar(600) via
+        // migration 346; still clamp here defensively so a surprise long title can't crash the
+        // whole poll (prior incident: one 419-char gift aborted the entire INSERT loop for a
+        // creator, silently stalling notifications for days).
+        const safeName = String(gift.name || 'Unknown item').slice(0, 600);
         await pool.execute(
             `INSERT INTO throne_seen_gifts (throne_username, gift_id, gift_name, status, is_crowdfunded, contributor_count)
              VALUES (?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE status = VALUES(status), contributor_count = VALUES(contributor_count)`,
-            [username, gift.id, gift.name, gift.status, gift.isCrowdfunded ? 1 : 0, gift.contributorCount]
+            [username, gift.id, safeName, gift.status, gift.isCrowdfunded ? 1 : 0, gift.contributorCount]
         );
     }
 
@@ -562,22 +762,29 @@ async function postRemovedItemNotifications(channel, username, items) {
 }
 
 // ─── Gift Received ───────────────────────────────────────────────
-async function postGiftNotifications(channel, username, gifts) {
+export async function postGiftNotifications(channel, username, gifts) {
     const { displayName, avatarUrl, url } = await getProfileInfo(username);
 
     for (const gift of gifts) {
-        const gifterNames = gift.gifters.map(g => `**${g.username}**`).join(', ') || '**Anonymous**';
+        // Name each gifter with what they put in, where Throne publishes it. It only does so
+        // for crowdfunding contributions — an outright purchase carries no figure at all.
+        const gifterNames = gift.gifters.length
+            ? gift.gifters.map(g => g.amountFormatted
+                ? `**${g.username}** (${g.amountFormatted})`
+                : `**${g.username}**`).join(', ')
+            : '**Anonymous**';
 
         const embed = new EmbedBuilder()
             .setColor(0x2ECC71)
             .setAuthor({ name: displayName, iconURL: avatarUrl, url })
             .setTitle('🎁 Gift Received!')
             .setDescription(`${gifterNames} gifted **${gift.name}**`)
-            .addFields(
-                { name: 'Value', value: gift.totalFormatted, inline: true },
-                { name: 'Status', value: gift.status, inline: true },
-            )
             .setTimestamp(gift.purchasedAt || new Date());
+
+        // Omit the field entirely when the amount isn't public — an embed field cannot take
+        // a null value, and "$0.00" would be a lie.
+        if (gift.totalFormatted) embed.addFields({ name: 'Value', value: gift.totalFormatted, inline: true });
+        embed.addFields({ name: 'Status', value: gift.status, inline: true });
 
         if (gift.isCrowdfunded) {
             embed.addFields({ name: 'Crowdfunded', value: `${gift.contributorCount} contributor${gift.contributorCount !== 1 ? 's' : ''}`, inline: true });
@@ -589,7 +796,7 @@ async function postGiftNotifications(channel, username, gifts) {
 }
 
 // ─── Contribution ────────────────────────────────────────────────
-async function postContributionNotifications(channel, username, updates) {
+export async function postContributionNotifications(channel, username, updates) {
     const { displayName, avatarUrl, url } = await getProfileInfo(username);
 
     for (const u of updates) {
@@ -601,10 +808,23 @@ async function postContributionNotifications(channel, username, updates) {
             .setURL(`https://throne.com/${username.toLowerCase()}/item/${u.id || ''}`)
             .addFields(
                 { name: 'Contributors', value: `${u.previousContributorCount} → ${u.contributorCount}`, inline: true },
-                { name: 'Value', value: u.totalFormatted, inline: true },
-                { name: 'Status', value: u.status, inline: true },
             )
             .setTimestamp();
+
+        // Throne publishes no figure for outright purchases, so this can legitimately be null.
+        if (u.totalFormatted) embed.addFields({ name: 'Raised', value: u.totalFormatted, inline: true });
+        embed.addFields({ name: 'Status', value: u.status, inline: true });
+
+        // Name who actually chipped in, with their amounts where Throne gives them.
+        const who = (u.gifters || []).filter(g => g.username !== 'Anonymous');
+        if (who.length) {
+            embed.addFields({
+                name: 'From',
+                value: who.map(g => g.amountFormatted ? `**${g.username}** (${g.amountFormatted})` : `**${g.username}**`)
+                    .join(', ').slice(0, 1024),
+                inline: false,
+            });
+        }
 
         if (u.imageUrl) embed.setThumbnail(u.imageUrl);
 

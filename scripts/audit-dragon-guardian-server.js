@@ -2,11 +2,11 @@ import dotenv from 'dotenv';
 dotenv.config();
 import { Client, GatewayIntentBits, PermissionsBitField } from 'discord.js';
 import mysql from 'mysql2/promise';
-// Lazy-load encryption after dotenv has set the env vars
-const { default: encryption } = await import('../utils/encryption.js');
+// Lazy-load the resolver after dotenv has set the env vars
+const { resolveBotForGuild } = await import('../utils/bot-resolver.js');
 
 const GUILD_ID = '880656752297783347';
-const BOT_ID = '1486198184047808542';
+// The acting bot comes from guild_bot_mapping — never pinned here.
 
 async function main() {
     const pool = mysql.createPool({
@@ -15,9 +15,8 @@ async function main() {
     });
 
     // Get bot token
-    const [bots] = await pool.execute('SELECT * FROM custom_bots WHERE bot_id = ?', [BOT_ID]);
-    if (!bots.length) { console.log('Bot not found'); process.exit(1); }
-    const token = encryption.decrypt(JSON.parse(bots[0].bot_token));
+    const bot = await resolveBotForGuild(GUILD_ID, { db: pool });
+    const token = bot.token;
 
     const client = new Client({
         intents: [

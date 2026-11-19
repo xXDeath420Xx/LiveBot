@@ -1,5 +1,6 @@
 import { EmbedBuilder } from 'discord.js';
 import axios from 'axios';
+import { themeColor } from '../../core/guild-theme.js';
 
 function getUnitConversions(type) {
     const conversions = {
@@ -22,10 +23,12 @@ function getUnitConversions(type) {
             lb: { symbol: 'pounds', toBase: 0.453592 },
             stone: { symbol: 'stones', toBase: 6.35029 }
         },
+        // Temperature scales are offset, not just scaled, so they convert through
+        // kelvin with functions instead of a single multiplier.
         temperature: {
-            c: { symbol: '\u00b0C', toBase: 1, special: true },
-            f: { symbol: '\u00b0F', toBase: 1, special: true },
-            k: { symbol: 'K', toBase: 1, special: true }
+            c: { symbol: '\u00b0C', toBase: c => c + 273.15, fromBase: k => k - 273.15 },
+            f: { symbol: '\u00b0F', toBase: f => (f - 32) * 5 / 9 + 273.15, fromBase: k => (k - 273.15) * 9 / 5 + 32 },
+            k: { symbol: 'K', toBase: k => k, fromBase: k => k }
         },
         volume: {
             ml: { symbol: 'milliliters', toBase: 0.001 },
@@ -83,6 +86,29 @@ function getUnitConversions(type) {
     return conversions[type] || {};
 }
 
+const TEMPERATURE_FORMULAS = {
+    'f>c': '\u00b0C = (\u00b0F \u2212 32) \u00d7 5/9',
+    'c>f': '\u00b0F = \u00b0C \u00d7 9/5 + 32',
+    'c>k': 'K = \u00b0C + 273.15',
+    'k>c': '\u00b0C = K \u2212 273.15',
+    'f>k': 'K = (\u00b0F \u2212 32) \u00d7 5/9 + 273.15',
+    'k>f': '\u00b0F = (K \u2212 273.15) \u00d7 9/5 + 32'
+};
+
+const TEMPERATURE_ALIASES = {
+    celsius: 'c', centigrade: 'c', fahrenheit: 'f', kelvin: 'k'
+};
+
+// Accept "\u00b0F", "F", "fahrenheit" etc. for temperature; other types keep exact keys.
+function normalizeUnit(type, unit) {
+    let u = unit.trim().toLowerCase();
+    if (type === 'temperature') {
+        u = u.replace(/[\u00b0\u00ba\s]/g, '').replace(/^deg(rees?)?/, '');
+        u = TEMPERATURE_ALIASES[u] || u;
+    }
+    return u;
+}
+
 function formatNumber(num) {
     if (Math.abs(num) < 0.01 && num !== 0) return num.toExponential(4);
     if (Math.abs(num) > 1000000) return num.toExponential(4);
@@ -133,8 +159,8 @@ function getCommonTimezones() {
 export async function handleUnitConversion(interaction) {
     const type = interaction.options.getString('type');
     const value = interaction.options.getNumber('value');
-    const from = interaction.options.getString('from').toLowerCase();
-    const to = interaction.options.getString('to').toLowerCase();
+    const from = normalizeUnit(type, interaction.options.getString('from'));
+    const to = normalizeUnit(type, interaction.options.getString('to'));
 
     const conversions = getUnitConversions(type);
 
@@ -146,16 +172,21 @@ export async function handleUnitConversion(interaction) {
         });
     }
 
-    const baseValue = value * conversions[from].toBase;
-    const result = baseValue / conversions[to].toBase;
+    const convert = v => typeof conversions[from].toBase === 'function'
+        ? conversions[to].fromBase(conversions[from].toBase(v))
+        : v * conversions[from].toBase / conversions[to].toBase;
+    const result = convert(value);
+    const formula = type === 'temperature'
+        ? TEMPERATURE_FORMULAS[`${from}>${to}`] || `${conversions[from].symbol} = ${conversions[to].symbol}`
+        : `1 ${conversions[from].symbol} = ${formatNumber(convert(1))} ${conversions[to].symbol}`;
 
     const embed = new EmbedBuilder()
-        .setColor('#3498DB')
+        .setColor(themeColor(interaction.guildId, 'primary'))
         .setTitle(`\ud83d\udd04 ${capitalizeFirst(type)} Conversion`)
         .addFields(
             { name: '\ud83d\udce5 Input', value: `${value} ${conversions[from].symbol}`, inline: true },
             { name: '\ud83d\udce4 Output', value: `${formatNumber(result)} ${conversions[to].symbol}`, inline: true },
-            { name: '\ud83d\udcca Formula', value: `1 ${conversions[from].symbol} = ${formatNumber(conversions[from].toBase / conversions[to].toBase)} ${conversions[to].symbol}`, inline: false }
+            { name: '\ud83d\udcca Formula', value: formula, inline: false }
         )
         .setFooter({ text: 'Conversion calculations are approximate' })
         .setTimestamp();
@@ -184,7 +215,7 @@ export async function handleCurrencyConversion(interaction) {
         const result = amount * rate;
 
         const embed = new EmbedBuilder()
-            .setColor('#2ECC71')
+            .setColor(themeColor(interaction.guildId, 'success'))
             .setTitle('\ud83d\udcb1 Currency Conversion')
             .addFields(
                 { name: '\ud83d\udcb5 From', value: `${formatCurrency(amount)} ${from}`, inline: true },
@@ -277,7 +308,7 @@ export async function handleTimezoneConversion(interaction) {
                     dayOffset < 0 ? ` (${dayOffset} day${dayOffset < -1 ? 's' : ''})` : '';
 
     const embed = new EmbedBuilder()
-        .setColor('#9B59B6')
+        .setColor(themeColor(interaction.guildId, 'accent'))
         .setTitle('\ud83c\udf0d Timezone Conversion')
         .addFields(
             { name: `\u23f0 ${fromTz}`, value: `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`, inline: true },
@@ -309,7 +340,7 @@ export async function handleBaseConversion(interaction) {
         const baseNames = { 2: 'Binary', 8: 'Octal', 10: 'Decimal', 16: 'Hexadecimal' };
 
         const embed = new EmbedBuilder()
-            .setColor('#E74C3C')
+            .setColor(themeColor(interaction.guildId, 'danger'))
             .setTitle('\ud83d\udd22 Number Base Conversion')
             .addFields(
                 { name: `\ud83d\udce5 ${baseNames[fromBase]} (Base ${fromBase})`, value: `\`${number}\``, inline: true },

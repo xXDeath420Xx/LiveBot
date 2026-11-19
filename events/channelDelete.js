@@ -1,6 +1,10 @@
 import { Events, EmbedBuilder, ChannelType, AuditLogEvent } from 'discord.js';
 import logger from '../utils/logger.js';
-import { sendLogEmbed } from '../core/log-manager.js';
+import { sendLogEmbed, saveAuditLog } from '../core/log-manager.js';
+import { themeColor } from '../core/guild-theme.js';
+import { shouldIgnoreGuild } from '../utils/custom-bot-check.js';
+import { waitForEntry } from '../utils/audit-log-correlator.js';
+import { onChannelDelete as autoRoleCategoryChannelDelete } from '../core/auto-role-categories.js';
 
 export default {
   name: Events.ChannelDelete,
@@ -9,15 +13,28 @@ export default {
       const guild = channel.guild;
       if (!guild) return;
 
-      // Check anti-nuke
-      const auditLogs = await guild.fetchAuditLogs({
-        type: AuditLogEvent.ChannelDelete,
-        limit: 1
-      }).catch(() => null);
+      // Inverse of the auto-role-category create flow: if the parent category is
+      // registered and no sibling channel still derives the same role name, drop
+      // the role (which cascades through guildRoleDelete to clean the panel).
+      autoRoleCategoryChannelDelete(channel).catch(() => {});
 
-      if (auditLogs && auditLogs.entries.size > 0) {
-        const entry = auditLogs.entries.first();
-        if (entry.target.id === channel.id && channel.client.antiNukeManager) {
+      // Correlator first; direct audit log fetch is now a fallback.
+      let entry = await waitForEntry(guild.id, AuditLogEvent.ChannelDelete, channel.id, 1000);
+      if (!entry) {
+        const auditLogs = await guild.fetchAuditLogs({
+          type: AuditLogEvent.ChannelDelete,
+          limit: 1
+        }).catch(() => null);
+        if (auditLogs && auditLogs.entries.size > 0) {
+          const first = auditLogs.entries.first();
+          if (first.target?.id === channel.id) entry = first;
+        }
+      }
+
+      let executorId = null;
+      if (entry) {
+        executorId = entry.executor?.id || null;
+        if (channel.client.antiNukeManager) {
           await channel.client.antiNukeManager.trackChannelDelete(guild, channel, entry.executor);
         }
       }
@@ -38,7 +55,7 @@ export default {
 
       // Create embed
       const embed = new EmbedBuilder()
-        .setColor(0xED4245) // Red
+        .setColor(themeColor(guild?.id, 'danger')) // Red
         .setTitle('🗑️ Channel Deleted')
         .setDescription(`A ${channelTypeName.toLowerCase()} has been deleted`)
         .addFields(
@@ -56,6 +73,25 @@ export default {
 
       // Send log
       await sendLogEmbed(guild, 'channelDelete', embed);
+
+      // Persist to audit_logs like every other logged event (same row shape as
+      // log-manager's logChannelDelete, which is not called here because it would post a
+      // second embed). Where a custom bot serves the guild, only that bot writes the row.
+      if (!(channel.client.isDefaultBot && await shouldIgnoreGuild(guild.id))) {
+        await saveAuditLog(
+          guild.id,
+          'CHANNEL_DELETE',
+          null,
+          channel.id,
+          executorId,
+          channel.id,
+          'Channel deleted',
+          null,
+          channel.name,
+          null,
+          { type: channel.type, typeName: channelTypeName, parentId: channel.parentId || null }
+        );
+      }
 
       logger.info('[ChannelDelete] Channel deleted', {
         guildId: guild.id,

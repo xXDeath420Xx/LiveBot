@@ -2,6 +2,15 @@ import { Events, EmbedBuilder } from 'discord.js';
 import logger from '../utils/logger.js';
 import { sendLogEmbed, saveAuditLog } from '../core/log-manager.js';
 import { shouldIgnoreGuild } from '../utils/custom-bot-check.js';
+import { themeColor } from '../core/guild-theme.js';
+import { handleAutoModExecution } from '../core/message-threats.js';
+import { handleBlockedMessage } from '../core/word-filter.js';
+
+/*
+ * Discord AutoMod executions: logged here (server log + audit table), then handed to AutoMod escalation
+ * (core/message-threats.js handleAutoModExecution), which scores hits of the rules a server enforces and
+ * bans or flags the confirmed "fake support" pattern. Escalation is off until a server turns it on.
+ */
 
 export default {
     name: Events.AutoModerationActionExecution,
@@ -36,7 +45,7 @@ export default {
             });
 
             const embed = new EmbedBuilder()
-                .setColor(0xED4245)
+                .setColor(themeColor(guild?.id, 'danger'))
                 .setTitle('🛡️ AutoMod Action')
                 .setDescription(`AutoMod took action against a message`)
                 .addFields(
@@ -85,6 +94,12 @@ export default {
                 error: error.message,
                 stack: error.stack
             });
+        }
+
+        // Escalation runs even when the log above failed; it never throws.
+        if (action.guild && !(action.client.isDefaultBot && await shouldIgnoreGuild(action.guild.id).catch(() => false))) {
+            await handleAutoModExecution(action);
+            await handleBlockedMessage(action);
         }
     }
 };

@@ -20,7 +20,7 @@ test('passes through static destinations unchanged', async () => {
   const out = await resolveDestinations(ctx([
     { id: 1, name: 'My Twitch', platform: 'twitch', resolution: 'static', rtmp_url: 'rtmp://t/app', dest_stream_key: 'k1', account_id: null, config_json: null },
   ]), 'cf_key');
-  assert.deepStrictEqual(out, [{ name: 'My Twitch', platform: 'twitch', rtmp_url: 'rtmp://t/app', dest_stream_key: 'k1' }]);
+  assert.deepStrictEqual(out, [{ id: 1, name: 'My Twitch', platform: 'twitch', rtmp_url: 'rtmp://t/app', dest_stream_key: 'k1' }]);
 });
 
 test('runs adapter.resolveAtGoLive for dynamic destinations', async () => {
@@ -28,7 +28,7 @@ test('runs adapter.resolveAtGoLive for dynamic destinations', async () => {
   const out = await resolveDestinations(ctx([
     { id: 2, name: 'YT', platform: 'youtube', resolution: 'dynamic', rtmp_url: null, dest_stream_key: null, account_id: 5, config_json: null },
   ], { 5: { id: 5, platform: 'youtube' } }, adapters), 'cf_key');
-  assert.deepStrictEqual(out, [{ name: 'YT', platform: 'youtube', rtmp_url: 'rtmp://yt/live2', dest_stream_key: 'yt-fresh' }]);
+  assert.deepStrictEqual(out, [{ id: 2, name: 'YT', platform: 'youtube', rtmp_url: 'rtmp://yt/live2', dest_stream_key: 'yt-fresh' }]);
 });
 
 test('skips a dynamic destination whose adapter throws (isolation)', async () => {
@@ -42,4 +42,16 @@ test('skips a dynamic destination whose adapter throws (isolation)', async () =>
   ], { 5: { id: 5, platform: 'youtube' } }, adapters), 'cf_key');
   assert.strictEqual(out.length, 1);
   assert.strictEqual(out[0].name, 'Tw');
+});
+
+test('reports destinations it could not resolve in ctx.failed (the relay records them per session)', async () => {
+  const adapters = { youtube: { resolveAtGoLive: async () => { throw new Error('token revoked'); } } };
+  const c = ctx([
+    { id: 2, name: 'YT', platform: 'youtube', resolution: 'dynamic', account_id: 5, config_json: null },
+  ], { 5: { id: 5, platform: 'youtube' } }, adapters);
+  c.failed = [];
+  c.logger = { error() {} };
+  const out = await resolveDestinations(c, 'cf_key');
+  assert.deepStrictEqual(out, []);
+  assert.deepStrictEqual(c.failed, [{ id: 2, name: 'YT', platform: 'youtube', error: 'Could not start: token revoked' }]);
 });

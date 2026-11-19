@@ -2,8 +2,23 @@ import express from 'express';
 import pool from '../../../../utils/db.js';
 import logger from '../../../../utils/logger.js';
 import { EmbedBuilder } from 'discord.js';
+import { TODO_LIMITS } from '../../../../core/todo-limits.js';
 
 const router = express.Router({ mergeParams: true });
+
+// Shared with /todo (commands/admin/todo.js): core/todo-limits.js.
+const { title: MAX_TITLE, task: MAX_TASK, items: MAX_ITEMS } = TODO_LIMITS;
+
+// Every /:listId route acts only on a list that belongs to this server.
+router.param('listId', async (req, res, next, listId) => {
+    try {
+        const [rows] = await pool.execute('SELECT id FROM todo_lists WHERE id = ? AND guild_id = ?', [listId, req.params.guildId]);
+        if (!rows.length) return res.status(404).json({ error: 'List not found' });
+        next();
+    } catch (err) {
+        next(err);
+    }
+});
 
 /**
  * Build and update the Discord embed for a todo list
@@ -85,8 +100,15 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
     try {
         const { guildId } = req.params;
-        const { title, channel_id } = req.body;
+        const { channel_id } = req.body;
+        const title = String(req.body.title || '').trim();
         if (!channel_id) return res.status(400).json({ error: 'Channel required' });
+        if (title.length > MAX_TITLE) return res.status(400).json({ error: `The title must be ${MAX_TITLE} characters or fewer.` });
+        const guild = global.botManager?.getClientForGuild?.(guildId)?.guilds.cache.get(guildId);
+        const channel = guild?.channels.cache.get(String(channel_id));
+        if (guild && (!channel || !channel.isTextBased?.() || channel.type === 4)) {
+            return res.status(400).json({ error: 'Choose a text channel in this server.' });
+        }
 
         const [existing] = await pool.execute(
             'SELECT id FROM todo_lists WHERE guild_id = ? AND channel_id = ?', [guildId, channel_id]
@@ -135,8 +157,11 @@ router.delete('/:listId', async (req, res) => {
 router.post('/:listId/items', async (req, res) => {
     try {
         const { guildId, listId } = req.params;
-        const { task } = req.body;
+        const task = String(req.body.task || '').trim();
         if (!task) return res.status(400).json({ error: 'Task required' });
+        if (task.length > MAX_TASK) return res.status(400).json({ error: `A task must be ${MAX_TASK} characters or fewer.` });
+        const [[{ n }]] = await pool.execute('SELECT COUNT(*) AS n FROM todo_items WHERE list_id = ?', [listId]);
+        if (n >= MAX_ITEMS) return res.status(400).json({ error: `A list holds up to ${MAX_ITEMS} tasks. Remove some first.` });
 
         const [maxPos] = await pool.execute(
             'SELECT COALESCE(MAX(position), 0) + 1 AS next FROM todo_items WHERE list_id = ?', [listId]

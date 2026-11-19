@@ -10,6 +10,7 @@ import {
 import { buildTreeMessage } from '../../core/growtree/display.js';
 import { getNextLevelRequiredXp, getTreeHeight } from '../../core/growtree/formulas.js';
 import { getBook, getCoins, compost, compostBonus, BUGS } from '../../core/growtree/critters.js';
+import { displayNameFor } from '../../utils/display-name.js';
 
 const EPHEMERAL = { flags: MessageFlags.Ephemeral };
 const GREEN = 0x3E8E41;
@@ -84,7 +85,7 @@ export default {
 
     if (sub === 'show') {
       const tree = await getTree(guildId);
-      if (!tree) return interaction.reply({ content: 'No tree here yet. An admin can plant one with `/tree plant`.', ...EPHEMERAL });
+      if (!tree) return interaction.reply({ content: 'No tree here yet. An admin can plant one with `/arcade tree plant`.', ...EPHEMERAL });
       await interaction.deferReply();
       const payload = await buildTreeMessage(tree, interaction.guild);
       return interaction.editReply(payload);
@@ -123,7 +124,7 @@ export default {
       return interaction.reply({
         embeds: [new EmbedBuilder()
           .setColor(have === book.length ? 0xF0B23B : GREEN)
-          .setTitle(`📔 ${who.username}'s sticker book`)
+          .setTitle(`📔 ${displayNameFor(who, interaction.guild)}'s sticker book`)
           .setDescription(lines.join('\n'))
           .setFooter({ text: have === book.length
             ? 'Complete. Every bug in the garden.'
@@ -135,7 +136,7 @@ export default {
       const coins = await getCoins(interaction.user.id);
       return interaction.reply({
         content: coins
-          ? `🪙 You have **${coins.toLocaleString()}** coins. Spend them with \`/tree compost\`.`
+          ? `🪙 You have **${coins.toLocaleString()}** coins. Spend them with \`/arcade tree compost\`.`
           : '🪙 You have no coins yet. Catch bugs and fruit when they appear on the tree.',
         ...EPHEMERAL,
       });
@@ -163,7 +164,7 @@ export default {
           .setColor(0x6B4F2A)
           .setTitle('🪱 Onto the heap')
           .setDescription(
-            `**${interaction.user.username}** composted **${res.coins.toLocaleString()}** coins.\n`
+            `**${displayNameFor(interaction.user, interaction.guild)}** composted **${res.coins.toLocaleString()}** coins.\n`
             + `The heap is now **${res.total.toLocaleString()}**, growing the tree **+${bonus}** extra per water — `
             + 'for everyone.')
           .setFooter({ text: 'The composter is shared. Everyone\'s tree grows faster.' })],
@@ -213,7 +214,7 @@ export default {
       ]);
       const needed = getNextLevelRequiredXp(player.level);
       const embed = new EmbedBuilder().setColor(GREEN)
-        .setTitle(`🌱 ${target.username}`)
+        .setTitle(`🌱 ${displayNameFor(target, interaction.guild)}`)
         .addFields(
           { name: 'Level', value: String(player.level), inline: true },
           { name: 'XP', value: `${player.xp} / ${needed}`, inline: true },

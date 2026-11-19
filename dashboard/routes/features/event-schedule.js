@@ -85,9 +85,24 @@ router.get('/event-schedule', async (req, res) => {
 router.post('/event-schedule/config', async (req, res) => {
   try {
     const { guildId } = req.params;
-    const { is_enabled, mode, channel_id, title, custom_message } = req.body;
+    const { is_enabled, mode, title } = req.body;
 
     const safeMode = mode === 'per_user' ? 'per_user' : 'combined';
+    // The channel must be a text channel of this server; text is capped (title 100, message 2000).
+    const esGuild = global.botManager?.getClientForGuild?.(guildId)?.guilds.cache.get(guildId);
+    const rawChannel = req.body.channel_id ? String(req.body.channel_id) : '';
+    if (rawChannel && (!/^\d{17,20}$/.test(rawChannel) || (esGuild && !esGuild.channels.cache.get(rawChannel)?.isTextBased?.()))) {
+      return res.status(400).json({ error: 'That channel is not a text channel in this server.' });
+    }
+    const channel_id = rawChannel || null;
+    // Older clients did not send the message; keep the saved one rather than wiping it.
+    let custom_message;
+    if (Object.prototype.hasOwnProperty.call(req.body, 'custom_message')) {
+      custom_message = typeof req.body.custom_message === 'string' && req.body.custom_message.trim() ? req.body.custom_message.trim().slice(0, 2000) : null;
+    } else {
+      const [[prev]] = await pool.execute('SELECT custom_message FROM event_schedule_config WHERE guild_id = ?', [guildId]);
+      custom_message = prev?.custom_message ?? null;
+    }
 
     await pool.execute(
       `INSERT INTO event_schedule_config
@@ -104,7 +119,7 @@ router.post('/event-schedule/config', async (req, res) => {
         is_enabled ? 1 : 0,
         safeMode,
         channel_id || null,
-        title || 'Event Calendar',
+        (typeof title === 'string' && title.trim() ? title.trim().slice(0, 100) : 'Event Calendar'),
         custom_message || null
       ]
     );

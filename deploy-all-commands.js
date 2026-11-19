@@ -6,6 +6,9 @@ import { dirname, join } from 'path';
 import fs from 'fs';
 import pool from './utils/db.js';
 import encryption from './utils/encryption.js';
+// Same builder as the automatic deploy: mounts (core/command-mounts.js) and only slash-registered
+// commands (core/command-registration.js). Raw module JSON went over Discord's 100 cap.
+import { buildDeployJson } from './core/command-mounts.js';
 
 dotenv.config();
 
@@ -13,6 +16,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 const commands = [];
+const modules = [];
+const skippedScoped = [];
 
 /**
  * Load all command files and build command array
@@ -38,18 +43,31 @@ async function loadCommands() {
                 const filePath = join(folderPath, file);
                 const command = await import(`file://${filePath}`);
 
-                if (command.data) {
-                    commands.push(command.data.toJSON());
-                } else if (command.default && command.default.data) {
-                    commands.push(command.default.data.toJSON());
+                // guildScoped commands are intentionally held back from both the main-bot global
+                // payload and the per-guild deploys below. They're registered to opted-in guilds
+                // only via scripts/deploy-guild-scoped-commands.js, which reads the opt-in list
+                // from the guild_scoped_commands table. Without this filter, the bulk PUT below
+                // would push them to every guild and trip Discord's 100-chat-input-per-guild cap.
+                const marker = command.default?.guildScoped || command.guildScoped;
+                if (marker) {
+                    skippedScoped.push(command.default?.data?.name || command.data?.name || file);
+                    continue;
                 }
+
+                const mod = command.default?.data ? command.default : (command.data ? command : null);
+                if (mod) modules.push(mod);
             } catch (error) {
                 logger.error(`[Deploy] Failed to load ${folder}/${file}`, { error: error.message });
             }
         }
     }
 
-    console.log(`Loaded ${commands.length} commands`);
+    commands.push(...buildDeployJson(modules));
+    console.log(`Loaded ${modules.length} command modules, ${commands.length} to register`);
+    if (skippedScoped.length) {
+        console.log(`Held back ${skippedScoped.length} guild-scoped command(s) from the bulk payload: ${skippedScoped.join(', ')}`);
+        console.log(`  (deploy those with: node scripts/deploy-guild-scoped-commands.js)`);
+    }
 }
 
 /**

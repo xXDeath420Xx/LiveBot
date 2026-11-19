@@ -1,0 +1,107 @@
+<%#
+  Overview: the last 7 days (ProBot-style). Data from dashboard/services/manage-sections.js
+  LOADERS.overview (activity_stats + message_stats). Locals: guild, activity
+  ({ days: [{ date, messages, joined, left }] oldest first, activeMembers, previous }).
+  Charts are inline SVG drawn here; each day is one hover target with a tooltip, and a hidden
+  table carries the same numbers for screen readers. Colours come from cf-manage.css (.cf-ov-*).
+%>
+<% if (typeof activity !== 'undefined' && activity && Array.isArray(activity.days) && activity.days.length) {
+    const D = activity.days;
+    const n = (v) => Number(v) || 0;
+    const sum = (k) => D.reduce((t, d) => t + n(d[k]), 0);
+    const fmt = (v) => n(v).toLocaleString('en-US');
+    const msgs = sum('messages'), joined = sum('joined'), left = sum('left'), net = joined - left;
+    const today = D[D.length - 1];
+    const prev = activity.previous || {};
+    const pct = n(prev.messages) > 0 ? Math.round(((msgs - n(prev.messages)) / n(prev.messages)) * 100) : null;
+    const asDate = (iso) => new Date(String(iso) + 'T12:00:00Z');
+    const dayShort = (iso) => asDate(iso).toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' });
+    const dayLong = (iso) => asDate(iso).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+    const W = 280, H = 96, slot = W / D.length, barW = Math.min(20, slot * 0.5);
+    const x = (i) => (i * slot + (slot - barW) / 2).toFixed(2);
+    const mMax = Math.max(1, ...D.map((d) => n(d.messages)));
+    const jMax = Math.max(1, ...D.map((d) => Math.max(n(d.joined), n(d.left))));
+    const h = (v, max, room) => (v > 0 ? Math.max(1.5, (v / max) * room) : 0);
+    const mid = H / 2;
+    const quiet = msgs === 0 && joined === 0 && left === 0;
+%>
+<section class="cf-section cf-ov-act" aria-labelledby="ovActTitle">
+    <header class="cf-section-head">
+        <div>
+            <h2 class="cf-section-title" id="ovActTitle">Last 7 days</h2>
+            <p class="cf-section-desc">Messages the bot counted and members who joined or left, by day.</p>
+        </div>
+        <div class="cf-section-actions">
+            <a class="btn btn-sm btn-secondary" href="/manage/<%= guild.id %>?page=analytics">Full analytics</a>
+        </div>
+    </header>
+
+    <dl class="cf-kpis" aria-label="Activity in the last 7 days">
+        <div class="cf-kpi"><dt>Messages</dt><dd class="cf-kpi-value"><%= fmt(msgs) %><span class="cf-kpi-sub">Today: <%= fmt(today.messages) %><% if (pct !== null && pct !== 0) { %> · <%= Math.abs(pct) %>% <%= pct > 0 ? 'more' : 'fewer' %> than the week before<% } %></span></dd></div>
+        <div class="cf-kpi"><dt>Members who chatted</dt><dd class="cf-kpi-value"><%= fmt(activity.activeMembers) %><span class="cf-kpi-sub">At least one message</span></dd></div>
+        <div class="cf-kpi"><dt>Joined</dt><dd class="cf-kpi-value"><%= fmt(joined) %><span class="cf-kpi-sub">Week before: <%= fmt(prev.joined) %></span></dd></div>
+        <div class="cf-kpi"><dt>Left</dt><dd class="cf-kpi-value"><%= fmt(left) %><span class="cf-kpi-sub">Week before: <%= fmt(prev.left) %></span></dd></div>
+        <div class="cf-kpi"><dt>Net change</dt><dd class="cf-kpi-value"><%= net > 0 ? '+' : '' %><%= fmt(net) %><span class="cf-kpi-sub"><%= net > 0 ? 'More joined than left' : net < 0 ? 'More left than joined' : 'No change' %></span></dd></div>
+    </dl>
+
+    <% if (quiet) { %>
+    <div class="cf-rows">
+        <%- include('../kit/_state', { title: 'Nothing recorded in the last 7 days', text: 'Messages are counted in channels the bot can read; joins and leaves are counted while it is in the server.' }) %>
+    </div>
+    <% } else { %>
+    <div class="cf-ov-charts">
+        <figure class="cf-ov-chart">
+            <figcaption class="cf-ov-chart-head">
+                <span class="cf-ov-chart-title">Messages per day</span>
+                <span class="cf-ov-chart-note">Busiest: <%= fmt(mMax) %></span>
+            </figcaption>
+            <div class="cf-ov-plot">
+                <svg viewBox="0 0 <%= W %> <%= H %>" preserveAspectRatio="none" role="img" aria-label="Messages per day for the last 7 days, <%= fmt(msgs) %> in total">
+                    <line class="cf-ov-axis" x1="0" x2="<%= W %>" y1="<%= H - 0.5 %>" y2="<%= H - 0.5 %>" />
+                    <% D.forEach(function (d, i) { const bh = h(n(d.messages), mMax, H - 6); %>
+                    <g class="cf-ov-day">
+                        <title><%= dayLong(d.date) %>: <%= fmt(d.messages) %> messages</title>
+                        <rect class="cf-ov-hit" x="<%= (i * slot).toFixed(2) %>" y="0" width="<%= slot.toFixed(2) %>" height="<%= H %>" />
+                        <% if (bh) { %><rect class="cf-ov-bar" x="<%= x(i) %>" y="<%= (H - 1 - bh).toFixed(2) %>" width="<%= barW.toFixed(2) %>" height="<%= bh.toFixed(2) %>" /><% } %>
+                    </g>
+                    <% }); %>
+                </svg>
+            </div>
+            <div class="cf-ov-days" aria-hidden="true"><% D.forEach(function (d, i) { %><span<% if (i === D.length - 1) { %> class="is-today"<% } %>><%= i === D.length - 1 ? 'Today' : dayShort(d.date) %></span><% }); %></div>
+        </figure>
+
+        <figure class="cf-ov-chart">
+            <figcaption class="cf-ov-chart-head">
+                <span class="cf-ov-chart-title">Joins and leaves</span>
+                <span class="cf-ov-legend">
+                    <span class="cf-ov-key is-joined">Joined <%= fmt(joined) %></span>
+                    <span class="cf-ov-key is-left">Left <%= fmt(left) %></span>
+                </span>
+            </figcaption>
+            <div class="cf-ov-plot">
+                <svg viewBox="0 0 <%= W %> <%= H %>" preserveAspectRatio="none" role="img" aria-label="Members joined and left per day for the last 7 days: <%= fmt(joined) %> joined, <%= fmt(left) %> left">
+                    <line class="cf-ov-axis" x1="0" x2="<%= W %>" y1="<%= mid %>" y2="<%= mid %>" />
+                    <% D.forEach(function (d, i) { const jh = h(n(d.joined), jMax, mid - 4), lh = h(n(d.left), jMax, mid - 4); %>
+                    <g class="cf-ov-day">
+                        <title><%= dayLong(d.date) %>: <%= fmt(d.joined) %> joined, <%= fmt(d.left) %> left</title>
+                        <rect class="cf-ov-hit" x="<%= (i * slot).toFixed(2) %>" y="0" width="<%= slot.toFixed(2) %>" height="<%= H %>" />
+                        <% if (jh) { %><rect class="cf-ov-bar is-joined" x="<%= x(i) %>" y="<%= (mid - 1 - jh).toFixed(2) %>" width="<%= barW.toFixed(2) %>" height="<%= jh.toFixed(2) %>" /><% } %>
+                        <% if (lh) { %><rect class="cf-ov-bar is-left" x="<%= x(i) %>" y="<%= (mid + 1).toFixed(2) %>" width="<%= barW.toFixed(2) %>" height="<%= lh.toFixed(2) %>" /><% } %>
+                    </g>
+                    <% }); %>
+                </svg>
+            </div>
+            <div class="cf-ov-days" aria-hidden="true"><% D.forEach(function (d, i) { %><span<% if (i === D.length - 1) { %> class="is-today"<% } %>><%= i === D.length - 1 ? 'Today' : dayShort(d.date) %></span><% }); %></div>
+        </figure>
+    </div>
+
+    <table class="visually-hidden">
+        <caption>Activity in the last 7 days</caption>
+        <thead><tr><th scope="col">Day</th><th scope="col">Messages</th><th scope="col">Joined</th><th scope="col">Left</th></tr></thead>
+        <tbody>
+            <% D.forEach(function (d) { %><tr><th scope="row"><%= dayLong(d.date) %></th><td><%= fmt(d.messages) %></td><td><%= fmt(d.joined) %></td><td><%= fmt(d.left) %></td></tr><% }); %>
+        </tbody>
+    </table>
+    <% } %>
+</section>
+<% } %>

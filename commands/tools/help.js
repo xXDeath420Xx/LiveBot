@@ -1,4 +1,33 @@
 import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder } from 'discord.js';
+import { themeColor } from '../../core/guild-theme.js';
+import { MOUNTS, slashPath } from '../../core/command-mounts.js';
+import { describePath } from '../../core/universal-commands.js';
+import { commandType, relPaths } from '../../core/command-registration.js';
+
+// What a member can type: no dropped aliases (core/command-mounts.js), moved commands under their parent's path.
+const listed = client => [...client.commands.values()].filter(cmd => cmd.data?.name && !MOUNTS[cmd.data.name]?.drop);
+
+/**
+ * How a command is run (slash/text split, core/command-registration.js): its slash path, or for a text
+ * command the words members type as a message ("/owo"), with a short type note.
+ */
+function labelFor(cmd) {
+    const name = cmd.data.name;
+    let type = 'slash';
+    try { type = commandType(name, cmd); } catch { /* treat as slash */ }
+    if (type !== 'text') return { type, label: `/${slashPath(name)}` };
+    let json = null;
+    try { json = cmd.data.toJSON(); } catch { /* fall through */ }
+    const forms = (json ? relPaths(json) : ['']).map(rel => describePath(rel ? `${name} ${rel}` : name).text).filter(Boolean);
+    const firsts = [...new Set(forms.map(f => f.split(' ')[0]))];
+    return { type, label: forms.length === 1 ? forms[0] : (firsts.length === 1 ? firsts[0] : `/${name}`) };
+}
+const typeNote = t => (t === 'text' ? ' (text)' : t === 'mixed' ? ' (slash + text)' : '');
+/** One subcommand as members run it: "/music play" or "/joke (text)". */
+function runFormFor(path) {
+    const d = describePath(path);
+    return d.slash ? `\`${d.slash}\`` : d.text ? `\`${d.text}\` (text)` : `\`!${path}\``;
+}
 
 // Category emojis and descriptions
 const CATEGORIES = {
@@ -43,15 +72,18 @@ export default {
 
     async autocomplete(interaction) {
         const focusedValue = interaction.options.getFocused().toLowerCase();
-        const commands = [...interaction.client.commands.values()];
+        const commands = listed(interaction.client);
 
         const filtered = commands
             .filter(cmd => cmd.data?.name?.toLowerCase().includes(focusedValue))
             .slice(0, 25)
-            .map(cmd => ({
-                name: `/${cmd.data.name} - ${cmd.data.description?.substring(0, 50) || 'No description'}`,
-                value: cmd.data.name
-            }));
+            .map(cmd => {
+                const { type, label } = labelFor(cmd);
+                return {
+                    name: `${label}${typeNote(type)} - ${cmd.data.description?.substring(0, 50) || 'No description'}`.slice(0, 100),
+                    value: cmd.data.name
+                };
+            });
 
         await interaction.respond(filtered);
     },
@@ -77,7 +109,7 @@ export default {
  * Show the main help menu with all categories
  */
 async function showMainHelp(interaction) {
-    const commands = [...interaction.client.commands.values()];
+    const commands = listed(interaction.client);
 
     // Group commands by category
     const categoryCounts = {};
@@ -87,12 +119,14 @@ async function showMainHelp(interaction) {
     }
 
     const embed = new EmbedBuilder()
-        .setColor(0x5865F2)
+        .setColor(themeColor(interaction.guildId, 'primary'))
         .setTitle('📚 Bot Help')
         .setDescription(
             `Welcome to **${interaction.client.user.username}**!\n\n` +
             `Use \`/help command:<name>\` for detailed command info\n` +
             `Use \`/help category:<name>\` to browse by category\n\n` +
+            `**Slash** commands are in Discord's / menu. **Text** commands are typed as a normal message, ` +
+            `for example \`/owo hunt\` or \`/joke\` (\`!\` and the server's other prefixes work too).\n\n` +
             `**Available Categories:**`
         )
         .setThumbnail(interaction.client.user.displayAvatarURL({ dynamic: true }))
@@ -122,6 +156,8 @@ async function showMainHelp(interaction) {
             '• `/grow journal` - Grow journals',
         inline: false
     });
+    // AGPL-3.0 section 13: users who interact with the bot over a network are offered its source.
+    embed.addFields({ name: '📜 Source code', value: 'CertiFried is free software (AGPL-3.0-or-later): [github.com/xXDeath420Xx/LiveBot](https://github.com/xXDeath420Xx/LiveBot)', inline: false });
 
     // Create category select menu
     const selectMenu = new StringSelectMenuBuilder()
@@ -147,7 +183,7 @@ async function showMainHelp(interaction) {
  * Show commands in a specific category
  */
 async function showCategoryHelp(interaction, categoryName) {
-    const commands = [...interaction.client.commands.values()];
+    const commands = listed(interaction.client);
     const catInfo = CATEGORIES[categoryName] || { emoji: '📁', description: 'Commands' };
 
     // Filter commands by category
@@ -157,7 +193,7 @@ async function showCategoryHelp(interaction, categoryName) {
     });
 
     const embed = new EmbedBuilder()
-        .setColor(0x5865F2)
+        .setColor(themeColor(interaction.guildId, 'primary'))
         .setTitle(`${catInfo.emoji} ${categoryName.charAt(0).toUpperCase() + categoryName.slice(1)} Commands`)
         .setDescription(catInfo.description)
         .setFooter({ text: `${categoryCommands.length} commands in this category` })
@@ -174,8 +210,9 @@ async function showCategoryHelp(interaction, categoryName) {
         const commandList = categoryCommands
             .sort((a, b) => a.data.name.localeCompare(b.data.name))
             .slice(0, 20)
-            .map(cmd => `\`/${cmd.data.name}\` - ${cmd.data.description?.substring(0, 60) || 'No description'}`)
-            .join('\n');
+            .map(cmd => { const { type, label } = labelFor(cmd); return `\`${label}\`${typeNote(type)} - ${cmd.data.description?.substring(0, 60) || 'No description'}`; })
+            .join('\n')
+            .slice(0, 1024);
 
         embed.addFields({
             name: 'Commands',
@@ -201,7 +238,7 @@ async function showCategoryHelp(interaction, categoryName) {
 async function showCommandHelp(interaction, commandName) {
     const command = interaction.client.commands.get(commandName);
 
-    if (!command) {
+    if (!command || MOUNTS[commandName]?.drop) {
         return await interaction.reply({
             content: `❌ Command \`/${commandName}\` not found. Use \`/help\` to see all available commands.`,
             ephemeral: true
@@ -210,11 +247,16 @@ async function showCommandHelp(interaction, commandName) {
 
     const cmdData = command.data;
     const catInfo = CATEGORIES[command.category] || { emoji: '📁', description: 'Command' };
+    const { type, label } = labelFor(command);
+    const howTo = type === 'text'
+        ? 'Text command: type it as a normal message (it is not in the / menu).'
+        : type === 'mixed' ? 'Some parts are slash commands, the rest are typed as messages; each one below shows which.'
+            : 'Slash command: pick it from the / menu.';
 
     const embed = new EmbedBuilder()
-        .setColor(0x5865F2)
-        .setTitle(`${catInfo.emoji} /${cmdData.name}`)
-        .setDescription(cmdData.description || 'No description available')
+        .setColor(themeColor(interaction.guildId, 'primary'))
+        .setTitle(`${catInfo.emoji} ${label}${typeNote(type)}`)
+        .setDescription(`${cmdData.description || 'No description available'}\n${howTo}`)
         .setFooter({ text: `Category: ${command.category || 'tools'}` })
         .setTimestamp();
 
@@ -222,8 +264,9 @@ async function showCommandHelp(interaction, commandName) {
     const subcommands = cmdData.options?.filter(opt => opt.type === 1) || [];
     if (subcommands.length > 0) {
         const subList = subcommands
-            .map(sub => `\`${sub.name}\` - ${sub.description || 'No description'}`)
-            .join('\n');
+            .map(sub => `${runFormFor(`${cmdData.name} ${sub.name}`)} - ${sub.description || 'No description'}`)
+            .join('\n')
+            .slice(0, 1024);
         embed.addFields({
             name: '📋 Subcommands',
             value: subList,
@@ -235,10 +278,15 @@ async function showCommandHelp(interaction, commandName) {
     const subGroups = cmdData.options?.filter(opt => opt.type === 2) || [];
     if (subGroups.length > 0) {
         for (const group of subGroups) {
+            // The run form once per group ("/rpg character", or "/random" for a renamed text group), so a
+            // command with ~100 subcommands stays inside Discord's 6,000-character embed limit.
+            const first = group.options?.[0];
+            const f = first ? describePath(`${cmdData.name} ${group.name} ${first.name}`) : null;
+            const prefix = f?.slash ? f.slash.split(' ').slice(0, -1).join(' ') : f?.text ? `${f.text.split(' ').slice(0, -1).join(' ')} (text)` : '';
             const groupSubs = group.options?.map(sub => `\`${sub.name}\` - ${sub.description || ''}`) || [];
             embed.addFields({
-                name: `📁 ${group.name}`,
-                value: groupSubs.join('\n') || 'No subcommands',
+                name: `📁 ${group.name}${prefix ? ` · ${prefix}` : ''}`.slice(0, 256),
+                value: (groupSubs.join('\n') || 'No subcommands').slice(0, 1024),
                 inline: false
             });
         }
@@ -263,7 +311,7 @@ async function showCommandHelp(interaction, commandName) {
     }
 
     // Add usage example
-    let usage = `/${cmdData.name}`;
+    let usage = label;
     if (subcommands.length > 0) {
         usage += ` <subcommand>`;
     }
@@ -272,6 +320,13 @@ async function showCommandHelp(interaction, commandName) {
         value: `\`${usage}\``,
         inline: false
     });
+
+    // Discord rejects an embed over 6,000 characters: drop the last groups rather than fail.
+    const size = () => JSON.stringify(embed.toJSON()).length;
+    const fields = embed.data.fields || [];
+    let cut = 0;
+    while (fields.length > 2 && size() > 5800) { fields.splice(fields.length - 2, 1); cut++; }
+    if (cut) embed.setFooter({ text: `Category: ${command.category || 'tools'} · ${cut} more group(s) not shown; the dashboard's Commands page lists them all` });
 
     await interaction.reply({ embeds: [embed] });
 }

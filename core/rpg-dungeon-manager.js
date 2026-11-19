@@ -7,6 +7,36 @@ import { pool } from '../utils/db.js';
 import logger from '../utils/logger.js';
 import { RPGDiceEngine } from './rpg-dice-engine.js';
 import { resolveEncounter } from './rpg-auto-combat.js';
+import RPGLeaderboardManager from './rpg-leaderboard-manager.js';
+
+/**
+ * Record stats for a resolved dungeon encounter (player is side 'a' in every
+ * duel log). Fire-and-forget; never throws.
+ */
+function trackEncounterStats(characterId, enemies, outcome) {
+    try {
+        let damage = 0;
+        let crits = 0;
+        let bosses = 0;
+        let dragons = 0;
+        (outcome.log || []).forEach((entry, i) => {
+            for (const r of entry.rounds || []) {
+                if (r.attackerKey !== 'a') continue;
+                damage += Number(r.damage) || 0;
+                if (r.crit) crits++;
+            }
+            if (entry.defeated && enemies[i] && enemies[i].isBoss) bosses++;
+            if (entry.defeated && enemies[i] && RPGLeaderboardManager.isDragon(enemies[i].name)) dragons++;
+        });
+        RPGLeaderboardManager.trackStat(characterId, 'total_monsters_killed', outcome.enemiesDefeated || 0);
+        RPGLeaderboardManager.trackStat(characterId, 'bosses_killed', bosses);
+        RPGLeaderboardManager.trackStat(characterId, 'total_damage_dealt', damage);
+        RPGLeaderboardManager.trackStat(characterId, 'crits_rolled', crits);
+        RPGLeaderboardManager.trackStat(characterId, 'dragons_slain', dragons);
+    } catch (err) {
+        logger.error('[Dungeon] Stat tracking failed', { characterId, error: err.message });
+    }
+}
 
 // Room types and their properties
 const ROOM_TYPES = {
@@ -292,6 +322,23 @@ class RPGDungeonManager {
 
         logger.info('[Dungeon] Completed run', { runId, totalXP, totalGold });
 
+        // dungeons_completed for the solo runner, or every member of the party
+        try {
+            let runners = [];
+            if (run.character_id) {
+                runners = [run.character_id];
+            } else if (run.party_id) {
+                const [members] = await pool.execute(
+                    'SELECT character_id FROM dnd_characters WHERE party_id = ?',
+                    [run.party_id]
+                );
+                runners = members.map(m => m.character_id);
+            }
+            for (const cid of runners) RPGLeaderboardManager.trackStat(cid, 'dungeons_completed', 1);
+        } catch (err) {
+            logger.error('[Dungeon] Completion stat tracking failed', { runId, error: err.message });
+        }
+
         return {
             completed: true,
             dungeon_name: run.dungeon_name,
@@ -540,6 +587,9 @@ class RPGDungeonManager {
 
         const outcome = resolveEncounter(player, enemies, {});
 
+        // Kills / bosses / damage / crits count whether or not the room was won
+        trackEncounterStats(character.character_id, enemies, outcome);
+
         if (outcome.victory) {
             // Roll room loot (gold + items) on top of the enemy xp/gold.
             const loot = this.generateLoot(room, difficulty);
@@ -578,6 +628,8 @@ class RPGDungeonManager {
             'UPDATE dnd_characters SET health = 0, deaths = COALESCE(deaths, 0) + 1 WHERE character_id = ?',
             [character.character_id]
         );
+        // deaths was bumped inline above; just re-evaluate achievements
+        RPGLeaderboardManager.trackAchievements(character.character_id);
         await this.failRun(runId);
 
         return {

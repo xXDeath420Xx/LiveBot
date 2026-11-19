@@ -1,6 +1,29 @@
 <!DOCTYPE html>
-<html lang="en">
+<html data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>" lang="en">
 <head>
+    <script>
+    // Anti-flash: the theme is on <html> before first paint.
+    // Signed in, the server rendered the theme saved in Settings: that value is the
+    // authority (Dark included) and is copied to storage. Signed out, the choice
+    // made with the footer's theme switch is read from storage; with none, Dark.
+    (function () {
+        try {
+            var d = document.documentElement, saved = <%= locals.userPrefs ? 'true' : 'false' %>;
+            var t = localStorage.getItem('ui-theme');
+            var n = localStorage.getItem('ui-density');
+            if (saved) {
+                localStorage.setItem('ui-theme', d.getAttribute('data-theme') || 'dark');
+                localStorage.setItem('ui-density', d.getAttribute('data-density') || 'comfortable');
+            } else {
+                if (t && /^[a-z]{3,12}$/.test(t)) d.setAttribute('data-theme', t);
+                if (n && /^[a-z]{3,12}$/.test(n)) d.setAttribute('data-density', n);
+            }
+        } catch (e) { /* private mode / storage disabled — server value stands */ }
+    })();
+    </script>
+    <!-- Auto theme (core/user-preferences.js AUTO_THEME_SCRIPT): follow the OS light/dark setting. Dark Reader: the site has its own themes. -->
+    <script>(function(){var d=document.documentElement,m=window.matchMedia?matchMedia('(prefers-color-scheme: light)'):null;function a(){if(d.getAttribute('data-theme')==='auto'||d.getAttribute('data-theme-mode')==='auto'){d.setAttribute('data-theme-mode','auto');d.setAttribute('data-theme',m&&m.matches?'light':'dark');}}a();if(m&&m.addEventListener)m.addEventListener('change',a);})();</script>
+    <meta name="darkreader-lock">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><%= card.card_name || (card.username + "'s Card") %> | CertiFried</title>
@@ -11,16 +34,28 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Pacifico&family=Dancing+Script:wght@400;700&family=Lobster&family=Caveat:wght@400;700&family=Permanent+Marker&family=Satisfy&family=Great+Vibes&family=Sacramento&family=Architects+Daughter&family=Indie+Flower&family=Patrick+Hand&family=Shadows+Into+Light&family=Amatic+SC:wght@400;700&family=Quicksand:wght@400;600;700&family=Roboto:wght@400;500;700&family=Muli:wght@400;600;700&family=Source+Code+Pro:wght@400;600&family=Annie+Use+Your+Telescope&family=Kalam:wght@400;700&family=Reenie+Beanie&family=Bad+Script&family=Swanky+and+Moo+Moo&family=Fredericka+the+Great&display=swap" rel="stylesheet">
     <style>
-        :root { --bg: #0b0f11; --card-bg: #141a1e; --border: rgba(255,255,255,0.08); --accent: #a78bfa; --text: #ffffff; --muted: rgba(255,255,255,0.5); --pink: #FF69B4; --gold: #FFD700; }
+        /* color-scheme tells the browser to draw native widgets — select popups, scrollbars,
+           file pickers — dark. Without it they render light and inherit white text. */
+        :root { --bg: #0b0f11; --card-bg: #141a1e; --border: rgba(255,255,255,0.08); --accent: #a78bfa; --text: #ffffff; --muted: rgba(255,255,255,0.5); --pink: #FF69B4; --gold: #FFD700; color-scheme: dark; }
+        /* Page chrome around the card. Dark keeps the original black page; Light and Sand follow the theme.
+           A card header or board with no colour of its own (.bc-themed, the unset default) follows the page too;
+           a colour or image the creator picked is their design and is never changed. */
+        :root { --bc-page: #000000; --bc-ink: #ffffff; --bc-well: rgba(0,0,0,0.3); --bc-bar: rgba(0,0,0,0.5); --bc-discord: #5865F2; }
+        :root:is([data-theme="light"], [data-theme="sand"]) { --bc-page: var(--cf-bg); --bc-ink: var(--cf-text); --bc-well: var(--cf-surface-2); --bc-bar: var(--cf-surface); --bc-discord: color-mix(in srgb, #5865F2 72%, var(--cf-text)); --bg: var(--cf-bg); --gold: var(--cf-warning-ink); color-scheme: light; }
+        .bc-header { --bc-head-ink: #ffffff; }
+        .bc-header { --bc-head-sub: color-mix(in srgb, var(--bc-head-ink) 60%, transparent); }
+        .bc-header.bc-themed { --bc-head-ink: var(--bc-ink); }
+        :root:is([data-theme="light"], [data-theme="sand"]) .bc-header.bc-themed { --bc-head-sub: var(--cf-text-2); }
+        option, optgroup { background: var(--bg-secondary, #0f1316); color: var(--cf-text); }
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Inter', sans-serif; background: rgb(0,0,0); color: var(--text); min-height: 100vh; }
+        body { font-family: 'Inter', sans-serif; background: var(--bc-page); color: var(--text); min-height: 100vh; }
         .container { max-width: 100%; margin: 0; padding: 0; }
 
         /* Card Header — dynamic theming from card data */
-        .card-header { text-align: center; padding: 30px 20px; border: none; border-radius: 0; margin-bottom: 0; position: relative; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06); }
-        .card-header::before { display: none; }
-        .avatar { width: 80px; height: 80px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.2); margin: 0 auto 12px; display: block; object-fit: cover; }
-        .avatar-placeholder { width: 80px; height: 80px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.2); margin: 0 auto 12px; background: var(--card-bg); display: flex; align-items: center; justify-content: center; font-size: 2rem; }
+        .bc-header { text-align: center; padding: 30px 20px; border: none; border-radius: 0; margin-bottom: 0; position: relative; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06); }
+        .bc-header::before { display: none; }
+        .avatar { width: 80px; height: 80px; border-radius: 50%; border: 3px solid color-mix(in srgb, var(--bc-head-ink) 20%, transparent); margin: 0 auto 12px; display: block; object-fit: cover; }
+        .avatar-placeholder { width: 80px; height: 80px; border-radius: 50%; border: 3px solid color-mix(in srgb, var(--bc-head-ink) 20%, transparent); margin: 0 auto 12px; background: var(--card-bg); display: flex; align-items: center; justify-content: center; font-size: 2rem; }
         .card-title { font-size: 36px; font-weight: 700; margin-bottom: 4px; }
         .card-title span { background: none; -webkit-background-clip: unset; -webkit-text-fill-color: unset; }
         .card-subtitle { font-size: 16px; margin-bottom: 8px; }
@@ -38,9 +73,9 @@
         .note-effect span:nth-child(4) { left: 70%; animation-duration: 4.5s; animation-delay: 1.5s; }
         .note-effect span:nth-child(5) { left: 90%; animation-duration: 3s; animation-delay: 2s; }
         @keyframes note-float { 0% { bottom: -20px; opacity: 0; } 20% { opacity: 0.8; } 80% { opacity: 0.6; } 100% { bottom: 110%; opacity: 0; transform: translateX(-15px) rotate(20deg); } }
-        .badge { display: inline-flex; align-items: center; gap: 6px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 20px; padding: 6px 14px; font-size: 0.8rem; font-weight: 600; color: rgba(255,255,255,0.8); margin-top: 12px; }
+        .badge { display: inline-flex; align-items: center; gap: 6px; background: color-mix(in srgb, var(--bc-head-ink) 10%, transparent); border: 1px solid color-mix(in srgb, var(--bc-head-ink) 20%, transparent); border-radius: 20px; padding: 6px 14px; font-size: 0.8rem; font-weight: 600; color: color-mix(in srgb, var(--bc-head-ink) 80%, transparent); margin-top: 12px; }
         .read-only-banner { background: rgba(255,215,0,0.1); border: 1px solid rgba(255,215,0,0.3); border-radius: 12px; padding: 12px 16px; text-align: center; color: var(--gold); font-size: 0.85rem; margin: 8px auto; max-width: 700px; }
-        .frozen-banner { background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.3); border-radius: 12px; padding: 12px 16px; text-align: center; color: #60a5fa; font-size: 0.85rem; margin: 8px auto; max-width: 700px; }
+        .frozen-banner { background: rgba(59,130,246,0.1); border: 1px solid rgba(59,130,246,0.3); border-radius: 12px; padding: 12px 16px; text-align: center; color: var(--cf-info-ink); font-size: 0.85rem; margin: 8px auto; max-width: 700px; }
 
         /* Floating balloons animation (RecoCards-style) */
         .balloons { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; overflow: hidden; z-index: 0; }
@@ -60,12 +95,12 @@
         .stats-bar { display: none; }
 
         /* Toolbar — slim bar between header and board */
-        .card-toolbar { display: flex; justify-content: center; align-items: center; gap: 8px; padding: 10px 16px; background: rgb(0,0,0); border-bottom: 1px solid rgba(255,255,255,0.08); flex-wrap: wrap; }
+        .card-toolbar { display: flex; justify-content: center; align-items: center; gap: 8px; padding: 10px 16px; background: var(--bc-page); border-bottom: 1px solid color-mix(in srgb, var(--bc-ink) 8%, transparent); flex-wrap: wrap; }
         .card-toolbar .btn { font-size: 0.75rem; padding: 6px 14px; border-radius: 4px; }
 
         /* Embed code box */
         .embed-box { background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin: 8px auto 16px; display: none; max-width: 700px; }
-        .embed-box pre { background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px; font-size: 0.75rem; color: var(--accent); overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
+        .embed-box pre { background: var(--bc-well); padding: 10px; border-radius: 8px; font-size: 0.75rem; color: var(--accent); overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
 
         /* Audio player in signatures */
         .sig-audio { width: 100%; margin-top: 8px; height: 32px; opacity: 0.85; border-radius: 16px; }
@@ -125,14 +160,14 @@
         }
         .signatures.list-mode .sig:hover { border-color: rgba(167,139,250,0.3); transform: translateY(-2px) !important; box-shadow: none; }
         .signatures.list-mode .sig-name { color: var(--text); }
-        .signatures.list-mode .sig-message { color: rgba(255,255,255,0.85); }
+        .signatures.list-mode .sig-message { color: color-mix(in srgb, var(--cf-text) 85%, transparent); }
         .signatures.list-mode .sig-time { color: var(--muted); }
         .signatures.list-mode .sig-actions { border-top-color: var(--border); }
         .signatures.list-mode .sig-action-btn { color: var(--muted); }
         .signatures.list-mode .sig-replies { border-top-color: var(--border); }
-        .signatures.list-mode .sig-reply { color: rgba(255,255,255,0.7); }
+        .signatures.list-mode .sig-reply { color: color-mix(in srgb, var(--cf-text) 70%, transparent); }
         .signatures.list-mode .sig-reply strong { color: var(--text); }
-        .signatures.list-mode .reply-input { background: rgba(255,255,255,0.05); border-color: var(--border); color: var(--text); }
+        .signatures.list-mode .reply-input { background: color-mix(in srgb, var(--cf-text) 5%, transparent); border-color: var(--border); color: var(--text); }
         .signatures.list-mode .reply-send { background: var(--accent); }
         .sig-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
         .sig-avatar { width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0; object-fit: cover; }
@@ -142,6 +177,11 @@
         .sig-time { font-size: 0.65rem; color: #999; }
         .sig-message { color: rgb(31, 41, 55); font-size: 14px; line-height: 26px; word-wrap: break-word; white-space: pre-wrap; font-family: 'Muli', 'Helvetica Neue', sans-serif; }
         .sig-gif { width: 100%; border-radius: 20px; margin-top: 8px; display: block; max-width: 100%; }
+        .sig-video { position: relative; margin-top: 8px; border-radius: 20px; overflow: hidden; cursor: pointer; background: #000; aspect-ratio: 16 / 9; /* theme: fixed (video letterbox) */ }
+        .sig-video img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .sig-video iframe { width: 100%; height: 100%; border: 0; display: block; }
+        .sig-video-play { position: absolute; inset: 0; margin: auto; width: 54px; height: 54px; border-radius: 50%; background: rgba(0,0,0,0.65); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; pointer-events: none; transition: background 0.15s, transform 0.15s; }
+        .sig-video:hover .sig-video-play { background: #ff0000; transform: scale(1.08); }
         .empty-state { text-align: center; padding: 40px; color: var(--muted); }
 
         /* Like + Reply — RecoCards style */
@@ -168,7 +208,7 @@
         .media-tab:hover { color: var(--text); }
         .media-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
         .emoji-btn:hover { border-color: var(--accent); transform: scale(1.15); }
-        .giphy-item { cursor: pointer; border-radius: 8px; overflow: hidden; transition: transform 0.15s, box-shadow 0.15s; background: rgba(255,255,255,0.03); border: 1px solid var(--border); break-inside: avoid; margin-bottom: 8px; }
+        .giphy-item { cursor: pointer; border-radius: 8px; overflow: hidden; transition: transform 0.15s, box-shadow 0.15s; background: color-mix(in srgb, var(--cf-text) 3%, transparent); border: 1px solid var(--border); break-inside: avoid; margin-bottom: 8px; }
         .giphy-item:hover { transform: scale(1.03); box-shadow: 0 4px 12px rgba(167,139,250,0.2); border-color: var(--accent); }
         .giphy-item img { width: 100%; height: auto; display: block; }
 
@@ -180,15 +220,20 @@
         .sign-form h3 { font-size: 1rem; font-weight: 700; margin-bottom: 16px; }
         .form-group { margin-bottom: 16px; }
         .form-group label { display: block; font-size: 0.8rem; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
-        .form-group input, .form-group textarea { width: 100%; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; color: var(--text); font-family: inherit; font-size: 0.9rem; resize: vertical; }
+        .form-group input, .form-group textarea { width: 100%; background: color-mix(in srgb, var(--cf-text) 5%, transparent); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; color: var(--text); font-family: inherit; font-size: 0.9rem; resize: vertical; }
         .form-group input:focus, .form-group textarea:focus { outline: none; border-color: var(--accent); }
         .form-group textarea { min-height: 80px; }
+        /* The message box previews the finished note, and a note is a white card — so it
+           gets the note's paper, not the form's dark chrome. Preview text colours are
+           picked to read on white; on the dark background they were black-on-black. */
+        .form-group textarea.note-paper, textarea.note-paper { background: #ffffff; color: rgb(31,41,55); border-color: rgba(0,0,0,0.15); }
+        textarea.note-paper::placeholder { color: rgba(0,0,0,0.38); }
         /* Dark theme for ALL select/option/optgroup elements */
-        select, select option, select optgroup { background: #1a1f25; color: #e5e7eb; }
+        select, select option, select optgroup { background: var(--bg-secondary, #0f1316); color: var(--cf-text); }
         select option:checked { background: rgba(167,139,250,0.3); }
-        input[type="color"] { background: #1a1f25; }
-        input[type="date"] { background: rgba(255,255,255,0.05); color: var(--text); color-scheme: dark; }
-        input[type="range"] { color-scheme: dark; }
+        input[type="color"] { background: var(--cf-surface-2); }
+        input[type="date"] { background: color-mix(in srgb, var(--cf-text) 5%, transparent); color: var(--text); color-scheme: inherit; }
+        input[type="range"] { color-scheme: inherit; }
         .form-hint { font-size: 0.75rem; color: var(--muted); margin-top: 4px; }
         .btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 20px; border-radius: 10px; font-weight: 600; font-size: 0.9rem; cursor: pointer; border: none; font-family: inherit; transition: all 0.2s; }
         .btn-primary { background: linear-gradient(135deg, var(--accent), var(--pink)); color: white; }
@@ -196,13 +241,28 @@
         .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
         .btn-discord { background: #5865F2; color: white; text-decoration: none; }
         .btn-discord:hover { background: #4752c4; }
-        .error-msg { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); border-radius: 8px; padding: 10px 14px; color: #f87171; font-size: 0.85rem; margin-bottom: 16px; display: none; }
-        .success-msg { background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.3); border-radius: 8px; padding: 10px 14px; color: #22c55e; font-size: 0.85rem; margin-bottom: 16px; display: none; }
+        .error-msg { background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); border-radius: 8px; padding: 10px 14px; color: var(--cf-danger-ink); font-size: 0.85rem; margin-bottom: 16px; display: none; }
+        .success-msg { background: rgba(34,197,94,0.1); border: 1px solid rgba(34,197,94,0.3); border-radius: 8px; padding: 10px 14px; color: var(--cf-success-ink); font-size: 0.85rem; margin-bottom: 16px; display: none; }
         .login-prompt { text-align: center; padding: 24px; }
 
+        /* Edit-note modal — the full signing form again, prefilled with what you wrote */
+        .edit-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 1100; display: none; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 24px 12px; }
+        .edit-modal.active { display: flex; }
+        .edit-modal-box { background: var(--card-bg); border: 1px solid var(--border); border-radius: 16px; width: 100%; max-width: 640px; padding: 20px; box-shadow: 0 24px 64px rgba(0,0,0,0.5); }
+        .edit-modal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+        .edit-modal-head h3 { font-size: 1.05rem; }
+        .edit-modal-close { background: none; border: none; color: var(--muted); font-size: 1.1rem; cursor: pointer; padding: 4px 8px; }
+        .edit-modal-close:hover { color: var(--text); }
+        .edit-field-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; padding: 10px 12px; background: color-mix(in srgb, var(--cf-text) 3%, transparent); border: 1px solid var(--border); border-radius: 10px; }
+        .edit-modal select, .edit-modal input[type="text"] { background: color-mix(in srgb, var(--cf-text) 5%, transparent); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; color: var(--text); font-size: 0.8rem; font-family: inherit; }
+        .edit-modal input[type="color"] { width: 32px; height: 32px; border: 2px solid var(--border); border-radius: 6px; cursor: pointer; background: none; padding: 0; }
+        .edit-modal label.mini { font-size: 0.65rem; color: var(--muted); display: block; margin-bottom: 2px; }
+        .edit-modal details { margin-bottom: 14px; background: color-mix(in srgb, var(--cf-text) 3%, transparent); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; }
+        .edit-modal summary { cursor: pointer; font-size: 0.8rem; font-weight: 600; color: var(--accent); }
+
         /* Footer */
-        .footer { text-align: center; padding: 24px; color: var(--muted); font-size: 0.75rem; max-width: 700px; margin: 0 auto; }
-        .footer a { color: var(--accent); text-decoration: none; }
+        .bc-footer { text-align: center; padding: 24px; color: var(--muted); font-size: 0.75rem; max-width: 700px; margin: 0 auto; }
+        .bc-footer a { color: var(--accent); text-decoration: none; }
 
         /* Slideshow */
         .slideshow-toggle { display: flex; justify-content: center; gap: 8px; margin-bottom: 16px; }
@@ -210,21 +270,21 @@
         .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--muted); }
         .btn-outline.active { background: rgba(167,139,250,0.2); border-color: var(--accent); color: var(--accent); }
 
-        .slideshow-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 1000; display: none; flex-direction: column; align-items: center; overflow: hidden; }
+        .slideshow-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #000; z-index: 1000; display: none; flex-direction: column; align-items: center; overflow: hidden; /* theme: fixed (fullscreen slideshow stage) */ }
         .slideshow-overlay.active { display: flex; }
 
         /* Particles */
-        .slideshow-overlay::before { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: radial-gradient(2px 2px at 10% 20%, rgba(255,255,255,0.3), transparent), radial-gradient(2px 2px at 30% 60%, rgba(255,255,255,0.2), transparent), radial-gradient(2px 2px at 50% 10%, rgba(255,255,255,0.3), transparent), radial-gradient(2px 2px at 70% 80%, rgba(255,255,255,0.2), transparent), radial-gradient(2px 2px at 90% 40%, rgba(255,255,255,0.3), transparent), radial-gradient(1px 1px at 15% 75%, rgba(255,255,255,0.15), transparent), radial-gradient(1px 1px at 45% 35%, rgba(255,255,255,0.15), transparent), radial-gradient(1px 1px at 85% 15%, rgba(255,255,255,0.15), transparent); animation: twinkle 6s ease-in-out infinite alternate; pointer-events: none; z-index: 0; }
+        .slideshow-overlay::before { /* theme: fixed (star particles on the slideshow stage) */ content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: radial-gradient(2px 2px at 10% 20%, rgba(255,255,255,0.3), transparent), radial-gradient(2px 2px at 30% 60%, rgba(255,255,255,0.2), transparent), radial-gradient(2px 2px at 50% 10%, rgba(255,255,255,0.3), transparent), radial-gradient(2px 2px at 70% 80%, rgba(255,255,255,0.2), transparent), radial-gradient(2px 2px at 90% 40%, rgba(255,255,255,0.3), transparent), radial-gradient(1px 1px at 15% 75%, rgba(255,255,255,0.15), transparent), radial-gradient(1px 1px at 45% 35%, rgba(255,255,255,0.15), transparent), radial-gradient(1px 1px at 85% 15%, rgba(255,255,255,0.15), transparent); animation: twinkle 6s ease-in-out infinite alternate; pointer-events: none; z-index: 0; }
         @keyframes twinkle { 0% { opacity: 0.5; } 100% { opacity: 1; } }
 
-        .slideshow-close { position: absolute; top: 20px; right: 24px; background: none; border: none; color: rgba(255,255,255,0.4); font-size: 1.5rem; cursor: pointer; z-index: 1002; padding: 8px; }
+        .slideshow-close { /* theme: fixed (on the black slideshow stage) */ position: absolute; top: 20px; right: 24px; background: none; border: none; color: rgba(255,255,255,0.4); font-size: 1.5rem; cursor: pointer; z-index: 1002; padding: 8px; }
         .slideshow-close:hover { color: #fff; }
-        .slideshow-counter { position: absolute; top: 24px; left: 24px; font-size: 0.8rem; color: rgba(255,255,255,0.3); z-index: 1002; }
+        .slideshow-counter { /* theme: fixed (on the black slideshow stage) */ position: absolute; top: 24px; left: 24px; font-size: 0.8rem; color: rgba(255,255,255,0.3); z-index: 1002; }
 
         /* Title header in slideshow */
         .slideshow-title { text-align: center; padding-top: 40px; margin-bottom: 20px; z-index: 1; }
         .slideshow-title h2 { font-size: 2rem; font-weight: 800; color: #fff; margin: 0; }
-        .slideshow-title p { font-size: 0.85rem; color: rgba(255,255,255,0.4); margin: 4px 0 0; }
+        .slideshow-title p { /* theme: fixed (on the black slideshow stage) */ font-size: 0.85rem; color: rgba(255,255,255,0.4); margin: 4px 0 0; }
 
         /* Card-style slides */
         .slideshow-card-area { flex: 1; display: flex; align-items: center; justify-content: center; position: relative; width: 100%; z-index: 1; overflow: hidden; padding: 0 20px; }
@@ -242,8 +302,8 @@
         .slideshow-slide .slide-gif { max-width: 100%; max-height: 250px; border-radius: 8px; margin-top: 10px; margin-bottom: 4px; display: block; object-fit: contain; }
 
         .slideshow-nav { position: absolute; bottom: 32px; display: flex; gap: 12px; z-index: 1002; }
-        .slideshow-nav button { width: 44px; height: 44px; border-radius: 50%; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 1.1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
-        .slideshow-nav button:hover { background: rgba(255,255,255,0.15); border-color: rgba(255,255,255,0.3); }
+        .slideshow-nav button { /* theme: fixed (on the black slideshow stage) */ width: 44px; height: 44px; border-radius: 50%; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #fff; font-size: 1.1rem; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+        .slideshow-nav button:hover { /* theme: fixed (on the black slideshow stage) */ background: rgba(255,255,255,0.15); border-color: rgba(255,255,255,0.3); }
 
         .slideshow-progress { position: absolute; bottom: 0; left: 0; height: 3px; background: linear-gradient(90deg, var(--accent), var(--pink)); transition: width 0.3s ease; z-index: 1002; }
 
@@ -251,8 +311,8 @@
         @media print {
             body { background: #ffffff; color: #000000; }
             .container { max-width: 100%; padding: 0; }
-            .card-header { background: linear-gradient(135deg, #f3e8ff, #ffe4f0); border: 2px solid #d8b4fe; color: #000; page-break-after: avoid; }
-            .card-header::before { display: none; }
+            .bc-header { background: linear-gradient(135deg, #f3e8ff, #ffe4f0); border: 2px solid #d8b4fe; color: #000; page-break-after: avoid; }
+            .bc-header::before { display: none; }
             .card-title span { -webkit-text-fill-color: #db2777; color: #db2777; background: none; }
             .card-subtitle { color: #666; }
             .badge { background: #f3e8ff; color: #7c3aed; border-color: #d8b4fe; }
@@ -261,7 +321,7 @@
             .sig-name { color: #111; }
             .sig-message { color: #333; }
             .sig-time { color: #999; }
-            .slideshow-toggle, .slideshow-overlay, .sign-form, .footer, .read-only-banner, .login-prompt { display: none !important; }
+            .slideshow-toggle, .slideshow-overlay, .sign-form, .bc-footer, .read-only-banner, .login-prompt { display: none !important; }
             .avatar { border-color: #db2777; }
             a { color: inherit; text-decoration: none; }
         }
@@ -271,6 +331,21 @@
             .container { padding: 16px 12px; }
         }
     </style>
+    <link rel="stylesheet" href="/css/a11y.css">
+    <link rel="stylesheet" href="/css/dropdowns.css">
+    <link rel="stylesheet" href="/css/themes.css">
+    <% if (locals.uiCustomCss) { %><style id="custom-theme"><%- uiCustomCss %></style><% } %>
+    <link rel="stylesheet" href="/css/cf-ui.css">
+    <style>
+        /* The card itself (header, notes, slideshow) is the creator's design: keep its own
+           colours and fonts. cf-ui.css above styles the page chrome around it. */
+        body { background: var(--bc-page); }
+        .bc-header .card-title, .bc-header .card-subtitle, .slideshow-title h2 { color: inherit; }
+        .card-toolbar .btn { min-height: 32px; }
+        .card-toolbar .btn-outline { --bs-btn-bg: transparent; --bs-btn-color: color-mix(in srgb, var(--bc-ink) 75%, transparent); --bs-btn-border-color: color-mix(in srgb, var(--bc-ink) 18%, transparent); --bs-btn-hover-bg: color-mix(in srgb, var(--bc-ink) 8%, transparent); --bs-btn-hover-color: var(--bc-ink); }
+        .card-toolbar .btn-outline.active { --bs-btn-bg: color-mix(in srgb, var(--bc-ink) 12%, transparent); --bs-btn-color: var(--bc-ink); --bs-btn-border-color: color-mix(in srgb, var(--bc-ink) 40%, transparent); }
+        .avatar-placeholder i { font-size: 1.8rem; color: color-mix(in srgb, var(--bc-head-ink) 80%, transparent); }
+    </style>
 </head>
 <body>
     <div class="container">
@@ -279,7 +354,7 @@
             <% if (user) { %>
                 <div style="display: flex; align-items: center; gap: 10px;">
                     <% if (user.avatar) { %>
-                        <img src="https://cdn.discordapp.com/avatars/<%= user.id %>/<%= user.avatar %>.png?size=64" style="width: 28px; height: 28px; border-radius: 50%; object-fit: cover;">
+                        <img alt="" src="https://cdn.discordapp.com/avatars/<%= user.id %>/<%= user.avatar %>.png?size=64" style="width: 28px; height: 28px; border-radius: 50%; object-fit: cover;">
                     <% } else { %>
                         <div style="width: 28px; height: 28px; border-radius: 50%; background: rgba(167,139,250,0.2); display: flex; align-items: center; justify-content: center;"><i class="fas fa-user" style="font-size: 0.7rem; color: var(--accent);"></i></div>
                     <% } %>
@@ -296,15 +371,15 @@
             <% } %>
         </div>
         <!-- Card Header -->
-        <div class="card-header" style="background-color: <%= card.header_bg_color || '#000000' %>;<% if (card.card_background_url) { %> background-image: url('<%= card.card_background_url %>'); background-size: cover; background-position: center;<% } %>">
+        <div class="bc-header<%= (!card.header_bg_color && !card.card_background_url) ? ' bc-themed' : '' %>" style="background-color: <%= card.header_bg_color || 'var(--bc-page)' %>;<% if (card.card_background_url) { %> background-image: url('<%= card.card_background_url %>'); background-size: cover; background-position: center;<% } %>">
             <%/* Clean black header — no decorations, matching RecoCards */%>
             <% if (card.avatar_url) { %>
                 <img src="<%= card.avatar_url %>" alt="<%= card.username %>" class="avatar">
             <% } else { %>
-                <div class="avatar-placeholder">🎂</div>
+                <div class="avatar-placeholder" aria-hidden="true"><i class="fas fa-cake-candles"></i></div>
             <% } %>
-            <div class="card-title" style="<% if (card.title_font) { %>font-family: '<%= card.title_font %>', sans-serif;<% } %><% if (card.title_font_size) { %>font-size: <%= card.title_font_size %>px;<% } %><% if (card.title_font_color) { %>color: <%= card.title_font_color %>;<% } else { %>color: #ffffff;<% } %>"><span><%= card.card_name || ('Happy Birthday, ' + card.username + '!') %></span></div>
-            <div class="card-subtitle" style="<% if (card.subtitle_font) { %>font-family: '<%= card.subtitle_font %>', sans-serif;<% } %><% if (card.subtitle_font_color) { %>color: <%= card.subtitle_font_color %>;<% } else { %>color: rgba(255,255,255,0.6);<% } %>"><%= card.subtitle_text || card.guild_name || 'CertiFried Cards' %></div>
+            <div class="card-title" style="<% if (card.title_font) { %>font-family: '<%= card.title_font %>', sans-serif;<% } %><% if (card.title_font_size) { %>font-size: <%= card.title_font_size %>px;<% } %><% if (card.title_font_color) { %>color: <%= card.title_font_color %>;<% } else { %>color: var(--bc-head-ink);<% } %>"><span><%= card.card_name || ('Happy Birthday, ' + card.username + '!') %></span></div>
+            <div class="card-subtitle" style="<% if (card.subtitle_font) { %>font-family: '<%= card.subtitle_font %>', sans-serif;<% } %><% if (card.subtitle_font_color) { %>color: <%= card.subtitle_font_color %>;<% } else { %>color: var(--bc-head-sub);<% } %>"><%= card.subtitle_text || card.guild_name || 'CertiFried Cards' %></div>
             <div class="badge">
                 <i class="fas fa-pen-nib"></i>
                 <%= signatures.length %> signature<%= signatures.length !== 1 ? 's' : '' %>
@@ -340,7 +415,7 @@
         <!-- Discord Connection Panel (standalone cards only, creator only) -->
         <% if (!card.guild_id && typeof isCreator !== 'undefined' && isCreator && typeof mutualGuilds !== 'undefined') { %>
         <details style="background: rgba(88,101,242,0.08); border: 1px solid rgba(88,101,242,0.2); border-radius: 12px; padding: 14px 16px; margin-bottom: 16px;">
-            <summary style="cursor: pointer; font-size: 0.85rem; font-weight: 600; color: #5865F2; display: flex; align-items: center; gap: 8px;">
+            <summary style="cursor: pointer; font-size: 0.85rem; font-weight: 600; color: var(--bc-discord); display: flex; align-items: center; gap: 8px;">
                 <i class="fab fa-discord"></i> Connect to Discord Server
                 <span style="font-size: 0.65rem; font-weight: 500; color: var(--muted); margin-left: auto;">Optional</span>
             </summary>
@@ -352,8 +427,8 @@
                 <% if (mutualGuilds.length > 0) { %>
                 <div style="display: grid; gap: 10px;">
                     <div>
-                        <label style="font-size: 0.75rem; color: var(--muted); display: block; margin-bottom: 4px;">Server</label>
-                        <select id="connect-guild" style="width: 100%; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; color: var(--text); font-size: 0.85rem;" onchange="loadGuildChannels()">
+                        <label style="font-size: 0.75rem; color: var(--muted); display: block; margin-bottom: 4px;" for="connect-guild">Server</label>
+                        <select id="connect-guild" style="width: 100%; background: color-mix(in srgb, var(--cf-text) 5%, transparent); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; color: var(--text); font-size: 0.85rem;" onchange="loadGuildChannels()">
                             <option value="">Select a server...</option>
                             <% mutualGuilds.forEach(g => { %>
                             <option value="<%= g.id %>"><%= g.name %></option>
@@ -361,18 +436,18 @@
                         </select>
                     </div>
                     <div>
-                        <label style="font-size: 0.75rem; color: var(--muted); display: block; margin-bottom: 4px;">Recipient (Discord User ID)</label>
-                        <input type="text" id="connect-user-id" placeholder="e.g. 123456789012345678" style="width: 100%; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; color: var(--text); font-size: 0.85rem;">
+                        <label style="font-size: 0.75rem; color: var(--muted); display: block; margin-bottom: 4px;" for="connect-user-id">Recipient (Discord User ID)</label>
+                        <input type="text" id="connect-user-id" placeholder="e.g. 123456789012345678" style="width: 100%; background: color-mix(in srgb, var(--cf-text) 5%, transparent); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; color: var(--text); font-size: 0.85rem;">
                         <div style="font-size: 0.65rem; color: var(--muted); margin-top: 2px;">The Discord user who will receive the card. Right-click their profile → Copy User ID.</div>
                     </div>
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
                         <div>
-                            <label style="font-size: 0.75rem; color: var(--muted); display: block; margin-bottom: 4px;">Announcement Channel ID</label>
-                            <input type="text" id="connect-announce-channel" placeholder="Channel to post signing link" style="width: 100%; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; color: var(--text); font-size: 0.85rem;">
+                            <label style="font-size: 0.75rem; color: var(--muted); display: block; margin-bottom: 4px;" for="connect-announce-channel">Announcement Channel ID</label>
+                            <input type="text" id="connect-announce-channel" placeholder="Channel to post signing link" style="width: 100%; background: color-mix(in srgb, var(--cf-text) 5%, transparent); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; color: var(--text); font-size: 0.85rem;">
                         </div>
                         <div>
-                            <label style="font-size: 0.75rem; color: var(--muted); display: block; margin-bottom: 4px;">Birthday Role ID <span style="font-weight: 400;">(optional)</span></label>
-                            <input type="text" id="connect-birthday-role" placeholder="Role to assign on birthday" style="width: 100%; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; color: var(--text); font-size: 0.85rem;">
+                            <label style="font-size: 0.75rem; color: var(--muted); display: block; margin-bottom: 4px;" for="connect-birthday-role">Birthday Role ID <span style="font-weight: 400;">(optional)</span></label>
+                            <input type="text" id="connect-birthday-role" placeholder="Role to assign on birthday" style="width: 100%; background: color-mix(in srgb, var(--cf-text) 5%, transparent); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; color: var(--text); font-size: 0.85rem;">
                         </div>
                     </div>
                     <button type="button" onclick="connectToDiscord()" id="connect-btn" style="background: #5865F2; border: none; border-radius: 10px; padding: 10px 20px; color: white; cursor: pointer; font-size: 0.85rem; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 8px;">
@@ -381,7 +456,7 @@
                     <div id="connect-status" style="font-size: 0.8rem; display: none;"></div>
                 </div>
                 <% } else { %>
-                <div style="font-size: 0.8rem; color: var(--muted); padding: 12px; text-align: center; background: rgba(255,255,255,0.03); border-radius: 8px;">
+                <div style="font-size: 0.8rem; color: var(--muted); padding: 12px; text-align: center; background: color-mix(in srgb, var(--cf-text) 3%, transparent); border-radius: 8px;">
                     <i class="fas fa-info-circle" style="color: var(--accent);"></i>
                     No mutual servers found. Make sure CertiFried bot is in the server you want to connect to, and you have "Manage Server" permission.
                 </div>
@@ -389,7 +464,7 @@
             </div>
         </details>
         <% } else if (card.guild_id && typeof isCreator !== 'undefined' && isCreator) { %>
-        <div style="font-size: 0.75rem; color: rgba(88,101,242,0.6); text-align: center; margin-bottom: 12px;">
+        <div style="font-size: 0.75rem; color: color-mix(in srgb, var(--bc-discord) 60%, transparent); text-align: center; margin-bottom: 12px;">
             <i class="fab fa-discord"></i> Connected to <strong><%= card.guild_name %></strong>
         </div>
         <% } %>
@@ -403,16 +478,16 @@
         <% if (ytMatch || scMatch) { %>
         <!-- Music Player (resolves YouTube/SoundCloud via yt-dlp to direct audio) -->
         <style>
-            .music-bar { display: flex; align-items: center; gap: 10px; background: rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.08); border-radius: 40px; padding: 6px 16px 6px 6px; max-width: 360px; margin: 0 auto 16px; backdrop-filter: blur(12px); }
+            .music-bar { display: flex; align-items: center; gap: 10px; background: var(--bc-bar); border: 1px solid color-mix(in srgb, var(--bc-ink) 8%, transparent); border-radius: 40px; padding: 6px 16px 6px 6px; max-width: 360px; margin: 0 auto 16px; backdrop-filter: blur(12px); }
             .music-play { width: 36px; height: 36px; border-radius: 50%; border: none; background: var(--accent, #a78bfa); color: white; font-size: 14px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; transition: opacity 0.2s; }
             .music-play:hover { opacity: 0.85; }
             .music-play:disabled { opacity: 0.3; cursor: default; }
             .music-info { flex: 1; min-width: 0; }
-            .music-title { font-size: 0.75rem; font-weight: 600; color: rgba(255,255,255,0.9); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-            .music-sub { font-size: 0.6rem; color: rgba(255,255,255,0.4); }
-            .music-progress { width: 100%; height: 3px; background: rgba(255,255,255,0.1); border-radius: 2px; margin-top: 4px; cursor: pointer; }
+            .music-title { font-size: 0.75rem; font-weight: 600; color: color-mix(in srgb, var(--bc-ink) 90%, transparent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .music-sub { font-size: 0.6rem; color: var(--cf-text-3); }
+            .music-progress { width: 100%; height: 3px; background: color-mix(in srgb, var(--bc-ink) 10%, transparent); border-radius: 2px; margin-top: 4px; cursor: pointer; }
             .music-progress-fill { height: 100%; background: var(--accent, #a78bfa); border-radius: 2px; width: 0%; transition: width 0.3s linear; }
-            .music-time { font-size: 0.6rem; color: rgba(255,255,255,0.35); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+            .music-time { font-size: 0.6rem; color: var(--cf-text-3); font-variant-numeric: tabular-nums; flex-shrink: 0; }
             .music-bar.loading .music-play i::before { content: '\f110'; animation: spin 1s linear infinite; }
             @keyframes spin { to { transform: rotate(360deg); } }
         </style>
@@ -476,6 +551,9 @@
                 }
             };
 
+            // Starting a signature video pauses the card's background music so they don't overlap
+            window.stopCardMusic = function() { if (!audio.paused) audio.pause(); };
+
             audio.addEventListener('play', function() { playBtn.innerHTML = '<i class="fas fa-pause"></i>'; });
             audio.addEventListener('pause', function() { playBtn.innerHTML = '<i class="fas fa-play"></i>'; });
             audio.addEventListener('timeupdate', function() {
@@ -527,7 +605,7 @@
             <h3><i class="fas fa-lock" style="color: var(--accent); margin-right: 8px;"></i>This Card is Protected</h3>
             <p style="color: var(--muted); margin-bottom: 16px; font-size: 0.9rem;">Enter the password to view this birthday card</p>
             <form method="POST" action="/card/<%= card.slug || card.share_token %>/unlock" style="display: flex; gap: 8px; justify-content: center; max-width: 300px; margin: 0 auto;">
-                <input type="password" name="password" placeholder="Password" required style="flex: 1; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-size: 0.9rem;">
+                <input type="password" name="password" placeholder="Password" required style="flex: 1; background: color-mix(in srgb, var(--cf-text) 5%, transparent); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-size: 0.9rem;">
                 <button type="submit" class="btn btn-primary" style="padding: 8px 16px;"><i class="fas fa-unlock"></i></button>
             </form>
         </div>
@@ -566,7 +644,7 @@
         <div style="background: var(--card-bg); border: 1px solid var(--border); border-radius: 16px; padding: 16px; margin-bottom: 20px;">
             <div style="font-size: 0.85rem; font-weight: 600; margin-bottom: 8px; color: var(--accent);"><i class="fas fa-heart"></i> Thank Everyone</div>
             <div style="display: flex; gap: 8px;">
-                <textarea id="thank-you-msg" placeholder="Thank you all for the wishes!" style="flex: 1; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 10px; padding: 10px; color: var(--text); font-size: 0.9rem; font-family: inherit; resize: vertical; min-height: 60px;"></textarea>
+                <textarea id="thank-you-msg" placeholder="Thank you all for the wishes!" style="flex: 1; background: color-mix(in srgb, var(--cf-text) 5%, transparent); border: 1px solid var(--border); border-radius: 10px; padding: 10px; color: var(--text); font-size: 0.9rem; font-family: inherit; resize: vertical; min-height: 60px;"></textarea>
                 <button type="button" onclick="postThankYou()" class="btn btn-primary" style="align-self: flex-end; white-space: nowrap;"><i class="fas fa-paper-plane"></i></button>
             </div>
         </div>
@@ -574,7 +652,7 @@
 
         <%/* ═══ CARD TYPE ROUTING ═══ */%>
         <% if (card.card_type === 'greeting_card') { %>
-            <%- include('partials/card-greeting', { card, signatures, user, userLikes: typeof userLikes !== 'undefined' ? userLikes : [], repliesMap: typeof repliesMap !== 'undefined' ? repliesMap : {} }) %>
+            <%- include('partials/card-greeting', { card, signatures, user, userLikes: typeof userLikes !== 'undefined' ? userLikes : [], repliesMap: typeof repliesMap !== 'undefined' ? repliesMap : {}, canModerate: typeof canModerate !== 'undefined' ? canModerate : false }) %>
         <% } else if (card.card_type === 'one_person') { %>
             <%- include('partials/card-one-person', { card, signatures, user }) %>
         <% } else { %>
@@ -586,14 +664,14 @@
             <button type="button" class="btn btn-primary" style="font-size: 0.85rem; padding: 8px 20px; border-radius: 6px;" onclick="toggleSignForm()"><i class="fas fa-plus"></i> Write a message</button>
             <% } %>
             <% if (signatures.length > 0) { %>
-            <button type="button" class="btn btn-outline" id="view-board" onclick="setView('board')" title="Board view"><i class="fas fa-th"></i></button>
-            <button type="button" class="btn btn-outline" id="view-list" onclick="setView('list')" title="List view"><i class="fas fa-list"></i></button>
+            <button type="button" class="btn btn-outline" id="view-board" onclick="setView('board')" title="Board view" aria-label="Board view"><i class="fas fa-th" aria-hidden="true"></i></button>
+            <button type="button" class="btn btn-outline" id="view-list" onclick="setView('list')" title="List view" aria-label="List view"><i class="fas fa-list" aria-hidden="true"></i></button>
             <% if (signatures.length > 1) { %>
-            <button type="button" class="btn btn-outline" id="view-slideshow" onclick="startSlideshow()" title="Slideshow"><i class="fas fa-play"></i></button>
+            <button type="button" class="btn btn-outline" id="view-slideshow" onclick="startSlideshow()" title="Slideshow" aria-label="Slideshow"><i class="fas fa-play" aria-hidden="true"></i></button>
             <% } %>
-            <button type="button" class="btn btn-outline" onclick="window.print()" title="Export PDF"><i class="fas fa-file-pdf"></i></button>
-            <button type="button" class="btn btn-outline" onclick="downloadAsImage()" title="Export JPEG"><i class="fas fa-image"></i></button>
-            <button type="button" class="btn btn-outline" onclick="toggleEmbed()" title="Embed code"><i class="fas fa-code"></i></button>
+            <button type="button" class="btn btn-outline" onclick="window.print()" title="Save as PDF" aria-label="Save as PDF"><i class="fas fa-file-pdf" aria-hidden="true"></i></button>
+            <button type="button" class="btn btn-outline" onclick="downloadAsImage()" title="Save as image" aria-label="Save as image"><i class="fas fa-image" aria-hidden="true"></i></button>
+            <button type="button" class="btn btn-outline" onclick="toggleEmbed()" title="Embed code" aria-label="Embed code"><i class="fas fa-code" aria-hidden="true"></i></button>
             <% } %>
         </div>
         <!-- Embed code box -->
@@ -611,7 +689,7 @@
             <div class="slideshow-counter" id="slideshow-counter"></div>
 
             <div class="slideshow-title">
-                <h2>Happy Birthday, <%= card.username %>!</h2>
+                <h2><%= card.card_name || ('Happy Birthday, ' + card.username + '!') %></h2>
                 <p><%= card.guild_name || '' %></p>
             </div>
 
@@ -620,7 +698,7 @@
                 <div class="slideshow-slide" data-slide="<%= i %>">
                     <div class="slide-name"><%= sig.signer_username || 'Anonymous' %></div>
                     <% if (sig.gif_url) { %>
-                        <img src="<%= sig.gif_url %>" class="slide-gif" loading="lazy">
+                        <img alt="Animated GIF attached to this birthday message" src="<%= sig.gif_url %>" class="slide-gif" loading="lazy">
                     <% } %>
                     <% if (sig.message && sig.message !== 'Imported from RecoCards') { %>
                         <div class="slide-message" style="<% if (sig.font_color) { %>color: <%= sig.font_color %>;<% } %><% if (sig.font_family) { %>font-family: '<%= sig.font_family %>', sans-serif;<% } %><% if (sig.font_size) { %>font-size: <%= sig.font_size %>px;<% } %>"><%= sig.message %></div>
@@ -657,8 +735,8 @@
                     <div id="sign-success" class="success-msg"></div>
                     <form id="sign-form">
                         <div class="form-group">
-                            <label>Your Message</label>
-                            <textarea id="sign-message" placeholder="Happy birthday! Hope you have an amazing day..." maxlength="2000" required oninput="this.nextElementSibling.textContent=this.value.length+'/2000'" style="min-height: 100px;"></textarea>
+                            <label for="sign-message">Your Message</label>
+                            <textarea id="sign-message" class="note-paper" placeholder="Happy birthday! Hope you have an amazing day..." maxlength="2000" required oninput="this.nextElementSibling.textContent=this.value.length+'/2000'" style="min-height: 100px;"></textarea>
                             <div style="text-align: right; font-size: 0.65rem; color: var(--muted); margin-top: 2px;">0/2000</div>
                         </div>
                         <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px;">
@@ -667,9 +745,9 @@
                             <% }); %>
                         </div>
                         <!-- Font customization (RecoCards-style, FREE) -->
-                        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; padding: 10px 12px; background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 10px;">
+                        <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; padding: 10px 12px; background: color-mix(in srgb, var(--cf-text) 3%, transparent); border: 1px solid var(--border); border-radius: 10px;">
                             <input type="color" id="font-color" value="#1f2937" title="Text color" style="width: 32px; height: 32px; border: 2px solid var(--border); border-radius: 6px; cursor: pointer; background: none; padding: 0;">
-                            <select id="font-family" title="Font" style="background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; color: var(--text); font-size: 0.8rem; cursor: pointer; max-width: 160px;">
+                            <select id="font-family" title="Font" style="background: color-mix(in srgb, var(--cf-text) 5%, transparent); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; color: var(--text); font-size: 0.8rem; cursor: pointer; max-width: 160px;">
                                 <optgroup label="Sans Serif">
                                     <option value="" selected>Default (Inter)</option>
                                     <option value="Helvetica Neue" style="font-family: 'Helvetica Neue'">Helvetica Neue</option>
@@ -715,20 +793,20 @@
                             </div>
                         </div>
                         <!-- Card appearance customization -->
-                        <details style="margin-bottom: 12px; background: rgba(255,255,255,0.03); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px;">
+                        <details style="margin-bottom: 12px; background: color-mix(in srgb, var(--cf-text) 3%, transparent); border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px;">
                             <summary style="cursor: pointer; font-size: 0.8rem; font-weight: 600; color: var(--accent);"><i class="fas fa-palette"></i> Card Style</summary>
                             <div style="margin-top: 10px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
                                 <div>
-                                    <label style="font-size: 0.65rem; color: var(--muted); display: block; margin-bottom: 2px;">Card Color</label>
+                                    <label style="font-size: 0.65rem; color: var(--muted); display: block; margin-bottom: 2px;" for="card-bg-color">Card Color</label>
                                     <input type="color" id="card-bg-color" value="#ffffff" style="width: 32px; height: 32px; border: 2px solid var(--border); border-radius: 6px; cursor: pointer; background: none;">
                                 </div>
                                 <div>
-                                    <label style="font-size: 0.65rem; color: var(--muted); display: block; margin-bottom: 2px;">Border</label>
+                                    <label style="font-size: 0.65rem; color: var(--muted); display: block; margin-bottom: 2px;" for="card-border-color">Border</label>
                                     <input type="color" id="card-border-color" value="#ffffff" style="width: 32px; height: 32px; border: 2px solid var(--border); border-radius: 6px; cursor: pointer; background: none;">
                                 </div>
                                 <div>
-                                    <label style="font-size: 0.65rem; color: var(--muted); display: block; margin-bottom: 2px;">Shape</label>
-                                    <select id="card-border-radius" style="background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; color: var(--text); font-size: 0.75rem;">
+                                    <label style="font-size: 0.65rem; color: var(--muted); display: block; margin-bottom: 2px;" for="card-border-radius">Shape</label>
+                                    <select id="card-border-radius" style="background: color-mix(in srgb, var(--cf-text) 5%, transparent); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; color: var(--text); font-size: 0.75rem;">
                                         <option value="">Square (default)</option>
                                         <option value="8">Rounded</option>
                                         <option value="16">More Rounded</option>
@@ -737,8 +815,8 @@
                                     </select>
                                 </div>
                                 <div>
-                                    <label style="font-size: 0.65rem; color: var(--muted); display: block; margin-bottom: 2px;">Shadow</label>
-                                    <select id="card-shadow" style="background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; color: var(--text); font-size: 0.75rem;">
+                                    <label style="font-size: 0.65rem; color: var(--muted); display: block; margin-bottom: 2px;" for="card-shadow">Shadow</label>
+                                    <select id="card-shadow" style="background: color-mix(in srgb, var(--cf-text) 5%, transparent); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; color: var(--text); font-size: 0.75rem;">
                                         <option value="">Default</option>
                                         <option value="light">Light</option>
                                         <option value="dramatic">Dramatic</option>
@@ -746,8 +824,8 @@
                                     </select>
                                 </div>
                                 <div>
-                                    <label style="font-size: 0.65rem; color: var(--muted); display: block; margin-bottom: 2px;">Effect</label>
-                                    <select id="note-effect" style="background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; color: var(--text); font-size: 0.75rem;">
+                                    <label style="font-size: 0.65rem; color: var(--muted); display: block; margin-bottom: 2px;" for="note-effect">Effect</label>
+                                    <select id="note-effect" style="background: color-mix(in srgb, var(--cf-text) 5%, transparent); border: 1px solid var(--border); border-radius: 6px; padding: 4px 8px; color: var(--text); font-size: 0.75rem;">
                                         <option value="">None</option>
                                         <option value="hearts">❤️ Hearts</option>
                                         <option value="confetti">🎊 Confetti</option>
@@ -767,7 +845,7 @@
                             </div>
                             <div class="media-panel" id="panel-gif">
                                 <div style="display: flex; gap: 8px; margin-bottom: 10px;">
-                                    <input type="text" id="giphy-search" placeholder="Search GIFs..." style="flex: 1; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-size: 0.85rem;">
+                                    <input type="text" id="giphy-search" placeholder="Search GIFs..." style="flex: 1; background: color-mix(in srgb, var(--cf-text) 5%, transparent); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-size: 0.85rem;">
                                     <button type="button" onclick="searchGiphy('gif')" style="background: var(--accent); border: none; border-radius: 8px; padding: 8px 14px; color: white; cursor: pointer; font-size: 0.85rem;"><i class="fas fa-search"></i></button>
                                 </div>
                                 <div id="giphy-results" style="columns: 4; column-gap: 8px; max-height: 280px; overflow-y: auto; padding: 4px;"></div>
@@ -775,15 +853,15 @@
                             </div>
                             <div class="media-panel" id="panel-sticker" style="display: none;">
                                 <div style="display: flex; gap: 8px; margin-bottom: 10px;">
-                                    <input type="text" id="sticker-search" placeholder="Search stickers..." style="flex: 1; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-size: 0.85rem;">
+                                    <input type="text" id="sticker-search" placeholder="Search stickers..." style="flex: 1; background: color-mix(in srgb, var(--cf-text) 5%, transparent); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-size: 0.85rem;">
                                     <button type="button" onclick="searchGiphy('sticker')" style="background: var(--accent); border: none; border-radius: 8px; padding: 8px 14px; color: white; cursor: pointer; font-size: 0.85rem;"><i class="fas fa-search"></i></button>
                                 </div>
                                 <div id="sticker-results" style="columns: 4; column-gap: 8px; max-height: 280px; overflow-y: auto; padding: 4px;"></div>
                                 <div style="text-align: right; margin-top: 6px; font-size: 0.65rem; color: var(--muted);">Powered by GIPHY</div>
                             </div>
                             <div class="media-panel" id="panel-video" style="display: none;">
-                                <input type="text" id="video-url" placeholder="Paste a YouTube video link..." style="width: 100%; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-size: 0.85rem;">
-                                <div style="font-size: 0.75rem; color: var(--muted); margin-top: 6px;">The video thumbnail will be shown on the card</div>
+                                <input type="text" id="video-url" placeholder="Paste a YouTube video link..." style="width: 100%; background: color-mix(in srgb, var(--cf-text) 5%, transparent); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-size: 0.85rem;">
+                                <div style="font-size: 0.75rem; color: var(--muted); margin-top: 6px;">YouTube or Vimeo — it plays right on the card</div>
                             </div>
                             <div class="media-panel" id="panel-audio" style="display: none;">
                                 <div class="record-area">
@@ -801,12 +879,12 @@
                                 <div style="padding: 12px;">
                                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 8px;">
                                         <div>
-                                            <label style="font-size: 0.75rem; color: var(--muted); display: block; margin-bottom: 4px;">Upload a file</label>
-                                            <input type="file" id="upload-file" accept="image/png,image/jpeg,image/gif,image/webp" style="width: 100%; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 8px; padding: 6px; color: var(--text); font-size: 0.8rem;">
+                                            <label style="font-size: 0.75rem; color: var(--muted); display: block; margin-bottom: 4px;" for="upload-file">Upload a file</label>
+                                            <input type="file" id="upload-file" accept="image/png,image/jpeg,image/gif,image/webp" style="width: 100%; background: color-mix(in srgb, var(--cf-text) 5%, transparent); border: 1px solid var(--border); border-radius: 8px; padding: 6px; color: var(--text); font-size: 0.8rem;">
                                         </div>
                                         <div>
-                                            <label style="font-size: 0.75rem; color: var(--muted); display: block; margin-bottom: 4px;">Or paste a URL</label>
-                                            <input type="text" id="upload-url" placeholder="https://..." style="width: 100%; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-size: 0.85rem;">
+                                            <label style="font-size: 0.75rem; color: var(--muted); display: block; margin-bottom: 4px;" for="upload-url">Or paste a URL</label>
+                                            <input type="text" id="upload-url" placeholder="https://..." style="width: 100%; background: color-mix(in srgb, var(--cf-text) 5%, transparent); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-size: 0.85rem;">
                                         </div>
                                     </div>
                                     <div style="font-size: 0.65rem; color: var(--muted);">Max 5MB. JPG, PNG, GIF, WebP supported. Explicit content is prohibited.</div>
@@ -814,7 +892,7 @@
                             </div>
                         </div>
                         <div id="media-preview" style="display: none; margin-bottom: 12px; position: relative;">
-                            <img id="preview-img" style="max-width: 200px; max-height: 150px; border-radius: 8px; border: 2px solid var(--accent);">
+                            <img alt="Preview of the selected image" id="preview-img" style="max-width: 200px; max-height: 150px; border-radius: 8px; border: 2px solid var(--accent);">
                             <button type="button" onclick="clearMedia()" style="position: absolute; top: -8px; right: -8px; width: 24px; height: 24px; border-radius: 50%; background: #ef4444; border: none; color: white; cursor: pointer; font-size: 0.7rem; display: flex; align-items: center; justify-content: center;"><i class="fas fa-times"></i></button>
                         </div>
                         <input type="hidden" id="sign-gif" value="">
@@ -823,8 +901,8 @@
                             <summary style="cursor: pointer; font-size: 0.8rem; font-weight: 600; color: var(--gold);"><i class="fas fa-gift"></i> Attach a Digital Gift (optional)</summary>
                             <div style="margin-top: 10px;">
                                 <div class="form-group" style="margin-bottom: 10px;">
-                                    <label style="font-size: 0.7rem; color: var(--muted); display: block; margin-bottom: 2px;">What kind of gift?</label>
-                                    <select id="gift-platform" style="width: 100%; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; color: var(--text); font-size: 0.8rem;">
+                                    <label style="font-size: 0.7rem; color: var(--muted); display: block; margin-bottom: 2px;" for="gift-platform">What kind of gift?</label>
+                                    <select id="gift-platform" style="width: 100%; background: color-mix(in srgb, var(--cf-text) 5%, transparent); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; color: var(--text); font-size: 0.8rem;">
                                         <option value="">Select type...</option>
                                         <optgroup label="Gift Cards">
                                             <option value="Amazon Gift Card">Amazon Gift Card</option>
@@ -860,8 +938,8 @@
                                     </select>
                                 </div>
                                 <div class="form-group" style="margin-bottom: 6px;">
-                                    <label style="font-size: 0.7rem; color: var(--muted); display: block; margin-bottom: 2px;">Code, key, PIN, URL, or redemption details</label>
-                                    <textarea id="gift-code" placeholder="Paste the full code, key, PIN, URL, or any redemption details here. Multi-line is fine — include card numbers, security codes, PINs, expiry dates, or instructions." maxlength="2000" rows="3" style="width: 100%; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; color: var(--text); font-size: 0.8rem; font-family: monospace; resize: vertical;"></textarea>
+                                    <label style="font-size: 0.7rem; color: var(--muted); display: block; margin-bottom: 2px;" for="gift-code">Code, key, PIN, URL, or redemption details</label>
+                                    <textarea id="gift-code" placeholder="Paste the full code, key, PIN, URL, or any redemption details here. Multi-line is fine — include card numbers, security codes, PINs, expiry dates, or instructions." maxlength="2000" rows="3" style="width: 100%; background: color-mix(in srgb, var(--cf-text) 5%, transparent); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; color: var(--text); font-size: 0.8rem; font-family: monospace; resize: vertical;"></textarea>
                                 </div>
                                 <div style="font-size: 0.65rem; color: var(--muted); padding: 6px 8px; background: rgba(167,139,250,0.08); border-radius: 6px;">
                                     <i class="fas fa-shield-alt" style="color: var(--accent);"></i>
@@ -895,17 +973,17 @@
                 <form id="sign-form">
                     <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px;">
                         <div class="form-group" style="margin-bottom: 0;">
-                            <label>Your Name</label>
+                            <label for="guest-name">Your Name</label>
                             <input type="text" id="guest-name" placeholder="Your name" required maxlength="100" style="font-size: 0.9rem;">
                         </div>
                         <div class="form-group" style="margin-bottom: 0;">
-                            <label>Edit Password <span style="font-weight: 400; color: var(--muted);">(optional)</span></label>
+                            <label for="guest-password">Edit Password <span style="font-weight: 400; color: var(--muted);">(optional)</span></label>
                             <input type="password" id="guest-password" placeholder="Set to edit later" maxlength="100" style="font-size: 0.9rem;">
                         </div>
                     </div>
                     <div class="form-group">
-                        <label>Your Message</label>
-                        <textarea id="sign-message" placeholder="Happy birthday! Hope you have an amazing day..." maxlength="2000" required oninput="this.nextElementSibling.textContent=this.value.length+'/2000'" style="min-height: 80px;"></textarea>
+                        <label for="sign-message">Your Message</label>
+                        <textarea id="sign-message" class="note-paper" placeholder="Happy birthday! Hope you have an amazing day..." maxlength="2000" required oninput="this.nextElementSibling.textContent=this.value.length+'/2000'" style="min-height: 80px;"></textarea>
                         <div style="text-align: right; font-size: 0.65rem; color: var(--muted); margin-top: 2px;">0/2000</div>
                     </div>
                     <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px;">
@@ -921,7 +999,7 @@
                         </div>
                         <div class="media-panel" id="panel-gif">
                             <div style="display: flex; gap: 8px; margin-bottom: 10px;">
-                                <input type="text" id="giphy-search" placeholder="Search GIFs..." style="flex: 1; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-size: 0.85rem;">
+                                <input type="text" id="giphy-search" placeholder="Search GIFs..." style="flex: 1; background: color-mix(in srgb, var(--cf-text) 5%, transparent); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-size: 0.85rem;">
                                 <button type="button" onclick="searchGiphy('gif')" style="background: var(--accent); border: none; border-radius: 8px; padding: 8px 14px; color: white; cursor: pointer; font-size: 0.85rem;"><i class="fas fa-search"></i></button>
                             </div>
                             <div id="giphy-results" style="columns: 4; column-gap: 8px; max-height: 280px; overflow-y: auto; padding: 4px;"></div>
@@ -929,7 +1007,7 @@
                         </div>
                         <div class="media-panel" id="panel-sticker" style="display: none;">
                             <div style="display: flex; gap: 8px; margin-bottom: 10px;">
-                                <input type="text" id="sticker-search" placeholder="Search stickers..." style="flex: 1; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-size: 0.85rem;">
+                                <input type="text" id="sticker-search" placeholder="Search stickers..." style="flex: 1; background: color-mix(in srgb, var(--cf-text) 5%, transparent); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-size: 0.85rem;">
                                 <button type="button" onclick="searchGiphy('sticker')" style="background: var(--accent); border: none; border-radius: 8px; padding: 8px 14px; color: white; cursor: pointer; font-size: 0.85rem;"><i class="fas fa-search"></i></button>
                             </div>
                             <div id="sticker-results" style="columns: 4; column-gap: 8px; max-height: 280px; overflow-y: auto; padding: 4px;"></div>
@@ -939,19 +1017,19 @@
                             <div style="padding: 12px;">
                                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 8px;">
                                     <div>
-                                        <label style="font-size: 0.75rem; color: var(--muted); display: block; margin-bottom: 4px;">Upload a file</label>
-                                        <input type="file" id="upload-file" accept="image/png,image/jpeg,image/gif,image/webp" style="width: 100%; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 8px; padding: 6px; color: var(--text); font-size: 0.8rem;">
+                                        <label style="font-size: 0.75rem; color: var(--muted); display: block; margin-bottom: 4px;" for="upload-file">Upload a file</label>
+                                        <input type="file" id="upload-file" accept="image/png,image/jpeg,image/gif,image/webp" style="width: 100%; background: color-mix(in srgb, var(--cf-text) 5%, transparent); border: 1px solid var(--border); border-radius: 8px; padding: 6px; color: var(--text); font-size: 0.8rem;">
                                     </div>
                                     <div>
-                                        <label style="font-size: 0.75rem; color: var(--muted); display: block; margin-bottom: 4px;">Or paste a URL</label>
-                                        <input type="text" id="upload-url" placeholder="https://..." style="width: 100%; background: rgba(255,255,255,0.05); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-size: 0.85rem;">
+                                        <label style="font-size: 0.75rem; color: var(--muted); display: block; margin-bottom: 4px;" for="upload-url">Or paste a URL</label>
+                                        <input type="text" id="upload-url" placeholder="https://..." style="width: 100%; background: color-mix(in srgb, var(--cf-text) 5%, transparent); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-size: 0.85rem;">
                                     </div>
                                 </div>
                             </div>
                         </div>
                     </div>
                     <div id="media-preview" style="display: none; margin-bottom: 12px; position: relative;">
-                        <img id="preview-img" style="max-width: 200px; max-height: 150px; border-radius: 8px; border: 2px solid var(--accent);">
+                        <img alt="Preview of the selected image" id="preview-img" style="max-width: 200px; max-height: 150px; border-radius: 8px; border: 2px solid var(--accent);">
                         <button type="button" onclick="clearMedia()" style="position: absolute; top: -8px; right: -8px; width: 24px; height: 24px; border-radius: 50%; background: #ef4444; border: none; color: white; cursor: pointer; font-size: 0.7rem; display: flex; align-items: center; justify-content: center;"><i class="fas fa-times"></i></button>
                     </div>
                     <input type="hidden" id="sign-gif" value="">
@@ -967,7 +1045,7 @@
         <%/* ═══ BOARD-SPECIFIC: Signatures grid (only for group boards) ═══ */%>
         <% if (card.card_type !== 'greeting_card' && card.card_type !== 'one_person') { %>
         <!-- Signatures -->
-        <div class="signatures" id="signatures-container" style="<% if (card.board_bg_image_url) { %>background-image: url('<%= card.board_bg_image_url %>'); background-color: rgba(0,0,0,0.3);<% } else if (card.board_bg_color) { %>background-color: <%= card.board_bg_color %>;<% } else { %>background-color: rgb(0,0,0);<% } %>">
+        <div class="signatures" id="signatures-container" style="<% if (card.board_bg_image_url) { %>background-image: url('<%= card.board_bg_image_url %>'); background-color: rgba(0,0,0,0.3);<% } else if (card.board_bg_color) { %>background-color: <%= card.board_bg_color %>;<% } else { %>background-color: var(--bc-page);<% } %>">
             <% if (signatures.length > 0) { %>
                 <%
                     const likesSet = new Set((typeof userLikes !== 'undefined' ? userLikes : []));
@@ -984,7 +1062,14 @@
                     <% if (sig.message && sig.message !== 'Imported from RecoCards') { %>
                         <div class="sig-message" style="<% if (sig.font_color) { %>color: <%= sig.font_color %>;<% } %><% if (sig.font_family) { %>font-family: '<%= sig.font_family %>', sans-serif;<% } %><% if (sig.font_size) { %>font-size: <%= sig.font_size %>px;<% } %><% if (sig.pin_rank) { %>border-left: 3px solid var(--gold); padding-left: 10px;<% } %>"><%= sig.message %></div>
                     <% } %>
-                    <% if (sig.gif_url) { %>
+                    <% if (sig.video && sig.video.embedUrl) { %>
+                        <div class="sig-video" data-embed="<%= sig.video.embedUrl %>" onclick="playVideo(this)" title="Play video">
+                            <% if (sig.video.thumbnailUrl || sig.gif_url) { %>
+                            <img src="<%= sig.video.thumbnailUrl || sig.gif_url %>" alt="" loading="lazy">
+                            <% } %>
+                            <span class="sig-video-play"><i class="fas fa-play"></i></span>
+                        </div>
+                    <% } else if (sig.gif_url) { %>
                         <img src="<%= sig.gif_url %>" alt="" class="sig-gif" loading="lazy">
                     <% } %>
                     <% if (sig.audio_url) { %>
@@ -1007,13 +1092,14 @@
                         </button>
                         <% const canEdit = (user && user.id === sig.signer_user_id) || sig.guest_password_hash; %>
                         <% if (canEdit) { %>
-                        <button type="button" class="sig-action-btn" onclick="editSig(<%= sig.id %>, <%= sig.guest_password_hash ? 'true' : 'false' %>)" title="Edit message"><i class="far fa-edit"></i></button>
+                        <button type="button" class="sig-action-btn" onclick="editSig(<%= sig.id %>, <%= sig.guest_password_hash ? 'true' : 'false' %>)" title="Edit your note"><i class="far fa-edit"></i></button>
                         <% } %>
-                        <% const canDelete = (user && (user.id === sig.signer_user_id || user.id === card.user_id || user.id === card.creator_user_id)) || sig.guest_password_hash; %>
+                        <% const isMod = typeof canModerate !== 'undefined' && canModerate; %>
+                        <% const canDelete = (user && (user.id === sig.signer_user_id || isMod)) || sig.guest_password_hash; %>
                         <% if (canDelete) { %>
-                        <button type="button" class="sig-action-btn" onclick="deleteSig(<%= sig.id %>, <%= sig.guest_password_hash ? 'true' : 'false' %>)" title="Delete message"><i class="far fa-trash-alt"></i></button>
+                        <button type="button" class="sig-action-btn" onclick="deleteSig(<%= sig.id %>, <%= (sig.guest_password_hash && !isMod && !(user && user.id === sig.signer_user_id)) ? 'true' : 'false' %>)" title="Delete message"><i class="far fa-trash-alt"></i></button>
                         <% } %>
-                        <% const canPin = user && (user.id === card.user_id || user.id === card.creator_user_id); %>
+                        <% const canPin = isMod; %>
                         <% if (canPin && card.card_type !== 'one_person') { %>
                         <button type="button" class="sig-action-btn" onclick="pinSig(<%= sig.id %>, <%= sig.pin_rank ? 'null' : '1' %>)" title="<%= sig.pin_rank ? 'Unpin' : 'Pin to top' %>" style="<%= sig.pin_rank ? 'color: var(--gold);' : '' %>"><i class="fas fa-thumbtack"></i></button>
                         <% } %>
@@ -1024,7 +1110,7 @@
                     <div class="sig-replies" id="replies-<%= sig.id %>" style="<%= sigReplies.length ? '' : 'display:none;' %>">
                         <% sigReplies.forEach(r => { %>
                         <div class="sig-reply">
-                            <% if (r.avatar_url) { %><img src="<%= r.avatar_url %>" class="reply-avatar"><% } %>
+                            <% if (r.avatar_url) { %><img alt="" src="<%= r.avatar_url %>" class="reply-avatar"><% } %>
                             <div><strong><%= r.username %></strong> <%= r.message %></div>
                         </div>
                         <% }); %>
@@ -1048,8 +1134,174 @@
         <% } %>
         <%/* ═══ END BOARD-SPECIFIC SIGNATURES ═══ */%>
 
-        <div class="footer">
+        <div class="bc-footer">
             Powered by <a href="/">CertiFried MultiTool</a>
+        </div>
+    </div>
+
+    <!-- ═══ Edit-your-note modal ═══
+         The whole signing form again, prefilled — a note's wording, styling, video and
+         gift are all editable after the fact, not just its text. -->
+    <div class="edit-modal" id="edit-modal" onclick="if (event.target === this) closeEditModal()">
+        <div class="edit-modal-box">
+            <div class="edit-modal-head">
+                <h3><i class="far fa-edit" style="color: var(--accent); margin-right: 6px;"></i>Edit your note</h3>
+                <button type="button" class="edit-modal-close" onclick="closeEditModal()" title="Close"><i class="fas fa-times"></i></button>
+            </div>
+
+            <div id="edit-error" class="error-msg"></div>
+
+            <div class="form-group" style="margin-bottom: 8px;">
+                <label for="edit-message">Your Message</label>
+                <textarea id="edit-message" class="note-paper" maxlength="2000" placeholder="Happy birthday!" style="min-height: 100px;" oninput="document.getElementById('edit-count').textContent = this.value.length + '/2000'"></textarea>
+                <div id="edit-count" style="text-align: right; font-size: 0.65rem; color: var(--muted); margin-top: 2px;">0/2000</div>
+            </div>
+            <div style="display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 12px;">
+                <% ['❤️','👍','🥳','🎉','🎂','🥰','😍','🤩','🎁','🍰','🥂','🎊','💐','🌟','🔥'].forEach(e => { %>
+                <button type="button" class="emoji-btn" onclick="document.getElementById('edit-message').value += '<%= e %>'; document.getElementById('edit-message').dispatchEvent(new Event('input'));" style="background: none; border: 1px solid var(--border); border-radius: 8px; padding: 4px 8px; font-size: 1.1rem; cursor: pointer;"><%= e %></button>
+                <% }); %>
+            </div>
+
+            <div class="edit-field-row">
+                <input type="color" id="edit-font-color" value="#1f2937" title="Text color">
+                <select id="edit-font-family" title="Font" style="max-width: 160px;"></select>
+                <div style="display: flex; align-items: center; gap: 6px;">
+                    <span style="font-size: 0.7rem; color: var(--muted);">Size</span>
+                    <input type="range" id="edit-font-size" min="10" max="28" value="14" style="width: 80px; accent-color: var(--pink); cursor: pointer;">
+                    <span id="edit-font-size-label" style="font-size: 0.75rem; color: var(--muted); min-width: 28px;">14px</span>
+                </div>
+            </div>
+
+            <details>
+                <summary><i class="fas fa-palette"></i> Card Style</summary>
+                <div style="margin-top: 10px; display: flex; gap: 10px; flex-wrap: wrap; align-items: center;">
+                    <div>
+                        <label class="mini" for="edit-card-bg-color">Card Color</label>
+                        <input type="color" id="edit-card-bg-color" value="#ffffff">
+                    </div>
+                    <div>
+                        <label class="mini" for="edit-card-border-color">Border</label>
+                        <input type="color" id="edit-card-border-color" value="#ffffff">
+                    </div>
+                    <div>
+                        <label class="mini" for="edit-card-border-radius">Shape</label>
+                        <select id="edit-card-border-radius">
+                            <option value="">Square (default)</option>
+                            <option value="8">Rounded</option>
+                            <option value="16">More Rounded</option>
+                            <option value="24">Very Rounded</option>
+                            <option value="32">Pill</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="mini" for="edit-card-shadow">Shadow</label>
+                        <select id="edit-card-shadow">
+                            <option value="">Default</option>
+                            <option value="light">Light</option>
+                            <option value="dramatic">Dramatic</option>
+                            <option value="none">None</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="mini" for="edit-note-effect">Effect</label>
+                        <select id="edit-note-effect">
+                            <option value="">None</option>
+                            <option value="hearts">❤️ Hearts</option>
+                            <option value="confetti">🎊 Confetti</option>
+                            <option value="stars">⭐ Stars</option>
+                            <option value="sparkles">✨ Sparkles</option>
+                        </select>
+                    </div>
+                </div>
+            </details>
+
+            <details open>
+                <summary><i class="fas fa-photo-film"></i> Media</summary>
+                <div style="margin-top: 10px;">
+                    <label class="mini" for="edit-video-url">Video link (YouTube or Vimeo)</label>
+                    <input type="text" id="edit-video-url" placeholder="https://youtube.com/watch?v=..." style="width: 100%; margin-bottom: 10px;">
+
+                    <label class="mini" for="edit-gif-url">Image / GIF link</label>
+                    <input type="text" id="edit-gif-url" placeholder="https://..." style="width: 100%; margin-bottom: 8px;" oninput="setEditMedia(this.value.trim(), true)">
+
+                    <div style="display: flex; gap: 8px; margin-bottom: 8px; flex-wrap: wrap;">
+                        <input type="text" id="edit-giphy-search" placeholder="Search GIPHY..." style="flex: 1; min-width: 160px;" onkeydown="if (event.key === 'Enter') { event.preventDefault(); editSearchGiphy(); }">
+                        <button type="button" onclick="editSearchGiphy()" style="background: var(--accent); border: none; border-radius: 8px; padding: 6px 14px; color: white; cursor: pointer; font-size: 0.8rem;"><i class="fas fa-search"></i></button>
+                        <input type="file" id="edit-upload-file" accept="image/png,image/jpeg,image/gif,image/webp" style="font-size: 0.75rem; color: var(--muted);">
+                    </div>
+                    <div id="edit-giphy-results" style="columns: 4; column-gap: 8px; max-height: 240px; overflow-y: auto; padding: 4px;"></div>
+
+                    <div id="edit-media-preview" style="display: none; margin-top: 10px; position: relative; width: fit-content;">
+                        <img alt="Preview of the selected image" id="edit-preview-img" style="max-width: 200px; max-height: 150px; border-radius: 8px; border: 2px solid var(--accent);">
+                        <button type="button" onclick="clearEditMedia()" title="Remove image" style="position: absolute; top: -8px; right: -8px; width: 24px; height: 24px; border-radius: 50%; background: #ef4444; border: none; color: white; cursor: pointer; font-size: 0.7rem;"><i class="fas fa-times"></i></button>
+                    </div>
+
+                    <div style="margin-top: 12px; border-top: 1px solid var(--border); padding-top: 10px;">
+                        <label class="mini">Voice note</label>
+                        <div class="record-area">
+                            <button type="button" class="record-btn idle" id="edit-record-btn" onclick="toggleRecording('edit-')"><i class="fas fa-microphone"></i></button>
+                            <div class="record-timer" id="edit-record-timer">Tap to record (30s max)</div>
+                            <div class="record-preview" id="edit-record-preview" style="display: none;">
+                                <audio id="edit-record-playback" controls style="width: 100%; height: 32px; margin-top: 8px;"></audio>
+                                <button type="button" onclick="clearRecording('edit-')" style="background: #ef4444; border: none; border-radius: 8px; padding: 4px 12px; color: white; cursor: pointer; font-size: 0.75rem; margin-top: 6px;"><i class="fas fa-trash"></i> Remove</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </details>
+
+            <details>
+                <summary><i class="fas fa-gift"></i> Digital Gift</summary>
+                <div style="margin-top: 10px;">
+                    <div id="edit-gift-status" style="font-size: 0.75rem; color: var(--muted); margin-bottom: 8px;"></div>
+                    <label class="mini" for="edit-gift-platform">Gift type</label>
+                    <select id="edit-gift-platform" style="width: 100%; margin-bottom: 8px;">
+                        <option value="">Select type...</option>
+                        <option value="Amazon Gift Card">Amazon Gift Card</option>
+                        <option value="Steam Gift Card">Steam Gift Card</option>
+                        <option value="PlayStation Gift Card">PlayStation Store</option>
+                        <option value="Xbox Gift Card">Xbox Gift Card</option>
+                        <option value="Nintendo eShop">Nintendo eShop</option>
+                        <option value="Google Play Gift Card">Google Play</option>
+                        <option value="Apple Gift Card">Apple / iTunes</option>
+                        <option value="Netflix Gift Card">Netflix</option>
+                        <option value="Spotify Gift Card">Spotify</option>
+                        <option value="DoorDash Gift Card">DoorDash</option>
+                        <option value="Uber Eats Gift Card">Uber Eats</option>
+                        <option value="Starbucks Gift Card">Starbucks</option>
+                        <option value="Visa Prepaid Card">Visa Prepaid Card</option>
+                        <option value="Mastercard Prepaid">Mastercard Prepaid</option>
+                        <option value="PayPal Gift">PayPal</option>
+                        <option value="Crypto">Crypto</option>
+                        <option value="Roblox Gift Card">Roblox</option>
+                        <option value="V-Bucks Card">V-Bucks (Fortnite)</option>
+                        <option value="League of Legends RP">League of Legends RP</option>
+                        <option value="Battle.net Balance">Battle.net</option>
+                        <option value="Subscription Code">Subscription Code</option>
+                        <option value="Redeem URL">Redeem URL / Link</option>
+                        <option value="Other">Other</option>
+                    </select>
+                    <label class="mini" for="edit-gift-code">New code, key, PIN or URL</label>
+                    <textarea id="edit-gift-code" rows="3" maxlength="2000" placeholder="Leave blank to keep the gift you already attached." style="width: 100%; background: color-mix(in srgb, var(--cf-text) 5%, transparent); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; color: var(--text); font-size: 0.8rem; font-family: monospace; resize: vertical;"></textarea>
+                    <label style="display: flex; align-items: center; gap: 6px; font-size: 0.75rem; color: var(--muted); margin-top: 8px;">
+                        <input type="checkbox" id="edit-remove-gift"> Remove the attached gift
+                    </label>
+                    <div style="font-size: 0.65rem; color: var(--muted); margin-top: 8px;">
+                        <i class="fas fa-shield-alt" style="color: var(--accent);"></i>
+                        Gift codes are encrypted, so an existing one can't be shown back to you — only replaced or removed.
+                    </div>
+                </div>
+            </details>
+
+            <div class="form-group" id="edit-password-wrap" style="display: none;">
+                <label for="edit-guest-password">Your edit password</label>
+                <input type="password" id="edit-guest-password" placeholder="The password you set when signing">
+            </div>
+
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <button type="button" class="btn btn-primary" id="edit-save-btn" onclick="submitEdit()"><i class="fas fa-save"></i> Save changes</button>
+                <button type="button" class="btn btn-outline" onclick="closeEditModal()">Cancel</button>
+            </div>
         </div>
     </div>
 
@@ -1061,7 +1313,7 @@
         script.onload = function() {
             var container = document.querySelector('.container');
             // Temporarily hide non-content elements
-            var hide = document.querySelectorAll('.slideshow-toggle, .sign-form, .footer, .slideshow-overlay');
+            var hide = document.querySelectorAll('.slideshow-toggle, .sign-form, .bc-footer, .slideshow-overlay');
             hide.forEach(function(el) { el.style.display = 'none'; });
 
             html2canvas(container, { backgroundColor: '#0b0f11', scale: 2, useCORS: true }).then(function(canvas) {
@@ -1082,20 +1334,26 @@
     <!-- Media / Giphy JS -->
     <script>
     var selectedMediaUrl = '';
-    var GIPHY_KEY = '***REMOVED***';
+    var selectedVideoUrl = '';
+    // GIPHY goes through the card's own proxy (dashboard/routes/card-giphy.js): the key stays on the server.
+    var GIPHY_PROXY = '/card/' + encodeURIComponent('<%= card.slug || card.share_token %>') + '/giphy/';
     var trendingLoaded = { gif: false, sticker: false };
 
-    // Live font preview — update textarea as user changes font settings
+    // Live font preview — update textarea as user changes font settings.
+    // The box also takes the chosen card colour as its background, so the pairing you see
+    // is the pairing the note ends up with (and dark text never lands on a dark box).
     (function() {
         var colorPicker = document.getElementById('font-color');
         var fontSelect = document.getElementById('font-family');
         var sizeSlider = document.getElementById('font-size');
         var sizeLabel = document.getElementById('font-size-label');
+        var cardColor = document.getElementById('card-bg-color');
         var textarea = document.getElementById('sign-message');
 
         function updatePreview() {
             if (!textarea) return;
             if (colorPicker) textarea.style.color = colorPicker.value;
+            if (cardColor) textarea.style.background = cardColor.value;
             if (fontSelect && fontSelect.value) {
                 textarea.style.fontFamily = "'" + fontSelect.value + "', sans-serif";
             } else if (fontSelect) {
@@ -1109,6 +1367,7 @@
         if (colorPicker) colorPicker.addEventListener('input', updatePreview);
         if (fontSelect) fontSelect.addEventListener('change', updatePreview);
         if (sizeSlider) sizeSlider.addEventListener('input', updatePreview);
+        if (cardColor) cardColor.addEventListener('input', updatePreview);
     })();
 
     function switchMediaTab(tab) {
@@ -1130,14 +1389,12 @@
 
     function loadTrending(type) {
         var resultsId = type === 'sticker' ? 'sticker-results' : 'giphy-results';
-        var endpoint = type === 'sticker'
-            ? 'https://api.giphy.com/v1/stickers/trending'
-            : 'https://api.giphy.com/v1/gifs/trending';
+        var endpoint = GIPHY_PROXY + (type === 'sticker' ? 'stickers' : 'gifs') + '/trending';
 
         var container = document.getElementById(resultsId);
         container.textContent = 'Loading trending...';
 
-        fetch(endpoint + '?api_key=' + GIPHY_KEY + '&limit=30&rating=pg-13')
+        fetch(endpoint, { credentials: 'same-origin' })
         .then(function(r) {
             if (!r.ok) throw new Error('HTTP ' + r.status);
             return r.json();
@@ -1154,14 +1411,12 @@
         // If empty search, reload trending
         if (!query) { loadTrending(type); return; }
 
-        var endpoint = type === 'sticker'
-            ? 'https://api.giphy.com/v1/stickers/search'
-            : 'https://api.giphy.com/v1/gifs/search';
+        var endpoint = GIPHY_PROXY + (type === 'sticker' ? 'stickers' : 'gifs') + '/search';
 
         var container = document.getElementById(resultsId);
         container.textContent = 'Searching...';
 
-        fetch(endpoint + '?api_key=' + GIPHY_KEY + '&q=' + encodeURIComponent(query) + '&limit=30&rating=pg-13')
+        fetch(endpoint + '?q=' + encodeURIComponent(query), { credentials: 'same-origin' })
         .then(function(r) {
             if (!r.ok) throw new Error('HTTP ' + r.status);
             return r.json();
@@ -1170,7 +1425,9 @@
         .catch(function(err) { container.textContent = 'Search failed: ' + err.message; });
     }
 
-    function renderGiphyResults(container, data) {
+    // onPick lets a second picker (the edit modal) reuse this grid without stealing the
+    // sign form's target inputs.
+    function renderGiphyResults(container, data, onPick) {
         container.textContent = '';
         if (!data || !data.data || !data.data.length) {
             container.textContent = 'No results found';
@@ -1192,7 +1449,7 @@
             div.appendChild(img);
             div.addEventListener('mouseenter', function() { img.src = animUrl; });
             div.addEventListener('mouseleave', function() { img.src = stillUrl; });
-            div.addEventListener('click', function() { selectMedia(fullUrl); });
+            div.addEventListener('click', function() { (onPick || selectMedia)(fullUrl); });
             container.appendChild(div);
         });
     }
@@ -1206,18 +1463,28 @@
 
     function clearMedia() {
         selectedMediaUrl = '';
+        selectedVideoUrl = '';
+        var vi = document.getElementById('video-url');
+        if (vi) vi.value = '';
         document.getElementById('sign-gif').value = '';
         document.getElementById('media-preview').style.display = 'none';
     }
 
-    // Handle video URL → thumbnail
+    // Handle video URL — keep the real link (it becomes a playable embed) and show its thumbnail as the poster
     var videoInput = document.getElementById('video-url');
     if (videoInput) {
-        videoInput.addEventListener('change', function() {
+        videoInput.addEventListener('input', function() {
             var url = videoInput.value.trim();
-            var ytMatch = url.match(/(?:youtu\.be\/|youtube\.com\/watch\?v=|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/);
+            var ytMatch = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|live\/))([a-zA-Z0-9_-]{11})/);
+            var vimeoMatch = url.match(/vimeo\.com\/(?:video\/)?(\d{6,12})/);
             if (ytMatch) {
+                selectedVideoUrl = url;
                 selectMedia('https://img.youtube.com/vi/' + ytMatch[1] + '/hqdefault.jpg');
+            } else if (vimeoMatch) {
+                // Vimeo posters need an API call, so there is nothing to preview — just keep the link
+                selectedVideoUrl = url;
+            } else if (!url) {
+                selectedVideoUrl = '';
             }
         });
     }
@@ -1353,25 +1620,21 @@
         });
     }
 
-    function editSig(sigId, needsPassword) {
-        var newMsg = prompt('Edit your message:');
-        if (!newMsg || !newMsg.trim()) return;
-        var body = { message: newMsg.trim() };
-        if (needsPassword && !isLoggedIn) {
-            var pw = prompt('Enter the edit password you set when signing:');
-            if (!pw) return;
-            body.guest_password = pw;
-        }
-        fetch('/card/<%= card.slug || card.share_token %>/edit-signature/' + sigId, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
-        })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            if (data.success) { window.location.reload(); }
-            else { alert(data.error || 'Failed to edit'); }
-        });
+
+    // Swap the poster for a real player only once the viewer asks for it — a card can
+    // carry a dozen videos and they must not all load (or fight the background music).
+    function playVideo(el) {
+        var embed = el.getAttribute('data-embed');
+        if (!embed || el.querySelector('iframe')) return;
+        if (window.stopCardMusic) window.stopCardMusic();
+        var frame = document.createElement('iframe');
+        frame.src = embed;
+        frame.setAttribute('allow', 'accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture');
+        frame.setAttribute('allowfullscreen', '');
+        frame.setAttribute('referrerpolicy', 'strict-origin-when-cross-origin');
+        el.innerHTML = '';
+        el.appendChild(frame);
+        el.style.cursor = 'default';
     }
 
     // Pin/unpin a signature
@@ -1498,7 +1761,7 @@
         var fontColor = document.getElementById('font-color')?.value || '';
         var fontFamily = document.getElementById('font-family')?.value || '';
         var fontSize = document.getElementById('font-size')?.value || '';
-        var body = { message: msg, gif_url: gif || null };
+        var body = { message: msg, gif_url: gif || null, video_url: selectedVideoUrl || null };
         if (fontColor && fontColor !== '#1f2937') body.font_color = fontColor;
         if (fontFamily) body.font_family = fontFamily;
         if (fontSize && parseInt(fontSize) !== 14) body.font_size = parseInt(fontSize);
@@ -1655,12 +1918,20 @@
     var audioChunks = [];
     var recordingTimer = null;
     var recordingSeconds = 0;
-    var recordedAudioUrl = null;
+    var recordedAudioUrl = null;      // sign form
+    var editRecordedAudioUrl = null;  // edit modal
 
-    window.toggleRecording = function() {
-        var btn = document.getElementById('record-btn');
+    // `scope` prefixes the element ids ('' for the sign form, 'edit-' for the edit modal),
+    // so the same recorder drives both without either one hijacking the other's controls.
+    window.toggleRecording = function(scope) {
+        scope = scope || '';
+        var btn = document.getElementById(scope + 'record-btn');
         if (!btn) return;
         var icon = btn.querySelector('i');
+        var setStatus = function(text) {
+            var el = document.getElementById(scope + 'record-timer');
+            if (el) el.textContent = text;
+        };
 
         if (mediaRecorder && mediaRecorder.state === 'recording') {
             mediaRecorder.stop();
@@ -1668,7 +1939,7 @@
         }
 
         if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            document.getElementById('record-timer').textContent = 'Audio recording not supported in this browser';
+            setStatus('Audio recording not supported in this browser');
             return;
         }
 
@@ -1689,30 +1960,30 @@
 
                 var blob = new Blob(audioChunks, { type: 'audio/webm' });
                 if (blob.size > 2 * 1024 * 1024) {
-                    document.getElementById('record-timer').textContent = 'Recording too large (max 2MB). Try a shorter message.';
+                    setStatus('Recording too large (max 2MB). Try a shorter message.');
                     return;
                 }
 
                 var formData = new FormData();
                 formData.append('audio', blob, 'voice_message.webm');
-                document.getElementById('record-timer').textContent = 'Uploading...';
+                setStatus('Uploading...');
 
                 fetch('/card/upload-audio', { method: 'POST', body: formData })
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
                     if (data.url) {
-                        recordedAudioUrl = data.url;
-                        document.getElementById('record-timer').textContent = 'Voice message ready!';
-                        var preview = document.getElementById('record-preview');
-                        var playback = document.getElementById('record-playback');
+                        if (scope) { editRecordedAudioUrl = data.url; } else { recordedAudioUrl = data.url; }
+                        setStatus('Voice message ready!');
+                        var preview = document.getElementById(scope + 'record-preview');
+                        var playback = document.getElementById(scope + 'record-playback');
                         preview.style.display = 'block';
                         playback.src = data.url;
                     } else {
-                        document.getElementById('record-timer').textContent = data.error || 'Upload failed';
+                        setStatus(data.error || 'Upload failed');
                     }
                 })
                 .catch(function() {
-                    document.getElementById('record-timer').textContent = 'Upload failed';
+                    setStatus('Upload failed');
                 });
             };
 
@@ -1722,21 +1993,24 @@
 
             recordingTimer = setInterval(function() {
                 recordingSeconds++;
-                document.getElementById('record-timer').textContent = recordingSeconds + 's / 30s';
+                setStatus(recordingSeconds + 's / 30s');
                 if (recordingSeconds >= 30) {
                     mediaRecorder.stop();
                 }
             }, 1000);
         }).catch(function() {
-            document.getElementById('record-timer').textContent = 'Microphone access denied';
+            setStatus('Microphone access denied');
         });
     };
 
-    window.clearRecording = function() {
-        recordedAudioUrl = null;
-        document.getElementById('record-preview').style.display = 'none';
-        document.getElementById('record-timer').textContent = 'Tap to record (30s max)';
-        var btn = document.getElementById('record-btn');
+    window.clearRecording = function(scope) {
+        scope = scope || '';
+        if (scope) { editRecordedAudioUrl = null; } else { recordedAudioUrl = null; }
+        var preview = document.getElementById(scope + 'record-preview');
+        var timer = document.getElementById(scope + 'record-timer');
+        if (preview) preview.style.display = 'none';
+        if (timer) timer.textContent = 'Tap to record (30s max)';
+        var btn = document.getElementById(scope + 'record-btn');
         var icon = btn ? btn.querySelector('i') : null;
         if (btn) btn.className = 'record-btn idle';
         if (icon) icon.className = 'fas fa-microphone';
@@ -1751,7 +2025,7 @@
         var status = document.getElementById('connect-status');
         var btn = document.getElementById('connect-btn');
 
-        if (!guildId) { status.textContent = 'Please select a server.'; status.style.display = 'block'; status.style.color = '#f87171'; return; }
+        if (!guildId) { status.textContent = 'Please select a server.'; status.style.display = 'block'; status.style.color = 'var(--cf-danger-ink)'; return; }
 
         status.style.display = 'block';
         status.style.color = 'var(--accent)';
@@ -1771,17 +2045,17 @@
         .then(function(r) { return r.json(); })
         .then(function(data) {
             if (data.success) {
-                status.style.color = '#22c55e';
+                status.style.color = 'var(--cf-success-ink)';
                 status.textContent = 'Connected! The card is now linked to your Discord server.';
                 setTimeout(function() { window.location.reload(); }, 2000);
             } else {
-                status.style.color = '#f87171';
+                status.style.color = 'var(--cf-danger-ink)';
                 status.textContent = data.error || 'Failed to connect.';
                 btn.disabled = false;
             }
         })
         .catch(function() {
-            status.style.color = '#f87171';
+            status.style.color = 'var(--cf-danger-ink)';
             status.textContent = 'Network error.';
             btn.disabled = false;
         });
@@ -1807,7 +2081,7 @@
                     fromEl.style.cssText = 'font-size: 0.8rem; font-weight: 600; color: var(--text); margin-bottom: 6px;';
                     fromEl.textContent = (gift.platform || 'Gift') + ' from ' + gift.from;
                     var codeEl = document.createElement('pre');
-                    codeEl.style.cssText = 'font-family: monospace; font-size: 0.85rem; color: var(--gold); white-space: pre-wrap; word-break: break-all; user-select: all; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 8px; margin: 0;';
+                    codeEl.style.cssText = 'font-family: monospace; font-size: 0.85rem; color: var(--gold); white-space: pre-wrap; word-break: break-all; user-select: all; background: var(--bc-well); padding: 10px; border-radius: 8px; margin: 0;';
                     codeEl.textContent = gift.code;
                     info.appendChild(fromEl);
                     info.appendChild(codeEl);
@@ -1842,6 +2116,299 @@
         })
         .catch(function() { alert('Network error'); });
     };
+    </script>
+
+    <!-- ═══ Edit-your-note modal JS ═══ -->
+    <script>
+    // Prefill data, one entry per note the viewer could edit. Deliberately whitelisted:
+    // gift_code_encrypted and guest_password_hash must never reach the page source, and
+    // gift details are withheld unless the viewer is the note's signed-in author, so the
+    // recipient can't read a gift's platform off the page before the reveal.
+    var SIG_EDIT_DATA = <%-
+        JSON.stringify(Object.fromEntries(
+            signatures
+                .filter(s => (user && user.id === s.signer_user_id) || s.guest_password_hash)
+                .map(s => {
+                    const owned = !!(user && user.id === s.signer_user_id);
+                    return [s.id, {
+                        message: s.message || '',
+                        gif_url: s.gif_url || '',
+                        video_url: s.video_url || '',
+                        font_color: s.font_color || '',
+                        font_family: s.font_family || '',
+                        font_size: s.font_size || null,
+                        audio_url: s.audio_url || '',
+                        card_bg_color: s.card_bg_color || '',
+                        card_border_radius: s.card_border_radius || '',
+                        card_border_color: s.card_border_color || '',
+                        card_shadow: s.card_shadow || '',
+                        note_effect: s.note_effect || '',
+                        gift_platform: owned ? (s.gift_platform || '') : '',
+                        has_gift: owned ? !!s.gift_code_encrypted : null,
+                    }];
+                })
+        )).replace(/</g, '\\u003c')
+    %>;
+
+    // Mirrors the sign form's picker. The server's allowlist is the authority — anything
+    // not on it is stored as "no font".
+    var EDIT_FONT_GROUPS = [
+        ['Sans Serif', ['Helvetica Neue', 'Arial', 'Verdana', 'Trebuchet MS', 'Roboto', 'Quicksand']],
+        ['Serif', ['Georgia', 'Palatino', 'Garamond', 'Bookman']],
+        ['Monospace', ['Courier New']],
+        ['Handwriting', ['Pacifico', 'Dancing Script', 'Lobster', 'Caveat', 'Permanent Marker', 'Satisfy', 'Great Vibes', 'Sacramento', 'Architects Daughter', 'Indie Flower', 'Patrick Hand', 'Shadows Into Light', 'Amatic SC']],
+        ['Display', ['Comic Sans MS', 'Impact']],
+    ];
+
+    var editingSigId = null;
+    var editNeedsPassword = false;
+
+    (function buildEditFontOptions() {
+        var sel = document.getElementById('edit-font-family');
+        if (!sel) return;
+        var def = document.createElement('option');
+        def.value = '';
+        def.textContent = 'Default (Inter)';
+        sel.appendChild(def);
+        EDIT_FONT_GROUPS.forEach(function(group) {
+            var og = document.createElement('optgroup');
+            og.label = group[0];
+            group[1].forEach(function(font) {
+                var opt = document.createElement('option');
+                opt.value = font;
+                opt.textContent = font;
+                opt.style.fontFamily = "'" + font + "', sans-serif";
+                og.appendChild(opt);
+            });
+            sel.appendChild(og);
+        });
+    })();
+
+    function setEditMedia(url, fromInput) {
+        var preview = document.getElementById('edit-media-preview');
+        if (!url) {
+            preview.style.display = 'none';
+            if (!fromInput) document.getElementById('edit-gif-url').value = '';
+            return;
+        }
+        if (!fromInput) document.getElementById('edit-gif-url').value = url;
+        document.getElementById('edit-preview-img').src = url;
+        preview.style.display = 'block';
+    }
+
+    function clearEditMedia() {
+        document.getElementById('edit-gif-url').value = '';
+        document.getElementById('edit-media-preview').style.display = 'none';
+    }
+
+    function editSearchGiphy() {
+        var query = document.getElementById('edit-giphy-search').value.trim();
+        var container = document.getElementById('edit-giphy-results');
+        container.textContent = query ? 'Searching...' : 'Loading trending...';
+        var url = GIPHY_PROXY + 'gifs/' + (query ? 'search?q=' + encodeURIComponent(query) : 'trending');
+        fetch(url, { credentials: 'same-origin' })
+        .then(function(r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+        .then(function(data) { renderGiphyResults(container, data, function(picked) { setEditMedia(picked); }); })
+        .catch(function(err) { container.textContent = 'Search failed: ' + err.message; });
+    }
+
+    // Live preview inside the modal, same as the sign form gives you — text colour on the
+    // chosen card colour, so what you read here is what the note will look like.
+    function applyEditPreview() {
+        var area = document.getElementById('edit-message');
+        if (!area) return;
+        var color = document.getElementById('edit-font-color');
+        var family = document.getElementById('edit-font-family');
+        var size = document.getElementById('edit-font-size');
+        var cardColor = document.getElementById('edit-card-bg-color');
+        area.style.color = color.value;
+        area.style.background = cardColor.value;
+        area.style.fontFamily = family.value ? "'" + family.value + "', sans-serif" : '';
+        area.style.fontSize = size.value + 'px';
+        document.getElementById('edit-font-size-label').textContent = size.value + 'px';
+    }
+    ['edit-font-color', 'edit-font-size', 'edit-card-bg-color'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) el.addEventListener('input', applyEditPreview);
+    });
+    (function() {
+        var family = document.getElementById('edit-font-family');
+        if (family) family.addEventListener('change', applyEditPreview);
+    })();
+
+    // A video's poster lives in gif_url, so the two fields have to move together: swap the
+    // link and the poster follows; clear the link and a leftover YouTube still would
+    // otherwise linger on the note as a plain image.
+    var editVideoInput = document.getElementById('edit-video-url');
+    if (editVideoInput) {
+        editVideoInput.addEventListener('input', function() {
+            var url = editVideoInput.value.trim();
+            var gifField = document.getElementById('edit-gif-url');
+            var yt = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|live\/))([a-zA-Z0-9_-]{11})/);
+            if (yt) {
+                setEditMedia('https://img.youtube.com/vi/' + yt[1] + '/hqdefault.jpg');
+            } else if (!url && /img\.youtube\.com\/vi\//.test(gifField.value)) {
+                clearEditMedia();
+            }
+        });
+    }
+
+    var editUploadFile = document.getElementById('edit-upload-file');
+    if (editUploadFile) {
+        editUploadFile.addEventListener('change', function() {
+            if (!editUploadFile.files.length) return;
+            var file = editUploadFile.files[0];
+            if (file.size > 5 * 1024 * 1024) { alert('File too large (max 5MB)'); return; }
+            var formData = new FormData();
+            formData.append('file', file);
+            fetch('/card/upload', { method: 'POST', body: formData })
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                if (data.success && data.url) setEditMedia(data.url);
+                else alert(data.error || 'Upload failed');
+            })
+            .catch(function() { alert('Upload failed'); });
+        });
+    }
+
+    function editSig(sigId, needsPassword) {
+        var d = SIG_EDIT_DATA[sigId];
+        if (!d) { alert('This note can no longer be edited — try reloading the page.'); return; }
+
+        editingSigId = sigId;
+        editNeedsPassword = !!needsPassword && !isLoggedIn;
+
+        document.getElementById('edit-message').value = d.message;
+        document.getElementById('edit-count').textContent = d.message.length + '/2000';
+        document.getElementById('edit-font-color').value = d.font_color || '#1f2937';
+        document.getElementById('edit-font-family').value = d.font_family || '';
+        document.getElementById('edit-font-size').value = d.font_size || 14;
+        document.getElementById('edit-font-size-label').textContent = (d.font_size || 14) + 'px';
+        document.getElementById('edit-card-bg-color').value = d.card_bg_color || '#ffffff';
+        document.getElementById('edit-card-border-color').value = d.card_border_color || '#ffffff';
+        document.getElementById('edit-card-border-radius').value = d.card_border_radius ? String(d.card_border_radius) : '';
+        document.getElementById('edit-card-shadow').value = d.card_shadow || '';
+        document.getElementById('edit-note-effect').value = d.note_effect || '';
+        document.getElementById('edit-video-url').value = d.video_url || '';
+        document.getElementById('edit-gif-url').value = d.gif_url || '';
+        setEditMedia(d.gif_url || '', true);
+
+        // Voice note: start from whatever is already attached, so saving without touching
+        // the recorder keeps it.
+        editRecordedAudioUrl = d.audio_url || null;
+        var recPreview = document.getElementById('edit-record-preview');
+        var recTimer = document.getElementById('edit-record-timer');
+        if (d.audio_url) {
+            document.getElementById('edit-record-playback').src = d.audio_url;
+            recPreview.style.display = 'block';
+            recTimer.textContent = 'Voice note attached — record again to replace it';
+        } else {
+            recPreview.style.display = 'none';
+            recTimer.textContent = 'Tap to record (30s max)';
+        }
+
+        document.getElementById('edit-gift-code').value = '';
+        document.getElementById('edit-remove-gift').checked = false;
+        document.getElementById('edit-gift-platform').value = d.gift_platform || '';
+        document.getElementById('edit-gift-status').textContent = d.has_gift === null
+            ? 'Leave the code blank to keep whatever gift is attached.'
+            : (d.has_gift ? 'A gift is attached. Leave the code blank to keep it as-is.' : 'No gift attached yet.');
+
+        document.getElementById('edit-password-wrap').style.display = editNeedsPassword ? '' : 'none';
+        document.getElementById('edit-guest-password').value = '';
+
+        var err = document.getElementById('edit-error');
+        err.style.display = 'none';
+        document.getElementById('edit-modal').classList.add('active');
+        document.body.style.overflow = 'hidden';
+        document.getElementById('edit-message').dispatchEvent(new Event('input'));
+        applyEditPreview();
+    }
+
+    function closeEditModal() {
+        document.getElementById('edit-modal').classList.remove('active');
+        document.body.style.overflow = '';
+        editingSigId = null;
+    }
+
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && document.getElementById('edit-modal').classList.contains('active')) closeEditModal();
+    });
+
+    function submitEdit() {
+        if (!editingSigId) return;
+        var err = document.getElementById('edit-error');
+        var btn = document.getElementById('edit-save-btn');
+        var msg = document.getElementById('edit-message').value.trim();
+
+        if (!msg) {
+            err.textContent = 'Your message cannot be empty.';
+            err.style.display = 'block';
+            return;
+        }
+
+        var password = document.getElementById('edit-guest-password').value.trim();
+        if (editNeedsPassword && !password) {
+            err.textContent = 'Enter the edit password you set when signing.';
+            err.style.display = 'block';
+            return;
+        }
+        err.style.display = 'none';
+
+        // The server treats this payload as the note's complete state, so anything left at
+        // its default is sent as null and clears the stored value.
+        var fontColor = document.getElementById('edit-font-color').value;
+        var fontSize = parseInt(document.getElementById('edit-font-size').value, 10);
+        var cardBg = document.getElementById('edit-card-bg-color').value;
+        var cardBorder = document.getElementById('edit-card-border-color').value;
+
+        var body = {
+            message: msg,
+            gif_url: document.getElementById('edit-gif-url').value.trim() || null,
+            video_url: document.getElementById('edit-video-url').value.trim() || null,
+            font_color: fontColor !== '#1f2937' ? fontColor : null,
+            font_family: document.getElementById('edit-font-family').value || null,
+            font_size: fontSize !== 14 ? fontSize : null,
+            audio_url: editRecordedAudioUrl || null,
+            card_bg_color: cardBg !== '#ffffff' ? cardBg : null,
+            card_border_color: cardBorder !== '#ffffff' ? cardBorder : null,
+            card_border_radius: document.getElementById('edit-card-border-radius').value || null,
+            card_shadow: document.getElementById('edit-card-shadow').value || null,
+            note_effect: document.getElementById('edit-note-effect').value || null,
+        };
+
+        var giftCode = document.getElementById('edit-gift-code').value.trim();
+        if (giftCode) {
+            body.gift_code = giftCode;
+            body.gift_platform = document.getElementById('edit-gift-platform').value || null;
+        } else if (document.getElementById('edit-remove-gift').checked) {
+            body.remove_gift = true;
+        }
+        if (editNeedsPassword) body.guest_password = password;
+
+        btn.disabled = true;
+        btn.querySelector('i').className = 'fas fa-spinner fa-spin';
+
+        fetch('/card/<%= card.slug || card.share_token %>/edit-signature/' + editingSigId, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) { window.location.reload(); return; }
+            err.textContent = data.error || 'Failed to save changes.';
+            err.style.display = 'block';
+            btn.disabled = false;
+            btn.querySelector('i').className = 'fas fa-save';
+        })
+        .catch(function() {
+            err.textContent = 'Network error.';
+            err.style.display = 'block';
+            btn.disabled = false;
+            btn.querySelector('i').className = 'fas fa-save';
+        });
+    }
     </script>
 </body>
 </html>

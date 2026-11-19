@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>" lang="en">
+<head>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="/css/super-admin-music.css?v=5">
+
+    <style>
+        .chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 1rem; }
+        .chip { font: inherit; font-size: 0.8rem; font-weight: 600; padding: 0.35rem 0.75rem; border-radius: 999px; cursor: pointer;
+            background: var(--bg-card); border: 1px solid var(--border-color); color: var(--text-secondary); }
+        .chip[aria-pressed="true"] { background: color-mix(in srgb, var(--accent-purple) 20%, transparent); border-color: var(--accent-purple); color: var(--text-primary); }
+        .chip .n { color: var(--text-muted); margin-left: 0.25rem; }
+        .chip:focus-visible, th button:focus-visible, tr.cmd:focus-visible { outline: 2px solid var(--accent-purple); outline-offset: 2px; }
+        .tog { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.83rem; color: var(--text-secondary); cursor: pointer; }
+        table.usage { min-width: 920px; }
+        table.usage th button { all: unset; cursor: pointer; }
+        table.usage th[aria-sort="descending"] button::after { content: " ▾"; color: var(--accent-purple); }
+        table.usage th[aria-sort="ascending"] button::after { content: " ▴"; color: var(--accent-purple); }
+        table.usage td { vertical-align: middle; }
+        tr.cmd { cursor: pointer; }
+        tr.cmd:hover td { background: var(--bg-card-hover); }
+        .cname { font-weight: 600; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+        .use { display: grid; grid-template-columns: 3.2rem minmax(6rem, 1fr); gap: 0.6rem; align-items: center; min-width: 11rem; }
+        .use b { text-align: right; font-variant-numeric: tabular-nums; }
+        .use .bd-track { display: block; }
+        .tag { margin-left: 0.4rem; }
+        .tone-info { --tone: var(--accent-blue); }
+        .bad { color: var(--accent-red, #ed4245); }
+        tr.paths td { background: var(--bg-card); padding: 0.75rem 1rem 1rem; }
+        .plist { list-style: none; columns: 2 22rem; column-gap: 1.5rem; font-size: 0.82rem; }
+        .plist li { break-inside: avoid; padding: 0.15rem 0; display: flex; justify-content: space-between; gap: 0.75rem; }
+        .plist li span:first-child { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+        .plist li span:last-child { color: var(--text-muted); white-space: nowrap; font-variant-numeric: tabular-nums; }
+        .notes { display: grid; gap: 0.4rem; color: var(--text-muted); font-size: 0.82rem; margin-top: 1rem; max-width: 80ch; }
+        .notes b { color: var(--text-secondary); }
+    </style>
+<%- include('partials/site-head', { title: 'Command usage · Owner console · CertiFried', noindex: true }) %>
+</head>
+<body>
+    <%- include('partials/site-header', { user }) %>
+
+    <main id="main-content" tabindex="-1">
+        <div class="container">
+            <%- include('partials/site/_owner-nav', { ownerActive: 'command-usage' }) %>
+            <div class="page-header">
+                <div class="page-header-content">
+                    <div class="page-icon" aria-hidden="true"><i class="fas fa-terminal"></i></div>
+                    <div>
+                        <h1 class="page-title">Command usage</h1>
+                        <p class="page-subtitle">Every command across all servers and bots: how often it runs, where, as slash or as text, and how often it fails.</p>
+                    </div>
+                </div>
+                <div class="controls">
+                    <div class="seg" role="group" aria-label="Time range">
+                        <button type="button" data-range="7" aria-pressed="false">7 days</button>
+                        <button type="button" data-range="30" aria-pressed="true">30 days</button>
+                        <button type="button" data-range="90" aria-pressed="false">90 days</button>
+                        <button type="button" data-range="365" aria-pressed="false">365 days</button>
+                        <button type="button" data-range="all" aria-pressed="false">All time</button>
+                    </div>
+                    <button type="button" class="btn" id="refresh"><i class="fas fa-rotate-right" aria-hidden="true"></i> Refresh</button>
+                    <span class="updated" id="updated"></span>
+                </div>
+            </div>
+
+            <div id="error"></div>
+            <div class="kpis" id="kpis" aria-live="polite"></div>
+
+            <form class="filters" role="search" onsubmit="return false">
+                <label class="sr-only" for="f-q">Search commands</label>
+                <input class="field search" id="f-q" type="search" placeholder="Search commands" autocomplete="off">
+                <label class="tog"><input type="checkbox" id="f-unused"> Only commands with no use</label>
+            </form>
+            <div class="chips" id="chips" role="group" aria-label="Command type"></div>
+
+            <div class="card"><div class="table-wrap">
+                <table class="usage">
+                    <thead><tr>
+                        <th scope="col"><span class="sr-only">Rank</span>#</th>
+                        <th scope="col"><button type="button" data-k="name">Command</button></th>
+                        <th scope="col"><button type="button" data-k="type">Type</button></th>
+                        <th scope="col" aria-sort="descending"><button type="button" data-k="uses">Uses</button></th>
+                        <th scope="col" class="num"><button type="button" data-k="slash">As slash</button></th>
+                        <th scope="col" class="num"><button type="button" data-k="text">As text</button></th>
+                        <th scope="col" class="num"><button type="button" data-k="servers">Servers</button></th>
+                        <th scope="col" class="num"><button type="button" data-k="users">Members</button></th>
+                        <th scope="col" class="num"><button type="button" data-k="errRate">Errors</button></th>
+                        <th scope="col" class="num"><button type="button" data-k="last">Last used</button></th>
+                    </tr></thead>
+                    <tbody id="rows"><tr><td colspan="10" class="empty">Loading…</td></tr></tbody>
+                </table>
+            </div></div>
+
+            <div class="notes">
+                <div><b>Uses</b> counts every run in the range: slash commands, context menus, and commands typed in chat (<b>As text</b> adds up every prefix, including the <code>/</code> typed form). Context menu uses count in Uses only.</div>
+                <div><b>Servers</b> is how many servers used it. <b>Members</b> is distinct members since live tracking began, so history from before it is not in that column. <b>Errors</b> is the share of runs where the command threw.</div>
+                <div>History from before tracking began was rebuilt from the audit log, bot logs and logged chat commands; those commands are marked <b>Includes history</b>. Click a row for its subcommands. The page refreshes itself every two minutes.</div>
+            </div>
+        </div>
+    </main>
+    <%- include('partials/site-footer') %>
+
+    <script>
+    (function () {
+        'use strict';
+        const API = '/api/super-admin/command-usage';
+        const REFRESH_MS = 120000;
+        const RANGES = ['7', '30', '90', '365', 'all'];
+        const RANGE_LABEL = { 7: '7 days', 30: '30 days', 90: '90 days', 365: '365 days', all: 'all time' };
+        const TYPE_LABEL = { slash: 'Slash', text: 'Text', mixed: 'Slash and text', context: 'Context menu', unknown: 'Removed' };
+
+        const params = new URLSearchParams(location.search);
+        const state = { range: RANGES.includes(params.get('range')) ? params.get('range') : '30', sort: 'uses', dir: -1,
+            type: 'All', q: '', unused: false, open: new Set() };
+        try {
+            const s = JSON.parse(localStorage.getItem('command-usage') || '{}');
+            for (const k of ['sort', 'dir', 'type']) if (s[k] != null) state[k] = s[k];
+        } catch (e) { /* storage disabled */ }
+        const save = () => { try { localStorage.setItem('command-usage', JSON.stringify({ sort: state.sort, dir: state.dir, type: state.type })); } catch (e) { /* storage disabled */ } };
+        let data = null, loadedAt = 0, inFlight = null;
+
+        // Every node is built here, so command names are text, never HTML.
+        function h(tag, attrs, ...kids) {
+            const el = document.createElement(tag);
+            for (const [k, v] of Object.entries(attrs || {})) if (v != null && v !== false) el.setAttribute(k, String(v));
+            for (const kid of kids.flat(Infinity)) if (kid != null && kid !== false) el.append(kid instanceof Node ? kid : String(kid));
+            return el;
+        }
+        const $ = (id) => document.getElementById(id);
+        const put = (id, ...nodes) => $(id).replaceChildren(...nodes.flat(Infinity).filter(n => n != null && n !== false));
+        const icon = (cls) => h('i', { class: cls, 'aria-hidden': 'true' });
+        const fmtNum = new Intl.NumberFormat();
+        const pct = (n, d) => d ? `${(Math.round((n / d) * 1000) / 10).toFixed(1)}%` : '–';
+        function fmtDay(d) { try { return new Date(d + 'T00:00:00').toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }); } catch (e) { return d; } }
+        function ago(ms) {
+            const s = Math.max(0, Math.round(ms / 1000));
+            if (s < 60) return `${s}s ago`;
+            if (s < 3600) return `${Math.round(s / 60)}m ago`;
+            return `${Math.round(s / 3600)}h ago`;
+        }
+        const dash = () => h('span', { class: 'muted' }, '–');
+
+        async function load(fresh) {
+            const ctrl = new AbortController();
+            if (inFlight) inFlight.abort();
+            inFlight = ctrl;
+            try {
+                const r = await fetch(`${API}?range=${state.range}${fresh ? '&fresh=1' : ''}`, { credentials: 'same-origin', headers: { accept: 'application/json' }, signal: ctrl.signal });
+                if (!(r.headers.get('content-type') || '').includes('application/json')) throw new Error('Your session expired — reload the page to sign in again.');
+                const body = await r.json();
+                if (!r.ok) throw new Error(body.error || `HTTP ${r.status}`);
+                data = body; loadedAt = Date.now();
+                for (const c of data.commands) c.errRate = c.uses ? c.errors / c.uses : -1;
+                put('error');
+                render();
+            } catch (e) {
+                if (e.name === 'AbortError') return;
+                put('error', h('div', { class: 'banner tone-down', role: 'alert' }, h('div', { class: 'banner-icon' }, icon('fas fa-circle-xmark')),
+                    h('div', null, h('h2', null, 'Could not load command usage'), h('p', null, e.message))));
+            } finally { if (inFlight === ctrl) inFlight = null; tickUpdated(); }
+        }
+
+        function render() { renderKpis(); renderChips(); renderRows(); }
+
+        function renderKpis() {
+            const t = data.totals;
+            const kpi = (value, label, sub) => h('div', { class: 'kpi' }, h('div', { class: 'kpi-value' }, value), h('div', { class: 'kpi-label' }, label), sub ? h('div', { class: 'kpi-sub' }, sub) : null);
+            const used = data.commands.filter(c => c.uses > 0);
+            const top = used.slice().sort((a, b) => b.uses - a.uses)[0];
+            put('kpis',
+                kpi(fmtNum.format(t.uses), `Uses, ${RANGE_LABEL[data.range]}`, t.first ? `data from ${fmtDay(t.first)}` : null),
+                kpi(fmtNum.format(t.servers), 'Servers using commands'),
+                kpi(fmtNum.format(t.users), 'Members', t.trackingSince ? `live tracking since ${fmtDay(t.trackingSince)}` : 'live tracking only'),
+                kpi(pct(t.slash, t.uses), 'Run as slash', `${pct(t.text, t.uses)} typed as text`),
+                kpi(pct(t.errors, t.uses), 'Error rate', `${fmtNum.format(t.errors)} runs threw`),
+                kpi(fmtNum.format(t.unused), 'Commands with no use', `of ${fmtNum.format(data.commands.filter(c => c.type !== 'unknown').length)}`),
+                top ? kpi(fmtNum.format(top.uses), 'Most used', top.name) : null);
+        }
+
+        function renderChips() {
+            const types = ['All', ...['slash', 'text', 'mixed', 'context', 'unknown'].filter(t => data.commands.some(c => c.type === t))];
+            if (!types.includes(state.type)) state.type = 'All';
+            put('chips', types.map(t => h('button', { type: 'button', class: 'chip', 'data-t': t, 'aria-pressed': String(t === state.type) },
+                t === 'All' ? 'All' : TYPE_LABEL[t], h('span', { class: 'n' }, t === 'All' ? data.commands.length : data.commands.filter(c => c.type === t).length))));
+        }
+
+        const val = (c, k) => (k === 'name' || k === 'type') ? String(c[k]).toLowerCase() : k === 'last' ? (c.last || '') : (c[k] ?? -1);
+        function renderRows() {
+            document.querySelectorAll('table.usage th').forEach(th => {
+                const b = th.querySelector('button'); if (!b) return;
+                if (b.dataset.k === state.sort) th.setAttribute('aria-sort', state.dir < 0 ? 'descending' : 'ascending'); else th.removeAttribute('aria-sort');
+            });
+            const q = state.q.toLowerCase();
+            const list = data.commands.filter(c => (state.type === 'All' || c.type === state.type)
+                && (!q || c.name.includes(q) || c.paths.some(p => p.path.includes(q)))
+                && (!state.unused || c.uses === 0));
+            list.sort((a, b) => { const x = val(a, state.sort), y = val(b, state.sort); return (x < y ? -1 : x > y ? 1 : 0) * state.dir || b.uses - a.uses || a.name.localeCompare(b.name); });
+            if (!list.length) return put('rows', h('tr', null, h('td', { colspan: 10, class: 'empty' }, 'No commands match. Clear the search or pick another type.')));
+            const max = Math.max(1, ...list.map(c => c.uses));
+            const rows = [];
+            list.forEach((c, i) => {
+                const open = state.open.has(c.name);
+                const tag = c.uses === 0 ? h('span', { class: 'pill tone-down tag' }, 'No use')
+                    : c.backfilled ? h('span', { class: 'pill tone-info tag', title: 'Part of this is history rebuilt from before tracking began' }, 'Includes history') : null;
+                rows.push(h('tr', { class: 'cmd', tabindex: 0, 'data-name': c.name, 'aria-expanded': String(open) },
+                    h('td', { class: 'muted' }, i + 1),
+                    h('td', null, h('span', { class: 'cname' }, c.name), tag),
+                    h('td', { class: 'muted small' }, TYPE_LABEL[c.type] || c.type),
+                    h('td', null, h('div', { class: 'use' }, h('b', null, fmtNum.format(c.uses)),
+                        h('span', { class: 'bd-track' }, h('span', { class: 'bd-fill', style: `width:${Math.round((c.uses / max) * 100)}%` })))),
+                    h('td', { class: 'num' }, c.uses ? fmtNum.format(c.slash) : dash()),
+                    h('td', { class: 'num' }, c.uses ? fmtNum.format(c.text) : dash()),
+                    h('td', { class: 'num' }, c.servers || dash()),
+                    h('td', { class: 'num' }, c.users || dash()),
+                    h('td', { class: `num${c.uses && c.errors / c.uses >= 0.05 ? ' bad' : ''}`, title: c.errors ? `${c.errors} of ${c.uses}` : null }, c.uses ? pct(c.errors, c.uses) : dash()),
+                    h('td', { class: 'num' }, c.last ? fmtDay(c.last) : dash())));
+                if (open) {
+                    rows.push(h('tr', { class: 'paths' }, h('td'), h('td', { colspan: 9 }, c.paths.length
+                        ? h('ul', { class: 'plist' }, c.paths.map(p => h('li', null, h('span', null, p.path),
+                            h('span', null, `${fmtNum.format(p.uses)} · ${fmtNum.format(p.slash)} slash · ${fmtNum.format(p.text)} text · ${p.servers} servers${p.errors ? ` · ${p.errors} errors` : ''}`))))
+                        : h('span', { class: 'muted' }, `Not used in ${RANGE_LABEL[data.range]}.`))));
+                }
+            });
+            put('rows', rows);
+        }
+
+        // ── controls ───────────────────────────────────────────────────────────
+        $('chips').addEventListener('click', e => { const b = e.target.closest('.chip'); if (!b) return; state.type = b.dataset.t; save(); render(); });
+        $('f-q').addEventListener('input', e => { state.q = e.target.value.trim(); if (data) renderRows(); });
+        $('f-unused').addEventListener('change', e => { state.unused = e.target.checked; if (data) renderRows(); });
+        document.querySelectorAll('table.usage th button').forEach(b => b.addEventListener('click', () => {
+            const k = b.dataset.k;
+            if (state.sort === k) state.dir *= -1; else { state.sort = k; state.dir = (k === 'name' || k === 'type') ? 1 : -1; }
+            save(); if (data) renderRows();
+        }));
+        const toggle = tr => { const n = tr.dataset.name; state.open.has(n) ? state.open.delete(n) : state.open.add(n); renderRows(); };
+        $('rows').addEventListener('click', e => { const tr = e.target.closest('tr.cmd'); if (tr) toggle(tr); });
+        $('rows').addEventListener('keydown', e => { const tr = e.target.closest('tr.cmd'); if (tr && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggle(tr); } });
+        document.querySelectorAll('.seg button').forEach(b => b.addEventListener('click', () => {
+            state.range = b.dataset.range;
+            history.replaceState(null, '', `${location.pathname}?range=${state.range}`);
+            document.querySelectorAll('.seg button').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.range === state.range)));
+            load();
+        }));
+        document.querySelectorAll('.seg button').forEach(x => x.setAttribute('aria-pressed', String(x.dataset.range === state.range)));
+        $('refresh').addEventListener('click', () => load(true));
+        function tickUpdated() { $('updated').textContent = loadedAt ? `Updated ${ago(Date.now() - loadedAt)}` : ''; }
+        setInterval(tickUpdated, 1000);
+        setInterval(() => { if (!document.hidden) load(); }, REFRESH_MS);
+        load();
+    })();
+    </script>
+</body>
+</html>

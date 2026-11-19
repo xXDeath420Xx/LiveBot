@@ -1,0 +1,116 @@
+<%#
+  GET /studio (dashboard/routes/legal-pages.js). Locals: user, facts (STUDIO_FACTS from dashboard/content/legal/data-inventory.js).
+  Screenshots come from the guide manifest through app.locals.siteGuides (demo data only, scripts/site-shots); the page
+  renders without them.
+%>
+<!DOCTYPE html>
+<html lang="en" data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>">
+<head>
+<%- include('partials/site-head', { title: 'CertiFried Studio · CertiFried', description: 'CertiFried Studio is a free, open-source Windows app that runs your CertiFried stream bot on your streaming PC: OBS, sounds, hotkeys, voice commands and song requests kept out of your VODs.', path: '/studio' }) %>
+    <link rel="stylesheet" href="/css/cf-studio-pages.css">
+</head>
+<body class="cfs-body">
+<%- include('partials/site-header', { active: '', user: locals.user || null, returnTo: '/studio' }) %>
+<%
+  const _f = locals.facts || {};
+  const _img = (id) => (locals.siteGuides && typeof locals.siteGuides.guideImage === 'function') ? locals.siteGuides.guideImage(id) : null;
+  const _shots = [
+      ['studio-status', 'Studio\'s Status tab: connected to CertiFried and to OBS, the scene on air and recent actions.'],
+      ['studio-hotkeys', 'Hotkeys run an automation, play a sound or mute a microphone.'],
+      ['stream-bot-editor', 'Automations are made on the dashboard: a trigger, conditions and actions.'],
+      ['stream-bot-overview', 'The stream bot overview: linked channels, today\'s events and the live feed.'],
+  ].map(([id, caption]) => ({ img: _img(id), caption })).filter((s) => s.img);
+%>
+    <main id="main-content" tabindex="-1" class="cfs-main">
+        <div class="cfs-pagehead">
+            <span class="cfs-eyebrow">Stream bot app for Windows</span>
+            <h1>CertiFried Studio</h1>
+            <p class="cfs-lede">One app on your streaming PC that carries out what your CertiFried stream bot decides: switching OBS scenes, showing sources, playing sounds, pressing hotkeys, listening for voice commands and playing song requests without putting them in your Twitch VOD. You set it all up on the dashboard; Studio does the part that has to happen on your PC.</p>
+            <div class="cfs-actions-row">
+                <a class="btn btn-primary" href="/downloads/studio">Download for Windows</a>
+                <a class="btn btn-secondary" href="/studio/how-it-works">How it works</a>
+            </div>
+            <p class="cfs-meta">Free and open source under the GNU AGPL-3.0-or-later. No paid tiers, no ads, no tracking. <a href="<%= _f.githubRepo %>" rel="noopener">Source code</a>.</p>
+        </div>
+        <%- include('partials/studio-nav', { current: 'overview' }) %>
+
+        <section class="cfs-section" aria-labelledby="sp-why-h">
+            <h2 id="sp-why-h">Why one app</h2>
+            <p class="cfs-section-desc">Most streams run five to eight tools that each want their own login, their own overlay and their own place in OBS. Studio and the stream bot cover that work in one place, with one look.</p>
+            <div class="sp-split">
+                <div>
+                    <h3>What it does today</h3>
+                    <ul>
+                        <li>Automations on Twitch and Kick events: follows, subs, cheers, raids, channel points, polls, tips from StreamElements, Streamlabs, Ko-fi, Buy Me a Coffee, Throne and Fourthwall (the work of Streamer.bot and Firebot).</li>
+                        <li>OBS control: scenes, sources, audio, filters, streaming, recording, replay buffer, screenshots, text and browser sources.</li>
+                        <li>Sounds from a library you upload once, on any output device (the sound part of SoundAlerts and Blerp).</li>
+                        <li>Global hotkeys and offline voice commands (as in Lumia Stream and Streamer.bot).</li>
+                        <li>Song requests with a moderator queue, played only in OBS and kept off your Twitch VOD.</li>
+                        <li>Chat commands and timers, three OBS docks, a CertiFried theme for OBS, and an importer for Firebot and Streamer.bot setups.</li>
+                    </ul>
+                </div>
+                <div>
+                    <h3>Not there yet</h3>
+                    <ul>
+                        <li>Alerts and overlays as OBS browser sources are being built now.</li>
+                        <li>Sounds that viewers pay for with Bits (what SoundAlerts and Blerp are known for) need a Twitch extension; that comes later.</li>
+                        <li>Stream Deck, smart lights and Voicemeeter come in later updates.</li>
+                        <li>Studio is Windows only.</li>
+                    </ul>
+                    <p>CertiFried tracks money (tips, Bits, subs) so automations can react to it. It never processes a payment and never sees payment details.</p>
+                </div>
+            </div>
+        </section>
+
+        <% if (_shots.length) { %>
+        <section class="cfs-section" aria-labelledby="sp-shots-h">
+            <h2 id="sp-shots-h">What it looks like</h2>
+            <p class="cfs-section-desc">Screenshots with made-up demo data.</p>
+            <div class="sp-shots">
+                <% _shots.forEach((s, i) => { %>
+                <figure class="gd-figure">
+                    <a href="<%= s.img.src %>"><img src="<%= (s.img.thumb && i > 1) ? s.img.thumb.src : s.img.src %>" alt="<%= s.img.alt %>" width="<%= (s.img.thumb && i > 1) ? s.img.thumb.width : s.img.width %>" height="<%= (s.img.thumb && i > 1) ? s.img.thumb.height : s.img.height %>"<% if (i > 1) { %> loading="lazy"<% } %> decoding="async"></a>
+                    <figcaption><%= s.caption %></figcaption>
+                </figure>
+                <% }) %>
+            </div>
+        </section>
+        <% } %>
+
+        <section class="cfs-section" aria-labelledby="sp-where-h">
+            <h2 id="sp-where-h">What runs where</h2>
+            <div class="cfs-prose">
+                <p>Your automations, settings and sounds live on the CertiFried dashboard. The CertiFried server listens to Twitch, Kick and your tip services and decides what to do. When an action has to happen on your PC, the server sends it to Studio over one encrypted connection, Studio carries it out in OBS or on your PC, and reports back to your run history. If Studio is closed, those actions wait for two minutes (or the time you choose) and then expire.</p>
+                <p><a href="/studio/how-it-works">How it works</a> has the details: pairing, VOD-safe music, voice commands, docks, offline behaviour and updates. <a href="/studio/privacy">Studio privacy</a> lists exactly what stays on your PC and what is sent.</p>
+            </div>
+        </section>
+
+        <section class="cfs-section" aria-labelledby="sp-free-h">
+            <h2 id="sp-free-h">Free and open source</h2>
+            <div class="cfs-prose">
+                <p>CertiFried, Studio included, is free, and its <a href="<%= _f.githubRepo %>" rel="noopener">source code</a> is published on GitHub under the <a href="<%= _f.license %>" rel="noopener">GNU Affero General Public License, version 3 or later</a>. You may read, change and share it under that licence; if you run a changed copy as a service for other people, the AGPL asks you to offer them your source too. The author's <a href="<%= _f.dbad %>" rel="noopener">Don't Be a Dick note</a> is a friendly, non-binding request on top. There are no paid tiers and there never will be; donations are voluntary and unlock nothing.</p>
+                <p>Studio is not code-signed, so Windows SmartScreen warns about it the first time. Every build on the download page has its SHA-256 checksum next to it so you can check the file is ours. The <a href="/studio/faq">questions page</a> explains both.</p>
+            </div>
+        </section>
+
+        <section class="cfs-section" aria-labelledby="sp-req-h">
+            <h2 id="sp-req-h">Requirements</h2>
+            <dl class="sp-facts">
+                <div><dt>Windows</dt><dd><%= _f.windows %>.</dd></div>
+                <div><dt>OBS Studio</dt><dd>OBS <%= _f.obsWebsocket %> or newer for the WebSocket connection Studio uses. OBS <%= _f.obsDocks %> or newer for the CertiFried docks, and <%= _f.obsTheme %> or newer for the CertiFried theme.</dd></div>
+                <div><dt>A CertiFried account</dt><dd>Sign in on the site with Discord, open the stream bot and link your Twitch or Kick channel.</dd></div>
+                <div><dt>Song requests</dt><dd>OBS with Advanced output, so Studio can use the Twitch VOD track. Studio explains the change if you use Simple output.</dd></div>
+                <div><dt>Voice commands</dt><dd>A microphone and a Windows language with speech recognition. The microphone stays off until you turn it on.</dd></div>
+            </dl>
+        </section>
+
+        <section class="cfs-section">
+            <div class="sp-cta">
+                <p><strong>Ready to try it?</strong> Download Studio, pair it with your account and connect OBS. The <a href="/docs/guides/stream-bot">stream bot guide</a> walks through every step.</p>
+                <a class="btn btn-primary" href="/downloads/studio">Download CertiFried Studio</a>
+            </div>
+        </section>
+    </main>
+<%- include('partials/site-footer') %>
+</body>
+</html>

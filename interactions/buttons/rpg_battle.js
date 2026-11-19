@@ -1,5 +1,6 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import logger from '../../utils/logger.js';
+import { themeColor } from '../../core/guild-theme.js';
 
 /**
  * Handle RPG battle attack button
@@ -35,7 +36,7 @@ export async function handleBattleAttack(interaction) {
 
         if (result.status === 'victory') {
             const embed = new EmbedBuilder()
-                .setColor('#00FF00')
+                .setColor(themeColor(interaction.guildId, 'success'))
                 .setTitle('VICTORY!')
                 .setDescription(`You dealt ${result.playerDamage} damage and defeated the enemy!`)
                 .addFields(
@@ -54,7 +55,7 @@ export async function handleBattleAttack(interaction) {
             await interaction.editReply({ embeds: [embed], components: [] });
         } else if (result.status === 'defeat') {
             const embed = new EmbedBuilder()
-                .setColor('#FF0000')
+                .setColor(themeColor(interaction.guildId, 'danger'))
                 .setTitle('DEFEATED!')
                 .setDescription('You have been defeated in battle!')
                 .addFields({
@@ -154,14 +155,14 @@ export async function handleBattleFlee(interaction) {
 
         if (result.status === 'fled') {
             const embed = new EmbedBuilder()
-                .setColor('#FFA500')
+                .setColor(themeColor(interaction.guildId, 'warning'))
                 .setTitle('Fled from Battle')
                 .setDescription('You successfully escaped from the battle!');
 
             await interaction.editReply({ embeds: [embed], components: [] });
         } else if (result.status === 'defeat') {
             const embed = new EmbedBuilder()
-                .setColor('#FF0000')
+                .setColor(themeColor(interaction.guildId, 'danger'))
                 .setTitle('DEFEATED!')
                 .setDescription('You failed to flee and were defeated!')
                 .addFields({

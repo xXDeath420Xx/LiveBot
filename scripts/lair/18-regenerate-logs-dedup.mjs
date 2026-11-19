@@ -3,28 +3,28 @@
 //   1. Clone category 1496410178759954463 (Admin Logs) + every child channel
 //      into a fresh category, rewire logging_config/log_event_config to new IDs,
 //      then delete every old child + the old category.
-//   2. In every NON-log channel: delete ALL CertiFried Utility (1409904443125665875)
-//      messages.
+//   2. In every NON-log channel: delete ALL CertiFried Utility messages.
 //   3. In every NON-log channel: delete duplicate CertiFried Bear messages
 //      (same content-hash posted more than once in same channel — keep earliest).
 //
-// Uses CertiFried Bear's token (1496406792417185802).
+// Uses CertiFried Bear's token (resolved from guild_bot_mapping).
 import 'dotenv/config';
 import mysql from 'mysql2/promise';
 import crypto from 'crypto';
 
 const GUILD       = '1216126780767731722';
 const OLD_CAT_ID  = '1496410178759954463';
-const OLD_BOT     = '1409904443125665875';
-const NEW_BOT     = '1496406792417185802';
+const OLD_BOT     = '1409904443125665875';  // bot-id-ok: previous author of the messages being deleted, not a credential
+// The acting bot (NEW_BOT below) comes from guild_bot_mapping — never pinned here.
 
 const pool = mysql.createPool({
     host: process.env.DB_HOST, user: process.env.DB_USER,
     password: process.env.DB_PASSWORD, database: process.env.DB_NAME,
 });
-const enc = (await import('/home/death/CertiFriedUtility/utils/encryption.js')).default;
-const [r0] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id = ?', [NEW_BOT]);
-const token = enc.decrypt(JSON.parse(r0[0].bot_token));
+const { resolveBotForGuild } = await import('../../utils/bot-resolver.js');
+const actingBot = await resolveBotForGuild(GUILD, { db: pool });
+const NEW_BOT = actingBot.botId;
+const token = actingBot.token;
 const H = { Authorization: 'Bot ' + token, 'Content-Type': 'application/json' };
 const H_NOCT = { Authorization: 'Bot ' + token };
 

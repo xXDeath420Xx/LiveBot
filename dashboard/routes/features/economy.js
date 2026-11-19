@@ -14,12 +14,9 @@ router.get('/:guildId/economy', ensureAuth, ensureGuildPerms, async (req, res) =
     );
 
     if (rows.length === 0) {
-      // Return default config if doesn't exist
-      return res.json({
-        guild_id: req.guildId,
-        currency_name: 'coins',
-        starting_balance: 100
-      });
+      // Never saved: the same defaults /economy runs on (core/economy-manager.js, H-668).
+      const { ECONOMY_DEFAULTS } = await import('../../../core/economy-manager.js');
+      return res.json({ guild_id: req.guildId, ...ECONOMY_DEFAULTS });
     }
 
     res.json(rows[0]);
@@ -35,12 +32,13 @@ router.patch('/:guildId/economy', ensureAuth, ensureGuildPerms, async (req, res)
     const { currency_name, starting_balance } = req.body;
 
     // Validate inputs
-    if (currency_name !== undefined && (currency_name.length < 1 || currency_name.length > 32)) {
-      return res.status(400).json({ error: 'Currency name must be between 1 and 32 characters' });
+    // The Economy page's limits: a name of up to 50 characters, a starting balance of 0 to 1,000,000,000.
+    if (currency_name !== undefined && (typeof currency_name !== 'string' || currency_name.trim().length < 1 || currency_name.length > 50)) {
+      return res.status(400).json({ error: 'Currency name must be between 1 and 50 characters' });
     }
 
-    if (starting_balance !== undefined && (starting_balance < 0 || starting_balance > 1000000)) {
-      return res.status(400).json({ error: 'Starting balance must be between 0 and 1,000,000' });
+    if (starting_balance !== undefined && (!Number.isInteger(Number(starting_balance)) || starting_balance < 0 || starting_balance > 1000000000)) {
+      return res.status(400).json({ error: 'Starting balance must be a whole number between 0 and 1,000,000,000' });
     }
 
     // Check if config exists
@@ -50,14 +48,15 @@ router.patch('/:guildId/economy', ensureAuth, ensureGuildPerms, async (req, res)
     );
 
     if (existing.length === 0) {
-      // Insert new config
+      // Insert new config. enabled = 1: saving the currency name must not switch the economy off (H-668).
+      const { ECONOMY_DEFAULTS } = await import('../../../core/economy-manager.js');
       await pool.execute(
-        `INSERT INTO economy_config (guild_id, currency_name, starting_balance)
-         VALUES (?, ?, ?)`,
+        `INSERT INTO economy_config (guild_id, enabled, currency_name, starting_balance)
+         VALUES (?, 1, ?, ?)`,
         [
           req.guildId,
-          currency_name || 'coins',
-          starting_balance !== undefined ? starting_balance : 100
+          currency_name || ECONOMY_DEFAULTS.currency_name,
+          starting_balance !== undefined ? starting_balance : ECONOMY_DEFAULTS.starting_balance
         ]
       );
     } else {

@@ -91,7 +91,7 @@ router.post('/join', async (req, res) => {
             [playerId, eventId]
         );
 
-        logger.info('[Events] Player joined event', { playerId, eventId, eventName: event.name });
+        logger.debug('[Events] Player joined event', { playerId, eventId, eventName: event.name });
 
         res.json({
             success: true,
@@ -212,7 +212,7 @@ router.post('/claim-reward', async (req, res) => {
             rewardDetails.cashAwarded = cashResult.cashAwarded;
         }
 
-        logger.info('[Events] Reward claimed', {
+        logger.debug('[Events] Reward claimed', {
             playerId,
             eventId,
             milestone: milestoneIndex,

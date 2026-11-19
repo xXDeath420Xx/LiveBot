@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>" lang="en">
+<head>
+<%- include('partials/site-head', { title: 'All channels — Twitch analytics | CertiFried', noindex: true }) %>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="/css/cf-settings.css">
+    <link rel="stylesheet" href="/css/cf-analytics.css">
+    <style>
+        #compareTable th[data-sort] { cursor: pointer; user-select: none; }
+        #compareTable th[data-sort]:hover { color: var(--cf-text) !important; }
+        #compareTable th[aria-sort="ascending"]::after { content: " \2191"; }
+        #compareTable th[aria-sort="descending"]::after { content: " \2193"; }
+    </style>
+</head>
+<%
+    const n = (v) => Number(v || 0).toLocaleString('en-US');
+    const totals = rows.reduce((t, r) => ({ followers: t.followers + Number(r.follower_count || 0), sessions: t.sessions + Number(r.sessions_30d || 0),
+        anomalies: t.anomalies + Number(r.anomalies_30d || 0), write: t.write + (r.has_tier_b ? 1 : 0) }), { followers: 0, sessions: 0, anomalies: 0, write: 0 });
+%>
+<body class="cf-an-body">
+<%- include('partials/site-header') %>
+<main id="main-content" class="cf-an-page" tabindex="-1">
+    <a href="/servers" class="cf-an-crumb"><i class="fas fa-arrow-left" aria-hidden="true"></i> Back to servers</a>
+    <header class="cf-an-head">
+        <span class="cf-an-head-icon" aria-hidden="true"><i class="fas fa-table-columns"></i></span>
+        <div class="cf-an-head-text">
+            <h1 class="cf-an-title">All connected channels</h1>
+            <p class="cf-an-sub">Every server with a connected Twitch broadcaster, side by side. Click a column to sort.</p>
+        </div>
+        <% if (rows.length) { %>
+        <div class="cf-an-actions"><button type="button" class="btn btn-secondary btn-sm" id="csvBtn"><i class="fas fa-file-csv" aria-hidden="true"></i> Export CSV</button></div>
+        <% } %>
+    </header>
+<%- include('partials/analytics/twitch-nav', { active: 'compare', guildId: null }) %>
+
+    <% if (!rows.length) { %>
+    <div class="cf-rows"><div class="cf-state">
+        <p class="cf-state-title">No connected channels</p>
+        <p class="cf-state-text">A channel shows here once a server connects its Twitch broadcaster account on the Role sync tab.</p>
+    </div></div>
+    <% } else { %>
+    <dl class="cf-kpis">
+        <div class="cf-kpi"><dt>Channels</dt><dd><%= n(rows.length) %></dd></div>
+        <div class="cf-kpi"><dt>With write permission</dt><dd><%= n(totals.write) %></dd></div>
+        <div class="cf-kpi"><dt>Followers, all channels</dt><dd><%= n(totals.followers) %></dd></div>
+        <div class="cf-kpi"><dt>Streams, last 30 days</dt><dd><%= n(totals.sessions) %></dd></div>
+        <div class="cf-kpi"><dt>Anomaly alerts, last 30 days</dt><dd><%= n(totals.anomalies) %></dd></div>
+    </dl>
+    <div class="cf-rows">
+        <div class="cf-table-wrap">
+            <table class="cf-table cf-table--stack" id="compareTable">
+                <thead>
+                    <tr>
+                        <th scope="col" data-sort="text">Channel</th>
+                        <th scope="col" data-sort="text">Access</th>
+                        <th scope="col" data-sort="num" class="cf-cell-end">Followers</th>
+                        <th scope="col" data-sort="num" class="cf-cell-end">Subs</th>
+                        <th scope="col" data-sort="num" class="cf-cell-end">Bits</th>
+                        <th scope="col" data-sort="num" class="cf-cell-end">Best peak</th>
+                        <th scope="col" data-sort="num" class="cf-cell-end">Streams (30d)</th>
+                        <th scope="col" data-sort="num" class="cf-cell-end">Clips</th>
+                        <th scope="col" data-sort="num" class="cf-cell-end">Alerts (30d)</th>
+                        <th scope="col" data-sort="num">Last backfill</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <% rows.forEach(r => { %>
+                    <tr>
+                        <td data-label="Channel" data-v="<%= String(r.login || '').toLowerCase() %>"><a href="/manage/<%= r.guild_id %>/twitch-analytics"><%= r.login %></a></td>
+                        <td data-label="Access" data-v="<%= r.has_tier_b ? 'a' : 'b' %>"><span class="cf-status <%= r.has_tier_b ? 'is-on' : 'is-muted' %>"><%= r.has_tier_b ? 'Read and write' : 'Read only' %></span></td>
+                        <td data-label="Followers" class="cf-cell-end" data-v="<%= Number(r.follower_count || 0) %>"><%= n(r.follower_count) %></td>
+                        <td data-label="Subs" class="cf-cell-end" data-v="<%= Number(r.subscriber_count || 0) %>"><%= n(r.subscriber_count) %></td>
+                        <td data-label="Bits" class="cf-cell-end" data-v="<%= Number(r.bits_total_period || 0) %>"><%= n(r.bits_total_period) %></td>
+                        <td data-label="Best peak" class="cf-cell-end" data-v="<%= Number(r.all_time_peak || 0) %>"><%= n(r.all_time_peak) %></td>
+                        <td data-label="Streams (30d)" class="cf-cell-end" data-v="<%= Number(r.sessions_30d || 0) %>"><%= n(r.sessions_30d) %></td>
+                        <td data-label="Clips" class="cf-cell-end" data-v="<%= Number(r.clips || 0) %>"><%= n(r.clips) %></td>
+                        <td data-label="Alerts (30d)" class="cf-cell-end" data-v="<%= Number(r.anomalies_30d || 0) %>"><% if (Number(r.anomalies_30d) > 0) { %><span class="cf-status is-warn"><%= n(r.anomalies_30d) %></span><% } else { %>0<% } %></td>
+                        <td data-label="Last backfill" class="cf-an-muted" data-v="<%= r.last_run_at ? new Date(r.last_run_at).getTime() : 0 %>"><%= r.last_run_at ? new Date(r.last_run_at).toISOString().slice(0, 16).replace('T', ' ') + ' UTC' : 'Never' %></td>
+                    </tr>
+                    <% }) %>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <% } %>
+</main>
+<%- include('partials/site-footer') %>
+<% if (rows.length) { %>
+<script>
+(function () {
+    var table = document.getElementById('compareTable');
+    var body = table.tBodies[0];
+    var heads = table.tHead.rows[0].cells;
+    Array.prototype.forEach.call(heads, function (th, col) {
+        var type = th.getAttribute('data-sort');
+        if (!type) return;
+        th.tabIndex = 0;
+        function sort() {
+            var dir = th.getAttribute('aria-sort') === 'descending' ? 1 : -1;
+            if (type === 'text' && !th.hasAttribute('aria-sort')) dir = 1;
+            var val = function (tr) { var v = tr.cells[col].getAttribute('data-v') || ''; return type === 'num' ? Number(v) : v; };
+            Array.prototype.slice.call(body.rows).sort(function (a, b) {
+                var x = val(a), y = val(b);
+                return (x < y ? -1 : x > y ? 1 : 0) * dir;
+            }).forEach(function (tr) { body.appendChild(tr); });
+            Array.prototype.forEach.call(heads, function (h) { h.removeAttribute('aria-sort'); });
+            th.setAttribute('aria-sort', dir === 1 ? 'ascending' : 'descending');
+        }
+        th.addEventListener('click', sort);
+        th.addEventListener('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); sort(); } });
+    });
+    var data = <%- JSON.stringify(rows.map(r => [r.login, r.guild_id, r.has_tier_b ? 'read_write' : 'read_only', Number(r.follower_count || 0), Number(r.subscriber_count || 0), Number(r.bits_total_period || 0), Number(r.all_time_peak || 0), Number(r.sessions_30d || 0), Number(r.clips || 0), Number(r.anomalies_30d || 0), r.last_run_at || ''])).replace(/</g, '\\u003c') %>;
+    document.getElementById('csvBtn').addEventListener('click', function () {
+        function cell(v) { var s = v == null ? '' : String(v); if (/^[=+\-@\t\r]/.test(s)) s = "'" + s; s = s.replace(/"/g, '""'); return /[",\n\r]/.test(s) ? '"' + s + '"' : s; }
+        var lines = [['channel', 'guild_id', 'access', 'followers', 'subs', 'bits', 'best_peak', 'streams_30d', 'clips', 'alerts_30d', 'last_backfill_utc']].concat(data);
+        var blob = new Blob([lines.map(function (r) { return r.map(cell).join(','); }).join('\n') + '\n'], { type: 'text/csv;charset=utf-8' });
+        var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'twitch-all-channels.csv';
+        document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+    });
+})();
+</script>
+<% } %>
+</body>
+</html>

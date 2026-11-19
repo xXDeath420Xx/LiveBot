@@ -1,5 +1,6 @@
 import { EmbedBuilder } from 'discord.js';
 import axios from 'axios';
+import { themeColor } from '../../../core/guild-theme.js';
 
 export async function execute(interaction) {
     const subcommand = interaction.options.getSubcommand();
@@ -153,7 +154,7 @@ async function handleForecast(interaction) {
         const daily = weatherResponse.data.daily;
 
         const embed = new EmbedBuilder()
-            .setColor('#3498DB')
+            .setColor(themeColor(interaction.guildId, 'primary'))
             .setTitle(`🌤️ 7-Day Weather Forecast - ${name}, ${country}`)
             .setDescription('Detailed weather forecast for the next week')
             .setFooter({ text: 'Powered by Open-Meteo' })

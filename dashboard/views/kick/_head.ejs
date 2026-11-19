@@ -1,101 +1,172 @@
 <!DOCTYPE html>
-<html lang="en">
+<html data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>" lang="en">
 <head>
+    <script>
+    // Anti-flash: the theme is on <html> before first paint.
+    // Signed in, the server rendered the theme saved in Settings: that value is the
+    // authority (Dark included) and is copied to storage. Signed out, the choice
+    // made with the footer's theme switch is read from storage; with none, Dark.
+    (function () {
+        try {
+            var d = document.documentElement, saved = <%= locals.userPrefs ? 'true' : 'false' %>;
+            var t = localStorage.getItem('ui-theme');
+            var n = localStorage.getItem('ui-density');
+            if (saved) {
+                localStorage.setItem('ui-theme', d.getAttribute('data-theme') || 'dark');
+                localStorage.setItem('ui-density', d.getAttribute('data-density') || 'comfortable');
+            } else {
+                if (t && /^[a-z]{3,12}$/.test(t)) d.setAttribute('data-theme', t);
+                if (n && /^[a-z]{3,12}$/.test(n)) d.setAttribute('data-density', n);
+            }
+        } catch (e) { /* private mode / storage disabled — server value stands */ }
+    })();
+    </script>
+    <!-- Auto theme (core/user-preferences.js AUTO_THEME_SCRIPT): follow the OS light/dark setting. Dark Reader: the site has its own themes. -->
+    <script>(function(){var d=document.documentElement,m=window.matchMedia?matchMedia('(prefers-color-scheme: light)'):null;function a(){if(d.getAttribute('data-theme')==='auto'||d.getAttribute('data-theme-mode')==='auto'){d.setAttribute('data-theme-mode','auto');d.setAttribute('data-theme',m&&m.matches?'light':'dark');}}a();if(m&&m.addEventListener)m.addEventListener('change',a);})();</script>
+  <meta name="darkreader-lock">
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex" />
   <meta name="csrf-token" content="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>" />
-  <title><%= typeof pageTitle !== 'undefined' ? pageTitle : 'Kick Defender' %> — CertiFried Utility</title>
+  <title><%= typeof pageTitle !== 'undefined' ? pageTitle : 'Kick Defender' %> - Kick Defender | CertiFried</title>
   <link rel="icon" type="image/png" href="/images/CertiFried.png" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script src="/js/kick-dashboard.js"></script>
+  <link rel="stylesheet" href="/css/channel-bot.css">
   <style>
-    *{box-sizing:border-box;margin:0;padding:0}
-    :root{--bg:#0a0911;--ink:#f1f0f6;--muted:#928da8;--line:rgba(255,255,255,.08);--card:rgba(255,255,255,.025);--kick:#53FC18;--kick-dim:#7dfc4f;--discord:#7c84ff;--warn:#fcd34d;--danger:#fca5a5}
-    body{font-family:'Inter',system-ui,sans-serif;background:var(--bg);color:var(--ink);min-height:100vh}
-    a{color:inherit}
-    .bg{position:fixed;inset:0;z-index:0;pointer-events:none;background:
-      radial-gradient(45rem 32rem at 12% -8%,rgba(83,252,24,.10),transparent 60%),
-      radial-gradient(45rem 32rem at 90% 0%,rgba(124,132,255,.10),transparent 55%)}
-    /* ── Network top bar ─────────────────────────────────────── */
-    .netbar{position:relative;z-index:2;border-bottom:1px solid var(--line);background:rgba(10,9,17,.75);backdrop-filter:blur(8px)}
-    .netbar-in{max-width:64rem;margin:0 auto;display:flex;align-items:center;gap:1rem;padding:.7rem 1.25rem;flex-wrap:wrap}
-    .brand{display:inline-flex;align-items:center;gap:.5rem;font-weight:700;font-size:.95rem;text-decoration:none}
-    .brand img{width:26px;height:26px;border-radius:7px}
-    .netlinks{display:flex;gap:.25rem;flex-wrap:wrap;margin-left:auto;align-items:center}
-    .netlinks a{font-size:.82rem;color:var(--muted);text-decoration:none;padding:.35rem .6rem;border-radius:8px;transition:color .15s,background .15s}
-    .netlinks a:hover{color:#fff;background:rgba(255,255,255,.06)}
-    .netlinks a.cta{color:var(--kick);font-weight:600}
-    /* ── Page shell ──────────────────────────────────────────── */
-    .wrap{position:relative;z-index:1;max-width:64rem;margin:0 auto;padding:2rem 1.25rem 3rem}
-    .pagehead{display:flex;align-items:flex-end;justify-content:space-between;gap:1rem;flex-wrap:wrap;margin-bottom:1.5rem}
-    .pagehead h1{font-family:'Space Grotesk',sans-serif;font-size:1.7rem;font-weight:700;letter-spacing:-.01em;display:flex;align-items:center;gap:.5rem}
-    .pagehead .sub{color:var(--muted);font-size:.9rem;margin-top:.25rem}
-    /* sub-nav (within /kick) */
-    .subnav{display:flex;gap:.35rem;flex-wrap:wrap}
-    .subnav a{font-size:.85rem;color:var(--muted);text-decoration:none;padding:.4rem .75rem;border-radius:9px;border:1px solid transparent;transition:.15s}
-    .subnav a:hover{color:#fff;background:rgba(255,255,255,.05)}
-    .subnav a.active{color:#06140a;background:var(--kick);font-weight:700}
-    /* ── Cards / primitives ──────────────────────────────────── */
-    .card{position:relative;border:1px solid var(--line);background:var(--card);border-radius:18px;padding:1.4rem 1.5rem;margin-bottom:1.1rem}
-    .card h2{font-family:'Space Grotesk',sans-serif;font-size:1.15rem;font-weight:700;margin-bottom:.85rem}
-    .muted{color:var(--muted);font-size:.85rem}
-    .row{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap}
-    /* stat grid */
-    .statgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(8.5rem,1fr));gap:.85rem;margin-bottom:1.5rem}
-    .stat{border:1px solid var(--line);background:var(--card);border-radius:14px;padding:1.1rem 1.25rem}
-    .stat b{display:block;font-family:'Space Grotesk',sans-serif;font-size:1.85rem;font-weight:700;line-height:1}
-    .stat span{display:block;color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.06em;margin-top:.4rem}
-    .stat.kick b{color:var(--kick-dim)}
-    /* pills */
-    .pill{display:inline-flex;align-items:center;gap:.3rem;font-size:.72rem;font-weight:700;padding:.2rem .55rem;border-radius:999px;letter-spacing:.02em}
-    .pill.ok{background:rgba(34,197,94,.16);color:#86efac}
-    .pill.off{background:rgba(255,255,255,.07);color:var(--muted)}
-    .pill.warn{background:rgba(245,158,11,.16);color:var(--warn)}
-    .pill.bad{background:rgba(239,68,68,.18);color:var(--danger)}
-    /* forms + buttons */
-    input,select,textarea{font-family:inherit;font-size:.9rem;padding:.55rem .7rem;border-radius:10px;border:1px solid rgba(255,255,255,.15);background:#14121d;color:var(--ink)}
-    input:focus,select:focus,textarea:focus{outline:none;border-color:rgba(83,252,24,.5)}
-    button{font-family:inherit;font-weight:700;font-size:.88rem;border:none;border-radius:10px;padding:.55rem 1.05rem;cursor:pointer;background:var(--kick);color:#06140a;transition:transform .12s,filter .12s}
-    button:hover{filter:brightness(1.08)}
-    button:active{transform:translateY(1px)}
-    button:disabled{opacity:.55;cursor:default}
-    button.ghost{background:rgba(255,255,255,.08);color:var(--ink)}
-    button.danger{background:rgba(239,68,68,.85);color:#fff}
-    .srow{display:flex;gap:.6rem;flex-wrap:wrap;align-items:center}
-    .srow label{font-size:.78rem;color:var(--muted);display:flex;flex-direction:column;gap:.25rem}
-    .banner{margin-top:.85rem;padding:.7rem .9rem;border-radius:11px;background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.4);color:var(--warn);font-size:.85rem}
-    .banner a{color:#fde68a}
-    details.settings{margin-top:.85rem;border-top:1px solid var(--line);padding-top:.75rem}
-    details.settings summary{cursor:pointer;color:var(--muted);font-size:.85rem}
-    ul.clean{list-style:none}
-    ul.clean li{display:flex;justify-content:space-between;align-items:center;gap:.75rem;padding:.5rem 0;border-bottom:1px solid rgba(255,255,255,.05);font-size:.9rem}
-    .log-out{margin-top:.6rem;font-size:.8rem;color:#b9b4cf}
-    .log-out table{width:100%;border-collapse:collapse}
-    .log-out td{padding:.25rem .45rem;border-bottom:1px solid rgba(255,255,255,.05)}
-    .empty{color:var(--muted);text-align:center;padding:1.5rem}
+    /* Kick Defender pages: cf-ui.css (tokens, header, buttons, inputs) + cf-settings.css (sections,
+       rows, KPIs, notices) carry the look. Only Kick's own mark (the green square, the active-tab
+       underline and the chart's "banned" series) uses Kick green; everything else is the site palette. */
+    :root { --kick: #53fc18; }
+    /* Light/Sand: neon Kick green vanishes on a light surface (chart bars, tab underline); a deeper Kick green keeps 3:1. */
+    :root:is([data-theme="light"], [data-theme="sand"]) { --kick: #2b8a0a; }
+    *, *::before, *::after { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: flex; flex-direction: column; overflow-x: hidden; }
+    .kick-main { flex: 1 0 auto; width: 100%; max-width: 64rem; margin: 0 auto;
+      padding: calc(var(--cf-header-h) + var(--cf-8)) var(--cf-5) var(--cf-12); min-width: 0; }
+
+    /* Site header actions + phone menu */
+    .navbar .navbar-actions { display: flex; align-items: center; gap: var(--cf-2); margin-left: auto; min-width: 0; }
+    .kick-account { display: inline-flex; align-items: center; gap: 8px; font-size: var(--cf-text-sm); color: var(--cf-text-2); max-width: 12rem; }
+    .kick-account span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .kick-account img { width: 24px; height: 24px; border-radius: 50%; object-fit: cover; flex: none; background: var(--cf-surface-2); }
+    .mobile-menu-btn { display: none; align-items: center; justify-content: center; width: 36px; height: 36px; padding: 0;
+      background: transparent; border: 1px solid var(--cf-border); color: var(--cf-text); cursor: pointer; }
+    .mobile-menu-btn svg { width: 20px; height: 20px; }
+    .mobile-menu { display: none; position: fixed; top: var(--cf-header-h); left: 0; right: 0; z-index: 999;
+      border-bottom: 1px solid var(--cf-border); }
+    .mobile-menu.is-open { display: block; }
+    .mobile-menu-inner { display: flex; flex-direction: column; }
+    .mobile-menu-link { display: block; padding: 10px 12px; border-radius: var(--cf-radius); color: var(--cf-text-2); text-decoration: none; font-size: var(--cf-text-md); }
+    @media (max-width: 768px) {
+      .mobile-menu-btn { display: inline-flex; }
+      .kick-account span { display: none; }
+      .navbar .navbar-actions .btn { display: none; }
+    }
+
+    /* Page head: product mark, title, tabs */
+    .kick-eyebrow { display: inline-flex; align-items: center; gap: 8px; margin: 0 0 6px;
+      font-size: var(--cf-text-xs); font-weight: 600; color: var(--cf-text-2); }
+    .kick-eyebrow::before { content: ''; width: 10px; height: 10px; border-radius: 2px; background: var(--kick); flex: none; }
+    .pagehead { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--cf-3) var(--cf-4); flex-wrap: wrap; margin: 0 0 var(--cf-4); }
+    .pagehead > div:first-child { min-width: 0; flex: 1 1 20rem; }
+    .pagehead h1 { margin: 0; font-size: var(--cf-text-2xl); font-weight: 600; line-height: 1.2; overflow-wrap: anywhere; }
+    .pagehead .sub { margin: 4px 0 0; color: var(--cf-text-3); font-size: var(--cf-text-md); max-width: 70ch; }
+    .pagehead-actions { display: flex; gap: var(--cf-2); flex-wrap: wrap; }
+    .kick-tabs { display: flex; gap: var(--cf-1); flex-wrap: wrap; margin: 0 0 var(--cf-8); border-bottom: 1px solid var(--cf-border); }
+    .kick-tabs a { padding: 8px 10px; font-size: var(--cf-text-sm); font-weight: 500; color: var(--cf-text-2); text-decoration: none; border-radius: var(--cf-radius) var(--cf-radius) 0 0; }
+    .kick-tabs a:hover { color: var(--cf-text); background: var(--cf-surface-2); }
+    .kick-tabs a[aria-current="page"] { color: var(--cf-text); box-shadow: inset 0 -2px 0 var(--kick); }
+
+    /* Small pieces the kit does not have */
+    .kick-title-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: var(--cf-text-lg); font-weight: 600; color: var(--cf-text); overflow-wrap: anywhere; }
+    .kick-panel-stack > .cf-rows + .cf-rows { margin-top: var(--cf-4); }
+    .kick-log { width: 100%; border-collapse: collapse; font-size: var(--cf-text-sm); }
+    .kick-log th { text-align: left; font-weight: 500; font-size: var(--cf-text-xs); color: var(--cf-text-3); padding: 6px 10px; border-bottom: 1px solid var(--cf-border); white-space: nowrap; }
+    .kick-log td { padding: 6px 10px; border-bottom: 1px solid var(--cf-border); vertical-align: top; overflow-wrap: anywhere; }
+    .kick-log tr:last-child td { border-bottom: 0; }
+    .kick-log td.nowrap { white-space: nowrap; color: var(--cf-text-3); font-variant-numeric: tabular-nums; }
+    .kick-scroll { overflow-x: auto; max-width: 100%; -webkit-overflow-scrolling: touch; }
+    .kick-chart svg { display: block; width: 100%; height: auto; }
+    .kick-chart .axis { stroke: var(--cf-border); stroke-width: 1; }
+    .kick-chart .lbl { fill: var(--cf-text-3); font-size: 9px; font-family: var(--cf-font); }
+    .kick-chart .b-banned { fill: var(--kick); }
+    .kick-chart .b-removed { fill: var(--cf-info); }
+    .kick-chart .b-detected { fill: var(--cf-border-strong); }
+    .kick-chart .b-chat { fill: var(--cf-accent); }
+    .kick-legend { display: flex; gap: var(--cf-4); flex-wrap: wrap; font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+    .kick-legend span { display: inline-flex; align-items: center; gap: 6px; }
+    .kick-legend i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+    .kick-sw-banned { background: var(--kick); }
+    .kick-sw-removed { background: var(--cf-info); }
+    .kick-sw-detected { background: var(--cf-border-strong); }
+    .kick-sw-chat { background: var(--cf-accent); }
+    .cf-rows .cf-row-control .kick-inline { display: flex; gap: var(--cf-2); align-items: center; flex-wrap: wrap; }
+    .cf-rows .cf-row-control .kick-inline > input[type="number"] { width: 7rem; }
+    .cf-rows .cf-row-control .kick-inline > .cf-input-unit { width: 9rem; }
+    .cf-rows .cf-row-control.kick-end { align-items: flex-end; }
+    .kick-acct-head { display: flex; align-items: center; gap: var(--cf-3); }
+    .kick-acct-head img { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; flex: none; background: var(--cf-surface-2); }
+    .kick-scopes { font-size: var(--cf-text-xs); overflow-wrap: anywhere; }
+    .kick-foot { max-width: 64rem; margin: 0 auto; padding: 0 var(--cf-5); }
+    .kick-foot .footer-links { display: flex; flex-wrap: wrap; }
+    @media (max-width: 640px) {
+      .kick-main { padding-left: var(--cf-4); padding-right: var(--cf-4); }
+      .kick-search { max-width: none; }
+    }
     <%- typeof extraCss !== 'undefined' ? extraCss : '' %>
   </style>
+    <link rel="stylesheet" href="/css/a11y.css">
+    <link rel="stylesheet" href="/css/dropdowns.css">
+    <link rel="stylesheet" href="/css/themes.css">
+    <% if (locals.uiCustomCss) { %><style id="custom-theme"><%- uiCustomCss %></style><% } %>
+    <link rel="stylesheet" href="/css/cf-ui.css">
+    <link rel="stylesheet" href="/css/cf-settings.css">
 </head>
 <body>
-  <div class="bg"></div>
-
-  <!-- ── CertiFried network bar (every Kick page) ─────────────── -->
-  <div class="netbar">
-    <div class="netbar-in">
-      <a class="brand" href="/"><img src="/images/CertiFried.png" alt=""/> CertiFried Utility</a>
-      <nav class="netlinks">
+  <a class="skip-to-content" href="#main-content">Skip to main content</a>
+  <% var _ku = (typeof kickUser !== 'undefined' && kickUser) ? kickUser : null; %>
+  <nav class="navbar" aria-label="Site">
+    <div class="navbar-container">
+      <a href="/" class="navbar-brand">
+        <img src="/images/CertiFried.png" alt="" class="navbar-logo">
+        <span>CertiFried</span>
+      </a>
+      <div class="navbar-links">
         <a href="/">Home</a>
-        <a href="/discord">Discord Bot</a>
-        <a href="/kick/features" class="cta">Features</a>
+        <a href="/kick"<%- _ku ? ' aria-current="page"' : '' %>>Kick Defender</a>
+        <a href="/kick/features">Features</a>
         <a href="/docs#kick-defender">Docs</a>
-        <a href="https://certifriedmultitool.com/discord" target="_blank" rel="noopener">Support</a>
-        <a href="/donate">Donate</a>
-        <% if (typeof kickUser !== 'undefined' && kickUser) { %>
-          <a href="/logout">Log out</a>
+        <a href="/status">Status</a>
+      </div>
+      <div class="navbar-actions">
+        <% if (_ku) { %>
+          <span class="kick-account" title="Signed in with Kick">
+            <% if (_ku.avatar) { %><img src="<%= _ku.avatar %>" alt="" onerror="this.remove()"><% } %>
+            <span><%= _ku.name || 'Kick account' %></span>
+          </span>
+          <a href="/tokes-bot/auth/logout" class="btn btn-secondary btn-sm">Sign out</a>
+        <% } else { %>
+          <a href="/tokes-bot/auth/kick" class="btn btn-primary btn-sm">Sign in with Kick</a>
         <% } %>
-      </nav>
+        <button type="button" class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Open menu" aria-expanded="false" aria-controls="mobileMenu">
+          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
+        </button>
+      </div>
+    </div>
+  </nav>
+  <div class="mobile-menu" id="mobileMenu">
+    <div class="mobile-menu-inner">
+      <a href="/" class="mobile-menu-link">Home</a>
+      <a href="/kick" class="mobile-menu-link">Kick Defender</a>
+      <a href="/kick/features" class="mobile-menu-link">Features</a>
+      <a href="/docs#kick-defender" class="mobile-menu-link">Docs</a>
+      <a href="/status" class="mobile-menu-link">Status</a>
+      <% if (_ku) { %>
+        <a href="/tokes-bot/auth/logout" class="mobile-menu-link">Sign out</a>
+      <% } else { %>
+        <a href="/tokes-bot/auth/kick" class="mobile-menu-link">Sign in with Kick</a>
+      <% } %>
     </div>
   </div>
 
-  <div class="wrap">
+  <main id="main-content" class="kick-main page-content" tabindex="-1">

@@ -12,10 +12,10 @@
 
 import 'dotenv/config';
 import pool from '../utils/db.js';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 
 const GUILD_ID = '1414753158999179286';
-const BOT_ID   = '1507873568095076425';
+// The acting bot comes from guild_bot_mapping — never pinned here.
 const VERIFIED_ROLE = '1455255019627479071';
 const WOLFIE_LIVE_CH = '1455251028399099934';
 const STREAM_SIGNUP_CH = '1508616684703842355';
@@ -46,8 +46,9 @@ const TIERS = [
     { name: '🏆 Pack Legend',   level: 100, color: 0xe74c3c },
 ];
 
-const [botRows] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id = ?', [BOT_ID]);
-const TOKEN = encryption.decrypt(JSON.parse(botRows[0].bot_token));
+const bot = await resolveBotForGuild(GUILD_ID, { db: pool });
+const BOT_ID = bot.botId;
+const TOKEN = bot.token;
 
 async function api(method, path, body) {
     await new Promise(r => setTimeout(r, 150));
@@ -225,7 +226,7 @@ console.log('[6] Patching #stream-signup embed to reference #levels for tracking
             `Use \`/rank\` anywhere (or head to <#${levelsCh.id}>) to see your current XP and how far you are from **Level 3**.`,
             ``,
             `### Supported platforms`,
-            `**Twitch** · **Kick** · **YouTube** · **TikTok** · **Trovo** · **Facebook Gaming**`,
+            `**Twitch** · **Kick** · **YouTube** · **TikTok** · **Rumble** · **Facebook Gaming**`,
             ``,
             `### How it works`,
             `\`1.\` Hit **Level 3** from chatting / voice activity *(see <#${levelsCh.id}> for the full tier ladder)*`,

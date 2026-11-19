@@ -11,6 +11,7 @@ import * as chrono from 'chrono-node';
 import moment from 'moment-timezone';
 import pool from '../utils/db.js';
 import logger from '../utils/logger.js';
+import { displayNameFor } from '../utils/display-name.js';
 
 export const CLOCK = '🕰️';
 const MAX_LIST_ZONES = 10;
@@ -167,9 +168,16 @@ function scrub(content) {
     .replace(/<[@#&]!?\d+>/g, ' ');
 }
 
+// A match only counts as a clock time if its own text carries an unambiguous time shape.
+// chrono's isCertain('hour') is not enough on its own: it happily reads a bare "3", "5", a score
+// like "100%", or a nick like "420" as an hour. Requiring an am/pm suffix, an HH:MM colon, or a
+// named time kills those false positives while still catching every real "8pm", "3:30", "noon".
+const CLOCK_SHAPE = /\b\d{1,2}\s*:\s*\d{2}\b|\b\d{1,2}\s*(?:[ap]\.?m\.?)\b|\b(?:noon|midday|midnight)\b/i;
+
 /**
  * Times explicitly stated in `content`, interpreted in `sourceZone`.
- * Only results with a CERTAIN hour count — "see you tomorrow" and "version 2.5" are not times.
+ * Only results with a CERTAIN hour AND an unambiguous clock shape count — "see you tomorrow",
+ * "version 2.5", "100%", and a bare "3" are not times.
  */
 export function findTimes(content, sourceZone, now = new Date()) {
   const text = scrub(content || '');
@@ -182,7 +190,7 @@ export function findTimes(content, sourceZone, now = new Date()) {
     return [];
   }
   return results
-    .filter(r => r.start?.isCertain('hour'))
+    .filter(r => r.start?.isCertain('hour') && CLOCK_SHAPE.test(r.text))
     .slice(0, MAX_RESULTS)
     .map(r => ({ text: r.text, date: r.start.date() }));
 }
@@ -283,7 +291,7 @@ export async function handleTimeReaction(reaction, user) {
 
     await user.send({
       content:
-        `🕰️ **${message.author.username}** in **${message.guild.name}** (${from}):\n` +
+        `🕰️ **${displayNameFor(message.author, message.guild)}** in **${message.guild.name}** (${from}):\n` +
         lines.join('\n') + `\n\n${message.url}`,
     }).catch(() => { /* DMs closed — Friend Time behaves the same way */ });
 

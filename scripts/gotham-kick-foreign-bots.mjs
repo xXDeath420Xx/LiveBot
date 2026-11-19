@@ -3,10 +3,10 @@
 
 import 'dotenv/config';
 import pool from '../utils/db.js';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 
 const GUILD = '800157336458231848';
-const HARLEY_BOT_ID = '1503936879635202149';
+// The acting bot comes from guild_bot_mapping — never pinned here.
 
 const TO_KICK = {
   '375805687529209857':  'Streamcord',
@@ -15,7 +15,7 @@ const TO_KICK = {
   '696870234262339614':  'Sx Bot',
   '678344927997853742':  'Sapphire',
   '235148962103951360':  'Carl-bot',
-  '1409904443125665875': 'CertiFried Utility (default — replaced by Harley\'s Bat)',
+  '1409904443125665875': 'CertiFried Utility (default — replaced by Harley\'s Bat)',  // bot-id-ok: kick-list entry naming which bot to remove, not a credential
   // Dyno + Maki.gg only kicked if found in member list
 };
 
@@ -26,12 +26,12 @@ const ALSO_KICK_IF_FOUND = [
 ];
 
 const KEEP_REASONS = {
-  '1503936879635202149': "Harley's Bat — owner of this guild's automation",
+  '1503936879635202149': "Harley's Bat — owner of this guild's automation",  // bot-id-ok: keep-list entry naming which bot to spare, not a credential
   '693167035068317736':  'Rumble Royale — game bot, kept by user',
 };
 
-const [row] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id = ?', [HARLEY_BOT_ID]);
-const token = encryption.decrypt(JSON.parse(row[0].bot_token));
+const bot = await resolveBotForGuild(GUILD, { db: pool });
+const token = bot.token;
 
 async function api(method, path) {
   await new Promise(r => setTimeout(r, 200));

@@ -82,6 +82,13 @@ async function teardown(guildId) {
   // Only destroy the connection if WE created it — never tear down a 24/7
   // voice-camp connection we merely borrowed.
   if (s.ownsConnection) { try { s.connection?.destroy(); } catch {} }
+  // A borrowed (voice-camp) connection: our subscribe() displaced discord-player's audio
+  // player, and discord-player only subscribes once — hand the connection back, or the
+  // next /music play in this guild plays to nobody.
+  else {
+    const ap = global.player?.nodes?.get(guildId)?.dispatcher?.audioPlayer;
+    if (ap) { try { s.connection?.subscribe(ap); } catch {} }
+  }
   if (s.session) { await glrStop(s.session).catch(() => {}); release(s.session, guildId); }
 }
 
@@ -165,14 +172,28 @@ export default {
         : 'The shared Spotify account is busy in another server. **Link your own** with `/spotify link` so you\'re never blocked.');
     }
 
+    // Resources this attempt owns until they're handed to live.set(). teardown() only
+    // knows about live sessions, so failures before that point must clean these up here —
+    // otherwise ffmpeg leaks and the account stays "busy" in this guild forever.
+    let ff = null, connection = null, ownsConnection = false;
+    const abort = async () => {
+      try { ff?.kill('SIGKILL'); } catch {}
+      if (ownsConnection) { try { connection?.destroy(); } catch {} }
+      await glrStop(session).catch(() => {});
+      release(session, guildId);
+    };
+
     try {
       await teardown(guildId);
-      acquire(session, guildId);
+      // teardown() released the lock if this guild already held it — re-take it WITH the
+      // owner/stopHolder settings, or an owner's stream becomes preemptable and a preempted
+      // stream is never torn down on the Discord side.
+      acquire(session, guildId, { owner, stopHolder: () => teardown(guildId) });
 
       // Reader-first ordering: open ffmpeg on the FIFO (it waits for go-librespot to
       // start writing), join the VC, THEN trigger playback — so audio flows from the
       // first sample with no clipped intro.
-      const ff = openPcmStream(session);
+      ff = openPcmStream(session);
       const resource = createAudioResource(ff.stdout, { inputType: StreamType.Raw });
       const player = createAudioPlayer();
 
@@ -185,7 +206,6 @@ export default {
       const campConn = global.player?.nodes?.get(guildId)?.connection
         || getVoiceConnection(guildId, interaction.client.user?.id)
         || getVoiceConnection(guildId);
-      let connection, ownsConnection;
       if (campConn && campConn.state?.status !== 'destroyed') {
         connection = campConn;
         ownsConnection = false;
@@ -200,7 +220,7 @@ export default {
         ownsConnection = true;
       }
       try { await waitReady(connection, 20000); }
-      catch (e) { if (ownsConnection) await teardown(guildId); return interaction.editReply('Couldn\'t connect to the voice channel.'); }
+      catch (e) { await abort(); return interaction.editReply('Couldn\'t connect to the voice channel.'); }
 
       const subscription = connection.subscribe(player);
       player.play(resource);
@@ -227,7 +247,7 @@ export default {
       return interaction.editReply(`🎧 **Spotify-direct** now playing **${t.name}** — ${(t.artist_names || []).join(', ')}\n_Real Spotify audio. \`/spotify stop\` to end._`);
     } catch (err) {
       logger.error(`[SpotifyConnect] play failed in ${guildId}: ${err.message}`);
-      await teardown(guildId);
+      if (live.has(guildId)) await teardown(guildId); else await abort();
       return interaction.editReply(`Couldn't start Spotify playback: ${err.message}`);
     }
   },

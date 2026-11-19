@@ -18,10 +18,10 @@ import {
     EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder,
 } from 'discord.js';
 import pool from '../utils/db.js';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 
 const GUILD_ID = '1500965606659194982';
-const BOT_ID = '1502798840124670133';
+// The acting bot comes from guild_bot_mapping — never pinned here.
 
 // Pre-existing roles
 const OWNER_ROLE = '1502751525728948366'; // House Master
@@ -31,8 +31,8 @@ const VERIFIED_ROLE  = '1502814371502624858';
 const MODERATOR_ROLE = '1502814369439027370';
 
 async function main() {
-    const [bots] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id = ?', [BOT_ID]);
-    const token = encryption.decrypt(JSON.parse(bots[0].bot_token));
+    const bot = await resolveBotForGuild(GUILD_ID, { db: pool });
+    const token = bot.token;
     const client = new Client({
         intents: [
             GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers,
@@ -139,7 +139,7 @@ async function main() {
             `INSERT INTO ticket_panels (guild_id, panel_name, panel_channel_id, embed_title, embed_description, embed_color,
                 button_text, button_emoji, ticket_category_id, support_role_id, ticket_name_format,
                 save_transcripts, log_channel_id, alert_channel_id, is_active)
-             VALUES (?, 'Support', ?, ?, ?, '#5865F2', 'Open a ticket', '🎫', ?, ?, 'ticket-{user}', 1, ?, ?, 1)`,
+             VALUES (?, 'Support', ?, ?, ?, '#5865F2', 'Open a ticket', '🎫', ?, ?, 'ticket-{username}', 1, ?, ?, 1)`,
             [GUILD_ID, chSupport.id, '🎫 Support Tickets',
              'Need help, want to report something, or have a question only staff should see?\nClick below to open a private ticket — only you and the staff team will see it.',
              catTickets.id, MODERATOR_ROLE, chModLogs.id, chModLogs.id]

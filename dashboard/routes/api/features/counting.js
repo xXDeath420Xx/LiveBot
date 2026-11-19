@@ -16,7 +16,6 @@ const router = express.Router({ mergeParams: true });
 
 const SNOWFLAKE = /^\d{15,25}$/;
 const BOOL_COLUMNS = {
-    allow_same_user: 'allow-same-user',
     react_on_valid: 'react-on-valid',
     announce_milestones: 'announce-milestones',
     delete_chatter: 'delete-chatter',
@@ -31,7 +30,6 @@ router.get('/', async (req, res) => {
         const channels = rows.map(r => ({
             ...r,
             is_active: !!r.is_active,
-            allow_same_user: !!r.allow_same_user,
             react_on_valid: !!r.react_on_valid,
             announce_milestones: !!r.announce_milestones,
             delete_chatter: !!r.delete_chatter,

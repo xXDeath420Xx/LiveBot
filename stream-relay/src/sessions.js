@@ -19,11 +19,28 @@ async function endSession(db, sessionId, status = 'ended', errorMessage = null) 
   );
 }
 
+// One row per destination per session (src/targets.js keeps it current). Returns the row id.
 async function recordTarget(db, sessionId, destinationId, platform, state, lastError = null) {
-  await db.query(
+  const res = await db.query(
     'INSERT INTO stream_session_targets (session_id, destination_id, platform, state, last_error) VALUES (?, ?, ?, ?, ?)',
     [sessionId, destinationId, platform, state, lastError]
   );
+  return res.insertId;
 }
 
-module.exports = { createSession, endSession, recordTarget };
+// A newer error replaces the stored one; a state change without one keeps the last error seen.
+async function updateTarget(db, targetId, state, lastError = null) {
+  await db.query(
+    'UPDATE stream_session_targets SET state = ?, last_error = COALESCE(?, last_error) WHERE id = ?',
+    [state, lastError, targetId]
+  );
+}
+
+async function endTargets(db, sessionId) {
+  await db.query(
+    "UPDATE stream_session_targets SET state = 'ended' WHERE session_id = ? AND state IN ('connecting', 'live')",
+    [sessionId]
+  );
+}
+
+module.exports = { createSession, endSession, recordTarget, updateTarget, endTargets };

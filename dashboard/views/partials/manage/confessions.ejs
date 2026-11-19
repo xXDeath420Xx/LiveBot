@@ -1,395 +1,121 @@
-<style>
-/* Compact Confessions Page Styles */
-.confessions-section-card {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(167, 139, 250, 0.15);
-    border-radius: 12px;
-    overflow: hidden;
-    margin-bottom: 16px;
-}
-
-.confessions-section-header {
-    background: rgba(167, 139, 250, 0.08);
-    padding: 14px 18px;
-    border-bottom: 1px solid rgba(167, 139, 250, 0.15);
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.confessions-section-header i { font-size: 1rem; color: #a78bfa; }
-.confessions-section-header.pending i { color: #fbbf24; }
-.confessions-section-header.recent i { color: #22c55e; }
-.confessions-section-header h3 { font-size: 0.95rem; font-weight: 600; color: #ffffff; margin: 0; }
-.confessions-section-header p { font-size: 0.75rem; color: rgba(255, 255, 255, 0.5); margin: 2px 0 0 0; }
-
-.confessions-section-body { padding: 18px; }
-
-/* Toggle Switch */
-.confessions-toggle-wrapper {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 12px 16px;
-    background: rgba(0, 0, 0, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 10px;
-    cursor: pointer;
-    transition: all 0.2s;
-    margin-bottom: 16px;
-}
-
-.confessions-toggle-wrapper:hover {
-    background: rgba(0, 0, 0, 0.3);
-    border-color: rgba(167, 139, 250, 0.3);
-}
-
-.confessions-toggle {
-    position: relative;
-    width: 44px;
-    height: 24px;
-    flex-shrink: 0;
-}
-
-.confessions-toggle input { opacity: 0; width: 0; height: 0; }
-
-.confessions-toggle-slider {
-    position: absolute;
-    cursor: pointer;
-    inset: 0;
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    transition: 0.2s;
-    border-radius: 24px;
-}
-
-.confessions-toggle-slider:before {
-    position: absolute;
-    content: "";
-    height: 18px;
-    width: 18px;
-    left: 2px;
-    bottom: 2px;
-    background-color: white;
-    transition: 0.2s;
-    border-radius: 50%;
-}
-
-.confessions-toggle input:checked + .confessions-toggle-slider {
-    background: linear-gradient(135deg, #7c3aed, #a78bfa);
-    border-color: #a78bfa;
-}
-
-.confessions-toggle input:checked + .confessions-toggle-slider:before {
-    transform: translateX(20px);
-}
-
-.confessions-toggle-label { font-weight: 600; color: #ffffff; font-size: 0.85rem; }
-.confessions-toggle-desc { font-size: 0.7rem; color: rgba(255, 255, 255, 0.5); margin-top: 2px; }
-
-/* Form Styles */
-.confessions-form-group { margin-bottom: 16px; }
-
-.confessions-form-label {
-    display: block;
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: rgba(255, 255, 255, 0.9);
-    margin-bottom: 6px;
-}
-
-.confessions-form-label i { color: #a78bfa; margin-right: 6px; }
-
-.confessions-form-select {
-    width: 100%;
-    padding: 10px 14px;
-    background: rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 8px;
-    color: #ffffff;
-    font-size: 0.85rem;
-    transition: all 0.2s;
-}
-
-.confessions-form-select:focus {
-    outline: none;
-    border-color: rgba(167, 139, 250, 0.5);
-    box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.1);
-}
-
-.confessions-form-select option { background: #1a1d21; color: #ffffff; }
-
-.confessions-form-hint {
-    display: block;
-    margin-top: 4px;
-    font-size: 0.7rem;
-    color: rgba(255, 255, 255, 0.45);
-}
-
-/* Save Button */
-.confessions-save-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 20px;
-    background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%);
-    border: none;
-    border-radius: 8px;
-    color: #ffffff;
-    font-size: 0.85rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.confessions-save-btn:hover { box-shadow: 0 4px 16px rgba(124, 58, 237, 0.4); }
-
-/* Confession Item */
-.confession-item {
-    background: rgba(0, 0, 0, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 10px;
-    padding: 14px;
-    margin-bottom: 12px;
-    transition: all 0.2s;
-}
-
-.confession-item:hover {
-    background: rgba(0, 0, 0, 0.3);
-    border-color: rgba(167, 139, 250, 0.3);
-}
-
-.confession-item:last-child { margin-bottom: 0; }
-
-.confession-content {
-    background: rgba(167, 139, 250, 0.08);
-    border: 1px solid rgba(167, 139, 250, 0.2);
-    border-radius: 8px;
-    padding: 12px;
-    color: rgba(255, 255, 255, 0.9);
-    font-style: italic;
-    font-size: 0.85rem;
-    line-height: 1.5;
-    margin-bottom: 12px;
-}
-
-.confession-meta {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 0.75rem;
-    color: rgba(255, 255, 255, 0.5);
-}
-
-.confession-actions {
-    display: flex;
-    gap: 8px;
-    margin-top: 12px;
-}
-
-.confession-approve-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 8px 14px;
-    background: rgba(34, 197, 94, 0.15);
-    border: 1px solid rgba(34, 197, 94, 0.3);
-    border-radius: 6px;
-    color: #22c55e;
-    font-size: 0.75rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.confession-approve-btn:hover {
-    background: rgba(34, 197, 94, 0.25);
-    border-color: rgba(34, 197, 94, 0.5);
-}
-
-.confession-reject-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 8px 14px;
-    background: rgba(239, 68, 68, 0.15);
-    border: 1px solid rgba(239, 68, 68, 0.3);
-    border-radius: 6px;
-    color: #ef4444;
-    font-size: 0.75rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.confession-reject-btn:hover {
-    background: rgba(239, 68, 68, 0.25);
-    border-color: rgba(239, 68, 68, 0.5);
-}
-
-/* Status Badge */
-.confession-status-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 4px 8px;
-    border-radius: 4px;
-    font-size: 0.65rem;
-    font-weight: 600;
-    text-transform: uppercase;
-}
-
-.confession-status-badge.pending {
-    background: rgba(251, 191, 36, 0.15);
-    border: 1px solid rgba(251, 191, 36, 0.3);
-    color: #fbbf24;
-}
-
-.confession-status-badge.approved {
-    background: rgba(34, 197, 94, 0.15);
-    border: 1px solid rgba(34, 197, 94, 0.3);
-    color: #22c55e;
-}
-
-.confession-status-badge.rejected {
-    background: rgba(239, 68, 68, 0.15);
-    border: 1px solid rgba(239, 68, 68, 0.3);
-    color: #ef4444;
-}
-
-/* Empty State */
-.confessions-empty {
-    text-align: center;
-    padding: 32px 20px;
-    color: rgba(255, 255, 255, 0.5);
-}
-
-.confessions-empty i { font-size: 2rem; margin-bottom: 12px; opacity: 0.5; }
-.confessions-empty p { margin: 0; font-size: 0.85rem; }
-
-/* Loading State */
-.confessions-loading {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 32px 20px;
-    color: rgba(255, 255, 255, 0.6);
-    font-size: 0.85rem;
-}
-
-.confessions-loading i {
-    font-size: 1.5rem;
-    color: #a78bfa;
-    margin-bottom: 12px;
-    animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-}
-</style>
+<%#
+  Confessions: the channel, approval switch and review channel (JSON POST confessions/config),
+  the review queue (approve / reject) and the latest decisions, loaded from GET confessions.
+  Built on the settings-row kit (cf-settings.css); ids, field names and script hooks unchanged.
+%>
 
 <div class="page-section">
     <div class="page-section-header">
         <div>
             <div class="page-section-title">
                 <i class="fas fa-user-secret"></i>
-                <span>Anonymous Confessions</span>
+                <span>Anonymous confessions</span>
             </div>
-            <div class="page-section-subtitle">
-                Allow users to submit anonymous confessions to a channel
-            </div>
+            <div class="page-section-subtitle">Settings, the review queue and recent decisions. Members never see who sent a confession; server admins can show the sender here for 30 days to deal with abuse, and each time is written to the audit log.</div>
         </div>
     </div>
 
-    <!-- Configuration Section -->
-    <div class="confessions-section-card">
-        <div class="confessions-section-header">
-            <i class="fas fa-cog"></i>
-            <h3>Configuration</h3>
-        </div>
-        <div class="confessions-section-body">
-            <form id="confession-config-form" onsubmit="saveConfessionConfig(event)">
-                <div class="confessions-form-group">
-                    <label class="confessions-form-label">
-                        <i class="fas fa-hashtag"></i>Confession Channel
-                    </label>
-                    <select id="confession-channel" name="channel_id" class="confessions-form-select" required>
-                        <option value="">Select a channel...</option>
-                        <% if (channels) { %>
-                            <% channels.filter(c => c.type === 0).forEach(channel => { %>
-                                <option value="<%= channel.id %>">#<%= channel.name %></option>
-                            <% }); %>
-                        <% } %>
-                    </select>
-                    <span class="confessions-form-hint">Channel where approved confessions will be posted</span>
+    <form id="confession-config-form" onsubmit="saveConfessionConfig(event)">
+        <section class="cf-section" aria-labelledby="cfs-config-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="cfs-config-title">Settings</h2>
+                    <p class="cf-section-desc">Where confessions are posted, and whether staff approve them first.</p>
                 </div>
-
-                <label class="confessions-toggle-wrapper">
-                    <div class="confessions-toggle">
-                        <input type="checkbox" id="require-approval" name="require_approval">
-                        <span class="confessions-toggle-slider"></span>
+            </header>
+            <div class="cf-rows">
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="cfs-enabled">Confessions</label>
+                        <p class="cf-row-desc" id="cfs-enabled-desc">Members can use /confess (also /fun confess) in this server.</p>
                     </div>
-                    <div>
-                        <div class="confessions-toggle-label">Require Approval</div>
-                        <div class="confessions-toggle-desc">Confessions must be approved by staff before posting</div>
+                    <div class="cf-row-control">
+                        <input type="checkbox" class="cf-switch" role="switch" id="cfs-enabled" name="enabled" data-feature-switch aria-describedby="cfs-enabled-desc">
                     </div>
-                </label>
-
-                <div class="confessions-form-group" style="margin-bottom: 0;">
-                    <label class="confessions-form-label">
-                        <i class="fas fa-shield-alt"></i>Moderation Channel
-                    </label>
-                    <select id="mod-channel" name="mod_channel_id" class="confessions-form-select">
-                        <option value="">None (disable moderation queue)</option>
-                        <% if (channels) { %>
-                            <% channels.filter(c => c.type === 0).forEach(channel => { %>
-                                <option value="<%= channel.id %>">#<%= channel.name %></option>
-                            <% }); %>
-                        <% } %>
-                    </select>
-                    <span class="confessions-form-hint">Where pending confessions will be sent for review</span>
                 </div>
-
-                <div style="margin-top: 18px;">
-                    <button type="submit" class="confessions-save-btn">
-                        <i class="fas fa-save"></i>
-                        Save Settings
-                    </button>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="confession-channel">Confession channel</label>
+                        <p class="cf-row-desc" id="confession-channel-desc">Approved confessions are posted here.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <select id="confession-channel" name="channel_id" class="form-select" required aria-describedby="confession-channel-desc">
+                            <%- include('../kit/_pick-options', { items: (typeof channels !== 'undefined' && channels) || [], selected: null, kind: 'channel', only: 'text', empty: 'Choose a channel' }) %>
+                        </select>
+                    </div>
                 </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Pending Confessions Section -->
-    <div class="confessions-section-card">
-        <div class="confessions-section-header pending">
-            <i class="fas fa-clock"></i>
-            <h3>Pending Confessions</h3>
-        </div>
-        <div class="confessions-section-body" id="pending-confessions">
-            <div class="confessions-loading">
-                <i class="fas fa-spinner"></i>
-                <span>Loading pending confessions...</span>
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="require-approval">Require approval</label>
+                        <p class="cf-row-desc" id="require-approval-desc">Staff approve each confession before it is posted.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="checkbox" class="cf-switch" role="switch" id="require-approval" name="require_approval" aria-describedby="require-approval-desc">
+                    </div>
+                </div>
+                <div class="cf-row cf-row--sub">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="mod-channel">Review channel</label>
+                        <p class="cf-row-desc" id="mod-channel-desc">Where confessions waiting for approval are sent.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <select id="mod-channel" name="mod_channel_id" class="form-select" aria-describedby="mod-channel-desc">
+                            <%- include('../kit/_pick-options', { items: (typeof channels !== 'undefined' && channels) || [], selected: null, kind: 'channel', only: 'text', empty: 'None (review here only)' }) %>
+                        </select>
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="cfs-min-length">Length</label>
+                        <p class="cf-row-desc" id="cfs-length-desc">The shortest and longest confession members can send, in characters.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="cf-input-group">
+                            <div class="cf-input-unit"><span class="cf-unit">from</span><input id="cfs-min-length" type="number" class="form-control" name="min_length" min="1" max="1000" value="10" aria-describedby="cfs-length-desc"></div>
+                            <div class="cf-input-unit"><span class="cf-unit">to</span><input id="cfs-max-length" type="number" class="form-control" name="max_length" min="10" max="4000" value="1000" aria-label="Longest confession" aria-describedby="cfs-length-desc"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="cfs-cooldown">Wait between confessions</label>
+                        <p class="cf-row-desc" id="cfs-cooldown-desc">How long a member waits after one confession before sending another. 0 means no wait.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="cf-input-unit"><input id="cfs-cooldown" type="number" class="form-control" name="cooldown_minutes" min="0" max="1440" step="1" value="5" aria-describedby="cfs-cooldown-desc"><span class="cf-unit">minutes</span></div>
+                    </div>
+                </div>
+                <div class="cf-section-foot">
+                    <span class="cf-status-line cf-foot-note" id="cfs-save-status" role="status"></span>
+                    <button type="submit" class="btn btn-primary">Save</button>
+                </div>
             </div>
-        </div>
-    </div>
+        </section>
+    </form>
 
-    <!-- Recent Confessions Section -->
-    <div class="confessions-section-card">
-        <div class="confessions-section-header recent">
-            <i class="fas fa-check-circle"></i>
-            <h3>Recent Confessions</h3>
-        </div>
-        <div class="confessions-section-body" id="recent-confessions">
-            <div class="confessions-loading">
-                <i class="fas fa-spinner"></i>
-                <span>Loading recent confessions...</span>
+    <section class="cf-section" aria-labelledby="cfs-pending-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="cfs-pending-title">Waiting for review <span id="cfs-pending-count"></span></h2>
+                <p class="cf-section-desc">Approve to post a confession, or reject it.</p>
             </div>
+        </header>
+        <div class="cf-rows" id="pending-confessions">
+            <%- include('../kit/_state', { kind: 'loading', title: 'Loading confessions', text: null, id: null, boxed: false, compact: true }) %>
         </div>
-    </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="cfs-recent-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="cfs-recent-title">Recent decisions</h2>
+                <p class="cf-section-desc">Confessions approved or rejected lately.</p>
+            </div>
+        </header>
+        <div class="cf-rows" id="recent-confessions">
+            <%- include('../kit/_state', { kind: 'loading', title: 'Loading confessions', text: null, id: null, boxed: false, compact: true }) %>
+        </div>
+    </section>
 </div>
 
 <script>
@@ -403,78 +129,111 @@ async function loadConfessions() {
             document.getElementById('confession-channel').value = data.config.channel_id || '';
             document.getElementById('require-approval').checked = data.config.require_approval || false;
             document.getElementById('mod-channel').value = data.config.mod_channel_id || '';
+            // Never set up yet: on by default, as the bot treats a new row.
+            const on = document.getElementById('cfs-enabled');
+            on.checked = data.config.channel_id ? !!data.config.enabled : true;
+            on.dispatchEvent(new Event('change'));
+            document.getElementById('cfs-min-length').value = data.config.min_length || 10;
+            document.getElementById('cfs-max-length').value = data.config.max_length || 1000;
+            document.getElementById('cfs-cooldown').value = data.config.cooldown_minutes ?? 5;
         }
+        cfsSyncReview();
+        const waiting = Array.isArray(data.pendingConfessions) ? data.pendingConfessions.length : 0;
+        document.getElementById('cfs-pending-count').textContent = waiting ? '(' + waiting + ')' : '';
 
-        // Pending confessions
-        if (data.pendingConfessions && data.pendingConfessions.length > 0) {
-            const pendingHtml = data.pendingConfessions.map(confession => `
-                <div class="confession-item">
-                    <div class="confession-content">"${confession.content}"</div>
-                    <div class="confession-meta">
-                        <span><i class="fas fa-calendar"></i> ${new Date(confession.submitted_at).toLocaleString()}</span>
-                        <span class="confession-status-badge pending"><i class="fas fa-clock"></i> Pending</span>
-                    </div>
-                    <div class="confession-actions">
-                        <button class="confession-approve-btn" onclick="approveConfession(${confession.id})">
-                            <i class="fas fa-check"></i> Approve
-                        </button>
-                        <button class="confession-reject-btn" onclick="rejectConfession(${confession.id})">
-                            <i class="fas fa-times"></i> Reject
-                        </button>
-                    </div>
-                </div>
-            `).join('');
-            document.getElementById('pending-confessions').innerHTML = pendingHtml;
-        } else {
-            document.getElementById('pending-confessions').innerHTML = `
-                <div class="confessions-empty">
-                    <i class="fas fa-inbox"></i>
-                    <p>No pending confessions</p>
-                </div>
-            `;
-        }
-
-        // Recent confessions
-        if (data.recentConfessions && data.recentConfessions.length > 0) {
-            const recentHtml = data.recentConfessions.map(confession => {
-                const statusClass = confession.approved === 1 ? 'approved' : 'rejected';
-                const statusText = confession.approved === 1 ? 'Approved' : 'Rejected';
-                const statusIcon = confession.approved === 1 ? 'check' : 'times';
-                return `
-                    <div class="confession-item">
-                        <div class="confession-content">"${confession.content}"</div>
-                        <div class="confession-meta">
-                            <span><i class="fas fa-calendar"></i> ${new Date(confession.submitted_at).toLocaleString()}</span>
-                            <span class="confession-status-badge ${statusClass}"><i class="fas fa-${statusIcon}"></i> ${statusText}</span>
-                        </div>
-                    </div>
-                `;
-            }).join('');
-            document.getElementById('recent-confessions').innerHTML = recentHtml;
-        } else {
-            document.getElementById('recent-confessions').innerHTML = `
-                <div class="confessions-empty">
-                    <i class="fas fa-inbox"></i>
-                    <p>No recent confessions</p>
-                </div>
-            `;
-        }
+        // Confession text is what members wrote: it only ever goes in as text (textContent).
+        window.cfsCanReveal = !!data.canRevealSender;
+        renderConfessions(document.getElementById('pending-confessions'), data.pendingConfessions, true, 'Nothing waiting for review');
+        renderConfessions(document.getElementById('recent-confessions'), data.recentConfessions, false, 'No confessions yet');
 
     } catch (error) {
         console.error('Error loading confessions:', error);
-        document.getElementById('pending-confessions').innerHTML = `
-            <div class="confessions-empty">
-                <i class="fas fa-exclamation-triangle"></i>
-                <p>Error loading data</p>
-            </div>
-        `;
+        document.getElementById('pending-confessions').replaceChildren(confessionState('Could not load confessions', true));
     }
+}
+
+function confessionEl(tag, className, text) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text != null) node.textContent = text;
+    return node;
+}
+
+function confessionState(title, isError) {
+    const box = confessionEl('div', `cf-state cf-state--${isError ? 'error' : 'empty'} cf-state--compact`);
+    if (isError) box.setAttribute('role', 'alert');
+    box.append(confessionEl('p', 'cf-state-title', title));
+    return box;
+}
+
+/** One list row per confession: the text, when it was sent, and Approve / Reject or the decision. */
+function renderConfessions(box, list, pending, emptyTitle) {
+    if (!Array.isArray(list) || !list.length) {
+        box.replaceChildren(confessionState(emptyTitle, false));
+        return;
+    }
+    box.replaceChildren(...list.map((confession) => {
+        const row = confessionEl('div', 'cf-list-item cf-list-item--multi');
+        const main = confessionEl('div', 'cf-list-main');
+        main.append(confessionEl('p', 'cf-list-body is-pre', confession.content));
+        const meta = confessionEl('p', 'cf-list-meta');
+        meta.append(confessionEl('span', null, `Submitted ${new Date(confession.submitted_at).toLocaleString()}`));
+        if (!pending) {
+            const ok = confession.approved === 1;
+            meta.append(confessionEl('span', `cf-pill ${ok ? 'is-ok' : 'is-bad'}`, ok ? 'Approved' : 'Rejected'));
+        }
+        main.append(meta);
+        row.append(main);
+        const actions = confessionEl('div', 'cf-list-actions');
+        let buttons = 0;
+        // Server admins only (the server decides; this just hides the button for everyone else).
+        if (window.cfsCanReveal && Number(confession.sender_available) === 1) {
+            const who = confessionEl('button', 'btn btn-sm btn-secondary', 'Show sender');
+            who.type = 'button';
+            who.title = 'Only server admins see this. Each time is written to the audit log.';
+            who.addEventListener('click', () => revealSender(Number(confession.id), who, meta));
+            actions.append(who);
+            buttons++;
+        }
+        if (pending) {
+            const id = Number(confession.id);
+            const approve = confessionEl('button', 'btn btn-sm btn-primary', 'Approve');
+            approve.type = 'button';
+            approve.addEventListener('click', () => approveConfession(id));
+            const reject = confessionEl('button', 'btn btn-sm btn-danger', 'Reject');
+            reject.type = 'button';
+            reject.addEventListener('click', () => rejectConfession(id));
+            actions.append(approve, reject);
+            buttons += 2;
+        }
+        if (buttons) row.append(actions);
+        return row;
+    }));
+}
+
+// The review channel only matters while approval is required.
+function cfsSyncReview() {
+    const row = document.getElementById('mod-channel').closest('.cf-row');
+    if (row) row.hidden = !document.getElementById('require-approval').checked;
+}
+document.getElementById('require-approval').addEventListener('change', cfsSyncReview);
+
+function cfsSay(text, ok) {
+    if (window.showToast) { window.showToast(text, ok ? 'success' : 'error'); return; }
+    const line = document.getElementById('cfs-save-status');
+    line.textContent = text;
+    line.classList.toggle('is-ok', !!ok);
+    line.classList.toggle('is-bad', !ok);
 }
 
 async function saveConfessionConfig(event) {
     event.preventDefault();
     const formData = new FormData(event.target);
     const config = {
+        enabled: document.getElementById('cfs-enabled').checked,
+        min_length: Number(formData.get('min_length')) || 10,
+        max_length: Number(formData.get('max_length')) || 1000,
+        cooldown_minutes: Math.min(Math.max(Math.round(Number(formData.get('cooldown_minutes'))) || 0, 0), 1440),
         channel_id: formData.get('channel_id'),
         require_approval: document.getElementById('require-approval').checked,
         mod_channel_id: formData.get('mod_channel_id') || null
@@ -487,14 +246,15 @@ async function saveConfessionConfig(event) {
             body: JSON.stringify(config)
         });
 
-        if (response.ok) {
-            alert('Configuration saved successfully!');
-        } else {
-            alert('Failed to save configuration');
-        }
+        const line = document.getElementById('cfs-save-status');
+        line.textContent = response.ok ? 'Saved' : 'Could not save the settings.';
+        line.classList.toggle('is-ok', response.ok);
+        line.classList.toggle('is-bad', !response.ok);
     } catch (error) {
         console.error('Error saving config:', error);
-        alert('Error saving configuration');
+        const line = document.getElementById('cfs-save-status');
+        line.textContent = 'Could not reach the server.';
+        line.classList.add('is-bad');
     }
 }
 
@@ -505,14 +265,35 @@ async function approveConfession(id) {
         });
 
         if (response.ok) {
-            alert('Confession approved!');
+            cfsSay('Confession approved and posted.', true);
             loadConfessions();
         } else {
-            alert('Failed to approve confession');
+            cfsSay('Could not approve the confession.', false);
         }
     } catch (error) {
         console.error('Error approving confession:', error);
-        alert('Error approving confession');
+        cfsSay('Could not approve the confession.', false);
+    }
+}
+
+/** Admins only: fetch who sent a confession (the server writes an audit-log entry first). */
+async function revealSender(id, button, meta) {
+    button.disabled = true;
+    try {
+        const response = await fetch(`/manage/<%= guild.id %>/confessions/${id}/sender`, { method: 'POST' });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.sender) {
+            cfsSay(data.error || 'Could not look up the sender.', false);
+            button.disabled = false;
+            return;
+        }
+        const label = data.sender.name ? `${data.sender.name}, ${data.sender.id}` : `User ${data.sender.id} (no longer in the server)`;
+        meta.append(confessionEl('span', 'cf-pill', `Sent by ${label}`));
+        button.remove();
+    } catch (error) {
+        console.error('Error revealing sender:', error);
+        cfsSay('Could not look up the sender.', false);
+        button.disabled = false;
     }
 }
 
@@ -523,14 +304,14 @@ async function rejectConfession(id) {
         });
 
         if (response.ok) {
-            alert('Confession rejected');
+            cfsSay('Confession rejected.', true);
             loadConfessions();
         } else {
-            alert('Failed to reject confession');
+            cfsSay('Could not reject the confession.', false);
         }
     } catch (error) {
         console.error('Error rejecting confession:', error);
-        alert('Error rejecting confession');
+        cfsSay('Could not reject the confession.', false);
     }
 }
 

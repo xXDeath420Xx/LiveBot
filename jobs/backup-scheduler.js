@@ -8,6 +8,7 @@ import cron from 'node-cron';
 import logger from '../utils/logger.js';
 import pool from '../utils/db.js';
 import { createSnapshot, saveBackup } from '../utils/backup-utils.js';
+import { logFeatureEvent } from '../core/feature-log.js';
 
 let schedulerTask = null;
 let isRunning = false;
@@ -75,10 +76,25 @@ async function runBackupCycle(client) {
     logger.info(`[BackupScheduler] Backing up ${guildMap.size} guilds`);
 
     for (const [guildId, guild] of guildMap) {
+        // Post through the bot that serves the server, not whichever client listed it first.
+        const logGuild = botManager.getClientForGuild?.(guildId)?.guilds.cache.get(guildId) || guild;
         try {
             const snapshot = await createSnapshot(guild);
             await saveBackup(guildId, snapshotName, snapshot, 'auto-scheduler');
             success++;
+            const m = snapshot.meta || {};
+            void logFeatureEvent(() => (logGuild), 'backup.autoCreated', () => ({
+                title: '🗓️ Weekly Backup Created',
+                description: `The weekly automatic backup **${snapshotName}** was saved. The last ${MAX_AUTO_BACKUPS} weekly backups are kept.`,
+                fields: [
+                    ['Name', snapshotName],
+                    ['Roles', m.roleCount],
+                    ['Channels', m.channelCount],
+                    ['Emojis', m.emojiCount],
+                    ['Members', snapshot.discord?.members?.length],
+                    ['Bot settings', m.configTablesCount != null ? `${m.configTablesCount} tables (${m.configRowsCount} rows)` : null],
+                ],
+            }));
 
             // Prune old auto-backups beyond MAX_AUTO_BACKUPS
             try {
@@ -93,6 +109,11 @@ async function runBackupCycle(client) {
                         toDelete
                     );
                     logger.info(`[BackupScheduler] Pruned ${toDelete.length} old auto-backups for ${guild.name}`);
+                    void logFeatureEvent(() => (logGuild), 'backup.pruned', () => ({
+                        title: '🧹 Old Auto Backups Pruned',
+                        description: `${toDelete.length} older weekly backup(s) were deleted to keep the newest ${MAX_AUTO_BACKUPS}.`,
+                        fields: [['Deleted', toDelete.length], ['Kept', MAX_AUTO_BACKUPS]],
+                    }));
                 }
             } catch { /* prune is best-effort */ }
 
@@ -101,6 +122,11 @@ async function runBackupCycle(client) {
         } catch (error) {
             failed++;
             logger.error(`[BackupScheduler] Failed backup for ${guild.name} (${guildId}):`, { error: error.message });
+            void logFeatureEvent(() => (logGuild), 'backup.failed', () => ({
+                title: '❌ Backup Failed',
+                description: 'This week\'s automatic backup could not be saved. It will be tried again next week, or create one now from the dashboard.',
+                fields: [['Action', 'Weekly automatic backup'], ['Why', String(error.message || 'Unknown error').slice(0, 300), false]],
+            }));
         }
     }
 

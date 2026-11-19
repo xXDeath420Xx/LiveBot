@@ -2,6 +2,63 @@ import pool from '../utils/db.js';
 import logger from '../utils/logger.js';
 import { EmbedBuilder } from 'discord.js';
 import { isProtectedFromBanCommands } from '../utils/owner-protection.js';
+import { themeColor } from './guild-theme.js';
+import { logFeatureEvent, userLabel } from './feature-log.js';
+import { protectionHold } from './protection-exempt.js';
+import { sendModerationDm } from './moderation-manager.js';
+
+/**
+ * The infractions an escalation rule counts: warnings, timeouts, kicks and bans (H-658). Not reversals
+ * (Unmute, Unban), not the ClearInfractions marker, and not the raid / self-bot / spam detector rows,
+ * which record a detection rather than a moderation action.
+ */
+export const ESCALATION_COUNTED_TYPES = Object.freeze(['Warn', 'Mute', 'Kick', 'Ban']);
+
+/** The reason every escalation-made infraction carries; those rows are the punishment, not an offence. */
+const ESCALATION_REASON_PREFIX = 'Automatic action:';
+
+/**
+ * How many infractions count towards a rule: the counted types created at or after `sinceMs`, after the
+ * member's last ClearInfractions row (/admin mod clearinfractions wipes the history, then writes that row),
+ * leaving out the rows escalation itself recorded.
+ * @param {Array<{ id:number, type:string, reason?:string|null, created_at:Date|string }>} rows  the member's rows
+ * @param {number} sinceMs  start of the rule's window
+ */
+export function countTowardEscalation(rows, sinceMs) {
+  const list = Array.isArray(rows) ? rows : [];
+  const lastClear = list.reduce((max, r) => (r.type === 'ClearInfractions' && Number(r.id) > max ? Number(r.id) : max), 0);
+  return list.filter((r) => ESCALATION_COUNTED_TYPES.includes(r.type)
+    && Number(r.id) > lastClear
+    && new Date(r.created_at).getTime() >= sinceMs
+    && !String(r.reason || '').startsWith(ESCALATION_REASON_PREFIX)).length;
+}
+
+/**
+ * escalation_rules.action → the infractions.type ENUM value it is recorded as.
+ *
+ * The type used to be built by capitalising the action, so a 'timeout' rule (what the dashboard's
+ * "Timeout" option means) became 'Timeout', which the ENUM rejects — the INSERT threw before the
+ * action ran and the rule never fired. A timeout IS a mute in Discord terms.
+ */
+const ACTION_INFRACTION_TYPE = {
+  warn: 'Warn',
+  mute: 'Mute',
+  timeout: 'Mute',
+  kick: 'Kick',
+  ban: 'Ban'
+};
+
+/** infractions.type → the Moderation page's DM switch and wording (core/moderation-manager.js MOD_DM_ACTIONS). */
+const ESCALATION_DM_ACTION = { Warn: 'warn', Mute: 'mute', Kick: 'kick', Ban: 'ban' };
+
+/**
+ * Length of an escalation mute/timeout whose rule has no action_duration_minutes. The dashboard form
+ * never asked for one, so most mute rules have NULL — which timed the member out for 0 ms (no mute).
+ */
+export const DEFAULT_ESCALATION_MUTE_MINUTES = 60;
+
+/** Discord refuses timeouts longer than 28 days. */
+const MAX_TIMEOUT_MINUTES = 28 * 24 * 60;
 
 /**
  * Check if a user has met escalation criteria and apply automatic actions
@@ -41,17 +98,16 @@ export async function checkEscalations(guild, user) {
       return;
     }
 
+    // The member's record in this server, read once and counted per rule (countTowardEscalation).
+    const [history] = await pool.execute(
+      'SELECT id, type, reason, created_at FROM infractions WHERE guild_id = ? AND user_id = ?',
+      [guild.id, user.id]
+    );
+
     // Check each rule (highest count first)
     for (const rule of rules) {
-      const sinceDate = new Date(Date.now() - rule.time_period_hours * 60 * 60 * 1000);
-
-      // Count infractions in the time period
-      const [rows] = await pool.execute(
-        'SELECT COUNT(*) as count FROM infractions WHERE guild_id = ? AND user_id = ? AND created_at >= ?',
-        [guild.id, user.id, sinceDate]
-      );
-
-      const infractionCount = rows[0].count;
+      const sinceMs = Date.now() - rule.time_period_hours * 60 * 60 * 1000;
+      const infractionCount = countTowardEscalation(history, sinceMs);
 
       if (infractionCount >= rule.infraction_count) {
         // Escalation triggered - apply action and stop checking
@@ -97,13 +153,44 @@ async function applyAction(guild, member, user, rule) {
 
   const reason = `Automatic action: ${rule.infraction_count} infractions in ${rule.time_period_hours} hours.`;
 
+  const action = String(rule.action || '').toLowerCase();
+  const infractionType = ACTION_INFRACTION_TYPE[action];
+  if (!infractionType) {
+    logger.warn('[EscalationManager] Escalation rule has an unknown action — skipped', {
+      guildId: guild.id,
+      ruleId: rule.id,
+      action: rule.action
+    });
+    return;
+  }
+
+  // Unified allowlist / global pause: no automatic escalation (core/protection-exempt.js logs the skip).
+  const doing = { Mute: 'timeout', Kick: 'kick', Ban: 'ban', Warn: 'warn' }[infractionType];
+  if (await protectionHold(member ?? { guild, id: user.id, user }, doing, 'Auto escalation')) return;
+
+  // Only mutes have a length. Kick/ban rules carry 0 or NULL here, which is not a duration.
+  let durationMinutes = null;
+  if (infractionType === 'Mute') {
+    durationMinutes = Number(rule.action_duration_minutes);
+    if (!Number.isFinite(durationMinutes) || durationMinutes <= 0) {
+      logger.warn('[EscalationManager] Mute/timeout rule has no duration — using the default', {
+        guildId: guild.id,
+        ruleId: rule.id,
+        action: rule.action,
+        defaultMinutes: DEFAULT_ESCALATION_MUTE_MINUTES
+      });
+      durationMinutes = DEFAULT_ESCALATION_MUTE_MINUTES;
+    }
+    durationMinutes = Math.min(Math.round(durationMinutes), MAX_TIMEOUT_MINUTES);
+  }
+
   try {
     // Get bot client from guild
     const botUser = guild.client.user;
 
     // Log the automated infraction
-    const expiresAt = rule.action_duration_minutes
-      ? new Date(Date.now() + rule.action_duration_minutes * 60000)
+    const expiresAt = durationMinutes
+      ? new Date(Date.now() + durationMinutes * 60000)
       : null;
 
     const [result] = await pool.execute(
@@ -112,61 +199,50 @@ async function applyAction(guild, member, user, rule) {
         guild.id,
         user.id,
         botUser.id,
-        rule.action.charAt(0).toUpperCase() + rule.action.slice(1), // Capitalize action type
+        infractionType,
         reason,
-        rule.action_duration_minutes,
+        durationMinutes,
         expiresAt
       ]
     );
 
     const infractionId = result.insertId;
 
-    // Try to DM the user
-    try {
-      const dmEmbed = new EmbedBuilder()
-        .setColor('#E74C3C')
-        .setTitle(`Automatic Action Taken in ${guild.name}`)
-        .setDescription('Due to accumulating too many infractions recently, an automatic action has been taken.')
-        .addFields(
-          { name: 'Action', value: rule.action.toUpperCase() },
-          { name: 'Reason', value: reason }
-        )
-        .setTimestamp();
-
-      if (rule.action_duration_minutes) {
-        dmEmbed.addFields({ name: 'Duration', value: `${rule.action_duration_minutes} minutes` });
-      }
-
-      await user.send({ embeds: [dmEmbed] });
-    } catch (dmError) {
-      logger.warn('[EscalationManager] Could not DM user about automated action', {
-        userId: user.id,
-        userTag: user.tag
-      });
-    }
+    // DM the member through the Moderation page's messages: its on/off switch and wording for this
+    // action (H-658 — this used to send its own DM whatever the switches said). Before a kick or ban,
+    // while the bot still shares the server with them. sendModerationDm never throws.
+    await sendModerationDm(guild, user, ESCALATION_DM_ACTION[infractionType], {
+      reason,
+      durationMinutes,
+      expiresAtMs: durationMinutes ? Date.now() + durationMinutes * 60000 : undefined,
+      permanent: infractionType === 'Ban',
+      moderator: botUser,
+    });
 
     // Apply the action
-    switch (rule.action.toLowerCase()) {
-      case 'mute':
-        await member.timeout(rule.action_duration_minutes * 60 * 1000, reason);
+    switch (infractionType) {
+      case 'Mute':
+        await member.timeout(durationMinutes * 60 * 1000, reason);
         logger.info('[EscalationManager] User muted (escalation)', {
           userId: user.id,
-          duration: rule.action_duration_minutes
+          duration: durationMinutes
         });
         break;
 
-      case 'kick':
+      case 'Kick':
         await member.kick(reason);
         logger.info('[EscalationManager] User kicked (escalation)', { userId: user.id });
         break;
 
-      case 'ban':
+      case 'Ban':
         await member.ban({ reason });
         logger.info('[EscalationManager] User banned (escalation)', { userId: user.id });
         break;
 
-      default:
-        logger.warn('[EscalationManager] Unknown escalation action', { action: rule.action });
+      case 'Warn':
+        // A warning is the recorded infraction plus the DM above; there is no Discord-side action.
+        logger.info('[EscalationManager] User warned (escalation)', { userId: user.id });
+        break;
     }
 
     // Post to mod log
@@ -176,6 +252,22 @@ async function applyAction(guild, member, user, rule) {
     );
 
     const config = configRows[0];
+
+    // Server log; the mod-log embed below goes to mod_log_channel_id, so it is not repeated there.
+    void logFeatureEvent(() => (guild), 'moderation.escalation', () => ({
+      title: '📈 Escalation Triggered',
+      fields: [
+        ['Member', userLabel(user)],
+        ['Action', rule.action.toUpperCase()],
+        ['Duration', durationMinutes ? `${durationMinutes} minutes` : null],
+        ['Rule', `${rule.infraction_count} infractions in ${rule.time_period_hours} hours`],
+        ['Case', `#${infractionId}`],
+        ['Moderator', userLabel(botUser)],
+        ['Reason', reason, false],
+      ],
+      avoidChannelIds: [config?.mod_log_channel_id],
+    }));
+
     if (!config || !config.mod_log_channel_id) {
       logger.debug('[EscalationManager] No mod log channel configured');
       return;
@@ -188,14 +280,14 @@ async function applyAction(guild, member, user, rule) {
     }
 
     const logEmbed = new EmbedBuilder()
-      .setColor('#C0392B')
+      .setColor(themeColor(member.guild?.id, 'danger'))
       .setAuthor({ name: 'Automated Moderation' })
       .setTitle('Escalation Rule Triggered')
       .addFields(
         { name: 'User', value: `${user.tag} (${user.id})` },
         {
           name: 'Action Taken',
-          value: `${rule.action.toUpperCase()}${rule.action_duration_minutes ? ` (${rule.action_duration_minutes}m)` : ''}`
+          value: `${rule.action.toUpperCase()}${durationMinutes ? ` (${durationMinutes}m)` : ''}`
         },
         {
           name: 'Trigger',

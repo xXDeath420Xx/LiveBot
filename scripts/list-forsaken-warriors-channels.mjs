@@ -2,13 +2,13 @@ import 'dotenv/config';
 import { REST } from '@discordjs/rest';
 import { Routes } from 'discord-api-types/v10';
 import pool from '../utils/db.js';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 
 const GUILD_ID = '1469931133981687873';
-const KITSUNE_BOT_ID = '1498486251576229958';
+// The acting bot comes from guild_bot_mapping — never pinned here.
 
-const [rows] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id = ?', [KITSUNE_BOT_ID]);
-const token = encryption.decrypt(JSON.parse(rows[0].bot_token));
+const bot = await resolveBotForGuild(GUILD_ID, { db: pool });
+const token = bot.token;
 const rest = new REST({ version: '10' }).setToken(token);
 
 const channels = await rest.get(Routes.guildChannels(GUILD_ID));

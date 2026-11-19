@@ -3,8 +3,8 @@ import crypto from 'crypto';
 import pool from '../../utils/db.js';
 import fetch from 'node-fetch';
 import logger from '../../utils/logger.js';
-import { encryptToken, decryptToken, hashForLogging } from '../../utils/token-encryption.js';
-import { logSessionEvent, getSessionStore } from '../config/session.js';
+import { encryptToken, hashForLogging } from '../../utils/token-encryption.js';
+import { logSessionEvent } from '../config/session.js';
 
 const router = express.Router();
 
@@ -24,7 +24,7 @@ const KICK_REDIRECT_URI = `${BASE_URL}/tokes-bot/auth/kick/callback`;
 const KICK_SCOPES = ['user:read', 'chat:write', 'events:subscribe', 'channel:read', 'moderation:ban', 'moderation:chat_message:manage'].join(' ');
 
 // Allowed return paths (prevent open redirect)
-const ALLOWED_RETURN_PATHS = ['/tokes-bot', '/tokes-bot/dashboard', '/tokes-bot/channels', '/tokes-bot/profile', '/kick'];
+const ALLOWED_RETURN_PATHS = ['/kick'];
 // The legacy /tokes-bot dashboard is hidden; the Kick bot lives at /kick.
 const DEFAULT_RETURN_PATH = '/kick';
 
@@ -114,17 +114,17 @@ router.get('/tokes-bot/auth/twitch/callback', async (req, res) => {
 
     if (!state || state !== req.session?.twitchOAuthState) {
         logger.warn('[Tokes Bot Auth] Invalid OAuth state', { state });
-        return res.redirect('/tokes-bot?error=invalid_state');
+        return res.redirect('/kick?error=invalid_state');
     }
     delete req.session.twitchOAuthState;
 
     if (error) {
         logger.error('[Tokes Bot Auth] Twitch OAuth error', { error });
-        return res.redirect('/tokes-bot?error=twitch_auth_denied');
+        return res.redirect('/kick?error=twitch_auth_denied');
     }
 
     if (!code) {
-        return res.redirect('/tokes-bot?error=no_code');
+        return res.redirect('/kick?error=no_code');
     }
 
     try {
@@ -149,7 +149,7 @@ router.get('/tokes-bot/auth/twitch/callback', async (req, res) => {
                 error: tokenData.error || 'unknown',
                 errorDescription: tokenData.error_description || 'No access token returned'
             });
-            return res.redirect('/tokes-bot?error=token_failed');
+            return res.redirect('/kick?error=token_failed');
         }
 
         // Fetch user info
@@ -164,7 +164,7 @@ router.get('/tokes-bot/auth/twitch/callback', async (req, res) => {
 
         if (!userData.data?.[0]) {
             logger.error('[Tokes Bot Auth] Failed to get Twitch user', { error: userData });
-            return res.redirect('/tokes-bot?error=user_fetch_failed');
+            return res.redirect('/kick?error=user_fetch_failed');
         }
 
         const twitchUser = userData.data[0];
@@ -181,6 +181,7 @@ router.get('/tokes-bot/auth/twitch/callback', async (req, res) => {
 
         // Upsert user and connection
         const userId = await upsertUser('twitch', twitchUser, tokenData, expiresAt, linkToUserId);
+        if (await isTokesUserBanned(userId)) return renderBanned(res);
 
         // Set session
         req.session.tokesUser = {
@@ -209,7 +210,7 @@ router.get('/tokes-bot/auth/twitch/callback', async (req, res) => {
 
     } catch (error) {
         logger.error('[Tokes Bot Auth] Twitch auth error', { error: error.message, stack: error.stack });
-        res.redirect('/tokes-bot?error=auth_error');
+        res.redirect('/kick?error=auth_error');
     }
 });
 
@@ -223,7 +224,7 @@ router.get('/tokes-bot/auth/twitch/callback', async (req, res) => {
  */
 router.get('/tokes-bot/auth/kick', (req, res) => {
     if (!KICK_CLIENT_ID) {
-        return res.redirect('/tokes-bot?error=kick_not_configured');
+        return res.redirect('/kick?error=kick_not_configured');
     }
 
     const returnTo = sanitizeReturnTo(req.query.returnTo);
@@ -262,9 +263,8 @@ router.get('/tokes-bot/auth/kick', (req, res) => {
 router.get('/tokes-bot/auth/kick/callback', async (req, res) => {
     const { code, error, state } = req.query;
 
-    // Route auth errors back to wherever the flow began: /kick (defender) or
-    // /tokes-bot. tokesReturnTo was stashed (sanitized) when the flow started.
-    const errorBase = (req.session?.tokesReturnTo || '').startsWith('/kick') ? '/kick' : '/tokes-bot';
+    // Auth errors go back to /kick, the only page that still signs in through here.
+    const errorBase = '/kick';
 
     if (!state || state !== req.session?.kickOAuthState) {
         logger.warn('[Tokes Bot Auth] Invalid Kick OAuth state');
@@ -348,6 +348,7 @@ router.get('/tokes-bot/auth/kick/callback', async (req, res) => {
 
         // Upsert user and connection
         const userId = await upsertUser('kick', kickUser, tokenData, expiresAt, linkToUserId);
+        if (await isTokesUserBanned(userId)) return renderBanned(res);
 
         // Set session
         req.session.tokesUser = {
@@ -414,36 +415,106 @@ router.get('/tokes-bot/auth/logout', async (req, res) => {
             }
             // Clear the cookie
             res.clearCookie('certifried.sid');
-            res.redirect('/tokes-bot');
+            res.redirect('/kick');
         });
     } catch (error) {
         logger.error('[Tokes Bot Auth] Logout error', { error: error.message });
-        res.redirect('/tokes-bot');
+        res.redirect('/kick');
     }
 });
 
-/**
- * GET /tokes-bot/api/me
- * Get current logged in user
+/*
+ * Bans (tokes_users.is_banned, with the expiry of a temporary ban on its
+ * tokes_moderation_actions row) were stored but never enforced. Checked at sign-in and on every
+ * authenticated request; cached briefly so requests don't each cost a query. An expired temporary
+ * ban is lifted here, since nothing else lifts it.
  */
-router.get('/tokes-bot/api/me', (req, res) => {
-    if (req.session?.tokesUser) {
-        res.json({ user: req.session.tokesUser });
-    } else {
-        res.json({ user: null });
+const BAN_CACHE_MS = 60 * 1000;
+const banCache = new Map(); // tokes user id -> { at, banned }
+
+export async function isTokesUserBanned(userId) {
+    if (!userId) return false;
+    const cached = banCache.get(userId);
+    if (cached && Date.now() - cached.at < BAN_CACHE_MS) return cached.banned;
+
+    let banned = false;
+    try {
+        const [[user]] = await pool.execute('SELECT is_banned FROM tokes_users WHERE id = ?', [userId]);
+        banned = !!user?.is_banned;
+        if (banned) {
+            // Lift it when every active ban record has an expiry that has passed.
+            const [[ban]] = await pool.execute(
+                `SELECT COUNT(*) AS active, SUM(expires_at IS NOT NULL AND expires_at <= NOW()) AS expired
+                   FROM tokes_moderation_actions WHERE user_id = ? AND action_type = 'ban' AND is_active = 1`,
+                [userId]);
+            if (Number(ban.active) > 0 && Number(ban.expired) === Number(ban.active)) {
+                await pool.execute('UPDATE tokes_users SET is_banned = 0, ban_reason = NULL WHERE id = ?', [userId]);
+                await pool.execute(
+                    `UPDATE tokes_moderation_actions SET is_active = 0
+                      WHERE user_id = ? AND action_type = 'ban' AND is_active = 1`, [userId]);
+                logger.info('[Tokes Auth] Temporary ban expired and was lifted', { userId });
+                banned = false;
+            }
+        }
+    } catch (error) {
+        logger.error('[Tokes Auth] Ban check failed', { userId, error: error.message });
+        return false;   // fail open: a DB hiccup must not lock everyone out
     }
-});
+    if (banCache.size > 10000) banCache.clear();
+    banCache.set(userId, { at: Date.now(), banned });
+    return banned;
+}
+
+/** Forget the cached ban status (after a ban or unban from /kick/admin), so it applies on the next request. */
+export function forgetTokesBanStatus(userId) {
+    if (userId == null) banCache.clear();
+    else { banCache.delete(Number(userId)); banCache.delete(String(userId)); }
+}
+
+async function refuseIfBanned(req, res) {
+    if (!(await isTokesUserBanned(req.session?.tokesUser?.id))) return false;
+    req.session.tokesUser = null;
+    if (req.xhr || req.headers.accept?.includes('application/json')) {
+        res.status(403).json({ error: 'This account is banned' });
+    } else {
+        renderBanned(res);
+    }
+    return true;
+}
+
+function renderBanned(res) {
+    return res.status(403).render('kick/message', {
+        heading: 'This account is banned',
+        message: "This account can't sign in to Kick Defender. If you think that's a mistake, ask in the support server.",
+        kickUser: null,
+        actionHref: 'https://certifriedmultitool.com/discord', actionLabel: 'Support server'
+    });
+}
+
+// Why a Kick/Twitch sign-in came back to /kick?error=... (codes set by the callbacks above).
+const SIGN_IN_ERRORS = {
+    invalid_state: 'The sign-in took too long or was opened in another tab.',
+    kick_auth_denied: 'Kick sign-in was cancelled.',
+    twitch_auth_denied: 'Twitch sign-in was cancelled.',
+    no_code: 'Kick did not send a sign-in code back.',
+    missing_pkce: 'The sign-in session expired.',
+    token_failed: 'Kick did not accept the sign-in.',
+    user_fetch_failed: 'Kick did not return your account details.',
+    auth_error: 'Something went wrong while signing in.',
+    kick_not_configured: 'Kick sign-in is not set up on this server.'
+};
 
 /**
  * Middleware to require Tokes Bot authentication
  */
-export function requireTokesAuth(req, res, next) {
+export async function requireTokesAuth(req, res, next) {
     if (!req.session?.tokesUser) {
         if (req.xhr || req.headers.accept?.includes('application/json')) {
             return res.status(401).json({ error: 'Authentication required' });
         }
         return res.redirect(`/tokes-bot/auth/twitch?returnTo=${encodeURIComponent(req.originalUrl)}`);
     }
+    if (await refuseIfBanned(req, res)) return;
     next();
 }
 
@@ -454,13 +525,25 @@ export function requireTokesAuth(req, res, next) {
  * for a Kick product, and Kick login is what grants the moderation scopes the
  * defender needs.
  */
-export function requireKickAuth(req, res, next) {
+export async function requireKickAuth(req, res, next) {
     if (!req.session?.tokesUser) {
         if (req.xhr || req.headers.accept?.includes('application/json')) {
             return res.status(401).json({ error: 'Authentication required' });
         }
+        // A sign-in that failed comes back here with ?error=: say what happened instead of sending the
+        // visitor straight back to Kick (which looped them through the consent screen with no message).
+        if (req.method === 'GET' && typeof req.query?.error === 'string') {
+            return res.status(401).render('kick/message', {
+                heading: 'Sign in with Kick',
+                message: (SIGN_IN_ERRORS[req.query.error] || 'Signing in did not finish.') + ' Try again to continue.',
+                kickUser: null,
+                actionHref: `/tokes-bot/auth/kick?returnTo=${encodeURIComponent(req.path)}`,
+                actionLabel: 'Sign in with Kick'
+            });
+        }
         return res.redirect(`/tokes-bot/auth/kick?returnTo=${encodeURIComponent(req.originalUrl)}`);
     }
+    if (await refuseIfBanned(req, res)) return;
     next();
 }
 
@@ -481,6 +564,14 @@ export function requireKickAuth(req, res, next) {
  * @param {number} userId   tokes_users.id (owner)
  * @param {object} kickUser Kick API user object ({ user_id, name })
  */
+// Fire-and-forget: subscribe a channel to the Kick webhook events (chat, follows, subs, stream).
+function subscribeKickChat(channelId) {
+    import('../../services/certifried-bot/kick-event-subscriptions.js')
+        .then(m => m.ensureSubscribed(channelId))
+        .then(r => { if (r && !r.ok) logger.warn('[Tokes Bot Auth] Kick event subscription failed (non-fatal)', { channelId, error: r.error }); })
+        .catch(err => logger.warn('[Tokes Bot Auth] Kick event subscription error (non-fatal)', { channelId, error: err.message }));
+}
+
 async function ensureKickChannel(userId, kickUser) {
     try {
         const channelId = String(kickUser.user_id);
@@ -508,6 +599,7 @@ async function ensureKickChannel(userId, kickUser) {
                 "UPDATE tokes_channels SET owner_id = ?, connection_id = ?, channel_name = ? WHERE id = ?",
                 [userId, conn.id, channelName, existing.id]
             );
+            subscribeKickChat(channelId);
             return;
         }
 
@@ -524,14 +616,8 @@ async function ensureKickChannel(userId, kickUser) {
         );
         logger.info('[Tokes Bot Auth] Auto-provisioned + enrolled Kick channel', { userId, channelName });
 
-        // Best-effort: have the live bot join the new channel immediately.
-        try {
-            if (global.certiFriedBot?.kickBot?.isConnected) {
-                await global.certiFriedBot.kickBot.joinChannel(channelName, channelId);
-            }
-        } catch (joinErr) {
-            logger.warn('[Tokes Bot Auth] ensureKickChannel: bot join failed (non-fatal)', { channelName, error: joinErr.message });
-        }
+        // Chat reaches the bot through Kick's webhook, one subscription per channel.
+        subscribeKickChat(channelId);
     } catch (error) {
         logger.error('[Tokes Bot Auth] ensureKickChannel failed (non-fatal)', { userId, error: error.message });
     }
@@ -589,9 +675,12 @@ async function upsertUser(platform, platformUser, tokenData, expiresAt, linkToUs
 
             // Update platform connection tokens
             await connection.query(
+                // needs_relink = 0: logging in again IS the re-link, so clear the flag
+                // that the refresh scheduler uses to skip this connection.
                 `UPDATE tokes_platform_connections SET
                     platform_name = ?, platform_avatar = ?, access_token = ?,
-                    refresh_token = ?, expires_at = ?, scopes = ?, token_updated_at = NOW()
+                    refresh_token = ?, expires_at = ?, scopes = ?, token_updated_at = NOW(),
+                    needs_relink = 0
                 WHERE platform = ? AND platform_id = ?`,
                 [platformName || 'Unknown', platformAvatar || null, encryptedAccessToken,
                  encryptedRefreshToken, expiresAt, scopesStr, platform, platformId]
@@ -709,334 +798,6 @@ async function claimLegacyProfiles(platform, platformId, displayName, userId) {
         logger.error('[ClaimLegacy] Error', { error: error.message, platform, displayName });
     }
 }
-
-// ============================================================
-// PROFILE & PLATFORM MANAGEMENT API
-// ============================================================
-
-/**
- * GET /tokes-bot/api/profile
- * Get current user's profile with all connected platforms
- */
-router.get('/tokes-bot/api/profile', async (req, res) => {
-    if (!req.session?.tokesUser?.id) {
-        return res.status(401).json({ error: 'Not authenticated' });
-    }
-
-    try {
-        const userId = req.session.tokesUser.id;
-
-        const [users] = await pool.execute(
-            'SELECT id, primary_name, email, role, created_at FROM tokes_users WHERE id = ?',
-            [userId]
-        );
-
-        if (users.length === 0) {
-            return res.status(404).json({ error: 'User not found' });
-        }
-
-        const [platforms] = await pool.execute(
-            `SELECT platform, platform_id, platform_name, platform_avatar, connected_at, token_updated_at, scopes
-             FROM tokes_platform_connections WHERE user_id = ?`,
-            [userId]
-        );
-
-        res.json({
-            user: users[0],
-            platforms: platforms,
-            currentPlatform: req.session.tokesUser.platform
-        });
-
-    } catch (error) {
-        logger.error('[Tokes Bot API] Error getting profile', { error: error.message });
-        res.status(500).json({ error: 'Failed to get profile' });
-    }
-});
-
-/**
- * DELETE /tokes-bot/api/platforms/:platform
- * Disconnect a platform from the user's account
- */
-router.delete('/tokes-bot/api/platforms/:platform', async (req, res) => {
-    if (!req.session?.tokesUser?.id) {
-        return res.status(401).json({ error: 'Not authenticated' });
-    }
-
-    const { platform } = req.params;
-    if (!['twitch', 'kick'].includes(platform)) {
-        return res.status(400).json({ error: 'Invalid platform' });
-    }
-
-    try {
-        const userId = req.session.tokesUser.id;
-
-        const [platforms] = await pool.execute(
-            'SELECT platform FROM tokes_platform_connections WHERE user_id = ?',
-            [userId]
-        );
-
-        if (platforms.length <= 1) {
-            return res.status(400).json({ error: 'Cannot disconnect your only platform' });
-        }
-
-        const [result] = await pool.execute(
-            'DELETE FROM tokes_platform_connections WHERE user_id = ? AND platform = ?',
-            [userId, platform]
-        );
-
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ error: 'Platform not connected' });
-        }
-
-        if (req.session.tokesUser.platform === platform) {
-            const [remaining] = await pool.execute(
-                `SELECT platform, platform_id, platform_name, platform_avatar FROM tokes_platform_connections WHERE user_id = ? LIMIT 1`,
-                [userId]
-            );
-
-            if (remaining.length > 0) {
-                req.session.tokesUser.platform = remaining[0].platform;
-                req.session.tokesUser.platformId = remaining[0].platform_id;
-                req.session.tokesUser.name = remaining[0].platform_name;
-                req.session.tokesUser.avatar = remaining[0].platform_avatar;
-            }
-        }
-
-        logger.info('[Tokes Bot API] Platform disconnected', { userId, platform });
-        res.json({ success: true, message: `${platform} disconnected` });
-
-    } catch (error) {
-        logger.error('[Tokes Bot API] Error disconnecting platform', { error: error.message });
-        res.status(500).json({ error: 'Failed to disconnect platform' });
-    }
-});
-
-/**
- * POST /tokes-bot/api/platforms/:platform/activate
- * Switch the active platform for the current session
- */
-router.post('/tokes-bot/api/platforms/:platform/activate', async (req, res) => {
-    if (!req.session?.tokesUser?.id) {
-        return res.status(401).json({ error: 'Not authenticated' });
-    }
-
-    const { platform } = req.params;
-    if (!['twitch', 'kick'].includes(platform)) {
-        return res.status(400).json({ error: 'Invalid platform' });
-    }
-
-    try {
-        const userId = req.session.tokesUser.id;
-
-        // Check if user has this platform connected
-        const [connections] = await pool.execute(
-            `SELECT platform, platform_id, platform_name, platform_avatar
-             FROM tokes_platform_connections
-             WHERE user_id = ? AND platform = ?`,
-            [userId, platform]
-        );
-
-        if (connections.length === 0) {
-            return res.status(404).json({
-                error: 'Platform not connected',
-                message: `You haven't connected your ${platform} account yet`
-            });
-        }
-
-        const conn = connections[0];
-
-        // Update session with new active platform
-        req.session.tokesUser.platform = conn.platform;
-        req.session.tokesUser.platformId = conn.platform_id;
-        req.session.tokesUser.name = conn.platform_name;
-        req.session.tokesUser.avatar = conn.platform_avatar;
-
-        logger.info('[Tokes Bot API] Platform switched', { userId, platform });
-        res.json({
-            success: true,
-            message: `Switched to ${platform}`,
-            user: {
-                platform: conn.platform,
-                platformId: conn.platform_id,
-                name: conn.platform_name,
-                avatar: conn.platform_avatar
-            }
-        });
-
-    } catch (error) {
-        logger.error('[Tokes Bot API] Error switching platform', { error: error.message });
-        res.status(500).json({ error: 'Failed to switch platform' });
-    }
-});
-
-/**
- * PATCH /tokes-bot/api/platforms/:platform/bot-status
- * Toggle whether a platform connection is marked as a bot account
- */
-router.patch('/tokes-bot/api/platforms/:platform/bot-status', async (req, res) => {
-    if (!req.session?.tokesUser?.id) {
-        return res.status(401).json({ error: 'Not authenticated' });
-    }
-
-    const { platform } = req.params;
-    const { is_bot_account } = req.body;
-
-    if (!['twitch', 'kick'].includes(platform)) {
-        return res.status(400).json({ error: 'Invalid platform' });
-    }
-
-    if (typeof is_bot_account !== 'boolean') {
-        return res.status(400).json({ error: 'is_bot_account must be a boolean' });
-    }
-
-    try {
-        const userId = req.session.tokesUser.id;
-
-        const [result] = await pool.execute(
-            `UPDATE tokes_platform_connections
-             SET is_bot_account = ?
-             WHERE user_id = ? AND platform = ?`,
-            [is_bot_account ? 1 : 0, userId, platform]
-        );
-
-        if (result.affectedRows === 0) {
-            return res.status(404).json({ error: 'Platform connection not found' });
-        }
-
-        logger.info('[Tokes Bot API] Bot status updated', { userId, platform, is_bot_account });
-        res.json({
-            success: true,
-            message: is_bot_account ? 'Account marked as bot' : 'Account unmarked as bot'
-        });
-
-    } catch (error) {
-        logger.error('[Tokes Bot API] Error updating bot status', { error: error.message });
-        res.status(500).json({ error: 'Failed to update bot status' });
-    }
-});
-
-/**
- * GET /tokes-bot/api/bot-accounts
- * Get all bot accounts for the current user
- */
-router.get('/tokes-bot/api/bot-accounts', async (req, res) => {
-    if (!req.session?.tokesUser?.id) {
-        return res.status(401).json({ error: 'Not authenticated' });
-    }
-
-    try {
-        const userId = req.session.tokesUser.id;
-
-        const [bots] = await pool.execute(
-            `SELECT id, platform, platform_id, platform_name, platform_avatar
-             FROM tokes_platform_connections
-             WHERE user_id = ? AND is_bot_account = 1`,
-            [userId]
-        );
-
-        res.json({ bots });
-
-    } catch (error) {
-        logger.error('[Tokes Bot API] Error getting bot accounts', { error: error.message });
-        res.status(500).json({ error: 'Failed to get bot accounts' });
-    }
-});
-
-/**
- * POST /tokes-bot/api/admin/make-admin
- * Make a user admin (requires authentication)
- * Bootstrap mode requires TOKES_BOOTSTRAP_SECRET environment variable
- */
-router.post('/tokes-bot/api/admin/make-admin', async (req, res) => {
-    try {
-        const { userId, role, bootstrapSecret } = req.body;
-
-        if (!userId) {
-            return res.status(400).json({ error: 'userId is required' });
-        }
-
-        const [owners] = await pool.execute("SELECT id FROM tokes_users WHERE role = 'owner' LIMIT 1");
-
-        // Bootstrap mode - only allowed if no owners exist AND correct secret provided
-        if (owners.length === 0) {
-            const expectedSecret = process.env.TOKES_BOOTSTRAP_SECRET;
-
-            // Require bootstrap secret in production
-            if (!expectedSecret) {
-                logger.warn('[Tokes Bot] Bootstrap attempted but TOKES_BOOTSTRAP_SECRET not set');
-                return res.status(403).json({
-                    error: 'Bootstrap disabled. Set TOKES_BOOTSTRAP_SECRET in environment and provide it in request.'
-                });
-            }
-
-            // Timing-safe comparison of bootstrap secret
-            if (!bootstrapSecret || bootstrapSecret.length !== expectedSecret.length ||
-                !crypto.timingSafeEqual(Buffer.from(bootstrapSecret), Buffer.from(expectedSecret))) {
-                logger.warn('[Tokes Bot] Invalid bootstrap secret attempt', {
-                    ip: req.ip,
-                    userId
-                });
-                return res.status(403).json({ error: 'Invalid bootstrap secret' });
-            }
-
-            // Verify user exists before promoting
-            const [targetUser] = await pool.execute("SELECT id, primary_name FROM tokes_users WHERE id = ?", [userId]);
-            if (targetUser.length === 0) {
-                return res.status(404).json({ error: 'User not found' });
-            }
-
-            await pool.execute("UPDATE tokes_users SET role = 'owner' WHERE id = ?", [userId]);
-
-            logger.info('[Tokes Bot] Owner bootstrapped successfully', {
-                userId,
-                userName: targetUser[0].primary_name,
-                ip: req.ip
-            });
-
-            return res.json({ success: true, message: 'User set as owner (bootstrap complete)' });
-        }
-
-        // Normal mode - require authentication
-        if (!req.session?.tokesUser?.id) {
-            return res.status(401).json({ error: 'Not authenticated' });
-        }
-
-        const [currentUser] = await pool.execute("SELECT role FROM tokes_users WHERE id = ?", [req.session.tokesUser.id]);
-
-        if (currentUser[0]?.role !== 'owner') {
-            logger.warn('[Tokes Bot] Unauthorized role change attempt', {
-                attemptedBy: req.session.tokesUser.id,
-                targetUser: userId
-            });
-            return res.status(403).json({ error: 'Only owner can manage roles' });
-        }
-
-        const validRoles = ['user', 'mod', 'admin'];
-        if (!validRoles.includes(role)) {
-            return res.status(400).json({ error: 'Invalid role. Must be: user, mod, or admin' });
-        }
-
-        // Verify target user exists
-        const [targetUser] = await pool.execute("SELECT id, primary_name FROM tokes_users WHERE id = ?", [userId]);
-        if (targetUser.length === 0) {
-            return res.status(404).json({ error: 'User not found' });
-        }
-
-        await pool.execute("UPDATE tokes_users SET role = ? WHERE id = ?", [role, userId]);
-
-        logger.info('[Tokes Bot] User role updated', {
-            updatedBy: req.session.tokesUser.id,
-            targetUser: userId,
-            newRole: role
-        });
-
-        res.json({ success: true, message: `User role set to ${role}` });
-
-    } catch (error) {
-        logger.error('[Tokes Bot] Role update error', { error: error.message });
-        res.status(500).json({ error: 'Failed to update role' });
-    }
-});
 
 // Legacy redirect for old URLs
 router.get('/twitch-bot/auth/*', (req, res) => {

@@ -1,6 +1,9 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import pool from '../../utils/db.js';
 import logger from '../../utils/logger.js';
+import { displayNameFor } from '../../utils/display-name.js';
+import { themeColor } from '../../core/guild-theme.js';
+import { getCannabisDayClock } from '../../core/cannabis-settings.js';
 
 const XP_PER_TOKE = 10;
 const XP_PER_LEVEL = 100;
@@ -141,6 +144,9 @@ async function checkAndGrantAchievements(connection, guildId, userId, stats) {
 export async function handleToke(interaction, guildId, userId, method) {
     await interaction.deferReply();
 
+    // Streak days start at the Cannabis Community page's daily reset hour (server timezone).
+    const clock = await getCannabisDayClock(guildId);
+
     const connection = await pool.getConnection();
     try {
         await connection.beginTransaction();
@@ -155,6 +161,15 @@ export async function handleToke(interaction, guildId, userId, method) {
             [guildId, userId, method]
         );
 
+        const [seshHit] = await connection.execute(
+            `UPDATE toke_sesh_participants p
+               JOIN toke_group_sesh g ON g.id = p.sesh_id AND g.guild_id = ? AND g.status = 'active'
+                SET p.tokes_in_sesh = p.tokes_in_sesh + 1, g.total_tokes = g.total_tokes + 1
+              WHERE p.user_id = ?`,
+            [guildId, userId]
+        );
+        void seshHit;
+
         const [[currentStats]] = await connection.execute(
             'SELECT * FROM toke_user_stats WHERE guild_id = ? AND user_id = ?',
             [guildId, userId]
@@ -163,14 +178,12 @@ export async function handleToke(interaction, guildId, userId, method) {
         let newStreak = 1;
         let streakBroken = false;
         if (currentStats?.last_toke_at) {
-            const lastToke = new Date(currentStats.last_toke_at);
-            const now = new Date();
-            const hoursSinceLastToke = (now - lastToke) / (1000 * 60 * 60);
+            const daysSinceLastToke = clock.day(new Date()) - clock.day(new Date(currentStats.last_toke_at));
 
-            if (hoursSinceLastToke < 24) {
-                newStreak = currentStats.current_streak;
-            } else if (hoursSinceLastToke < 48) {
-                newStreak = currentStats.current_streak + 1;
+            if (daysSinceLastToke <= 0) {
+                newStreak = Math.max(1, Number(currentStats.current_streak) || 0);
+            } else if (daysSinceLastToke === 1) {
+                newStreak = (Number(currentStats.current_streak) || 0) + 1;
             } else {
                 streakBroken = currentStats.current_streak > 1;
                 newStreak = 1;
@@ -212,13 +225,13 @@ export async function handleToke(interaction, guildId, userId, method) {
 
         const responses = TOKE_RESPONSES[method] || TOKE_RESPONSES.other;
         const randomResponse = responses[Math.floor(Math.random() * responses.length)];
-        const displayName = interaction.member?.displayName || interaction.user.username;
+        const displayName = displayNameFor(interaction.user, interaction.guild);
         let description = prefs?.custom_message
             ? `**${displayName}** ${prefs.custom_message}`
             : `**${displayName}** ${randomResponse}`;
 
         const embed = new EmbedBuilder()
-            .setColor(0x4caf50)
+            .setColor(themeColor(interaction.guildId, 'success'))
             .setTitle(getMethodEmoji(method) + ' Toke Recorded!')
             .setDescription(description)
             .addFields(
@@ -258,7 +271,7 @@ export async function handleTokeStats(interaction, guildId) {
     );
 
     if (!stats) {
-        return interaction.editReply(`${targetUser.username} hasn't recorded any tokes yet! Use \`/cannabis toke <method>\` to get started.`);
+        return interaction.editReply(`${displayNameFor(targetUser, interaction.guild)} hasn't recorded any tokes yet! Use \`/cannabis toke <method>\` to get started.`);
     }
 
     const [[achievementCount]] = await pool.execute(
@@ -275,8 +288,8 @@ export async function handleTokeStats(interaction, guildId) {
     const progressBar = createProgressBar(progressToNextLevel, XP_PER_LEVEL, 10);
 
     const embed = new EmbedBuilder()
-        .setColor(0x2196f3)
-        .setTitle(`📊 ${targetUser.username}'s Toke Stats`)
+        .setColor(themeColor(interaction.guildId, 'primary'))
+        .setTitle(`📊 ${displayNameFor(targetUser, interaction.guild)}'s Toke Stats`)
         .setThumbnail(targetUser.displayAvatarURL())
         .addFields(
             { name: '🏆 Server Rank', value: `#${rankResult.rank}`, inline: true },
@@ -418,7 +431,7 @@ export async function handleTokeAchievements(interaction, guildId) {
             .setColor(0xff9800)
             .setTitle(`${categoryEmojis[category] || '🏆'} ${category.charAt(0).toUpperCase() + category.slice(1)} Achievements`)
             .setDescription(achievementList || 'No achievements in this category.')
-            .setFooter({ text: `${unlocked}/${total} unlocked | ${targetUser.username}'s achievements` }));
+            .setFooter({ text: `${unlocked}/${total} unlocked | ${displayNameFor(targetUser, interaction.guild)}'s achievements` }));
     }
 
     let currentPage = 0;
@@ -451,7 +464,7 @@ export async function handleTokeSetMessage(interaction, userId) {
         [userId, message, message]
     );
     await interaction.reply({
-        content: `✅ Your custom toke message has been set!\n\nPreview: **${interaction.user.username}** ${message}`,
+        content: `✅ Your custom toke message has been set!\n\nPreview: **${displayNameFor(interaction.user, interaction.guild)}** ${message}`,
         flags: 64
     });
 }
@@ -482,9 +495,9 @@ export async function handleTokeStartSesh(interaction, guildId, userId) {
     );
 
     const embed = new EmbedBuilder()
-        .setColor(0x4caf50)
+        .setColor(themeColor(interaction.guildId, 'success'))
         .setTitle('🌿 Group Sesh Started!')
-        .setDescription(`**${interaction.user.username}** has started a group sesh!\n\nUse \`/cannabis sesh join\` to join the session.\nUse any \`/cannabis toke <method>\` command to toke with the group!`)
+        .setDescription(`**${displayNameFor(interaction.user, interaction.guild)}** has started a group sesh!\n\nUse \`/cannabis sesh join\` to join the session.\nUse any \`/cannabis toke <method>\` command to toke with the group!`)
         .addFields(
             { name: '👥 Participants', value: '1', inline: true },
             { name: '💨 Total Tokes', value: '0', inline: true }
@@ -516,7 +529,7 @@ export async function handleTokeJoinSesh(interaction, guildId, userId) {
     await pool.execute('INSERT INTO toke_sesh_participants (sesh_id, user_id) VALUES (?, ?)', [sesh.id, userId]);
     await pool.execute('UPDATE toke_group_sesh SET participant_count = participant_count + 1 WHERE id = ?', [sesh.id]);
 
-    await interaction.reply(`🌿 **${interaction.user.username}** has joined the sesh!`);
+    await interaction.reply(`🌿 **${displayNameFor(interaction.user, interaction.guild)}** has joined the sesh!`);
 }
 
 export async function handleTokeEndSesh(interaction, guildId, userId) {

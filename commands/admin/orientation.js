@@ -14,11 +14,15 @@ export default {
         .setDefaultMemberPermissions(PermissionsBitField.Flags.Administrator)
         .addSubcommand(sub =>
             sub.setName('post')
-                .setDescription('Post or re-post the orientation message')
+                .setDescription('Post the orientation message, or refresh the existing one')
                 .addChannelOption(opt =>
                     opt.setName('channel')
                         .setDescription('Channel to post in (defaults to current)')
                         .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement)
+                )
+                .addBooleanOption(opt =>
+                    opt.setName('fresh')
+                        .setDescription('Delete the old message and post a new one at the bottom of the channel')
                 )
         )
         .addSubcommand(sub =>
@@ -38,12 +42,28 @@ export default {
                 case 'post': {
                     await interaction.deferReply({ ephemeral: true });
                     const channel = interaction.options.getChannel('channel') || interaction.channel;
-                    const msg = await postOrientationMessage(interaction.client, interaction.guildId, channel.id);
+                    const fresh = interaction.options.getBoolean('fresh') ?? false;
+                    const result = await postOrientationMessage(interaction.client, interaction.guildId, channel.id, { fresh });
 
-                    if (msg) {
-                        await interaction.editReply(`Orientation message posted in <#${channel.id}>!`);
+                    if (!result) {
+                        await interaction.editReply('Failed to post the orientation message. Make sure I can see and send messages in that channel.');
+                        break;
+                    }
+
+                    // The default path edits the existing message in place, which
+                    // leaves it wherever it was first posted — possibly months up
+                    // the channel. Saying "posted!" there reads as a silent
+                    // failure, so say what actually happened and link to it.
+                    if (result.action === 'edited') {
+                        const posted = Math.floor(result.message.createdTimestamp / 1000);
+                        await interaction.editReply(
+                            `Refreshed the orientation message that's already in <#${result.message.channelId}> ` +
+                            `(originally posted <t:${posted}:R>) — it now shows this server's current features:\n${result.message.url}\n\n` +
+                            `Nothing new appeared at the bottom of the channel because it was updated in place. ` +
+                            `To delete it and post a new one at the bottom instead, run \`/systems orientation post fresh: True\`.`
+                        );
                     } else {
-                        await interaction.editReply('Failed to post the orientation message. Make sure I can send messages in that channel.');
+                        await interaction.editReply(`Orientation message posted in <#${channel.id}>:\n${result.message.url}`);
                     }
                     break;
                 }
@@ -55,7 +75,7 @@ export default {
                     if (updated) {
                         await interaction.editReply('Orientation message updated with current feature state.');
                     } else {
-                        await interaction.editReply('No existing orientation message found. Use `/orientation post` first.');
+                        await interaction.editReply('No existing orientation message found. Use `/systems orientation post` first.');
                     }
                     break;
                 }

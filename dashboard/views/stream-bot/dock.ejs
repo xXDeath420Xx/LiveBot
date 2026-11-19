@@ -1,0 +1,74 @@
+<%#
+  OBS docks (dashboard/routes/stream-bot-dock.js). Locals: theme ('dark' | 'light' | 'sand'), page ('activity' |
+  'controls' | 'chat' | 'denied' | 'error'), title, data. No site header or footer: this runs inside an OBS dock.
+  /js/stream-bot-dock.js reads the key from the address, opens the live feed and wires the Run buttons.
+%>
+<!DOCTYPE html>
+<html lang="en" data-theme="<%= theme %>">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="robots" content="noindex, nofollow">
+    <meta name="referrer" content="no-referrer">
+    <title><%= title %> · CertiFried</title>
+    <link rel="stylesheet" href="/css/cf-ui.css">
+    <link rel="stylesheet" href="/css/stream-bot-dock.css">
+</head>
+<body class="dock" data-dock-page="<%= page %>">
+<main class="dock-main">
+<% if (page === 'denied') { %>
+    <p class="dock-state">This dock key was replaced or removed. In CertiFried Studio choose Add CertiFried docks again.</p>
+<% } else if (page === 'error') { %>
+    <p class="dock-state">This dock could not load. It tries again when OBS reloads it.</p>
+<% } else if (page === 'controls') { %>
+    <section aria-labelledby="dock-run-title">
+        <h1 class="dock-title" id="dock-run-title">Run</h1>
+        <% if (!data.automations.length) { %>
+        <p class="dock-empty">No automations are on. Turn some on in Stream bot on the dashboard.</p>
+        <% } else { %>
+        <ul class="dock-list" id="dock-automations">
+            <% data.automations.forEach((a) => { %>
+            <li class="dock-row">
+                <span class="dock-row-main"><span class="dock-name"><%= a.name %></span><span class="dock-meta"><%= a.trigger %></span></span>
+                <button type="button" class="dock-btn" data-run="<%= a.id %>">Run</button>
+            </li>
+            <% }) %>
+        </ul>
+        <% } %>
+        <p class="dock-status" id="dock-status" role="status" aria-live="polite"></p>
+    </section>
+    <section aria-labelledby="dock-count-title">
+        <h2 class="dock-title" id="dock-count-title">Counters</h2>
+        <% if (!data.counters.length) { %>
+        <p class="dock-empty">No counters yet. An Add to a counter action makes one.</p>
+        <% } else { %>
+        <dl class="dock-counters" id="dock-counters">
+            <% data.counters.forEach((c) => { %><dt><%= c.key %></dt><dd><%= c.value %></dd><% }) %>
+        </dl>
+        <% } %>
+    </section>
+<% } else { %>
+    <h1 class="dock-title"><%= page === 'chat' ? 'Chat' : 'Activity' %> <span class="dock-live" id="dock-live" hidden>Live</span></h1>
+    <% if (page === 'chat' && !data.storeChat && !data.events.length) { %>
+    <p class="dock-empty" id="dock-hint">Chat from your Twitch and Kick channels shows here as it arrives.</p>
+    <% } else if (!data.events.length) { %>
+    <p class="dock-empty" id="dock-hint">Nothing yet. New events show here as they happen.</p>
+    <% } %>
+    <ol class="dock-feed" id="dock-feed" data-kind="<%= page %>">
+        <% data.events.forEach((e) => { %>
+        <li class="dock-item">
+            <% if (page === 'chat') { %>
+            <span class="dock-meta"><%= e.platformLabel %></span> <span class="dock-name"><%= e.user || 'Someone' %></span> <span class="dock-text"><%= e.message || '' %></span>
+            <% } else { %>
+            <span class="dock-text"><%= e.text %></span> <span class="dock-meta"><%= e.platformLabel %></span>
+            <% } %>
+        </li>
+        <% }) %>
+    </ol>
+<% } %>
+</main>
+<% if (page === 'activity' || page === 'chat' || page === 'controls') { %>
+<script src="/js/stream-bot-dock.js"></script>
+<% } %>
+</body>
+</html>

@@ -1,263 +1,328 @@
-<%- include('_head', { pageTitle: 'Your Channels', csrfToken, kickUser: user }) %>
+<%- include('_head', { pageTitle: 'Your channels', csrfToken, kickUser: user }) %>
 
   <div class="pagehead">
     <div>
-      <h1>🐻 Kick Defender</h1>
-      <div class="sub">Shared-banlist protection &amp; chat-bot control for your Kick channels.</div>
+      <div class="kick-eyebrow">Kick Defender</div>
+      <h1>Your channels</h1>
+      <p class="sub">Protection and chat tools for the Kick channels you own.</p>
     </div>
-    <nav class="subnav">
-      <a href="/kick" class="active">Channels</a>
-      <% if (isManager) { %><a href="/kick/managers">Manager console</a><% } %>
-      <% if (typeof isAdmin !== 'undefined' && isAdmin) { %><a href="/kick/admin">Connected accounts</a><% } %>
-    </nav>
   </div>
+  <%- include('_tabs', { active: 'channels', isManager, isAdmin: typeof isAdmin !== 'undefined' && isAdmin }) %>
 
-  <!-- ── Bot health strip ───────────────────────────────────── -->
-  <div class="card" id="health" style="padding:.75rem 1rem">
-    <div class="row" style="align-items:center;gap:.75rem">
-      <div style="display:flex;align-items:center;gap:.6rem">
-        <span id="health-dot" class="pill" style="width:.7rem;height:.7rem;padding:0;border-radius:50%;background:var(--muted)"></span>
-        <span id="health-status" style="font-weight:600">Defender bot: <span class="muted">checking…</span></span>
+  <% var totalBanned = 0, totalDeleted = 0, totalDormant = 0, enrolledCount = 0;
+     channels.forEach(function (c) { totalBanned += (c.stats.banned || 0); totalDeleted += (c.stats.deleted || 0); totalDormant += (c.stats.dormant || 0); if (c.enabled) enrolledCount++; }); %>
+  <dl class="cf-kpis">
+    <div class="cf-kpi"><dt>Channels</dt><dd><%= channels.length %></dd></div>
+    <div class="cf-kpi"><dt>Defender on</dt><dd><%= enrolledCount %></dd></div>
+    <div class="cf-kpi"><dt>Users banned</dt><dd><%= totalBanned.toLocaleString() %></dd></div>
+    <div class="cf-kpi"><dt>Messages removed</dt><dd><%= totalDeleted.toLocaleString() %></dd></div>
+    <div class="cf-kpi"><dt>Detected, no permission</dt><dd><%= totalDormant.toLocaleString() %></dd></div>
+  </dl>
+
+  <section class="cf-section" id="channels">
+    <header class="cf-section-head">
+      <div>
+        <h2 class="cf-section-title">Channels <span class="muted">(<%= channels.length %>)</span></h2>
+        <p class="cf-section-desc">Each channel's defender switch, chat connection and scam-link settings.</p>
       </div>
-      <span id="health-joined" class="muted">—</span>
-    </div>
-    <div id="health-warn" style="margin-top:.4rem"></div>
-  </div>
+    </header>
+    <div class="cf-notice is-warn" id="feed-problem" hidden><div class="cf-notice-body">Couldn't check the chat connections with Kick just now. Reload the page to try again.</div></div>
 
-  <!-- ── Overview stats ─────────────────────────────────────── -->
-  <% var totalBanned = 0, totalDeleted = 0, totalDormant = 0, enrolledCount = 0, scopeOK = 0;
-     channels.forEach(function(c){ totalBanned += (c.stats.banned||0); totalDeleted += (c.stats.deleted||0); totalDormant += (c.stats.dormant||0); if(c.enabled) enrolledCount++; if(c.hasBanScope) scopeOK++; }); %>
-  <div class="statgrid">
-    <div class="stat kick"><b><%= channels.length %></b><span>Channels</span></div>
-    <div class="stat kick"><b><%= enrolledCount %></b><span>Defender on</span></div>
-    <div class="stat"><b><%= totalBanned.toLocaleString() %></b><span>Users banned</span></div>
-    <div class="stat"><b><%= totalDeleted.toLocaleString() %></b><span>Messages removed</span></div>
-    <div class="stat"><b><%= totalDormant.toLocaleString() %></b><span>Detected (no scope)</span></div>
-  </div>
-
-  <!-- ── Network protection ──────────────────────────────────── -->
-  <h2 style="font-family:'Space Grotesk',sans-serif;font-size:1.05rem;margin:1.4rem 0 .6rem">Across the network</h2>
-  <div class="statgrid">
-    <div class="stat"><b id="ns-banned">—</b><span>Users banned</span></div>
-    <div class="stat"><b id="ns-removed">—</b><span>Messages removed</span></div>
-    <div class="stat"><b id="ns-banlist">—</b><span>Banlist size</span></div>
-    <div class="stat kick"><b id="ns-phishing">—</b><span>Phishing domains</span></div>
-  </div>
-
-  <!-- ── 14-day activity chart ───────────────────────────────── -->
-  <div class="card" style="margin-top:1rem">
-    <div class="row" style="align-items:baseline">
-      <div style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:1.05rem">Activity — last 14 days</div>
-      <div style="display:flex;gap:.9rem;flex-wrap:wrap;font-size:.78rem;color:var(--muted)">
-        <span style="display:inline-flex;align-items:center;gap:.35rem"><span style="width:.7rem;height:.7rem;border-radius:2px;background:var(--kick)"></span>Banned</span>
-        <span style="display:inline-flex;align-items:center;gap:.35rem"><span style="width:.7rem;height:.7rem;border-radius:2px;background:#7c84ff"></span>Removed</span>
-        <span style="display:inline-flex;align-items:center;gap:.35rem"><span style="width:.7rem;height:.7rem;border-radius:2px;background:rgba(255,255,255,.25)"></span>Detected</span>
+    <% if (!channels.length) { %>
+      <div class="cf-rows">
+        <div class="cf-state">
+          <p class="cf-state-title">No Kick channels linked yet</p>
+          <p class="cf-state-text">Sign in with Kick and grant the moderation permissions to add your channel.</p>
+          <a class="btn btn-primary" href="<%= reauthHref %>">Authorize with Kick</a>
+        </div>
       </div>
-    </div>
-    <div id="trend-chart" class="muted" style="margin-top:.75rem">Loading…</div>
-  </div>
+    <% } %>
 
-  <% if (!channels.length) { %>
-    <div class="card">
-      <div class="empty">
-        <p style="font-size:1.05rem;color:var(--ink);margin-bottom:.5rem">No Kick channels linked yet.</p>
-        <p class="muted" style="margin-bottom:1rem">Connect your channel and grant moderation permissions to activate the defender.</p>
-        <a href="<%= reauthHref %>"><button>Authorize with Kick →</button></a>
-      </div>
-    </div>
-  <% } %>
-
-  <% channels.forEach(function(ch){ %>
-    <div class="card">
-      <div class="row">
-        <div>
-          <div style="font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:1.15rem;display:flex;align-items:center;gap:.5rem">
-            <%= ch.channelName %>
-            <span class="pill <%= ch.enabled ? 'ok' : 'off' %>"><%= ch.enabled ? '● protected' : 'off' %></span>
-            <% if (ch.enabled && !ch.hasBanScope) { %><span class="pill warn">limited</span><% } %>
+    <div class="kick-panel-stack">
+    <% channels.forEach(function (ch) { var cid = ch.channelId; %>
+      <div class="cf-rows kick-channel" data-channel="<%= cid %>">
+        <div class="cf-row">
+          <div class="cf-row-text">
+            <div class="kick-title-line">
+              <%= ch.channelName %>
+              <span class="pill <%= ch.enabled ? 'ok' : 'off' %>"><%= ch.enabled ? 'Protected' : 'Defender off' %></span>
+              <% if (ch.enabled && !ch.hasBanScope) { %><span class="pill warn">Limited</span><% } %>
+            </div>
+            <p class="cf-row-desc">Banned <%= (ch.stats.banned || 0).toLocaleString() %> · Removed <%= (ch.stats.deleted || 0).toLocaleString() %> · Detected without permission <%= (ch.stats.dormant || 0).toLocaleString() %></p>
           </div>
-          <div class="muted" style="margin-top:.4rem">Banned <%= ch.stats.banned %> · Removed <%= ch.stats.deleted %> · Detected <%= ch.stats.dormant %></div>
+          <div class="cf-row-control kick-end">
+            <a class="btn btn-secondary btn-sm" href="/kick/channel/<%= cid %>">Settings and commands</a>
+          </div>
         </div>
-        <div style="display:flex;align-items:center;gap:.6rem;flex-wrap:wrap">
-          <button class="enroll <%= ch.enabled ? 'ghost' : '' %>" data-channel="<%= ch.channelId %>" data-enabled="<%= ch.enabled ? 0 : 1 %>">
-            <%= ch.enabled ? 'Disable' : 'Enable defender' %>
-          </button>
-          <a href="/kick/channel/<%= ch.channelId %>"><button class="ghost">Settings &amp; commands →</button></a>
+
+        <% if (ch.enabled && !ch.hasBanScope) { %>
+          <div class="cf-notice is-warn">
+            <div class="cf-notice-body">
+              <% if (!ch.hasManageScope) { %>This channel has not granted any moderation permissions, so nothing can be removed or banned.<% } else { %>Messages can be removed, but users can't be banned yet.<% } %>
+              <a href="<%= reauthHref %>">Re-authorize with Kick</a> to grant them.
+            </div>
+          </div>
+        <% } %>
+
+        <div class="cf-row cf-row--switch">
+          <div class="cf-row-text">
+            <label class="cf-row-label" for="enroll-<%= cid %>">Defender</label>
+            <p class="cf-row-desc">Bans accounts on the shared banlist and removes known scam links in this channel's chat.</p>
+          </div>
+          <div class="cf-row-control">
+            <input type="checkbox" role="switch" class="cf-switch enroll" id="enroll-<%= cid %>" data-channel="<%= cid %>" <%= ch.enabled ? 'checked' : '' %>>
+          </div>
+        </div>
+
+        <div class="cf-row">
+          <div class="cf-row-text">
+            <span class="cf-row-label">Chat connection</span>
+            <p class="cf-row-desc">Kick sends this channel's chat to the bot through webhooks. The defender, automod and commands only see chat while this is connected.</p>
+          </div>
+          <div class="cf-row-control">
+            <div class="kick-inline">
+              <span class="chat-status" data-channel="<%= cid %>"><span class="muted">Checking…</span></span>
+              <button type="button" class="btn btn-secondary btn-sm chat-connect" data-channel="<%= cid %>" hidden>Connect chat</button>
+            </div>
+            <span class="kick-status chat-msg" data-channel="<%= cid %>" role="status" aria-live="polite"></span>
+          </div>
+        </div>
+
+        <div class="cf-row">
+          <div class="cf-row-text">
+            <label class="cf-row-label" for="bantype-<%= cid %>">Ban length</label>
+            <p class="cf-row-desc">Applies to banlist matches and repeat scam-link posters.</p>
+          </div>
+          <div class="cf-row-control">
+            <div class="kick-inline">
+              <select class="set-bantype" id="bantype-<%= cid %>" data-channel="<%= cid %>">
+                <option value="">Permanent</option>
+                <option value="timed">Timed</option>
+              </select>
+              <div class="cf-input-unit">
+                <input class="set-duration" data-channel="<%= cid %>" type="number" min="1" max="525600" placeholder="60" aria-label="Ban length in minutes" disabled>
+                <span class="cf-unit">min</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="cf-row">
+          <div class="cf-row-text">
+            <label class="cf-row-label" for="threshold-<%= cid %>">Scam-link strikes before a ban</label>
+            <p class="cf-row-desc">How many scam links one poster can send before they are banned, counted across every connected channel. Links before that are removed with a warning; 1 bans on the first link. 1 to 10, default 2.</p>
+          </div>
+          <div class="cf-row-control">
+            <input class="set-threshold" id="threshold-<%= cid %>" data-channel="<%= cid %>" type="number" min="1" max="10" value="2">
+          </div>
+        </div>
+
+        <div class="cf-row cf-row--stack">
+          <div class="cf-row-text">
+            <label class="cf-row-label" for="warning-<%= cid %>">Scam-link warning</label>
+            <p class="cf-row-desc">Posted in chat when a scam link is removed and the poster is not banned yet. <code>{{username}}</code> is the poster. Leave empty for the default.</p>
+          </div>
+          <div class="cf-row-control">
+            <textarea class="set-warning" id="warning-<%= cid %>" data-channel="<%= cid %>" rows="2" maxlength="400" placeholder="@{{username}} posted a known scam link and it was removed. Repeat offenses = ban."></textarea>
+          </div>
+        </div>
+
+        <div class="cf-row cf-row--stack">
+          <div class="cf-row-text">
+            <label class="cf-row-label" for="safe-<%= cid %>">Allowed domains</label>
+            <p class="cf-row-desc">Links to these domains and their subdomains are never treated as scam links in this channel. One per line, up to 50.</p>
+          </div>
+          <div class="cf-row-control">
+            <textarea class="set-safe" id="safe-<%= cid %>" data-channel="<%= cid %>" rows="3" placeholder="example.com"></textarea>
+          </div>
+        </div>
+
+        <div class="cf-section-foot">
+          <span class="kick-status cf-foot-note set-status" data-channel="<%= cid %>" role="status" aria-live="polite"></span>
+          <button type="button" class="btn btn-primary btn-sm set-save" data-channel="<%= cid %>">Save protection settings</button>
+        </div>
+
+        <div class="cf-row cf-row--stack">
+          <div class="cf-row-text">
+            <span class="cf-row-label">Recent actions</span>
+            <p class="cf-row-desc">The last 25 things the defender did in this channel.</p>
+          </div>
+          <div class="cf-row-control">
+            <div><button type="button" class="btn btn-secondary btn-sm log-load" data-channel="<%= cid %>">Show recent actions</button></div>
+            <div class="log-out" data-channel="<%= cid %>"></div>
+          </div>
         </div>
       </div>
-
-      <% if (ch.enabled && !ch.hasBanScope) { %>
-        <div class="banner">
-          ⚠ This channel can't issue bans yet. <a href="<%= reauthHref %>">Re-authorize with Kick</a> to grant moderation permissions.
-          <% if (!ch.hasManageScope) { %> (No moderation scopes granted at all.)<% } else { %> (Messages can be deleted, but users can't be banned.)<% } %>
-        </div>
-      <% } %>
-
-      <details class="settings">
-        <summary>Protection settings &amp; recent actions</summary>
-        <div class="srow" style="margin-top:.7rem">
-          <label>Ban type
-            <select class="set-bantype" data-channel="<%= ch.channelId %>">
-              <option value="">Permanent</option>
-              <option value="timed">Timed (minutes)</option>
-            </select>
-          </label>
-          <input class="set-duration" data-channel="<%= ch.channelId %>" type="number" min="1" placeholder="minutes" style="width:8rem" />
-          <label>Scam-link strikes before ban
-            <input class="set-threshold" data-channel="<%= ch.channelId %>" type="number" min="1" max="10" value="2" style="width:5rem" />
-          </label>
-          <button class="set-save" data-channel="<%= ch.channelId %>">Save settings</button>
-        </div>
-        <textarea class="set-warning" data-channel="<%= ch.channelId %>" placeholder="Custom scam-link warning (use {{username}})" style="width:100%;margin-top:.6rem"></textarea>
-        <div class="log" data-channel="<%= ch.channelId %>" style="margin-top:.75rem">
-          <button class="log-load ghost" data-channel="<%= ch.channelId %>">Load recent actions</button>
-          <div class="log-out"></div>
-        </div>
-      </details>
+    <% }) %>
     </div>
-  <% }) %>
+  </section>
 
-<% var panelJs = `
+  <section class="cf-section">
+    <header class="cf-section-head">
+      <div>
+        <h2 class="cf-section-title">Across the network</h2>
+        <p class="cf-section-desc">Every channel that uses Kick Defender shares one banlist.</p>
+      </div>
+    </header>
+    <dl class="cf-kpis">
+      <div class="cf-kpi"><dt>Users banned</dt><dd id="ns-banned">—</dd></div>
+      <div class="cf-kpi"><dt>Messages removed</dt><dd id="ns-removed">—</dd></div>
+      <div class="cf-kpi"><dt>Banlist size</dt><dd id="ns-banlist">—</dd></div>
+      <div class="cf-kpi"><dt>Scam domains blocked</dt><dd id="ns-phishing">—</dd></div>
+    </dl>
+    <div class="cf-rows">
+      <div class="cf-row cf-row--stack">
+        <div class="cf-row-text">
+          <span class="cf-row-label">Activity, last 14 days</span>
+          <div class="kick-legend" aria-hidden="true"><span><i class="kick-sw-banned"></i>Banned</span><span><i class="kick-sw-removed"></i>Removed</span><span><i class="kick-sw-detected"></i>Detected</span></div>
+        </div>
+        <div class="kick-chart" id="trend-chart"><p class="muted">Loading…</p></div>
+      </div>
+    </div>
+  </section>
+
   <script>
-    document.querySelectorAll('.enroll').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        btn.disabled = true;
-        try { await KickDash.post('/kick/api/enroll', { channelId: btn.dataset.channel, enabled: Number(btn.dataset.enabled) }); location.reload(); }
-        catch (e) { btn.disabled = false; alert(e.message || 'Could not update enrollment.'); }
+  (function () {
+    var K = window.KickDash;
+    var q = function (cls, ch) { return document.querySelector('.' + cls + '[data-channel="' + ch + '"]'); };
+
+    // Defender switch: enroll / unenroll, then reload so the pills and counts match.
+    document.querySelectorAll('.enroll').forEach(function (sw) {
+      sw.addEventListener('change', async function () {
+        sw.disabled = true;
+        try { await K.post('/kick/api/enroll', { channelId: sw.dataset.channel, enabled: sw.checked ? 1 : 0 }); location.reload(); }
+        catch (e) { sw.checked = !sw.checked; sw.disabled = false; K.status(q('chat-msg', sw.dataset.channel), e.message || 'Could not change the defender.', 'bad'); }
       });
     });
-    document.querySelectorAll('.set-save').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const ch = btn.dataset.channel;
-        const q = s => document.querySelector(s + '[data-channel="' + ch + '"]');
-        const banType = q('.set-bantype').value;
-        const duration = q('.set-duration').value;
-        btn.disabled = true;
-        try { await KickDash.post('/kick/api/channel-settings', { channelId: ch, banDurationMin: banType === 'timed' ? (Number(duration) || 1) : '', phishingThreshold: q('.set-threshold').value, warningTemplate: q('.set-warning').value }); btn.textContent = 'Saved ✓'; }
-        catch (e) { alert(e.message || 'Save failed.'); }
-        finally { btn.disabled = false; setTimeout(() => { btn.textContent = 'Save settings'; }, 1500); }
-      });
+
+    // Ban length: minutes only apply to a timed ban.
+    document.querySelectorAll('.set-bantype').forEach(function (sel) {
+      var sync = function () { var d = q('set-duration', sel.dataset.channel); d.disabled = sel.value !== 'timed'; if (!d.disabled && !d.value) d.value = 60; };
+      sel.addEventListener('change', sync);
+      sel._sync = sync;
     });
-    document.querySelectorAll('.log-load').forEach(btn => {
-      btn.addEventListener('click', async () => {
-        const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-        const ch = btn.dataset.channel;
-        const out = btn.parentElement.querySelector('.log-out');
-        out.textContent = 'Loading…';
-        try {
-          const res = await fetch('/kick/api/enforcement-log?channelId=' + encodeURIComponent(ch) + '&limit=25');
-          const j = await res.json();
-          if (!res.ok) throw new Error(j.error || 'Failed');
-          if (!j.events.length) { out.textContent = 'No actions recorded yet.'; return; }
-          out.innerHTML = '<table>' + j.events.map(e =>
-            '<tr><td>' + (e.created_at ? new Date(e.created_at).toISOString().slice(0,16).replace('T',' ') : '—') +
-            '</td><td>' + esc(e.action) + (e.success ? '' : ' (failed)') +
-            '</td><td>' + esc(e.target_username) + '</td><td>' + esc(e.reason) + '</td></tr>').join('') + '</table>';
-        } catch (e) { out.textContent = e.message || 'Failed to load.'; }
-      });
-    });
-    document.querySelectorAll('.set-save').forEach(async btn => {
-      const ch = btn.dataset.channel;
+
+    // Load each channel's saved protection settings.
+    document.querySelectorAll('.set-save').forEach(async function (btn) {
+      var ch = btn.dataset.channel;
       try {
-        const res = await fetch('/kick/api/channel-settings?channelId=' + encodeURIComponent(ch));
-        const j = await res.json();
-        if (res.ok && j.settings) {
-          const q = s => document.querySelector(s + '[data-channel="' + ch + '"]');
-          if (j.settings.ban_duration_min != null) { q('.set-bantype').value = 'timed'; q('.set-duration').value = j.settings.ban_duration_min; }
-          if (j.settings.phishing_threshold != null) q('.set-threshold').value = j.settings.phishing_threshold;
-          if (j.settings.warning_template) q('.set-warning').value = j.settings.warning_template;
-        }
-      } catch (_) {}
+        var j = await K.get('/kick/api/channel-settings?channelId=' + encodeURIComponent(ch));
+        var s = j.settings;
+        if (!s) return;
+        if (s.ban_duration_min != null) { q('set-bantype', ch).value = 'timed'; q('set-duration', ch).value = s.ban_duration_min; }
+        if (s.phishing_threshold != null) q('set-threshold', ch).value = s.phishing_threshold;
+        if (s.warning_template) q('set-warning', ch).value = s.warning_template;
+        if (s.safe_domains) q('set-safe', ch).value = String(s.safe_domains).split(',').map(function (x) { return x.trim(); }).filter(Boolean).join('\n');
+      } catch (_) { /* defaults stay */ }
+      finally { var sel = q('set-bantype', ch); if (sel && sel._sync) sel._sync(); }
     });
 
-    // ── Bot health + network-protection stats ──────────────────
-    (function () {
-      const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-
-      (async function loadHealth() {
-        const dot = document.getElementById('health-dot');
-        const status = document.getElementById('health-status');
-        const joined = document.getElementById('health-joined');
-        const warn = document.getElementById('health-warn');
-        if (!status) return;
+    document.querySelectorAll('.set-save').forEach(function (btn) {
+      btn.addEventListener('click', async function () {
+        var ch = btn.dataset.channel;
+        var out = q('set-status', ch);
+        var timed = q('set-bantype', ch).value === 'timed';
+        var safe = q('set-safe', ch).value.split(/[\n,]+/).map(function (x) { return x.trim(); }).filter(Boolean);
+        if (safe.length > 50) { K.status(out, 'Up to 50 allowed domains.', 'bad'); return; }
+        btn.disabled = true; K.status(out, 'Saving…');
         try {
-          const res = await fetch('/kick/api/bot-health');
-          const j = await res.json();
-          if (!res.ok) throw new Error(j.error || 'Failed');
-          if (j.connected) {
-            if (dot) dot.style.background = 'var(--ok, #2ecc71)';
-            status.innerHTML = 'Defender bot: <span class="pill ok">connected</span>';
-          } else {
-            if (dot) dot.style.background = 'var(--bad, #e74c3c)';
-            status.innerHTML = 'Defender bot: <span class="pill bad">offline</span>';
-          }
-          if (joined) joined.textContent = (j.joinedChannels || 0).toLocaleString() + ' chatrooms joined';
-          const missing = (j.channels || []).filter(c => c.enrolled && !c.joined);
-          if (warn) {
-            warn.innerHTML = missing.map(c =>
-              '<div class="muted" style="color:var(--warn,#e0a800)">⚠ ' + esc(c.channelName) + ' enrolled but not joined</div>'
-            ).join('');
-          }
-        } catch (e) {
-          if (status) status.innerHTML = 'Defender bot: <span class="muted">status unavailable</span>';
-        }
-      })();
-
-      (async function loadNetworkStats() {
-        try {
-          const res = await fetch('/kick/api/network-stats');
-          const j = await res.json();
-          if (!res.ok) throw new Error(j.error || 'Failed');
-          const s = j.stats || {};
-          const set = (id, v) => { const el = document.getElementById(id); if (el && v != null) el.textContent = Number(v).toLocaleString(); };
-          set('ns-banned', s.banned);
-          set('ns-removed', s.deleted);
-          set('ns-banlist', Array.isArray(j.banlist) ? j.banlist.length : j.banlist);
-          set('ns-phishing', Array.isArray(j.phishing) ? j.phishing.length : j.phishing);
-        } catch (e) { /* leave placeholders */ }
-      })();
-
-      (async function loadTrend() {
-        const host = document.getElementById('trend-chart');
-        if (!host) return;
-        try {
-          const res = await fetch('/kick/api/network-trend?days=14');
-          const j = await res.json();
-          if (!res.ok) throw new Error((j && j.error) || 'Failed');
-          const series = Array.isArray(j.series) ? j.series : [];
-          const max = series.reduce((m, d) => Math.max(m, (d.banned || 0) + (d.deleted || 0) + (d.dormant || 0)), 0);
-          if (!series.length || max <= 0) { host.textContent = 'No activity in the last 14 days.'; return; }
-
-          const W = 560, H = 160, padL = 8, padR = 8, padTop = 8, axisY = 132, labelY = 150;
-          const plotW = W - padL - padR;
-          const slot = plotW / series.length;
-          const barW = Math.min(22, slot * 0.6);
-          const plotH = axisY - padTop;
-          const colors = { banned: '#53FC18', deleted: '#7c84ff', dormant: 'rgba(255,255,255,.25)' };
-          let rects = '';
-          let labels = '';
-          series.forEach((d, i) => {
-            const cx = padL + slot * i + slot / 2;
-            const x = cx - barW / 2;
-            const banned = d.banned || 0, deleted = d.deleted || 0, dormant = d.dormant || 0;
-            let y = axisY;
-            [['banned', banned], ['deleted', deleted], ['dormant', dormant]].forEach(([k, v]) => {
-              if (v > 0) {
-                const h = (v / max) * plotH;
-                y -= h;
-                rects += '<rect x="' + x.toFixed(1) + '" y="' + y.toFixed(1) + '" width="' + barW.toFixed(1) + '" height="' + h.toFixed(1) + '" rx="1.5" fill="' + colors[k] + '"></rect>';
-              }
-            });
-            if (i % 3 === 0 && typeof d.date === 'string' && d.date.length >= 10) {
-              const md = d.date.slice(5, 7) + '/' + d.date.slice(8, 10);
-              labels += '<text x="' + cx.toFixed(1) + '" y="' + labelY + '" font-size="9" text-anchor="middle" fill="rgba(255,255,255,.45)">' + md + '</text>';
-            }
+          var r = await K.post('/kick/api/channel-settings', {
+            channelId: ch,
+            banDurationMin: timed ? (Number(q('set-duration', ch).value) || 1) : '',
+            phishingThreshold: q('set-threshold', ch).value,
+            warningTemplate: q('set-warning', ch).value,
+            safeDomains: safe
           });
-          const baseline = '<line x1="' + padL + '" y1="' + axisY + '" x2="' + (W - padR) + '" y2="' + axisY + '" stroke="rgba(255,255,255,.12)" stroke-width="1"></line>';
-          host.classList.remove('muted');
-          host.innerHTML = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img" aria-label="14-day activity chart" style="display:block">' + baseline + rects + labels + '</svg>';
-        } catch (e) { host.textContent = 'Failed to load chart.'; }
-      })();
+          if (r && Array.isArray(r.safeDomains)) q('set-safe', ch).value = r.safeDomains.join('\n');
+          K.status(out, 'Saved.', 'ok');
+        } catch (e) { K.status(out, e.message || 'Save failed.', 'bad'); }
+        finally { btn.disabled = false; }
+      });
+    });
+
+    // Recent actions per channel.
+    document.querySelectorAll('.log-load').forEach(function (btn) {
+      btn.addEventListener('click', async function () {
+        var ch = btn.dataset.channel;
+        var out = q('log-out', ch);
+        out.replaceChildren(K.el('p', 'muted', 'Loading…'));
+        try {
+          var j = await K.get('/kick/api/enforcement-log?channelId=' + encodeURIComponent(ch) + '&limit=25');
+          K.table(out, ['Time', 'Action', 'User', 'Reason'], (j.events || []).map(function (e) {
+            return [{ text: K.fmtTime(e.created_at) || '—', cls: 'nowrap' }, e.action + (e.success ? '' : ' (failed)'), e.target_username || '', e.reason || ''];
+          }), 'No actions recorded yet.');
+          btn.textContent = 'Refresh';
+        } catch (e) { out.replaceChildren(K.el('p', 'muted', e.message || 'Failed to load.')); }
+      });
+    });
+
+    // Chat connection (Kick webhooks) per channel.
+    function showChat(c) {
+      var host = q('chat-status', c.channelId);
+      var btn = q('chat-connect', c.channelId);
+      if (!host) return;
+      host.replaceChildren();
+      if (c.chatSubscribed === true) {
+        host.appendChild(K.el('span', 'pill ok', 'Connected'));
+        var seen = c.lastChatAt ? ' Last message ' + K.ago(c.lastChatAt) + '.' : '';
+        if (seen) host.appendChild(K.el('span', 'muted', seen));
+        var missing = (c.missingEvents || []).length;
+        btn.hidden = !missing;
+        btn.textContent = 'Connect follow and sub alerts';
+      } else if (c.chatSubscribed === false) {
+        host.appendChild(K.el('span', 'pill bad', 'Not connected'));
+        btn.hidden = false;
+        btn.textContent = 'Connect chat';
+      } else {
+        host.appendChild(K.el('span', 'pill off', 'Unknown'));
+        btn.hidden = true;
+      }
+    }
+    async function loadHealth() {
+      try {
+        var j = await K.get('/kick/api/bot-health');
+        document.getElementById('feed-problem').hidden = !!j.connected;
+        (j.channels || []).forEach(showChat);
+      } catch (_) {
+        document.getElementById('feed-problem').hidden = false;
+        document.querySelectorAll('.chat-status').forEach(function (h) { h.replaceChildren(K.el('span', 'pill off', 'Unknown')); });
+      }
+    }
+    document.querySelectorAll('.chat-connect').forEach(function (btn) {
+      btn.addEventListener('click', async function () {
+        var ch = btn.dataset.channel;
+        var out = q('chat-msg', ch);
+        btn.disabled = true; K.status(out, 'Connecting…');
+        try { await K.post('/kick/api/channel/' + encodeURIComponent(ch) + '/events/subscribe', {}); K.status(out, 'Connected.', 'ok'); await loadHealth(); }
+        catch (e) { K.status(out, e.message || 'Kick did not accept the connection.', 'bad'); }
+        finally { btn.disabled = false; }
+      });
+    });
+    loadHealth();
+
+    (async function loadNetworkStats() {
+      try {
+        var j = await K.get('/kick/api/network-stats');
+        var s = j.stats || {};
+        var set = function (id, v) { var n = document.getElementById(id); if (n && v != null) n.textContent = Number(v).toLocaleString(); };
+        set('ns-banned', s.banned);
+        set('ns-removed', s.deleted);
+        set('ns-banlist', Array.isArray(j.banlist) ? j.banlist.length : j.banlist);
+        set('ns-phishing', Array.isArray(j.phishing) ? j.phishing.length : j.phishing);
+      } catch (_) { /* dashes stay */ }
     })();
-  </script>`; %>
-<%- include('_foot', { extraJs: panelJs }) %>
+
+    (async function loadTrend() {
+      var host = document.getElementById('trend-chart');
+      try {
+        var j = await K.get('/kick/api/network-trend?days=14');
+        K.bars(host, Array.isArray(j.series) ? j.series : [], [
+          { key: 'banned', cls: 'banned', label: 'Banned' },
+          { key: 'deleted', cls: 'removed', label: 'Removed' },
+          { key: 'dormant', cls: 'detected', label: 'Detected' }
+        ], { label: 'Network activity, last 14 days' });
+      } catch (_) { host.replaceChildren(K.el('p', 'muted', 'Failed to load the chart.')); }
+    })();
+  })();
+  </script>
+<%- include('_foot') %>

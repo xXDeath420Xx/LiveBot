@@ -290,4 +290,93 @@ export async function searchProducts(rawHandle, query) {
     return { handle, query: q, products };
 }
 
-export default { getShop, getProduct, getCollection, searchProducts };
+
+
+// ──────────────────────────────────────────────────────────────────────────
+// Per-product enrichment via JSON-LD on the product page (Fourthwall analysis
+// 2026-10-14 — adds variant + availability + internal UUID data the tile scraper
+// doesn't carry). See fourthwall-analysis.md §7.
+// ──────────────────────────────────────────────────────────────────────────
+
+function extractAllJsonLd(html) {
+    const out = [];
+    const matches = String(html || '').matchAll(/<script[^>]+type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi);
+    for (const m of matches) {
+        try { out.push(JSON.parse(String(m[1]).trim())); } catch { /* malformed, skip */ }
+    }
+    return out;
+}
+
+function pickProductLd(blocks) {
+    for (const b of blocks) {
+        if (!b) continue;
+        if (b['@type'] === 'Product') return b;
+        if (Array.isArray(b)) {
+            const p = b.find(x => x && x['@type'] === 'Product');
+            if (p) return p;
+        }
+    }
+    return null;
+}
+
+function parseFourthwallVariant(offer) {
+    const priceMinor = Math.round(Number(offer.price) * 100);
+    const availability = String(offer.availability || '').replace(/^https?:\/\/schema\.org\//, '');
+    const variantUrl = String(offer.url || '');
+    const variantMatch = Array.from(variantUrl.matchAll(/[?&]variant=([a-f0-9-]+)/gi))[0];
+    return {
+        id: variantMatch ? variantMatch[1] : null,
+        name: offer.name || null,
+        price: Number.isFinite(priceMinor) ? priceMinor : null,
+        currency: offer.priceCurrency || 'USD',
+        availability,
+        url: variantUrl || null,
+    };
+}
+
+/**
+ * Fetch one product page and extract variants, images, internal UUID, availability.
+ *
+ * Returns null if the page can't be loaded or has no JSON-LD (gracefully — the tracker
+ * continues with tile-level data in that case). Caches like the other scraper endpoints
+ * (5 min TTL via cacheGet/cacheSet).
+ *
+ * Cost note: ~32 KB per call. The tracker gates calls so a stable catalog costs zero
+ * per-product fetches per cycle — only new slugs or ones whose tile price changed get
+ * re-fetched.
+ */
+export async function getProductDetails(rawHandle, rawSlug) {
+    const handle = validateHandle(rawHandle);
+    const slug = String(rawSlug || '').trim().toLowerCase();
+    if (!/^[a-z0-9-]{1,200}$/.test(slug)) return null;
+
+    const key = `details:${handle}:${slug}`;
+    const cached = cacheGet(key);
+    if (cached) return cached;
+
+    let html;
+    try {
+        html = await fetchHtml(`${BASE_URL(handle)}/products/${slug}/`);
+    } catch (err) {
+        logger.warn('[FW Scraper] getProductDetails fetch failed', { handle, slug, status: err?.status, msg: err?.message });
+        return null;
+    }
+
+    const ld = pickProductLd(extractAllJsonLd(html));
+    const internalMatch = Array.from(String(html).matchAll(/item_id:\s*"([a-f0-9-]{32,36})"/gi))[0];
+    const internalId = internalMatch ? internalMatch[1] : null;
+
+    const result = {
+        handle, slug, internalId,
+        name: ld?.name || null,
+        images: Array.isArray(ld?.image) ? ld.image : (ld?.image ? [ld.image] : []),
+        brand: ld?.brand?.name || null,
+        variants: Array.isArray(ld?.offers)
+            ? ld.offers.map(parseFourthwallVariant)
+            : (ld?.offers ? [parseFourthwallVariant(ld.offers)] : []),
+    };
+    cacheSet(key, result);
+    return result;
+}
+
+export default { getShop, getProduct, getCollection, searchProducts, getProductDetails };

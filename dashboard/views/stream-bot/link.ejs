@@ -1,0 +1,57 @@
+<%#
+  GET/POST /stream/bot/devices/link (dashboard/routes/stream-bot-link.js): approve a "Sign in with CertiFried" request
+  from CertiFried Studio. Locals: link { id, name, check, status, otherNetwork } | null, outcome null | 'approved' |
+  'cancelled' | 'gone' | 'error'. The form posts with the session CSRF token; nothing secret is on this page.
+%>
+<%- include('_head', { pageTitle: 'Connect CertiFried Studio', active: 'devices', sbPage: 'link' }) %>
+<div class="cf-page-head">
+    <div>
+        <h1 class="cf-page-title">Connect CertiFried Studio</h1>
+    </div>
+</div>
+
+<section class="cf-section" aria-labelledby="sb-link-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sb-link-title">
+        <% if (outcome === 'approved') { %>Connected<% } else if (outcome === 'cancelled') { %>Cancelled<% } else if (outcome === 'error') { %>Something went wrong<% } else if (!link || outcome === 'gone') { %>This request has ended<% } else { %>Approve this device?<% } %>
+    </h2></div></header>
+    <div class="cf-rows">
+        <% if (outcome === 'approved') { %>
+        <div class="cf-state cf-state--compact">
+            <p class="cf-state-title">CertiFried Studio on <%= link ? link.name : 'your PC' %> is connecting now.</p>
+            <p class="cf-state-text">You can close this tab and go back to Studio. It shows up on <a href="/stream/bot/devices">Devices</a>, where you can remove it at any time.</p>
+        </div>
+        <% } else if (outcome === 'cancelled') { %>
+        <div class="cf-state cf-state--compact">
+            <p class="cf-state-title">Nothing was connected.</p>
+            <p class="cf-state-text">Studio stops waiting. You can start again from Studio whenever you like.</p>
+        </div>
+        <% } else if (outcome === 'error') { %>
+        <div class="cf-state cf-state--compact">
+            <p class="cf-state-title">The device could not be connected.</p>
+            <p class="cf-state-text">Try again in a minute, or use a pairing code from <a href="/stream/bot/devices">Devices</a>.</p>
+        </div>
+        <% } else if (!link || outcome === 'gone' || link.status !== 'pending') { %>
+        <div class="cf-state cf-state--compact">
+            <p class="cf-state-title">This sign-in request has expired or was already used.</p>
+            <p class="cf-state-text">Requests last 10 minutes and work once. In CertiFried Studio, choose Sign in with CertiFried again, or make a pairing code on <a href="/stream/bot/devices">Devices</a>.</p>
+        </div>
+        <% } else { %>
+        <div class="cf-row">
+            <div class="cf-row-text">
+                <p class="cf-row-label">CertiFried Studio on <strong><%= link.name %></strong> wants to connect to your stream bot.</p>
+                <p class="cf-row-desc">Once connected it can carry out your automations' OBS, sound and hotkey actions on that PC. Studio shows the code <strong><%= link.check %></strong>; approve only if it matches and you started this yourself.</p>
+                <% if (link.otherNetwork) { %>
+                <p class="cf-row-desc"><strong>Check first:</strong> this request came from a different network than the one you are on. If you did not just choose Sign in with CertiFried in Studio, cancel it.</p>
+                <% } %>
+            </div>
+        </div>
+        <form method="post" action="/stream/bot/devices/link" class="cf-section-foot">
+            <input type="hidden" name="_csrf" value="<%= locals.csrfToken || '' %>">
+            <input type="hidden" name="request" value="<%= link.id %>">
+            <button type="submit" name="decision" value="cancel" class="btn btn-secondary btn-sm">Cancel</button>
+            <button type="submit" name="decision" value="approve" class="btn btn-primary btn-sm">Approve</button>
+        </form>
+        <% } %>
+    </div>
+</section>
+<%- include('_foot') %>

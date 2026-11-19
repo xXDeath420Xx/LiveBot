@@ -1,200 +1,83 @@
 <!DOCTYPE html>
-<html lang="en">
+<html data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>" lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Apply to join the Against_The_Tide stream team. Opens a private Discord ticket only you and the server owner can see.">
-    <meta name="theme-color" content="#9146FF">
-    <meta name="robots" content="noindex">
-    <title>Stream Team Signup - CertiFried MultiTool</title>
-    <link rel="icon" type="image/png" href="/images/CertiFried.png">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<%- include('partials/site-head', { title: 'Stream team signup · CertiFried', description: 'Apply to join the Against_The_Tide Twitch stream team. Your application opens a private Discord ticket that the server owner reviews.', path: '/stream-team', noindex: true }) %>
+    <script src="/js/csrf.js"></script>
     <style>
-        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-        :root {
-            --bg-primary: #0b0f11;
-            --bg-card: rgba(255, 255, 255, 0.03);
-            --bg-card-hover: rgba(255, 255, 255, 0.06);
-            --border-color: rgba(255, 255, 255, 0.08);
-            --text-primary: #ffffff;
-            --text-secondary: rgba(255, 255, 255, 0.7);
-            --text-muted: rgba(255, 255, 255, 0.5);
-            --accent-purple: #a78bfa;
-            --accent-blue: #60a5fa;
-            --accent-green: #34d399;
-            --accent-red: #f87171;
-            --twitch: #9146FF;
-        }
-        html { scroll-behavior: smooth; }
-        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg-primary); color: var(--text-primary); min-height: 100vh; line-height: 1.6; }
-        .bg-effects { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; overflow: hidden; }
-        .orb { position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.25; animation: float 20s ease-in-out infinite; }
-        .orb-1 { width: clamp(300px, 40vw, 500px); height: clamp(300px, 40vw, 500px); background: linear-gradient(135deg, #9146FF, #7c3aed); top: -10%; right: -10%; }
-        .orb-2 { width: clamp(250px, 35vw, 450px); height: clamp(250px, 35vw, 450px); background: linear-gradient(135deg, #7c3aed, #a78bfa); bottom: 10%; left: -10%; animation-delay: -10s; }
-        @keyframes float { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(20px, 20px) scale(1.02); } }
-        .container { width: 100%; max-width: 880px; margin: 0 auto; padding: 0 clamp(1rem, 4vw, 2rem); }
-        .navbar { position: fixed; top: 0; left: 0; right: 0; z-index: 1000; padding: 1rem 0; background: rgba(11, 15, 17, 0.9); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-bottom: 1px solid var(--border-color); }
-        .navbar-container { max-width: 1400px; margin: 0 auto; padding: 0 clamp(1rem, 4vw, 2rem); }
-        .navbar-content { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
-        .navbar-brand { display: flex; align-items: center; gap: 0.75rem; text-decoration: none; color: var(--text-primary); font-weight: 700; }
-        .navbar-logo { width: 36px; height: 36px; aspect-ratio: 1/1; border-radius: 50%; object-fit: cover; border: 2px solid var(--accent-purple); }
-        .navbar-links { display: flex; align-items: center; gap: 1.5rem; }
-        .navbar-links a { color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; font-weight: 500; transition: color 0.2s; }
-        .navbar-links a:hover, .navbar-links a.active { color: var(--text-primary); }
-        .user-menu { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 1rem; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 10px; text-decoration: none; transition: all 0.2s; }
-        .user-menu:hover { border-color: var(--accent-purple); }
-        .user-avatar { width: 32px; height: 32px; border-radius: 50%; object-fit: cover; }
-        .user-name { font-size: 0.85rem; font-weight: 600; color: var(--text-primary); }
-        main { position: relative; z-index: 1; padding: 100px 0 4rem; min-height: 100vh; }
-        .page-header { margin-bottom: 2rem; }
-        .page-header h1 { font-size: clamp(1.75rem, 3vw, 2.25rem); font-weight: 800; background: linear-gradient(135deg, var(--text-primary), var(--twitch)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin-bottom: 0.5rem; }
-        .page-header p { color: var(--text-secondary); font-size: 0.95rem; }
-        @keyframes fadeInUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
-        .card { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-radius: 16px; padding: 1.75rem; margin-bottom: 1.5rem; animation: fadeInUp 0.4s cubic-bezier(0.22, 1, 0.36, 1) both; }
-        .card h3 { font-size: 1.15rem; font-weight: 700; margin-bottom: 0.35rem; }
-        .card .muted { color: var(--text-muted); font-size: 0.85rem; }
-        .status-box { display: flex; align-items: center; gap: 0.75rem; padding: 1rem 1.25rem; border-radius: 12px; font-weight: 600; margin-bottom: 1.25rem; }
-        .status-box.linked { background: rgba(52, 211, 153, 0.12); border: 1px solid rgba(52, 211, 153, 0.3); color: var(--accent-green); }
-        .status-box.unlinked { background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border-color); color: var(--text-secondary); }
-        .status-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
-        .status-box.linked .status-dot { background: var(--accent-green); }
-        .status-box.unlinked .status-dot { background: var(--text-muted); }
-        label.field-label { display: block; font-size: 0.8rem; font-weight: 600; color: var(--text-secondary); margin-bottom: 0.4rem; }
-        .input, textarea.input { width: 100%; padding: 0.7rem 0.9rem; background: rgba(0,0,0,0.25); border: 1px solid var(--border-color); border-radius: 10px; color: var(--text-primary); font-family: inherit; font-size: 0.9rem; transition: border-color 0.2s; }
-        textarea.input { resize: vertical; min-height: 90px; }
-        .input:focus { outline: none; border-color: var(--twitch); }
-        .field { margin-bottom: 1.1rem; }
-        .row { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin-top: 0.9rem; }
-        .btn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.625rem 1.25rem; border-radius: 10px; font-size: 0.875rem; font-weight: 600; text-decoration: none; transition: all 0.2s; border: none; cursor: pointer; font-family: inherit; }
-        .btn:disabled { opacity: 0.6; cursor: not-allowed; }
-        .btn-primary { background: linear-gradient(135deg, var(--twitch), #7c3aed); color: #fff; }
-        .btn-primary:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(145, 70, 255, 0.3); }
-        .btn-secondary { background: rgba(145, 70, 255, 0.1); border: 1px solid rgba(145, 70, 255, 0.35); color: var(--accent-purple); }
-        .btn-secondary:hover:not(:disabled) { background: rgba(145, 70, 255, 0.2); }
-        .status-msg { font-size: 0.85rem; }
-        .status-msg.ok { color: var(--accent-green); }
-        .status-msg.err { color: var(--accent-red); }
-        .status-msg.info { color: var(--text-muted); }
-        .note { font-size: 0.78rem; color: var(--text-muted); margin-top: 0.5rem; }
-        .privacy { display: flex; gap: 0.6rem; align-items: flex-start; padding: 0.9rem 1.1rem; background: rgba(145, 70, 255, 0.08); border: 1px solid rgba(145, 70, 255, 0.25); border-radius: 12px; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1.25rem; }
-        .privacy svg { width: 18px; height: 18px; flex-shrink: 0; margin-top: 2px; color: var(--accent-purple); }
+        .st-panel { padding: var(--cf-5); margin-bottom: var(--cf-4); background: var(--cf-surface); border: 1px solid var(--cf-border); border-radius: var(--cf-radius-lg); }
+        .st-panel > h2 { margin: 0 0 var(--cf-2); font-size: var(--cf-text-lg); font-weight: 600; }
+        .st-panel .muted { margin: 0 0 var(--cf-4); font-size: var(--cf-text-sm); line-height: 1.6; color: var(--cf-text-2); }
+        .st-panel .muted:last-child { margin-bottom: 0; }
+        .st-state { display: flex; align-items: center; gap: var(--cf-2); margin: 0 0 var(--cf-2); font-weight: 600; }
+        .field { margin-bottom: var(--cf-4); }
+        .field-label { display: block; margin-bottom: 6px; font-size: var(--cf-text-sm); font-weight: 500; color: var(--cf-text); }
+        .field .form-input, .field .form-select, .field .form-textarea { width: 100%; min-height: 40px; }
+        .field .form-textarea { min-height: 110px; resize: vertical; }
+        .st-actions { display: flex; align-items: center; gap: var(--cf-3); flex-wrap: wrap; }
+        .status-msg { font-size: var(--cf-text-sm); }
+        .status-msg.ok { color: var(--cf-success); }
+        .status-msg.err { color: var(--cf-danger); }
+        .status-msg.info { color: var(--cf-text-3); }
+        .note { margin: var(--cf-3) 0 0; font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+        .st-honeypot { position: absolute; left: -9999px; top: -9999px; width: 1px; height: 1px; overflow: hidden; }
         .hidden { display: none !important; }
-        .footer { padding: clamp(2rem, 5vh, 3.5rem) 0; background: var(--bg-primary); border-top: 1px solid var(--border-color); text-align: center; margin-top: 2rem; }
-        .footer-links { display: flex; gap: clamp(1.25rem, 2.5vw, 2.5rem); justify-content: center; flex-wrap: wrap; margin-bottom: 1.5rem; }
-        .footer-link { color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; transition: color 0.3s ease; }
-        .footer-link:hover { color: var(--accent-purple); }
-        .footer-copyright { color: var(--text-muted); font-size: 0.85rem; }
-        @media (max-width: 768px) { .navbar-links { display: none; } }
     </style>
 </head>
-<body>
-    <div class="bg-effects"><div class="orb orb-1"></div><div class="orb orb-2"></div></div>
-
-    <nav class="navbar">
-        <div class="navbar-container">
-            <div class="navbar-content">
-                <a href="/" class="navbar-brand">
-                    <img src="/images/CertiFried.png" alt="CertiFried" class="navbar-logo">
-                    <span>CertiFried</span>
-                </a>
-                <div class="navbar-links">
-                    <a href="/">Home</a>
-                    <a href="/commands">Commands</a>
-                    <a href="/cards">Cards</a>
-                    <a href="/status">Status</a>
-                    <a href="/dashboard">Dashboard</a>
-                </div>
-                <% if (user) { %>
-                <a href="/profile" class="user-menu">
-                    <img src="<%= user.avatar ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png` : 'https://cdn.discordapp.com/embed/avatars/0.png' %>" alt="" class="user-avatar">
-                    <span class="user-name"><%= user.username %></span>
-                </a>
-                <% } else { %>
-                <a href="/auth/discord?returnTo=/stream-team" class="user-menu">
-                    <span class="user-name">Log in with Discord</span>
-                </a>
-                <% } %>
-            </div>
+<body class="cfs-body">
+<%- include('partials/site-header', { active: '', user: locals.user || null, returnTo: '/stream-team' }) %>
+    <main id="main-content" tabindex="-1" class="cfs-main cfs-main--narrow">
+        <div class="cfs-pagehead">
+            <h1>Stream team signup</h1>
+            <p class="cfs-lede">Apply to join the Against_The_Tide Twitch team. You only need a Twitch channel. If you are in our Discord server, log in first and you can chat with the owner in your ticket.</p>
         </div>
-    </nav>
 
-    <main>
-        <div class="container">
-            <div class="page-header">
-                <h1>📺 Stream Team Signup</h1>
-                <p>Apply to join the <strong>Against_The_Tide</strong> stream team. <strong>No Discord account needed — apply with your Twitch.</strong> If you're in our Discord, log in first and you'll get a private ticket you can chat in.</p>
-            </div>
-
-            <div class="privacy">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
-                <span>Your application opens a <strong>private ticket channel</strong> only the <strong>server owner</strong> can read. If you log in with Discord and you're a member, you'll be added to the ticket so you can chat there too.</span>
-            </div>
-
-            <!-- Loading state -->
-            <div id="loading" class="card">
-                <div class="status-box unlinked"><span class="status-dot"></span><span>Loading…</span></div>
-            </div>
-
-            <!-- Panel-unavailable state -->
-            <div id="unavailable" class="card hidden">
-                <div class="status-box unlinked"><span class="status-dot"></span><span>The Stream Team Signup form isn't available right now. Please check back later.</span></div>
-            </div>
-
-            <!-- Already-applied state -->
-            <div id="already" class="card hidden">
-                <div class="status-box linked"><span class="status-dot"></span><span>You already have an open application.</span></div>
-                <p class="muted">Head to your private ticket in the Discord server to continue the conversation. You can only have one open application at a time.</p>
-            </div>
-
-            <!-- Signup form -->
-            <div id="form-card" class="card hidden">
-                <h3>Tell us about your stream</h3>
-                <p class="muted" style="margin-bottom:1.25rem;">All fields below are required. We'll verify your Twitch channel exists before submitting.</p>
-                <div id="fields"></div>
-
-                <!-- Optional Discord username (shown to logged-out applicants too) -->
-                <div class="field" id="discord-field">
-                    <label class="field-label" for="discord_username">Your Discord username (optional)</label>
-                    <input type="text" class="input" id="discord_username" placeholder="e.g. yourname" autocomplete="off">
-                </div>
-
-                <!-- HONEYPOT — hidden from humans, bots fill it. Never visible. -->
-                <div aria-hidden="true" style="position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden;opacity:0;pointer-events:none;">
-                    <label for="website">Website (leave blank)</label>
-                    <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">
-                </div>
-
-                <div class="row">
-                    <button id="submit-btn" class="btn btn-primary" type="button">Submit application</button>
-                    <span id="status-msg" class="status-msg"></span>
-                </div>
-                <p class="note">By submitting you open a private ticket the server owner will review.</p>
-            </div>
-
-            <!-- The team link -->
-            <div class="card">
-                <h3>About the team</h3>
-                <p class="muted">Against_The_Tide is a Twitch team. Check out the roster:</p>
-                <div style="margin-top:0.9rem;">
-                    <a href="https://www.twitch.tv/team/against_the_tide" target="_blank" rel="noopener" class="btn btn-secondary">View the Against_The_Tide team on Twitch ↗</a>
-                </div>
-            </div>
+        <div class="cfs-note">
+            <p>Each application opens a private ticket channel in the team's Discord server that other members cannot see. If you log in with Discord and are a member of the server, you are added to the ticket too.</p>
         </div>
+
+        <div id="loading" class="st-panel" role="status"><p class="muted">Loading the form…</p></div>
+
+        <div id="unavailable" class="st-panel hidden">
+            <p class="st-state"><span class="cfs-dot" aria-hidden="true"></span>The signup form is closed right now.</p>
+            <p class="muted">Check back later.</p>
+        </div>
+
+        <div id="already" class="st-panel hidden" role="status">
+            <p class="st-state"><span class="cfs-dot cfs-dot--ok" aria-hidden="true"></span><span>You already have an open application.</span></p>
+            <p class="muted">Continue in your private ticket in the Discord server. You can have one open application at a time.</p>
+        </div>
+
+        <section id="form-card" class="st-panel hidden" aria-labelledby="st-form-h">
+            <h2 id="st-form-h">Tell us about your stream</h2>
+            <p class="muted">Answer every question that is not marked optional. We check that your Twitch channel exists before the application is sent.</p>
+            <div id="fields"></div>
+
+            <div class="field" id="discord-field">
+                <label class="field-label" for="discord_username">Your Discord username (optional)</label>
+                <input type="text" class="form-input" id="discord_username" autocomplete="off">
+            </div>
+
+            <!-- Spam trap: hidden from people, filled in by bots. -->
+            <div class="st-honeypot" aria-hidden="true">
+                <label for="website">Website (leave blank)</label>
+                <input type="text" id="website" name="website" tabindex="-1" autocomplete="off">
+            </div>
+
+            <div class="st-actions">
+                <button id="submit-btn" class="btn btn-primary" type="button">Send application</button>
+                <span id="status-msg" class="status-msg" role="status" aria-live="polite"></span>
+            </div>
+            <p class="note">Sending opens a private ticket that the server owner reviews.</p>
+        </section>
+
+        <section class="st-panel" aria-labelledby="st-team-h">
+            <h2 id="st-team-h">About the team</h2>
+            <p class="muted">Against_The_Tide is a Twitch team. See who is on it:</p>
+            <a href="https://www.twitch.tv/team/against_the_tide" target="_blank" rel="noopener" class="btn btn-secondary">Against_The_Tide on Twitch</a>
+        </section>
     </main>
 
-    <footer class="footer">
-        <div class="container">
-            <div class="footer-links">
-                <a href="/commands" class="footer-link">Commands</a>
-                <a href="/profile" class="footer-link">Profile</a>
-                <a href="/status" class="footer-link">Status</a>
-                <a href="/docs" class="footer-link">Documentation</a>
-                <a href="/terms" class="footer-link">Terms</a>
-                <a href="/privacy" class="footer-link">Privacy</a>
-            </div>
-            <p class="footer-copyright">&copy; <%= new Date().getFullYear() %> CertiFried MultiTool. All rights reserved.</p>
-        </div>
-    </footer>
+<%- include('partials/site-footer') %>
 
     <script>
     (function () {
@@ -221,19 +104,32 @@
                 const label = document.createElement('label');
                 label.className = 'field-label';
                 label.setAttribute('for', 'q-' + q.question_id);
-                label.textContent = q.question_text;
+                label.textContent = q.question_text + (q.is_required ? '' : ' (optional)');
                 field.appendChild(label);
 
+                // Mirror the answer formats the form was built with. The member/role/channel
+                // pickers have no meaning outside Discord, so they degrade to a text box here.
                 let inputEl;
-                if (q.question_type === 'paragraph') {
+                const choices = Array.isArray(q.question_options) ? q.question_options : [];
+                if (choices.length && (q.question_type === 'select' || q.question_type === 'multiselect')) {
+                    inputEl = document.createElement('select');
+                    if (q.question_type === 'multiselect') {
+                        inputEl.multiple = true;
+                        inputEl.size = Math.min(choices.length, 6);
+                    } else if (!q.is_required) {
+                        inputEl.appendChild(new Option('No answer', ''));
+                    }
+                    for (const choice of choices) inputEl.appendChild(new Option(choice, choice));
+                } else if (q.question_type === 'paragraph') {
                     inputEl = document.createElement('textarea');
                 } else {
                     inputEl = document.createElement('input');
-                    inputEl.type = 'text';
+                    inputEl.type = q.question_type === 'number' ? 'number' : 'text';
                 }
-                inputEl.className = 'input';
+                inputEl.className = inputEl.tagName === 'SELECT' ? 'form-select' : inputEl.tagName === 'TEXTAREA' ? 'form-textarea' : 'form-input';
                 inputEl.id = 'q-' + q.question_id;
                 inputEl.dataset.qid = q.question_id;
+                inputEl.dataset.qtype = q.question_type;
                 field.appendChild(inputEl);
 
                 wrap.appendChild(field);
@@ -261,9 +157,14 @@
                 const answers = {};
                 for (const q of questions) {
                     const inp = document.getElementById('q-' + q.question_id);
-                    answers[q.question_id] = (inp && inp.value || '').trim();
-                    if (!answers[q.question_id]) {
-                        setMsg('Please fill in all fields.', 'err');
+                    // A multi-select answers with a list; everything else with one trimmed string.
+                    const value = (inp && inp.multiple)
+                        ? Array.from(inp.selectedOptions).map(o => o.value).filter(Boolean)
+                        : ((inp && inp.value) || '').trim();
+                    answers[q.question_id] = value;
+                    const blank = Array.isArray(value) ? value.length === 0 : !value;
+                    if (blank && q.is_required) {
+                        setMsg('Answer this question: ' + q.question_text, 'err');
                         if (inp) inp.focus();
                         return;
                     }
@@ -271,7 +172,7 @@
                 const discordEl = document.getElementById('discord_username');
                 const honeypotEl = document.getElementById('website');
                 btn.disabled = true;
-                setMsg('Submitting…', 'info');
+                setMsg('Sending…', 'info');
                 try {
                     const r = await fetch(base + '/apply', {
                         method: 'POST',
@@ -284,22 +185,22 @@
                     }).then(x => x.json());
                     if (r.ok) {
                         hide('form-card');
-                        const box = document.querySelector('#already .status-box span');
+                        const box = document.querySelector('#already .st-state span:last-child');
                         const note = document.querySelector('#already .muted');
                         if (r.linked) {
-                            if (box) box.textContent = 'Application submitted!';
-                            if (note) note.textContent = 'A private ticket has been opened in the Discord server — head there to chat with the owner. You can only have one open application at a time.';
+                            if (box) box.textContent = 'Application sent.';
+                            if (note) note.textContent = 'A private ticket is open in the Discord server: chat with the owner there. You can have one open application at a time.';
                         } else {
-                            if (box) box.textContent = 'Application received!';
-                            if (note) note.textContent = "Thanks! The server owner has been notified and will review your application. Since you applied without logging in, we'll reach out via the details you provided.";
+                            if (box) box.textContent = 'Application received.';
+                            if (note) note.textContent = 'The server owner will review it. You applied without logging in, so they will contact you through the details you gave.';
                         }
                         show('already');
                     } else {
-                        setMsg(r.error || 'Could not submit your application.', 'err');
+                        setMsg(r.error || 'Could not send your application.', 'err');
                         btn.disabled = false;
                     }
                 } catch (e) {
-                    setMsg('Request failed.', 'err');
+                    setMsg('Could not reach the server. Try again in a minute.', 'err');
                     btn.disabled = false;
                 }
             }

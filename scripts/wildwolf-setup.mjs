@@ -11,10 +11,10 @@
 
 import 'dotenv/config';
 import pool from '../utils/db.js';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 
 const GUILD_ID = '1414753158999179286';
-const BOT_ID   = '1507873568095076425';
+// The acting bot comes from guild_bot_mapping — never pinned here.
 
 // ── Existing identifiers (pre-discovered via Discord REST inventory) ───
 const VERIFIED_ROLE_NAME = 'PACK MEMBERS';     // becomes @Verified
@@ -93,9 +93,9 @@ function staffName(name) {
 }
 
 // ─────────── Boot: decrypt bot token ──────────────────────────────────
-const [botRows] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id = ?', [BOT_ID]);
-if (!botRows.length) { console.error(`Bot row missing (bot_id=${BOT_ID})`); process.exit(1); }
-const TOKEN = encryption.decrypt(JSON.parse(botRows[0].bot_token));
+const bot = await resolveBotForGuild(GUILD_ID, { db: pool });
+const BOT_ID = bot.botId;
+const TOKEN = bot.token;
 
 async function api(method, path, body) {
     await new Promise(r => setTimeout(r, 120));
@@ -295,7 +295,7 @@ for (const c of channels) {
 }
 
 // Streamer-class candidates: the stream signup + any pre-existing curated stream-link channels
-const streamerNamePat = /^(stream-signup|twitch|youtube|kick|tiktok|trovo|facebook|instagram|twitter)$/i;
+const streamerNamePat = /^(stream-signup|twitch|youtube|kick|tiktok|facebook|instagram|twitter)$/i;
 for (const c of channels) {
     if (c.type === 0 && streamerNamePat.test(c.name)) {
         CHANNEL_CLASS_OVERRIDE[c.id] = CLASS.STREAMER;
@@ -727,7 +727,7 @@ await pool.execute(`
     INSERT INTO self_promo_config (guild_id, enabled, channel_id, allowed_platforms, auto_subscribe, delete_invalid, dm_on_track, dm_on_already_tracked, announcement_channel_id, same_channel)
     VALUES (?, 0, ?, ?, 0, 0, 1, 0, ?, 0)
     ON DUPLICATE KEY UPDATE channel_id=VALUES(channel_id), allowed_platforms=VALUES(allowed_platforms), announcement_channel_id=VALUES(announcement_channel_id)`,
-    [GUILD_ID, selfPromoCh?.id, JSON.stringify(['twitch','kick','youtube','tiktok','trovo','facebook']), wolfieLiveCh?.id]
+    [GUILD_ID, selfPromoCh?.id, JSON.stringify(['twitch','kick','youtube','tiktok','facebook']), wolfieLiveCh?.id]
 );
 ok('self_promo_config', 'DISABLED (Lair-tiered — dashboard toggle available later)');
 

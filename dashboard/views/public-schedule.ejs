@@ -1,872 +1,272 @@
-<%- include('partials/modern-header', {
-    pageTitle: event ? event.name + ' - Schedule' : 'Schedule Not Found',
-    additionalCSS: []
-}) %>
-
-<style>
-/* Schedule Page Styles */
-.schedule-page {
-    min-height: 100vh;
-    background: var(--color-dark-800);
-    padding-bottom: var(--spacing-12);
-}
-
-.schedule-container {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: var(--spacing-6);
-}
-
-/* Event Header */
-.event-header {
-    background: var(--gradient-primary);
-    padding: var(--spacing-10) var(--spacing-6);
-    border-radius: var(--radius-xl);
-    margin-bottom: var(--spacing-6);
-    box-shadow: var(--shadow-lg);
-}
-
-.event-header-content {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    flex-wrap: wrap;
-    gap: var(--spacing-6);
-}
-
-.event-info h1 {
-    font-size: var(--font-size-3xl);
-    font-weight: var(--font-weight-bold);
-    color: var(--color-text-primary);
-    margin: 0 0 var(--spacing-2) 0;
-}
-
-.event-description {
-    color: rgba(255, 255, 255, 0.8);
-    font-size: var(--font-size-base);
-    max-width: 600px;
-    margin-bottom: var(--spacing-4);
-}
-
-.event-links {
-    display: flex;
-    gap: var(--spacing-3);
-    flex-wrap: wrap;
-}
-
-.event-link {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--spacing-2);
-    padding: var(--spacing-2) var(--spacing-4);
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: var(--radius-md);
-    color: var(--color-text-primary);
-    text-decoration: none;
-    font-weight: var(--font-weight-medium);
-    transition: all 0.2s ease;
-}
-
-.event-link:hover {
-    background: rgba(255, 255, 255, 0.2);
-    text-decoration: none;
-    color: var(--color-text-primary);
-}
-
-.event-link.twitch {
-    background: #9146ff;
-    border-color: #9146ff;
-}
-
-.event-link.twitch:hover {
-    background: #7c3aed;
-}
-
-/* Ticker Section */
-.ticker-section {
-    background: var(--color-dark-700);
-    border: 1px solid var(--color-dark-400);
-    border-radius: var(--radius-lg);
-    padding: var(--spacing-6);
-    margin-bottom: var(--spacing-6);
-    box-shadow: var(--shadow-md);
-}
-
-.ticker-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: var(--spacing-5);
-}
-
-.ticker-title {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-3);
-    font-size: var(--font-size-xl);
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-primary);
-}
-
-.live-indicator {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--spacing-2);
-    padding: var(--spacing-1) var(--spacing-3);
-    background: rgba(67, 181, 129, 0.2);
-    border-radius: var(--radius-full);
-    font-size: var(--font-size-xs);
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-success);
-    text-transform: uppercase;
-}
-
-.live-indicator::before {
-    content: '';
-    width: 8px;
-    height: 8px;
-    background: var(--color-success);
-    border-radius: 50%;
-    animation: pulse 1.5s ease-in-out infinite;
-}
-
-@keyframes pulse {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50% { opacity: 0.5; transform: scale(0.9); }
-}
-
-.ticker-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: var(--spacing-4);
-}
-
-@media (max-width: 768px) {
-    .ticker-grid {
-        grid-template-columns: 1fr;
-    }
-}
-
-.ticker-card {
-    background: var(--color-dark-600);
-    border: 1px solid var(--color-dark-400);
-    border-radius: var(--radius-md);
-    padding: var(--spacing-4);
-}
-
-.ticker-card.current {
-    border-color: var(--color-success);
-    background: rgba(67, 181, 129, 0.1);
-}
-
-.ticker-card-label {
-    font-size: var(--font-size-xs);
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-muted);
-    text-transform: uppercase;
-    margin-bottom: var(--spacing-2);
-}
-
-.ticker-card.current .ticker-card-label {
-    color: var(--color-success);
-}
-
-.ticker-card-game {
-    font-size: var(--font-size-lg);
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-primary);
-    margin-bottom: var(--spacing-1);
-}
-
-.ticker-card-category {
-    color: var(--color-text-secondary);
-    font-size: var(--font-size-sm);
-}
-
-.ticker-card-runners {
-    color: var(--color-primary-400);
-    font-size: var(--font-size-sm);
-    margin-top: var(--spacing-2);
-}
-
-.ticker-card-time {
-    font-family: var(--font-family-mono);
-    font-size: var(--font-size-xs);
-    color: var(--color-text-muted);
-    margin-top: var(--spacing-2);
-}
-
-/* Progress Section */
-.progress-section {
-    margin-bottom: var(--spacing-6);
-}
-
-.progress-info {
-    display: flex;
-    justify-content: space-between;
-    margin-bottom: var(--spacing-2);
-    font-size: var(--font-size-sm);
-    color: var(--color-text-secondary);
-}
-
-.progress-bar {
-    height: 8px;
-    background: var(--color-dark-600);
-    border-radius: var(--radius-full);
-    overflow: hidden;
-}
-
-.progress-fill {
-    height: 100%;
-    background: var(--gradient-primary);
-    border-radius: var(--radius-full);
-    transition: width 0.5s ease;
-}
-
-/* Schedule Tabs */
-.schedule-tabs {
-    display: flex;
-    gap: var(--spacing-2);
-    margin-bottom: var(--spacing-6);
-    flex-wrap: wrap;
-}
-
-.schedule-tab {
-    padding: var(--spacing-2) var(--spacing-4);
-    background: var(--color-dark-600);
-    border: 1px solid var(--color-dark-400);
-    border-radius: var(--radius-md);
-    color: var(--color-text-secondary);
-    text-decoration: none;
-    font-weight: var(--font-weight-medium);
-    transition: all 0.2s ease;
-}
-
-.schedule-tab:hover {
-    background: var(--color-dark-500);
-    color: var(--color-text-primary);
-    text-decoration: none;
-}
-
-.schedule-tab.active {
-    background: var(--color-primary-500);
-    border-color: var(--color-primary-500);
-    color: var(--color-text-primary);
-}
-
-/* Schedule Table */
-.schedule-table-container {
-    background: var(--color-dark-700);
-    border: 1px solid var(--color-dark-400);
-    border-radius: var(--radius-lg);
-    overflow: hidden;
-    box-shadow: var(--shadow-md);
-}
-
-.schedule-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-.schedule-table th {
-    padding: var(--spacing-4);
-    text-align: left;
-    font-size: var(--font-size-xs);
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    background: var(--color-dark-600);
-    border-bottom: 1px solid var(--color-dark-400);
-}
-
-.schedule-table td {
-    padding: var(--spacing-4);
-    border-bottom: 1px solid var(--color-dark-400);
-    vertical-align: middle;
-}
-
-.schedule-table tbody tr {
-    transition: background 0.2s ease;
-}
-
-.schedule-table tbody tr:hover {
-    background: var(--color-dark-600);
-}
-
-.schedule-table tbody tr:last-child td {
-    border-bottom: none;
-}
-
-.schedule-table tbody tr.status-running {
-    background: rgba(67, 181, 129, 0.15);
-}
-
-.schedule-table tbody tr.status-running td {
-    border-color: rgba(67, 181, 129, 0.3);
-}
-
-.schedule-table tbody tr.status-completed {
-    opacity: 0.5;
-}
-
-.run-position {
-    font-family: var(--font-family-mono);
-    font-weight: var(--font-weight-bold);
-    color: var(--color-text-muted);
-    width: 50px;
-}
-
-.run-game {
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-primary);
-}
-
-.run-category {
-    color: var(--color-text-secondary);
-    font-size: var(--font-size-sm);
-}
-
-.run-runners {
-    color: var(--color-primary-400);
-}
-
-.run-time {
-    font-family: var(--font-family-mono);
-    font-size: var(--font-size-sm);
-}
-
-.run-estimate {
-    color: var(--color-text-primary);
-}
-
-.run-setup {
-    color: var(--color-text-muted);
-    font-size: var(--font-size-xs);
-}
-
-.run-eta {
-    font-family: var(--font-family-mono);
-    font-size: var(--font-size-sm);
-    color: var(--color-text-secondary);
-}
-
-.status-badge {
-    display: inline-block;
-    padding: var(--spacing-1) var(--spacing-2);
-    border-radius: var(--radius-sm);
-    font-size: var(--font-size-xs);
-    font-weight: var(--font-weight-semibold);
-    text-transform: uppercase;
-}
-
-.status-pending { background: var(--color-dark-500); color: var(--color-text-muted); }
-.status-running { background: var(--color-success); color: white; }
-.status-completed { background: var(--color-primary-500); color: white; }
-.status-skipped { background: var(--color-warning); color: black; }
-
-/* Error State */
-.error-state {
-    text-align: center;
-    padding: var(--spacing-16) var(--spacing-6);
-}
-
-.error-state i {
-    font-size: 5rem;
-    color: var(--color-dark-400);
-    margin-bottom: var(--spacing-6);
-}
-
-.error-state h2 {
-    font-size: var(--font-size-2xl);
-    color: var(--color-text-primary);
-    margin-bottom: var(--spacing-3);
-}
-
-.error-state p {
-    color: var(--color-text-secondary);
-    margin-bottom: var(--spacing-6);
-}
-
-.back-link {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--spacing-2);
-    padding: var(--spacing-3) var(--spacing-5);
-    background: var(--color-primary-500);
-    color: var(--color-text-primary);
-    border-radius: var(--radius-md);
-    text-decoration: none;
-    font-weight: var(--font-weight-medium);
-    transition: background 0.2s ease;
-}
-
-.back-link:hover {
-    background: var(--color-primary-600);
-    text-decoration: none;
-    color: var(--color-text-primary);
-}
-
-/* User Bar */
-.user-bar {
-    display: flex;
-    justify-content: flex-end;
-    align-items: center;
-    gap: var(--spacing-4);
-    padding: var(--spacing-3) var(--spacing-6);
-    background: var(--color-dark-700);
-    border-bottom: 1px solid var(--color-dark-400);
-}
-
-.user-bar-inner {
-    max-width: 1200px;
-    width: 100%;
-    margin: 0 auto;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.user-bar-left {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-3);
-}
-
-.user-bar-left a {
-    color: var(--color-text-secondary);
-    text-decoration: none;
-    font-size: var(--font-size-sm);
-    transition: color 0.2s ease;
-}
-
-.user-bar-left a:hover {
-    color: var(--color-text-primary);
-}
-
-.user-bar-right {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-3);
-}
-
-.user-info {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-2);
-}
-
-.user-avatar {
-    width: 32px;
-    height: 32px;
-    border-radius: var(--radius-full);
-    object-fit: cover;
-    border: 2px solid var(--color-primary-500);
-}
-
-.user-name {
-    color: var(--color-text-primary);
-    font-weight: var(--font-weight-medium);
-    font-size: var(--font-size-sm);
-}
-
-.twitch-login-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--spacing-2);
-    padding: var(--spacing-2) var(--spacing-4);
-    background: #9146ff;
-    color: #fff;
-    border-radius: var(--radius-md);
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-medium);
-    text-decoration: none;
-    transition: background 0.2s ease;
-}
-
-.twitch-login-btn:hover {
-    background: #7c3aed;
-    color: #fff;
-    text-decoration: none;
-}
-
-.my-schedules-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--spacing-2);
-    padding: var(--spacing-2) var(--spacing-4);
-    background: var(--color-primary-600);
-    color: #fff;
-    border-radius: var(--radius-md);
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-medium);
-    text-decoration: none;
-    transition: background 0.2s ease;
-}
-
-.my-schedules-btn:hover {
-    background: var(--color-primary-500);
-    color: #fff;
-    text-decoration: none;
-}
-
-.logout-btn {
-    padding: var(--spacing-2) var(--spacing-3);
-    background: var(--color-dark-500);
-    color: var(--color-text-secondary);
-    border-radius: var(--radius-md);
-    font-size: var(--font-size-sm);
-    text-decoration: none;
-    transition: all 0.2s ease;
-}
-
-.logout-btn:hover {
-    background: var(--color-danger-500);
-    color: #fff;
-    text-decoration: none;
-}
-
-/* Responsive */
-@media (max-width: 768px) {
-    .event-info h1 {
-        font-size: var(--font-size-2xl);
-    }
-
-    .event-header-content {
-        flex-direction: column;
-    }
-
-    .schedule-table {
-        font-size: var(--font-size-sm);
-    }
-
-    .schedule-table th,
-    .schedule-table td {
-        padding: var(--spacing-3) var(--spacing-2);
-    }
-
-    .hide-mobile {
-        display: none;
-    }
-
-    .user-bar {
-        padding: var(--spacing-2) var(--spacing-3);
-    }
-
-    .user-bar-inner {
-        flex-direction: column;
-        gap: var(--spacing-2);
-    }
-
-    .user-name {
-        display: none;
-    }
-}
-</style>
-
-<div class="schedule-page">
-    <!-- User Bar -->
-    <div class="user-bar">
-        <div class="user-bar-inner">
-            <div class="user-bar-left">
-                <a href="/"><i class="fas fa-home"></i> Home</a>
-                <a href="/schedule"><i class="fas fa-calendar"></i> Calendar</a>
-            </div>
-            <div class="user-bar-right">
-                <% if (twitchUser) { %>
-                    <div class="user-info">
-                        <img src="<%= twitchUser.avatar %>" alt="<%= twitchUser.display_name %>" class="user-avatar">
-                        <span class="user-name"><%= twitchUser.display_name %></span>
-                    </div>
-                    <a href="/my-schedules" class="my-schedules-btn">
-                        <i class="fas fa-calendar-plus"></i> My Schedules
-                    </a>
-                    <a href="/auth/twitch/logout" class="logout-btn">
-                        <i class="fas fa-sign-out-alt"></i> Logout
-                    </a>
-                <% } else { %>
-                    <a href="/auth/twitch?returnTo=<%= event ? '/schedule/' + event.slug : '/schedule' %>" class="twitch-login-btn">
-                        <i class="fab fa-twitch"></i> Login with Twitch
-                    </a>
-                <% } %>
-            </div>
-        </div>
-    </div>
-
-    <div class="schedule-container">
-        <% if (error || !event) { %>
-            <div class="error-state">
-                <i class="fas fa-calendar-xmark"></i>
-                <h2>Schedule Not Found</h2>
-                <p><%= error || 'The requested event could not be found or is not currently active.' %></p>
-                <a href="/schedule" class="back-link">
-                    <i class="fas fa-arrow-left"></i> Back to Calendar
-                </a>
-            </div>
-        <% } else { %>
-            <!-- Event Header -->
-            <header class="event-header">
-                <div class="event-header-content">
-                    <div class="event-info">
-                        <h1><%= event.name %></h1>
-                        <% if (event.description) { %>
-                            <p class="event-description"><%= event.description %></p>
-                        <% } %>
-                        <div class="event-links">
-                            <a href="/schedule" class="event-link">
-                                <i class="fas fa-arrow-left"></i> Calendar
-                            </a>
-                            <% if (event.twitch_channel) { %>
-                                <a href="https://twitch.tv/<%= event.twitch_channel %>" target="_blank" class="event-link twitch">
-                                    <i class="fab fa-twitch"></i> Watch Live
-                                </a>
-                            <% } %>
-                            <a href="/api/schedule/<%= event.slug %>/export" target="_blank" class="event-link">
-                                <i class="fas fa-download"></i> Export JSON
-                            </a>
-                        </div>
-                    </div>
-                </div>
-            </header>
-
-            <!-- Live Ticker -->
-            <div class="ticker-section" id="ticker">
-                <div class="ticker-header">
-                    <div class="ticker-title">
-                        <i class="fas fa-play-circle"></i>
-                        <span>Now Playing</span>
-                    </div>
-                    <span class="live-indicator">Live</span>
-                </div>
-                <div class="ticker-grid" id="ticker-cards">
-                    <div class="ticker-card">
-                        <div class="ticker-card-label">Previous</div>
-                        <div class="ticker-card-game" id="prev-game">-</div>
-                        <div class="ticker-card-category" id="prev-category"></div>
-                        <div class="ticker-card-runners" id="prev-runners"></div>
-                    </div>
-                    <div class="ticker-card current">
-                        <div class="ticker-card-label">Current Run</div>
-                        <div class="ticker-card-game" id="current-game">-</div>
-                        <div class="ticker-card-category" id="current-category"></div>
-                        <div class="ticker-card-runners" id="current-runners"></div>
-                        <div class="ticker-card-time" id="current-estimate"></div>
-                    </div>
-                    <div class="ticker-card">
-                        <div class="ticker-card-label">Up Next</div>
-                        <div class="ticker-card-game" id="next-game">-</div>
-                        <div class="ticker-card-category" id="next-category"></div>
-                        <div class="ticker-card-runners" id="next-runners"></div>
-                        <div class="ticker-card-time" id="next-eta"></div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Progress -->
-            <div class="progress-section">
-                <div class="progress-info">
-                    <span id="progress-text">0 of <%= items.length %> runs completed</span>
-                    <span id="progress-percent">0%</span>
-                </div>
-                <div class="progress-bar">
-                    <div class="progress-fill" id="progress-fill" style="width: 0%"></div>
-                </div>
-            </div>
-
-            <!-- Schedule Tabs -->
-            <% if (schedules.length > 1) { %>
-                <div class="schedule-tabs">
-                    <% schedules.forEach(schedule => { %>
-                        <a href="/schedule/<%= event.slug %>?schedule=<%= schedule.slug %>"
-                           class="schedule-tab <%= currentSchedule && currentSchedule.id === schedule.id ? 'active' : '' %>">
-                            <%= schedule.name %>
-                        </a>
-                    <% }); %>
-                </div>
-            <% } %>
-
-            <!-- Schedule Table -->
-            <div class="schedule-table-container">
-                <table class="schedule-table">
-                    <thead>
-                        <tr>
-                            <th>#</th>
-                            <th>Game</th>
-                            <th>Runner(s)</th>
-                            <th>Estimate</th>
-                            <th class="hide-mobile">ETA</th>
-                            <th>Status</th>
-                        </tr>
-                    </thead>
-                    <tbody id="runs-tbody">
-                        <% if (items.length === 0) { %>
-                            <tr>
-                                <td colspan="6" style="text-align: center; padding: var(--spacing-10); color: var(--color-text-muted);">
-                                    No runs scheduled yet
-                                </td>
-                            </tr>
-                        <% } else { %>
-                            <% items.forEach((item, index) => { %>
-                                <tr class="status-<%= item.status || 'pending' %>" data-item-id="<%= item.id %>">
-                                    <td class="run-position"><%= item.position %></td>
-                                    <td>
-                                        <div class="run-game"><%= item.game_name %></div>
-                                        <% if (item.category) { %>
-                                            <div class="run-category"><%= item.category %></div>
-                                        <% } %>
-                                    </td>
-                                    <td class="run-runners"><%= item.runners || '-' %></td>
-                                    <td class="run-time">
-                                        <div class="run-estimate"><%= formatTime(item.estimate_seconds) %></div>
-                                        <% if (item.setup_seconds) { %>
-                                            <div class="run-setup">+<%= formatTime(item.setup_seconds) %> setup</div>
-                                        <% } %>
-                                    </td>
-                                    <td class="run-eta hide-mobile">
-                                        <% if (item.estimated_start) { %>
-                                            <%= formatETA(item.estimated_start) %>
-                                        <% } else { %>
-                                            -
-                                        <% } %>
-                                    </td>
-                                    <td>
-                                        <span class="status-badge status-<%= item.status || 'pending' %>">
-                                            <%= item.status || 'pending' %>
-                                        </span>
-                                    </td>
-                                </tr>
-                            <% }); %>
-                        <% } %>
-                    </tbody>
-                </table>
-            </div>
-        <% } %>
-    </div>
-</div>
-
-<%- include('partials/modern-footer') %>
-
-<script>
-    const eventSlug = '<%= event?.slug || "" %>';
-    const scheduleSlug = '<%= currentSchedule?.slug || "" %>';
-
-    function formatTime(seconds) {
-        if (!seconds) return '0:00:00';
-        const h = Math.floor(seconds / 3600);
-        const m = Math.floor((seconds % 3600) / 60);
-        const s = seconds % 60;
-        return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-    }
-
-    function formatETA(dateStr) {
-        const date = new Date(dateStr);
-        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    }
-
-    async function updateTicker() {
-        if (!eventSlug) return;
-
-        try {
-            const url = `/api/schedule/${eventSlug}/ticker${scheduleSlug ? '?schedule=' + scheduleSlug : ''}`;
-            const response = await fetch(url);
-            const data = await response.json();
-
-            if (data.error) return;
-
-            const ticker = data.ticker;
-            if (ticker) {
-                // Previous
-                if (ticker.previous) {
-                    document.getElementById('prev-game').textContent = ticker.previous.game_name;
-                    document.getElementById('prev-category').textContent = ticker.previous.category || '';
-                    document.getElementById('prev-runners').textContent = ticker.previous.runners || '';
-                } else {
-                    document.getElementById('prev-game').textContent = '-';
-                    document.getElementById('prev-category').textContent = '';
-                    document.getElementById('prev-runners').textContent = '';
-                }
-
-                // Current
-                if (ticker.current) {
-                    document.getElementById('current-game').textContent = ticker.current.game_name;
-                    document.getElementById('current-category').textContent = ticker.current.category || '';
-                    document.getElementById('current-runners').textContent = ticker.current.runners || '';
-                    document.getElementById('current-estimate').textContent = 'Est: ' + formatTime(ticker.current.estimate_seconds);
-                } else {
-                    document.getElementById('current-game').textContent = 'No active run';
-                    document.getElementById('current-category').textContent = '';
-                    document.getElementById('current-runners').textContent = '';
-                    document.getElementById('current-estimate').textContent = '';
-                }
-
-                // Next
-                if (ticker.next) {
-                    document.getElementById('next-game').textContent = ticker.next.game_name;
-                    document.getElementById('next-category').textContent = ticker.next.category || '';
-                    document.getElementById('next-runners').textContent = ticker.next.runners || '';
-                    if (ticker.next.estimated_start) {
-                        document.getElementById('next-eta').textContent = 'ETA: ' + formatETA(ticker.next.estimated_start);
-                    }
-                } else {
-                    document.getElementById('next-game').textContent = '-';
-                    document.getElementById('next-category').textContent = '';
-                    document.getElementById('next-runners').textContent = '';
-                    document.getElementById('next-eta').textContent = '';
-                }
-
-                // Progress
-                const percent = ticker.total_runs > 0
-                    ? Math.round((ticker.completed_runs / ticker.total_runs) * 100)
-                    : 0;
-                document.getElementById('progress-text').textContent = `${ticker.completed_runs} of ${ticker.total_runs} runs completed`;
-                document.getElementById('progress-percent').textContent = `${percent}%`;
-                document.getElementById('progress-fill').style.width = `${percent}%`;
-            }
-
-            // Update row statuses
-            if (data.items) {
-                data.items.forEach(item => {
-                    const row = document.querySelector(`tr[data-item-id="${item.id}"]`);
-                    if (row) {
-                        row.className = `status-${item.status || 'pending'}`;
-                        const badge = row.querySelector('.status-badge');
-                        if (badge) {
-                            badge.className = `status-badge status-${item.status || 'pending'}`;
-                            badge.textContent = item.status || 'pending';
-                        }
-                    }
-                });
-            }
-
-        } catch (error) {
-            console.error('Error updating ticker:', error);
-        }
-    }
-
-    // Initial update and set interval
-    if (eventSlug) {
-        updateTicker();
-        setInterval(updateTicker, 30000);
-    }
-</script>
-
-<%
-function formatTime(seconds) {
-    if (!seconds) return '0:00:00';
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = seconds % 60;
-    return `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-}
-
-function formatETA(date) {
-    if (!date) return '-';
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
+<!DOCTYPE html>
+<html data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>" lang="en">
+<head>
+<%#
+  Public event schedule (GET /schedule/:eventSlug, routes/public-schedule.js). Locals: error, event,
+  schedules, currentSchedule, items (with estimated_start Date and position), twitchUser.
+  Start times are printed in UTC by the server and rewritten in the visitor's time zone by the
+  script, which also refreshes the "now" panel and the run statuses from /api/schedule/<slug>/ticker.
 %>
+<%
+    const _twitch = (typeof twitchUser !== 'undefined' && twitchUser) ? twitchUser : null;
+    const _event = (typeof event !== 'undefined' && event) ? event : null;
+    const _error = (typeof error !== 'undefined' && error) ? error : null;
+    const _schedules = (typeof schedules !== 'undefined' && Array.isArray(schedules)) ? schedules : [];
+    const _current = (typeof currentSchedule !== 'undefined' && currentSchedule) ? currentSchedule : null;
+    const _items = (typeof items !== 'undefined' && Array.isArray(items)) ? items : [];
+    const _found = !!_event && !_error;
+    const _dur = (s) => { s = Number(s) || 0; const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60; return h + ':' + String(m).padStart(2, '0') + ':' + String(x).padStart(2, '0'); };
+    const _iso = (d) => { const t = d ? new Date(d) : null; return t && !isNaN(t) ? t.toISOString() : ''; };
+    const _utc = (d) => new Date(d).toLocaleString('en-GB', { weekday: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) + ' UTC';
+    const _statusLabel = { pending: 'Pending', running: 'Running', completed: 'Done', skipped: 'Skipped' };
+    const _statusClass = { running: 'cfs-badge--ok', completed: 'cfs-badge--off', skipped: 'cfs-badge--warn' };
+    let _desc = 'This event schedule does not exist or is not public.';
+    if (_found) {
+        const d = _event.description ? String(_event.description).replace(/\s+/g, ' ').trim() : '';
+        _desc = d ? (d.length > 155 ? d.slice(0, 155).replace(/\s+\S*$/, '') + '…' : d) : 'Run order, estimates and start times for ' + _event.name + '.';
+    }
+    const _completed = _items.filter(i => i.status === 'completed').length;
+    const _pct = _items.length ? Math.round((_completed / _items.length) * 100) : 0;
+    // The "now" panel as of page load, picked the same way as the ticker API does.
+    let _prev = null, _cur = null, _next = null;
+    _items.forEach(i => {
+        if (i.status === 'running') _cur = i;
+        else if (i.status === 'completed') _prev = i;
+        else if (!_cur && !_next && (i.status || 'pending') === 'pending') _next = i;
+    });
+    if (!_cur && _next) { _cur = _next; _next = _items.find(i => (i.status || 'pending') === 'pending' && i.position > _cur.position) || null; }
+%>
+<%- include('partials/site-head', { title: (_found ? _event.name + ' schedule' : 'Schedule not found') + ' · CertiFried', description: _desc, path: _found ? '/schedule/' + encodeURIComponent(_event.slug) : null, noindex: !_found }) %>
+    <style>
+        /* Tap targets: at least 40px tall on every screen size. */
+        main .btn { min-height: 40px; display: inline-flex; align-items: center; justify-content: center; }
+        .sc-account { display: flex; flex-wrap: wrap; align-items: center; gap: var(--cf-2) var(--cf-3); margin-top: var(--cf-4); font-size: var(--cf-text-sm); color: var(--cf-text-2); }
+        .sc-account img { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; }
+        .sc-back { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; margin-bottom: var(--cf-2); font-size: var(--cf-text-sm); color: var(--cf-text-2); text-decoration: none; }
+        .sc-back:hover { color: var(--cf-text); }
 
-<!-- Bootstrap JS -->
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+        .sc-now { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--cf-3); }
+        @media (max-width: 760px) { .sc-now { grid-template-columns: minmax(0, 1fr); } }
+        .sc-run { padding: var(--cf-4); background: var(--cf-surface); border: 1px solid var(--cf-border); border-radius: var(--cf-radius-lg); min-width: 0; }
+        .sc-run.is-current { border-color: var(--cf-accent-line); }
+        .sc-run h3 { margin: 0 0 var(--cf-2); font-size: var(--cf-text-xs); font-weight: 500; color: var(--cf-text-3); }
+        .sc-run .sc-game { margin: 0; font-size: var(--cf-text-lg); font-weight: 600; color: var(--cf-text); overflow-wrap: anywhere; }
+        .sc-run p { margin: 2px 0 0; font-size: var(--cf-text-sm); color: var(--cf-text-2); overflow-wrap: anywhere; }
+        .sc-run p:empty { display: none; }
+        .sc-live-note { margin: var(--cf-3) 0 0; font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+
+        .sc-progress { margin-top: var(--cf-5); }
+        .sc-progress-row { display: flex; justify-content: space-between; gap: var(--cf-3); margin-bottom: 6px; font-size: var(--cf-text-sm); color: var(--cf-text-2); font-variant-numeric: tabular-nums; }
+        .sc-bar { height: 8px; border-radius: 999px; background: var(--cf-surface-2); border: 1px solid var(--cf-border); overflow: hidden; }
+        .sc-bar span { display: block; height: 100%; background: var(--cf-accent); transition: width var(--cf-base) var(--cf-ease); }
+
+        .sc-tabs { display: flex; flex-wrap: wrap; gap: var(--cf-2); margin: 0 0 var(--cf-4); padding: 0; list-style: none; }
+        .sc-tabs a { display: inline-flex; align-items: center; min-height: 40px; padding: 0 14px; border: 1px solid var(--cf-border); border-radius: var(--cf-radius); background: var(--cf-surface); color: var(--cf-text-2); font-size: var(--cf-text-sm); font-weight: 500; text-decoration: none; }
+        .sc-tabs a:hover { color: var(--cf-text); border-color: var(--cf-border-strong); }
+        .sc-tabs a[aria-current="page"] { color: var(--cf-text); background: var(--cf-surface-3); border-color: var(--cf-border-strong); }
+        .sc-tabs a:focus-visible, .sc-back:focus-visible { outline: 2px solid var(--cf-accent); outline-offset: 2px; }
+
+        .sc-table { width: 100%; min-width: 640px; border-collapse: collapse; font-size: var(--cf-text-sm); }
+        .sc-table th, .sc-table td { padding: 10px 12px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--cf-border); }
+        .sc-table th { font-size: var(--cf-text-xs); font-weight: 500; color: var(--cf-text-3); white-space: nowrap; }
+        .sc-table tr:last-child td { border-bottom: 0; }
+        .sc-table td.num { width: 3rem; color: var(--cf-text-3); font-variant-numeric: tabular-nums; }
+        .sc-table .sc-time { white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--cf-text); }
+        .sc-table .sc-sub { display: block; margin-top: 2px; font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+        .sc-table .sc-name { font-weight: 500; color: var(--cf-text); }
+        .sc-table tr.is-running td { background: var(--cf-accent-soft); }
+        .sc-table tr.is-completed .sc-name, .sc-table tr.is-skipped .sc-name { color: var(--cf-text-2); }
+        .sc-tz { margin: var(--cf-3) 0 0; font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+
+        @media print {
+            .cfs-header, .cfs-footer, .sc-account, .sc-back, .cfs-actions-row, #sc-now-section, .sc-tabs { display: none !important; }
+            .cfs-body, .cfs-table-wrap, .sc-table td, .sc-table th { background: #fff !important; color: #111 !important; border-color: #ccc !important; }
+            .sc-table { min-width: 0; }
+        }
+    </style>
+</head>
+<body class="cfs-body">
+<%- include('partials/site-header', { active: '', returnTo: _found ? '/schedule/' + encodeURIComponent(_event.slug) : '/schedule' }) %>
+    <main id="main-content" tabindex="-1" class="cfs-main">
+        <a class="sc-back" href="/schedule"><span aria-hidden="true">&larr;</span> Event calendar</a>
+
+        <% if (!_found) { %>
+            <div class="cfs-pagehead">
+                <h1>Schedule not found</h1>
+                <p class="cfs-lede"><%= _error && _error !== 'Event not found or not active' ? 'The schedule could not be loaded just now. Try again in a minute.' : 'There is no public event at this address. It may have ended, been renamed or been made private.' %></p>
+                <div class="cfs-actions-row"><a class="btn btn-primary" href="/schedule">Browse the event calendar</a></div>
+            </div>
+        <% } else {
+            // A schedule can override the event's stream, website and X account.
+            const liveChannel = (_current && _current.twitch_channel) || _event.twitch_channel;
+            const siteUrl = (_current && _current.website_url) || _event.website_url;
+            const xHandle = String((_current && _current.twitter) || _event.twitter || '').replace(/^@/, '');
+            const slug = encodeURIComponent(_event.slug);
+        %>
+            <div class="cfs-pagehead">
+                <h1><%= _event.name %></h1>
+                <% if (_event.description) { %><p class="cfs-lede"><%= _event.description %></p><% } %>
+                <div class="cfs-actions-row">
+                    <% if (liveChannel) { %><a class="btn btn-primary" href="https://twitch.tv/<%= encodeURIComponent(liveChannel) %>" target="_blank" rel="noopener">Watch on Twitch</a><% } %>
+                    <% if (siteUrl && /^https?:\/\//i.test(siteUrl)) { %><a class="btn btn-secondary" href="<%= siteUrl %>" target="_blank" rel="noopener">Website</a><% } %>
+                    <% if (xHandle) { %><a class="btn btn-secondary" href="https://x.com/<%= encodeURIComponent(xHandle) %>" target="_blank" rel="noopener">@<%= xHandle %> on X</a><% } %>
+                    <a class="btn btn-secondary" href="/api/schedule/<%= slug %>/export" download="<%= _event.slug %>-schedule.json">Download as JSON</a>
+                </div>
+                <div class="sc-account">
+                    <% if (_twitch) { %>
+                        <% if (_twitch.avatar && /^https:\/\//.test(_twitch.avatar)) { %><img src="<%= _twitch.avatar %>" alt="" width="28" height="28" referrerpolicy="no-referrer"><% } %>
+                        <span>Signed in to Twitch as <strong><%= _twitch.display_name || _twitch.login || 'you' %></strong></span>
+                        <a href="/my-schedules" class="btn btn-secondary btn-sm">My schedules</a>
+                        <a href="/auth/twitch/logout" class="btn btn-secondary btn-sm">Log out of Twitch</a>
+                    <% } else { %>
+                        <a href="/auth/twitch?returnTo=/schedule/<%= slug %>" class="btn btn-secondary btn-sm">Log in with Twitch to publish your own schedule</a>
+                    <% } %>
+                </div>
+            </div>
+
+            <section class="cfs-section" id="sc-now-section" aria-labelledby="sc-now-h">
+                <h2 id="sc-now-h">Now</h2>
+                <div class="sc-now" aria-live="polite">
+                    <div class="sc-run">
+                        <h3>Previous</h3>
+                        <p class="sc-game" id="prev-game"><%= _prev ? _prev.game_name : 'None yet' %></p>
+                        <p id="prev-category"><%= _prev && _prev.category || '' %></p>
+                        <p id="prev-runners"><%= _prev && _prev.runners || '' %></p>
+                    </div>
+                    <div class="sc-run is-current">
+                        <h3>Current run</h3>
+                        <p class="sc-game" id="current-game"><%= _cur ? _cur.game_name : 'No run in progress' %></p>
+                        <p id="current-category"><%= _cur && _cur.category || '' %></p>
+                        <p id="current-runners"><%= _cur && _cur.runners || '' %></p>
+                        <p id="current-estimate"><%= _cur ? 'Estimate ' + _dur(_cur.estimate_seconds) : '' %></p>
+                    </div>
+                    <div class="sc-run">
+                        <h3>Up next</h3>
+                        <p class="sc-game" id="next-game"><%= _next ? _next.game_name : 'Nothing after this' %></p>
+                        <p id="next-category"><%= _next && _next.category || '' %></p>
+                        <p id="next-runners"><%= _next && _next.runners || '' %></p>
+                        <p id="next-eta"><% if (_next && _iso(_next.estimated_start)) { %>Starts about <time datetime="<%= _iso(_next.estimated_start) %>" data-local="start"><%= _utc(_next.estimated_start) %></time><% } %></p>
+                    </div>
+                </div>
+                <div class="sc-progress">
+                    <div class="sc-progress-row"><span id="progress-text"><%= _completed %> of <%= _items.length %> runs done</span><span id="progress-percent"><%= _pct %>%</span></div>
+                    <div class="sc-bar" role="progressbar" aria-labelledby="progress-text" aria-valuemin="0" aria-valuemax="100" aria-valuenow="<%= _pct %>" id="progress-bar"><span id="progress-fill" style="width: <%= _pct %>%"></span></div>
+                </div>
+                <p class="sc-live-note" id="sc-live-note">Updates every 30 seconds while this page is open.</p>
+            </section>
+
+            <section class="cfs-section" aria-labelledby="sc-runs-h">
+                <h2 id="sc-runs-h"><%= _schedules.length > 1 && _current ? _current.name : 'Run order' %></h2>
+                <% if (_schedules.length > 1) { %>
+                    <nav aria-label="Schedules in this event">
+                        <ul class="sc-tabs">
+                            <% _schedules.forEach(function (s) { %>
+                            <li><a href="/schedule/<%= slug %>?schedule=<%= encodeURIComponent(s.slug) %>"<% if (_current && _current.id === s.id) { %> aria-current="page"<% } %>><%= s.name %></a></li>
+                            <% }); %>
+                        </ul>
+                    </nav>
+                <% } %>
+
+                <% if (!_items.length) { %>
+                    <div class="cfs-rows"><div class="cfs-empty"><p>No runs have been added to this schedule yet.</p></div></div>
+                <% } else { %>
+                    <div class="cfs-table-wrap">
+                        <table class="sc-table">
+                            <thead>
+                                <tr><th scope="col">#</th><th scope="col">Starts</th><th scope="col">Game</th><th scope="col">Runners</th><th scope="col">Estimate</th><th scope="col">Status</th></tr>
+                            </thead>
+                            <tbody id="runs-tbody">
+                                <% _items.forEach(function (item) {
+                                    const st = _statusLabel[item.status] ? item.status : 'pending';
+                                    const startIso = _iso(item.estimated_start);
+                                %>
+                                <tr class="is-<%= st %>" data-item-id="<%= item.id %>">
+                                    <td class="num"><%= item.position %></td>
+                                    <td><% if (startIso) { %><time class="sc-time" datetime="<%= startIso %>" data-local="start"><%= _utc(item.estimated_start) %></time><% } else { %><span class="sc-sub">Not set</span><% } %></td>
+                                    <td><span class="sc-name"><%= item.game_name %></span><% if (item.category) { %><span class="sc-sub"><%= item.category %></span><% } %></td>
+                                    <td><%= item.runners || '–' %></td>
+                                    <td><span class="sc-time"><%= _dur(item.estimate_seconds) %></span><% if (item.setup_seconds) { %><span class="sc-sub">+<%= _dur(item.setup_seconds) %> setup</span><% } %></td>
+                                    <td><span class="cfs-badge <%= _statusClass[st] || '' %>" data-status><%= _statusLabel[st] %></span></td>
+                                </tr>
+                                <% }); %>
+                            </tbody>
+                        </table>
+                    </div>
+                    <p class="sc-tz" id="sc-tz">Start times are estimates in UTC, from the schedule's start plus each run's estimate and setup.</p>
+                <% } %>
+            </section>
+        <% } %>
+    </main>
+<%- include('partials/site-footer') %>
+<% if (_found) { %>
+<script>
+(function () {
+    var eventSlug = <%- JSON.stringify(String(_event.slug)).replace(/</g, '\\u003c') %>;
+    var scheduleSlug = <%- JSON.stringify(_current && _current.slug ? String(_current.slug) : '').replace(/</g, '\\u003c') %>;
+    var LABEL = { pending: 'Pending', running: 'Running', completed: 'Done', skipped: 'Skipped' };
+    var BADGE = { running: 'cfs-badge--ok', completed: 'cfs-badge--off', skipped: 'cfs-badge--warn' };
+    var $ = function (id) { return document.getElementById(id); };
+
+    function dur(s) {
+        s = Number(s) || 0;
+        var h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60;
+        return h + ':' + String(m).padStart(2, '0') + ':' + String(x).padStart(2, '0');
+    }
+    function localTime(iso) {
+        var d = new Date(iso);
+        return isNaN(d) ? '' : d.toLocaleString(undefined, { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+    }
+
+    // Start times: the server prints UTC; show them in the visitor's time zone.
+    var times = document.querySelectorAll('time[data-local="start"]');
+    times.forEach(function (t) { var s = localTime(t.getAttribute('datetime')); if (s) t.textContent = s; });
+    if (times.length && $('sc-tz')) {
+        var zone = '';
+        try { zone = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch (e) { /* older browsers */ }
+        $('sc-tz').textContent = 'Start times are estimates in your time zone' + (zone ? ' (' + zone + ')' : '') + ", from the schedule's start plus each run's estimate and setup.";
+    }
+
+    function fill(prefix, run, extra) {
+        $(prefix + '-game').textContent = run ? run.game_name : (prefix === 'current' ? 'No run in progress' : prefix === 'prev' ? 'None yet' : 'Nothing after this');
+        $(prefix + '-category').textContent = run && run.category ? run.category : '';
+        $(prefix + '-runners').textContent = run && run.runners ? run.runners : '';
+        if (extra) $(extra.id).textContent = run ? extra.text(run) : '';
+    }
+
+    function update() {
+        var url = '/api/schedule/' + encodeURIComponent(eventSlug) + '/ticker' + (scheduleSlug ? '?schedule=' + encodeURIComponent(scheduleSlug) : '');
+        fetch(url, { cache: 'no-store', credentials: 'same-origin' })
+            .then(function (r) { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+            .then(function (data) {
+                var t = data.ticker;
+                if (t) {
+                    fill('prev', t.previous);
+                    fill('current', t.current, { id: 'current-estimate', text: function (r) { return 'Estimate ' + dur(r.estimate_seconds); } });
+                    fill('next', t.next, { id: 'next-eta', text: function (r) { return r.estimated_start ? 'Starts about ' + localTime(r.estimated_start) : ''; } });
+                    var pct = t.total_runs > 0 ? Math.round((t.completed_runs / t.total_runs) * 100) : 0;
+                    $('progress-text').textContent = t.completed_runs + ' of ' + t.total_runs + ' runs done';
+                    $('progress-percent').textContent = pct + '%';
+                    $('progress-fill').style.width = pct + '%';
+                    $('progress-bar').setAttribute('aria-valuenow', String(pct));
+                }
+                (data.items || []).forEach(function (item) {
+                    var row = document.querySelector('tr[data-item-id="' + item.id + '"]');
+                    if (!row) return;
+                    var st = LABEL[item.status] ? item.status : 'pending';
+                    row.className = 'is-' + st;
+                    var badge = row.querySelector('[data-status]');
+                    if (badge) { badge.className = 'cfs-badge ' + (BADGE[st] || ''); badge.textContent = LABEL[st]; }
+                });
+                $('sc-live-note').textContent = 'Updates every 30 seconds while this page is open.';
+            })
+            .catch(function () {
+                $('sc-live-note').textContent = 'Live updates are not available right now. The run order below is from when the page loaded.';
+            });
+    }
+    update();
+    setInterval(function () { if (!document.hidden) update(); }, 30000);
+})();
+</script>
+<% } %>
 </body>
 </html>

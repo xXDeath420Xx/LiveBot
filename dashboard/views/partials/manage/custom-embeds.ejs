@@ -1,249 +1,451 @@
+<%#
+  Custom embeds: saved embeds (live preview, edit: POST edit-custom-embed, post a draft through the
+  JSON API, copy as JSON, delete: POST delete-custom-embed) and a form to create one (POST
+  create-custom-embed) with a live preview and a JSON import that fills the form.
+  Built on the settings-row kit (cf-settings.css); field names are unchanged. The first saved embed
+  keeps the original field ids (f-custom-embeds-*); the others get their own (cfk-ce-<id>-*), so no
+  two fields share an id. The preview is the shared one (/js/cf-msgpreview.js).
+%>
+<%
+const embedList = typeof customEmbeds !== 'undefined' ? customEmbeds : [];
+const ceRoles = typeof roles !== 'undefined' && roles ? roles : [];
+const ceText = (channels || []).filter(c => c.type === 0 || c.type === 5);
+const ceHex = (v) => /^#[0-9a-f]{6}$/i.test(String(v || '')) ? v : '#a78bfa';
+const ceNames = {
+    channels: Object.fromEntries((channels || []).map(c => [c.id, c.name])),
+    roles: Object.fromEntries(ceRoles.map(r => [r.id, { name: r.name, color: r.hexColor || (typeof r.color === 'number' && r.color ? '#' + r.color.toString(16).padStart(6, '0') : null) }])),
+};
+// Field id for saved embed i: the first keeps the page's original ids.
+const ceId = (i, emb, field) => i === 0 ? `f-custom-embeds-${field}` : `cfk-ce-${emb.id}-${field}`;
+%>
+<style>
+    .cf-rows .ce-item > summary { gap: var(--cf-3) var(--cf-4); font-weight: 400; }
+    .ce-main { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: var(--cf-3); }
+    .ce-main > div { min-width: 0; }
+    .ce-swatch { flex: none; width: 10px; height: 10px; border-radius: 50%; background: var(--cf-border-strong); }
+    .ce-title { display: block; font-weight: 600; color: var(--cf-text); font-size: var(--cf-text-md); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .ce-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px var(--cf-2); margin-top: 2px; font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+    .ce-actions { display: flex; gap: var(--cf-2); flex: none; align-items: center; flex-wrap: wrap; }
+    .ce-actions form { display: inline; margin: 0; }
+    .ce-body { padding: var(--cf-4) var(--cf-5) var(--cf-5); border-top: 1px solid var(--cf-border); display: grid; gap: var(--cf-4);
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+    .ce-body .cf-field-wide { grid-column: 1 / -1; }
+    .ce-body .ce-buttons { display: flex; gap: var(--cf-2); flex-wrap: wrap; margin-top: var(--cf-4); align-items: center; }
+    .ce-pv-wrap { display: grid; gap: var(--cf-2); min-width: 0; position: sticky; top: calc(var(--cf-header-h, 56px) + var(--cf-4)); }
+    .ce-pv-count { font-size: var(--cf-text-xs); color: var(--cf-text-3); font-variant-numeric: tabular-nums; }
+    .ce-pv-count.is-over { color: var(--cf-danger); font-weight: 600; }
+    .cf-rows input[type="color"].ce-color { width: 100%; height: 38px; padding: 3px; cursor: pointer; }
+    .ce-new-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 26rem); gap: var(--cf-6); align-items: start; }
+    .ce-new-grid > .cf-section { margin-bottom: 0; }
+    .ce-new-grid .ce-pv-wrap .cf-section-desc { margin: 0; }
+    .cf-rows .ce-item.is-filtered { display: none; }
+    .ce-import textarea { font-family: var(--cf-mono); font-size: var(--cf-text-xs); }
+    @media (max-width: 1100px) {
+        .ce-body, .ce-new-grid { grid-template-columns: minmax(0, 1fr); }
+        .ce-pv-wrap { position: static; }
+    }
+    @media (max-width: 640px) {
+        .cf-rows .ce-item > summary { flex-direction: column; align-items: stretch; }
+        .cf-rows .ce-item > summary::after { display: none; }
+        .ce-actions { justify-content: flex-end; }
+        .ce-body { padding: var(--cf-4); }
+        .cf-rows input[type="color"].ce-color { height: 44px; }
+    }
+</style>
+
 <div class="page-section">
     <div class="page-section-header">
         <div>
             <div class="page-section-title">
                 <i class="fas fa-newspaper"></i>
-                <span>Custom Embeds</span>
+                <span>Custom embeds</span>
             </div>
             <div class="page-section-subtitle">
-                Create and post rich embed messages to any channel
+                Drafts stay here until you post them; a posted embed can be edited in place.
             </div>
         </div>
     </div>
 
-    <!-- Existing embeds -->
-    <% const embedList = typeof customEmbeds !== 'undefined' ? customEmbeds : []; %>
-    <% if (embedList.length > 0) { %>
-    <div style="margin-bottom: var(--spacing-6);">
-        <h3 style="font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-3);">
-            Embeds (<%= embedList.length %>)
-        </h3>
-        <div style="display: flex; flex-direction: column; gap: 10px;">
-            <% embedList.forEach(emb => { %>
-            <details style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-md); border-left: 4px solid <%= emb.color || '#a78bfa' %>;">
-                <summary style="display: flex; align-items: center; justify-content: space-between; padding: var(--spacing-3) var(--spacing-4); cursor: pointer; list-style: none;">
-                    <div style="flex: 1; min-width: 0;">
-                        <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary); font-size: var(--font-size-sm); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
-                            <%= emb.title || 'Untitled' %>
-                        </div>
-                        <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-top: 2px;">
-                            <% const ch = channels.find(c => c.id === emb.channel_id); %>
-                            #<%= ch ? ch.name : emb.channel_id %> &middot;
-                            <% if (emb.message_id) { %>
-                                <span style="color: var(--accent-green);">Posted</span>
-                            <% } else { %>
-                                <span style="color: var(--color-warning);">Draft</span>
-                            <% } %>
-                            &middot; <%= new Date(emb.created_at).toLocaleDateString() %>
+    <section class="cf-section" aria-labelledby="ce-list-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="ce-list-title">Saved embeds<% if (embedList.length) { %> (<%= embedList.length %>)<% } %></h2>
+                <p class="cf-section-desc">Open an embed to preview and edit it. Deleting one also deletes its message in Discord.</p>
+            </div>
+            <div class="cf-section-actions">
+                <span class="cf-status-line" id="cfk-ce-list-error" role="status" aria-live="polite"></span>
+                <% if (embedList.length > 15) { %>
+                <label class="cf-search">
+                    <i class="fas fa-search" aria-hidden="true"></i>
+                    <input type="search" id="cfk-ce-search" class="form-control" placeholder="Search embeds" aria-label="Search embeds">
+                </label>
+                <% } %>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <% if (embedList.length > 0) { %>
+            <% embedList.forEach((emb, i) => { const ch = channels.find(c => c.id === emb.channel_id); const hex = ceHex(emb.color); %>
+            <details class="ce-item cf-expand" data-ce-id="<%= emb.id %>">
+                <summary>
+                    <div class="ce-main">
+                        <span class="ce-swatch" data-ce-color="<%= hex %>" aria-hidden="true"></span>
+                        <div>
+                            <span class="ce-title"><%= emb.title || (emb.description ? emb.description.slice(0, 60) : 'Untitled') %></span>
+                            <span class="ce-meta">
+                                <span>#<%= ch ? ch.name : emb.channel_id %></span>
+                                <% if (emb.message_id) { %><span class="cf-pill is-ok">Posted</span><% } else { %><span class="cf-pill is-warn">Draft</span><% } %>
+                                <% if (!ch) { %><span class="cf-pill is-bad">Channel not found</span><% } %>
+                                <span><%= new Date(emb.updated_at || emb.created_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) %></span>
+                            </span>
                         </div>
                     </div>
-                    <div style="display: flex; gap: 6px; flex-shrink: 0; margin-left: var(--spacing-3);">
-                        <button type="button" style="background: rgba(167,139,250,0.15); border: 1px solid rgba(167,139,250,0.3); border-radius: var(--radius-md); padding: 6px 12px; color: #a78bfa; cursor: pointer; font-size: 0.75rem;" onclick="event.stopPropagation(); this.closest('details').open = !this.closest('details').open;">
-                            <i class="fas fa-edit"></i> Edit
-                        </button>
+                    <div class="ce-actions">
+                        <button type="button" class="btn btn-sm btn-secondary" onclick="event.stopPropagation(); this.closest('details').open = !this.closest('details').open;">Edit</button>
                         <% if (!emb.message_id) { %>
-                        <button type="button" class="ce-post-btn btn btn-primary" data-id="<%= emb.id %>" style="padding: 6px 12px; font-size: 0.75rem;" onclick="event.stopPropagation();">
-                            <i class="fas fa-paper-plane"></i> Post
-                        </button>
+                        <button type="button" class="ce-post-btn btn btn-sm btn-primary" data-id="<%= emb.id %>" onclick="event.stopPropagation();"><i class="fas fa-paper-plane" aria-hidden="true"></i> Post</button>
                         <% } %>
-                        <form action="/manage/<%= guild.id %>/delete-custom-embed" method="POST" style="display: inline;" onsubmit="event.stopPropagation(); return confirm('Delete this embed and its Discord message?')">
+                        <button type="button" class="ce-json-btn btn btn-sm btn-secondary" data-id="<%= emb.id %>" onclick="event.stopPropagation();">Copy JSON</button>
+                        <form action="/manage/<%= guild.id %>/delete-custom-embed" method="POST" onsubmit="event.stopPropagation(); return confirm('Delete this embed and its Discord message?')">
                             <input type="hidden" name="embedId" value="<%= emb.id %>">
-                            <button type="submit" style="background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.2); border-radius: var(--radius-md); padding: 6px 12px; color: #f87171; cursor: pointer; font-size: 0.75rem;">
-                                <i class="fas fa-trash"></i>
-                            </button>
+                            <button type="submit" class="btn btn-sm btn-danger">Delete</button>
                         </form>
                     </div>
                 </summary>
-                <!-- Expand: preview + edit form -->
-                <div style="padding: 0 var(--spacing-4) var(--spacing-4); border-top: 1px solid var(--color-dark-400);">
-                    <!-- Preview -->
-                    <div style="margin: var(--spacing-3) 0; padding: var(--spacing-3); background: var(--color-dark-700); border-radius: var(--radius-sm); border-left: 4px solid <%= emb.color || '#a78bfa' %>;">
-                        <% if (emb.author_name) { %>
-                        <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
-                            <% if (emb.author_icon_url) { %><img src="<%= emb.author_icon_url %>" style="width: 16px; height: 16px; border-radius: 50%;"><% } %>
-                            <%= emb.author_name %>
-                        </div>
-                        <% } %>
-                        <% if (emb.title) { %>
-                        <div style="font-weight: var(--font-weight-bold); color: var(--accent-purple); font-size: var(--font-size-sm); margin-bottom: 4px;"><%= emb.title %></div>
-                        <% } %>
-                        <% if (emb.description) { %>
-                        <div style="font-size: var(--font-size-xs); color: var(--color-text-secondary); line-height: 1.5; white-space: pre-wrap; word-break: break-word;"><%= emb.description %></div>
-                        <% } %>
-                        <% if (emb.image_url) { %>
-                        <img src="<%= emb.image_url %>" style="max-width: 200px; max-height: 100px; border-radius: var(--radius-sm); margin-top: 6px;">
-                        <% } %>
-                        <% if (emb.footer_text) { %>
-                        <div style="font-size: 0.65rem; color: var(--color-text-muted); margin-top: 6px;"><%= emb.footer_text %></div>
-                        <% } %>
-                    </div>
-                    <!-- Edit form -->
-                    <form action="/manage/<%= guild.id %>/edit-custom-embed" method="POST">
+                <div class="ce-body">
+                    <form action="/manage/<%= guild.id %>/edit-custom-embed" method="POST" class="ce-form">
                         <input type="hidden" name="embedId" value="<%= emb.id %>">
-                        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 8px; margin-bottom: 8px;">
-                            <div>
-                                <label class="form-label" style="font-size: 0.7rem;">Channel</label>
-                                <select name="channel_id" class="form-select" style="font-size: 0.75rem; padding: 4px 8px;">
-                                    <% channels.forEach(c => { %>
-                                    <option value="<%= c.id %>" <%= c.id === emb.channel_id ? 'selected' : '' %>>#<%= c.name %></option>
+                        <div class="cf-fields">
+                            <div class="cf-field">
+                                <label for="<%= ceId(i, emb, 'channel_id') %>">Channel</label>
+                                <select id="<%= ceId(i, emb, 'channel_id') %>" name="channel_id" class="form-select">
+                                    <% if (!ceText.some(c => c.id === emb.channel_id)) { %><option value="<%= emb.channel_id %>" selected>#<%= ch ? ch.name : 'deleted channel' %></option><% } %>
+                                    <% ceText.forEach(c => { %>
+                                    <option value="<%= c.id %>" data-kind="text" <%= c.id === emb.channel_id ? 'selected' : '' %>>#<%= c.name %></option>
                                     <% }); %>
                                 </select>
                             </div>
-                            <div>
-                                <label class="form-label" style="font-size: 0.7rem;">Color</label>
-                                <input type="color" name="color" value="<%= emb.color || '#a78bfa' %>" style="width: 100%; height: 30px; cursor: pointer; border-radius: 4px;">
+                            <div class="cf-field">
+                                <label for="<%= ceId(i, emb, 'color') %>">Colour</label>
+                                <input id="<%= ceId(i, emb, 'color') %>" type="color" name="color" class="form-control ce-color" value="<%= hex %>">
+                            </div>
+                            <div class="cf-field">
+                                <label for="<%= ceId(i, emb, 'title') %>">Title</label>
+                                <input id="<%= ceId(i, emb, 'title') %>" type="text" name="title" class="form-control" value="<%= emb.title || '' %>" maxlength="256">
+                            </div>
+                            <div class="cf-field">
+                                <label for="<%= ceId(i, emb, 'url') %>">Title link</label>
+                                <input id="<%= ceId(i, emb, 'url') %>" type="text" inputmode="url" name="url" class="form-control" value="<%= emb.url || '' %>" maxlength="2048" placeholder="https://">
+                            </div>
+                            <div class="cf-field cf-field-wide">
+                                <label for="<%= ceId(i, emb, 'description') %>">Description</label>
+                                <textarea id="<%= ceId(i, emb, 'description') %>" name="description" class="form-control" rows="5" maxlength="4096"><%= emb.description || '' %></textarea>
+                            </div>
+                            <div class="cf-field">
+                                <label for="<%= ceId(i, emb, 'author_name') %>">Author name</label>
+                                <input id="<%= ceId(i, emb, 'author_name') %>" type="text" name="author_name" class="form-control" value="<%= emb.author_name || '' %>" maxlength="256">
+                            </div>
+                            <div class="cf-field">
+                                <label for="<%= ceId(i, emb, 'author_icon_url') %>">Author icon URL</label>
+                                <input id="<%= ceId(i, emb, 'author_icon_url') %>" type="text" inputmode="url" name="author_icon_url" class="form-control" value="<%= emb.author_icon_url || '' %>" maxlength="2048" placeholder="https://">
+                            </div>
+                            <div class="cf-field">
+                                <label for="<%= ceId(i, emb, 'thumbnail_url') %>">Thumbnail URL</label>
+                                <input id="<%= ceId(i, emb, 'thumbnail_url') %>" type="text" inputmode="url" name="thumbnail_url" class="form-control" value="<%= emb.thumbnail_url || '' %>" maxlength="2048" placeholder="https://">
+                            </div>
+                            <div class="cf-field">
+                                <label for="<%= ceId(i, emb, 'image_url') %>">Image URL</label>
+                                <input id="<%= ceId(i, emb, 'image_url') %>" type="text" inputmode="url" name="image_url" class="form-control" value="<%= emb.image_url || '' %>" maxlength="2048" placeholder="https://">
+                            </div>
+                            <div class="cf-field cf-field-wide">
+                                <label for="<%= ceId(i, emb, 'footer_text') %>">Footer</label>
+                                <input id="<%= ceId(i, emb, 'footer_text') %>" type="text" name="footer_text" class="form-control" value="<%= emb.footer_text || '' %>" maxlength="2048">
                             </div>
                         </div>
-                        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 8px; margin-bottom: 8px;">
-                            <div>
-                                <label class="form-label" style="font-size: 0.7rem;">Title</label>
-                                <input type="text" name="title" class="form-control" value="<%= emb.title || '' %>" style="font-size: 0.75rem; padding: 4px 8px;" maxlength="256">
-                            </div>
-                            <div>
-                                <label class="form-label" style="font-size: 0.7rem;">Title URL</label>
-                                <input type="text" name="url" class="form-control" value="<%= emb.url || '' %>" style="font-size: 0.75rem; padding: 4px 8px;">
-                            </div>
-                        </div>
-                        <div style="margin-bottom: 8px;">
-                            <label class="form-label" style="font-size: 0.7rem;">Description</label>
-                            <textarea name="description" class="form-control" rows="3" style="font-size: 0.75rem; padding: 4px 8px; resize: vertical;"><%= emb.description || '' %></textarea>
-                        </div>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
-                            <div>
-                                <label class="form-label" style="font-size: 0.7rem;">Author Name</label>
-                                <input type="text" name="author_name" class="form-control" value="<%= emb.author_name || '' %>" style="font-size: 0.75rem; padding: 4px 8px;" maxlength="256">
-                            </div>
-                            <div>
-                                <label class="form-label" style="font-size: 0.7rem;">Author Icon URL</label>
-                                <input type="text" name="author_icon_url" class="form-control" value="<%= emb.author_icon_url || '' %>" style="font-size: 0.75rem; padding: 4px 8px;">
-                            </div>
-                        </div>
-                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px;">
-                            <div>
-                                <label class="form-label" style="font-size: 0.7rem;">Thumbnail URL</label>
-                                <input type="text" name="thumbnail_url" class="form-control" value="<%= emb.thumbnail_url || '' %>" style="font-size: 0.75rem; padding: 4px 8px;">
-                            </div>
-                            <div>
-                                <label class="form-label" style="font-size: 0.7rem;">Image URL</label>
-                                <input type="text" name="image_url" class="form-control" value="<%= emb.image_url || '' %>" style="font-size: 0.75rem; padding: 4px 8px;">
-                            </div>
-                        </div>
-                        <div style="margin-bottom: 8px;">
-                            <label class="form-label" style="font-size: 0.7rem;">Footer Text</label>
-                            <input type="text" name="footer_text" class="form-control" value="<%= emb.footer_text || '' %>" style="font-size: 0.75rem; padding: 4px 8px;">
-                        </div>
-                        <div style="display: flex; gap: 8px;">
-                            <button type="submit" name="action" value="save" class="btn btn-primary" style="font-size: 0.75rem; padding: 6px 14px;">
-                                <i class="fas fa-save"></i> Save Changes
-                            </button>
+                        <div class="ce-buttons">
+                            <button type="submit" name="action" value="save" class="btn btn-primary">Save</button>
                             <% if (emb.message_id) { %>
-                            <button type="submit" name="action" value="update_discord" class="btn btn-secondary" style="font-size: 0.75rem; padding: 6px 14px;">
-                                <i class="fas fa-sync"></i> Save & Update Discord Message
-                            </button>
+                            <button type="submit" name="action" value="update_discord" class="btn btn-secondary">Save and update the Discord message</button>
+                            <a class="btn btn-secondary" href="https://discord.com/channels/<%= guild.id %>/<%= emb.channel_id %>/<%= emb.message_id %>" target="_blank" rel="noopener">Open in Discord</a>
                             <% } %>
                         </div>
                     </form>
+                    <div class="ce-pv-wrap">
+                        <div class="ce-pv" aria-live="polite"></div>
+                        <span class="ce-pv-count"></span>
+                    </div>
                 </div>
             </details>
             <% }); %>
+            <% if (embedList.length > 15) { %>
+            <div class="cf-state cf-state--compact" id="cfk-ce-search-empty" hidden><p class="cf-state-text">No embeds match the search.</p></div>
+            <% } %>
+            <% } else { %>
+            <%- include('../kit/_state', { kind: 'empty', title: 'No embeds yet', text: 'Create one below. Save it as a draft or post it straight away.', id: null, boxed: false, compact: false }) %>
+            <% } %>
         </div>
-    </div>
-    <% } %>
+    </section>
 
-    <!-- Create new embed -->
-    <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6);">
-        <h3 style="font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
-            <i class="fas fa-plus" style="color: var(--accent-purple); margin-right: var(--spacing-2);"></i>
-            Create Embed
-        </h3>
-
-        <div id="ce-error" style="display: none; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); border-radius: var(--radius-md); padding: var(--spacing-3); margin-bottom: var(--spacing-4); color: var(--color-danger); font-size: var(--font-size-sm);"></div>
-
-        <form action="/manage/<%= guild.id %>/create-custom-embed" method="POST">
-            <!-- Row 1: Channel + Color -->
-            <div style="display: grid; grid-template-columns: 2fr 1fr; gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
+    <div class="ce-new-grid">
+    <form action="/manage/<%= guild.id %>/create-custom-embed" method="POST" class="ce-form" id="cfk-ce-new-rows">
+        <section class="cf-section" aria-labelledby="ce-new-title">
+            <header class="cf-section-head">
                 <div>
-                    <label class="form-label">Post to Channel</label>
-                    <select name="channel_id" class="form-select" required>
-                        <option value="">Select channel...</option>
-                        <% channels.forEach(ch => { %>
-                        <option value="<%= ch.id %>">#<%= ch.name %></option>
-                        <% }); %>
-                    </select>
+                    <h2 class="cf-section-title" id="ce-new-title">New embed</h2>
+                    <p class="cf-section-desc">A channel and a title or description are required. Empty fields are left out.</p>
                 </div>
-                <div>
-                    <label class="form-label">Embed Color</label>
-                    <input type="color" name="color" value="#a78bfa" class="form-control" style="height: 42px; cursor: pointer;">
+            </header>
+            <div id="ce-error" class="ce-error cf-notice is-bad" role="alert" hidden></div>
+            <div class="cf-rows">
+                <details class="cf-expand ce-import">
+                    <summary>Start from JSON</summary>
+                    <div class="cf-expand-body">
+                        <div class="cf-fields">
+                            <div class="cf-field">
+                                <label for="cfk-ce-import">Embed JSON</label>
+                                <textarea id="cfk-ce-import" class="form-control" rows="5" placeholder='{"title": "Rules", "description": "Be kind.", "color": 3908956}'></textarea>
+                                <span class="cf-field-hint">An embed object, or a message with an "embeds" list (the first embed is used). Fields and buttons are not supported yet and are skipped.</span>
+                            </div>
+                        </div>
+                        <div class="ce-buttons">
+                            <button type="button" class="btn btn-secondary btn-sm" id="cfk-ce-import-btn">Fill the form</button>
+                            <span class="cf-status-line" id="cfk-ce-import-error" role="status" aria-live="polite"></span>
+                        </div>
+                    </div>
+                </details>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-custom-embeds-channel_id-2">Channel</label>
+                        <p class="cf-row-desc">Where the embed is posted.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <select id="f-custom-embeds-channel_id-2" name="channel_id" class="form-select" required>
+                            <option value="">Choose a channel</option>
+                            <% ceText.forEach(ch => { %>
+                            <option value="<%= ch.id %>" data-kind="text">#<%= ch.name %></option>
+                            <% }); %>
+                        </select>
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-custom-embeds-color-2">Colour</label>
+                        <p class="cf-row-desc">The stripe down the left of the embed.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input id="f-custom-embeds-color-2" type="color" name="color" value="#a78bfa" class="form-control ce-color">
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-custom-embeds-title-2">Title</label>
+                    </div>
+                    <div class="cf-row-control">
+                        <input id="f-custom-embeds-title-2" type="text" name="title" class="form-control" placeholder="Server rules" maxlength="256">
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-custom-embeds-url-2">Title link</label>
+                        <p class="cf-row-desc">Optional. Makes the title a link.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input id="f-custom-embeds-url-2" type="text" inputmode="url" name="url" class="form-control" placeholder="https://" maxlength="2048">
+                    </div>
+                </div>
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-custom-embeds-description-2">Description</label>
+                        <p class="cf-row-desc" id="f-custom-embeds-description-2-desc">Discord formatting works: **bold**, *italic*, ~~strikethrough~~, `code`, [links](url), headings with #, and mentions such as &lt;#channel id&gt;.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <textarea id="f-custom-embeds-description-2" name="description" class="form-control" rows="6" maxlength="4096" aria-describedby="f-custom-embeds-description-2-desc"></textarea>
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-custom-embeds-author_name-2">Author name</label>
+                        <p class="cf-row-desc">Optional. Small text above the title.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input id="f-custom-embeds-author_name-2" type="text" name="author_name" class="form-control" maxlength="256">
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-custom-embeds-author_icon_url-2">Author icon URL</label>
+                        <p class="cf-row-desc">Optional. A small round image next to the author name.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input id="f-custom-embeds-author_icon_url-2" type="text" inputmode="url" name="author_icon_url" class="form-control" placeholder="https://" maxlength="2048">
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-custom-embeds-thumbnail_url-2">Thumbnail URL</label>
+                        <p class="cf-row-desc">Optional. A small image at the top right.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input id="f-custom-embeds-thumbnail_url-2" type="text" inputmode="url" name="thumbnail_url" class="form-control" placeholder="https://" maxlength="2048">
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-custom-embeds-image_url-2">Image URL</label>
+                        <p class="cf-row-desc">Optional. A large image at the bottom.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input id="f-custom-embeds-image_url-2" type="text" inputmode="url" name="image_url" class="form-control" placeholder="https://" maxlength="2048">
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-custom-embeds-footer_text-2">Footer</label>
+                        <p class="cf-row-desc">Optional. Small text at the bottom, next to the time it was posted.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input id="f-custom-embeds-footer_text-2" type="text" name="footer_text" class="form-control" maxlength="2048">
+                    </div>
+                </div>
+                <div class="cf-section-foot">
+                    <button type="submit" name="action" value="draft" class="btn btn-secondary">Save as draft</button>
+                    <button type="submit" name="action" value="post" class="btn btn-primary">Create and post</button>
                 </div>
             </div>
-
-            <!-- Row 2: Title + URL -->
-            <div style="display: grid; grid-template-columns: 2fr 1fr; gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
+        </section>
+    </form>
+        <section class="cf-section ce-pv-wrap" aria-labelledby="cfk-ce-pv-title">
+            <header class="cf-section-head">
                 <div>
-                    <label class="form-label">Title</label>
-                    <input type="text" name="title" class="form-control" placeholder="Embed title" maxlength="256">
+                    <h2 class="cf-section-title" id="cfk-ce-pv-title">Preview</h2>
+                    <p class="cf-section-desc">Close to what Discord shows; mentions show as names.</p>
                 </div>
-                <div>
-                    <label class="form-label">Title URL <span style="font-weight:400;color:var(--color-text-muted);">(optional)</span></label>
-                    <input type="text" name="url" class="form-control" placeholder="https://...">
-                </div>
-            </div>
-
-            <!-- Description -->
-            <div style="margin-bottom: var(--spacing-4);">
-                <label class="form-label">Description</label>
-                <textarea name="description" class="form-control" rows="4" placeholder="Embed description — supports Discord markdown" style="resize: vertical;"></textarea>
-                <div class="form-help">Supports **bold**, *italic*, ~~strikethrough~~, `code`, [links](url), and Discord emoji</div>
-            </div>
-
-            <!-- Author -->
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
-                <div>
-                    <label class="form-label">Author Name <span style="font-weight:400;color:var(--color-text-muted);">(optional)</span></label>
-                    <input type="text" name="author_name" class="form-control" placeholder="Author text above title" maxlength="256">
-                </div>
-                <div>
-                    <label class="form-label">Author Icon URL <span style="font-weight:400;color:var(--color-text-muted);">(optional)</span></label>
-                    <input type="text" name="author_icon_url" class="form-control" placeholder="https://...">
-                </div>
-            </div>
-
-            <!-- Images -->
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
-                <div>
-                    <label class="form-label">Thumbnail URL <span style="font-weight:400;color:var(--color-text-muted);">(optional)</span></label>
-                    <input type="text" name="thumbnail_url" class="form-control" placeholder="Small image top-right">
-                </div>
-                <div>
-                    <label class="form-label">Image URL <span style="font-weight:400;color:var(--color-text-muted);">(optional)</span></label>
-                    <input type="text" name="image_url" class="form-control" placeholder="Large image at bottom">
-                </div>
-            </div>
-
-            <!-- Footer -->
-            <div style="margin-bottom: var(--spacing-6);">
-                <label class="form-label">Footer Text <span style="font-weight:400;color:var(--color-text-muted);">(optional)</span></label>
-                <input type="text" name="footer_text" class="form-control" placeholder="Small text at the bottom">
-            </div>
-
-            <!-- Action buttons -->
-            <div style="display: flex; gap: var(--spacing-3);">
-                <button type="submit" name="action" value="post" class="btn btn-primary">
-                    <i class="fas fa-paper-plane"></i>
-                    <span>Create & Post</span>
-                </button>
-                <button type="submit" name="action" value="draft" class="btn btn-secondary">
-                    <i class="fas fa-save"></i>
-                    <span>Save as Draft</span>
-                </button>
-            </div>
-        </form>
+            </header>
+            <div class="ce-pv" id="cfk-ce-new-preview" aria-live="polite"></div>
+            <span class="ce-pv-count"></span>
+        </section>
     </div>
 </div>
 
+<script src="/js/cf-msgpreview.js"></script>
+<script type="application/json" id="cfk-ce-names"><%- JSON.stringify(ceNames).replace(/</g, '\\u003c') %></script>
 <script>
 (function() {
     var guildId = '<%= guild.id %>';
+    var names = {};
+    try { names = JSON.parse(document.getElementById('cfk-ce-names').textContent || '{}'); } catch (e) { names = {}; }
+    var LIMIT = 6000;   // Discord's limit for all the text in one embed
+
+    function listStatus(text, tone) {
+        var box = document.getElementById('cfk-ce-list-error');
+        if (!box) return;
+        box.textContent = text || '';
+        box.className = 'cf-status-line' + (text && tone ? ' is-' + tone : '');
+    }
+
+    // Swatches: the colour comes from data, so it is checked before it is used.
+    document.querySelectorAll('.ce-swatch[data-ce-color]').forEach(function (sw) {
+        var c = sw.getAttribute('data-ce-color');
+        if (/^#[0-9a-f]{6}$/i.test(c)) sw.style.background = c;
+    });
+
+    // An embed read from one of the forms (create or edit), in Discord's shape.
+    function read(form) {
+        function v(name) { var f = form.querySelector('[name="' + name + '"]'); return f ? f.value : ''; }
+        return {
+            color: v('color'), title: v('title'), url: v('url'), description: v('description'),
+            author: { name: v('author_name'), icon_url: v('author_icon_url') },
+            thumbnail: v('thumbnail_url'), image: v('image_url'), footer: { text: v('footer_text') },
+            timestamp: form.getAttribute('action').indexOf('create-custom-embed') !== -1,
+        };
+    }
+    function size(e) { return (e.title || '').length + (e.description || '').length + (e.author.name || '').length + (e.footer.text || '').length; }
+
+    function wire(form, box, count) {
+        function paint() {
+            var e = read(form);
+            if (window.cfDiscordPreview) window.cfDiscordPreview.render(box, { embeds: [e], names: names, emptyText: 'Add a title or description to see the embed.' });
+            if (count) {
+                var n = size(e);
+                count.textContent = n + ' / ' + LIMIT + ' characters';
+                count.classList.toggle('is-over', n > LIMIT);
+            }
+        }
+        form.addEventListener('input', paint);
+        form.addEventListener('change', paint);
+        paint();
+        return paint;
+    }
+
+    document.querySelectorAll('details.ce-item').forEach(function (item) {
+        var form = item.querySelector('form.ce-form');
+        var wrap = item.querySelector('.ce-pv-wrap');
+        if (form && wrap) wire(form, wrap.querySelector('.ce-pv'), wrap.querySelector('.ce-pv-count'));
+    });
+    var newForm = document.getElementById('cfk-ce-new-rows');
+    var newPreview = document.getElementById('cfk-ce-new-preview');
+    var paintNew = newForm && newPreview ? wire(newForm, newPreview, newPreview.parentNode.querySelector('.ce-pv-count')) : null;
+
+    // The new-embed form needs a title or a description (the server refuses one without).
+    if (newForm) newForm.addEventListener('submit', function (ev) {
+        var e = read(newForm);
+        var err = document.getElementById('ce-error');
+        var problem = !e.title.trim() && !e.description.trim() ? 'Add a title or a description.'
+            : size(e) > LIMIT ? 'The embed has more than ' + LIMIT + ' characters of text.' : '';
+        err.hidden = !problem;
+        err.textContent = problem;
+        if (problem) { ev.preventDefault(); err.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+    });
+
+    // Copy a saved embed as Discord embed JSON (for backups or other tools).
+    document.querySelectorAll('.ce-json-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var form = btn.closest('details').querySelector('form.ce-form');
+            var e = read(form);
+            var out = {};
+            if (e.title) out.title = e.title;
+            if (e.url) out.url = e.url;
+            if (e.description) out.description = e.description;
+            if (/^#[0-9a-f]{6}$/i.test(e.color)) out.color = parseInt(e.color.slice(1), 16);
+            if (e.author.name) out.author = e.author.icon_url ? { name: e.author.name, icon_url: e.author.icon_url } : { name: e.author.name };
+            if (e.thumbnail) out.thumbnail = { url: e.thumbnail };
+            if (e.image) out.image = { url: e.image };
+            if (e.footer.text) out.footer = { text: e.footer.text };
+            var text = JSON.stringify(out, null, 2);
+            (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject(new Error('no clipboard')))
+                .then(function () { listStatus('Copied the embed JSON.', 'ok'); })
+                .catch(function () { window.prompt('Copy the embed JSON:', text); });
+        });
+    });
+
+    // Fill the new-embed form from pasted JSON.
+    var importBtn = document.getElementById('cfk-ce-import-btn');
+    if (importBtn && newForm) importBtn.addEventListener('click', function () {
+        var status = document.getElementById('cfk-ce-import-error');
+        function say(text, tone) { status.textContent = text; status.className = 'cf-status-line is-' + tone; }
+        var data;
+        try { data = JSON.parse(document.getElementById('cfk-ce-import').value); } catch (e) { return say('That is not valid JSON.', 'bad'); }
+        var e = data && Array.isArray(data.embeds) ? data.embeds[0] : data;
+        if (!e || typeof e !== 'object' || Array.isArray(e)) return say('No embed found in that JSON.', 'bad');
+        function set(name, value) { var f = newForm.querySelector('[name="' + name + '"]'); if (f) f.value = value == null ? '' : String(value); }
+        function str(x) { return typeof x === 'string' ? x : ''; }
+        set('title', str(e.title).slice(0, 256));
+        set('url', str(e.url));
+        set('description', str(e.description).slice(0, 4096));
+        var colour = typeof e.color === 'number' ? '#' + (e.color >>> 0).toString(16).padStart(6, '0').slice(-6)
+            : /^#?[0-9a-f]{6}$/i.test(str(e.color)) ? '#' + str(e.color).replace('#', '') : null;
+        if (colour) set('color', colour);
+        set('author_name', e.author ? str(e.author.name).slice(0, 256) : '');
+        set('author_icon_url', e.author ? str(e.author.icon_url) : '');
+        set('thumbnail_url', e.thumbnail ? str(e.thumbnail.url) : '');
+        set('image_url', e.image ? str(e.image.url) : '');
+        set('footer_text', e.footer ? str(e.footer.text).slice(0, 2048) : '');
+        if (paintNew) paintNew();
+        var skipped = [];
+        if (Array.isArray(e.fields) && e.fields.length) skipped.push(e.fields.length + ' field' + (e.fields.length === 1 ? '' : 's'));
+        if (data && Array.isArray(data.embeds) && data.embeds.length > 1) skipped.push((data.embeds.length - 1) + ' more embed' + (data.embeds.length > 2 ? 's' : ''));
+        if (data && Array.isArray(data.components) && data.components.length) skipped.push('buttons');
+        say(skipped.length ? 'Filled. Skipped: ' + skipped.join(', ') + '.' : 'Filled. Check the preview, then save.', skipped.length ? 'warn' : 'ok');
+    });
 
     // Post draft embeds
     document.querySelectorAll('.ce-post-btn').forEach(function(btn) {
@@ -251,19 +453,31 @@
             var id = btn.getAttribute('data-id');
             btn.disabled = true;
             btn.querySelector('i').className = 'fas fa-spinner fa-spin';
-            fetch('/api/guilds/' + guildId + '/custom-embeds/' + id + '/post', { method: 'POST' })
+            function failed(message) {
+                listStatus(message, 'bad');
+                btn.disabled = false;
+                btn.querySelector('i').className = 'fas fa-paper-plane';
+            }
+            fetch('/api/guilds/' + guildId + '/custom-embeds/' + id + '/post', { method: 'POST', credentials: 'same-origin' })
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 if (data.success) { window.location.reload(); }
-                else { alert(data.error || 'Failed to post'); btn.disabled = false; btn.querySelector('i').className = 'fas fa-paper-plane'; }
+                else failed(data.error || 'Could not post the embed.');
             })
-            .catch(function() { alert('Network error'); btn.disabled = false; btn.querySelector('i').className = 'fas fa-paper-plane'; });
+            .catch(function() { failed('Could not reach the dashboard. Try again.'); });
         });
+    });
+
+    var search = document.getElementById('cfk-ce-search');
+    if (search) search.addEventListener('input', function () {
+        var q = search.value.trim().toLowerCase();
+        var shown = 0;
+        document.querySelectorAll('details.ce-item').forEach(function (item) {
+            var hit = !q || item.querySelector('summary').textContent.toLowerCase().indexOf(q) !== -1;
+            item.classList.toggle('is-filtered', !hit);
+            if (hit) shown++;
+        });
+        document.getElementById('cfk-ce-search-empty').hidden = shown > 0;
     });
 })();
 </script>
-
-<style>
-.form-label { display: block; font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-2); }
-.form-help { font-size: var(--font-size-xs); color: var(--color-text-muted); margin-top: var(--spacing-2); }
-</style>

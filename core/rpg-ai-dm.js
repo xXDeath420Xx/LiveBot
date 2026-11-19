@@ -9,6 +9,9 @@ import { pool } from '../utils/db.js';
 import logger from '../utils/logger.js';
 import RPGDiceEngine from './rpg-dice-engine.js';
 import RPGStateManager from './rpg-state-manager.js';
+import RPGWorldMemory from './rpg-world-memory.js';
+import RPGLeaderboardManager from './rpg-leaderboard-manager.js';
+import { parseQuestTag, renderQuestEvent, buildWorldPromptSection, isRealLocation } from './rpg-world-tags.js';
 
 // Initialize Gemini client
 const genAI = new GoogleGenerativeAI(process.env.GOOGLE_API_KEY || '');
@@ -92,8 +95,10 @@ class RPGAiDungeonMaster {
 
     /**
      * Generate the system prompt for the AI DM
+     * @param {object|null} world RPGWorldMemory.loadWorld() result — the campaign's persisted quest
+     *        log, NPCs, places and environment. Null when unavailable (falls back to the session row).
      */
-    static buildSystemPrompt(campaign, session, characters) {
+    static buildSystemPrompt(campaign, session, characters, world = null) {
         const personality = DM_PERSONALITIES[campaign.ai_personality] || DM_PERSONALITIES.classic;
         const setting = CAMPAIGN_SETTINGS[campaign.setting?.toLowerCase().replace(/ /g, '_')] || CAMPAIGN_SETTINGS.forgotten_realms;
 
@@ -125,6 +130,7 @@ Difficulty: ${campaign.difficulty || 'Normal'}
 11. When player SPENDS gold (buying items, paying fees, etc), use format: {{SPEND_GOLD:amount}}
 12. When location changes, use format: {{LOCATION:new_location_name}}
 13. When introducing an NPC, use format: {{NPC:name:brief_description}}
+14. When a quest is offered, advances, or ends, use format: {{QUEST:quest_name:START|UPDATE|COMPLETE|FAIL:short_detail}}
 
 ## D&D 5E DIFFICULTY CLASS (DC) GUIDELINES
 - DC 5: Very Easy (nearly automatic)
@@ -233,6 +239,13 @@ The system automatically tracks game state. You MUST use these tags for ALL stat
 - Time change: {{TIME:dawn/day/dusk/night}}
 - Weather: {{WEATHER:condition}}
 
+### Quest Log (persisted for the whole campaign)
+- New quest offered/accepted: {{QUEST:quest_name:START:one-line goal}} - e.g., "{{QUEST:The Missing Miller:START:Find the miller's son in the Whispering Woods}}"
+- Progress on a quest: {{QUEST:quest_name:UPDATE:what changed}} - e.g., "{{QUEST:The Missing Miller:UPDATE:Tracks lead north to the old mill}}"
+- Quest resolved: {{QUEST:quest_name:COMPLETE}} or {{QUEST:quest_name:FAIL}}
+- Use the EXACT same quest_name every time. Completing a side quest does NOT end the game — only {{GAME_OVER}} does.
+- Keep NPC names consistent with the Known NPCs list below; reuse them rather than inventing new ones for the same role.
+
 ### Game End
 - When the character DIES or the quest ENDS (success or failure): {{GAME_OVER:reason}}
   - Examples: {{GAME_OVER:character_death}}, {{GAME_OVER:quest_complete}}, {{GAME_OVER:quest_failed}}
@@ -285,7 +298,9 @@ ${char.backstory ? `- Background: ${char.backstory.substring(0, 200)}...` : ''}`
             if (state.location !== 'Unknown Location') {
                 prompt += `\n\n## Current Location: ${state.location}`;
             }
-            if (state.npcsEncountered.length > 0) {
+            // The persisted world section below lists NPCs with descriptions; only fall back to the
+            // in-memory names when world memory is unavailable.
+            if (state.npcsEncountered.length > 0 && !(world?.npcs?.length)) {
                 prompt += `\n\n## NPCs Met: ${state.npcsEncountered.map(n => n.name).join(', ')}`;
             }
             if (state.inCombat) {
@@ -294,13 +309,19 @@ ${char.backstory ? `- Background: ${char.backstory.substring(0, 200)}...` : ''}`
             }
         }
 
-        // Add active quests
-        if (session?.active_quests) {
+        // Persisted campaign world: quest log, known NPCs, places, environment.
+        if (world) {
+            prompt += buildWorldPromptSection(world);
+        }
+
+        // Add active quests (legacy snapshot on the session row — only when the live quest log
+        // was not available, so the same quests are not listed twice)
+        if (!world && session?.active_quests) {
             let quests = session.active_quests;
             if (typeof quests === 'string') {
                 try { quests = JSON.parse(quests); } catch { quests = []; }
             }
-            if (quests.length > 0) {
+            if (Array.isArray(quests) && quests.length > 0) {
                 prompt += '\n\n## Active Quests';
                 quests.forEach(q => {
                     prompt += `\n- ${q.name}: ${q.description || 'No description'}`;
@@ -453,14 +474,27 @@ ${char.backstory ? `- Background: ${char.backstory.substring(0, 200)}...` : ''}`
      * Process narration for auto-rolls and metadata
      * Comprehensive state tracking for all game elements
      */
-    static async processNarrationTags(narration, character, sessionId) {
+    static async processNarrationTags(narration, character, sessionId, campaignId = null) {
         const state = this.getSessionState(sessionId);
+        // World facts established by this narration — persisted per campaign at the end
+        // (RPGWorldMemory.persistEvents) so they outlive the in-memory session cache.
+        const worldEvents = {
+            previousLocation: state.location,
+            locations: [],
+            npcs: [],
+            quests: [],
+            timeOfDay: null,
+            weather: null,
+        };
         const rolls = [];
         const loot = [];
         const itemsUsed = [];
         const enemiesSpawned = [];
         const enemyDamage = [];
         const enemiesKilled = [];
+        // Enemies this narration actually killed, each once (see RPGStateManager.updateEnemyHP)
+        const enemiesDefeated = [];
+        const onEnemyDeath = e => enemiesDefeated.push({ id: e.id, name: e.name });
         let goldGained = 0;
         let goldSpent = 0;
         let xpGained = 0;
@@ -506,6 +540,7 @@ ${char.backstory ? `- Background: ${char.backstory.substring(0, 200)}...` : ''}`
         const locationPattern = /\{\{LOCATION:\s*([^}\s]+[^}]*?)\}?\}?(?=\s|$|[.,!?])/gi;
         processedNarration = processedNarration.replace(locationPattern, (match, location) => {
             state.location = location.trim();
+            if (isRealLocation(state.location)) worldEvents.locations.push(state.location);
             return `📍 **${location.trim()}**`;
         });
 
@@ -513,13 +548,27 @@ ${char.backstory ? `- Background: ${char.backstory.substring(0, 200)}...` : ''}`
         const npcPattern = /\{\{NPC:\s*([^:}]+)\s*:\s*([^}]+?)\}?\}?(?=\s|$|[.,!?])/gi;
         processedNarration = processedNarration.replace(npcPattern, (match, name, desc) => {
             const npc = { name: name.trim(), description: desc.trim(), metAt: new Date() };
-            if (!state.npcsEncountered.find(n => n.name === npc.name)) {
+            const known = state.npcsEncountered.find(n => n.name.toLowerCase() === npc.name.toLowerCase());
+            if (!known) {
                 state.npcsEncountered.push(npc);
+            } else if (!known.metAt) {
+                known.metAt = npc.metAt; // remembered from an earlier session, met again in this one
             }
             if (!state.npcsPresent.includes(name.trim())) {
                 state.npcsPresent.push(name.trim());
             }
+            worldEvents.npcs.push({ name: npc.name, description: npc.description, location: state.location });
             return `**${name.trim()}** *(${desc.trim()})*`;
+        });
+
+        // Process QUEST tags: {{QUEST:name:START|UPDATE|COMPLETE|FAIL|ABANDON:detail}}
+        // (tolerant of a missing closing brace; never spans lines)
+        const questPattern = /\{\{QUEST:\s*([^}\n]+?)\s*\}\}?/gi;
+        processedNarration = processedNarration.replace(questPattern, (match, inner) => {
+            const quest = parseQuestTag(inner);
+            if (!quest) return '';
+            worldEvents.quests.push(quest);
+            return renderQuestEvent(quest);
         });
 
         // Process ENEMY tags: {{ENEMY:name:hp:ac}} (tolerant of missing closing braces)
@@ -539,7 +588,7 @@ ${char.backstory ? `- Background: ${char.backstory.substring(0, 200)}...` : ''}`
         const enemyDamagePattern = /\{\{ENEMY_DAMAGE:\s*([^:}]+)\s*:\s*(\d+)\}?\}?/gi;
         processedNarration = processedNarration.replace(enemyDamagePattern, (match, name, amount) => {
             const dmg = parseInt(amount);
-            const enemy = RPGStateManager.updateEnemyHP(sessionId, name.trim(), -dmg);
+            const enemy = RPGStateManager.updateEnemyHP(sessionId, name.trim(), -dmg, onEnemyDeath);
             enemyDamage.push({ name: name.trim(), damage: dmg, newHP: enemy?.hp || 0 });
             if (enemy && enemy.hp <= 0) {
                 return `💀 **${name.trim()}** takes **${dmg}** damage and falls!`;
@@ -551,7 +600,7 @@ ${char.backstory ? `- Background: ${char.backstory.substring(0, 200)}...` : ''}`
         const enemyDamageNoBracesPattern = /[💥⚔️💀]?\s*ENEMY_DAMAGE:\s*([^:]+)\s*:\s*(\d+)\s*[💥⚔️💀]?/gi;
         processedNarration = processedNarration.replace(enemyDamageNoBracesPattern, (match, name, amount) => {
             const dmg = parseInt(amount);
-            const enemy = RPGStateManager.updateEnemyHP(sessionId, name.trim(), -dmg);
+            const enemy = RPGStateManager.updateEnemyHP(sessionId, name.trim(), -dmg, onEnemyDeath);
             enemyDamage.push({ name: name.trim(), damage: dmg, newHP: enemy?.hp || 0 });
             logger.info('[AI DM] Caught ENEMY_DAMAGE tag without braces', { enemy: name.trim(), amount: dmg });
             if (enemy && enemy.hp <= 0) {
@@ -560,13 +609,18 @@ ${char.backstory ? `- Background: ${char.backstory.substring(0, 200)}...` : ''}`
             return `⚔️ **${name.trim()}** takes **${dmg}** damage (${enemy?.hp || '?'}/${enemy?.maxHp || '?'} HP)`;
         });
 
-        // Process ENEMY_DEAD tags: {{ENEMY_DEAD:name}} (tolerant of missing closing braces)
+        // Process ENEMY_DEAD tags: {{ENEMY_DEAD:name}}. A properly closed tag keeps the whole name
+        // ("Goblin Archer"); the tolerant pattern after it catches tags missing their closing braces
+        // (one word only there, so it cannot swallow the narration that follows).
+        const markEnemyDead = (name) => {
+            RPGStateManager.updateEnemyHP(sessionId, name, -9999, onEnemyDeath); // Ensure dead
+            enemiesKilled.push(name);
+            return `💀 **${name}** is defeated!`;
+        };
+        processedNarration = processedNarration.replace(/\{\{ENEMY_DEAD:\s*([^}\n]+?)\s*\}\}/gi,
+            (match, name) => markEnemyDead(name.trim()));
         const enemyDeadPattern = /\{\{ENEMY_DEAD:\s*([^}\s]+)\}?\}?/gi;
-        processedNarration = processedNarration.replace(enemyDeadPattern, (match, name) => {
-            RPGStateManager.updateEnemyHP(sessionId, name.trim(), -9999); // Ensure dead
-            enemiesKilled.push(name.trim());
-            return `💀 **${name.trim()}** is defeated!`;
-        });
+        processedNarration = processedNarration.replace(enemyDeadPattern, (match, name) => markEnemyDead(name.trim()));
 
         // Process ADD_ITEM tags: {{ADD_ITEM:name:quantity:rarity?}} (tolerant of missing closing braces)
         const addItemPattern = /\{\{ADD_ITEM:\s*([^:}]+)\s*:\s*(\d+)(?:\s*:\s*(\w+))?\}?\}?/gi;
@@ -837,6 +891,7 @@ ${char.backstory ? `- Background: ${char.backstory.substring(0, 200)}...` : ''}`
         const timePattern = /\{\{TIME:\s*([^}]+)\}\}/gi;
         processedNarration = processedNarration.replace(timePattern, (match, time) => {
             state.timeOfDay = time.trim().toLowerCase();
+            worldEvents.timeOfDay = state.timeOfDay;
             const icons = { dawn: '🌅', day: '☀️', dusk: '🌆', night: '🌙' };
             return `${icons[state.timeOfDay] || '🕐'} *It is now ${time.trim()}*`;
         });
@@ -845,6 +900,7 @@ ${char.backstory ? `- Background: ${char.backstory.substring(0, 200)}...` : ''}`
         const weatherPattern = /\{\{WEATHER:\s*([^}]+)\}\}/gi;
         processedNarration = processedNarration.replace(weatherPattern, (match, weather) => {
             state.weather = weather.trim().toLowerCase();
+            worldEvents.weather = state.weather;
             const icons = { clear: '☀️', cloudy: '☁️', rain: '🌧️', storm: '⛈️', snow: '❄️', fog: '🌫️' };
             return `${icons[state.weather] || '🌤️'} *Weather: ${weather.trim()}*`;
         });
@@ -884,8 +940,13 @@ ${char.backstory ? `- Background: ${char.backstory.substring(0, 200)}...` : ''}`
                 /thank\s+you\s+for\s+playing/i,
                 /farewell.*until\s+(?:next\s+time|then)/i,
                 /the\s+end\s*[.!]?$/i,
-                /quest\s+(?:has\s+)?(?:ended|complete|failed)/i,
             ];
+            // "Quest complete/failed" only means the adventure is over when the DM is not tracking
+            // that quest in the quest log — a {{QUEST:…:COMPLETE}} in this narration is a quest
+            // ending inside an ongoing campaign, not the end of the game.
+            if (worldEvents.quests.length === 0) {
+                gameOverPhrases.push(/quest\s+(?:has\s+)?(?:ended|complete|failed)/i);
+            }
             for (const pattern of gameOverPhrases) {
                 if (pattern.test(processedNarration)) {
                     gameOver = true;
@@ -1023,10 +1084,17 @@ ${char.backstory ? `- Background: ${char.backstory.substring(0, 200)}...` : ''}`
             const loc = match.replace(/\{\{LOCATION:\s*/i, '').replace(/\}\}$/, '').trim();
             if (loc && loc !== '???' && !loc.match(/^\?+$/)) {
                 state.location = loc;
+                worldEvents.locations.push(loc);
                 return `📍 **${loc}**`;
             }
             return ''; // Remove invalid location tags
         });
+
+        // Persist the world facts for the campaign (best-effort; failures are logged inside).
+        if (campaignId && sessionId) {
+            state.campaignId = state.campaignId || campaignId;
+            await RPGWorldMemory.persistEvents(campaignId, sessionId, { ...worldEvents, location: state.location });
+        }
 
         return {
             narration: processedNarration,
@@ -1036,6 +1104,7 @@ ${char.backstory ? `- Background: ${char.backstory.substring(0, 200)}...` : ''}`
             enemiesSpawned,
             enemyDamage,
             enemiesKilled,
+            enemiesDefeated,
             goldGained,
             goldSpent,
             xpGained,
@@ -1046,7 +1115,8 @@ ${char.backstory ? `- Background: ${char.backstory.substring(0, 200)}...` : ''}`
             inCombat: state.inCombat,
             combatStatus: RPGStateManager.buildCombatStatus(sessionId, character),
             gameOver,
-            gameOverReason
+            gameOverReason,
+            quests: worldEvents.quests
         };
     }
 
@@ -1055,7 +1125,15 @@ ${char.backstory ? `- Background: ${char.backstory.substring(0, 200)}...` : ''}`
      */
     static async generateResponse(campaign, session, characters, playerInput, inputType = 'action') {
         try {
-            const systemPrompt = this.buildSystemPrompt(campaign, session, characters);
+            // Campaign world memory: load it once, rebuild the session cache from it after a cache
+            // miss (restart / new session), and feed it to the prompt.
+            const campaignId = campaign?.campaign_id || session?.campaign_id || null;
+            const world = campaignId ? await RPGWorldMemory.loadWorld(campaignId) : null;
+            if (session?.session_id && campaignId) {
+                await RPGStateManager.hydrateSessionState(session.session_id, campaignId, session.current_location || null, world);
+            }
+
+            const systemPrompt = this.buildSystemPrompt(campaign, session, characters, world);
             const historyText = session?.session_id
                 ? await this.buildMessageHistory(session.session_id)
                 : '';
@@ -1086,6 +1164,7 @@ Now respond as the Dungeon Master. Be engaging and descriptive.
 Remember to use {{ROLL:skill:DC#}} format when checks are needed - the system will auto-roll.
 Use {{LOCATION:name}} when moving to a new area.
 Use {{NPC:name:description}} when introducing characters.
+Use {{QUEST:quest_name:START|UPDATE|COMPLETE|FAIL:detail}} whenever a quest is offered, advances or ends.
 Use {{LOOT:item}}, {{GOLD:amount}}, {{XP:amount}} for rewards.
 CRITICAL FOR DAMAGE/HEALING:
 - If the PLAYER takes damage: {{DAMAGE:Player:amount}}
@@ -1106,7 +1185,8 @@ End with a hook for the player's next action.`;
             const processed = await this.processNarrationTags(
                 dmResponse,
                 actingChar,
-                session?.session_id || 0
+                session?.session_id || 0,
+                campaignId
             );
 
             // Check if combat was initiated
@@ -1134,7 +1214,9 @@ End with a hook for the player's next action.`;
                 combatInitiated,
                 rollRequests: [], // No longer needed - rolls are automatic
                 gameOver: processed.gameOver,
-                gameOverReason: processed.gameOverReason
+                gameOverReason: processed.gameOverReason,
+                questUpdates: processed.quests || [],
+                enemiesDefeated: processed.enemiesDefeated || []
             };
         } catch (error) {
             logger.error('[AI DM] Error generating response:', { error: error.message, stack: error.stack });
@@ -1326,6 +1408,8 @@ Keep it to 2-3 paragraphs.`;
         );
 
         const campaign = campaigns[0];
+        // NPCs reloaded from world memory carry metAt = null until they appear in this session.
+        const metThisSession = state.npcsEncountered.filter(n => n.metAt);
 
         const [messageCount] = await pool.execute(
             'SELECT COUNT(*) as count FROM dnd_session_messages WHERE session_id = ?',
@@ -1333,7 +1417,7 @@ Keep it to 2-3 paragraphs.`;
         );
 
         const summaryPrompt = `Generate a brief "Story So Far" summary for this session.
-Mention key events, decisions made, NPCs met (${state.npcsEncountered.map(n => n.name).join(', ') || 'none'}), and any cliffhangers.
+Mention key events, decisions made, NPCs met (${metThisSession.map(n => n.name).join(', ') || 'none'}), and any cliffhangers.
 Keep it to 2-3 paragraphs that could serve as a recap for next session.`;
 
         const summary = await this.generateResponse(campaign, session, [], summaryPrompt, 'action');
@@ -1353,7 +1437,7 @@ Keep it to 2-3 paragraphs that could serve as a recap for next session.`;
             sessionNumber: session.session_number,
             messageCount: messageCount[0].count,
             xpGained: state.xpGained,
-            npcsEncountered: state.npcsEncountered,
+            npcsEncountered: metThisSession,
             loot: state.loot
         };
     }
@@ -1451,6 +1535,15 @@ Keep it to 2-3 paragraphs that could serve as a recap for next session.`;
                 await RPGStateManager.updateCharacterGold(actingChar.character_id, netGold);
             }
 
+            // Kills: every spawned enemy this reply killed, counted once (repeated ENEMY_DEAD /
+            // ENEMY_DAMAGE tags for a dead enemy add nothing). Credited to the acting character the
+            // same way /rpg combat credits a won battle: monster kills + Dragonslayer.
+            const defeated = Array.isArray(response.enemiesDefeated) ? response.enemiesDefeated : [];
+            if (actingChar && defeated.length > 0) {
+                RPGLeaderboardManager.trackStat(actingChar.character_id, 'total_monsters_killed', defeated.length);
+                for (const kill of defeated) RPGLeaderboardManager.trackKill(actingChar.character_id, kill.name);
+            }
+
             // Apply XP changes
             if (actingChar && response.xpGained > 0) {
                 const xpResult = await RPGStateManager.addCharacterXP(actingChar.character_id, response.xpGained);
@@ -1491,9 +1584,19 @@ Keep it to 2-3 paragraphs that could serve as a recap for next session.`;
                 });
             }
 
-            // Update character location
+            // Update character location, and log a discovery when they actually moved somewhere.
             if (actingChar && response.location) {
-                await RPGStateManager.updateCharacterLocation(actingChar.character_id, response.location);
+                const moved = await RPGStateManager.updateCharacterLocation(actingChar.character_id, response.location);
+                if (moved?.changed) {
+                    const discovery = await RPGWorldMemory.recordDiscovery(
+                        actingChar.character_id, session.campaign_id, response.location);
+                    if (discovery) {
+                        response.discovery = discovery;
+                        if (discovery.isNew) {
+                            response.narration += `\n\n🗺️ *New area discovered: **${response.location}** — see \`/rpg journal map\`*`;
+                        }
+                    }
+                }
             }
         }
 
@@ -1534,6 +1637,7 @@ Keep it to 2-3 paragraphs that could serve as a recap for next session.`;
                     [actingChar.character_id]
                 );
                 logger.info('[AI DM] Character marked as dead (HP set to 0)', { characterId: actingChar.character_id });
+                RPGLeaderboardManager.trackStat(actingChar.character_id, 'deaths', 1);
             }
 
             // Clear session state from cache

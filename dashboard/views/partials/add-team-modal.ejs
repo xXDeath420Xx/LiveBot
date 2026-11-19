@@ -10,7 +10,7 @@
                 <div class="modal-body">
                     <div class="mb-3">
                         <label for="team-name" class="form-label">Twitch Team Name</label>
-                        <input type="text" class="form-control" id="team-name" name="teamName" required placeholder="e.g., 'livebot'">
+                        <input type="text" class="form-control" id="team-name" name="teamName" required placeholder="e.g. against_the_tide">
                         <div class="form-text">This is the team's slug from the URL (e.g., twitch.tv/team/<strong>livebot</strong>).</div>
                     </div>
                     <div class="mb-3">
@@ -30,6 +30,16 @@
                                 <option value="<%= role.id %>"><%= role.name %></option>
                             <% }); %>
                         </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="team-live-board-channel-id" class="form-label">Live board channel</label>
+                        <select class="form-select" id="team-live-board-channel-id" name="liveBoardChannelId">
+                            <option value="">-- No live board --</option>
+                            <% channels.forEach(channel => { %>
+                                <option value="<%= channel.id %>"><%= channel.name %></option>
+                            <% }); %>
+                        </select>
+                        <div class="form-text">One message here lists which team members are live right now. It updates every minute. Use a channel nobody else posts in, so it stays at the top.</div>
                     </div>
                 </div>
                 <div class="modal-footer">

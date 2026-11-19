@@ -2,6 +2,7 @@ import { EmbedBuilder, PermissionsBitField } from 'discord.js';
 import pool from '../../utils/db.js';
 import logger from '../../utils/logger.js';
 import { closeTicket } from '../../core/ticket-manager.js';
+import { themeColor } from '../../core/guild-theme.js';
 
 /**
  * Handle ticket close button clicks
@@ -74,7 +75,7 @@ export async function handleTicketClose(interaction) {
 
         // Send closing message
         const closingEmbed = new EmbedBuilder()
-            .setColor('#E74C3C')
+            .setColor(themeColor(interaction.guildId, 'danger'))
             .setDescription(`🔒 Ticket closed by ${interaction.user}. Generating transcript and archiving...`);
 
         await interaction.editReply({ embeds: [closingEmbed] });

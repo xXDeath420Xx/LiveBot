@@ -377,7 +377,7 @@ export async function executeRaid(playerId) {
                 immunityUntil: immunityUntil.toISOString()
             });
 
-            logger.info('[RaidSystem] Raid avoided via tunnel', { playerId, tunnelLevel });
+            logger.debug('[RaidSystem] Raid avoided via tunnel', { playerId, tunnelLevel });
 
             return {
                 success: true,
@@ -575,7 +575,7 @@ export async function executeRaid(playerId) {
         ]
     );
 
-    logger.info('[RaidSystem] Raid executed', {
+    logger.debug('[RaidSystem] Raid executed', {
         playerId,
         heatAtRaid: currentHeat,
         securityLevel,

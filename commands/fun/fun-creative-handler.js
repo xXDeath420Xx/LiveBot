@@ -1,4 +1,5 @@
 import { EmbedBuilder } from 'discord.js';
+import { themeColor } from '../../core/guild-theme.js';
 
 function capitalizeFirst(str) { return str.charAt(0).toUpperCase() + str.slice(1); }
 function randomHexColor() { return '#' + Math.floor(Math.random() * 16777215).toString(16).padStart(6, '0').toUpperCase(); }
@@ -57,7 +58,7 @@ export async function handleStory(interaction) {
 
   const template = storyTemplates[genre] || storyTemplates.fantasy;
   const embed = new EmbedBuilder()
-    .setColor('#9B59B6')
+    .setColor(themeColor(interaction.guildId, 'accent'))
     .setTitle(`📖 ${capitalizeFirst(genre)} Story`)
     .setDescription(template.starter + template.middle + template.end)
     .addFields(
@@ -100,7 +101,7 @@ export async function handlePrompt(interaction) {
   const randomPrompt = categoryPrompts[Math.floor(Math.random() * categoryPrompts.length)];
 
   const embed = new EmbedBuilder()
-    .setColor('#F39C12')
+    .setColor(themeColor(interaction.guildId, 'warning'))
     .setTitle(`✨ ${capitalizeFirst(type)} Prompt`)
     .setDescription(randomPrompt.prompt)
     .addFields(

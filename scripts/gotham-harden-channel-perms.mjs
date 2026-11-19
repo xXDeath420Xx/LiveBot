@@ -18,10 +18,10 @@
 import 'dotenv/config';
 import fs from 'fs/promises';
 import pool from '../utils/db.js';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 
 const GUILD = '800157336458231848';
-const HARLEY_BOT_ID = '1503936879635202149';
+// The acting bot comes from guild_bot_mapping — never pinned here.
 
 const CITIZEN_ROLE = '800252381513777158';
 const MUTED_ROLE   = '1503946366542548992';
@@ -98,8 +98,8 @@ function classifyChannel(ch) {
 // ──────────────────────────────────────────────────────────────────────────
 // Boot
 // ──────────────────────────────────────────────────────────────────────────
-const [row] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id=?', [HARLEY_BOT_ID]);
-const token = encryption.decrypt(JSON.parse(row[0].bot_token));
+const bot = await resolveBotForGuild(GUILD, { db: pool });
+const token = bot.token;
 
 const staffRolesJson = JSON.parse(await fs.readFile('docs/gotham-staff-roles.json', 'utf8'));
 const HUMAN_STAFF_ROLE_IDS = staffRolesJson.humanStaff.map(r => r.id);

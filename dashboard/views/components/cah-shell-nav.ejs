@@ -1,89 +1,86 @@
-<%# Shared navbar — pass { user, page } where page ∈ {'lobbies','my-decks','leaderboard','game','config'} %>
+<%# CAH header: the shared site header (partials/site-header.ejs, styled by
+    /css/cf-site.css) plus the CAH section tabs. Pass { user, page } where page is one of
+    'lobbies','my-decks','packs','history','leaderboard','game','config'. %>
 <%
 const cahPage = (typeof page !== 'undefined') ? page : '';
-const isActive = (p) => p === cahPage ? ' active' : '';
+const cahUser = (typeof user !== 'undefined' && user) ? user : null;
 %>
-<nav class="navbar">
-    <div class="container">
-        <div class="navbar-inner">
-            <a href="/" class="navbar-brand">
-                <img src="/images/CertiFried.png" alt="CertiFried" class="navbar-logo">
-                <span>CertiFried CAH</span>
-            </a>
-            <div class="navbar-links">
-                <a href="/cah" class="navbar-link<%= isActive('lobbies') %>">Lobbies</a>
-                <a href="/cah/my-decks" class="navbar-link<%= isActive('my-decks') %>">My Decks</a>
-                <a href="/cah/packs" class="navbar-link<%= isActive('packs') %>">Browse Packs</a>
-                <a href="/cah/my-history" class="navbar-link<%= isActive('history') %>">My History</a>
-                <a href="/cah/leaderboard" class="navbar-link<%= isActive('leaderboard') %>">Leaderboard</a>
-                <a href="/commands" class="navbar-link">Commands</a>
-                <a href="/docs" class="navbar-link">Docs</a>
-                <a href="https://certifriedmultitool.com/donate" target="_blank" class="navbar-link" style="color: var(--accent-pink);">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="display:inline;vertical-align:-1px;margin-right:3px;"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
-                    Donate
-                </a>
-            </div>
-            <div class="navbar-actions">
-                <% if (typeof user !== 'undefined' && user) { %>
-                    <a href="/cah" class="btn btn-primary btn-sm">Host a Game</a>
-                    <span style="color: var(--text-secondary); font-size: 0.85rem;"><%= user.username %></span>
-                    <a href="/logout" class="btn btn-outline btn-sm">Logout</a>
-                <% } else { %>
-                    <a href="/auth/discord" class="btn btn-primary btn-sm">Login with Discord</a>
-                <% } %>
-            </div>
-            <button class="mobile-menu-btn" id="cah-mobile-btn" aria-label="Toggle menu" onclick="document.getElementById('cah-mobile-menu').classList.toggle('open')">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-            </button>
-        </div>
-    </div>
-    <div class="mobile-menu" id="cah-mobile-menu">
-        <a href="/cah" class="<%= isActive('lobbies') %>">🃏 Lobbies</a>
-        <a href="/cah/my-decks" class="<%= isActive('my-decks') %>">📚 My Decks</a>
-        <a href="/cah/leaderboard" class="<%= isActive('leaderboard') %>">🏆 Leaderboard</a>
-        <a href="/commands">⚙ Commands</a>
-        <a href="/docs">📖 Docs</a>
-        <% if (typeof user !== 'undefined' && user) { %>
-            <a href="/logout">↪ Logout (<%= user.username %>)</a>
-        <% } else { %>
-            <a href="/auth/discord">Login with Discord</a>
-        <% } %>
-    </div>
-</nav>
+<%- include('../partials/site-header', { user: cahUser, active: 'cah', returnTo: '/cah' }) %>
+<%- include('../partials/section-tabs', { label: 'Cards Against Humanity', active: cahPage, tabs: [
+    ['lobbies', '/cah', 'Lobbies'],
+    ['my-decks', '/cah/my-decks', 'My decks'],
+    ['packs', '/cah/packs', 'Card packs'],
+    ['history', '/cah/my-history', 'My games'],
+    ['leaderboard', '/cah/leaderboard', 'Leaderboard']
+] }) %>
 
-<%# Floating bug-report widget on every CAH page. Opens a modal, POSTs to
-    /cah/feedback which relays to a Discord webhook (admin-configurable). %>
-<button class="feedback-fab" onclick="document.getElementById('feedback-mask').classList.add('open')">
-    💬 Feedback
+<%# Feedback button on every CAH page. Opens a dialog, POSTs to /cah/feedback,
+    which relays to a Discord webhook (admin-configurable). The route needs a
+    Discord login, so guests don't get the button. %>
+<% if (cahUser) { %>
+<button class="feedback-fab" type="button" id="cah-feedback-open" aria-haspopup="dialog">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+    <span class="fab-label">Feedback</span>
 </button>
-<div class="feedback-mask" id="feedback-mask" onclick="if(event.target===this)this.classList.remove('open')">
-    <div class="feedback-modal">
-        <h3>Send feedback or report a bug</h3>
-        <p>Tell us what broke or what could be better. We'll get this in the dev channel.</p>
-        <textarea id="feedback-text" placeholder="What happened? What were you doing?" maxlength="2000"></textarea>
+<div class="feedback-mask" id="feedback-mask">
+    <div class="feedback-modal" role="dialog" aria-modal="true" aria-labelledby="feedback-title">
+        <h3 id="feedback-title">Send feedback or report a bug</h3>
+        <p>Say what broke or what could be better. It goes to the developers' channel.</p>
+        <label class="form-label" for="feedback-text">Message</label>
+        <textarea id="feedback-text" class="form-textarea" placeholder="What happened, and what were you doing?" maxlength="2000"></textarea>
+        <div class="feedback-error" id="feedback-error" role="alert"></div>
         <div class="acts">
-            <button class="btn btn-ghost" onclick="document.getElementById('feedback-mask').classList.remove('open')">Cancel</button>
-            <button class="btn btn-primary" onclick="sendFeedback()">Send</button>
+            <button class="btn btn-ghost" type="button" id="feedback-cancel">Cancel</button>
+            <button class="btn btn-primary" type="button" id="feedback-send">Send</button>
         </div>
     </div>
 </div>
-<div class="feedback-toast" id="feedback-toast">✅ Thanks — sent to the dev channel</div>
+<div class="feedback-toast" id="feedback-toast" role="status" aria-live="polite">Thanks, it has been sent.</div>
+<% } %>
 <script>
-    async function sendFeedback() {
-        const text = document.getElementById('feedback-text').value.trim();
-        if (!text) return;
-        const res = await cfetch('/cah/feedback', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ text, page: location.pathname, ua: navigator.userAgent })
-        });
-        if (res.ok) {
-            document.getElementById('feedback-mask').classList.remove('open');
-            document.getElementById('feedback-text').value = '';
-            const t = document.getElementById('feedback-toast');
-            t.classList.add('show');
-            setTimeout(() => t.classList.remove('show'), 3500);
-        } else {
-            alert('Failed to send feedback — try again');
+(function () {
+    // Log-in links come back to the CAH page they were clicked on (a game, a deck…).
+    document.querySelectorAll('a[href^="/auth/discord?returnTo="]').forEach(function (a) {
+        a.href = '/auth/discord?returnTo=' + encodeURIComponent(location.pathname + location.search);
+    });
+
+    var mask = document.getElementById('feedback-mask');
+    if (!mask) return;
+    var text = document.getElementById('feedback-text');
+    var errEl = document.getElementById('feedback-error');
+    function openFb() { mask.classList.add('open'); errEl.style.display = 'none'; setTimeout(function () { text.focus(); }, 30); }
+    function closeFb() { mask.classList.remove('open'); }
+    document.getElementById('cah-feedback-open').addEventListener('click', openFb);
+    document.getElementById('feedback-cancel').addEventListener('click', closeFb);
+    mask.addEventListener('click', function (e) { if (e.target === mask) closeFb(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && mask.classList.contains('open')) closeFb(); });
+    var sendBtn = document.getElementById('feedback-send');
+    sendBtn.addEventListener('click', async function () {
+        var msg = text.value.trim();
+        if (!msg) { errEl.textContent = 'Write a message first.'; errEl.style.display = 'block'; return; }
+        sendBtn.disabled = true;
+        try {
+            var res = await cfetch('/cah/feedback', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text: msg, page: location.pathname, ua: navigator.userAgent })
+            });
+            var data = await res.json().catch(function () { return {}; });
+            if (res.ok && !res.redirected && data.ok === true) {
+                closeFb();
+                text.value = '';
+                var t = document.getElementById('feedback-toast');
+                t.classList.add('show');
+                setTimeout(function () { t.classList.remove('show'); }, 3500);
+            } else {
+                errEl.textContent = data.reason === 'rate_limited' ? 'You have sent a lot of feedback recently. Try again later.' : 'Could not send it. Try again in a moment.';
+                errEl.style.display = 'block';
+            }
+        } catch (_) {
+            errEl.textContent = 'Could not send it. Check your connection and try again.';
+            errEl.style.display = 'block';
+        } finally {
+            sendBtn.disabled = false;
         }
-    }
+    });
+})();
 </script>

@@ -22,7 +22,7 @@ async function runSQLFile(filename) {
         .map(s => s.trim())
         .filter(s => s.length > 0);
 
-    logger.info(`[CFX Setup] Running ${filename} (${statements.length} statements)`);
+    logger.debug(`[CFX Setup] Running ${filename} (${statements.length} statements)`);
 
     for (const statement of statements) {
         if (statement.length > 0) {
@@ -52,7 +52,7 @@ async function runSQLFile(filename) {
         }
     }
 
-    logger.info(`[CFX Setup] Completed ${filename}`);
+    logger.debug(`[CFX Setup] Completed ${filename}`);
 }
 
 async function runMigrations() {
@@ -60,7 +60,7 @@ async function runMigrations() {
 
     // Check if migrations directory exists
     if (!fs.existsSync(migrationsDir)) {
-        logger.info('[CFX Setup] No migrations directory found');
+        logger.debug('[CFX Setup] No migrations directory found');
         return;
     }
 
@@ -68,7 +68,7 @@ async function runMigrations() {
         .filter(f => f.endsWith('.sql'))
         .sort(); // Alphabetical order
 
-    logger.info(`[CFX Setup] Found ${files.length} migration files`);
+    logger.debug(`[CFX Setup] Found ${files.length} migration files`);
 
     for (const file of files) {
         try {
@@ -82,19 +82,19 @@ async function runMigrations() {
 
 async function setup() {
     try {
-        logger.info('[CFX Setup] Starting database setup...');
+        logger.debug('[CFX Setup] Starting database setup...');
 
         // Test connection
         const conn = await pool.getConnection();
         await conn.ping();
         conn.release();
-        logger.info('[CFX Setup] Database connection confirmed');
+        logger.debug('[CFX Setup] Database connection confirmed');
 
         // Check if cfx_players table exists (indicating DB is already set up)
         const [existingTables] = await pool.execute("SHOW TABLES LIKE 'cfx_players'");
 
         if (existingTables.length > 0) {
-            logger.info('[CFX Setup] Database already initialized, running migrations only...');
+            logger.debug('[CFX Setup] Database already initialized, running migrations only...');
         } else {
             // Run schema only for fresh installs
             await runSQLFile('schema.sql');
@@ -109,21 +109,21 @@ async function setup() {
         const [tables] = await pool.execute(
             "SHOW TABLES LIKE 'cfx_%'"
         );
-        logger.info(`[CFX Setup] Created ${tables.length} cfx_* tables`);
+        logger.debug(`[CFX Setup] Created ${tables.length} cfx_* tables`);
 
         // Verify strains
         const [strains] = await pool.execute('SELECT COUNT(*) as count FROM cfx_strains');
-        logger.info(`[CFX Setup] Seeded ${strains[0].count} strains`);
+        logger.debug(`[CFX Setup] Seeded ${strains[0].count} strains`);
 
         // Verify skills
         const [skills] = await pool.execute('SELECT COUNT(*) as count FROM cfx_skill_nodes');
-        logger.info(`[CFX Setup] Seeded ${skills[0].count} skill nodes`);
+        logger.debug(`[CFX Setup] Seeded ${skills[0].count} skill nodes`);
 
         // Verify quests
         const [quests] = await pool.execute('SELECT COUNT(*) as count FROM cfx_quest_definitions');
-        logger.info(`[CFX Setup] Seeded ${quests[0].count} quest definitions`);
+        logger.debug(`[CFX Setup] Seeded ${quests[0].count} quest definitions`);
 
-        logger.info('[CFX Setup] Database setup complete!');
+        logger.debug('[CFX Setup] Database setup complete!');
 
     } catch (error) {
         logger.error('[CFX Setup] Setup failed:', error);

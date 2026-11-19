@@ -1,0 +1,383 @@
+<%#
+  Digimon quiz questions: see, edit, turn off and add the questions /digimon today asks in this server.
+  Changes apply only here (digimon_quiz_questions, read by buildBank). API /api/guilds/:id/digimon/quiz-questions.
+  Needs `guild`. Rows are built with createElement and textContent: question text is server-written.
+%>
+<%- include('_game-kit') %>
+<div class="page-section" id="digimonQuizPage" data-guild-id="<%= guild.id %>">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-circle-question"></i>
+                <span>Digimon quiz questions</span>
+            </div>
+            <div class="page-section-subtitle">Each day <code>/digimon today</code> picks five categories and one question from each. Changes apply to this server only.</div>
+        </div>
+    </div>
+
+    <%- include('_digimon-nav', { dgNav: 'digimon-quiz' }) %>
+
+    <div id="dqError" class="cf-notice is-bad" role="alert" hidden></div>
+    <div id="dqAllOff" class="cf-notice is-warn" hidden>Every question is turned off, so the quiz uses the standard set until you turn some back on or add your own.</div>
+
+    <dl class="cf-kpis" aria-label="Quiz questions at a glance">
+        <div class="cf-kpi"><dt>In use</dt><dd class="cf-kpi-value" id="dqInUse">–</dd></div>
+        <div class="cf-kpi"><dt>Your own</dt><dd class="cf-kpi-value" id="dqOwn">–</dd></div>
+        <div class="cf-kpi"><dt>Changed</dt><dd class="cf-kpi-value" id="dqChanged">–</dd></div>
+        <div class="cf-kpi"><dt>Turned off</dt><dd class="cf-kpi-value" id="dqOff">–</dd></div>
+    </dl>
+
+    <section class="cf-section" aria-labelledby="dq-preview-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="dq-preview-title">In Discord</h2>
+                <p class="cf-section-desc">One question of the quiz. Only the member who started it can press the buttons; the same message turns into their result.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="gk-preview">
+                <div class="cf-dc" aria-label="Preview: a quiz question">
+                    <%- include('_gk-author', { gkUsed: '/digimon today' }) %>
+                    <div class="cf-dc-embed">
+                        <div class="cf-dc-title">Which Digital Monster are you today?</div>
+                        <div class="cf-dc-desc" id="dqPvDesc">Loading…</div>
+                        <div class="cf-dc-footer">Alex's quiz · only they can answer</div>
+                    </div>
+                    <div class="cf-dc-buttons" id="dqPvButtons"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="dq-balance-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="dq-balance-title">Balance</h2>
+                <p class="cf-section-desc">Every answer quietly points at an attribute, a field, a family, a Crest and a power from 0 to 3. The result is the Digimon that best fits the answers, and the power total decides its stage. These are the answers in use, counted by what they point at.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--stack"><ul class="dq-warnings" id="dqWarnings"></ul></div>
+            <div class="cf-row cf-row--stack"><div class="dq-balance" id="dqBalance"></div></div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="dq-list-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="dq-list-title">Questions <span class="gk-cmd-count" id="dqCount"></span></h2>
+                <p class="cf-section-desc">Buttons in Discord hold up to 80 characters, so answers are kept short. Reset puts a standard question back the way it was.</p>
+            </div>
+            <div class="cf-section-actions"><button id="dqAdd" class="btn btn-primary btn-sm" type="button">Add question</button></div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--stack">
+                <div class="dq-controls">
+                    <label class="cf-search"><i class="fas fa-search" aria-hidden="true"></i><input id="dqSearch" type="search" class="form-control" placeholder="Search questions and answers" aria-label="Search questions and answers" autocomplete="off" data-no-savebar></label>
+                    <select id="dqCatFilter" class="form-select" aria-label="Filter by category" data-no-savebar><option value="">All categories</option></select>
+                    <select id="dqShow" class="form-select" aria-label="Show" data-no-savebar>
+                        <option value="">All questions</option>
+                        <option value="own">Your own</option>
+                        <option value="edited">Changed</option>
+                        <option value="off">Turned off</option>
+                    </select>
+                </div>
+            </div>
+            <div id="dqList" class="cf-list"><div class="cf-state cf-state--compact"><p class="cf-state-text">Loading…</p></div></div>
+        </div>
+    </section>
+
+    <dialog id="dqDialog" class="cf-modal-dialog is-wide" aria-labelledby="dqDialogTitle">
+        <form id="dqForm" method="dialog" novalidate class="dq-form">
+            <header class="cf-modal-head">
+                <div>
+                    <h2 class="cf-modal-title" id="dqDialogTitle">Edit question</h2>
+                    <p class="cf-modal-desc" id="dqDialogNote"></p>
+                </div>
+                <button type="button" class="cf-modal-close" id="dqFormClose" aria-label="Close"><i class="fas fa-times" aria-hidden="true"></i></button>
+            </header>
+            <div class="cf-modal-body">
+                <div class="dq-field">
+                    <label for="dqFormCat">Category</label>
+                    <select id="dqFormCat" class="form-select" data-no-savebar></select>
+                </div>
+                <div class="dq-field">
+                    <label for="dqFormQ">Question</label>
+                    <textarea id="dqFormQ" class="form-control" rows="2" maxlength="300" data-no-savebar></textarea>
+                </div>
+                <div class="dq-answers" id="dqFormAnswers"></div>
+                <div><button id="dqFormAddAnswer" class="btn btn-secondary btn-sm" type="button">Add answer</button></div>
+                <div>
+                    <p class="gk-preview-label">Preview</p>
+                    <div class="cf-dc" aria-label="Preview of the question in Discord">
+                        <%- include('_gk-author', { gkUsed: '/digimon today' }) %>
+                        <div class="cf-dc-embed">
+                            <div class="cf-dc-title">Which Digital Monster are you today?</div>
+                            <div class="cf-dc-desc" id="dqFormPvDesc"></div>
+                        </div>
+                        <div class="cf-dc-buttons" id="dqFormPvButtons"></div>
+                    </div>
+                </div>
+                <p class="cf-field-error" id="dqFormError" role="alert" hidden></p>
+            </div>
+            <footer class="cf-modal-foot">
+                <button id="dqFormCancel" class="btn btn-secondary" type="button">Cancel</button>
+                <button id="dqFormSave" class="btn btn-primary" type="submit">Save question</button>
+            </footer>
+        </form>
+    </dialog>
+</div>
+<style>
+    .dq-warnings { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; font-size: var(--cf-text-sm); }
+    .dq-warnings li { padding: 8px 12px; border-left: 3px solid var(--cf-warning); background: color-mix(in srgb, var(--cf-warning) 8%, transparent); border-radius: var(--cf-radius-sm); color: var(--cf-text-2); }
+    .dq-warnings li.is-ok { border-left-color: var(--cf-success); background: transparent; }
+    .dq-balance { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr)); gap: var(--cf-4); }
+    .dq-balance h3 { font-size: var(--cf-text-sm); font-weight: 600; color: var(--cf-text-2); margin: 0 0 6px; }
+    .dq-tally { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; margin: 0; font-size: var(--cf-text-sm); }
+    .dq-tally dt { color: var(--cf-text-2); font-weight: 400; }
+    .dq-tally dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+    .dq-tally dd.is-zero { color: var(--cf-danger); font-weight: 600; }
+    .dq-controls { display: flex; flex-wrap: wrap; gap: var(--cf-2); align-items: center; }
+    .dq-controls .cf-search { flex: 1 1 16rem; width: auto; }
+    .dq-controls select { width: auto; flex: 0 1 auto; }
+    .dq-q.is-off .dq-q-text, .dq-q.is-off .dq-opts { opacity: .55; }
+    .dq-q-text { margin: 0; font-weight: 600; color: var(--cf-text); }
+    .dq-opts { margin: 0; padding: 0; list-style: none; display: grid; gap: 3px; font-size: var(--cf-text-sm); color: var(--cf-text-2); }
+    .dq-opts li { display: flex; flex-wrap: wrap; gap: 4px 10px; }
+    .dq-opt-tags { color: var(--cf-text-3); font-size: var(--cf-text-xs); }
+    #dqDialog { padding: 0; }
+    .dq-form { display: flex; flex-direction: column; min-height: 0; max-height: inherit; margin: 0; }
+    .dq-field { display: grid; gap: 4px; }
+    .dq-field label, .dq-answer legend { font-size: var(--cf-text-sm); font-weight: 500; color: var(--cf-text); }
+    .dq-answers { display: grid; gap: 10px; }
+    .dq-answer { border: 1px solid var(--cf-border); border-radius: var(--cf-radius); padding: 10px 12px; margin: 0; display: grid; gap: 8px; min-width: 0; }
+    .dq-answer legend { float: none; width: auto; padding: 0 4px; margin: 0; }
+    .dq-answer-tags { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 8rem), 1fr)); gap: 8px; }
+    .dq-answer-tags label { display: grid; gap: 2px; font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+    @media (max-width: 640px) {
+        .dq-controls select { flex: 1 1 100%; min-height: 44px; }
+    }
+</style>
+<script>
+(function () {
+    const root = document.getElementById('digimonQuizPage');
+    if (!root) return;
+    const base = `/api/guilds/${root.dataset.guildId}/digimon/quiz-questions`;
+    const $ = id => document.getElementById(id);
+    let data = null, editing = null;
+
+    function el(tag, props, ...kids) {
+        const node = document.createElement(tag);
+        const p = props || {};
+        if (p.className) node.className = p.className;
+        if (p.text !== undefined) node.textContent = String(p.text);
+        for (const [k, v] of Object.entries(p.attrs || {})) node.setAttribute(k, v);
+        for (const kid of kids) if (kid !== null && kid !== undefined) node.append(kid);
+        return node;
+    }
+    async function api(url, opts) {
+        const res = await fetch(url, { headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', ...opts });
+        const json = await res.json().catch(() => ({ success: false, error: `HTTP ${res.status}` }));
+        if (!res.ok || json.success === false) throw new Error(json.error || `HTTP ${res.status}`);
+        return json;
+    }
+    const showErr = m => { $('dqError').textContent = m || ''; $('dqError').hidden = !m; };
+    const familyWord = k => data.tags.families.find(f => f.key === k)?.word ?? k;
+    const crestName = k => data.tags.crests.find(c => c.key === k)?.name ?? k;
+    const tagLine = o => [o.a, o.f, o.t && familyWord(o.t), o.c && crestName(o.c), `power ${o.p}`].filter(Boolean).join(' · ');
+    const all = () => [...data.own.map(q => ({ ...q, own: true })), ...data.builtins];
+
+    // A question drawn the way /digimon today shows it.
+    function drawQuestion(descNode, btnNode, q, catKey, labels) {
+        GK.fill(descNode, `**1/5** · ${(data && data.tags.categories[catKey]) || 'Question'}\n\n${q || 'Your question appears here.'}`);
+        btnNode.replaceChildren(...labels.map(l => el('span', { className: 'cf-dc-btn is-primary', text: l || 'Answer' })));
+    }
+    function drawPagePreview() {
+        const q = all().find(x => x.enabled) || all()[0];
+        if (!q) { $('dqPvDesc').textContent = 'No questions.'; return; }
+        drawQuestion($('dqPvDesc'), $('dqPvButtons'), q.q, q.cat, q.options.map(o => o.label));
+    }
+
+    function renderSummary() {
+        const qs = all();
+        $('dqInUse').textContent = qs.filter(q => q.enabled).length;
+        $('dqOwn').textContent = data.own.length;
+        $('dqChanged').textContent = data.builtins.filter(q => q.edited).length;
+        $('dqOff').textContent = qs.filter(q => !q.enabled).length;
+        $('dqAllOff').hidden = !data.allOff;
+
+        const w = data.balance.warnings;
+        $('dqWarnings').replaceChildren(...(w.length ? w.map(t => el('li', { text: t }))
+            : [el('li', { className: 'is-ok', text: 'Every attribute, Crest and family can come up, and answers cover every power.' })]));
+        const tally = (title, counts, name = k => k) => el('div', null, el('h3', { text: title }),
+            el('dl', { className: 'dq-tally' }, ...Object.entries(counts).flatMap(([k, n]) =>
+                [el('dt', { text: name(k) }), el('dd', { className: n ? '' : 'is-zero', text: n })])));
+        const c = data.balance.counts;
+        $('dqBalance').replaceChildren(
+            tally('Attribute', c.attribute),
+            tally('Crest', c.crest, crestName),
+            tally('Family', c.family, familyWord),
+            tally('Field', c.field),
+            tally('Power', c.power, k => `${k} · ${data.tags.powerWords[k]}`));
+        drawPagePreview();
+    }
+
+    function renderList() {
+        const q = $('dqSearch').value.trim().toLowerCase();
+        const cat = $('dqCatFilter').value, show = $('dqShow').value;
+        const shown = all().filter(x => (!cat || x.cat === cat)
+            && (!show || (show === 'own' && x.own) || (show === 'edited' && x.edited) || (show === 'off' && !x.enabled))
+            && (!q || x.q.toLowerCase().includes(q) || x.options.some(o => o.label.toLowerCase().includes(q))));
+        $('dqCount').textContent = shown.length === all().length ? String(all().length) : `${shown.length} of ${all().length}`;
+        if (!shown.length) return void $('dqList').replaceChildren(el('div', { className: 'cf-state cf-state--compact' }, el('p', { className: 'cf-state-text', text: 'No questions match.' })));
+        $('dqList').replaceChildren(...shown.map(x => {
+            const chips = [el('span', { text: data.tags.categories[x.cat] || x.cat })];
+            if (x.own) chips.push(el('span', { className: 'cf-pill is-info', text: 'Your own' }));
+            if (x.edited) chips.push(el('span', { className: 'cf-pill is-warn', text: 'Changed' }));
+            if (!x.enabled) chips.push(el('span', { className: 'cf-pill', text: 'Off' }));
+            const actions = [
+                el('button', { className: 'btn btn-secondary btn-sm', text: 'Edit', attrs: { type: 'button', 'data-act': 'edit', 'data-ref': x.ref } }),
+                el('button', { className: 'btn btn-secondary btn-sm', text: x.enabled ? 'Turn off' : 'Turn on', attrs: { type: 'button', 'data-act': 'toggle', 'data-ref': x.ref } }),
+            ];
+            if (x.edited) actions.push(el('button', { className: 'btn btn-secondary btn-sm', text: 'Reset', attrs: { type: 'button', 'data-act': 'reset', 'data-ref': x.ref } }));
+            if (x.own) actions.push(el('button', { className: 'btn btn-danger btn-sm', text: 'Delete', attrs: { type: 'button', 'data-act': 'delete', 'data-ref': x.ref } }));
+            return el('article', { className: 'cf-list-item cf-list-item--multi dq-q' + (x.enabled ? '' : ' is-off') },
+                el('div', { className: 'cf-list-main' },
+                    el('div', { className: 'cf-list-meta' }, ...chips),
+                    el('p', { className: 'dq-q-text', text: x.q }),
+                    el('ul', { className: 'dq-opts' }, ...x.options.map(o => el('li', null, el('span', { text: o.label }), el('span', { className: 'dq-opt-tags', text: tagLine(o) }))))),
+                el('div', { className: 'cf-list-actions' }, ...actions));
+        }));
+    }
+
+    async function load() {
+        data = await api(base);
+        if ($('dqCatFilter').options.length <= 1) {
+            for (const [k, name] of Object.entries(data.tags.categories)) {
+                $('dqCatFilter').append(el('option', { text: name, attrs: { value: k } }));
+                $('dqFormCat').append(el('option', { text: name, attrs: { value: k } }));
+            }
+        }
+        renderSummary();
+        renderList();
+    }
+
+    // ── Editor
+    function selectOf(label, values, current, allowNone) {
+        const s = el('select', { className: 'form-select form-select-sm', attrs: { 'data-no-savebar': '' } });
+        if (allowNone) s.append(el('option', { text: 'None', attrs: { value: '' } }));
+        for (const [v, text] of values) {
+            const o = el('option', { text, attrs: { value: String(v) } });
+            if (String(v) === String(current ?? '')) o.selected = true;
+            s.append(o);
+        }
+        return el('label', null, label, s);
+    }
+    function answerBox(o, i) {
+        const t = data.tags;
+        const label = el('input', { className: 'form-control', attrs: { maxlength: String(t.limits.label), 'aria-label': `Answer ${i + 1} text`, 'data-no-savebar': '' } });
+        label.value = o.label || '';
+        const box = el('fieldset', { className: 'dq-answer' },
+            el('legend', { text: `Answer ${i + 1}` }),
+            label,
+            el('div', { className: 'dq-answer-tags' },
+                selectOf('Attribute', t.attributes.map(a => [a, a]), o.a || t.attributes[0], false),
+                selectOf('Field', t.fields.map(f => [f, f]), o.f, true),
+                selectOf('Family', t.families.map(f => [f.key, f.word]), o.t, true),
+                selectOf('Crest', t.crests.map(c => [c.key, c.name]), o.c, true),
+                selectOf('Power', t.powerWords.map((w, p) => [p, `${p} · ${w}`]), o.p ?? 1, false)));
+        if (i >= t.limits.minOptions) {
+            const rm = el('button', { className: 'btn btn-secondary btn-sm', text: 'Remove answer', attrs: { type: 'button' } });
+            rm.addEventListener('click', () => { box.remove(); renumber(); drawForm(); });
+            box.append(el('div', null, rm));
+        }
+        return box;
+    }
+    function renumber() {
+        [...$('dqFormAnswers').children].forEach((b, i) => { b.querySelector('legend').textContent = `Answer ${i + 1}`; });
+        $('dqFormAddAnswer').hidden = $('dqFormAnswers').children.length >= data.tags.limits.maxOptions;
+    }
+    function drawForm() {
+        drawQuestion($('dqFormPvDesc'), $('dqFormPvButtons'), $('dqFormQ').value, $('dqFormCat').value,
+            [...$('dqFormAnswers').children].map(b => b.querySelector('input').value));
+    }
+    function openEditor(x) {
+        editing = x;
+        $('dqDialogTitle').textContent = x ? 'Edit question' : 'Add question';
+        $('dqDialogNote').textContent = !x ? 'Your question joins the others in its category. It is used only in this server.'
+            : x.own ? 'This is one of your own questions.'
+            : 'This is a standard question. Your changes apply only in this server, and Reset puts the original back.';
+        $('dqFormCat').value = x ? x.cat : Object.keys(data.tags.categories)[0];
+        $('dqFormQ').value = x ? x.q : '';
+        const opts = x ? x.options : [{}, {}, {}, {}];
+        $('dqFormAnswers').replaceChildren(...opts.map(answerBox));
+        $('dqFormError').hidden = true;
+        renumber();
+        drawForm();
+        $('dqDialog').showModal();
+        $('dqFormQ').focus();
+    }
+    function readForm() {
+        return {
+            cat: $('dqFormCat').value,
+            q: $('dqFormQ').value,
+            options: [...$('dqFormAnswers').children].map(box => {
+                const [a, f, t, c, p] = [...box.querySelectorAll('select')].map(s => s.value);
+                return { label: box.querySelector('input').value, a, f: f || null, t: t || null, c: c || null, p: Number(p) };
+            }),
+        };
+    }
+    $('dqForm').addEventListener('input', drawForm);
+    $('dqFormAddAnswer').addEventListener('click', () => {
+        $('dqFormAnswers').append(answerBox({}, $('dqFormAnswers').children.length));
+        renumber();
+        drawForm();
+    });
+    $('dqFormCancel').addEventListener('click', () => $('dqDialog').close());
+    $('dqFormClose').addEventListener('click', () => $('dqDialog').close());
+    $('dqForm').addEventListener('submit', async e => {
+        e.preventDefault();
+        const btn = $('dqFormSave');
+        btn.disabled = true;
+        try {
+            const body = JSON.stringify(readForm());
+            if (editing) await api(`${base}/${editing.ref}`, { method: 'PUT', body });
+            else await api(base, { method: 'POST', body });
+            $('dqDialog').close();
+            await load();
+        } catch (err) {
+            $('dqFormError').textContent = err.message;
+            $('dqFormError').hidden = false;
+        } finally { btn.disabled = false; }
+    });
+
+    // ── Row actions. Delete asks once more on the same button instead of a browser dialog.
+    $('dqList').addEventListener('click', async e => {
+        const btn = e.target.closest('button[data-act]');
+        if (!btn) return;
+        const x = all().find(q => q.ref === btn.dataset.ref);
+        if (!x) return;
+        const act = btn.dataset.act;
+        if (act === 'edit') return openEditor(x);
+        if (act === 'delete' && !btn.dataset.armed) {
+            btn.dataset.armed = '1';
+            btn.textContent = 'Delete for good';
+            setTimeout(() => { if (btn.isConnected) { delete btn.dataset.armed; btn.textContent = 'Delete'; } }, 5000);
+            return;
+        }
+        btn.disabled = true;
+        showErr('');
+        try {
+            if (act === 'toggle') await api(`${base}/${x.ref}/enabled`, { method: 'POST', body: JSON.stringify({ enabled: !x.enabled }) });
+            if (act === 'reset' || act === 'delete') await api(`${base}/${x.ref}`, { method: 'DELETE' });
+            await load();
+        } catch (err) {
+            showErr(err.message);
+            btn.disabled = false;
+        }
+    });
+    $('dqAdd').addEventListener('click', () => openEditor(null));
+    ['dqSearch', 'dqCatFilter', 'dqShow'].forEach(id => $(id).addEventListener('input', renderList));
+    load().catch(err => showErr(`Could not load the quiz questions: ${err.message}`));
+})();
+</script>

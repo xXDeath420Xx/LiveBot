@@ -9,16 +9,10 @@
  */
 import pool from '../../../utils/db.js';
 import logger from '../../../utils/logger.js';
-
-// Never flag these, even if a community list contains them. Mirrors
-// core/phishing-detection-manager.js SAFE_DOMAINS (+ kick essentials).
-const SAFE_DOMAINS = new Set([
-    'discord.com', 'discordapp.com', 'cdn.discordapp.com', 'cdn.discord.com',
-    'media.discordapp.net', 'discord.gg', 'discord.media', 'discordstatus.com',
-    'twitch.tv', 'kick.com', 'youtube.com', 'youtu.be', 'twitter.com', 'x.com',
-    'steamcommunity.com', 'store.steampowered.com', 'github.com',
-    'tenor.com', 'giphy.com', 'imgur.com'
-]);
+// Never flag these, even if a community list contains them. Shared with the
+// Discord manager rather than mirrored — the mirrored copy drifted, so a domain
+// cleared on Discord was still being deleted on Kick.
+import { SAFE_DOMAINS, isSafeDomain } from '../../../core/safe-domains.js';
 
 const REFRESH_MS = 4 * 60 * 60 * 1000; // 4h, matching the Discord sync cadence
 let domainSet = new Set();
@@ -37,7 +31,7 @@ export async function loadDomains() {
         const [phish] = await pool.execute('SELECT domain FROM phishing_domains');
         for (const r of phish) {
             const d = normalize(r.domain);
-            if (d && !SAFE_DOMAINS.has(d)) set.add(d);
+            if (d && !isSafeDomain(d)) set.add(d);
         }
         // Kick-specific manual additions (managers add via dashboard / chat).
         const [sites] = await pool.execute('SELECT uri FROM kbd_malicious_sites');
@@ -46,7 +40,7 @@ export async function loadDomains() {
             let host = String(r.uri).toLowerCase().trim();
             try { host = new URL(host.includes('://') ? host : `http://${host}`).hostname; } catch { /* keep raw */ }
             const d = normalize(host);
-            if (d && !SAFE_DOMAINS.has(d)) set.add(d);
+            if (d && !isSafeDomain(d)) set.add(d);
         }
         domainSet = set;
         loaded = true;
@@ -64,18 +58,28 @@ export function startDomainRefresh() {
     if (typeof refreshTimer.unref === 'function') refreshTimer.unref();
 }
 
-/** Extract unique {domain,url} from message content. Mirrors the Discord manager. */
+// A bare host name in chat ("free-nitro.xyz", "www.bad.co/claim"): labels of letters, digits and hyphens, at least
+// one dot, ending in an alphabetic TLD. Only used for list lookups (H-697).
+const BARE_HOST_RE = /(?:^|[\s(<"'\[])((?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,24})(?=$|[\s/)>"'\],.!?:;])/gi;
+
+/**
+ * Extract unique {domain,url} from message content. http(s) URLs as before (mirrors the Discord manager), plus
+ * bare host names with `bare: true` (H-697). Callers must only match bare hosts against the known list.
+ */
 export function extractDomains(content) {
-    const urlRegex = /https?:\/\/[^\s<>]+/gi;
-    const matches = (content || '').match(urlRegex);
-    if (!matches) return [];
+    const text = content || '';
     const seen = new Set();
     const out = [];
-    for (const rawUrl of matches) {
+    for (const rawUrl of text.match(/https?:\/\/[^\s<>]+/gi) || []) {
         try {
             const domain = normalize(new URL(rawUrl).hostname);
             if (!seen.has(domain)) { seen.add(domain); out.push({ domain, url: rawUrl }); }
         } catch { /* malformed URL — skip */ }
+    }
+    const withoutUrls = text.replace(/https?:\/\/[^\s<>]+/gi, ' ');
+    for (const m of withoutUrls.matchAll(BARE_HOST_RE)) {
+        const domain = normalize(m[1].toLowerCase());
+        if (!seen.has(domain)) { seen.add(domain); out.push({ domain, url: m[1], bare: true }); }
     }
     return out;
 }
@@ -86,8 +90,10 @@ export function extractDomains(content) {
  * Cheap-exits when the message has no URL.
  */
 export function findPhishingDomain(content) {
-    if (!loaded || !content || content.indexOf('http') === -1) return null;
+    // Cheap exit: no dot, no URL or host name to check.
+    if (!loaded || !content || content.indexOf('.') === -1) return null;
     for (const { domain } of extractDomains(content)) {
+        if (isSafeDomain(domain)) continue;
         if (domainSet.has(domain)) return domain;
         // Walk parent domains: a.b.evil.com → b.evil.com → evil.com
         const parts = domain.split('.');
@@ -110,7 +116,7 @@ export function isDomainBlocked(input) {
     let host = String(input).toLowerCase().trim();
     try { host = new URL(host.includes('://') ? host : `http://${host}`).hostname; } catch { /* use raw */ }
     host = normalize(host);
-    if (SAFE_DOMAINS.has(host)) return { blocked: false, matched: null, safe: true };
+    if (isSafeDomain(host)) return { blocked: false, matched: null, safe: true };
     if (domainSet.has(host)) return { blocked: true, matched: host, safe: false };
     const parts = host.split('.');
     for (let i = 1; i < parts.length - 1; i++) {

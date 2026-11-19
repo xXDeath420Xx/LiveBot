@@ -1,6 +1,8 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType } from 'discord.js';
 import pool from '../../utils/db.js';
 import logger from '../../utils/logger.js';
+import { getBugReportSettings, triagePing, BUG_REPORTS_OFF } from '../../core/bug-report-settings.js';
+import { holdsForReview, postReviewCard } from '../../core/suggestion-review.js';
 
 export async function handleForumSuggestionSubmit(interaction) {
     try {
@@ -23,13 +25,18 @@ export async function handleForumSuggestionSubmit(interaction) {
             return interaction.editReply({ content: 'Suggestions are not configured for this server.' });
         }
 
-        const status = config.require_approval ? 'pending' : 'approved';
+        const held = holdsForReview(config);
+        const status = held ? 'pending' : 'approved';
+
+        // A held suggestion is posted later from its stored text (core/suggestion-review.js), so the
+        // title and category go into that text.
+        const storedText = held ? `**${title}**\nCategory: ${category}\n\n${suggestionText}` : suggestionText;
 
         // Insert into DB
         const [result] = await pool.execute(
             `INSERT INTO suggestions (guild_id, user_id, suggestion_text, is_anonymous, status)
              VALUES (?, ?, ?, 0, ?)`,
-            [interaction.guildId, interaction.user.id, suggestionText, status]
+            [interaction.guildId, interaction.user.id, storedText, status]
         );
         const suggestionId = result.insertId;
 
@@ -40,6 +47,18 @@ export async function handleForumSuggestionSubmit(interaction) {
              ON DUPLICATE KEY UPDATE total_suggestions = total_suggestions + 1`,
             [interaction.guildId, interaction.user.id]
         );
+
+        // Approval required: staff see it first; it is posted for voting once approved.
+        if (held) {
+            await postReviewCard({
+                guild: interaction.guild, config, suggestionId, text: storedText, userId: interaction.user.id, anonymous: false,
+            });
+            await interaction.editReply({
+                content: `Your suggestion (#${suggestionId}) was sent to staff. It will be posted for voting once they approve it.`
+            });
+            logger.info('[ForumSuggestion] Suggestion held for approval', { suggestionId, userId: interaction.user.id, guildId: interaction.guildId });
+            return;
+        }
 
         // Build embed
         const embed = new EmbedBuilder()
@@ -114,6 +133,13 @@ export async function handleForumBugReportSubmit(interaction) {
     try {
         await interaction.deferReply({ ephemeral: true });
 
+        // Bug reports page: accepting, where to post, who to ping. Re-checked here because the
+        // setting can change while the form is open.
+        const bugSettings = await getBugReportSettings(interaction.guildId);
+        if (!bugSettings.accepting) {
+            return interaction.editReply({ content: BUG_REPORTS_OFF });
+        }
+
         const title = interaction.fields.getTextInputValue('bug_title');
         const trying = interaction.fields.getTextInputValue('bug_trying');
         const happened = interaction.fields.getTextInputValue('bug_happened');
@@ -154,11 +180,8 @@ export async function handleForumBugReportSubmit(interaction) {
         }
 
         // Post to forum
-        const [configs] = await pool.execute(
-            'SELECT bug_report_channel_id FROM suggestion_config WHERE guild_id = ?',
-            [interaction.guildId]
-        );
-        const bugChannelId = configs[0]?.bug_report_channel_id;
+        const bugChannelId = bugSettings.channelId;
+        const ping = triagePing(interaction.guild, bugSettings.triageRoleId);
 
         if (bugChannelId) {
             const channel = await interaction.guild.channels.fetch(bugChannelId).catch(() => null);
@@ -170,7 +193,7 @@ export async function handleForumBugReportSubmit(interaction) {
 
                 const thread = await channel.threads.create({
                     name: `Bug #${bugId}: ${title.substring(0, 90)}`,
-                    message: { embeds: [embed] },
+                    message: { embeds: [embed], ...ping },
                     appliedTags: tags
                 });
 
@@ -179,7 +202,7 @@ export async function handleForumBugReportSubmit(interaction) {
                     [JSON.stringify({ thread_id: thread.id, channel_id: bugChannelId }), bugId]
                 );
             } else if (channel) {
-                await channel.send({ embeds: [embed] });
+                await channel.send({ embeds: [embed], ...ping });
             }
         }
 

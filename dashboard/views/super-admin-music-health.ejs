@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>" lang="en">
+<head>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="/css/super-admin-music.css?v=4">
+
+<%- include('partials/site-head', { title: 'Music health · Owner console · CertiFried', noindex: true }) %>
+</head>
+<body>
+    <%- include('partials/site-header', { user }) %>
+
+    <main id="main-content" tabindex="-1">
+        <div class="container">
+            <%- include('partials/site/_owner-nav', { ownerActive: 'music-health' }) %>
+            <div class="page-header">
+                <div class="page-header-content">
+                    <div class="page-icon" aria-hidden="true"><i class="fas fa-wave-square"></i></div>
+                    <div>
+                        <h1 class="page-title">Music health</h1>
+                        <p class="page-subtitle">Every link in the music chain, checked once a minute.</p>
+                    </div>
+                </div>
+                <div class="controls">
+                    <div class="seg" role="group" aria-label="Time range">
+                        <button type="button" data-range="24h" aria-pressed="true">24h</button>
+                        <button type="button" data-range="7d" aria-pressed="false">7 days</button>
+                        <button type="button" data-range="30d" aria-pressed="false">30 days</button>
+                    </div>
+                    <button type="button" class="btn" id="refresh"><i class="fas fa-rotate-right" aria-hidden="true"></i> Refresh</button>
+                    <span class="updated" id="updated"></span>
+                </div>
+            </div>
+            <nav class="tabs" aria-label="Music pages">
+                <a href="/super-admin/music-health" aria-current="page">Health</a>
+                <a href="/super-admin/music-activity">Activity</a>
+            </nav>
+
+            <div class="banner tone-none" id="banner" role="status" aria-live="polite">
+                <div class="banner-icon"><i class="fas fa-circle-notch fa-spin" aria-hidden="true"></i></div>
+                <div><h2>Loading…</h2><p>Reading the health monitor.</p></div>
+            </div>
+
+            <h2 class="section-title"><i class="fas fa-satellite-dish" aria-hidden="true"></i> Right now</h2>
+            <div class="grid" id="components"></div>
+
+            <h2 class="section-title"><i class="fas fa-clock-rotate-left" aria-hidden="true"></i> History <span class="section-note" id="history-note"></span></h2>
+            <div class="card"><div class="card-body">
+                <div class="timeline" id="timeline"></div>
+                <div class="legend">
+                    <span class="tone-up"><i></i> Up</span>
+                    <span class="tone-degraded"><i></i> Blip (a probe failed but it didn't stay down)</span>
+                    <span class="tone-down"><i></i> Down</span>
+                    <span class="tone-none"><i></i> No data (monitor not running)</span>
+                </div>
+            </div></div>
+
+            <h2 class="section-title"><i class="fas fa-chart-line" aria-hidden="true"></i> Trends</h2>
+            <div class="charts" id="charts"></div>
+
+            <h2 class="section-title"><i class="fas fa-triangle-exclamation" aria-hidden="true"></i> Incidents <span class="section-note">state changes in this range · 🔔 = you were DMed</span></h2>
+            <div class="card"><div class="table-wrap" id="incidents"></div></div>
+
+            <details class="card" style="margin-top: 2rem;">
+                <summary class="card-header">
+                    <span class="card-title"><i class="fas fa-chevron-right chev" aria-hidden="true"></i> All checks</span>
+                    <span class="muted small" id="checks-count"></span>
+                </summary>
+                <div class="table-wrap" id="checks"></div>
+            </details>
+        </div>
+    </main>
+    <%- include('partials/site-footer') %>
+    <div id="tooltip" role="tooltip"></div>
+
+    <script>
+    (function () {
+        'use strict';
+        const API = '/api/super-admin/music-health';
+        const REFRESH_MS = 30000;
+        let range = '24h';
+        try { range = localStorage.getItem('music-health-range') || '24h'; } catch (e) { /* storage disabled */ }
+        if (!['24h', '7d', '30d'].includes(range)) range = '24h';
+        let data = null, loadedAt = 0, inFlight = false;
+
+        // Every node is built here: text goes in as text nodes and attributes via setAttribute, so
+        // nothing the monitor reports (check details, titles, hostnames) can ever be parsed as HTML.
+        const SVG_NS = 'http://www.w3.org/2000/svg';
+        const SVG_TAGS = new Set(['svg', 'path', 'rect', 'line', 'text', 'title']);
+        function h(tag, attrs, ...kids) {
+            const el = SVG_TAGS.has(tag) ? document.createElementNS(SVG_NS, tag) : document.createElement(tag);
+            for (const [k, v] of Object.entries(attrs || {})) if (v != null && v !== false) el.setAttribute(k, String(v));
+            for (const kid of kids.flat(Infinity)) if (kid != null && kid !== false) el.append(kid instanceof Node ? kid : String(kid));
+            return el;
+        }
+        const $ = (id) => document.getElementById(id);
+        const put = (id, ...nodes) => $(id).replaceChildren(...nodes.flat(Infinity).filter(n => n != null && n !== false));
+
+        const pct = (v) => (v == null ? '—' : v >= 0.9995 ? '100%' : `${(Math.floor(v * 1000) / 10).toFixed(1)}%`);
+        const fmtTime = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' });
+        const fmtDay = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' });
+        const fmtFull = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        function ago(ms) {
+            const s = Math.max(0, Math.round(ms / 1000));
+            if (s < 60) return `${s}s ago`;
+            if (s < 3600) return `${Math.round(s / 60)}m ago`;
+            if (s < 86400) return `${Math.floor(s / 3600)}h ${Math.round((s % 3600) / 60)}m ago`;
+            return `${Math.floor(s / 86400)}d ago`;
+        }
+        function dur(sec) {
+            if (sec == null) return '—';
+            if (sec < 90) return `${Math.round(sec)}s`;
+            if (sec < 5400) return `${Math.round(sec / 60)} min`;
+            if (sec < 172800) return `${Math.round(sec / 3600)} h`;
+            return `${Math.round(sec / 86400)} days`;
+        }
+        const mb = (b) => (b == null ? '—' : b >= 1e9 ? `${(b / 1e9).toFixed(2)} GB` : `${(b / 1e6).toFixed(1)} MB`);
+        const TONE = { up: 'Up', degraded: 'Blip', down: 'Down', none: 'No data' };
+        const ICON = { up: 'fa-circle-check', degraded: 'fa-circle-exclamation', down: 'fa-circle-xmark', none: 'fa-circle-question' };
+        const icon = (cls) => h('i', { class: cls, 'aria-hidden': 'true' });
+        const pill = (tone, text) => h('span', { class: `pill tone-${tone}` }, icon(`fas ${ICON[tone]}`), text || TONE[tone]);
+        const mark = (ok) => h('span', { class: ok ? 'ok' : 'bad' }, ok ? '✓' : '✗');
+        const COLORS = { server2: 'var(--accent-blue)', workstation: 'var(--accent-purple)' };
+        const colorOf = (name, i) => COLORS[name] || ['var(--accent-cyan)', 'var(--accent-orange)', 'var(--accent-green)'][i % 3];
+        const kv = (rows) => h('dl', { class: 'kv' }, rows.map(([k, ...v]) => [h('dt', null, k), h('dd', null, ...v)]));
+        const empty = (text) => h('div', { class: 'empty' }, text);
+
+        function checkState(c) { return !c ? 'none' : c.status === 'down' ? 'down' : c.ok ? 'up' : 'degraded'; }
+        const checksNow = () => data?.snapshot?.checks || {};
+        const titleOf = (id) => checksNow()[id]?.title || id;
+
+        // ── loading ────────────────────────────────────────────────────────────
+        async function load() {
+            if (inFlight) return;
+            inFlight = true;
+            try {
+                const r = await fetch(`${API}?range=${encodeURIComponent(range)}`, { credentials: 'same-origin', headers: { accept: 'application/json' } });
+                if (!(r.headers.get('content-type') || '').includes('application/json')) throw new Error('Your session expired — reload the page to sign in again.');
+                const body = await r.json();
+                if (!r.ok) throw new Error(body.error || `HTTP ${r.status}`);
+                data = body; loadedAt = Date.now();
+                render();
+            } catch (e) {
+                banner('down', 'Could not load music health', e.message);
+            } finally { inFlight = false; tickUpdated(); }
+        }
+
+        // ── rendering ──────────────────────────────────────────────────────────
+        function banner(tone, title, text) {
+            const b = $('banner');
+            b.className = `banner tone-${tone}`;
+            b.replaceChildren(h('div', { class: 'banner-icon' }, icon(`fas ${ICON[tone]}`)), h('div', null, h('h2', null, title), h('p', null, text)));
+        }
+
+        function render() {
+            const snap = data.snapshot, checks = checksNow(), ids = Object.keys(checks);
+            const down = ids.filter(id => checks[id].status === 'down');
+            const failing = ids.filter(id => !checks[id].ok && checks[id].status !== 'down');
+            const since = data.historySince ? `history since ${fmtFull.format(new Date(data.historySince))}` : 'no history yet';
+            const yt = checks['youtube:residential'];
+            if (!snap) banner('none', 'The health monitor has not reported yet', 'It starts about 30 seconds after the bot does.');
+            else if (data.snapshotAgeSec == null || data.snapshotAgeSec > 180) {
+                banner('down', 'The health monitor stopped reporting', `Last report ${ago(data.snapshotAgeSec * 1000)}: the bot or its monitor is not running. The sentinels on server2 and the workstation DM you if it stays that way.`);
+            } else if (yt && yt.status === 'down') banner('down', 'YouTube playback is down', `${yt.detail || ''} (${down.length} check(s) down)`);
+            else if (down.length) banner('down', `${down.length} check${down.length > 1 ? 's' : ''} down`, `${down.map(titleOf).join(' · ')}. Music keeps playing through whatever is still up.`);
+            else if (failing.length) banner('degraded', 'Operational, with a blip', `${failing.map(titleOf).join(' · ')} failed its latest probe; it only counts as down after two in a row. ${since}`);
+            else banner('up', 'All systems operational', `${ids.length} of ${ids.length} checks passing · monitor reported ${ago(data.snapshotAgeSec * 1000)} · ${since}`);
+
+            renderComponents();
+            renderTimeline();
+            renderCharts();
+            renderIncidents();
+            renderChecks();
+        }
+
+        function alertsFor(ids) {
+            const checks = checksNow();
+            const bad = ids.filter(id => checks[id] && !checks[id].ok);
+            if (!bad.length) return null;
+            return h('div', { class: 'alerts' }, bad.map(id => {
+                const c = checks[id];
+                const since = c.status === 'down' && c.since ? ` · down since ${fmtFull.format(new Date(c.since))}` : '';
+                return h('div', { class: `alert tone-${checkState(c)}` }, h('strong', null, `${c.title || id}${since}`), c.detail || '');
+            }));
+        }
+
+        function componentTone(comp) {
+            const states = comp.checks.map(id => checkState(checksNow()[id]));
+            return states.includes('down') ? 'down' : states.includes('degraded') ? 'degraded' : states.length ? 'up' : 'none';
+        }
+
+        function resolverBody(name) {
+            const hlth = data.snapshot?.resolvers?.[name];
+            if (!hlth) return h('p', { class: 'muted' }, 'Unreachable: no tunnel to it answers, so there are no details.');
+            const st = hlth.stats || {}, canary = hlth.canary || {}, v = hlth.versions || {};
+            const tunnels = (data.snapshot.tunnels || []).filter(t => t.resolver === name);
+            const playback = checksNow()[`resolver:${name}:playback`];
+            const rate = st.requests ? `${((st.ok / st.requests) * 100).toFixed(st.ok === st.requests ? 0 : 1)}% OK` : 'no requests yet';
+            return kv([
+                ['Status', hlth.status, (hlth.problems || []).length ? h('span', { class: 'warn' }, ` (${hlth.problems.join(', ')})`) : null],
+                ['Tunnels', `${tunnels.filter(t => t.reachable).length} of ${tunnels.length} up`],
+                ['Canary', canary.at ? [mark(canary.ok), ` ${canary.passed ?? '?'}/${canary.total ?? '?'} · ${canary.ms ? `${(canary.ms / 1000).toFixed(1)}s` : '—'} · ${ago(Date.now() - Date.parse(canary.at))}`]
+                    : h('span', { class: 'muted' }, 'not run yet')],
+                ['Playback', playback ? [mark(playback.ok), ` ${playback.ok ? 'plays on server1' : ''}`] : h('span', { class: 'muted' }, 'not probed yet')],
+                ['Cookies', hlth.cookieAgeSec == null ? h('span', { class: 'bad' }, 'no cookie jar') : `refreshed ${dur(hlth.cookieAgeSec)} ago`],
+                ['Requests', `${st.requests ?? 0} · ${rate}`, st.cookielessRescues ? ` · ${st.cookielessRescues} cookieless rescue(s)` : null],
+                ['Audio relay', st.relay ? [`${st.relay.streams} streams · ${mb(st.relay.bytes)}`,
+                    st.relay.active ? h('span', { class: 'ok' }, ` · ${st.relay.active} playing now`) : null,
+                    st.relay.upstreamErrors ? h('span', { class: 'warn' }, ` · ${st.relay.upstreamErrors} refused by YouTube`) : null] : '—'],
+                ['YouTube Music', st.ytm ? [`${st.ytm.served} matched & played · ${st.ytm.noMatch} fell back to search`,
+                    st.ytm.errors ? h('span', { class: 'warn' }, ` · ${st.ytm.errors} errors`) : null] : '—'],
+                ['Versions', `yt-dlp ${v['yt-dlp'] || '?'} · ejs ${v['yt-dlp-ejs'] || '?'} · PO tokens ${v['bgutil-ytdlp-pot-provider'] || '?'}`],
+                ['Auto-update', hlth.update || '—'],
+            ]);
+        }
+
+        function server1Body() {
+            const x = data.snapshot?.extractor || {}, p = data.snapshot?.prefetch || {};
+            const by = Object.entries(x.byResolver || {}).map(([n, v]) => `${n} ${v.hits}${v.failovers ? ` (+${v.failovers} failovers)` : ''}`).join(' · ');
+            const open = (x.breakers || []).filter(b => b.open).map(b => b.base);
+            return kv([
+                ['Lookups', `${x.calls ?? 0} sent · ${x.hits ?? 0} served`, x.since ? h('span', { class: 'muted' }, ` since ${fmtFull.format(new Date(x.since))}`) : null],
+                ['Served by', by || '—'],
+                ['Own-IP fallback', `${x.localOk ?? 0} OK · ${x.localFail ?? 0} failed`],
+                ['Prefetch', `${p.hits ?? 0} of ${p.started ?? 0} used`, p.stale ? ` · ${p.stale} stale` : null, p.expired ? ` · ${p.expired} expired` : null],
+                ['Circuit breakers', open.length ? h('span', { class: 'warn' }, `open: ${open.join(', ')}`) : 'all closed'],
+            ]);
+        }
+
+        const COMPONENT_ICON = { youtube: 'fa-brands fa-youtube', server1: 'fas fa-server', spotify: 'fa-brands fa-spotify', sentinels: 'fas fa-user-shield' };
+        const SHORT = { 'youtube:residential': 'Home resolver available', 'server1:cookies': 'Cookie jar', 'server1:bgutil': 'PO-token provider', 'spotify:owner': 'Owner session' };
+        const shortName = (id) => SHORT[id] || (id.startsWith('sentinel:') ? `${id.slice(9)} watching server1` : id.split(':').slice(1).join(':') || id);
+
+        function renderComponents() {
+            const checks = checksNow();
+            const cards = data.components.filter(c => c.checks.length).map(comp => {
+                const isResolver = comp.id.startsWith('resolver:');
+                const checkRows = () => kv(comp.checks.map(id => [shortName(id), mark(checks[id].ok), checks[id].ok ? ' OK' : ` ${checks[id].title || ''}`]));
+                let body;
+                if (isResolver) body = resolverBody(comp.id.slice(9));
+                else if (comp.id === 'server1') body = [checkRows(), h('div', { style: 'height:0.6rem' }), server1Body()];
+                else body = checkRows();
+                const intro = comp.id === 'youtube'
+                    ? h('p', { class: 'intro' }, 'Plays resolve on a home IP (server2 first, then the workstation) and stream to server1 through that machine\'s audio relay. server1\'s own IP is the last resort.')
+                    : null;
+                const titleId = `c-${comp.id.replace(/[^a-z0-9-]/gi, '-')}`;
+                return h('section', { class: 'card', 'aria-labelledby': titleId },
+                    h('div', { class: 'card-header' },
+                        h('h3', { class: 'card-title', id: titleId }, icon(isResolver ? 'fas fa-house-signal' : (COMPONENT_ICON[comp.id] || 'fas fa-circle-nodes')), comp.label),
+                        pill(componentTone(comp))),
+                    h('div', { class: 'card-body' }, intro, body, alertsFor(comp.checks)));
+            });
+            put('components', cards.length ? cards : h('div', { class: 'card' }, empty('No checks reported yet.')));
+        }
+
+        function renderTimeline() {
+            if (data.historyError) { $('history-note').textContent = ''; put('timeline', empty(data.historyError)); return; }
+            const mins = Math.round(data.bucketMs / 60000);
+            $('history-note').textContent = `${mins >= 60 ? `${mins / 60}-hour` : `${mins}-minute`} blocks · uptime = time not down`;
+            if (!data.components.length) { put('timeline', empty('No history yet.')); return; }
+            const rows = data.components.map(comp => {
+                const outages = comp.buckets.filter(b => b.state === 'down').length;
+                const upTone = comp.uptime == null ? 'muted' : comp.uptime >= 0.999 ? 'ok' : comp.uptime >= 0.98 ? 'warn' : 'bad';
+                return h('div', { class: 'tl-row' },
+                    h('div', { class: 'tl-label', title: comp.label }, comp.label),
+                    h('div', { class: 'tl-bars', role: 'img', 'aria-label': `${comp.label}: ${pct(comp.uptime)} uptime, ${outages} block(s) with an outage` },
+                        comp.buckets.map((b, i) => h('span', { class: `tl-bar tone-${b.state}`, 'data-c': comp.id, 'data-i': i }))),
+                    h('div', { class: `tl-uptime ${upTone}` }, pct(comp.uptime)));
+            });
+            const fmt = data.range === '24h' ? fmtTime : fmtDay;
+            const mid = data.from + (data.now - data.from) / 2;
+            put('timeline', rows, h('div', { class: 'tl-axis', 'aria-hidden': 'true' }, h('div'),
+                h('div', null, h('span', null, fmt.format(new Date(data.from))), h('span', null, fmt.format(new Date(mid))), h('span', null, 'now')), h('div')));
+        }
+
+        // Minimal SVG charts: no library, colours from the theme variables. The SVG stretches to the
+        // card (preserveAspectRatio none), so strokes use non-scaling-stroke and there is no text inside.
+        // minScale: the smallest top of the axis, so a few KB of probe traffic doesn't fill the chart.
+        function chart(title, series, { stacked = false, decimals = 0, total = null, unit = '', minScale = 1e-9 } = {}) {
+            const W = 600, H = 150, P = { l: 2, r: 2, t: 8, b: 4 };
+            const n = series[0]?.values.length || 0;
+            const totals = stacked ? Array.from({ length: n }, (_, i) => series.reduce((s, x) => s + (x.values[i] || 0), 0)) : null;
+            const max = Math.max(minScale, ...(stacked ? totals : series.flatMap(s => s.values.filter(v => v != null))));
+            const step = (W - P.l - P.r) / Math.max(1, n);
+            const x = (i) => P.l + (i + 0.5) * step;
+            const y = (v) => H - P.b - (v / max) * (H - P.t - P.b);
+            const hasData = series.some(s => s.values.some(v => v));
+            const shapes = [];
+            if (stacked) {
+                const bw = Math.max(1, step - 1), base = Array(n).fill(0);
+                for (const s of series) s.values.forEach((v, i) => {
+                    if (!v) return;
+                    const y0 = y(base[i]), y1 = y(base[i] + v);
+                    shapes.push(h('rect', { x: (x(i) - bw / 2).toFixed(1), y: y1.toFixed(1), width: bw.toFixed(1), height: Math.max(0.5, y0 - y1).toFixed(1), fill: s.color, rx: 1 },
+                        h('title', null, `${s.name}: ${v.toFixed(decimals)}`)));
+                    base[i] += v;
+                });
+            } else {
+                const stroke = (color, width) => ({ fill: 'none', stroke: color, 'stroke-width': width, 'stroke-linejoin': 'round', 'stroke-linecap': 'round', 'vector-effect': 'non-scaling-stroke' });
+                for (const s of series) {
+                    let d = '', pen = false;
+                    s.values.forEach((v, i) => {
+                        if (v == null) { pen = false; return; }
+                        d += `${pen ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`; pen = true;
+                        // A point with no neighbour draws no line: mark it with a round dot instead.
+                        if (s.values[i - 1] == null && s.values[i + 1] == null) {
+                            shapes.push(h('path', { d: `M${x(i).toFixed(1)},${y(v).toFixed(1)}h0.01`, ...stroke(s.color, 7) }, h('title', null, `${s.name}: ${v.toFixed(decimals)}${unit}`)));
+                        }
+                    });
+                    if (d) shapes.push(h('path', { d, ...stroke(s.color, 2) }));
+                }
+            }
+            const svg = h('svg', { viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: 'none', role: 'img', 'aria-label': `${title}, peak ${max.toFixed(decimals)}${unit}` },
+                h('line', { class: 'grid-line', x1: P.l, x2: W - P.r, y1: y(max), y2: y(max), 'vector-effect': 'non-scaling-stroke' }),
+                h('line', { class: 'grid-line', x1: P.l, x2: W - P.r, y1: y(0), y2: y(0), 'vector-effect': 'non-scaling-stroke' }),
+                shapes);
+            const note = total != null ? total : hasData ? `peak ${max.toFixed(decimals)}${unit}` : null;
+            return h('section', { class: 'card chart' },
+                h('div', { class: 'card-header' }, h('h3', { class: 'card-title' }, title), note != null ? h('span', { class: 'chart-total' }, note) : null),
+                h('div', { class: 'card-body' }, hasData ? svg : empty('Nothing in this range yet.'),
+                    h('div', { class: 'chart-legend' }, series.map(s => h('span', { style: `--c:${s.color}` }, s.name)))));
+        }
+
+        function renderCharts() {
+            const t = data.trends;
+            if (!t) { put('charts', h('div', { class: 'card' }, empty(data.historyError || 'No history yet.'))); return; }
+            const names = t.resolvers, sum = (arr) => arr.reduce((s, v) => s + (v || 0), 0);
+            const relayTotal = sum(names.map(n => sum(t.relayMb[n])));
+            put('charts',
+                chart('Canary resolve time', names.map((n, i) => ({ name: n, color: colorOf(n, i), values: t.latency[n].map(v => (v == null ? null : v / 1000)) })), { decimals: 1, unit: 's' }),
+                chart('Audio relayed to server1 (MB)', names.map((n, i) => ({ name: n, color: colorOf(n, i), values: t.relayMb[n] })),
+                    { stacked: true, decimals: 1, minScale: 1, total: `${relayTotal > 0 && relayTotal < 0.1 ? '< 0.1' : relayTotal.toFixed(1)} MB total` }),
+                chart('Lookups from the bot', [
+                    { name: 'via home resolvers', color: 'var(--accent-green)', values: t.plays.map((v, i) => Math.max(0, v - t.local[i])) },
+                    { name: 'server1 own-IP fallback', color: 'var(--accent-orange)', values: t.local },
+                ], { stacked: true, minScale: 5, total: `${sum(t.plays)} total` }));
+        }
+
+        function renderIncidents() {
+            const ev = data.events || [];
+            if (!ev.length) { put('incidents', empty(data.historyError || 'No state changes in this range. 🎉')); return; }
+            const KIND = { down: ['down', 'Down'], up: ['up', 'Recovered'], still_down: ['down', 'Still down'] };
+            put('incidents', h('table', null,
+                h('thead', null, h('tr', null, h('th', { scope: 'col' }, 'When'), h('th', { scope: 'col' }, 'Check'), h('th', { scope: 'col' }, 'Event'),
+                    h('th', { scope: 'col' }, h('span', { class: 'sr-only' }, 'DMed'), '🔔'), h('th', { scope: 'col' }, 'Detail'))),
+                h('tbody', null, ev.map(e => {
+                    const [tone, label] = KIND[e.kind] || ['none', e.kind];
+                    return h('tr', null,
+                        h('td', { class: 'num' }, fmtFull.format(new Date(e.t))),
+                        h('td', null, e.title, h('div', { class: 'muted small' }, e.check_id)),
+                        h('td', null, pill(tone, label)),
+                        h('td', null, e.notified ? h('span', { title: 'DMed to you' }, '🔔') : h('span', { class: 'muted', title: 'Not DMed: folded into a higher-level alert' }, '—')),
+                        h('td', { class: 'detail' }, e.detail || ''));
+                }))));
+        }
+
+        function renderChecks() {
+            const checks = checksNow();
+            const rank = (id) => ({ down: 0, degraded: 1, up: 2, none: 3 }[checkState(checks[id])]);
+            const ids = Object.keys(checks).sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
+            $('checks-count').textContent = `${ids.filter(id => checks[id].ok).length} of ${ids.length} passing`;
+            if (!ids.length) { put('checks', empty('No checks reported yet.')); return; }
+            put('checks', h('table', null,
+                h('thead', null, h('tr', null, h('th', { scope: 'col' }, 'Check'), h('th', { scope: 'col' }, 'State'), h('th', { scope: 'col' }, 'Since'),
+                    h('th', { scope: 'col', class: 'num' }, `Uptime (${data.range})`), h('th', { scope: 'col' }, 'Detail'))),
+                h('tbody', null, ids.map(id => {
+                    const c = checks[id];
+                    return h('tr', null,
+                        h('td', null, c.ok ? id : [c.title || id, h('div', { class: 'muted small' }, id)]),
+                        h('td', null, pill(checkState(c))),
+                        h('td', { class: 'num' }, c.since ? fmtFull.format(new Date(c.since)) : '—'),
+                        h('td', { class: 'num' }, pct(data.checkUptime?.[id])),
+                        h('td', { class: 'detail' }, c.ok ? '' : (c.detail || '')));
+                }))));
+        }
+
+        // ── timeline tooltip ───────────────────────────────────────────────────
+        const tip = $('tooltip');
+        document.addEventListener('mouseover', (e) => {
+            const bar = e.target.closest && e.target.closest('.tl-bar');
+            if (!bar || !data) { tip.style.display = 'none'; return; }
+            const comp = data.components.find(c => c.id === bar.dataset.c);
+            const b = comp && comp.buckets[Number(bar.dataset.i)];
+            if (!b) return;
+            tip.replaceChildren(
+                h('strong', null, `${fmtFull.format(new Date(b.start))} – ${fmtTime.format(new Date(b.start + data.bucketMs))}`),
+                TONE[b.state],
+                b.down.map(id => h('div', { class: 'bad' }, `Down: ${titleOf(id)}`)),
+                b.failing.map(id => h('div', { class: 'warn' }, `Blip: ${titleOf(id)}`)));
+            tip.style.display = 'block';
+        });
+        document.addEventListener('mousemove', (e) => {
+            if (tip.style.display !== 'block') return;
+            const w = tip.offsetWidth, ht = tip.offsetHeight;
+            tip.style.left = `${Math.max(8, Math.min(window.innerWidth - w - 8, e.clientX + 12))}px`;
+            tip.style.top = `${e.clientY + ht + 20 > window.innerHeight ? e.clientY - ht - 12 : e.clientY + 16}px`;
+        });
+
+        // ── controls ───────────────────────────────────────────────────────────
+        function setRange(r) {
+            range = r;
+            try { localStorage.setItem('music-health-range', r); } catch (e) { /* storage disabled */ }
+            document.querySelectorAll('.seg button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.range === r)));
+            load();
+        }
+        document.querySelectorAll('.seg button').forEach(b => b.addEventListener('click', () => setRange(b.dataset.range)));
+        $('refresh').addEventListener('click', load);
+        function tickUpdated() { $('updated').textContent = loadedAt ? `Updated ${ago(Date.now() - loadedAt)}` : ''; }
+        setInterval(tickUpdated, 1000);
+        setInterval(() => { if (!document.hidden) load(); }, REFRESH_MS);
+        document.addEventListener('visibilitychange', () => { if (!document.hidden && Date.now() - loadedAt > REFRESH_MS) load(); });
+        setRange(range);
+    })();
+    </script>
+</body>
+</html>

@@ -1,0 +1,56 @@
+/*
+ * cf-user.css — a person in a dashboard table or list (dashboard/public/js/cf-user.js,
+ * partials/manage/_user-cell.ejs): avatar, display name, muted @username; an id with a copy
+ * button when nobody could be found; a "left" tag for someone no longer in the server. Tokens only (cf-ui.css, or the Classic page's mapped
+ * --cf-* set), with fallbacks so a page without the tokens still reads.
+ */
+.cf-user {
+    display: inline-flex; align-items: center; gap: 8px;
+    min-width: 0; max-width: 100%; vertical-align: middle;
+    color: var(--cf-text, inherit); line-height: 1.25;
+}
+.cf-user-av {
+    flex: none; width: 24px; height: 24px; border-radius: 50%;
+    object-fit: cover; background: var(--cf-surface-3, rgba(127, 127, 127, 0.2));
+}
+.cf-user-av--blank {
+    display: inline-flex; align-items: center; justify-content: center;
+    color: var(--cf-text-3, currentColor); font-size: 11px;
+}
+.cf-user-text { display: inline-flex; align-items: baseline; gap: 6px; min-width: 0; flex-wrap: wrap; }
+.cf-user-name {
+    font-weight: 500; color: var(--cf-text, inherit);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 22ch;
+}
+.cf-user-handle {
+    font-size: 0.85em; color: var(--cf-text-3, inherit); opacity: 1;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 20ch;
+}
+.cf-user-id {
+    font-family: var(--cf-mono, ui-monospace, monospace); font-size: 0.85em;
+    color: var(--cf-text-2, inherit); font-variant-numeric: tabular-nums;
+}
+.cf-user-copy {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px; padding: 0; margin: 0;
+    border: 1px solid transparent; border-radius: var(--cf-radius-sm, 4px);
+    background: transparent; color: var(--cf-text-3, inherit); cursor: pointer; font-size: 11px;
+}
+.cf-user-copy:hover { background: var(--cf-surface-2, rgba(127, 127, 127, 0.15)); color: var(--cf-text, inherit); border-color: var(--cf-border, transparent); }
+.cf-user-copy:focus-visible { outline: 2px solid var(--cf-accent, currentColor); outline-offset: 1px; }
+.cf-user.is-gone .cf-user-name { color: var(--cf-text-2, inherit); }
+.cf-user.is-gone .cf-user-av { opacity: 0.7; }
+.cf-user.is-loading .cf-user-id { opacity: 0.7; }
+/* Someone who left the server (named by a Discord lookup, core/user-lookup.js): a quiet tag. */
+.cf-user-left {
+    display: inline-block; padding: 0 6px; border-radius: 999px;
+    border: 1px solid var(--cf-border, rgba(127, 127, 127, 0.35));
+    font-size: 0.75em; line-height: 1.5; font-weight: 500; white-space: nowrap;
+    color: var(--cf-text-2, inherit); background: transparent;
+}
+.cf-user--sm { gap: 6px; font-size: 0.92em; }
+.cf-user--sm .cf-user-av { width: 18px; height: 18px; }
+/* In a narrow table cell the handle drops under the name instead of pushing the column wider. */
+td .cf-user-text { flex-direction: column; align-items: flex-start; gap: 0; }
+td .cf-user--sm .cf-user-text, .cf-user--inline .cf-user-text { flex-direction: row; align-items: baseline; gap: 6px; }
+td .cf-user-text:has(.cf-user-id) { flex-direction: row; align-items: center; gap: 4px; }

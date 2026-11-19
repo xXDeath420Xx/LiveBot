@@ -125,7 +125,11 @@ export default {
                         .addStringOption(opt => opt.setName('duration').setDescription('How long the poll should last (e.g., 30m, 2h, 1d)').setRequired(false))
                         .addBooleanOption(opt => opt.setName('multiple-choice').setDescription('Allow users to vote for multiple options').setRequired(false))
                         .addBooleanOption(opt => opt.setName('anonymous').setDescription('Make votes anonymous').setRequired(false))
+                        .addBooleanOption(opt => opt.setName('hide-results').setDescription('Hide live tallies — results only shown when the poll ends').setRequired(false))
                         .addBooleanOption(opt => opt.setName('allow-write-in').setDescription('Allow users to submit custom answers').setRequired(false))
+                        .addBooleanOption(opt => opt.setName('betting').setDescription('Let members bet coins on the winning option (single-choice; needs the economy on)').setRequired(false))
+                        .addIntegerOption(opt => opt.setName('min-bet').setDescription('Smallest bet allowed (default 10)').setRequired(false).setMinValue(1))
+                        .addIntegerOption(opt => opt.setName('max-bet').setDescription('Largest bet allowed (default 1000)').setRequired(false).setMinValue(1))
                 )
                 .addSubcommand(sub =>
                     sub
@@ -138,6 +142,12 @@ export default {
                         .setName('results')
                         .setDescription('View poll results')
                         .addStringOption(opt => opt.setName('message-id').setDescription('The message ID of the poll').setRequired(true))
+                )
+                .addSubcommand(sub =>
+                    sub
+                        .setName('peek')
+                        .setDescription('Privately view live tallies on a hidden-results poll (creator or admin only)')
+                        .addStringOption(opt => opt.setName('message-id').setDescription('The message ID of the poll to peek at').setRequired(true))
                 )
         )
 
@@ -288,6 +298,7 @@ export default {
                     case 'create': return pollHandler.handleCreate(interaction);
                     case 'end': return pollHandler.handleEnd(interaction);
                     case 'results': return pollHandler.handleResults(interaction);
+                    case 'peek': return pollHandler.handlePeek(interaction);
                 }
                 break;
 

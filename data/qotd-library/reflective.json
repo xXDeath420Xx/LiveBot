@@ -1,0 +1,176 @@
+{
+  "theme": "reflective",
+  "label": "Reflective",
+  "questions": [
+    {
+      "slug": "refl-proud-quiet",
+      "text": "What are you quietly proud of that nobody ever congratulates you for?"
+    },
+    {
+      "slug": "refl-changed-five-years",
+      "text": "What's the biggest way you've changed in the last five years — and did you choose it or did it happen to you?"
+    },
+    {
+      "slug": "refl-advice-ignored",
+      "text": "What good advice do you regularly give and completely fail to follow yourself?"
+    },
+    {
+      "slug": "refl-hard-thing-easy",
+      "text": "What used to be hard for you that's now completely automatic?"
+    },
+    {
+      "slug": "refl-outgrown",
+      "text": "What belief have you outgrown, and what replaced it?"
+    },
+    {
+      "slug": "refl-energy-drain",
+      "text": "What drains your energy fastest, and what refills it?"
+    },
+    {
+      "slug": "refl-compliment-stuck",
+      "text": "What's a compliment you received years ago that you still think about?"
+    },
+    {
+      "slug": "refl-fear-faced",
+      "text": "What's something you were afraid of that you did anyway? How did it go?"
+    },
+    {
+      "slug": "refl-good-day",
+      "text": "Describe a genuinely good ordinary day for you, start to finish. No holidays, no big events."
+    },
+    {
+      "slug": "refl-time-spent",
+      "text": "What do you spend the most time on that you'd cut if you could, and what's stopping you?"
+    },
+    {
+      "slug": "refl-permission-needed",
+      "text": "What are you waiting for permission to do? Who exactly are you waiting on?"
+    },
+    {
+      "slug": "refl-younger-jealous",
+      "text": "What about your current life would your younger self be most impressed by?"
+    },
+    {
+      "slug": "refl-younger-disappointed",
+      "text": "What would your younger self give you grief about? Are they right?"
+    },
+    {
+      "slug": "refl-say-no-more",
+      "text": "What do you need to start saying no to?"
+    },
+    {
+      "slug": "refl-work-in-progress",
+      "text": "What are you actively working on about yourself right now, and how's it going honestly?"
+    },
+    {
+      "slug": "refl-lucky-break",
+      "text": "What's a piece of luck that shaped your life more than any of your decisions did?"
+    },
+    {
+      "slug": "refl-hardest-lesson",
+      "text": "What's the hardest thing you've had to learn, and did you have to learn it more than once?"
+    },
+    {
+      "slug": "refl-forgive-self",
+      "text": "What have you forgiven yourself for, and how long did that take?"
+    },
+    {
+      "slug": "refl-recharge-method",
+      "text": "When you're running on empty, what actually works — and what do you do instead?"
+    },
+    {
+      "slug": "refl-hardest-question",
+      "text": "What question do you hate being asked, and why does it land badly?"
+    },
+    {
+      "slug": "refl-what-matters-changed",
+      "text": "What used to matter enormously to you and now barely registers?"
+    },
+    {
+      "slug": "refl-known-for",
+      "text": "What do you want to be known for by the people who actually know you?"
+    },
+    {
+      "slug": "refl-decision-good",
+      "text": "What's the best decision you've made that seemed small at the time?"
+    },
+    {
+      "slug": "refl-stubborn-about",
+      "text": "What are you stubborn about, and is it serving you?"
+    },
+    {
+      "slug": "refl-comparison",
+      "text": "Who do you compare yourself to, and is that comparison fair to either of you?"
+    },
+    {
+      "slug": "refl-been-wrong",
+      "text": "What were you completely certain about and completely wrong about?"
+    },
+    {
+      "slug": "refl-hard-conversation",
+      "text": "What conversation are you putting off? You don't have to name names."
+    },
+    {
+      "slug": "refl-what-you-need",
+      "text": "What do you actually need more of right now — rest, challenge, company, quiet?"
+    },
+    {
+      "slug": "refl-standards",
+      "text": "Where are your standards for yourself higher than your standards for everyone else?"
+    },
+    {
+      "slug": "refl-help-asking",
+      "text": "How good are you at asking for help, and where did that come from?"
+    },
+    {
+      "slug": "refl-small-win-today",
+      "text": "What's one small thing that went right for you today? It counts.",
+      "group": "small-daily-joy"
+    },
+    {
+      "slug": "refl-legacy-object",
+      "text": "What one thing of yours would you want to end up with someone who'd appreciate it?"
+    },
+    {
+      "slug": "refl-motivated-by",
+      "text": "What actually motivates you — not what you'd put on a form. The real one."
+    },
+    {
+      "slug": "refl-boundary-learned",
+      "text": "What boundary did you have to learn the hard way to set?"
+    },
+    {
+      "slug": "refl-good-at-underrated",
+      "text": "What are you good at that doesn't feel like an achievement because it's easy for you?"
+    },
+    {
+      "slug": "refl-restart-hobby",
+      "text": "What would you pick back up if you stopped worrying about being bad at it?",
+      "group": "dormant-hobby"
+    },
+    {
+      "slug": "refl-happiest-period",
+      "text": "What period of your life were you happiest in, and what made it work?"
+    },
+    {
+      "slug": "refl-different-path",
+      "text": "What path did you nearly take? Do you ever wonder about that version of you?"
+    },
+    {
+      "slug": "refl-hard-year",
+      "text": "What got you through your hardest stretch — a person, a habit, or sheer stubbornness?"
+    },
+    {
+      "slug": "refl-gratitude-specific",
+      "text": "Name something specific you're grateful for today. Not the big obvious one — a small one."
+    },
+    {
+      "slug": "refl-value-inherited",
+      "text": "What value did you inherit from your family that you've kept on purpose?"
+    },
+    {
+      "slug": "refl-value-rejected",
+      "text": "What did you grow up around that you deliberately chose not to carry forward?"
+    }
+  ]
+}

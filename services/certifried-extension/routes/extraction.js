@@ -248,7 +248,7 @@ router.post('/start', async (req, res) => {
 
             await conn.commit();
 
-            logger.info('[Extraction] Started', {
+            logger.debug('[Extraction] Started', {
                 playerId,
                 slotId,
                 recipeId,
@@ -358,7 +358,7 @@ router.post('/claim', async (req, res) => {
             // Award reputation for extraction work (fire-and-forget)
             awardReputation(playerId, 'research_collective', 5).catch(() => {});
 
-            logger.info('[Extraction] Claimed', {
+            logger.debug('[Extraction] Claimed', {
                 playerId,
                 slotId,
                 productName,
@@ -436,7 +436,7 @@ router.post('/sell-product', async (req, res) => {
             // Award cash using engine function AFTER transaction (applies income bonus)
             const cashResult = await awardCash(playerId, saleAmount);
 
-            logger.info('[Extraction] Product sold', {
+            logger.debug('[Extraction] Product sold', {
                 playerId,
                 productId,
                 quantity: sellQty,

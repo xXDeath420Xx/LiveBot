@@ -19,7 +19,14 @@ export function startThroneScheduler() {
         return;
     }
 
-    // Main check — every 2 minutes
+    // Main check — every 2 minutes.
+    //
+    // Pre-Track-A this was every 10 because each cycle went through Tor + Puppeteer, which
+    // spent most of its wall-clock solving the Vercel challenge and provoking the 429s it then
+    // had to work around. Track A replaced the Vercel SSR path with direct Firestore + Cloud
+    // Functions calls (utils/scrapers/throne-scraper.js), which average ~400 ms per creator
+    // from the datacenter — the 10-minute ceiling was pure transport cost. Two minutes is a
+    // comfortable headroom at today's tracked-user count; raise if we add dozens of creators.
     schedulerTask = cron.schedule('*/2 * * * *', async () => {
         if (cycleRunning) return;
         cycleRunning = true;

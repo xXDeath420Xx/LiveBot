@@ -3,8 +3,9 @@ import logger from '../../utils/logger.js';
 import encryption from '../../utils/encryption.js';
 import { resolveStreamerIdentity, upsertStreamerByIdentity } from '../../utils/platforms/resolve-identity.js';
 import * as rumbleApi from '../../utils/platforms/rumble.js';
+import { getStreamEndDefaults } from '../../core/stream-end-defaults.js';
 
-const SUPPORTED_PLATFORMS = new Set(['twitch', 'kick', 'youtube', 'tiktok', 'trovo', 'facebook', 'rumble']);
+const SUPPORTED_PLATFORMS = new Set(['twitch', 'kick', 'youtube', 'tiktok', 'rumble']);
 
 export async function handleStreamSignupSubmit(interaction) {
     try {
@@ -75,7 +76,8 @@ export async function handleStreamSignupSubmit(interaction) {
             if (rSubs.length) {
                 await pool.execute('UPDATE subscriptions SET paused=0, announcement_channel_id=? WHERE subscription_id=?', [announceChannelId, rSubs[0].subscription_id]);
             } else {
-                await pool.execute('INSERT INTO subscriptions (guild_id, streamer_id, announcement_channel_id, paused) VALUES (?,?,?,0)', [guildId, rStreamerId, announceChannelId]);
+                const rStreamEnd = await getStreamEndDefaults(guildId);
+                await pool.execute('INSERT INTO subscriptions (guild_id, streamer_id, announcement_channel_id, paused, delete_on_end, edit_on_end) VALUES (?,?,?,0,?,?)', [guildId, rStreamerId, announceChannelId, rStreamEnd.delete_on_end, rStreamEnd.edit_on_end]);
             }
             logger.info(`[stream_signup] ${interaction.user.tag} (${userId}) signed up rumble:${username} in guild ${guildId}`);
             return interaction.editReply(`✅ You're now in the shoutout rotation for **rumble:${username}** — go live and the bot will announce it in <#${announceChannelId}>.`);
@@ -99,9 +101,10 @@ export async function handleStreamSignupSubmit(interaction) {
                 [announceChannelId, existingSubs[0].subscription_id]
             );
         } else {
+            const streamEnd = await getStreamEndDefaults(guildId);
             await pool.execute(
-                'INSERT INTO subscriptions (guild_id, streamer_id, announcement_channel_id, paused) VALUES (?, ?, ?, 0)',
-                [guildId, streamerId, announceChannelId]
+                'INSERT INTO subscriptions (guild_id, streamer_id, announcement_channel_id, paused, delete_on_end, edit_on_end) VALUES (?, ?, ?, 0, ?, ?)',
+                [guildId, streamerId, announceChannelId, streamEnd.delete_on_end, streamEnd.edit_on_end]
             );
         }
 

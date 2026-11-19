@@ -4,6 +4,10 @@ import { logVoiceJoin, logVoiceLeave, logVoiceMove, sendLogEmbed } from '../core
 import { logVoiceStateUpdate as logVoiceActivity } from '../core/activity-logger.js';
 import pool from '../utils/db.js';
 import { shouldIgnoreGuild } from '../utils/custom-bot-check.js';
+import { markActivity as markTempAccessActivity } from '../core/temp-access-manager.js';
+import { noteVoiceJoin as noteActivityVoice } from '../core/member-activity.js';
+import { noteMemberActivity as noteStatRoleActivity } from '../core/statrole-manager.js';
+import { logFeatureEvent, userLabel } from '../core/feature-log.js';
 
 export default {
   name: Events.VoiceStateUpdate,
@@ -49,12 +53,27 @@ export default {
         }
       }
 
+      // Temporary access: landing in a voice channel counts as showing up. Note
+      // this fires on JOIN, not on leave — a guest who joins voice and stays there
+      // for the whole trial never ends a session, so waiting for one to be logged
+      // would treat them as having done nothing.
+      if (newState.channelId && newState.channelId !== oldState.channelId && newState.member && !newState.member.user?.bot) {
+        markTempAccessActivity(newState.guild.id, newState.id, 'voice', newState.member);
+        // Last-activity record for the inactivity prune: a voice join counts on JOIN (memory only).
+        noteActivityVoice(newState.guild.id, newState.id, newState.channelId);
+      }
+
       // Log voice activity for tracking (time spent in voice channels)
       logVoiceActivity(oldState, newState);
 
       // Track voice activity with voice activity manager
       if (newState.client.voiceActivityManager) {
         await newState.client.voiceActivityManager.handleVoiceStateUpdate(oldState, newState);
+      }
+
+      // Stat roles: a finished voice session may cross a voice-minutes milestone.
+      if (oldState.channelId && oldState.channelId !== newState.channelId) {
+        noteStatRoleActivity(newState.member || oldState.member, 'voice');
       }
 
       // Award voice XP via leveling manager
@@ -116,6 +135,16 @@ async function handleTempChannels(oldState, newState) {
           logger.info('[TempChannels] Blocked spawn - missing required role', {
             guildId, userId: newState.id, creatorChannelId: matched.creator_channel_id, requiredRoleId: matched.required_role_id,
           });
+          void logFeatureEvent(() => (newState.guild), 'temp-channels.blocked', () => ({
+            title: '🚫 Temp Channel Blocked',
+            fields: [
+              ['Member', userLabel(newState.member ?? newState.id)],
+              ['Creator channel', `<#${matched.creator_channel_id}>`],
+              ['Required role', `<@&${matched.required_role_id}>`],
+            ],
+            // Someone rejoining the creator channel over and over gets one post a minute.
+            throttle: { key: 'tempvc-blocked:' + guildId + ':' + newState.id, ms: 60000 },
+          }));
         } else {
           await createTempChannel(newState, matched);
         }
@@ -124,12 +153,12 @@ async function handleTempChannels(oldState, newState) {
 
     // User left a voice channel
     if (oldState.channelId && !newState.channelId) {
-      await checkAndDeleteTempChannel(oldState.channel);
+      await checkAndDeleteTempChannel(oldState);
     }
 
     // User moved out of one channel into another - clean up the old one if empty
     if (oldState.channelId && newState.channelId && oldState.channelId !== newState.channelId) {
-      await checkAndDeleteTempChannel(oldState.channel);
+      await checkAndDeleteTempChannel(oldState);
     }
   } catch (error) {
     logger.error('[TempChannels] Error handling temp channels', {
@@ -200,6 +229,14 @@ async function createTempChannel(voiceState, config) {
       channelOpts.userLimit = userLimit;
     }
     const tempChannel = await guild.channels.create(channelOpts);
+    void logFeatureEvent(() => (guild), 'temp-channels.created', () => ({
+      title: '🔊 Temp Channel Created',
+      fields: [
+        ['Channel', `<#${tempChannel.id}>`],
+        ['Owner', userLabel(member)],
+        ['From', `<#${config.creator_channel_id}>`],
+      ],
+    }));
 
     // Track the temp channel in database
     await pool.execute(
@@ -226,16 +263,30 @@ async function createTempChannel(voiceState, config) {
   }
 }
 
-async function checkAndDeleteTempChannel(channel) {
+async function checkAndDeleteTempChannel(oldState) {
+  const channelId = oldState.channelId;
+  let channel = oldState.channel;
   try {
     // Check if this is a temp channel in the database
     const [rows] = await pool.execute(
       'SELECT * FROM temp_voice_channels WHERE channel_id = ?',
-      [channel.id]
+      [channelId]
     );
 
     if (rows.length === 0) {
       return; // Not a temp channel
+    }
+
+    // Not in the cache: either already deleted (another bot instance in this guild, or by hand) or just
+    // uncached. Ask Discord; if it is really gone, only the database row is left to clean up.
+    // Only Discord's "Unknown Channel" (10003) means gone: a rate limit or network error must not drop
+    // the record of a channel that still exists (it would then never be cleaned up).
+    if (!channel) channel = await oldState.guild?.channels.fetch(channelId).catch(e => (e.code === 10003 ? null : undefined));
+    if (channel === undefined) return;
+    if (!channel) {
+      await pool.execute('DELETE FROM temp_voice_channels WHERE channel_id = ?', [channelId]);
+      logger.info('[TempChannels] Temp channel already gone — removed its record', { channelId, guildId: oldState.guild?.id });
+      return;
     }
 
     // Check if channel is empty
@@ -248,6 +299,15 @@ async function checkAndDeleteTempChannel(channel) {
 
       // Delete the channel
       await channel.delete('Temporary channel empty');
+      void logFeatureEvent(() => (channel.guild), 'temp-channels.deleted', () => ({
+        title: '🗑️ Temp Channel Deleted',
+        fields: [
+          ['Channel', channel.name + ' (' + channel.id + ')'],
+          ['Owner', userLabel(rows[0].owner_id)],
+          ['Created', rows[0].created_at ? `<t:${Math.floor(new Date(rows[0].created_at).getTime() / 1000)}:R>` : null],
+          ['Why', 'Everyone left'],
+        ],
+      }));
 
       logger.info('[TempChannels] Deleted empty temp channel', {
         channelId: channel.id,
@@ -259,8 +319,8 @@ async function checkAndDeleteTempChannel(channel) {
     logger.error('[TempChannels] Error deleting temp channel', {
       error: error.message,
       stack: error.stack,
-      channelId: channel?.id,
-      guildId: channel?.guild?.id
+      channelId,
+      guildId: oldState.guild?.id
     });
   }
 }
@@ -280,7 +340,7 @@ async function logVoiceStateChanges(oldState, newState) {
           { name: 'Channel', value: newState.channel.name, inline: true }
         )
         .setTimestamp();
-      await sendLogEmbed(newState.guild, 'voiceServerMute', embed);
+      await sendLogEmbed(newState.guild, 'voiceServerMute', embed, newState.serverMute ? 'voiceServerMute.on' : 'voiceServerMute.off');
     }
 
     // Server deafen changes
@@ -294,7 +354,7 @@ async function logVoiceStateChanges(oldState, newState) {
           { name: 'Channel', value: newState.channel.name, inline: true }
         )
         .setTimestamp();
-      await sendLogEmbed(newState.guild, 'voiceServerDeaf', embed);
+      await sendLogEmbed(newState.guild, 'voiceServerDeaf', embed, newState.serverDeaf ? 'voiceServerDeaf.on' : 'voiceServerDeaf.off');
     }
 
     // Self mute changes
@@ -318,7 +378,8 @@ async function logVoiceStateChanges(oldState, newState) {
           { name: 'Channel', value: newState.channel.name, inline: true }
         )
         .setTimestamp();
-      await sendLogEmbed(newState.guild, 'voiceStream', embed);
+      await sendLogEmbed(newState.guild, 'voiceStream', embed, newState.streaming ? 'voiceStream.start' : 'voiceStream.stop',
+        { channel: newState.channel, member: newState.member });
     }
 
     // Video changes
@@ -332,7 +393,8 @@ async function logVoiceStateChanges(oldState, newState) {
           { name: 'Channel', value: newState.channel.name, inline: true }
         )
         .setTimestamp();
-      await sendLogEmbed(newState.guild, 'voiceVideo', embed);
+      await sendLogEmbed(newState.guild, 'voiceVideo', embed, newState.selfVideo ? 'voiceVideo.on' : 'voiceVideo.off',
+        { channel: newState.channel, member: newState.member });
     }
 
     // Log self-mute/self-deafen changes
@@ -347,7 +409,8 @@ async function logVoiceStateChanges(oldState, newState) {
           { name: 'Changes', value: changes.join('\n'), inline: false }
         )
         .setTimestamp();
-      await sendLogEmbed(newState.guild, 'voiceSelfMute', embed);
+      await sendLogEmbed(newState.guild, 'voiceSelfMute', embed, 'voiceSelfMute',
+        { channel: newState.channel, member: newState.member });
     }
   } catch (error) {
     logger.error('[VoiceStateChanges] Error logging voice state changes', {

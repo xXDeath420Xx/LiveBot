@@ -1,10 +1,12 @@
 /*
  * Grow a Tree — the message the game is played on: an embed with the rendered tree and a
- * 💧 button. Shared by `/tree` and the button handlers so both always look the same.
+ * 💧 button. Shared by `/arcade tree` and the button handlers so both always look the same.
  */
-import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, AttachmentBuilder } from 'discord.js';
-import { renderTree, renderTreeAscii, artInstalled } from './renderer.js';
+import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import { renderTreeAscii } from './renderer.js';
+import { renderCanopy } from './render-canopy.js';
 import { getTreeHeight, isGrowing, canBeWateredAt, getTreeAge, formatDurationLong } from './formulas.js';
+import { accessibleAttachment } from '../../utils/accessible-attachment.js';
 
 const GREEN = 0x3E8E41;
 
@@ -43,15 +45,18 @@ export async function buildTreeMessage(tree, guild) {
 
   const payload = { embeds: [embed], components: buildTreeComponents(growing) };
 
-  if (artInstalled()) {
-    const png = await renderTree(tree).catch(() => null);
-    if (png) {
-      payload.files = [new AttachmentBuilder(png, { name: 'tree.png' })];
-      embed.setImage('attachment://tree.png');
-      return payload;
-    }
+  // Procedural canopy render — trunk sized by height, crowned by a full layered canopy on a sky.
+  // No tile assets needed, so it always works; the ASCII trunk is only a last-ditch fallback if
+  // rasterising ever throws.
+  const png = await renderCanopy(tree).catch(() => null);
+  if (png) {
+    payload.files = [accessibleAttachment(png, {
+      name: 'tree.png',
+      description: `${tree.name}: a procedurally drawn tree ${Math.floor(height)} feet tall.`,
+    })];
+    embed.setImage('attachment://tree.png');
+    return payload;
   }
-  // No sprites generated — fall back to a drawn trunk so the game still plays.
   embed.setDescription(`${embed.data.description}\n${renderTreeAscii(tree.pieces)}`);
   return payload;
 }

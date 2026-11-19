@@ -1,0 +1,461 @@
+<%#
+  Smart purge rules: the rule list (POST purge-rule/toggle, purge-rule/delete) and the new-rule form
+  (POST purge-rule/add, #smart-purge-form; the script below fills presets and confirms a rule that
+  would delete everything). Built on the settings-row kit (cf-settings.css); field names and ids are
+  unchanged.
+%>
+<%
+  const rules = typeof purgeRules !== 'undefined' ? purgeRules : [];
+  const fmtDur = (s) => {
+    s = Number(s) || 0;
+    const units = [['day',86400],['hour',3600],['minute',60],['second',1]];
+    const parts = []; let rest = s;
+    for (const [n,size] of units) { const k = Math.floor(rest/size); if (k>0){parts.push(k+' '+n+(k===1?'':'s')); rest-=k*size;} if(parts.length===2) break; }
+    return parts.join(' ') || '0 seconds';
+  };
+  const spText = (channels || []).filter(c => c.type === 0 || c.type === 5);
+  const spRoleColor = (r) => r.hexColor || (typeof r.color === 'number' && r.color ? '#' + r.color.toString(16).padStart(6, '0') : '');
+  const spRunning = rules.filter(r => r.enabled).length;
+  const parseArr = (v) => { try { const p = typeof v === 'string' ? JSON.parse(v) : v; return Array.isArray(p) ? p : []; } catch { return []; } };
+  const parseObj = (v) => { try { const p = typeof v === 'string' ? JSON.parse(v) : v; return (p && typeof p === 'object' && !Array.isArray(p)) ? p : {}; } catch { return {}; } };
+  const FILTER_LABELS = {
+    has_attachment: 'has an upload', has_image: 'has an image', has_video: 'has a video',
+    has_file: 'has a non-media file', has_link: 'has a link', has_embed: 'has an embed',
+    has_sticker: 'has a sticker', has_mention: 'has a mention', text_only: 'is plain text',
+    from_bots: 'is from a bot', from_humans: 'is from a human'
+  };
+%>
+<style>
+    .sp-rule.is-off .sp-rule-body { opacity: 0.65; }
+    .sp-rule-name { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 6px; }
+    .sp-rule-name strong { font-weight: 600; color: var(--cf-text); overflow-wrap: anywhere; }
+    .sp-line { margin: 0 0 6px; font-size: var(--cf-text-sm); color: var(--cf-text-2); line-height: 1.5; overflow-wrap: anywhere; }
+    .sp-line strong { color: var(--cf-text); font-weight: 600; }
+    .sp-meta { margin: 4px 0 0; font-size: var(--cf-text-xs); color: var(--cf-text-3); line-height: 1.5; overflow-wrap: anywhere; }
+    .sp-meta .sp-warn { color: var(--cf-warning); }
+    .sp-chips { margin: 0 0 6px; }
+    .sp-chips .sp-mono { font-family: var(--cf-mono); }
+    .sp-boxes { --cf-check-min: 14rem; }
+    .sp-chips-label { font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+    .sp-error { margin: 8px 0 0; font-size: var(--cf-text-xs); color: var(--cf-danger); overflow-wrap: anywhere; }
+    .sp-actions form { margin: 0; }
+    .sp-presets { display: flex; flex-wrap: wrap; gap: var(--cf-2); }
+    .sp-preset {
+        display: inline-flex; align-items: center; min-height: 32px; padding: 0 12px; cursor: pointer;
+        background: var(--cf-surface); border: 1px solid var(--cf-border-strong); border-radius: var(--cf-radius);
+        color: var(--cf-text-2); font-size: var(--cf-text-sm); text-align: left;
+        transition: border-color var(--cf-fast) var(--cf-ease), color var(--cf-fast) var(--cf-ease);
+    }
+    .sp-preset:hover { border-color: var(--cf-accent); color: var(--cf-text); }
+    .sp-preset:focus-visible { outline: 2px solid var(--cf-accent); outline-offset: 2px; }
+    .sp-ttl { flex-wrap: nowrap; }
+    .sp-ttl > input { flex: 1 1 6rem; width: auto; min-width: 0; }
+    .sp-ttl > select { flex: 1 1 7rem; width: auto; min-width: 0; }
+    .cf-rows .sp-rule.is-filtered { display: none; }
+    @media (max-width: 640px) {
+        .sp-preset { min-height: 44px; }
+    }
+</style>
+
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-hourglass-half"></i>
+                <span>Smart purge rules</span>
+            </div>
+            <div class="page-section-subtitle">Every message gets its own timer, counted from when it was posted.</div>
+        </div>
+    </div>
+
+    <section class="cf-section" aria-labelledby="sp-list-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="sp-list-title">Rules<% if (rules.length) { %> (<%= rules.length %>)<% } %></h2>
+                <p class="cf-section-desc"><% if (rules.length) { %><%= spRunning %> running, <%= rules.length - spRunning %> paused. <% } %>Unlike <a href="/manage/<%= guild.id %>?page=auto-purge">Auto purge</a>, which empties a whole channel on a clock, a rule times each message from when it was posted, so every post gets the full time. It works through channel history, so messages from before the rule, or from while the bot was offline, are cleaned up too.</p>
+            </div>
+            <% if (rules.length > 15) { %>
+            <div class="cf-section-actions">
+                <label class="cf-search">
+                    <i class="fas fa-search" aria-hidden="true"></i>
+                    <input type="search" id="cfk-sp-search" class="form-control" placeholder="Search rules" aria-label="Search rules">
+                </label>
+            </div>
+            <% } %>
+        </header>
+        <div class="cf-rows">
+            <% if (rules.length > 0) { %>
+            <div class="cf-list">
+            <% rules.forEach(rule => {
+                const ch = channels.find(c => c.id === rule.channel_id);
+                const filters = parseObj(rule.filters);
+                const exemptRoles = parseArr(rule.exempt_role_ids);
+                const exemptUsers = parseArr(rule.exempt_user_ids);
+                const phrases = Array.isArray(filters.phrases) ? filters.phrases : [];
+                const flagChips = Object.keys(FILTER_LABELS).filter(k => filters[k]);
+                const filterUserIds = Array.isArray(filters.user_ids) ? filters.user_ids : [];
+                const filterRoleIds = Array.isArray(filters.role_ids) ? filters.role_ids : [];
+                const anyFilter = flagChips.length || phrases.length || filters.regex || filterUserIds.length || filterRoleIds.length || Number(filters.min_length) > 0 || Number(filters.max_length) > 0;
+            %>
+                <div class="sp-rule cf-list-item cf-list-item--multi<%= rule.enabled ? '' : ' is-off' %>">
+                        <div class="sp-rule-body cf-list-main">
+                            <p class="sp-rule-name">
+                                <strong><%= rule.name %></strong>
+                                <span class="cf-pill">#<%= ch ? ch.name : rule.channel_id %></span>
+                                <% if (!ch) { %><span class="cf-pill is-bad">Channel not found</span><% } %>
+                                <% if (rule.dry_run) { %><span class="cf-pill is-warn">Dry run: deletes nothing</span><% } %>
+                                <% if (!rule.enabled) { %><span class="cf-pill">Paused</span><% } %>
+                            </p>
+                            <p class="sp-line">
+                                Deletes
+                                <strong><% if (!anyFilter) { %>every message<% } else if (rule.target === 'non_matching') { %>every message <em>except</em> those that match<% } else { %>messages that match<% } %></strong>
+                                <%= fmtDur(rule.delete_after_seconds) %> after it was posted
+                            </p>
+                            <% if (anyFilter) { %>
+                            <div class="sp-chips cf-chips">
+                                <span class="sp-chips-label"><%= rule.match_mode === 'all' ? 'Matches all of:' : 'Matches any of:' %></span>
+                                <% flagChips.forEach(k => { %><span class="cf-chip"><span><%= FILTER_LABELS[k] %></span></span><% }); %>
+                                <% if (phrases.length) { %><span class="cf-chip"><span>contains: <%= phrases.slice(0,3).map(p => '"' + p + '"').join(', ') %><%= phrases.length > 3 ? ' +' + (phrases.length - 3) : '' %></span></span><% } %>
+                                <% if (filters.regex) { %><span class="cf-chip sp-mono"><span>/<%= filters.regex %>/i</span></span><% } %>
+                                <% filterRoleIds.forEach(rid => { const r = roles.find(x => x.id === rid); %><span class="cf-chip"><span>from @<%= r ? r.name : rid %></span></span><% }); %>
+                                <% filterUserIds.forEach(uid => { %><span class="cf-chip"><span>from user <%= uid %></span></span><% }); %>
+                                <% if (Number(filters.min_length) > 0) { %><span class="cf-chip"><span>&ge; <%= filters.min_length %> chars</span></span><% } %>
+                                <% if (Number(filters.max_length) > 0) { %><span class="cf-chip"><span>&le; <%= filters.max_length %> chars</span></span><% } %>
+                            </div>
+                            <% } %>
+                            <p class="sp-meta">
+                                Never deletes:
+                                <%= rule.exempt_pinned ? 'pinned' : '' %><%= rule.exempt_pinned && rule.exempt_bots ? ', ' : '' %><%= rule.exempt_bots ? 'bot messages' : '' %><%
+                                %><% exemptRoles.forEach(rid => { const r = roles.find(x => x.id === rid); %>, @<%= r ? r.name : rid %><% }); %><%
+                                %><% exemptUsers.forEach(uid => { %>, user <%= uid %><% }); %><%
+                                %><% if (!rule.exempt_pinned && !rule.exempt_bots && !exemptRoles.length && !exemptUsers.length) { %> nothing. <strong class="sp-warn">This rule can delete pinned messages.</strong><% } %>
+                            </p>
+                            <p class="sp-meta">
+                                <% if (rule.last_run_at) { %>Last run <%= new Date(rule.last_run_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) %> UTC &middot; <%= rule.last_deleted %> removed on that run<% } else { %>Has not run yet<% } %>
+                                &middot; <%= rule.total_deleted %> deleted in total
+                                <% if (!rule.scan_complete) { %>&middot; <span class="sp-warn">still working through existing history</span><% } %>
+                            </p>
+                            <% if (rule.last_error) { %>
+                            <p class="sp-error" role="alert">Last error: <%= rule.last_error %></p>
+                            <% } %>
+                        </div>
+                        <div class="sp-actions cf-list-actions">
+                            <form action="/manage/<%= guild.id %>/purge-rule/toggle" method="POST">
+                                <input type="hidden" name="ruleId" value="<%= rule.id %>">
+                                <input type="hidden" name="enabled" value="<%= rule.enabled ? '0' : '1' %>">
+                                <button type="submit" class="btn btn-sm btn-secondary"><%= rule.enabled ? 'Pause' : 'Resume' %></button>
+                            </form>
+                            <form action="/manage/<%= guild.id %>/purge-rule/delete" method="POST" onsubmit="return confirm(<%= JSON.stringify('Delete the rule "' + rule.name + '"? Messages already deleted are not recoverable.') %>)">
+                                <input type="hidden" name="ruleId" value="<%= rule.id %>">
+                                <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                            </form>
+                        </div>
+                </div>
+            <% }); %>
+            </div>
+            <% if (rules.length > 15) { %>
+            <div class="cf-state cf-state--compact" id="cfk-sp-search-empty" hidden><p class="cf-state-text">No rules match the search.</p></div>
+            <% } %>
+            <% } else { %>
+            <%- include('../kit/_state', { kind: 'empty', title: 'No smart purge rules yet', text: 'Build one below. Start with a dry run to watch what it would delete first.', id: null, boxed: false, compact: false }) %>
+            <% } %>
+        </div>
+    </section>
+
+    <form action="/manage/<%= guild.id %>/purge-rule/add" method="POST" id="smart-purge-form">
+        <section class="cf-section" aria-labelledby="sp-new-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="sp-new-title">New rule</h2>
+                    <p class="cf-section-desc">Name it, choose a channel and how long messages stay.</p>
+                </div>
+            </header>
+            <div class="cf-rows">
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-row-text">
+                        <span class="cf-row-label">Start from a preset</span>
+                        <p class="cf-row-desc">Optional. Fills in the form; you can still change anything.</p>
+                    </div>
+                    <div class="sp-presets">
+                        <button type="button" class="sp-preset" data-preset="ttl">Delete every post after 24 hours</button>
+                        <button type="button" class="sp-preset" data-preset="images">Images only, delete the chatter</button>
+                        <button type="button" class="sp-preset" data-preset="links">Delete links after 1 hour</button>
+                        <button type="button" class="sp-preset" data-preset="uploads">Clear uploads after 7 days</button>
+                        <button type="button" class="sp-preset" data-preset="phrases">Delete posts containing phrases</button>
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="sp-name">Rule name</label>
+                        <p class="cf-row-desc">For your own reference.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input id="sp-name" type="text" name="name" class="form-control" maxlength="100" placeholder="e.g. Self-promo 24h expiry" required>
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="sp-channel">Channel</label>
+                    </div>
+                    <div class="cf-row-control">
+                        <select id="sp-channel" name="channel_id" class="form-select" required>
+                            <option value="">Choose a channel</option>
+                            <% spText.forEach(c => { %><option value="<%= c.id %>" data-kind="text">#<%= c.name %></option>
+                            <% }); %>
+                        </select>
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="sp-ttl">Delete after</label>
+                        <p class="cf-row-desc" id="sp-ttl-desc">Timed from each message's own timestamp, so a post made at 11:59 pm still gets its full time. At least 1 minute and at most a year (365 days); the sweeper runs every 30 seconds.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="cf-inline sp-ttl">
+                            <input id="sp-ttl" type="number" name="ttl_value" class="form-control" min="1" max="9999" value="24" required aria-describedby="sp-ttl-desc">
+                            <select name="ttl_unit" class="form-select" aria-label="Unit">
+                                <option value="60">minutes</option>
+                                <option value="3600" selected>hours</option>
+                                <option value="86400">days</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="cf-section" aria-labelledby="sp-what-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="sp-what-title">What to delete</h2>
+                    <p class="cf-section-desc">Leave every filter blank to act on all messages.</p>
+                </div>
+            </header>
+            <div class="cf-rows">
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="sp-target">Act on</label>
+                        <p class="cf-row-desc">"Everything except" is how you make an images-only or links-only channel.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <select id="sp-target" name="target" class="form-select">
+                            <option value="matching">Messages that match the filters</option>
+                            <option value="non_matching">Everything except messages that match</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="sp-mode">Combine filters with</label>
+                    </div>
+                    <div class="cf-row-control">
+                        <select id="sp-mode" name="match_mode" class="form-select">
+                            <option value="any">Any: one filter is enough</option>
+                            <option value="all">All: every filter must be true</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-row-text">
+                        <span class="cf-row-label">Content filters</span>
+                    </div>
+                    <div class="sp-boxes cf-check-grid">
+                        <% const FILTER_BOXES = [
+                            ['has_attachment','Has an upload (any file)'],
+                            ['has_image','Has an image'],
+                            ['has_video','Has a video'],
+                            ['has_file','Has a non-media file'],
+                            ['has_link','Has a link'],
+                            ['has_embed','Has an embed'],
+                            ['has_sticker','Has a sticker'],
+                            ['has_mention','Mentions a user or role'],
+                            ['text_only','Is plain text (no media or links)'],
+                            ['from_bots','Posted by a bot or webhook'],
+                            ['from_humans','Posted by a human']
+                        ]; %>
+                        <% FILTER_BOXES.forEach(([key,label]) => { %>
+                        <label class="cf-choice"><input type="checkbox" name="f_<%= key %>" value="1" data-filter="<%= key %>"><span><%= label %></span></label>
+                        <% }); %>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-fields">
+                        <div class="cf-field">
+                            <label for="sp-phrases">Contains any of these phrases</label>
+                            <textarea id="sp-phrases" name="phrases" class="form-control" rows="3" placeholder="one phrase per line&#10;free nitro&#10;check my profile"></textarea>
+                            <span class="cf-field-hint">Case-insensitive, matched anywhere in the message.</span>
+                        </div>
+                        <div class="cf-field">
+                            <label for="sp-regex">Matches this pattern (advanced)</label>
+                            <input id="sp-regex" type="text" name="regex" class="form-control" placeholder="^!|discord\.gg/">
+                            <span class="cf-field-hint">A regular expression, case-insensitive. Rejected if it does not compile.</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-fields">
+                        <div class="cf-field">
+                            <label for="sp-min">Minimum length</label>
+                            <input id="sp-min" type="number" name="min_length" class="form-control" min="0" max="4000" placeholder="0">
+                        </div>
+                        <div class="cf-field">
+                            <label for="sp-max">Maximum length</label>
+                            <input id="sp-max" type="number" name="max_length" class="form-control" min="0" max="4000" placeholder="0">
+                        </div>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-fields">
+                        <div class="cf-field">
+                            <label for="sp-filter-roles">Only messages from these roles</label>
+                            <select id="sp-filter-roles" name="filter_role_ids" class="form-select" multiple size="4">
+                                <% roles.forEach(r => { %><option value="<%= r.id %>" data-kind="role"<% if (spRoleColor(r)) { %> data-color="<%= spRoleColor(r) %>"<% } %>><%= r.name %></option>
+                                <% }); %>
+                            </select>
+                            <span class="cf-field-hint">Leave empty for any role.</span>
+                        </div>
+                        <div class="cf-field">
+                            <label for="sp-filter-users">Only messages from these user IDs</label>
+                            <textarea id="sp-filter-users" name="filter_user_ids" class="form-control" rows="4" placeholder="one Discord user ID per line"></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="cf-section" aria-labelledby="sp-never-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="sp-never-title">Never delete</h2>
+                    <p class="cf-section-desc">Messages kept whatever the filters say.</p>
+                </div>
+            </header>
+            <div class="cf-rows">
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-choices">
+                        <label class="cf-choice"><input type="checkbox" name="exempt_pinned" value="1" checked><span>Pinned messages</span></label>
+                        <label class="cf-choice"><input type="checkbox" name="exempt_bots" value="1" checked><span>Bot and webhook messages</span></label>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-fields">
+                        <div class="cf-field">
+                            <label for="sp-exempt-roles">Exempt roles</label>
+                            <select id="sp-exempt-roles" name="exempt_role_ids" class="form-select" multiple size="4">
+                                <% roles.forEach(r => { %><option value="<%= r.id %>" data-kind="role"<% if (spRoleColor(r)) { %> data-color="<%= spRoleColor(r) %>"<% } %>><%= r.name %></option>
+                                <% }); %>
+                            </select>
+                            <span class="cf-field-hint">A message is kept if its author still has one of these roles.</span>
+                        </div>
+                        <div class="cf-field">
+                            <label for="sp-exempt-users">Exempt user IDs</label>
+                            <textarea id="sp-exempt-users" name="exempt_user_ids" class="form-control" rows="4" placeholder="one Discord user ID per line"></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="cf-section" aria-labelledby="sp-safety-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="sp-safety-title">Safety and reports</h2>
+                    <p class="cf-section-desc">Deleted messages cannot be recovered. When a rule is switched on it also works back through the channel's history, so anything already older than the time goes too. Messages over 14 days old are deleted one at a time, so a large backlog drains gradually. The bot needs View Channel, Read Message History and Manage Messages there.</p>
+                </div>
+            </header>
+            <div class="cf-rows">
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="cfk-sp-dry">Dry run</label>
+                        <p class="cf-row-desc" id="cfk-sp-dry-desc">Log what it would delete and delete nothing. Use it for the first run on a busy channel, and turn it off once the counts look right.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="checkbox" class="cf-switch" role="switch" id="cfk-sp-dry" name="dry_run" value="1" aria-describedby="cfk-sp-dry-desc">
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="sp-log">Report activity to</label>
+                        <p class="cf-row-desc">Optional. A channel where the rule says what it deleted.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <select id="sp-log" name="log_channel_id" class="form-select">
+                            <option value="">No reports</option>
+                            <% spText.forEach(c => { %><option value="<%= c.id %>" data-kind="text">#<%= c.name %></option>
+                            <% }); %>
+                        </select>
+                    </div>
+                </div>
+                <div class="cf-section-foot">
+                    <button type="submit" class="btn btn-primary">Create rule</button>
+                </div>
+            </div>
+        </section>
+    </form>
+</div>
+
+<script>
+(function () {
+    const form = document.getElementById('smart-purge-form');
+    if (!form) return;
+
+    // Each preset only sets the fields it cares about, after clearing the
+    // filter boxes — otherwise clicking two presets in a row silently ORs them
+    // together and the rule does something nobody asked for.
+    const PRESETS = {
+        ttl:     { name: 'Expire posts after 24 hours', ttl: [24, '3600'], target: 'matching', filters: [] },
+        images:  { name: 'Images only', ttl: [1, '3600'], target: 'non_matching', filters: ['has_image'] },
+        links:   { name: 'Drop links after 1 hour', ttl: [1, '3600'], target: 'matching', filters: ['has_link'] },
+        uploads: { name: 'Clear uploads after 7 days', ttl: [7, '86400'], target: 'matching', filters: ['has_attachment'] },
+        phrases: { name: 'Remove flagged phrases', ttl: [1, '3600'], target: 'matching', filters: [], focus: 'sp-phrases' }
+    };
+
+    const search = document.getElementById('cfk-sp-search');
+    if (search) {
+        search.addEventListener('input', () => {
+            const q = search.value.trim().toLowerCase();
+            let shown = 0;
+            document.querySelectorAll('.sp-rule').forEach(row => {
+                const hit = !q || row.textContent.toLowerCase().includes(q);
+                row.classList.toggle('is-filtered', !hit);
+                if (hit) shown++;
+            });
+            document.getElementById('cfk-sp-search-empty').hidden = shown > 0;
+        });
+    }
+
+    form.querySelectorAll('.sp-preset').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const p = PRESETS[btn.dataset.preset];
+            if (!p) return;
+            form.querySelectorAll('input[data-filter]').forEach(cb => { cb.checked = false; });
+            form.querySelector('#sp-name').value = p.name;
+            form.querySelector('#sp-ttl').value = p.ttl[0];
+            form.querySelector('[name="ttl_unit"]').value = p.ttl[1];
+            form.querySelector('#sp-target').value = p.target;
+            p.filters.forEach(k => {
+                const cb = form.querySelector('input[data-filter="' + k + '"]');
+                if (cb) cb.checked = true;
+            });
+            if (p.focus) document.getElementById(p.focus).focus();
+        });
+    });
+
+    // A rule with no filters and no exemptions deletes literally everything in
+    // the channel, pins included. That is a legitimate thing to want and a
+    // terrible thing to do by accident, so make the person say so out loud.
+    form.addEventListener('submit', (e) => {
+        const anyFilter = [...form.querySelectorAll('input[data-filter]')].some(cb => cb.checked)
+            || form.querySelector('#sp-phrases').value.trim()
+            || form.querySelector('#sp-regex').value.trim()
+            || [...form.querySelector('#sp-filter-roles').selectedOptions].length
+            || form.querySelector('#sp-filter-users').value.trim();
+        const pinnedSafe = form.querySelector('[name="exempt_pinned"]').checked;
+        if (!anyFilter && !pinnedSafe) {
+            if (!confirm('This rule has no content filters and does not protect pinned messages, so it will delete EVERYTHING in the channel, including pins. Continue?')) {
+                e.preventDefault();
+            }
+        }
+    });
+})();
+</script>

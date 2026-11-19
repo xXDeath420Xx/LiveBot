@@ -1,0 +1,87 @@
+<%#
+  GET /downloads/studio (dashboard/routes/downloads.js). Locals: release { version, releaseDate, builds: [{ kind, label, file, size,
+  sha256 }], sums } or null when nothing is published yet.
+%>
+<!DOCTYPE html>
+<html lang="en" data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>">
+<head>
+<%- include('partials/site-head', { title: 'Download CertiFried Studio · CertiFried', description: 'CertiFried Studio is the free Windows app for the CertiFried stream bot: OBS control, sounds and hotkeys on your streaming PC.', path: '/downloads/studio' }) %>
+    <link rel="stylesheet" href="/css/cf-studio-pages.css">
+    <style>
+        .dl-builds { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--cf-3); }
+        @media (max-width: 640px) { .dl-builds { grid-template-columns: minmax(0, 1fr); } }
+        .dl-build { display: flex; flex-direction: column; gap: var(--cf-3); padding: var(--cf-5); background: var(--cf-surface); border: 1px solid var(--cf-border); border-radius: var(--cf-radius-lg); }
+        .dl-build h3 { margin: 0; font-size: var(--cf-text-md); font-weight: 600; color: var(--cf-text); }
+        .dl-build p { margin: 0; font-size: var(--cf-text-sm); color: var(--cf-text-2); }
+        .dl-build .btn { align-self: flex-start; }
+        .dl-hash { margin: 0; font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+        .dl-hash code { display: block; margin-top: 2px; font-family: var(--cf-mono); font-size: var(--cf-text-xs); color: var(--cf-text-2); overflow-wrap: anywhere; }
+        .dl-steps { margin: 0; padding-left: 1.3em; color: var(--cf-text-2); }
+        .dl-steps li + li { margin-top: var(--cf-2); }
+    </style>
+</head>
+<body class="cfs-body">
+<%- include('partials/site-header', { active: '', user: locals.user || null, returnTo: '/downloads/studio' }) %>
+<%
+  const _size = (n) => (n / 1048576).toFixed(1) + ' MB';
+  const _date = (iso) => iso ? new Date(iso).toISOString().slice(0, 10) : '';
+  const _rel = locals.release || null;
+%>
+    <main id="main-content" tabindex="-1" class="cfs-main cfs-main--narrow">
+        <div class="cfs-pagehead">
+            <h1>CertiFried Studio</h1>
+            <p class="cfs-lede">The Windows app for the CertiFried stream bot. It runs on your streaming PC and carries out the actions your automations send: switching OBS scenes, showing and hiding sources, playing sounds and pressing hotkeys. Your settings stay on the dashboard.</p>
+            <p class="cfs-meta">Free and open source under the GNU AGPL-3.0-or-later. <a href="/studio">What Studio does</a>.</p>
+            <% if (_rel) { %><p class="cfs-meta">Version <%= _rel.version %><% if (_rel.releaseDate) { %>, released <time datetime="<%= _rel.releaseDate %>"><%= _date(_rel.releaseDate) %></time><% } %>. Windows 10 and 11, 64-bit.</p><% } %>
+        </div>
+
+        <%- include('partials/studio-nav', { current: 'download' }) %>
+
+        <section class="cfs-section" aria-labelledby="dl-get-h">
+            <h2 id="dl-get-h">Download</h2>
+            <% if (!_rel) { %>
+            <div class="cfs-note"><p>The download is not published yet. Check back soon.</p></div>
+            <% } else { %>
+            <div class="dl-builds">
+                <% _rel.builds.forEach((b) => { %>
+                <div class="dl-build">
+                    <h3><%= b.label %></h3>
+                    <p><%= b.kind === 'setup' ? 'Installs for your Windows account, adds a Start menu entry and updates itself.' : 'One file you run from any folder. It does not update itself: download the new version when one comes out.' %></p>
+                    <a class="btn btn-primary" href="/downloads/studio/<%= encodeURIComponent(b.file) %>" download><%= b.kind === 'setup' ? 'Download the installer' : 'Download the portable app' %></a>
+                    <p class="dl-hash"><%= b.file %>, <%= _size(b.size) %><% if (b.sha256) { %><br>SHA-256 <code><%= b.sha256 %></code><% } %></p>
+                </div>
+                <% }) %>
+            </div>
+            <% if (_rel.sums) { %><p class="cfs-meta">All checksums: <a href="/downloads/studio/SHA256SUMS.txt">SHA256SUMS.txt</a>.</p><% } %>
+            <% } %>
+        </section>
+
+        <section class="cfs-section" aria-labelledby="dl-smart-h">
+            <h2 id="dl-smart-h">Windows SmartScreen</h2>
+            <p>CertiFried Studio is not code-signed. The first time you open it, Windows SmartScreen shows "Windows protected your PC", as it does for new apps without a signature. To continue, click More info, then click Run anyway. <a href="/studio/faq#smartscreen">Why Studio is unsigned</a>.</p>
+            <p class="cfs-meta">To check that the file is the one published here, compare its SHA-256 with the value above. In PowerShell: <code>Get-FileHash .\CertiFried-Studio-Setup-<%= _rel ? _rel.version : 'x.y.z' %>.exe</code></p>
+        </section>
+
+        <section class="cfs-section" aria-labelledby="dl-start-h">
+            <h2 id="dl-start-h">Getting started</h2>
+            <ol class="dl-steps">
+                <li>Install and open CertiFried Studio.</li>
+                <li>On the dashboard, open <a href="/stream/bot/devices">Stream bot, Devices</a> and make a pairing code. Type it into Studio, or choose Open in CertiFried Studio.</li>
+                <li>In OBS, open Tools, WebSocket Server Settings. Turn the server on and note the port and password. Enter them in Studio under OBS.</li>
+                <li>Add OBS, sound and hotkey actions to your automations. Studio carries them out and reports back to the run history.</li>
+            </ol>
+            <p class="cfs-meta">The full walkthrough is in the <a href="/docs/guides/stream-bot">Stream bot guide</a>.</p>
+        </section>
+
+        <section class="cfs-section" aria-labelledby="dl-terms-h">
+            <h2 id="dl-terms-h">Before you install</h2>
+            <ul class="dl-steps">
+                <li><a href="/studio/privacy">Studio privacy</a> lists what the app keeps on your PC and what it sends to CertiFried. It has no analytics, telemetry or crash reporting, and your microphone audio and OBS password never leave your PC.</li>
+                <li><a href="/studio/how-it-works">How it works</a> explains what runs where and what Studio changes in OBS.</li>
+                <li>Using Studio means accepting the <a href="/eula#certifried-studio">EULA</a> and the <a href="/terms">Terms of Service</a>. The code is licensed under the <a href="https://github.com/xXDeath420Xx/LiveBot/blob/dev/LICENSE" rel="noopener">AGPL-3.0-or-later</a>; you can read or build it from the <a href="https://github.com/xXDeath420Xx/LiveBot" rel="noopener">source code</a>.</li>
+            </ul>
+        </section>
+    </main>
+<%- include('partials/site-footer') %>
+</body>
+</html>

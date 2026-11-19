@@ -177,16 +177,16 @@ function generateStrainName(parent1Name, parent2Name) {
  * @returns {object} Breeding operation
  */
 export async function startBreeding(playerId, parent1StrainId, parent2StrainId) {
-    logger.info('[BreedingEngine] Starting breed', { playerId, parent1StrainId, parent2StrainId });
+    logger.debug('[BreedingEngine] Starting breed', { playerId, parent1StrainId, parent2StrainId });
 
     // Get bonuses
     const bonuses = await getBonuses(playerId);
-    logger.info('[BreedingEngine] Bonuses', { playerId, breedingUnlocked: bonuses.breedingUnlocked, breedingSlots: bonuses.breedingSlots });
+    logger.debug('[BreedingEngine] Bonuses', { playerId, breedingUnlocked: bonuses.breedingUnlocked, breedingSlots: bonuses.breedingSlots });
 
     // Check if breeding is unlocked via skills OR research
     // NOTE: We auto-unlock breeding for all players now to reduce frustration
     const hasResearchBreeding = await hasFeatureUnlock(playerId, 'breeding');
-    logger.info('[BreedingEngine] Research check', { playerId, hasResearchBreeding, breedingUnlocked: bonuses.breedingUnlocked });
+    logger.debug('[BreedingEngine] Research check', { playerId, hasResearchBreeding, breedingUnlocked: bonuses.breedingUnlocked });
 
     // Breeding is now available to everyone - removed the artificial skill gate
     // if (!bonuses.breedingUnlocked && !hasResearchBreeding) {
@@ -200,7 +200,7 @@ export async function startBreeding(playerId, parent1StrainId, parent2StrainId) 
         [playerId]
     );
 
-    logger.info('[BreedingEngine] Slot check', { playerId, activeCount, breedingSlots: bonuses.breedingSlots });
+    logger.debug('[BreedingEngine] Slot check', { playerId, activeCount, breedingSlots: bonuses.breedingSlots });
 
     if (activeCount >= bonuses.breedingSlots) {
         logger.warn('[BreedingEngine] Max slots reached', { playerId, activeCount, breedingSlots: bonuses.breedingSlots });
@@ -211,7 +211,7 @@ export async function startBreeding(playerId, parent1StrainId, parent2StrainId) 
     const [[parent1]] = await pool.execute('SELECT * FROM cfx_strains WHERE id = ?', [parent1StrainId]);
     const [[parent2]] = await pool.execute('SELECT * FROM cfx_strains WHERE id = ?', [parent2StrainId]);
 
-    logger.info('[BreedingEngine] Parent strains', { playerId, parent1: parent1?.name, parent2: parent2?.name });
+    logger.debug('[BreedingEngine] Parent strains', { playerId, parent1: parent1?.name, parent2: parent2?.name });
 
     if (!parent1 || !parent2) {
         logger.warn('[BreedingEngine] Parent strain not found', { playerId, parent1StrainId, parent2StrainId, hasParent1: !!parent1, hasParent2: !!parent2 });
@@ -228,7 +228,7 @@ export async function startBreeding(playerId, parent1StrainId, parent2StrainId) 
         [playerId, parent2StrainId]
     );
 
-    logger.info('[BreedingEngine] Discovery check', { playerId, hasDisc1: !!disc1, hasDisc2: !!disc2 });
+    logger.debug('[BreedingEngine] Discovery check', { playerId, hasDisc1: !!disc1, hasDisc2: !!disc2 });
 
     if (!disc1 || !disc2) {
         logger.warn('[BreedingEngine] Strain not discovered', { playerId, hasDisc1: !!disc1, hasDisc2: !!disc2 });
@@ -274,7 +274,7 @@ export async function startBreeding(playerId, parent1StrainId, parent2StrainId) 
             [playerId, parent2StrainId]
         );
 
-        logger.info('[BreedingEngine] Seed check', {
+        logger.debug('[BreedingEngine] Seed check', {
             playerId,
             parent1StrainId, parent2StrainId,
             seeds1Qty: seeds1?.quantity, seeds2Qty: seeds2?.quantity
@@ -443,7 +443,7 @@ export async function claimBreeding(playerId, operationId) {
             [resultStrain.id, props.basePrice, props.basePrice, props.basePrice, props.basePrice, props.basePrice]
         );
 
-            logger.info('[BreedingEngine] New strain created', {
+            logger.debug('[BreedingEngine] New strain created', {
                 playerId,
                 strainId: resultStrain.id,
                 strainName,

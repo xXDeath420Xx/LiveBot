@@ -1,0 +1,230 @@
+<%#
+  Fourthwall shop tracker: watches public Fourthwall shop pages and posts catalog changes.
+  Rows are fourthwall_tracked_shops (migration 341), managed through
+  /api/guilds/:guildId/fourthwall/tracked (GET/POST/PUT/DELETE); core/fourthwall-shop-tracker.js
+  posts the changes, gated per row by the notify_* columns.
+%>
+<%
+const fwText = (channels || []).filter(c => c.type === 0 || c.type === 5 || c.type === undefined);
+%>
+<style>
+    #fwPage .fw-name { font-weight: 500; color: var(--cf-text); overflow-wrap: anywhere; }
+    #fwPage .fw-meta { display: block; font-size: var(--cf-text-xs); color: var(--cf-text-3); margin-top: 2px; overflow-wrap: anywhere; }
+    #fwPage .fw-meta.is-bad { color: var(--cf-danger); }
+    #fwPage .fw-shop { display: grid; gap: var(--cf-3); padding: var(--cf-4); border: 1px solid var(--cf-border); border-radius: var(--cf-radius); background: var(--cf-surface-2); }
+    #fwPage .fw-shop + .fw-shop { margin-top: var(--cf-3); }
+    #fwPage .fw-shop-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: var(--cf-2) var(--cf-4); }
+    #fwPage .fw-shop-head .form-select { width: auto; min-width: 12rem; max-width: 100%; }
+    #fwPage .fw-shop-ctl { display: flex; flex-wrap: wrap; align-items: center; gap: var(--cf-2); }
+    #fwPage .fw-group { margin: 0; padding: 0; border: 0; min-width: 0; }
+    #fwPage .fw-group > legend { float: none; width: auto; margin: 0 0 6px; padding: 0; font-size: var(--cf-text-xs); font-weight: 600; color: var(--cf-text-2); text-transform: uppercase; letter-spacing: 0.04em; }
+    #fwPage .cf-section-foot > .cf-status-line { margin-right: auto; }
+    @media (max-width: 640px) { #fwPage .fw-shop-head .form-select { width: 100%; } #fwPage .fw-shop-ctl { width: 100%; } }
+</style>
+
+<div class="page-section" id="fwPage" data-guild-id="<%= guild.id %>">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-shopping-bag" aria-hidden="true"></i>
+                <span>Fourthwall</span>
+            </div>
+            <div class="page-section-subtitle">Works from the public shop pages; no store login needed.</div>
+        </div>
+    </div>
+
+    <section class="cf-section" aria-labelledby="fw-tracked-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="fw-tracked-title">Tracked shops <span class="cf-tab-count" id="fwCount">0</span></h2>
+                <p class="cf-section-desc">The first check only records the catalog; posts start with the first change after that. Changes to a shop's switches save straight away.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div id="fwList"><%- include('../kit/_state', { kind: 'loading', title: 'Loading shops', text: null, id: null, boxed: false, compact: true }) %></div>
+
+            <div class="cf-rows-head" id="fw-add-head">Track a shop</div>
+            <div class="cf-row cf-row--stack">
+                <div class="cf-fields">
+                    <div class="cf-field">
+                        <label for="fwHandle">Shop address</label>
+                        <input type="text" id="fwHandle" class="form-control" maxlength="140" placeholder="name-shop.fourthwall.com" autocomplete="off">
+                        <span class="cf-field-hint">The shop link, or just the part before .fourthwall.com.</span>
+                    </div>
+                    <div class="cf-field">
+                        <label for="fwChannel">Post in</label>
+                        <select id="fwChannel" class="form-select">
+                            <option value="">Choose a channel</option>
+                            <% fwText.forEach(c => { %><option value="<%= c.id %>" data-kind="text">#<%= c.name %></option>
+                            <% }) %>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <div class="cf-section-foot">
+                <span class="cf-status-line" id="fwAddStatus" role="status" aria-live="polite"></span>
+                <button type="button" class="btn btn-primary" id="fwAdd">Track shop</button>
+            </div>
+        </div>
+    </section>
+</div>
+
+<script>
+(function () {
+    const root = document.getElementById('fwPage');
+    if (!root) return;
+    const api = '/api/guilds/' + root.dataset.guildId + '/fourthwall/tracked';
+    const CHANNELS = <%- JSON.stringify(fwText.map(c => ({ id: String(c.id), name: c.name }))).replace(/</g, '\\u003c') %>;
+    const $ = (id) => document.getElementById(id);
+    // Grouped as core/fourthwall-shop-tracker.js maps its events (EVENT_FLAG_MAP).
+    const GROUPS = [
+        ['Products', [
+            ['notify_new_products', 'New products'],
+            ['notify_sold_out', 'Sold out'],
+            ['notify_restocked', 'Back in stock'],
+            ['notify_price_drops', 'Price drops and sales'],
+            ['notify_price_increases', 'Price rises'],
+        ]],
+        ['Sizes and variants', [
+            ['notify_variant_added', 'Added or removed'],
+            ['notify_variant_sold_out', 'Sold out'],
+            ['notify_variant_low_stock', 'Low stock'],
+            ['notify_variant_restocked', 'Back in stock'],
+        ]],
+        ['Listing changes', [
+            ['notify_product_renamed', 'New link (renamed)'],
+            ['notify_name_changed', 'Name changed'],
+            ['notify_image_changed', 'New image'],
+        ]],
+    ];
+
+    function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+    function status(node, text, cls) { node.textContent = text; node.className = 'cf-status-line' + (cls ? ' ' + cls : ''); }
+    async function call(method, url, body) {
+        const res = await fetch(url, {
+            method, credentials: 'same-origin',
+            headers: body ? { 'Content-Type': 'application/json' } : {},
+            body: body ? JSON.stringify(body) : undefined,
+        });
+        const d = await res.json().catch(() => ({}));
+        if (!res.ok || d.ok === false) throw new Error(d.error || ('Request failed (' + res.status + ')'));
+        return d;
+    }
+
+    function shopCard(sub) {
+        const card = el('div', 'fw-shop');
+        const head = el('div', 'fw-shop-head');
+        const main = el('div', 'cf-list-main');
+        const link = el('a', 'fw-name', sub.shop_name || sub.shop_handle);
+        link.href = 'https://' + encodeURIComponent(sub.shop_handle) + '.fourthwall.com';
+        link.target = '_blank';
+        link.rel = 'noopener';
+        main.appendChild(link);
+        const checked = sub.last_checked_at ? 'Checked ' + new Date(sub.last_checked_at).toLocaleString() : 'Not checked yet';
+        main.appendChild(el('span', 'fw-meta', sub.shop_handle + '.fourthwall.com · ' + checked));
+        if (sub.last_error) main.appendChild(el('span', 'fw-meta is-bad', 'Last check failed: ' + String(sub.last_error).slice(0, 140)));
+        head.appendChild(main);
+
+        const ctl = el('div', 'fw-shop-ctl');
+        const sel = el('select', 'form-select form-select-sm');
+        sel.setAttribute('aria-label', 'Channel for ' + sub.shop_handle);
+        if (!CHANNELS.some(c => c.id === String(sub.channel_id))) {
+            const o = el('option', null, 'Deleted channel'); o.value = ''; o.selected = true; sel.appendChild(o);
+        }
+        CHANNELS.forEach(c => {
+            const o = el('option', null, '#' + c.name);
+            o.value = c.id;
+            o.dataset.kind = 'text';
+            if (c.id === String(sub.channel_id)) o.selected = true;
+            sel.appendChild(o);
+        });
+        const rowStatus = el('span', 'cf-status-line');
+        rowStatus.setAttribute('role', 'status');
+        rowStatus.setAttribute('aria-live', 'polite');
+        sel.addEventListener('change', async () => {
+            if (!sel.value) return;
+            sel.disabled = true;
+            try { await call('PUT', api + '/' + sub.id, { channel_id: sel.value }); status(rowStatus, 'Saved', 'is-ok'); }
+            catch (err) { status(rowStatus, err.message, 'is-bad'); }
+            finally { sel.disabled = false; }
+        });
+        const rm = el('button', 'btn btn-sm btn-danger', 'Remove');
+        rm.type = 'button';
+        rm.addEventListener('click', async () => {
+            if (!confirm('Stop tracking ' + sub.shop_handle + '? Posts for this shop stop right away.')) return;
+            rm.disabled = true;
+            try { await call('DELETE', api + '/' + sub.id); load(); }
+            catch (err) { rm.disabled = false; status(rowStatus, err.message, 'is-bad'); }
+        });
+        ctl.append(rowStatus, sel, rm);
+        head.appendChild(ctl);
+        card.appendChild(head);
+
+        const groups = el('div', 'cf-fields');
+        GROUPS.forEach(([title, items]) => {
+            const fs = el('fieldset', 'fw-group');
+            fs.appendChild(el('legend', null, title));
+            const grid = el('div', 'cf-check-grid');
+            items.forEach(([key, label]) => {
+                const lab = el('label', 'cf-choice');
+                const cb = el('input');
+                cb.type = 'checkbox';
+                cb.checked = Number(sub[key]) === 1;
+                cb.addEventListener('change', async () => {
+                    cb.disabled = true;
+                    try { await call('PUT', api + '/' + sub.id, { [key]: cb.checked ? 1 : 0 }); status(rowStatus, 'Saved', 'is-ok'); }
+                    catch (err) { cb.checked = !cb.checked; status(rowStatus, err.message, 'is-bad'); }
+                    finally { cb.disabled = false; }
+                });
+                lab.append(cb, el('span', null, label));
+                grid.appendChild(lab);
+            });
+            fs.appendChild(grid);
+            groups.appendChild(fs);
+        });
+        card.appendChild(groups);
+        return card;
+    }
+
+    function stateBox(title, text) {
+        const s = el('div', 'cf-state cf-state--compact');
+        s.appendChild(el('p', 'cf-state-title', title));
+        if (text) s.appendChild(el('p', 'cf-state-text', text));
+        return s;
+    }
+
+    async function load() {
+        const list = $('fwList');
+        try {
+            const d = await call('GET', api);
+            $('fwCount').textContent = String(d.subscriptions.length);
+            list.replaceChildren();
+            if (!d.subscriptions.length) { list.appendChild(stateBox('No shops tracked yet', 'Add a shop below to post its new products and stock changes.')); return; }
+            d.subscriptions.forEach(s => list.appendChild(shopCard(s)));
+        } catch (err) {
+            list.replaceChildren(stateBox('Could not load the shops', err.message));
+        }
+    }
+
+    $('fwAdd').addEventListener('click', async () => {
+        const out = $('fwAddStatus');
+        // Accept a pasted link: https://name-shop.fourthwall.com/... → name-shop
+        let handle = $('fwHandle').value.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '').replace(/\.fourthwall\.com$/, '');
+        const channel_id = $('fwChannel').value;
+        if (!/^[a-z0-9-]{1,100}$/.test(handle)) return status(out, 'Enter the shop address, such as name-shop.fourthwall.com.', 'is-bad');
+        if (!channel_id) return status(out, 'Choose a channel to post in.', 'is-bad');
+        $('fwAdd').disabled = true;
+        status(out, 'Adding', 'is-busy');
+        try {
+            await call('POST', api, { shop_handle: handle, channel_id });
+            $('fwHandle').value = '';
+            status(out, 'Added. Posts start with the first change after the next check.', 'is-ok');
+            load();
+        } catch (err) {
+            status(out, err.message, 'is-bad');
+        } finally { $('fwAdd').disabled = false; }
+    });
+
+    load();
+})();
+</script>

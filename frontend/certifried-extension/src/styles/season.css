@@ -1,0 +1,140 @@
+/* Season strip (under the nav) and season standings (leaderboard "Season" tab) */
+
+cf-season-strip {
+    display: flex;
+    gap: var(--space-2);
+    padding: 0 var(--space-3);
+    flex-wrap: wrap;
+}
+
+cf-season-strip:empty {
+    display: none;
+}
+
+.cf-season-strip__item {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin-top: var(--space-2);
+    padding: 6px 10px;
+    font-size: var(--font-size-xs);
+    color: var(--text-secondary);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-md);
+    text-align: left;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.cf-season-strip__item:hover,
+.cf-season-strip__item:focus-visible {
+    color: var(--text-primary);
+    border-color: var(--color-primary-600);
+}
+
+.cf-season-strip__item strong {
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.cf-season {
+    margin-bottom: var(--space-4);
+}
+
+.cf-season__head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: var(--space-2);
+    margin-bottom: 4px;
+}
+
+.cf-season__name {
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.cf-season__note,
+.cf-season__me {
+    margin: 0 0 var(--space-2);
+}
+
+.cf-season__row {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-primary);
+    border-radius: var(--radius-md);
+    margin-bottom: var(--space-2);
+}
+
+.cf-season__row.cf-leaderboard__player--current {
+    border-color: var(--color-primary-600);
+}
+
+.cf-season__rank {
+    width: 32px;
+    text-align: center;
+    font-weight: 700;
+    color: var(--text-muted);
+}
+
+.cf-season__row:nth-child(-n + 3) .cf-season__rank {
+    color: var(--color-accent-500);
+}
+
+.cf-season__who {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.cf-season__player {
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.cf-season__value {
+    font-weight: 700;
+    color: var(--color-primary-400);
+    white-space: nowrap;
+}
+
+.cf-season__rewards {
+    color: var(--text-secondary);
+    margin-top: var(--space-2);
+}
+
+.cf-season__rewards summary {
+    cursor: pointer;
+}
+
+.cf-season__rewards ul {
+    margin: 4px 0 0;
+    padding-left: 18px;
+}
+
+/* Twitch panel: identity prompt */
+.cf-identity {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    height: 100%;
+    padding: 24px;
+    text-align: center;
+}
+
+.cf-identity p {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 14px;
+}

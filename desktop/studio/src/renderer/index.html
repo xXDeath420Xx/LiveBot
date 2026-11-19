@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CertiFried Studio</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="shell">
+  <nav class="side" aria-label="Sections">
+    <div class="brand">
+      <img src="../../assets/icon.png" alt="" width="28" height="28">
+      <div>
+        <div class="brand-name">CertiFried Studio</div>
+        <div class="brand-version" id="version"></div>
+      </div>
+    </div>
+    <button class="nav-item" data-tab="status" aria-current="page">Status</button>
+    <button class="nav-item" data-tab="activity">Activity</button>
+    <button class="nav-item" data-tab="sounds">Sounds</button>
+    <button class="nav-item" data-tab="hotkeys">Hotkeys</button>
+    <button class="nav-item" data-tab="voice">Voice</button>
+    <button class="nav-item" data-tab="setup">Set up OBS</button>
+    <button class="nav-item" data-tab="settings">Settings</button>
+    <div class="side-foot">
+      <div class="dot-line"><span class="dot" id="dot-engine"></span><span id="side-engine">CertiFried</span></div>
+      <div class="dot-line"><span class="dot" id="dot-obs"></span><span id="side-obs">OBS</span></div>
+    </div>
+  </nav>
+
+  <main class="content">
+    <div class="banner" id="update-banner" hidden></div>
+    <div class="banner warn" id="storage-banner" role="status" hidden></div>
+
+    <!-- Status -->
+    <section class="tab" id="tab-status">
+      <h1>Status</h1>
+
+      <div class="card" id="pair-card" hidden>
+        <h2>Connect to CertiFried</h2>
+        <p class="muted">Sign in on certifriedmultitool.com in your browser and approve this PC. Nothing to copy.</p>
+        <div id="link-idle">
+          <div class="row-form">
+            <label class="field grow"><span>Name for this PC</span><input id="link-name" maxlength="100" placeholder="Streaming PC"></label>
+            <button class="btn primary" type="button" id="link-btn">Sign in with CertiFried</button>
+          </div>
+        </div>
+        <div id="link-wait" hidden>
+          <p>Waiting for you to approve in your browser. The page shows the code <kbd id="link-check"></kbd>; approve only if it matches.</p>
+          <div class="actions"><button class="btn" type="button" id="link-open">Open the page again</button><button class="btn ghost" type="button" id="link-cancel">Cancel</button></div>
+        </div>
+        <p class="msg" id="link-msg" role="status"></p>
+        <details class="advanced" id="code-details">
+          <summary>Use a pairing code instead</summary>
+        <ol class="steps">
+          <li>On certifriedmultitool.com open <strong>Stream bot → Devices</strong> and choose <strong>Make a pairing code</strong>.</li>
+          <li>Type the code it shows below. Codes last 10 minutes.</li>
+        </ol>
+        <form id="pair-form" class="row-form">
+          <label class="field"><span>Pairing code</span><input id="pair-code" autocomplete="off" spellcheck="false" placeholder="ABCD-EFGH" maxlength="12" required></label>
+          <label class="field grow"><span>Name for this PC</span><input id="pair-name" maxlength="100" placeholder="Streaming PC"></label>
+          <button class="btn primary" type="submit" id="pair-btn">Pair</button>
+        </form>
+        <p class="msg" id="pair-msg" role="status"></p>
+        <p class="muted"><a href="#" data-page="devices">Open the Devices page</a></p>
+        </details>
+      </div>
+
+      <div class="grid2" id="status-grid">
+        <div class="card">
+          <div class="card-head"><h2>CertiFried</h2><span class="pill" id="engine-pill"></span></div>
+          <dl class="kv">
+            <dt>This PC</dt><dd id="engine-device">-</dd>
+            <dt>Server</dt><dd id="engine-server">-</dd>
+          </dl>
+          <p class="msg" id="engine-note"></p>
+          <div class="actions"><button class="btn" id="engine-reconnect">Reconnect</button></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>OBS</h2><span class="pill" id="obs-pill"></span></div>
+          <dl class="kv">
+            <dt>Address</dt><dd id="obs-address">-</dd>
+            <dt>Version</dt><dd id="obs-version">-</dd>
+            <dt>Scene</dt><dd id="obs-scene">-</dd>
+            <dt>Output</dt><dd id="obs-output">-</dd>
+          </dl>
+          <p class="msg" id="obs-note"></p>
+          <p class="muted" id="obs-offer" hidden>OBS asked for a password. Studio can take it from OBS's own settings on this PC.</p>
+          <p class="msg" id="obs-import-status-msg" role="status"></p>
+          <div class="actions"><button class="btn" id="obs-reconnect">Reconnect</button><button class="btn primary" type="button" id="obs-import-status" hidden>Use my OBS settings</button><button class="btn ghost" data-goto="settings">OBS settings</button></div>
+        </div>
+      </div>
+
+      <div class="card" id="vod-card">
+        <div class="card-head"><h2>VOD-safe music</h2><span class="pill" id="vod-pill"></span></div>
+        <p class="muted">Song requests play only through the CertiFried Music source in OBS, which Studio keeps off your Twitch VOD track, so music is heard live but never saved in the VOD. This is always on.</p>
+        <p class="msg" id="vod-reason"></p>
+        <dl class="kv"><dt>VOD track</dt><dd id="vod-track">-</dd><dt>Music source</dt><dd id="vod-source">-</dd></dl>
+        <div id="vod-warn-wrap" hidden>
+          <p class="muted">These sources are on the VOD track and look like music or sound effects. Studio does not change them unless you click:</p>
+          <table class="table" id="vod-warn"><tbody></tbody></table>
+        </div>
+        <p class="msg" id="vod-desktop" hidden>Desktop Audio is on the VOD track: anything playing on this PC (Spotify, YouTube, games) is saved in the VOD.</p>
+        <details class="advanced">
+          <summary>What this cannot cover</summary>
+          <ul class="limits">
+            <li>Twitch clips are cut from the live stream, so they contain the music.</li>
+            <li>Kick has no VOD track: whatever Kick receives live is in its VODs. With the obs-multi-rtmp plugin, edit the Kick target and give it its own audio encoder on track <span class="vod-track-n">2</span> (the VOD track) to keep music off Kick entirely.</li>
+            <li>Local recordings use their own tracks and include the music unless you turn on Record without music.</li>
+          </ul>
+          <label class="field"><span>Music on Kick</span>
+            <select id="vod-kick"><option value="unknown">Not set up</option><option value="live">Kick gets the live audio (music in Kick VODs)</option><option value="vod">Kick uses the VOD track (no music on Kick)</option></select>
+          </label>
+          <label class="check"><input type="checkbox" id="vod-record"> Record without music (recordings use only the VOD track; changes the OBS profile, with a backup)</label>
+        </details>
+        <p class="msg" id="vod-msg" role="status"></p>
+        <div class="actions"><button class="btn" type="button" id="vod-check">Check again</button></div>
+      </div>
+
+      <div class="card">
+        <h2>Recent activity</h2>
+        <ul class="log" id="recent-log"></ul>
+        <div class="actions"><button class="btn ghost" data-goto="activity">All activity</button></div>
+      </div>
+    </section>
+
+    <!-- Activity -->
+    <section class="tab" id="tab-activity" hidden>
+      <div class="title-row">
+        <h1>Activity</h1>
+        <div class="seg" role="group" aria-label="Show">
+          <button data-filter="all" aria-pressed="true">All</button>
+          <button data-filter="action" aria-pressed="false">Actions</button>
+          <button data-filter="event" aria-pressed="false">OBS events</button>
+          <button data-filter="hotkey" aria-pressed="false">Hotkeys</button>
+        </div>
+      </div>
+      <p class="muted">Actions sent by your automations, what OBS reported, and hotkeys you pressed. Kept until the app closes; the log file keeps more.</p>
+      <ul class="log full" id="activity-log"></ul>
+      <p class="empty" id="activity-empty">Nothing yet.</p>
+    </section>
+
+    <!-- Sounds -->
+    <section class="tab" id="tab-sounds" hidden>
+      <h1>Sounds</h1>
+      <div class="card">
+        <h2>Playback</h2>
+        <div class="form-grid">
+          <label class="field"><span>Output device</span><select id="snd-device"><option value="default">Windows default</option></select></label>
+          <label class="field"><span>Master volume <output id="snd-volume-out"></output></span><input type="range" id="snd-volume" min="0" max="100" step="1"></label>
+          <label class="field"><span>When a sound is already playing</span>
+            <select id="snd-mode"><option value="overlap">Play at the same time</option><option value="queue">Play after it</option></select>
+          </label>
+        </div>
+        <p class="muted">Used by hotkeys and the Play buttons below. Automations use the choice saved on the action.</p>
+        <div class="actions"><button class="btn" id="snd-stop">Stop all sounds</button></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>Library</h2>
+          <div class="actions tight"><button class="btn" id="snd-folder">Open folder</button><button class="btn" id="snd-sync">Sync from dashboard</button></div>
+        </div>
+        <p class="muted">Put audio files (mp3, wav, ogg, m4a) in the folder, or upload them on the dashboard. Automations name a sound by its file name, with or without the extension.</p>
+        <label class="check"><input type="checkbox" id="snd-syncauto"> Keep dashboard sounds in sync</label>
+        <p class="msg" id="snd-msg" role="status"></p>
+        <table class="table" id="snd-table"><thead><tr><th>Name</th><th>From</th><th></th></tr></thead><tbody></tbody></table>
+        <p class="empty" id="snd-empty">No sounds yet.</p>
+      </div>
+    </section>
+
+    <!-- Hotkeys -->
+    <section class="tab" id="tab-hotkeys" hidden>
+      <h1>Hotkeys</h1>
+      <p class="muted">Hotkeys work in any program, including games. A key on its own is only allowed for F13 to F24 and the numpad; everything else needs Ctrl, Alt, Shift or Win.</p>
+      <div class="card">
+        <table class="table" id="hk-table"><thead><tr><th>Keys</th><th>Does</th><th>On</th><th></th></tr></thead><tbody></tbody></table>
+        <p class="empty" id="hk-empty">No hotkeys yet.</p>
+      </div>
+      <div class="card">
+        <h2 id="hk-form-title">Add a hotkey</h2>
+        <form id="hk-form">
+          <div class="form-grid">
+            <label class="field"><span>Keys</span><input id="hk-keys" readonly placeholder="Click, then press the keys"></label>
+            <label class="field"><span>Does</span>
+              <select id="hk-kind">
+                <option value="automation">Run an automation</option>
+                <option value="sound.play">Play a sound</option>
+                <option value="sound.stop">Stop all sounds</option>
+                <option value="obs.scene">OBS: switch scene</option>
+                <option value="obs.source">OBS: show or hide a source</option>
+                <option value="obs.mute">OBS: mute or unmute</option>
+                <option value="obs.stream">OBS: start or stop streaming</option>
+                <option value="obs.record">OBS: recording</option>
+                <option value="obs.replay">OBS: save replay</option>
+                <option value="obs.screenshot">OBS: screenshot</option>
+              </select>
+            </label>
+          </div>
+          <div class="form-grid" id="hk-fields"></div>
+          <p class="msg" id="hk-msg" role="status"></p>
+          <div class="actions"><button class="btn primary" type="submit">Save hotkey</button><button class="btn ghost" type="button" id="hk-cancel" hidden>Cancel</button></div>
+        </form>
+      </div>
+    </section>
+
+    <!-- Voice -->
+    <section class="tab" id="tab-voice" hidden>
+      <h1>Voice</h1>
+      <p class="muted">Say a phrase and Studio runs the automation that listens for it. Studio recognises only the phrases you set as Voice command triggers on the dashboard, with Windows' built-in speech recognition on this PC. No audio is recorded or sent anywhere; only the phrase it heard goes to CertiFried.</p>
+      <p class="msg bad" id="voice-unavailable" hidden>Voice commands need Windows.</p>
+      <div class="card">
+        <div class="card-head"><h2>Listening</h2><span class="pill" id="voice-pill">Off</span></div>
+        <label class="check"><input type="checkbox" id="voice-enabled"> Listen for voice commands</label>
+        <div class="meter" aria-hidden="true"><span id="voice-meter"></span></div>
+        <p class="muted" id="voice-last"></p>
+        <p class="msg bad" id="voice-error" role="status"></p>
+        <div class="form-grid">
+          <label class="field"><span>Microphone</span><select id="voice-device"><option value="default">Windows default</option></select></label>
+          <label class="field"><span>Listen</span>
+            <select id="voice-mode"><option value="always">All the time</option><option value="ptt">Only while I hold a key</option></select>
+          </label>
+          <label class="field" id="voice-ptt-wrap"><span>Key to hold</span><input id="voice-ptt" readonly placeholder="Click, then press a key"></label>
+          <label class="field"><span>How sure before it counts <output id="voice-threshold-out"></output></span><input type="range" id="voice-threshold" min="50" max="95" step="5"></label>
+        </div>
+        <p class="msg" id="voice-msg" role="status"></p>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>Your voice commands</h2><div class="actions tight"><button class="btn" type="button" id="voice-refresh">Refresh</button></div></div>
+        <p class="muted">Set these on the dashboard: an automation with the Voice command trigger.</p>
+        <ul class="phrases" id="voice-phrases"></ul>
+        <p class="empty" id="voice-empty">None yet.</p>
+      </div>
+    </section>
+
+    <!-- OBS setup -->
+    <section class="tab" id="tab-setup" hidden>
+      <h1>Set up OBS</h1>
+      <p class="muted">Each step changes something in OBS only when you click it, and says what it will change first.</p>
+      <ol class="setup">
+        <li class="card" id="step-ws">
+          <div class="card-head"><h2>1. OBS WebSocket</h2><span class="pill" id="step-ws-pill"></span></div>
+          <p class="muted">Studio talks to OBS through OBS's WebSocket server.</p>
+          <div class="actions"><button class="btn" type="button" id="step-ws-import">Use my OBS settings</button><button class="btn ghost" type="button" data-goto="settings">OBS settings</button></div>
+          <p class="msg" id="step-ws-msg" role="status"></p>
+        </li>
+        <li class="card" id="step-docks">
+          <div class="card-head"><h2>2. CertiFried docks</h2><span class="pill" id="step-docks-pill"></span></div>
+          <p class="muted">Adds three docks to OBS: CertiFried Activity (live events), CertiFried Controls (run automations, counters) and CertiFried Chat (Twitch and Kick chat). Studio writes them into OBS's settings file, keeps your other docks, and first saves a backup copy of that file next to it. OBS must be closed, because it rewrites that file when it closes. Each dock address carries a key that can only show your events and chat and run your automations; you can remove it on the Devices page.</p>
+          <p class="msg" id="step-docks-running" hidden>OBS is running. Close OBS, then choose Add CertiFried docks.</p>
+          <div class="actions"><button class="btn primary" type="button" id="step-docks-add">Add CertiFried docks</button><button class="btn" type="button" id="step-docks-check">Check again</button></div>
+          <p class="msg" id="step-docks-msg" role="status"></p>
+          <details class="advanced" id="step-docks-manual">
+            <summary>Add them by hand instead</summary>
+            <p class="muted">In OBS open Docks, then Custom Browser Docks. For each dock, type the name, paste the address, then choose Apply.</p>
+            <div class="actions tight"><button class="btn" type="button" id="step-docks-prepare">Show the addresses</button><button class="btn ghost" type="button" id="step-docks-regen">Make new addresses</button></div>
+            <table class="table" id="step-docks-table"><tbody></tbody></table>
+          </details>
+        </li>
+        <li class="card" id="step-theme">
+          <div class="card-head"><h2>3. CertiFried theme</h2><span class="pill" id="step-theme-pill"></span></div>
+          <p class="muted">Copies three styles, CertiFried, CertiFried Light and CertiFried Sand, into OBS's themes folder. Studio does not switch your theme: afterwards, in OBS open Settings, Appearance, keep Theme on Yami and pick a CertiFried Style. Needs OBS 30.2 or later; restart OBS if they are not listed.</p>
+          <div class="actions"><button class="btn primary" type="button" id="step-theme-install">Install the CertiFried theme</button></div>
+          <p class="msg" id="step-theme-msg" role="status"></p>
+        </li>
+        <li class="card" id="step-overlay">
+          <div class="card-head"><h2>4. CertiFried overlays</h2><span class="pill" id="step-overlay-pill"></span></div>
+          <p class="muted">Your alert box, chat, goals and other overlays from the Overlays tab on the dashboard. Each one is added to the scene on air as a browser source (1920 × 1080) with Control audio via OBS on, so you decide in Advanced Audio Properties whether alert sounds reach your VOD. OBS must be connected.</p>
+          <div class="actions"><button class="btn" type="button" id="step-overlay-refresh">Show my overlays</button><button class="btn ghost" type="button" id="step-overlay-site">Overlays on the dashboard</button></div>
+          <table class="table" id="step-overlay-table"><tbody></tbody></table>
+          <p class="msg" id="step-overlay-msg" role="status"></p>
+        </li>
+        <li class="card" id="step-scenes">
+          <div class="card-head"><h2>5. Starter scenes (optional)</h2><span class="pill" id="step-scenes-pill"></span></div>
+          <p class="muted">Creates the scenes you tick, each with a large centred text. Scenes that already exist are left alone. OBS must be connected.</p>
+          <div id="step-scenes-list"></div>
+          <div class="actions"><button class="btn primary" type="button" id="step-scenes-create">Add starter scenes</button></div>
+          <p class="msg" id="step-scenes-msg" role="status"></p>
+        </li>
+      </ol>
+    </section>
+
+    <!-- Settings -->
+    <section class="tab" id="tab-settings" hidden>
+      <h1>Settings</h1>
+      <div class="card">
+        <h2>OBS</h2>
+        <p class="muted">Use my OBS settings reads the port and password from OBS on this PC. Or in OBS open <strong>Tools → WebSocket Server Settings</strong>, turn on the server, and copy the port and password from <strong>Show Connect Info</strong>.</p>
+        <div class="actions tight"><button class="btn" type="button" id="obs-import">Use my OBS settings</button></div>
+        <p class="msg" id="obs-import-msg" role="status"></p>
+        <form id="obs-form">
+          <label class="check"><input type="checkbox" id="obs-enabled"> Connect to OBS</label>
+          <div class="form-grid">
+            <label class="field"><span>Address</span><input id="obs-host" maxlength="253" spellcheck="false"></label>
+            <label class="field"><span>Port</span><input id="obs-port" type="number" min="1" max="65535"></label>
+            <label class="field"><span>Password</span><input id="obs-password" type="password" autocomplete="off" maxlength="200"></label>
+          </div>
+          <label class="check" id="obs-clear-wrap" hidden><input type="checkbox" id="obs-clear"> Remove the saved password</label>
+          <p class="muted" id="storage-note" hidden></p>
+          <p class="msg" id="obs-msg" role="status"></p>
+          <div class="actions"><button class="btn primary" type="submit">Save and connect</button></div>
+        </form>
+      </div>
+
+      <div class="card">
+        <h2>CertiFried</h2>
+        <dl class="kv">
+          <dt>This PC</dt><dd id="set-device">-</dd>
+          <dt>Server</dt><dd id="set-server">-</dd>
+        </dl>
+        <div class="actions"><button class="btn danger" id="unpair-btn">Unpair this PC</button></div>
+        <details class="advanced" id="server-details">
+          <summary>Server address</summary>
+          <form id="server-form" class="row-form">
+            <label class="field grow"><span>Address</span><input id="server-input" spellcheck="false"></label>
+            <button class="btn" type="submit">Save</button>
+          </form>
+          <p class="muted">Only change this if CertiFried support asks you to. It can be changed while the app is not paired.</p>
+          <p class="msg" id="server-msg" role="status"></p>
+        </details>
+      </div>
+
+      <div class="card">
+        <h2>App</h2>
+        <div class="form-grid">
+          <label class="field"><span>Theme</span><select id="app-theme"><option value="dark">Dark</option><option value="light">Light</option><option value="sand">Sand</option></select></label>
+        </div>
+        <label class="check"><input type="checkbox" id="app-login"> Start with Windows</label>
+        <label class="check"><input type="checkbox" id="app-min"> When started with Windows, stay in the tray</label>
+        <label class="check"><input type="checkbox" id="app-updates"> Check for updates</label>
+        <p class="msg" id="app-msg" role="status"></p>
+        <div class="actions">
+          <button class="btn" id="app-check">Check for updates</button>
+          <button class="btn" id="app-logs">Open log folder</button>
+          <button class="btn" id="app-links" hidden>Open pairing links with this copy</button>
+          <button class="btn ghost" data-page="guide">Guide</button>
+        </div>
+        <p class="muted" id="app-about"></p>
+      </div>
+      <div class="card">
+        <h2>About and legal</h2>
+        <p class="muted">CertiFried Studio is free and open source under the GNU AGPL-3.0-or-later. It has no analytics or telemetry; your microphone audio and OBS password never leave this PC.</p>
+        <div class="actions">
+          <button class="btn ghost" data-page="privacy">Privacy</button>
+          <button class="btn ghost" data-page="howItWorks">How it works</button>
+          <button class="btn ghost" data-page="faq">FAQ</button>
+          <button class="btn ghost" data-page="eula">Licence terms</button>
+          <button class="btn ghost" data-page="source">Source code</button>
+        </div>
+      </div>
+      <div class="actions"><button class="btn ghost" id="app-quit">Quit CertiFried Studio</button></div>
+    </section>
+  </main>
+</div>
+<script src="app.js"></script>
+</body>
+</html>

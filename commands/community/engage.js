@@ -115,7 +115,10 @@ export default {
                 )
                 .addSubcommand(sub =>
                     sub.setName('remove')
-                        .setDescription('Remove your birthday from the system')
+                        .setDescription('Remove a birthday from the system')
+                        .addUserOption(opt =>
+                            opt.setName('user').setDescription('Whose birthday to remove — Admin only (defaults to you)').setRequired(false)
+                        )
                 )
                 .addSubcommand(sub =>
                     sub.setName('view')
@@ -209,7 +212,7 @@ export default {
                 )
         )
 
-        // ── Suggest group (9 subcmds) ──
+        // ── Suggest group (11 subcmds) ──
         .addSubcommandGroup(group =>
             group
                 .setName('suggest')
@@ -247,6 +250,33 @@ export default {
                         .addUserOption(opt =>
                             opt.setName('user').setDescription('Filter by user').setRequired(false)
                         )
+                        .addStringOption(opt =>
+                            opt.setName('tag').setDescription('Filter by tag').setRequired(false).setAutocomplete(true)
+                        )
+                )
+                .addSubcommand(sub =>
+                    sub.setName('tag')
+                        .setDescription('Tag or untag a suggestion (Staff)')
+                        .addIntegerOption(opt => opt.setName('id').setDescription('Suggestion ID').setRequired(true))
+                        .addStringOption(opt => opt.setName('tag').setDescription('Tag').setRequired(true).setAutocomplete(true))
+                        .addBooleanOption(opt => opt.setName('remove').setDescription('Remove the tag instead').setRequired(false))
+                )
+                .addSubcommand(sub =>
+                    sub.setName('tags')
+                        .setDescription('Manage suggestion tags (Admin)')
+                        .addStringOption(opt =>
+                            opt.setName('action').setDescription('What to do').setRequired(true)
+                                .addChoices(
+                                    { name: 'List', value: 'list' },
+                                    { name: 'Create', value: 'create' },
+                                    { name: 'Edit', value: 'edit' },
+                                    { name: 'Delete', value: 'delete' }
+                                )
+                        )
+                        .addStringOption(opt => opt.setName('name').setDescription('Tag name').setRequired(false).setMaxLength(50).setAutocomplete(true))
+                        .addStringOption(opt => opt.setName('color').setDescription('Hex colour, e.g. #3498db').setRequired(false).setMaxLength(7))
+                        .addStringOption(opt => opt.setName('emoji').setDescription('Emoji').setRequired(false).setMaxLength(64))
+                        .addStringOption(opt => opt.setName('rename').setDescription('New name (edit)').setRequired(false).setMaxLength(50))
                 )
                 .addSubcommand(sub =>
                     sub.setName('approve')
@@ -678,6 +708,8 @@ export default {
                         case 'duplicate': return await suggestHandlers.handleDuplicate(interaction);
                         case 'stats': return await suggestHandlers.handleStats(interaction);
                         case 'setup': return await suggestHandlers.handleSetup(interaction);
+                        case 'tag': return await suggestHandlers.handleTag(interaction);
+                        case 'tags': return await suggestHandlers.handleTags(interaction);
                     }
                     break;
 
@@ -748,6 +780,10 @@ export default {
 
         if (group === 'tags') {
             return await tagsHandlers.handleTagsAutocomplete(interaction);
+        }
+
+        if (group === 'suggest') {
+            return await suggestHandlers.handleSuggestAutocomplete(interaction);
         }
     }
 };

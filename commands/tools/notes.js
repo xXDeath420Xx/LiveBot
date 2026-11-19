@@ -1,5 +1,6 @@
 import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 import pool from '../../utils/db.js';
+import { themeColor } from '../../core/guild-theme.js';
 
 export default {
     category: 'tools',
@@ -16,7 +17,15 @@ export default {
                         .setDescription('Set a reminder for yourself')
                         .addStringOption(opt => opt.setName('time').setDescription('When to remind you (e.g., 5m, 2h, 1d, 1w)').setRequired(true))
                         .addStringOption(opt => opt.setName('message').setDescription('What to remind you about').setRequired(true))
-                        .addBooleanOption(opt => opt.setName('dm').setDescription('Send reminder via DM instead of in this channel')))
+                        .addBooleanOption(opt => opt.setName('dm').setDescription('Send reminder via DM instead of in this channel'))
+                        .addStringOption(opt => opt.setName('repeat').setDescription('Repeat the reminder after the first time')
+                            .addChoices(
+                                { name: 'Every hour', value: '3600' },
+                                { name: 'Every day', value: '86400' },
+                                { name: 'Every week', value: '604800' },
+                                { name: 'Every 2 weeks', value: '1209600' },
+                                { name: 'Every 4 weeks', value: '2419200' }))
+                        .addIntegerOption(opt => opt.setName('times').setDescription('With repeat: how many times in all (default: until you delete it)').setMinValue(2).setMaxValue(1000)))
                 .addSubcommand(sub =>
                     sub.setName('list')
                         .setDescription('List all your active reminders'))
@@ -83,6 +92,7 @@ export default {
 
 // ═══════════════════════════════════════════
 // Remind Handlers
+const REPEAT_LABELS = { 3600: 'Every hour', 86400: 'Every day', 604800: 'Every week', 1209600: 'Every 2 weeks', 2419200: 'Every 4 weeks' };
 // ═══════════════════════════════════════════
 async function handleRemind(interaction, subcommand) {
     const reminderManager = interaction.client.reminderManager;
@@ -97,6 +107,8 @@ async function handleRemind(interaction, subcommand) {
         const timeStr = interaction.options.getString('time', true);
         const message = interaction.options.getString('message', true);
         const isDm = interaction.options.getBoolean('dm') || false;
+        const repeatSeconds = Number(interaction.options.getString('repeat')) || 0;
+        const repeatTimes = interaction.options.getInteger('times');
 
         const duration = reminderManager.parseTime(timeStr);
 
@@ -120,18 +132,20 @@ async function handleRemind(interaction, subcommand) {
             interaction.channel.id,
             message,
             duration,
-            isDm
+            isDm,
+            repeatSeconds ? { interval: repeatSeconds, count: repeatTimes ?? -1 } : null
         );
 
         if (result.success) {
             const embed = new EmbedBuilder()
-                .setColor('#5865F2')
+                .setColor(themeColor(interaction.guildId, 'primary'))
                 .setTitle('\u2705 Reminder Set')
                 .setDescription(`I'll remind you about:\n\n*${message}*`)
                 .addFields(
                     { name: 'When', value: `<t:${Math.floor(result.remindAt.getTime() / 1000)}:R>`, inline: true },
                     { name: 'Location', value: isDm ? 'Direct Message' : 'This Channel', inline: true },
-                    { name: 'Reminder ID', value: `#${result.reminderId}`, inline: true }
+                    { name: 'Reminder ID', value: `#${result.reminderId}`, inline: true },
+                    ...(repeatSeconds ? [{ name: 'Repeats', value: `${REPEAT_LABELS[repeatSeconds] || 'Yes'}${repeatTimes ? `, ${repeatTimes} times in all` : ', until you delete it'}`, inline: false }] : [])
                 )
                 .setFooter({ text: 'Use /notes remind list to see all your reminders' })
                 .setTimestamp();
@@ -149,12 +163,13 @@ async function handleRemind(interaction, subcommand) {
         }
 
         const embed = new EmbedBuilder()
-            .setColor('#5865F2')
+            .setColor(themeColor(interaction.guildId, 'primary'))
             .setTitle('\ud83d\udccb Your Active Reminders')
             .setDescription(reminders.map(r => {
                 const timestamp = Math.floor(new Date(r.remind_at).getTime() / 1000);
                 const location = r.is_dm ? '\ud83d\udcec DM' : '\ud83d\udcac Channel';
-                return `**#${r.id}** - ${location}\n${r.reminder_text}\n\u23f0 <t:${timestamp}:R> (<t:${timestamp}:f>)`;
+                const repeats = Number(r.recurring_interval) > 0 ? ` - ${REPEAT_LABELS[Number(r.recurring_interval)] || 'repeats'}` : '';
+                return `**#${r.id}** - ${location}\n${r.reminder_text}\n\u23f0 <t:${timestamp}:R> (<t:${timestamp}:f>)${repeats}`;
             }).join('\n\n'))
             .setFooter({ text: `You have ${reminders.length} active reminder${reminders.length !== 1 ? 's' : ''}` })
             .setTimestamp();
@@ -255,7 +270,7 @@ async function handleTimeCapsule(interaction, subcommand) {
         }
 
         const embed = new EmbedBuilder()
-            .setColor('#5865F2')
+            .setColor(themeColor(interaction.guildId, 'primary'))
             .setTitle('\u23f0 Upcoming Time Capsules')
             .setTimestamp();
 

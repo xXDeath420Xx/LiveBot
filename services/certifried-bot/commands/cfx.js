@@ -7,11 +7,23 @@
  */
 
 import * as cfxCommands from '../../certifried-extension/bot/commands.js';
+import { isFrozen as v1Frozen, FROZEN_MESSAGE } from '../../certifried-extension/freeze.js';
+import { isGreenhouseLive, oldGameMovedMessage } from '../../cfx/integrations/cutover.js';
+
+// Frozen until v2 (CFX_FROZEN, H-636), replaced once Greenhouse Tycoon is live (GREENHOUSE_LIVE=1, phase 5).
+const isFrozen = () => v1Frozen() || isGreenhouseLive();
+
+/** Every !cfx command only says the game is frozen, or once live, where it went. */
+async function replyFrozen(ctx) {
+    const message = isGreenhouseLive() ? oldGameMovedMessage() : FROZEN_MESSAGE;
+    try { await ctx.reply(message); } catch { /* chat send failed; nothing else to do */ }
+}
 
 /**
  * !cfx - Show player stats
  */
 export async function cfxCommand(ctx) {
+    if (isFrozen()) return replyFrozen(ctx);
     const { username, userId, reply, profile } = ctx;
 
     try {
@@ -34,6 +46,7 @@ export async function cfxCommand(ctx) {
  * !cfxdaily - Claim daily reward
  */
 export async function cfxDailyCommand(ctx) {
+    if (isFrozen()) return replyFrozen(ctx);
     const { username, userId, reply, profile } = ctx;
 
     try {
@@ -56,6 +69,7 @@ export async function cfxDailyCommand(ctx) {
  * !cfxmarket - View market prices
  */
 export async function cfxMarketCommand(ctx) {
+    if (isFrozen()) return replyFrozen(ctx);
     const { reply } = ctx;
 
     try {
@@ -71,6 +85,7 @@ export async function cfxMarketCommand(ctx) {
  * !cfxleaderboard - View leaderboard
  */
 export async function cfxLeaderboardCommand(ctx) {
+    if (isFrozen()) return replyFrozen(ctx);
     const { reply, args } = ctx;
 
     try {
@@ -90,6 +105,7 @@ export async function cfxLeaderboardCommand(ctx) {
  * !cfxsell - Quick sell from inventory
  */
 export async function cfxSellCommand(ctx) {
+    if (isFrozen()) return replyFrozen(ctx);
     const { username, userId, reply, args, profile } = ctx;
 
     if (!args[0]) {

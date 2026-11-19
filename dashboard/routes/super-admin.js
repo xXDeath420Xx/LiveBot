@@ -4,6 +4,7 @@ import { requireSuperAdmin } from '../../utils/auth-middleware.js';
 import logger from '../../utils/logger.js';
 import encryption from '../../utils/encryption.js';
 import { fullBotTest, testBotConnection } from '../../utils/bot-validator.js';
+import { registerGreenhouseAdmin } from './greenhouse-admin.js';
 
 const router = express.Router();
 
@@ -19,16 +20,15 @@ router.get('/api/super-admin/permissions', requireSuperAdmin, async (req, res) =
         const [permissions] = await pool.execute(`
             SELECT
                 bcp.*,
-                u.username,
-                u.discriminator,
-                u.avatar,
+                NULL AS username,
+                NULL AS discriminator,
+                NULL AS avatar,
                 (SELECT COUNT(*) FROM custom_bots WHERE owner_user_id = bcp.user_id) as bot_count
             FROM bot_creator_permissions bcp
-            LEFT JOIN users u ON u.discord_id = bcp.user_id
             ORDER BY bcp.created_at DESC
         `);
 
-        // Fetch usernames from Discord for users not in database
+        // Names come from Discord (the old users table was never populated)
         const client = req.app.locals.client;
         for (const perm of permissions) {
             if (!perm.username && client) {
@@ -149,15 +149,14 @@ router.get('/api/super-admin/bots', requireSuperAdmin, async (req, res) => {
         const [bots] = await pool.execute(`
             SELECT
                 cb.*,
-                u.username as owner_username,
-                u.discriminator as owner_discriminator,
+                NULL AS owner_username,
+                NULL AS owner_discriminator,
                 (SELECT COUNT(*) FROM guild_bot_mapping WHERE bot_id = cb.bot_id) as guild_count
             FROM custom_bots cb
-            LEFT JOIN users u ON u.discord_id = cb.owner_user_id
             ORDER BY cb.created_at DESC
         `);
 
-        // Fetch owner usernames from Discord for users not in database
+        // Owner names come from Discord (the old users table was never populated)
         const client = req.app.locals.client;
         for (const bot of bots) {
             if (!bot.owner_username && client) {
@@ -524,45 +523,14 @@ router.get('/api/admin/stats', requireSuperAdmin, async (req, res) => {
             return res.status(500).json({ error: 'Bot client not available' });
         }
 
-        // Get all unique guild IDs (from both main bot and custom bots)
-        const mainBotGuildIds = new Set(client.guilds.cache.keys());
-
-        // Get guilds with custom bots
-        const [customBotGuilds] = await pool.execute(`
-            SELECT DISTINCT guild_id FROM guild_bot_mapping
-        `);
-
-        // Combine all unique guild IDs
-        const allGuildIds = new Set([
-            ...mainBotGuildIds,
-            ...customBotGuilds.map(row => row.guild_id)
-        ]);
-
-        const totalGuilds = allGuildIds.size;
-
-        // Get total users from ALL bot instances (main + custom)
-        let totalUsers = 0;
-
-        // Add users from main bot
-        client.guilds.cache.forEach(guild => {
-            totalUsers += guild.memberCount || 0;
-        });
-
-        // Add users from custom bots
-        if (botManager) {
-            const allBotStatuses = botManager.getAllBotStatuses();
-            for (const status of allBotStatuses) {
-                if (status && !status.isDefault && status.isReady) {
-                    // Get the custom bot client
-                    const customClient = botManager.clients.get(status.botId);
-                    if (customClient && customClient.guilds) {
-                        customClient.guilds.cache.forEach(guild => {
-                            totalUsers += guild.memberCount || 0;
-                        });
-                    }
-                }
-            }
-        }
+        // Servers some running bot is actually in, each counted once. This used to add every
+        // guild_bot_mapping row on top of the main bot's guilds, so a custom bot that was deleted
+        // (or kicked) left its server in the total forever: 89 shown with 87 real. Members were
+        // summed per bot too, so a server holding both the main bot and its custom bot counted twice.
+        const totalGuilds = botManager ? botManager.getTotalGuildCount() : client.guilds.cache.size;
+        const totalUsers = botManager
+            ? botManager.getTotalMemberCount()
+            : client.guilds.cache.reduce((n, g) => n + (g.memberCount || 0), 0);
 
         // Get live streamers count
         let liveStreamers = 0;
@@ -748,6 +716,105 @@ router.get('/api/super-admin/all-bots', requireSuperAdmin, async (req, res) => {
         logger.error('[Super Admin] Error fetching all bots:', error);
         res.status(500).json({ error: 'Failed to fetch bots' });
     }
+});
+
+// ===========================
+// OWNER TOOLS (super-admin page, Tools section)
+// ===========================
+// These three buttons were on the page for months with no route behind them (every click 404'd).
+
+const SNOWFLAKE = /^\d{17,20}$/;
+
+function guildName(id) {
+    return global.botManager?.getGuildFromAnyClient?.(id)?.name || null;
+}
+
+/** POST /api/admin/leave-guild { guildId } — every one of our bots in that server leaves it. */
+router.post('/api/admin/leave-guild', requireSuperAdmin, async (req, res) => {
+    try {
+        const guildId = String(req.body?.guildId || '').trim();
+        if (!SNOWFLAKE.test(guildId)) return res.status(400).json({ error: 'Enter a server ID (17-20 digits).' });
+        const clients = global.botManager ? global.botManager.getAllClients() : [req.app.locals.client].filter(Boolean);
+        const left = [];
+        let name = null;
+        for (const c of clients) {
+            const g = c?.isReady?.() ? c.guilds.cache.get(guildId) : null;
+            if (!g) continue;
+            name = name || g.name;
+            await g.leave();
+            left.push(c.user?.username || c.botId || 'bot');
+        }
+        if (!left.length) return res.status(404).json({ error: 'None of our bots is in that server.' });
+        logger.warn(`[Super Admin] ${req.user.username} made ${left.join(', ')} leave ${name} (${guildId})`);
+        res.json({ success: true, message: `${left.join(', ')} left ${name}.`, left, guildName: name });
+    } catch (error) {
+        logger.error('[Super Admin] leave-guild failed:', error);
+        res.status(500).json({ error: `Could not leave: ${error.message}` });
+    }
+});
+
+/** POST /api/admin/search-streamer { username, platform? } — tracked streamer profiles and where they are followed. */
+router.post('/api/admin/search-streamer', requireSuperAdmin, async (req, res) => {
+    try {
+        const username = String(req.body?.username || '').trim().slice(0, 64);
+        const platform = String(req.body?.platform || '').trim().toLowerCase();
+        if (username.length < 2) return res.status(400).json({ error: 'Enter at least 2 characters.' });
+        const like = '%' + username.replace(/[\\%_]/g, c => '\\' + c) + '%';
+        const params = [like];
+        let where = 's.username LIKE ?';
+        if (platform) { where += ' AND s.platform = ?'; params.push(platform); }
+        const [rows] = await pool.execute(`
+            SELECT s.streamer_id, s.platform, s.username, s.discord_user_id
+              FROM streamers s WHERE ${where}
+             ORDER BY (s.username = ?) DESC, s.username LIMIT 25`, [...params, username]);
+        const ids = rows.map(r => r.streamer_id);
+        const [subs] = ids.length
+            ? await pool.query('SELECT streamer_id, guild_id FROM subscriptions WHERE departed_at IS NULL AND streamer_id IN (?)', [ids])
+            : [[]];
+        const client = req.app.locals.client;
+        const matches = rows.map(r => {
+            const guildIds = [...new Set(subs.filter(s => s.streamer_id === r.streamer_id).map(s => s.guild_id))];
+            const du = r.discord_user_id ? client?.users.cache.get(r.discord_user_id) : null;
+            return {
+                streamerUsername: r.username,
+                platform: r.platform,
+                discordUserId: r.discord_user_id || null,
+                discordUsername: du ? (du.globalName || du.username) : null,
+                guilds: guildIds.map(id => ({ id, name: guildName(id) })),
+            };
+        });
+        res.json({ success: true, matches });
+    } catch (error) {
+        logger.error('[Super Admin] search-streamer failed:', error);
+        res.status(500).json({ error: 'Search failed' });
+    }
+});
+
+/** POST /api/admin/view-links { userId } — streamer profiles and member Twitch links for a Discord user. */
+router.post('/api/admin/view-links', requireSuperAdmin, async (req, res) => {
+    try {
+        const userId = String(req.body?.userId || '').trim();
+        if (!SNOWFLAKE.test(userId)) return res.status(400).json({ error: 'Enter a Discord user ID (17-20 digits).' });
+        const [profiles] = await pool.execute(
+            `SELECT s.platform, s.username, COUNT(DISTINCT sub.guild_id) AS servers
+               FROM streamers s LEFT JOIN subscriptions sub ON sub.streamer_id = s.streamer_id AND sub.departed_at IS NULL
+              WHERE s.discord_user_id = ? GROUP BY s.streamer_id, s.platform, s.username ORDER BY s.platform, s.username`, [userId]);
+        const [twitch] = await pool.execute(
+            'SELECT guild_id, twitch_username, link_source, last_checked FROM community_twitch_links WHERE discord_user_id = ? ORDER BY last_checked DESC LIMIT 100', [userId]);
+        const links = [
+            ...profiles.map(p => ({ kind: 'profile', platform: p.platform, streamer_username: p.username, servers: Number(p.servers) || 0 })),
+            ...twitch.map(t => ({ kind: 'member', platform: 'twitch', streamer_username: t.twitch_username, guild_id: t.guild_id, guild_name: guildName(t.guild_id), source: t.link_source, checked_at: t.last_checked })),
+        ];
+        res.json({ success: true, links });
+    } catch (error) {
+        logger.error('[Super Admin] view-links failed:', error);
+        res.status(500).json({ error: 'Lookup failed' });
+    }
+});
+
+/** GET /api/super-admin/global-ban/watcher-status — the audit bot's report watcher (events/globalBanReportWatcher.js). */
+router.get('/api/super-admin/global-ban/watcher-status', requireSuperAdmin, (req, res) => {
+    res.json({ success: true, status: global.auditWatcherStatus || { connected: false } });
 });
 
 // ===========================
@@ -1691,5 +1758,8 @@ router.get('/api/super-admin/global-ban/action-log', requireSuperAdmin, async (r
         res.status(500).json({ error: 'Failed to fetch action log' });
     }
 });
+
+// Greenhouse Tycoon: game jobs kill switch and the Twitch review save (routes/greenhouse-admin.js)
+registerGreenhouseAdmin(router);
 
 export default router;

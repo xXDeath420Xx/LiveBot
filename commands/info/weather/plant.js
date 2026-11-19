@@ -1,4 +1,5 @@
 import { EmbedBuilder } from 'discord.js';
+import { themeColor } from '../../../core/guild-theme.js';
 
 export async function execute(interaction) {
   const subcommand = interaction.options.getSubcommand();
@@ -49,7 +50,7 @@ async function handleIdentify(interaction) {
   if (identified) {
     const careInfo = getPlantCare(identified);
     const embed = new EmbedBuilder()
-      .setColor('#2ECC71')
+      .setColor(themeColor(interaction.guildId, 'success'))
       .setTitle(`🌿 Possible Match: ${careInfo.name}`)
       .setDescription(`Based on your description, this might be a ${careInfo.name}!`)
       .addFields(
@@ -80,7 +81,7 @@ async function handleIdentify(interaction) {
     return interaction.editReply({ embeds: [embed] });
   } else {
     const embed = new EmbedBuilder()
-      .setColor('#F39C12')
+      .setColor(themeColor(interaction.guildId, 'warning'))
       .setTitle('🌿 Plant Identification')
       .setDescription('I couldn\'t identify the plant from your description.')
       .addFields({
@@ -100,7 +101,7 @@ async function handleCare(interaction) {
   const careInfo = getPlantCare(plantName);
 
   const embed = new EmbedBuilder()
-    .setColor('#27AE60')
+    .setColor(themeColor(interaction.guildId, 'success'))
     .setTitle(`🌱 ${careInfo.name} Care Guide`)
     .setDescription(careInfo.description)
     .addFields(
@@ -290,7 +291,7 @@ function getPlantCare(plantKey) {
 
 async function handleTips(interaction) {
   const embed = new EmbedBuilder()
-    .setColor('#1ABC9C')
+    .setColor(themeColor(interaction.guildId, 'info'))
     .setTitle('🌿 General Plant Care Tips')
     .setDescription('Essential knowledge for keeping your plants healthy and happy!')
     .addFields(

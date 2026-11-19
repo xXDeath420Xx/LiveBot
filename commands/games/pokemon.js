@@ -1,5 +1,7 @@
 import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, PermissionFlagsBits } from 'discord.js';
 import pool from '../../utils/db.js';
+import { displayNameFor } from '../../utils/display-name.js';
+import { themeColor } from '../../core/guild-theme.js';
 
 const POKEMON_PER_PAGE = 15;
 const SHINY_CHANCE = 4096; // 1 in 4096
@@ -689,7 +691,7 @@ async function handleStart(interaction) {
     );
 
     const embed = new EmbedBuilder()
-        .setColor(0x2ecc71)
+        .setColor(themeColor(interaction.guildId, 'success'))
         .setTitle('Your Pokemon Journey Begins!')
         .setDescription(`Congratulations! You received a **${pokemonData[0].name}** as your starter!\n\nYou also received 10 Pokeballs to start your adventure. Good luck, Trainer!`)
         .setTimestamp();
@@ -719,7 +721,7 @@ async function handleSetChannel(interaction) {
     );
 
     const embed = new EmbedBuilder()
-        .setColor(0x2ecc71)
+        .setColor(themeColor(interaction.guildId, 'success'))
         .setTitle('Pokemon Channel Set!')
         .setDescription(`All Pokemon spawns will now appear in ${channel}`)
         .setTimestamp();
@@ -813,7 +815,7 @@ async function handleCatch(interaction) {
 
     const embed = new EmbedBuilder()
         .setColor(spawn.is_shiny ? 0xFFD700 : 0x2ecc71)
-        .setTitle(`Congratulations! ${interaction.user.username} caught ${spawn.name}!${shinyText}`)
+        .setTitle(`Congratulations! ${displayNameFor(interaction.user, interaction.guild)} caught ${spawn.name}!${shinyText}`)
         .setDescription(`**Level:** ${xpResult ? xpResult.newLevel : 1}\n**Type:** ${typeText}\n**Nature:** ${nature}\n**IV:** ${ivPercentage}%\n**XP:** ${XP_PER_CATCH} gained${levelUpText}`)
         .setFooter({ text: `Added to your collection as #${userPokemonId}` })
         .setTimestamp();
@@ -860,8 +862,8 @@ async function handleList(interaction) {
         }).join('\n');
 
         return new EmbedBuilder()
-            .setColor(0x3498db)
-            .setTitle(`${interaction.user.username}'s Pokemon Collection`)
+            .setColor(themeColor(interaction.guildId, 'primary'))
+            .setTitle(`${displayNameFor(interaction.user, interaction.guild)}'s Pokemon Collection`)
             .setDescription(pokemonList || 'No Pokemon on this page.')
             .setFooter({ text: `Page ${page + 1}/${totalPages} • ${pokemonRows.length} total Pokemon | ✨ Shiny | ⭐ Favorite | 👉 Selected` });
     };
@@ -1124,7 +1126,7 @@ async function handleEvolve(interaction) {
     );
 
     const embed = new EmbedBuilder()
-        .setColor(0x9b59b6)
+        .setColor(themeColor(interaction.guildId, 'accent'))
         .setTitle('Congratulations!')
         .setDescription(`Your ${pokemon.name} evolved into ${pokemon.evo_name}!`)
         .setTimestamp();
@@ -1173,7 +1175,7 @@ async function handleBattle(interaction) {
     );
 
     if (opponentPokemon.length === 0) {
-        return await interaction.editReply({ content: `${opponent.username} doesn't have a Pokemon selected!` });
+        return await interaction.editReply({ content: `${displayNameFor(opponent, interaction.guild)} doesn't have a Pokemon selected!` });
     }
 
     const p1 = challengerPokemon[0];
@@ -1218,7 +1220,7 @@ async function handleBattle(interaction) {
 
     // Battle log
     const battleLog = [];
-    battleLog.push(`**Battle Start!**\n${challenger.username}'s ${p1.name} (Lv.${p1.level}) vs ${opponent.username}'s ${p2.name} (Lv.${p2.level})\n`);
+    battleLog.push(`**Battle Start!**\n${displayNameFor(challenger, interaction.guild)}'s ${p1.name} (Lv.${p1.level}) vs ${displayNameFor(opponent, interaction.guild)}'s ${p2.name} (Lv.${p2.level})\n`);
 
     // Determine who goes first (based on speed)
     let firstAttacker = p1Stats.speed >= p2Stats.speed ? 'p1' : 'p2';
@@ -1277,15 +1279,15 @@ async function handleBattle(interaction) {
     if (p1HP > p2HP) {
         winnerId = challenger.id;
         loserId = opponent.id;
-        winnerName = challenger.username;
-        loserName = opponent.username;
-        battleLog.push(`\n**${challenger.username}'s ${p1.name} wins!**`);
+        winnerName = displayNameFor(challenger, interaction.guild);
+        loserName = displayNameFor(opponent, interaction.guild);
+        battleLog.push(`\n**${displayNameFor(challenger, interaction.guild)}'s ${p1.name} wins!**`);
     } else {
         winnerId = opponent.id;
         loserId = challenger.id;
-        winnerName = opponent.username;
-        loserName = challenger.username;
-        battleLog.push(`\n**${opponent.username}'s ${p2.name} wins!**`);
+        winnerName = displayNameFor(opponent, interaction.guild);
+        loserName = displayNameFor(challenger, interaction.guild);
+        battleLog.push(`\n**${displayNameFor(opponent, interaction.guild)}'s ${p2.name} wins!**`);
     }
 
     // Award XP
@@ -1307,7 +1309,7 @@ async function handleBattle(interaction) {
     );
 
     const embed = new EmbedBuilder()
-        .setColor(0xe74c3c)
+        .setColor(themeColor(interaction.guildId, 'danger'))
         .setTitle('Pokemon Battle!')
         .setDescription(battleLog.slice(0, 10).join('\n') + (battleLog.length > 10 ? '\n...(battle log truncated)' : ''))
         .addFields(
@@ -1329,7 +1331,7 @@ async function handleMarketList(interaction) {
          JOIN user_pokemon up ON pm.user_pokemon_id = up.id
          JOIN pokemon_data pd ON up.pokemon_id = pd.id
          WHERE pm.guild_id = ?
-         ORDER BY pm.created_at DESC`,
+         ORDER BY pm.listed_at DESC`,
         [guildId]
     );
 
@@ -1355,7 +1357,7 @@ async function handleMarketList(interaction) {
         }).join('\n');
 
         return new EmbedBuilder()
-            .setColor(0xf39c12)
+            .setColor(themeColor(interaction.guildId, 'warning'))
             .setTitle('Pokemon Market')
             .setDescription(listingText || 'No listings on this page.')
             .setFooter({ text: `Page ${page + 1}/${totalPages} • ${marketRows.length} total listings | Use /pokemon market buy <id> to purchase` });
@@ -1447,7 +1449,7 @@ async function handleMarketSell(interaction) {
     );
 
     const embed = new EmbedBuilder()
-        .setColor(0x2ecc71)
+        .setColor(themeColor(interaction.guildId, 'success'))
         .setTitle('Listed on Market!')
         .setDescription(`Your ${pokemon.name} is now listed for **${price}** Pokecoins!`)
         .setTimestamp();
@@ -1531,7 +1533,7 @@ async function handleMarketBuy(interaction) {
         await connection.commit();
 
         const embed = new EmbedBuilder()
-            .setColor(0x2ecc71)
+            .setColor(themeColor(interaction.guildId, 'success'))
             .setTitle('Purchase Complete!')
             .setDescription(`You purchased ${listing.name} for **${listing.price}** Pokecoins!`)
             .setTimestamp();
@@ -1591,9 +1593,9 @@ async function handleTradeStart(interaction) {
     });
 
     const embed = new EmbedBuilder()
-        .setColor(0x9b59b6)
+        .setColor(themeColor(interaction.guildId, 'accent'))
         .setTitle('Trade Started!')
-        .setDescription(`Trade between ${interaction.user.username} and ${partner.username}\n\nBoth users use /pokemon trade offer to offer Pokemon, then /pokemon trade confirm to complete.`)
+        .setDescription(`Trade between ${displayNameFor(interaction.user, interaction.guild)} and ${displayNameFor(partner, interaction.guild)}\n\nBoth users use /pokemon trade offer to offer Pokemon, then /pokemon trade confirm to complete.`)
         .setTimestamp();
 
     await interaction.reply({ embeds: [embed] });
@@ -1724,7 +1726,7 @@ async function handleTradeConfirm(interaction) {
         activeTrades.delete(`${guildId}_${trade.user1}`);
 
         const embed = new EmbedBuilder()
-            .setColor(0x2ecc71)
+            .setColor(themeColor(interaction.guildId, 'success'))
             .setTitle('Trade Complete!')
             .setDescription('The Pokemon have been traded successfully!')
             .setTimestamp();
@@ -1811,7 +1813,7 @@ async function handleAdventure(interaction) {
     }
 
     const embed = new EmbedBuilder()
-        .setColor(0x3498db)
+        .setColor(themeColor(interaction.guildId, 'primary'))
         .setTitle('Adventure!')
         .setTimestamp();
 
@@ -1929,7 +1931,7 @@ async function handleIndex(interaction) {
         }).join('\n');
 
         return new EmbedBuilder()
-            .setColor(0xe74c3c)
+            .setColor(themeColor(interaction.guildId, 'danger'))
             .setTitle(search ? `Pokemon Index - Search: "${search}"` : 'Pokemon Index')
             .setDescription(pokemonList || 'No Pokemon on this page.')
             .setFooter({ text: `Page ${page + 1}/${totalPages} • ${pokemonRows.length} Pokemon` });
@@ -2008,8 +2010,8 @@ async function handlePokedex(interaction) {
     const completion = ((caughtCount / totalPokemon) * 100).toFixed(2);
 
     const embed = new EmbedBuilder()
-        .setColor(0xe74c3c)
-        .setTitle(`${interaction.user.username}'s Pokedex`)
+        .setColor(themeColor(interaction.guildId, 'danger'))
+        .setTitle(`${displayNameFor(interaction.user, interaction.guild)}'s Pokedex`)
         .setDescription(`**Completion:** ${caughtCount}/${totalPokemon} (${completion}%)\n\n${dexText}`)
         .setFooter({ text: dexRows.length > 20 ? `Showing first 20 of ${caughtCount} caught species` : `${caughtCount} species caught` });
 
@@ -2042,8 +2044,8 @@ async function handleInventory(interaction) {
     const inv = invRows[0];
 
     const embed = new EmbedBuilder()
-        .setColor(0xf39c12)
-        .setTitle(`${interaction.user.username}'s Inventory`)
+        .setColor(themeColor(interaction.guildId, 'warning'))
+        .setTitle(`${displayNameFor(interaction.user, interaction.guild)}'s Inventory`)
         .addFields(
             { name: 'Pokecoins', value: `${inv.pokecoins}`, inline: true },
             { name: 'Pokeballs', value: `${inv.pokeballs}`, inline: true },
@@ -2112,7 +2114,7 @@ async function handleDaily(interaction) {
     );
 
     const embed = new EmbedBuilder()
-        .setColor(0x2ecc71)
+        .setColor(themeColor(interaction.guildId, 'success'))
         .setTitle('Daily Rewards Claimed!')
         .setDescription(`You received:\n**${pokecoinReward}** Pokecoins\n**${pokeballReward}** Pokeballs`)
         .setFooter({ text: 'Come back tomorrow for more rewards!' });
@@ -2163,7 +2165,7 @@ async function handleSpawnInfo(interaction) {
     const activityBar = '█'.repeat(filledBars) + '░'.repeat(emptyBars);
 
     const embed = new EmbedBuilder()
-        .setColor(0x3498db)
+        .setColor(themeColor(interaction.guildId, 'primary'))
         .setTitle('📊 Pokemon Spawn Information')
         .addFields(
             { name: '👥 Active Users (Last 5 min)', value: `${activeUsers} users`, inline: true },

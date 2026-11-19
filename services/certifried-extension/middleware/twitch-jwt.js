@@ -6,14 +6,40 @@
 import jwt from 'jsonwebtoken';
 import logger from '../../../utils/logger.js';
 
-// Decode the base64 extension secret
+// The extension secret as shown in the Twitch developer console (base64). CFX_TWITCH_EXT_SECRET wins
+// when both are set; TWITCH_EXT_SECRET is the name the service has always used.
 const getExtensionSecret = () => {
-    const secret = process.env.TWITCH_EXT_SECRET;
+    const secret = process.env.CFX_TWITCH_EXT_SECRET || process.env.TWITCH_EXT_SECRET;
     if (!secret) {
         throw new Error('TWITCH_EXT_SECRET not configured');
     }
     return Buffer.from(secret, 'base64');
 };
+
+/**
+ * Verify a Bits transaction receipt (transaction.transactionReceipt from
+ * Twitch.ext.bits.onTransactionComplete). Twitch signs it with the extension
+ * secret, so a valid one proves the viewer really spent the Bits (H-401).
+ * @returns {{transactionId: string, userId: string, sku: string, bits: number, inDevelopment: boolean}|null}
+ */
+export function verifyBitsReceipt(receipt) {
+    if (typeof receipt !== 'string' || receipt.length > 4096) return null;
+    try {
+        const decoded = jwt.verify(receipt, getExtensionSecret(), { algorithms: ['HS256'] });
+        const d = decoded?.data;
+        if (decoded?.topic !== 'bits_transaction_receipt' || !d?.transactionId || !d?.userId || !d?.product?.sku) return null;
+        return {
+            transactionId: String(d.transactionId),
+            userId: String(d.userId),
+            sku: String(d.product.sku),
+            bits: Number(d.product.cost?.amount) || 0,
+            inDevelopment: !!d.product.inDevelopment
+        };
+    } catch (error) {
+        logger.debug('[TwitchJWT] Invalid Bits receipt', { error: error.message });
+        return null;
+    }
+}
 
 /**
  * Verify a Twitch Extension JWT

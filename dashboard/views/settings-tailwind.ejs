@@ -1,16 +1,6 @@
 <!DOCTYPE html>
-<html lang="en">
+<html data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>" lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="CertiFried MultiTool settings. Manage your bot preferences and account.">
-    <meta name="theme-color" content="#a78bfa">
-    <meta property="og:title" content="Settings - CertiFried MultiTool">
-    <meta property="og:description" content="Manage your CertiFried MultiTool settings.">
-    <meta property="og:image" content="/images/CertiFried.png">
-    <meta name="robots" content="noindex">
-    <title>Settings - CertiFried MultiTool</title>
-    <link rel="icon" type="image/png" href="/images/CertiFried.png">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
         *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
@@ -40,25 +30,14 @@
         /* Background Effects */
         .bg-effects { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; overflow: hidden; }
         .orb { position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.4; animation: float 20s ease-in-out infinite; }
-        .orb-1 { width: 500px; height: 500px; background: linear-gradient(135deg, #7c3aed, #a78bfa); top: -15%; right: -10%; }
-        .orb-2 { width: 400px; height: 400px; background: linear-gradient(135deg, #3b82f6, #60a5fa); bottom: -10%; left: -10%; animation-delay: -10s; }
+        .orb-1 { width: 500px; height: 500px; background: var(--cf-accent); top: -15%; right: -10%; }
+        .orb-2 { width: 400px; height: 400px; background: var(--cf-accent); bottom: -10%; left: -10%; animation-delay: -10s; }
         @keyframes float { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(30px, 30px) scale(1.05); } }
 
         /* Navbar */
-        .navbar { position: fixed; top: 0; left: 0; right: 0; z-index: 1000; padding: 1rem 0; background: rgba(11, 15, 17, 0.9); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-bottom: 1px solid var(--border-color); }
-        .navbar-container { max-width: 1400px; margin: 0 auto; padding: 0 1.5rem; display: flex; align-items: center; justify-content: space-between; }
-        .navbar-brand { display: flex; align-items: center; gap: 0.75rem; text-decoration: none; color: var(--text-primary); font-weight: 700; }
-        .navbar-logo { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 2px solid var(--accent-purple); }
-        .navbar-links { display: flex; align-items: center; gap: 1.5rem; }
-        .navbar-links a { color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; font-weight: 500; transition: color 0.2s; }
-        .navbar-links a:hover { color: var(--text-primary); }
-        .user-menu { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 1rem; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 50px; text-decoration: none; transition: all 0.2s; }
-        .user-menu:hover { background: var(--bg-card-hover); border-color: var(--accent-purple); }
-        .user-avatar { width: 28px; height: 28px; border-radius: 50%; }
-        .user-name { color: var(--text-primary); font-size: 0.875rem; font-weight: 500; }
 
         /* Main Content */
-        main { position: relative; z-index: 1; padding: 100px 1.5rem 4rem; max-width: 900px; margin: 0 auto; }
+        main { position: relative; z-index: 1; padding: 2rem 1.5rem 4rem; max-width: 900px; margin: 0 auto; }
 
         /* Page Header */
         .page-header { margin-bottom: 2.5rem; }
@@ -76,27 +55,107 @@
         .section-icon { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; }
         .section-icon svg { width: 20px; height: 20px; }
         .section-icon { transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1); }
-        .section-icon.purple { background: rgba(167, 139, 250, 0.15); color: var(--accent-purple); box-shadow: 0 4px 12px rgba(167,139,250,0.15); --section-accent: var(--accent-purple); }
-        .section-icon.yellow { background: rgba(251, 191, 36, 0.15); color: var(--accent-yellow); box-shadow: 0 4px 12px rgba(251,191,36,0.15); --section-accent: var(--accent-yellow); }
-        .section-icon.green { background: rgba(52, 211, 153, 0.15); color: var(--accent-green); box-shadow: 0 4px 12px rgba(52,211,153,0.15); --section-accent: var(--accent-green); }
-        .section-icon.blue { background: rgba(96, 165, 250, 0.15); color: var(--accent-blue); box-shadow: 0 4px 12px rgba(96,165,250,0.15); --section-accent: var(--accent-blue); }
-        .section-icon.cyan { background: rgba(34, 211, 238, 0.15); color: var(--accent-cyan); box-shadow: 0 4px 12px rgba(34,211,238,0.15); --section-accent: var(--accent-cyan); }
+        .section-icon.purple { background: var(--bg-card-hover); color: var(--accent-purple); box-shadow: 0 4px 12px color-mix(in srgb, var(--accent-purple) 15%, transparent); --section-accent: var(--accent-purple); }
+        .section-icon.yellow { background: color-mix(in srgb, var(--cf-warning) 15%, transparent); color: var(--accent-yellow); box-shadow: 0 4px 12px color-mix(in srgb, var(--cf-warning) 15%, transparent); --section-accent: var(--accent-yellow); }
+        .section-icon.green { background: color-mix(in srgb, var(--cf-success) 15%, transparent); color: var(--accent-green); box-shadow: 0 4px 12px color-mix(in srgb, var(--cf-success) 15%, transparent); --section-accent: var(--accent-green); }
+        .section-icon.blue { background: color-mix(in srgb, var(--cf-info) 15%, transparent); color: var(--accent-blue); box-shadow: 0 4px 12px color-mix(in srgb, var(--cf-info) 15%, transparent); --section-accent: var(--accent-blue); }
+        .section-icon.cyan { background: color-mix(in srgb, var(--cf-info) 15%, transparent); color: var(--accent-cyan); box-shadow: 0 4px 12px color-mix(in srgb, var(--cf-info) 15%, transparent); --section-accent: var(--accent-cyan); }
         @keyframes fadeInUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
         .section-title { font-size: 1.25rem; font-weight: 700; }
 
         /* Settings Card */
-        .settings-card { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.06); border-left: 3px solid var(--section-accent, var(--accent-purple)); border-radius: 4px 16px 16px 4px; overflow: hidden; animation: fadeInUp 0.4s cubic-bezier(0.22, 1, 0.36, 1) both; }
+        .settings-card { background: var(--bg-card); border: 1px solid var(--border-color); border-left: 3px solid var(--section-accent, var(--accent-purple)); border-radius: 4px 16px 16px 4px; overflow: hidden; animation: fadeInUp 0.4s cubic-bezier(0.22, 1, 0.36, 1) both; }
 
         /* Theme Options */
         .theme-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; padding: 1.25rem; }
-        .theme-option { cursor: pointer; padding: 1rem; background: rgba(255, 255, 255, 0.02); border: 2px solid var(--border-color); border-radius: 12px; transition: all 0.2s; }
+        .theme-group-label {
+            font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.07em;
+            color: var(--text-muted); margin: 1.1rem 1.25rem -0.5rem;
+        }
+        /* Auto: half the light swatch, half the dark one. */
+        .theme-swatch[data-swatch="auto"] {
+            /* theme: fixed (a picture of the Light and Dark themes, the same in every theme) */
+            background: linear-gradient(135deg, #f6f7f8 0%, #f6f7f8 50%, #0e0f11 50%, #0e0f11 100%);
+        }
+        .appearance-note { margin: 0.5rem 1.25rem 0; font-size: 0.82rem; color: var(--text-muted); line-height: 1.5; }
+        .appearance-note.is-warning {
+            padding: 0.6rem 0.8rem; border-radius: 10px; color: var(--text-primary);
+            background: color-mix(in srgb, var(--cf-warning, #e2a63f) 12%, transparent);
+            border: 1px solid color-mix(in srgb, var(--cf-warning, #e2a63f) 40%, transparent);
+        }
+        .appearance-note[hidden] { display: none; }
+        /* Hovering or focusing a theme or style shows it on this page for a moment; clicking keeps it. */
+        .preview-pill {
+            position: fixed; left: 50%; bottom: 1.5rem; transform: translateX(-50%); z-index: 9998;
+            padding: 0.45rem 0.9rem; border-radius: 999px; font-size: 0.82rem; font-weight: 500;
+            background: var(--cf-surface, #151619); color: var(--cf-text, #ececef);
+            border: 1px solid var(--cf-border-strong, #3a3d44); box-shadow: var(--cf-shadow-pop, 0 8px 24px rgba(0,0,0,.4));
+            pointer-events: none;
+        }
+        .preview-pill[hidden] { display: none; }
+        .setting-row .btn-inline {
+            height: 32px; padding: 0 0.8rem; border-radius: var(--cf-radius, 7px); font: inherit; font-size: 0.84rem; font-weight: 500;
+            border: 1px solid var(--cf-border-strong); background: var(--cf-surface-2); color: var(--cf-text); cursor: pointer; white-space: nowrap;
+        }
+        .setting-row .btn-inline:hover { background: var(--cf-surface-3); }
+        .theme-swatch[data-swatch="slate"]    { --sw-bg: #11151a; --sw-accent: #7dd3fc; }
+        .theme-swatch[data-swatch="forest"]   { --sw-bg: #0b1210; --sw-accent: #5eead4; }
+        .theme-swatch[data-swatch="ember"]    { --sw-bg: #140f0c; --sw-accent: #ffab70; }
+        .theme-swatch[data-swatch="plum"]     { --sw-bg: #120d18; --sw-accent: #c4a5ff; }
+        .theme-swatch[data-swatch="ocean"]    { --sw-bg: #06131a; --sw-accent: #5ec8e8; }
+        .theme-swatch[data-swatch="sand"]     { --sw-bg: #faf6ef; --sw-accent: #8a5a20; }
+        .theme-swatch[data-swatch="custom"]   {
+            background: conic-gradient(from 180deg, #ff6b6b, #ffd166, #06d6a0, #4cc9f0, #b79dff, #ff6b6b);
+        }
+
+        .custom-theme { margin-top: 1.25rem; border: 1px solid var(--border-color); border-radius: 12px; padding: 0.85rem 1rem; }
+        .custom-theme summary { cursor: pointer; font-weight: 600; font-size: 0.9rem; }
+        .custom-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 1rem; margin-top: 1rem; }
+        .custom-row { display: flex; gap: 0.5rem; align-items: center; }
+        .custom-row input[type="color"] { width: 46px; height: 36px; padding: 2px; border-radius: 6px; flex: none; cursor: pointer; }
+        .custom-hex { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; text-transform: lowercase; }
+        .custom-actions { display: flex; gap: 0.6rem; margin-top: 1rem; flex-wrap: wrap; }
+        .ct-warnings { margin-top: 0.85rem; display: flex; flex-direction: column; gap: 0.4rem; }
+        .ct-warn {
+            font-size: 0.82rem; padding: 0.5rem 0.7rem; border-radius: 8px;
+            background: color-mix(in srgb, var(--cf-warning) 12%, transparent); border: 1px solid color-mix(in srgb, var(--cf-warning) 35%, transparent);
+            color: var(--text-primary);
+        }
+
+        /* Live preview swatch — shows the actual theme surfaces rather than a
+           generic sun/moon icon, so the choice is legible before committing. */
+        .theme-swatch {
+            width: 44px; height: 44px; border-radius: 10px; flex: none;
+            border: 1px solid var(--border-color);
+            background: linear-gradient(135deg, var(--sw-bg) 0%, var(--sw-bg) 55%, var(--sw-accent) 55%, var(--sw-accent) 100%);
+        }
+        /* The page background and accent of each theme, as cf-ui.css and themes.css define them
+           (the Classic style swaps Dark, Light and Sand to its purple accent). */
+        .theme-swatch[data-swatch="dark"]     { --sw-bg: #0e0f11; --sw-accent: #b4e04f; }
+        .theme-swatch[data-swatch="light"]    { --sw-bg: #f6f7f8; --sw-accent: #4a7a10; }
+        .theme-swatch[data-swatch="midnight"] { --sw-bg: #070b14; --sw-accent: #8ba6ff; }
+        .theme-swatch[data-swatch="amoled"]   { --sw-bg: #000000; --sw-accent: #b79dff; }
+        .theme-swatch[data-swatch="contrast"] { --sw-bg: #000000; --sw-accent: #ffd76b; }
+        :root[data-style="classic"] .theme-swatch[data-swatch="dark"] { --sw-accent: #8b5cf6; }
+        :root[data-style="classic"] .theme-swatch:is([data-swatch="light"], [data-swatch="sand"]) { --sw-accent: #6d28d9; }
+
+        .density-picker { display: flex; gap: 2px; background: var(--bg-secondary, #0f1316); border: 1px solid var(--border-color); border-radius: 10px; padding: 3px; }
+        .density-btn {
+            border: 0; background: transparent; color: var(--text-muted);
+            padding: 0.45rem 0.85rem; border-radius: 7px; cursor: pointer;
+            font-size: 0.85rem; font-weight: 600; font-family: inherit;
+        }
+        .density-btn.is-on { background: var(--cf-accent); color: var(--cf-on-accent); }
+        .density-btn:focus-visible { outline: 3px solid var(--accent-purple, var(--accent-purple)); outline-offset: 2px; }
+
+        .theme-option { cursor: pointer; padding: 1rem; background: var(--bg-card); border: 2px solid var(--border-color); border-radius: 12px; transition: all 0.2s; }
         .theme-option:hover { background: var(--bg-card-hover); }
-        .theme-option.active { border-color: var(--accent-purple); background: rgba(167, 139, 250, 0.1); }
+        .theme-option.active { border-color: var(--accent-purple); background: var(--bg-card-hover); }
         .theme-option-content { display: flex; align-items: center; gap: 0.75rem; }
         .theme-icon { width: 44px; height: 44px; border-radius: 10px; display: flex; align-items: center; justify-content: center; }
         .theme-icon svg { width: 22px; height: 22px; }
-        .theme-icon.dark { background: rgba(167, 139, 250, 0.2); color: var(--accent-purple); }
-        .theme-icon.light { background: rgba(251, 191, 36, 0.2); color: var(--accent-yellow); }
+        .theme-icon.dark { background: var(--bg-card-hover); color: var(--accent-purple); }
+        .theme-icon.light { background: color-mix(in srgb, var(--cf-warning) 20%, transparent); color: var(--accent-yellow); }
         .theme-info { flex: 1; }
         .theme-name { font-weight: 600; font-size: 0.95rem; margin-bottom: 0.125rem; }
         .theme-status { font-size: 0.75rem; color: var(--text-muted); }
@@ -107,7 +166,7 @@
         /* Setting Row */
         .setting-row { display: flex; align-items: center; justify-content: space-between; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border-color); transition: background 0.2s; }
         .setting-row:last-child { border-bottom: none; }
-        .setting-row:hover { background: rgba(255, 255, 255, 0.02); }
+        .setting-row:hover { background: var(--bg-card); }
         .setting-info { flex: 1; }
         .setting-name { font-weight: 600; font-size: 0.95rem; margin-bottom: 0.25rem; }
         .setting-desc { font-size: 0.8rem; color: var(--text-muted); }
@@ -115,195 +174,112 @@
         /* Toggle Switch */
         .toggle { position: relative; width: 48px; height: 26px; cursor: pointer; }
         .toggle input { opacity: 0; width: 0; height: 0; }
-        .toggle-slider { position: absolute; inset: 0; background: rgba(255, 255, 255, 0.1); border-radius: 26px; transition: all 0.3s; }
+        .toggle-slider { position: absolute; inset: 0; background: var(--bg-card-hover); border-radius: 26px; transition: all 0.3s; }
         .toggle-slider::before { content: ''; position: absolute; width: 20px; height: 20px; left: 3px; top: 3px; background: white; border-radius: 50%; transition: transform 0.3s; }
         .toggle input:checked + .toggle-slider { background: var(--accent-purple); }
         .toggle input:checked + .toggle-slider::before { transform: translateX(22px); }
-        .toggle:hover .toggle-slider { background: rgba(255, 255, 255, 0.15); }
-        .toggle input:checked + .toggle-slider:hover { background: #9478e6; }
+        .toggle:hover .toggle-slider { background: color-mix(in srgb, var(--cf-text) 15%, transparent); }
+        .toggle input:checked + .toggle-slider:hover { background: var(--cf-accent-hover); }
 
         /* Account Section */
         .account-box { padding: 1.25rem; }
         .account-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 1rem; }
         .account-info h4 { font-weight: 600; font-size: 0.95rem; margin-bottom: 0.25rem; }
         .account-info p { font-size: 0.8rem; color: var(--text-muted); }
-        .status-badge { display: inline-flex; align-items: center; gap: 0.375rem; padding: 0.375rem 0.75rem; background: rgba(52, 211, 153, 0.15); border-radius: 50px; font-size: 0.75rem; font-weight: 500; color: var(--accent-green); }
+        .status-badge { display: inline-flex; align-items: center; gap: 0.375rem; padding: 0.375rem 0.75rem; background: color-mix(in srgb, var(--cf-success) 15%, transparent); border-radius: 50px; font-size: 0.75rem; font-weight: 500; color: var(--cf-success-ink); }
         .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent-green); }
 
         /* Buttons */
         .btn { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.625rem 1rem; border-radius: 10px; font-size: 0.875rem; font-weight: 600; text-decoration: none; transition: all 0.2s; cursor: pointer; border: none; font-family: inherit; }
         .btn svg { width: 16px; height: 16px; }
-        .btn-ghost { background: rgba(255, 255, 255, 0.05); border: 1px solid var(--border-color); color: var(--text-primary); }
+        .btn-ghost { background: var(--bg-card-hover); border: 1px solid var(--border-color); color: var(--text-primary); }
         .btn-ghost:hover { background: var(--bg-card-hover); border-color: var(--accent-purple); }
-        .btn-logout { background: rgba(248, 113, 113, 0.1); border: 1px solid rgba(248, 113, 113, 0.3); color: var(--accent-red); }
-        .btn-logout:hover { background: rgba(248, 113, 113, 0.2); border-color: var(--accent-red); }
+        .btn-logout { background: color-mix(in srgb, var(--cf-danger) 10%, transparent); border: 1px solid color-mix(in srgb, var(--cf-danger) 30%, transparent); color: var(--accent-red); }
+        .btn-logout:hover { background: color-mix(in srgb, var(--cf-danger) 20%, transparent); border-color: var(--accent-red); }
 
         /* About Section */
         .about-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 1rem; padding: 1.25rem; border-bottom: 1px solid var(--border-color); }
-        .about-item { padding: 0.875rem; background: rgba(255, 255, 255, 0.02); border-radius: 10px; }
+        .about-item { padding: 0.875rem; background: var(--bg-card); border-radius: 10px; }
         .about-label { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem; }
         .about-value { font-weight: 700; font-size: 1rem; }
         .about-links { display: flex; gap: 0.75rem; padding: 1.25rem; }
         .about-links .btn { flex: 1; justify-content: center; }
 
         /* Toast */
-        .toast { position: fixed; bottom: 2rem; right: 2rem; padding: 0.875rem 1.25rem; background: var(--accent-purple); color: white; border-radius: 12px; font-weight: 500; font-size: 0.875rem; box-shadow: 0 10px 30px rgba(167, 139, 250, 0.3); transform: translateY(100px); opacity: 0; transition: all 0.3s ease; z-index: 9999; }
+        .toast { position: fixed; bottom: 2rem; right: 2rem; padding: 0.875rem 1.25rem; background: var(--accent-purple); color: white; border-radius: 12px; font-weight: 500; font-size: 0.875rem; box-shadow: 0 10px 30px color-mix(in srgb, var(--accent-purple) 30%, transparent); transform: translateY(100px); opacity: 0; transition: all 0.3s ease; z-index: 9999; }
         .toast.show { transform: translateY(0); opacity: 1; }
 
         /* Footer */
-        .footer { padding: clamp(2rem, 5vh, 3.5rem) 0; background: var(--bg-primary); border-top: 1px solid var(--border-color); text-align: center; margin-top: 3rem; }
-        .footer-links { display: flex; gap: clamp(1.25rem, 2.5vw, 2.5rem); justify-content: center; flex-wrap: wrap; margin-bottom: 1.5rem; }
-        .footer-link { color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; transition: color 0.3s ease; }
-        .footer-link:hover { color: var(--accent-purple); }
-        .footer-copyright { color: var(--text-muted); font-size: 0.85rem; }
 
         /* Mobile Menu Button */
-        .mobile-menu-btn {
-            display: none;
-            background: transparent;
-            border: none;
-            color: var(--text-primary);
-            font-size: 1.25rem;
-            cursor: pointer;
-            padding: 0.5rem;
-            z-index: 1001;
-        }
 
-        .mobile-menu-btn svg {
-            width: 24px;
-            height: 24px;
-        }
 
         /* Mobile Menu Dropdown */
-        .mobile-menu {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(11, 15, 17, 0.98);
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-            z-index: 999;
-            padding-top: 80px;
-            opacity: 0;
-            visibility: hidden;
-            transition: opacity 0.3s ease, visibility 0.3s ease;
-        }
 
-        .mobile-menu.active {
-            display: block;
-            opacity: 1;
-            visibility: visible;
-        }
 
-        .mobile-menu-inner {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 1.5rem;
-            padding: 2rem;
-        }
 
-        .mobile-menu-link {
-            color: var(--text-primary);
-            text-decoration: none;
-            font-size: 1.25rem;
-            font-weight: 600;
-            padding: 0.75rem 1.5rem;
-            transition: color 0.3s ease;
-        }
 
-        .mobile-menu-link:hover {
-            color: var(--accent-purple);
-        }
 
-        .mobile-menu-divider {
-            width: 60%;
-            max-width: 200px;
-            height: 1px;
-            background: var(--border-color);
-            margin: 0.5rem 0;
-        }
 
-        .mobile-menu .btn {
-            padding: 0.75rem 1.5rem;
-            font-size: 1rem;
-        }
 
         /* Responsive */
         @media (max-width: 768px) {
-            .navbar-links { display: none; }
-            .mobile-menu-btn { display: block; }
-            main { padding: 90px 1rem 3rem; }
+            main { padding: 1.5rem 1rem 3rem; }
             .theme-grid { grid-template-columns: 1fr; }
             .about-grid { grid-template-columns: 1fr; }
             .about-links { flex-direction: column; }
             .setting-row { flex-wrap: wrap; gap: 1rem; }
             .account-header { flex-direction: column; gap: 0.75rem; }
-            .footer-links { flex-direction: column; gap: 0.75rem; }
         }
+
+        /* Site style picker (core/user-preferences.js STYLES). Screenshots in
+           /img/styles/<style>-<dark|light>.webp; the one matching the current
+           colour theme family is shown. */
+        .style-block { padding: 1.25rem 1.25rem 0.25rem; scroll-margin-top: 90px; }
+        .style-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 1rem; margin-top: 0.9rem; }
+        .style-card {
+            display: flex; flex-direction: column; overflow: hidden;
+            background: var(--cf-surface); border: 1px solid var(--cf-border); border-radius: var(--cf-radius-lg);
+            transition: border-color 0.15s, box-shadow 0.15s;
+        }
+        .style-card:hover { border-color: var(--cf-border-strong); }
+        .style-card.active { border-color: var(--cf-accent); box-shadow: 0 0 0 3px var(--cf-accent-soft); }
+        .style-thumb { aspect-ratio: 16 / 10; background: var(--cf-surface-2); border-bottom: 1px solid var(--cf-border); overflow: hidden; }
+        .style-thumb img { width: 100%; height: 100%; object-fit: cover; object-position: top left; display: block; }
+        .style-thumb-light { display: none !important; }
+        :root[data-theme="light"] .style-thumb-light, :root[data-theme="sand"] .style-thumb-light { display: block !important; }
+        :root[data-theme="light"] .style-thumb-dark, :root[data-theme="sand"] .style-thumb-dark { display: none !important; }
+        .style-body { padding: 0.85rem 0.95rem 0.95rem; display: flex; flex-direction: column; gap: 0.35rem; flex: 1; }
+        .style-name { display: flex; align-items: center; gap: 0.5rem; font-weight: 600; font-size: 0.98rem; color: var(--cf-text); }
+        .style-current { display: none; font-size: 0.72rem; font-weight: 600; padding: 1px 8px; border-radius: 999px; color: var(--cf-accent-fg); background: var(--cf-accent-soft); border: 1px solid var(--cf-accent-line); }
+        .style-card.active .style-current { display: inline-block; }
+        .style-blurb { font-size: 0.84rem; color: var(--cf-text-3); line-height: 1.45; flex: 1; }
+        .style-actions { display: flex; align-items: center; gap: 0.5rem; margin-top: 0.4rem; }
+        .style-use {
+            display: inline-flex; align-items: center; gap: 0.45rem; height: 32px; padding: 0 0.8rem;
+            border-radius: var(--cf-radius); border: 1px solid var(--cf-border-strong); background: var(--cf-surface-2);
+            color: var(--cf-text); font: inherit; font-size: 0.84rem; font-weight: 500; cursor: pointer;
+        }
+        .style-use::before { content: ''; width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--cf-border-strong); box-sizing: border-box; flex: none; }
+        .style-use[aria-checked="true"] { border-color: var(--cf-accent-line); background: var(--cf-accent-soft); }
+        .style-use[aria-checked="true"]::before { border: 4px solid var(--cf-accent); }
+        .style-use:focus-visible, .style-preview:focus-visible { outline: 2px solid var(--cf-accent); outline-offset: 2px; }
+        .style-preview { font-size: 0.84rem; color: var(--cf-text-2); text-decoration: underline; text-underline-offset: 3px; margin-left: auto; }
+        .style-preview:hover { color: var(--cf-text); }
+        .appearance-sub { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-muted); margin: 1.4rem 1.25rem 0; }
     </style>
+    <link rel="stylesheet" href="/css/dropdowns.css">
+<%- include('partials/site-head', { title: 'Settings - CertiFried MultiTool', description: 'CertiFried MultiTool settings. Manage your bot preferences and account.', noindex: true }) %>
 </head>
 <body>
     <div class="bg-effects"><div class="orb orb-1"></div><div class="orb orb-2"></div></div>
 
-    <nav class="navbar">
-        <div class="navbar-container">
-            <a href="/" class="navbar-brand">
-                <img src="/images/CertiFried.png" alt="CertiFried" class="navbar-logo">
-                <span>CertiFried</span>
-            </a>
-            <div class="navbar-links">
-                <a href="/">Home</a>
-                <a href="/servers">Servers</a>
-                <a href="/commands">Commands</a>
-                <a href="/cards">Cards</a>
-                <a href="/status">Status</a>
-            </div>
-            <% if (user) { %>
-                <a href="/profile" class="user-menu">
-                    <img src="https://cdn.discordapp.com/avatars/<%= user.id %>/<%= user.avatar %>.png?size=64" alt="Avatar" class="user-avatar" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
-                    <span class="user-name"><%= user.username %></span>
-                </a>
-            <% } else { %>
-                <a href="/login" class="user-menu">
-                    <span class="user-name">Login</span>
-                </a>
-            <% } %>
-            <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Toggle mobile menu" aria-expanded="false">
-                <svg id="menuIconOpen" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
-                <svg id="menuIconClose" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="display: none;"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-            </button>
-        </div>
-    </nav>
+    <%- include('partials/site-header', { user: locals.user || null }) %>
 
-    <!-- Mobile Menu -->
-    <div class="mobile-menu" id="mobileMenu">
-        <div class="mobile-menu-inner">
-            <a href="/" class="mobile-menu-link">Home</a>
-            <a href="/servers" class="mobile-menu-link">Servers</a>
-            <a href="/commands" class="mobile-menu-link">Commands</a>
-            <a href="/cards" class="mobile-menu-link">Cards</a>
-            <a href="/status" class="mobile-menu-link">Status</a>
-            <div class="mobile-menu-divider"></div>
-            <% if (user) { %>
-                <a href="/profile" class="mobile-menu-link">Profile</a>
-                <a href="/logout" class="btn btn-logout">
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
-                    Logout
-                </a>
-            <% } else { %>
-                <a href="/login" class="btn btn-ghost">Login</a>
-            <% } %>
-        </div>
-    </div>
-
-    <main>
+    <main id="main-content" tabindex="-1">
         <div class="page-header">
             <h1 class="page-title">Settings</h1>
-            <p class="page-subtitle">Manage your dashboard preferences and account</p>
+            <p class="page-subtitle">How the dashboard looks for you</p>
         </div>
 
         <!-- Appearance Settings -->
@@ -315,176 +291,130 @@
                 <h2 class="section-title">Appearance</h2>
             </div>
             <div class="settings-card">
+                <div class="style-block" id="site-style">
+                    <div class="setting-name">Site style</div>
+                    <div class="setting-desc">The overall look of the dashboard. Every style works with every colour theme below.</div>
+                    <div class="style-grid" role="radiogroup" aria-label="Site style">
+                        <% (locals.styles || []).forEach(st => { %>
+                        <div class="style-card" data-style-value="<%= st.value %>">
+                            <div class="style-thumb">
+                                <img class="style-thumb-dark" src="/img/styles/<%= st.preview %>-dark.webp" alt="The server overview in the <%= st.label %> style, dark theme" loading="lazy" width="720" height="450">
+                                <img class="style-thumb-light" src="/img/styles/<%= st.preview %>-light.webp" alt="The server overview in the <%= st.label %> style, light theme" loading="lazy" width="720" height="450">
+                            </div>
+                            <div class="style-body">
+                                <div class="style-name"><span><%= st.label %></span><span class="style-current">Current</span></div>
+                                <div class="style-blurb"><%= st.blurb %></div>
+                                <div class="style-actions">
+                                    <button type="button" class="style-use" role="radio" aria-checked="false" data-style-use="<%= st.value %>">Use this</button>
+                                    <a class="style-preview" href="/dashboard?style=<%= st.value %>" data-style-preview="<%= st.value %>">Preview</a>
+                                </div>
+                            </div>
+                        </div>
+                        <% }) %>
+                    </div>
+                </div>
+                <div class="appearance-sub">Colour theme</div>
+                <p class="appearance-note">Hover over a theme or a style to see it on this page; click to keep it. If you use a dark-mode browser extension, turn it off for this site: the site has its own themes.</p>
+                <p class="appearance-note is-warning" id="darkExtWarning" hidden>A dark-mode extension is recolouring this page, so the themes below will not look right. Turn it off for this site.</p>
+                <% const _groups = {}; (locals.themes || []).forEach(t => { (_groups[t.group || 'Themes'] ||= []).push(t); }); %>
+                <% Object.entries(_groups).forEach(([group, list]) => { %>
+                <div class="theme-group-label"><%= group %></div>
                 <div class="theme-grid">
-                    <div class="theme-option active" data-theme="dark">
+                    <% list.forEach(t => { %>
+                    <div class="theme-option" data-theme="<%= t.value %>" role="button" tabindex="0"
+                         aria-pressed="false" aria-label="Use the <%= t.label %> theme">
                         <div class="theme-option-content">
-                            <div class="theme-icon dark">
-                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
-                            </div>
+                            <div class="theme-swatch" data-swatch="<%= t.value %>" aria-hidden="true"></div>
                             <div class="theme-info">
-                                <div class="theme-name">Dark Mode</div>
-                                <div class="theme-status">Currently active</div>
+                                <div class="theme-name"><%= t.label %></div>
+                                <div class="theme-status"><%= t.blurb %></div>
                             </div>
                             <svg class="theme-check" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
                         </div>
                     </div>
-                    <div class="theme-option" data-theme="light">
-                        <div class="theme-option-content">
-                            <div class="theme-icon light">
-                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+                    <% }) %>
+                </div>
+                <% }) %>
+
+                <!-- Custom colour scheme. Only meaningful when "Custom" is the
+                     selected theme, so it stays collapsed otherwise. -->
+                <details class="custom-theme" id="customThemePanel">
+                    <summary>Build your own colour scheme</summary>
+                    <div class="custom-grid">
+                        <% const _cust = (locals.userPrefs && userPrefs.customTheme) || {}; %>
+                        <% [
+                             {k:'bg',    l:'Background', h:'The page behind everything.'},
+                             {k:'text',  l:'Text',       h:'Body text. Needs 4.5:1 against the background.'},
+                             {k:'accent',l:'Accent',     h:'Links, buttons, focus rings.'},
+                             {k:'surface',l:'Surface',   h:'Cards and panels. Blank = derived.'},
+                             {k:'border',l:'Border',     h:'Dividers. Blank = derived.'}
+                           ].forEach(f => { %>
+                        <div class="custom-field">
+                            <label class="form-label" for="ct-<%= f.k %>"><%= f.l %></label>
+                            <div class="custom-row">
+                                <input type="color" id="ct-<%= f.k %>" data-ct="<%= f.k %>"
+                                       value="<%= _cust[f.k] || (f.k === 'bg' ? '#0b0f11' : f.k === 'text' ? '#ffffff' : '#a78bfa') %>">
+                                <input type="text" class="custom-hex" data-ct-hex="<%= f.k %>"
+                                       value="<%= _cust[f.k] || '' %>" placeholder="auto"
+                                       pattern="#[0-9A-Fa-f]{6}" maxlength="7"
+                                       aria-label="<%= f.l %> hex value">
                             </div>
-                            <div class="theme-info">
-                                <div class="theme-name">Light Mode</div>
-                                <div class="theme-status">Click to activate</div>
-                            </div>
-                            <svg class="theme-check" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/></svg>
+                            <small class="form-help"><%= f.h %></small>
                         </div>
+                        <% }) %>
                     </div>
-                </div>
-                <div class="setting-row">
-                    <div class="setting-info">
-                        <div class="setting-name">Compact Mode</div>
-                        <div class="setting-desc">Reduce spacing for a denser layout</div>
+                    <div id="ctWarnings" class="ct-warnings" hidden></div>
+                    <div class="custom-actions">
+                        <button type="button" class="btn btn-primary" id="ctApply">Apply my colours</button>
+                        <button type="button" class="btn btn-secondary" id="ctClear">Clear</button>
                     </div>
-                    <label class="toggle">
-                        <input type="checkbox" id="compactMode">
-                        <span class="toggle-slider"></span>
-                    </label>
-                </div>
-            </div>
-        </section>
+                </details>
 
-        <!-- Notification Settings -->
-        <section class="settings-section">
-            <div class="section-header">
-                <div class="section-icon yellow">
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/></svg>
-                </div>
-                <h2 class="section-title">Notifications</h2>
-            </div>
-            <div class="settings-card">
+                <% const _prefs = locals.userPrefs || {}; const _hiddenLists = (_prefs.hiddenChecklists || []).length; %>
                 <div class="setting-row">
                     <div class="setting-info">
-                        <div class="setting-name">Browser Notifications</div>
-                        <div class="setting-desc">Receive notifications for important events</div>
+                        <label class="setting-name" for="serverAccentToggle">Use each server's colour</label>
+                        <div class="setting-desc">Tint a server's dashboard pages with its embed colour (Embed theme page). Only the accent changes; it is adjusted to stay readable on your theme.</div>
                     </div>
                     <label class="toggle">
-                        <input type="checkbox" id="browserNotifications">
+                        <input type="checkbox" id="serverAccentToggle" <%= _prefs.serverAccent ? 'checked' : '' %>>
                         <span class="toggle-slider"></span>
                     </label>
                 </div>
-                <div class="setting-row">
+                <div class="setting-row" id="checklistRow">
                     <div class="setting-info">
-                        <div class="setting-name">Stream Alerts</div>
-                        <div class="setting-desc">Get notified when streamers go live</div>
+                        <div class="setting-name">Setup checklists</div>
+                        <div class="setting-desc" id="checklistDesc"><%= _hiddenLists ? `Hidden on ${_hiddenLists} server${_hiddenLists === 1 ? '' : 's'}. Showing them again puts the checklist back on those overviews.` : 'Shown on every server overview until the recommended steps are done.' %></div>
                     </div>
-                    <label class="toggle">
-                        <input type="checkbox" id="streamAlerts" checked>
-                        <span class="toggle-slider"></span>
-                    </label>
+                    <% if (_hiddenLists) { %><button type="button" class="btn-inline" id="checklistShowAll">Show them again</button><% } %>
                 </div>
-                <div class="setting-row">
-                    <div class="setting-info">
-                        <div class="setting-name">Update Notifications</div>
-                        <div class="setting-desc">Stay informed about new features</div>
-                    </div>
-                    <label class="toggle">
-                        <input type="checkbox" id="updateNotifications" checked>
-                        <span class="toggle-slider"></span>
-                    </label>
-                </div>
-            </div>
-        </section>
 
-        <!-- Privacy Settings -->
-        <section class="settings-section">
-            <div class="section-header">
-                <div class="section-icon green">
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
-                </div>
-                <h2 class="section-title">Privacy & Security</h2>
-            </div>
-            <div class="settings-card">
-                <div class="setting-row">
+                <div class="setting-row" style="align-items:flex-start;">
                     <div class="setting-info">
-                        <div class="setting-name">Show Online Status</div>
-                        <div class="setting-desc">Display your status to other users</div>
+                        <div class="setting-name">Dashboard layout</div>
+                        <div class="setting-desc">How the server settings cards are arranged.</div>
                     </div>
-                    <label class="toggle">
-                        <input type="checkbox" id="showOnlineStatus" checked>
-                        <span class="toggle-slider"></span>
-                    </label>
-                </div>
-                <div class="setting-row">
-                    <div class="setting-info">
-                        <div class="setting-name">Analytics</div>
-                        <div class="setting-desc">Help improve with anonymous usage data</div>
+                    <div class="density-picker" role="group" aria-label="Dashboard layout">
+                        <% (locals.layouts || []).forEach(l => { %>
+                        <button type="button" class="density-btn layout-btn" data-layout="<%= l.value %>" title="<%= l.blurb %>"><%= l.label %></button>
+                        <% }) %>
                     </div>
-                    <label class="toggle">
-                        <input type="checkbox" id="analytics" checked>
-                        <span class="toggle-slider"></span>
-                    </label>
                 </div>
-            </div>
-        </section>
 
-        <!-- Account Settings -->
-        <section class="settings-section">
-            <div class="section-header">
-                <div class="section-icon blue">
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
-                </div>
-                <h2 class="section-title">Account</h2>
-            </div>
-            <div class="settings-card">
-                <div class="account-box">
-                    <div class="account-header">
-                        <div class="account-info">
-                            <h4>Discord Account</h4>
-                            <p>Connected as <%= user.username %><% if (user.discriminator && user.discriminator !== '0') { %>#<%= user.discriminator %><% } %></p>
-                        </div>
-                        <span class="status-badge">
-                            <span class="status-dot"></span>
-                            Connected
-                        </span>
-                    </div>
-                    <a href="/profile" class="btn btn-ghost">
-                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>
-                        View Profile
-                    </a>
-                </div>
-                <div class="setting-row">
+                <div class="setting-row" style="align-items:flex-start;">
                     <div class="setting-info">
-                        <div class="setting-name">Session Management</div>
-                        <div class="setting-desc">Sign out from all devices</div>
+                        <div class="setting-name">Density</div>
+                        <div class="setting-desc">How much breathing room the interface uses.</div>
                     </div>
-                    <a href="/logout" class="btn btn-logout">
-                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
-                        Logout
-                    </a>
+                    <div class="density-picker" role="group" aria-label="Interface density">
+                        <% (locals.densities || []).forEach(d => { %>
+                        <button type="button" class="density-btn" data-density="<%= d.value %>" title="<%= d.blurb %>">
+                            <%= d.label %>
+                        </button>
+                        <% }) %>
+                    </div>
                 </div>
-            </div>
-        </section>
 
-        <!-- About Section -->
-        <section class="settings-section">
-            <div class="section-header">
-                <div class="section-icon cyan">
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                </div>
-                <h2 class="section-title">About</h2>
-            </div>
-            <div class="settings-card">
-                <div class="about-grid">
-                    <div class="about-item">
-                        <div class="about-label">Dashboard Version</div>
-                        <div class="about-value">v2.0.0</div>
-                    </div>
-                    <div class="about-item">
-                        <div class="about-label">Bot Version</div>
-                        <div class="about-value">v3.1.0</div>
-                    </div>
-                </div>
                 <div class="about-links">
                     <a href="/commands" class="btn btn-ghost">
                         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
@@ -500,21 +430,10 @@
 
     </main>
 
-    <footer class="footer">
-        <div class="container" style="max-width: 900px; margin: 0 auto; padding: 0 1.5rem;">
-            <div class="footer-links">
-                <a href="/commands" class="footer-link">Commands</a>
-                <a href="/cards" class="footer-link">Cards</a>
-                <a href="/status" class="footer-link">Status</a>
-                <a href="/docs" class="footer-link">Documentation</a>
-                <a href="/terms" class="footer-link">Terms</a>
-                <a href="/privacy" class="footer-link">Privacy</a>
-            </div>
-            <p class="footer-copyright">&copy; <%= new Date().getFullYear() %> CertiFried MultiTool. All rights reserved.</p>
-        </div>
-    </footer>
+    <%- include('partials/site-footer') %>
 
     <div class="toast" id="toast"></div>
+    <div class="preview-pill" id="previewPill" role="status" aria-live="polite" hidden></div>
 
     <script>
     document.addEventListener('DOMContentLoaded', function() {
@@ -526,59 +445,370 @@
             setTimeout(() => toast.classList.remove('show'), 2500);
         }
 
-        // Mobile menu toggle
-        const mobileMenuBtn = document.getElementById('mobileMenuBtn');
-        const mobileMenu = document.getElementById('mobileMenu');
-        const menuIconOpen = document.getElementById('menuIconOpen');
-        const menuIconClose = document.getElementById('menuIconClose');
+        // ------------------------------------------------------------------
+        // Appearance — real persistence.
+        //
+        // What was here before: the theme picker wrote to localStorage and told
+        // nobody, and the compact toggle's entire handler was
+        // showToast('Setting updated') — it announced a change it never made.
+        //
+        // Now every change POSTs to /api/me/preferences, is applied to <html>
+        // immediately for feel, and mirrors to localStorage so the anti-flash
+        // script agrees on the next page load. A failed save reverts VISIBLY —
+        // silently rolling back would look like the click didn't register.
+        // ------------------------------------------------------------------
+        const CSRF = '<%= typeof csrfToken !== "undefined" ? csrfToken : "" %>';
+        const root = document.documentElement;
 
-        if (mobileMenuBtn && mobileMenu) {
-            mobileMenuBtn.addEventListener('click', () => {
-                const isOpen = mobileMenu.classList.toggle('active');
-                mobileMenuBtn.setAttribute('aria-expanded', isOpen);
-                menuIconOpen.style.display = isOpen ? 'none' : 'block';
-                menuIconClose.style.display = isOpen ? 'block' : 'none';
-                document.body.style.overflow = isOpen ? 'hidden' : '';
+        async function savePreference(payload) {
+            const res = await fetch('/api/me/preferences', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json',
+                    // /api/me/* is not CSRF-exempt (unlike /manage), so this is required.
+                    'X-CSRF-Token': CSRF,
+                },
+                body: JSON.stringify(payload),
             });
-
-            // Close menu when clicking a link
-            mobileMenu.querySelectorAll('a').forEach(link => {
-                link.addEventListener('click', () => {
-                    mobileMenu.classList.remove('active');
-                    mobileMenuBtn.setAttribute('aria-expanded', 'false');
-                    menuIconOpen.style.display = 'block';
-                    menuIconClose.style.display = 'none';
-                    document.body.style.overflow = '';
-                });
-            });
+            if (!res.ok) {
+                const body = await res.json().catch(() => ({}));
+                throw new Error(body.error || `Save failed (${res.status})`);
+            }
+            return res.json();
         }
 
-        // Theme selection
-        document.querySelectorAll('.theme-option').forEach(option => {
-            option.addEventListener('click', function() {
-                const theme = this.dataset.theme;
+        // ---- Theme --------------------------------------------------------
+        // Auto (follow the OS) is stored as 'auto' and shown on <html> as data-theme-mode="auto"
+        // plus the light or dark it currently resolves to (core/user-preferences.js AUTO_THEME_SCRIPT).
+        const prefersLight = window.matchMedia ? window.matchMedia('(prefers-color-scheme: light)') : null;
+        const currentTheme = () => root.getAttribute('data-theme-mode') === 'auto' ? 'auto' : (root.getAttribute('data-theme') || 'dark');
+        function applyTheme(theme) {
+            if (theme === 'auto') {
+                root.setAttribute('data-theme-mode', 'auto');
+                root.setAttribute('data-theme', prefersLight && prefersLight.matches ? 'light' : 'dark');
+            } else {
+                root.removeAttribute('data-theme-mode');
+                root.setAttribute('data-theme', theme);
+            }
+        }
+        function paintThemes(active) {
+            document.querySelectorAll('.theme-option').forEach((el) => {
+                const on = el.dataset.theme === active;
+                el.classList.toggle('active', on);
+                el.setAttribute('aria-pressed', on ? 'true' : 'false');
+                const status = el.querySelector('.theme-status');
+                if (status) status.dataset.blurb = status.dataset.blurb || status.textContent;
+                if (status) status.textContent = on ? 'Currently active' : status.dataset.blurb;
+            });
+        }
+        let committedTheme = currentTheme();
+        paintThemes(committedTheme);
 
-                document.querySelectorAll('.theme-option').forEach(opt => {
-                    opt.classList.remove('active');
-                    opt.querySelector('.theme-status').textContent = 'Click to activate';
-                });
+        async function chooseTheme(theme) {
+            endPreview();
+            const previous = committedTheme;
+            if (theme === previous) return;
 
-                this.classList.add('active');
-                this.querySelector('.theme-status').textContent = 'Currently active';
+            committedTheme = theme;
+            applyTheme(theme);
+            paintThemes(theme);
 
-                localStorage.setItem('theme', theme);
-                showToast(`Switched to ${theme} mode`);
+            try {
+                await savePreference({ theme });
+                localStorage.setItem('ui-theme', theme);
+                const label = document.querySelector(`.theme-option[data-theme="${theme}"] .theme-name`)?.textContent || theme;
+                showToast(`Theme set to ${label}`);
+            } catch (err) {
+                committedTheme = previous;
+                applyTheme(previous);
+                paintThemes(previous);
+                showToast(`Could not save: ${err.message}`);
+            }
+        }
+
+        // ---- Hover preview ------------------------------------------------
+        // Hovering or focusing a theme (or a site style card) shows it on this page; leaving puts
+        // the saved one back, clicking keeps it. A short delay on leave stops flicker between cards.
+        const pill = document.getElementById('previewPill');
+        let restoreTimer = null;
+        let previewing = false;
+        function startPreview(kind, value, label) {
+            clearTimeout(restoreTimer);
+            if (kind === 'theme') {
+                applyTheme(value);
+                root.setAttribute('data-style', committedStyle);
+            } else {
+                applyTheme(committedTheme);
+                root.setAttribute('data-style', value);
+            }
+            previewing = true;
+            const same = kind === 'theme' ? value === committedTheme : value === committedStyle;
+            pill.textContent = same ? `${label} (in use)` : `Previewing ${label}. Click to keep it.`;
+            pill.hidden = false;
+        }
+        function endPreview() {
+            clearTimeout(restoreTimer);
+            if (!previewing) return;
+            previewing = false;
+            applyTheme(committedTheme);
+            root.setAttribute('data-style', committedStyle);
+            pill.hidden = true;
+        }
+        function scheduleEnd() {
+            clearTimeout(restoreTimer);
+            restoreTimer = setTimeout(endPreview, 120);
+        }
+        if (prefersLight && prefersLight.addEventListener) prefersLight.addEventListener('change', () => { if (!previewing) applyTheme(committedTheme); });
+
+        document.querySelectorAll('.theme-option').forEach((el) => {
+            const label = el.querySelector('.theme-name')?.textContent || el.dataset.theme;
+            el.addEventListener('mouseenter', () => startPreview('theme', el.dataset.theme, label));
+            el.addEventListener('focus', () => startPreview('theme', el.dataset.theme, label));
+            el.addEventListener('mouseleave', scheduleEnd);
+            el.addEventListener('blur', scheduleEnd);
+            el.addEventListener('click', () => chooseTheme(el.dataset.theme));
+            // Keyboard parity — these are divs with role="button".
+            el.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); chooseTheme(el.dataset.theme); }
             });
         });
 
-        // Toggle handlers
-        ['compactMode', 'browserNotifications', 'streamAlerts', 'updateNotifications', 'showOnlineStatus', 'analytics'].forEach(id => {
-            const toggle = document.getElementById(id);
-            if (toggle) {
-                toggle.addEventListener('change', function() {
-                    showToast('Setting updated');
-                });
+        // ---- Site style -------------------------------------------------------
+        // Applied to <html data-style> at once and saved to the account; the
+        // server renders it on every page from then on. A failed save reverts.
+        // "Preview" opens the last managed server's overview with ?style=,
+        // which shows the style without saving it.
+        function paintStyles(active) {
+            document.querySelectorAll('.style-card').forEach((card) => {
+                const on = card.dataset.styleValue === active;
+                card.classList.toggle('active', on);
+                const btn = card.querySelector('.style-use');
+                if (btn) {
+                    btn.setAttribute('aria-checked', on ? 'true' : 'false');
+                    btn.textContent = on ? 'In use' : 'Use this';
+                }
+            });
+        }
+        var committedStyle = root.getAttribute('data-style') || 'cards';
+        paintStyles(committedStyle);
+
+        document.querySelectorAll('.style-card').forEach((card) => {
+            const label = card.querySelector('.style-name span')?.textContent || card.dataset.styleValue;
+            card.addEventListener('mouseenter', () => startPreview('style', card.dataset.styleValue, `the ${label} style`));
+            card.addEventListener('mouseleave', scheduleEnd);
+            card.addEventListener('focusin', () => startPreview('style', card.dataset.styleValue, `the ${label} style`));
+            card.addEventListener('focusout', scheduleEnd);
+        });
+
+        document.querySelectorAll('.style-use').forEach((btn) => {
+            btn.addEventListener('click', async () => {
+                const style = btn.dataset.styleUse;
+                const previous = committedStyle;
+                // No early return when it is already the current style: saving again also puts the layout back on Grid.
+                committedStyle = style;
+                endPreview();
+                root.setAttribute('data-style', style);
+                paintStyles(style);
+                try {
+                    await savePreference({ siteStyle: style, dashboardLayout: 'grid' });
+                    if (typeof paintLayout === 'function') paintLayout('grid');
+                    const name = btn.closest('.style-card')?.querySelector('.style-name span')?.textContent || style;
+                    showToast('Style set to ' + name);
+                } catch (err) {
+                    committedStyle = previous;
+                    root.setAttribute('data-style', previous);
+                    paintStyles(previous);
+                    showToast('Could not save: ' + err.message);
+                }
+            });
+        });
+
+        // ---- Server colour and setup checklists (user_preferences.ui_options) ----
+        const accentToggle = document.getElementById('serverAccentToggle');
+        if (accentToggle) accentToggle.addEventListener('change', async () => {
+            const on = accentToggle.checked;
+            try {
+                await savePreference({ serverAccent: on });
+                showToast(on ? "Server pages now use each server's colour" : 'Server pages use your theme colour again');
+            } catch (err) {
+                accentToggle.checked = !on;
+                showToast(`Could not save: ${err.message}`);
             }
+        });
+        const showAll = document.getElementById('checklistShowAll');
+        if (showAll) showAll.addEventListener('click', async () => {
+            showAll.disabled = true;
+            try {
+                await savePreference({ showAllChecklists: true });
+                document.getElementById('checklistDesc').textContent = 'Shown on every server overview until the recommended steps are done.';
+                showAll.remove();
+                showToast('Setup checklists are back on every server');
+            } catch (err) {
+                showAll.disabled = false;
+                showToast(`Could not save: ${err.message}`);
+            }
+        });
+
+        // ---- Dark-mode extensions ------------------------------------------
+        // Dark Reader (and similar) recolour the page on top of our own themes. The page asks
+        // Dark Reader to stand down (<meta name="darkreader-lock">); if something is still
+        // recolouring it, say so next to the theme picker.
+        (function detectDarkExtension() {
+            const check = () => {
+                const html = document.documentElement;
+                const hit = html.hasAttribute('data-darkreader-mode') || html.hasAttribute('data-darkreader-scheme')
+                    || !!document.querySelector('style.darkreader, meta[name="darkreader"]') || html.hasAttribute('data-nighteye');
+                const warn = document.getElementById('darkExtWarning');
+                if (warn) warn.hidden = !hit;
+            };
+            check();
+            setTimeout(check, 1500);
+        })();
+
+        (function previewLinks() {
+            let guild = null;
+            try {
+                guild = localStorage.getItem('cf-last-guild');
+                if (!guild) {
+                    for (let i = 0; i < localStorage.length; i++) {
+                        const k = localStorage.key(i) || '';
+                        if (k.indexOf('recent-visited-') === 0) { guild = k.slice('recent-visited-'.length); break; }
+                    }
+                }
+            } catch (e) { guild = null; }
+            if (!guild || !/^\d{15,22}$/.test(guild)) return;
+            document.querySelectorAll('[data-style-preview]').forEach((a) => {
+                a.href = '/manage/' + guild + '?style=' + encodeURIComponent(a.dataset.stylePreview);
+            });
+        })();
+
+        // ---- Density ------------------------------------------------------
+        function paintDensity(active) {
+            // Scoped to [data-density]: the layout picker reuses .density-btn
+            // for styling, and an unscoped query stripped .is-on off every
+            // layout button — which is why the layout choice never looked
+            // selected, and why clicking one also fired the density handler and
+            // set data-density="undefined".
+            document.querySelectorAll('.density-btn[data-density]').forEach((b) =>
+                b.classList.toggle('is-on', b.dataset.density === active));
+        }
+        paintDensity(root.getAttribute('data-density') || 'comfortable');
+
+        document.querySelectorAll('.density-btn[data-density]').forEach((btn) => {
+            btn.addEventListener('click', async () => {
+                const density = btn.dataset.density;
+                const previous = root.getAttribute('data-density') || 'comfortable';
+                if (density === previous) return;
+
+                root.setAttribute('data-density', density);
+                paintDensity(density);
+
+                try {
+                    await savePreference({ density });
+                    localStorage.setItem('ui-density', density);
+                    showToast(`Density set to ${density}`);
+                } catch (err) {
+                    root.setAttribute('data-density', previous);
+                    paintDensity(previous);
+                    showToast(`Could not save: ${err.message}`);
+                }
+            });
+        });
+
+        // ---- Dashboard layout ---------------------------------------------
+        function paintLayout(active) {
+            document.querySelectorAll('.layout-btn[data-layout]').forEach((b) =>
+                b.classList.toggle('is-on', b.dataset.layout === active));
+        }
+        paintLayout('<%= locals.uiLayout || "grid" %>');
+
+        document.querySelectorAll('.layout-btn[data-layout]').forEach((btn) => {
+            btn.addEventListener('click', async () => {
+                const layout = btn.dataset.layout;
+                const previous = document.querySelector('.layout-btn.is-on')?.dataset.layout || 'grid';
+                if (layout === previous) return;
+                paintLayout(layout);
+                try {
+                    await savePreference({ dashboardLayout: layout });
+                    showToast(`Layout set to ${layout}`);
+                } catch (err) {
+                    paintLayout(previous);
+                    showToast(`Could not save: ${err.message}`);
+                }
+            });
+        });
+
+        // ---- Custom colour scheme -----------------------------------------
+        // Keep the picker and the hex box in step, either can drive.
+        document.querySelectorAll('[data-ct]').forEach((picker) => {
+            const key = picker.dataset.ct;
+            const hexBox = document.querySelector(`[data-ct-hex="${key}"]`);
+            picker.addEventListener('input', () => { if (hexBox) hexBox.value = picker.value.toLowerCase(); });
+            if (hexBox) hexBox.addEventListener('change', () => {
+                if (/^#[0-9a-fA-F]{6}$/.test(hexBox.value)) picker.value = hexBox.value;
+            });
+        });
+
+        const ctWarnings = document.getElementById('ctWarnings');
+        function showWarnings(list) {
+            if (!ctWarnings) return;
+            ctWarnings.innerHTML = '';
+            if (!list || !list.length) { ctWarnings.hidden = true; return; }
+            list.forEach((w) => {
+                const div = document.createElement('div');
+                div.className = 'ct-warn';
+                div.textContent = '⚠ ' + (w.message || w);
+                ctWarnings.appendChild(div);
+            });
+            ctWarnings.hidden = false;
+        }
+
+        document.getElementById('ctApply')?.addEventListener('click', async () => {
+            const payload = {};
+            document.querySelectorAll('[data-ct-hex]').forEach((box) => {
+                const v = box.value.trim();
+                if (v) payload[box.dataset.ctHex] = v.toLowerCase();
+            });
+            // The picker always holds a value even when the hex box is blank, so
+            // fall back to it for the two required fields rather than erroring.
+            if (!payload.bg) payload.bg = document.getElementById('ct-bg').value.toLowerCase();
+            if (!payload.text) payload.text = document.getElementById('ct-text').value.toLowerCase();
+
+            try {
+                const result = await savePreference({ theme: 'custom', customTheme: payload });
+                showWarnings(result?.warnings);
+                localStorage.setItem('ui-theme', 'custom');
+                showToast('Custom colours applied');
+                // The generated CSS lives in a server-rendered <style>, so a
+                // reload is the honest way to show the real result.
+                setTimeout(() => location.reload(), 700);
+            } catch (err) {
+                showWarnings([err.message]);
+            }
+        });
+
+        document.getElementById('ctClear')?.addEventListener('click', async () => {
+            try {
+                await savePreference({ customTheme: null, theme: 'dark' });
+                localStorage.setItem('ui-theme', 'dark');
+                showToast('Custom colours cleared');
+                setTimeout(() => location.reload(), 500);
+            } catch (err) {
+                showWarnings([err.message]);
+            }
+        });
+
+        // ---- Remaining toggles --------------------------------------------
+        // These are still display-only. Saying so in the console beats the old
+        // behaviour of showing "Setting updated" for something that saves nothing.
+        ['browserNotifications', 'streamAlerts', 'updateNotifications', 'showOnlineStatus', 'analytics'].forEach(id => {
+            const toggle = document.getElementById(id);
+            if (!toggle) return;
+            toggle.addEventListener('change', function () {
+                console.info(`[settings] "${id}" is not wired to a backend yet — not persisted.`);
+                showToast('This setting is not saved yet');
+            });
         });
     });
     </script>

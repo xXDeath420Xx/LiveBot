@@ -1,0 +1,831 @@
+<%# Message threats: obfuscated-URL scam, AutoMod escalation (+ rule install, circuit breaker), anti-everyone, QR codes,
+    image-text rules, URL checker, ignore list, flagged queue, recent detections (core/message-threats.js). API-driven
+    (dashboard/routes/api/features/message-threats.js); needs `guild` in locals. Built on the settings-row kit
+    (dashboard/public/css/cf-settings.css); the page script fills the panels. %>
+<div class="page-section" id="messageThreatsPage" data-guild-id="<%= guild.id %>">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-user-ninja"></i>
+                <span>Message threats</span>
+            </div>
+            <div class="page-section-subtitle">Scams that slip past ordinary link filters. Each check is off until you switch it on.</div>
+        </div>
+    </div>
+
+    <div id="mtError" class="cf-notice is-bad" role="alert" hidden></div>
+    <div id="mtNotice" class="cf-notice is-info" role="status" hidden></div>
+    <div id="mtMigrate" class="cf-notice is-warn" hidden>The database update for this page has not been applied yet; settings cannot be saved.</div>
+
+    <dl class="cf-kpis" id="mtStats" aria-label="Message threats at a glance">
+        <div class="cf-kpi"><dt>Status</dt><dd class="cf-kpi-value is-small">Loading</dd></div>
+    </dl>
+
+    <section class="cf-section" id="mtBreakerCard" aria-labelledby="mt-breaker-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="mt-breaker-title">Circuit breaker</h2>
+                <p class="cf-section-desc">If these protections ban more than <strong id="mtBreakerLimit"></strong> members in <strong id="mtBreakerWindow"></strong> minutes,
+                    automatic bans pause for this server (new hits are flagged for a human instead) and the owner is told. Check the recent bans below,
+                    then reset it here.</p>
+            </div>
+            <div class="cf-section-actions"><span id="mtBreakerBadge" class="cf-pill">Loading</span></div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <span class="cf-row-label">State</span>
+                    <p class="cf-row-desc" id="mtBreakerState">Loading</p>
+                </div>
+                <div class="cf-row-control mt-control-end">
+                    <button type="button" class="btn btn-primary" id="mtBreakerReset" hidden>Reset the breaker</button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="mt-card-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="mt-card-title">Where evidence is posted</h2>
+                <p class="cf-section-desc">Each detection posts the message, why it was caught and what was done; flagged members get Ban and Dismiss buttons.
+                    Chat-image alerts from <a href="/manage/<%= guild.id %>?page=nsfw-protection">NSFW protection</a> are posted here too. Known phishing sites are handled by
+                    <a href="/manage/<%= guild.id %>?page=phishing">Phishing detection</a>.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="mtCardChannel">Evidence channel</label>
+                    <p class="cf-row-desc" id="mtCardChannel-desc">Without one, the Phishing detection alert channel is used.</p>
+                </div>
+                <div class="cf-row-control">
+                    <select id="mtCardChannel" class="form-select" aria-describedby="mtCardChannel-desc"></select>
+                </div>
+            </div>
+            <div class="cf-section-foot">
+                <button type="button" class="btn btn-primary" data-save="card">Save</button>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="mt-obf-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="mt-obf-title">Obfuscated-URL "fake support" scam</h2>
+                <p class="cf-section-desc">A Discord link disguised so filters cannot read it (split across lines, <code>https:////</code>, look-alike letters), sent with
+                    support, ticket or appeal wording. Safely quoted links (<code>discord[.]gg</code>) and code blocks are ignored. Bans delete the member's last hour of messages.</p>
+            </div>
+            <div class="cf-section-actions"><span id="mtObfBadge" class="cf-pill"></span></div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="mtObfEnabled">Check messages for the scam</label>
+                </div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="mtObfEnabled"></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text"><label class="cf-row-label" for="mtObfAction">Action</label></div>
+                <div class="cf-row-control"><select id="mtObfAction" class="form-select"></select></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="mtObfTimeout">Timeout length</label>
+                    <p class="cf-row-desc">Used when the action is Timeout.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-unit"><input id="mtObfTimeout" type="number" min="1" max="40320" class="form-control"><span class="cf-unit">minutes</span></div>
+                </div>
+            </div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="mtObfReview">Review alerts</label>
+                    <p class="cf-row-desc" id="mtObfReview-desc">Also post a Ban / Dismiss message for weaker hits (an obfuscated link without the support wording). The message stays up.</p>
+                </div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="mtObfReview" aria-describedby="mtObfReview-desc"></div>
+            </div>
+            <div class="cf-section-foot">
+                <button type="button" class="btn btn-primary" data-save="obf">Save</button>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="mt-everyone-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="mt-everyone-title">Anti-everyone</h2>
+                <p class="cf-section-desc">By default it acts on @everyone and @here pings from members who could only ping because the @everyone role was given Mention @everyone,
+                    a misconfiguration that hands it to every new account.</p>
+            </div>
+            <div class="cf-section-actions"><span id="mtEveryoneBadge" class="cf-pill"></span></div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="mtEveryoneEnabled">Delete unauthorised @everyone and @here pings</label>
+                </div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="mtEveryoneEnabled"></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="mtEveryoneTimeout">Then time out for</label>
+                    <p class="cf-row-desc">Set 0 for no timeout.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-unit"><input id="mtEveryoneTimeout" type="number" min="0" max="40320" class="form-control"><span class="cf-unit">minutes</span></div>
+                </div>
+            </div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="mtEveryoneStrict">Strict mode</label>
+                    <p class="cf-row-desc" id="mtEveryoneStrict-desc">Only Administrators, Manage Server and the allowed roles below may ping. A role that merely has Mention @everyone is not enough.</p>
+                </div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="mtEveryoneStrict" aria-describedby="mtEveryoneStrict-desc"></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="mtEveryoneWebhooks">Webhooks that ping @everyone</label>
+                    <p class="cf-row-desc">Bot-owned webhooks (including this bot's announcements) and followed-channel posts are always left alone. A webhook you did not
+                        set up pinging everyone usually means its URL leaked: delete it in the channel's Integrations.</p>
+                </div>
+                <div class="cf-row-control"><select id="mtEveryoneWebhooks" class="form-select"></select></div>
+            </div>
+            <div class="cf-row cf-row--stack">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="mtEveryoneRolePick">Allowed roles</label>
+                    <p class="cf-row-desc">Roles that may always ping @everyone. Changes take effect when you press Save.</p>
+                </div>
+                <div class="cf-input-group mt-group">
+                    <select id="mtEveryoneRolePick" class="form-select"></select>
+                    <button type="button" class="btn btn-secondary" id="mtEveryoneRoleAdd">Allow role</button>
+                </div>
+                <div id="mtEveryoneRoles" class="cf-chips"></div>
+            </div>
+            <div class="cf-section-foot">
+                <button type="button" class="btn btn-primary" data-save="everyone">Save</button>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="mt-esc-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="mt-esc-title">AutoMod escalation</h2>
+                <p class="cf-section-desc">Scores each hit on the Discord AutoMod rules you enforce below, and bans or flags only the confirmed scam pattern; weaker hits
+                    can raise review alerts. Needs the bot to have Manage Server.</p>
+            </div>
+            <div class="cf-section-actions"><span id="mtEscBadge" class="cf-pill"></span></div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text"><label class="cf-row-label" for="mtEscEnabled">Escalate AutoMod hits</label></div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="mtEscEnabled"></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text"><label class="cf-row-label" for="mtEscAction">Action</label></div>
+                <div class="cf-row-control"><select id="mtEscAction" class="form-select"></select></div>
+            </div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text"><label class="cf-row-label" for="mtEscReview">Review alerts for weaker hits</label></div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="mtEscReview"></div>
+            </div>
+            <div class="cf-section-foot">
+                <button type="button" class="btn btn-primary" data-save="esc">Save</button>
+            </div>
+            <div class="cf-rows-head" id="mt-rules-head">AutoMod rules in this server</div>
+            <div id="mtRules" class="cf-list"><div class="cf-state cf-state--loading cf-state--compact" role="status"><span class="cf-spinner" aria-hidden="true"></span><p class="cf-state-title">Loading AutoMod rules</p></div></div>
+            <div class="cf-section-foot">
+                <span class="cf-foot-note" id="mtInstallNote"></span>
+                <button type="button" class="btn btn-secondary" id="mtInstallRule">Install the Obfuscated URL AutoMod rule</button>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="mt-qr-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="mt-qr-title">QR codes in images</h2>
+                <p class="cf-section-desc">QR codes hide links from both text filters and OCR. Codes in posted images are decoded and their links go through the
+                    phishing list and the obfuscation check.</p>
+            </div>
+            <div class="cf-section-actions"><span id="mtQrBadge" class="cf-pill"></span></div>
+        </header>
+        <div class="cf-rows">
+            <div id="mtQrDecoder" class="cf-row cf-row--stack mt-warn" role="status" hidden></div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text"><label class="cf-row-label" for="mtQrEnabled">Decode QR codes in posted images</label></div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="mtQrEnabled"></div>
+            </div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="mtQrStrict">Remove every QR code</label>
+                    <p class="cf-row-desc" id="mtQrStrict-desc">Strict: any image that contains a QR code is removed, whatever it links to.</p>
+                </div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="mtQrStrict" aria-describedby="mtQrStrict-desc"></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text"><label class="cf-row-label" for="mtQrAction">Action</label></div>
+                <div class="cf-row-control"><select id="mtQrAction" class="form-select"></select></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="mtQrTimeout">Timeout length</label>
+                    <p class="cf-row-desc">Used when the action is Timeout.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-unit"><input id="mtQrTimeout" type="number" min="1" max="40320" class="form-control"><span class="cf-unit">minutes</span></div>
+                </div>
+            </div>
+            <div class="cf-section-foot">
+                <button type="button" class="btn btn-primary" data-save="qr">Save</button>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="mt-url-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="mt-url-title">Check a link</h2>
+                <p class="cf-section-desc">Looks the link up in the phishing list, the never-flag list, the link policy and the obfuscation check, and explains the
+                    verdict. Members can do the same with <code>/tools checkurl</code>.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--stack">
+                <div class="cf-input-group">
+                    <input id="mtUrl" class="form-control" maxlength="500" placeholder="https://example.com or a pasted message" aria-label="Link or message to check">
+                    <button type="button" class="btn btn-secondary" id="mtUrlBtn">Check</button>
+                </div>
+            </div>
+            <div id="mtUrlResult" class="mt-url-result"></div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="mt-ocr-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="mt-ocr-title">Image-text rules</h2>
+                <p class="cf-section-desc">Your own words, phrases or patterns for text read from posted images, each with its own action. A regex that is too slow is switched off automatically.</p>
+            </div>
+            <div class="cf-section-actions"><span id="mtOcrBadge" class="cf-pill"></span></div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text"><label class="cf-row-label" for="mtOcrEnabled">Run my image-text rules</label></div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="mtOcrEnabled"></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="mtOcrTimeout">Timeout length</label>
+                    <p class="cf-row-desc">Used by rules whose action is Timeout.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-unit"><input id="mtOcrTimeout" type="number" min="1" max="40320" class="form-control"><span class="cf-unit">minutes</span></div>
+                </div>
+            </div>
+            <div class="cf-section-foot">
+                <button type="button" class="btn btn-primary" data-save="ocr">Save</button>
+            </div>
+            <div class="cf-rows-head" id="mt-ocr-add-head">Add a rule</div>
+            <div class="cf-row cf-row--stack">
+                <div class="cf-fields">
+                    <div class="cf-field">
+                        <label for="mtOcrType">Type</label>
+                        <select id="mtOcrType" class="form-select"></select>
+                    </div>
+                    <div class="cf-field">
+                        <label for="mtOcrPattern">Text, regex or domain</label>
+                        <input id="mtOcrPattern" class="form-control" maxlength="300" placeholder="free nitro">
+                    </div>
+                    <div class="cf-field">
+                        <label for="mtOcrAction">Action</label>
+                        <select id="mtOcrAction" class="form-select"></select>
+                    </div>
+                    <div class="cf-field">
+                        <label for="mtOcrReason">Reason shown in the log</label>
+                        <input id="mtOcrReason" class="form-control" maxlength="200" placeholder="Optional">
+                    </div>
+                </div>
+            </div>
+            <div class="cf-section-foot">
+                <button type="button" class="btn btn-secondary" id="mtOcrAdd">Add rule</button>
+            </div>
+            <div class="cf-rows-head" id="mt-ocr-list-head">Rules</div>
+            <div id="mtOcrList" class="cf-list"></div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="mt-ignore-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="mt-ignore-title">Ignored channels and categories</h2>
+                <p class="cf-section-desc">Skipped by every check on this page and by phishing, link, invite and scam-image checks. A category covers every channel in it,
+                    including ones made later; threads follow their channel. Staff and allowlisted members are never acted on. The allowlist, and the pause that holds every protection, are on <a href="/manage/<%= guild.id %>?page=protection-settings">Protection settings</a>.</p>
+            </div>
+            <div class="cf-section-actions"><span id="mtIgnoreBadge" class="cf-pill"></span></div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--stack">
+                <div class="cf-input-group mt-group">
+                    <select id="mtIgnorePick" class="form-select" aria-label="Channel or category"></select>
+                    <button type="button" class="btn btn-secondary" id="mtIgnoreAdd">Ignore</button>
+                </div>
+                <div id="mtIgnored" class="cf-chips"></div>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="mt-queue-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="mt-queue-title">Flagged members</h2>
+                <p class="cf-section-desc">Hits the stages were not sure enough to act on. Ban or dismiss each one, or select several.</p>
+            </div>
+            <div class="cf-section-actions"><span id="mtQueueCount" class="cf-pill"></span></div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--stack">
+                <div class="cf-segmented mt-tabs" id="mtReviewTabs" role="group" aria-label="Show"></div>
+                <div class="cf-inline mt-bulk">
+                    <label class="cf-choice"><input type="checkbox" id="mtSelectAll"> <span>Select all</span></label>
+                    <span class="cf-row-meta" id="mtSelCount">0 selected</span>
+                    <button type="button" class="btn btn-sm btn-danger" data-bulk="ban">Ban selected</button>
+                    <button type="button" class="btn btn-sm btn-secondary" data-bulk="dismiss">Dismiss selected</button>
+                </div>
+            </div>
+            <div id="mtReviews" class="mt-reviews"></div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="mt-det-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="mt-det-title">Recent detections</h2>
+                <p class="cf-section-desc">The last 50 hits from every stage and the phishing list. Select one to see the evidence.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--stack">
+                <div class="cf-segmented mt-tabs" id="mtDetTabs" role="group" aria-label="Show"></div>
+            </div>
+            <div id="mtDetections" class="mt-reviews"></div>
+        </div>
+    </section>
+</div>
+
+<style>
+  /* Pills, lists and tab rows the script has not filled yet take no space. */
+  #messageThreatsPage .cf-pill:empty, #messageThreatsPage .cf-list:empty, #messageThreatsPage .mt-reviews:empty { display: none; }
+  #messageThreatsPage .cf-rows-head:has(+ .cf-list:empty) { display: none; }
+  #messageThreatsPage .cf-row:has(> .mt-tabs:empty:only-child) { display: none; }
+  #messageThreatsPage .cf-row:has(> .mt-tabs:empty:only-child) + * { border-top-color: transparent; }
+  #messageThreatsPage .cf-section-foot:has(+ .cf-rows-head + .cf-list:empty) { border-bottom-left-radius: inherit; border-bottom-right-radius: inherit; }
+  #messageThreatsPage .mt-tabs:empty { display: none; }
+  #messageThreatsPage .mt-tabs:empty + .mt-bulk { margin-top: 0; }
+  #messageThreatsPage .mt-reviews code, #messageThreatsPage .cf-list code { font-family: var(--cf-mono); font-size: 0.9em; overflow-wrap: anywhere; }
+  #messageThreatsPage .mt-control-end { align-items: flex-end; }
+  #messageThreatsPage .mt-group { max-width: 34rem; }
+  #messageThreatsPage .mt-muted { color: var(--cf-text-3); font-size: var(--cf-text-sm); }
+  #messageThreatsPage .mt-warn { color: var(--cf-warning); font-size: var(--cf-text-sm); }
+  #messageThreatsPage .cf-list > .mt-warn, #messageThreatsPage .mt-reviews > .mt-warn { padding: var(--cf-4) var(--cf-5); }
+  #messageThreatsPage .mt-url-result:empty { display: none; }
+  #messageThreatsPage .cf-chip > i { font-size: 0.9em; opacity: 0.8; }
+  #messageThreatsPage .mt-bulk { margin-top: var(--cf-3); }
+  #messageThreatsPage .cf-list-item .cf-list-main { flex: 1 1 auto; }
+  #messageThreatsPage .mt-rule-name { font-weight: 600; color: var(--cf-text); overflow-wrap: anywhere; }
+  #messageThreatsPage .mt-rule-meta { display: flex; flex-wrap: wrap; gap: 4px var(--cf-2); align-items: center; margin-top: 2px; }
+  #messageThreatsPage .mt-rule-actions { align-items: center; flex-wrap: wrap; }
+  #messageThreatsPage .mt-rule-action { width: auto; min-width: 8.5rem; }
+  #messageThreatsPage .mt-switch-label { display: inline-flex; align-items: center; gap: var(--cf-2); font-size: var(--cf-text-sm); color: var(--cf-text-2); cursor: pointer; margin: 0; }
+  #messageThreatsPage .mt-reviews > * + * { border-top: 1px solid var(--cf-border); }
+  #messageThreatsPage .mt-rev { display: grid; gap: var(--cf-2); padding: var(--cf-4) var(--cf-5); min-width: 0; }
+  #messageThreatsPage details.mt-rev > summary { cursor: pointer; list-style: none; }
+  #messageThreatsPage details.mt-rev > summary::-webkit-details-marker { display: none; }
+  #messageThreatsPage details.mt-rev > summary::before { content: ''; width: 6px; height: 6px; border-right: 1.5px solid var(--cf-text-3); border-bottom: 1.5px solid var(--cf-text-3);
+    transform: rotate(-45deg); transition: transform var(--cf-fast) var(--cf-ease); margin-right: 2px; }
+  #messageThreatsPage details.mt-rev[open] > summary::before { transform: rotate(45deg); }
+  #messageThreatsPage .mt-rev-head { display: flex; gap: var(--cf-2) var(--cf-3); align-items: center; flex-wrap: wrap; font-size: var(--cf-text-sm); color: var(--cf-text); min-width: 0; }
+  #messageThreatsPage .mt-rev-head strong { overflow-wrap: anywhere; }
+  #messageThreatsPage .mt-rev-head img { width: 28px; height: 28px; border-radius: 50%; object-fit: cover; background: var(--cf-surface-3); }
+  #messageThreatsPage .mt-rev-head > .fa-user { width: 28px; text-align: center; color: var(--cf-text-3); }
+  #messageThreatsPage .mt-rev-head .mt-muted { font-size: var(--cf-text-xs); overflow-wrap: anywhere; }
+  #messageThreatsPage pre.mt-content { margin: 0; padding: var(--cf-2) var(--cf-3); max-height: 12rem; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere;
+    background: var(--cf-surface-2); border: 1px solid var(--cf-border); border-radius: var(--cf-radius-sm); font-family: var(--cf-mono); font-size: var(--cf-text-xs); color: var(--cf-text-2); }
+  #messageThreatsPage .mt-reasons { margin: 0; padding-left: 1.1rem; font-size: var(--cf-text-sm); color: var(--cf-text-2); overflow-wrap: anywhere; }
+  #messageThreatsPage .mt-actions { display: flex; gap: var(--cf-2); flex-wrap: wrap; }
+  #messageThreatsPage .mt-verdict { display: grid; gap: var(--cf-2); padding: var(--cf-4) var(--cf-5); box-shadow: inset 3px 0 0 var(--mt-tone, var(--cf-border-strong)); }
+  #messageThreatsPage .mt-verdict.malicious { --mt-tone: var(--cf-danger); }
+  #messageThreatsPage .mt-verdict.suspicious { --mt-tone: var(--cf-warning); }
+  #messageThreatsPage .mt-verdict.safe { --mt-tone: var(--cf-success); }
+  #messageThreatsPage .mt-verdict .btn { justify-self: start; }
+  @media (max-width: 640px) {
+    #messageThreatsPage .mt-group { max-width: none; }
+    #messageThreatsPage .mt-tabs { justify-self: stretch; }
+    #messageThreatsPage .mt-rev, #messageThreatsPage .mt-verdict { padding: var(--cf-4); }
+    #messageThreatsPage .mt-rule-action { flex: 1 1 auto; }
+  }
+</style>
+
+<script>
+(function () {
+  const root = document.getElementById('messageThreatsPage');
+  if (!root) return;
+  const guildId = root.dataset.guildId;
+  const api = (p) => `/api/guilds/${guildId}/message-threats${p}`;
+  const $ = (id) => document.getElementById(id);
+  const ACTION_LABEL = {
+    ban: 'Ban (delete last hour)', timeout: 'Timeout', delete: 'Delete message', flag: 'Flag (Ban / Dismiss card)', log: 'Log only',
+  };
+  const OCR_ACTION_LABEL = { log: 'Alert only', delete: 'Delete', timeout: 'Timeout', ban: 'Ban' };
+  const OCR_TYPE_LABEL = { contains: 'Contains text', regex: 'Regular expression', exact: 'Exact text', domain: 'Mentions a domain' };
+  const WEBHOOK_LABEL = { log: 'Log them', delete: 'Delete the message', ignore: 'Ignore' };
+  const SOURCE_LABEL = {
+    obfuscated_url: 'Obfuscated URL', automod_escalation: 'AutoMod escalation', anti_everyone: 'Anti-everyone', qr: 'QR code',
+    image_rule: 'Image-text rule', 'auto-list': 'Phishing domain', 'image-domain': 'Phishing domain (image)', 'image-genre': 'Image scam',
+    evidence_flagged: 'Evidence post',
+  };
+  const OUTCOME_LABEL = {
+    banned: 'Banned', timeout: 'Timed out', deleted: 'Deleted', flagged: 'Flagged', review: 'Review alert', logged: 'Logged',
+    held: 'Held (exempt / paused)', staff: 'Logged (staff)', failed: 'Could not act', webhook_deleted: 'Webhook message deleted',
+    webhook_logged: 'Webhook logged', mute: 'Timed out', kick: 'Kicked', ban: 'Banned', delete: 'Deleted', warn: 'Warned', none: 'None',
+    flagged_evidence: 'Evidence (no action)',
+  };
+  let state = null;
+  let reviewTab = 'pending';
+  let detTab = '';
+  let reviews = [];
+  const selected = new Set();
+  let everyoneRoles = [];
+
+  // DOM builder: every server value goes in through textContent / attributes, never markup.
+  function el(tag, attrs = {}, ...kids) {
+    const n = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (v == null || v === false) continue;
+      if (k === 'class') n.className = v;
+      else if (k === 'text') n.textContent = v;
+      else if (k.startsWith('on')) n.addEventListener(k.slice(2), v);
+      else n.setAttribute(k, v === true ? '' : v);
+    }
+    for (const kid of kids.flat()) if (kid != null && kid !== false) n.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
+    return n;
+  }
+  const icon = (cls) => el('i', { class: cls });
+  const when = (t) => (t ? new Date(t).toLocaleString() : '');
+  const can = () => state && state.actor.canConfigure;
+
+  async function req(url, options = {}) {
+    const res = await fetch(url, { credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, ...options });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
+    return body;
+  }
+  const post = (p, body, method = 'POST') => req(api(p), { method, body: JSON.stringify(body || {}) });
+  const showError = (m) => { const e = $('mtError'); e.hidden = !m; e.textContent = m || ''; if (m) e.scrollIntoView({ block: 'nearest' }); };
+  const notice = (m) => { const e = $('mtNotice'); e.hidden = !m; e.textContent = m || ''; };
+  async function act(fn, done, reload = true) {
+    showError('');
+    try { const out = await fn(); if (done) notice(typeof done === 'function' ? done(out) : done); if (reload) await load(); return out; } catch (err) { showError(err.message); return null; }
+  }
+  function options(select, values, labels, value) {
+    select.replaceChildren(...values.map(v => el('option', { value: v, text: labels[v] || v })));
+    select.value = value;
+  }
+  function badge(node, on, text) { node.className = 'cf-pill' + (on ? ' is-ok' : ''); node.textContent = text ?? (on ? 'On' : 'Off'); }
+  // Kit empty / error state (cf-settings.css .cf-state), compact: one line inside a panel.
+  const stateRow = (title, kind = 'empty') => el('div', { class: `cf-state cf-state--${kind} cf-state--compact`, role: kind === 'error' ? 'alert' : null },
+    el('p', { class: 'cf-state-title', text: title }));
+
+  // ── render ──────────────────────────────────────────────────────────────
+  function renderStats() {
+    const s = state.settings;
+    const total = (state.stats || []).reduce((n, r) => n + r.n, 0);
+    const bans = (state.stats || []).filter(r => r.action === 'banned' || r.action === 'ban').reduce((n, r) => n + r.n, 0);
+    const on = [s.obf.enabled, s.escalation.enabled, s.everyone.enabled, s.qr.enabled, s.ocrRules.enabled].filter(Boolean).length;
+    const tile = (label, value, small) => el('div', { class: 'cf-kpi' }, el('dt', { text: label }), el('dd', { class: 'cf-kpi-value' + (small ? ' is-small' : ''), text: String(value) }));
+    $('mtStats').replaceChildren(
+      tile('Stages on (of 5)', on),
+      tile('Detections, 30 days', total),
+      tile('Bans, 30 days', bans),
+      tile('Flagged, waiting', state.counts.pending || 0),
+      tile('Circuit breaker', state.breaker.trippedAt ? 'Tripped' : 'Closed', true),
+    );
+  }
+
+  function renderBreaker() {
+    const b = state.breaker;
+    $('mtBreakerLimit').textContent = String(b.limit);
+    $('mtBreakerWindow').textContent = String(b.windowMinutes);
+    const tripped = !!b.trippedAt;
+    $('mtBreakerBadge').className = 'cf-pill ' + (tripped ? 'is-bad' : 'is-ok');
+    $('mtBreakerBadge').textContent = tripped ? 'Tripped' : 'Closed';
+    $('mtBreakerState').textContent = tripped
+      ? `Tripped ${when(b.trippedAt)}. Automatic bans are paused; hits are flagged for review instead.`
+      : `${b.recentBans} automatic ban(s) in the last ${b.windowMinutes} minutes.`;
+    $('mtBreakerReset').hidden = !tripped || !can();
+  }
+
+  function renderSettings() {
+    const s = state.settings;
+    const o = state.options;
+    const textChannels = state.channels.filter(c => c.text);
+    $('mtCardChannel').replaceChildren(el('option', { value: '', text: 'Use the Phishing Detection alert channel' }),
+      ...textChannels.map(c => el('option', { value: c.id, 'data-kind': 'text', text: `#${c.name}${c.parentName ? ` (${c.parentName})` : ''}` })));
+    $('mtCardChannel').value = s.threatChannelId || '';
+
+    $('mtObfEnabled').checked = s.obf.enabled;
+    options($('mtObfAction'), o.obf, ACTION_LABEL, s.obf.action);
+    $('mtObfTimeout').value = s.obf.timeoutMinutes;
+    $('mtObfReview').checked = s.obf.reviewAlerts;
+    badge($('mtObfBadge'), s.obf.enabled, s.obf.enabled ? `On · ${ACTION_LABEL[s.obf.action]}` : 'Off');
+
+    $('mtEveryoneEnabled').checked = s.everyone.enabled;
+    $('mtEveryoneTimeout').value = s.everyone.timeoutMinutes;
+    $('mtEveryoneStrict').checked = s.everyone.strict;
+    options($('mtEveryoneWebhooks'), o.webhooks, WEBHOOK_LABEL, s.everyone.webhooks);
+    everyoneRoles = [...s.everyone.allowedRoles];
+    renderEveryoneRoles();
+    badge($('mtEveryoneBadge'), s.everyone.enabled);
+
+    $('mtEscEnabled').checked = s.escalation.enabled;
+    options($('mtEscAction'), o.esc, ACTION_LABEL, s.escalation.action);
+    $('mtEscReview').checked = s.escalation.reviewAlerts;
+    badge($('mtEscBadge'), s.escalation.enabled, s.escalation.enabled ? `On · ${s.escalation.ruleIds.length} rule(s) enforced` : 'Off');
+
+    $('mtQrEnabled').checked = s.qr.enabled;
+    $('mtQrStrict').checked = s.qr.strict;
+    options($('mtQrAction'), o.qr, ACTION_LABEL, s.qr.action);
+    $('mtQrTimeout').value = s.qr.timeoutMinutes;
+    badge($('mtQrBadge'), s.qr.enabled, s.qr.enabled ? (s.qr.strict ? 'On · any QR' : 'On · bad links') : 'Off');
+    const dec = $('mtQrDecoder');
+    dec.hidden = !!state.qrDecoder;
+    dec.textContent = state.qrDecoder ? '' : 'The QR decoder (the jsqr package) is not installed on the bot yet, so no QR codes are read. Settings are kept for when it is.';
+
+    $('mtOcrEnabled').checked = s.ocrRules.enabled;
+    $('mtOcrTimeout').value = s.ocrRules.timeoutMinutes;
+    options($('mtOcrType'), o.ocrTypes, OCR_TYPE_LABEL, $('mtOcrType').value || 'contains');
+    options($('mtOcrAction'), o.ocr, OCR_ACTION_LABEL, $('mtOcrAction').value || 'log');
+    badge($('mtOcrBadge'), s.ocrRules.enabled, s.ocrRules.enabled ? `On · ${state.ocrRules.filter(r => Number(r.enabled)).length} rule(s)` : 'Off');
+
+    $('mtInstallNote').textContent = state.botPerms.manageGuild ? `Adds "${state.automodRule.name}" (blocks the obfuscation tricks; ${state.automodRule.patterns} patterns) and enforces it.`
+      : 'The bot needs the Manage Server permission to read and create AutoMod rules.';
+    $('mtInstallRule').disabled = !can() || !state.botPerms.manageGuild;
+    for (const b of root.querySelectorAll('[data-save]')) b.disabled = !can();
+  }
+
+  function renderEveryoneRoles() {
+    const byId = Object.fromEntries(state.roles.map(r => [r.id, r.name]));
+    $('mtEveryoneRolePick').replaceChildren(el('option', { value: '', text: 'Pick a role to allow…' }),
+      // Not gated by the bot's position: allowing a role to ping gives that role nothing, so a staff role
+      // above the bot is a normal choice here.
+      ...state.roles.filter(r => !everyoneRoles.includes(r.id)).map(r => el('option', { value: r.id, text: r.name, 'data-color': r.color || null })));
+    $('mtEveryoneRoles').replaceChildren(...(everyoneRoles.length ? everyoneRoles.map(id => el('span', { class: 'cf-chip', title: `@${byId[id] || id}` },
+      el('span', { text: `@${byId[id] || id}` }),
+      el('button', { type: 'button', class: 'cf-chip-remove', title: 'Remove', 'aria-label': 'Remove', onclick: () => { everyoneRoles = everyoneRoles.filter(r => r !== id); renderEveryoneRoles(); } }, icon('fas fa-times')),
+    )) : [el('span', { class: 'mt-muted', text: 'No allowed roles yet.' })]));
+  }
+
+  async function loadRules() {
+    const box = $('mtRules');
+    try {
+      const out = await req(api('/automod-rules'));
+      if (!out.ok) { box.replaceChildren(stateRow(out.error || 'Could not read AutoMod rules.', 'error')); return; }
+      if (!out.rules.length) { box.replaceChildren(stateRow('No AutoMod rules yet. Install the Obfuscated URL rule below.')); return; }
+      box.replaceChildren(...out.rules.map(r => {
+        const toggle = el('input', { type: 'checkbox', class: 'cf-switch', role: 'switch', disabled: !can() });
+        toggle.checked = !!r.enforced;
+        toggle.addEventListener('change', () => act(() => post(`/automod-rules/${r.id}/enforce`, { enforce: toggle.checked }),
+          toggle.checked ? `Hits of "${r.name}" are now escalated.` : `"${r.name}" is no longer escalated.`));
+        return el('div', { class: 'cf-list-item' },
+          el('div', { class: 'cf-list-main' },
+            el('div', { class: 'mt-rule-name', text: r.name }),
+            el('div', { class: 'mt-rule-meta' }, el('span', { class: 'mt-muted', text: r.id }),
+              r.installed ? el('span', { class: 'cf-pill is-ok', text: 'Installed by the bot' }) : null,
+              r.enabled ? null : el('span', { class: 'cf-pill is-warn', text: 'Disabled in Discord' }))),
+          el('div', { class: 'cf-list-actions' }, el('label', { class: 'mt-switch-label' }, el('span', { text: 'Enforce' }), toggle)));
+      }));
+    } catch (err) {
+      box.replaceChildren(stateRow(err.message, 'error'));
+    }
+  }
+
+  function renderOcrRules() {
+    const rows = state.ocrRules;
+    $('mtOcrList').replaceChildren(...(rows.length ? rows.map(r => {
+      const on = el('input', { type: 'checkbox', class: 'cf-switch', role: 'switch', 'aria-label': `Rule #${r.id} on`, disabled: !can() });
+      on.checked = !!Number(r.enabled);
+      on.addEventListener('change', () => act(() => post(`/ocr-rules/${r.id}`, { enabled: on.checked }, 'PATCH'), on.checked ? `Rule #${r.id} is on.` : `Rule #${r.id} is off.`));
+      const action = el('select', { class: 'form-select form-select-sm mt-rule-action', 'aria-label': 'Action', disabled: !can() });
+      options(action, state.options.ocr, OCR_ACTION_LABEL, r.action);
+      action.addEventListener('change', () => act(() => post(`/ocr-rules/${r.id}`, { action: action.value }, 'PATCH'), `Rule #${r.id} now: ${OCR_ACTION_LABEL[action.value]}.`));
+      return el('div', { class: 'cf-list-item' },
+        el('div', { class: 'cf-list-main' },
+          el('div', { class: 'mt-rule-name' }, el('code', { text: r.pattern })),
+          el('div', { class: 'mt-rule-meta' }, el('span', { class: 'mt-muted', text: `#${r.id} · ${OCR_TYPE_LABEL[r.pattern_type] || r.pattern_type}` }),
+            r.reason ? el('span', { class: 'mt-muted', text: `· ${r.reason}` }) : null,
+            r.hits ? el('span', { class: 'mt-muted', text: `· ${r.hits} hit(s)` }) : null)),
+        el('div', { class: 'cf-list-actions mt-rule-actions' },
+          on,
+          action,
+          el('button', { type: 'button', class: 'btn btn-sm btn-secondary', disabled: !can(), onclick: () => {
+            if (!confirm(`Delete image-text rule #${r.id}?`)) return;
+            act(() => req(api(`/ocr-rules/${r.id}`), { method: 'DELETE' }), `Rule #${r.id} deleted.`);
+          } }, 'Delete')));
+    }) : [stateRow('No image-text rules yet.')]));
+  }
+
+  function renderIgnore() {
+    const ignored = new Set(state.ignored.map(r => r.id));
+    $('mtIgnorePick').replaceChildren(el('option', { value: '', text: 'Pick a channel or category…' }),
+      ...state.channels.filter(c => !ignored.has(c.id)).map(c => el('option', { value: c.id, 'data-kind': c.category ? 'category' : c.text ? 'text' : null, text: c.category ? `${c.name} (category)` : `#${c.name}${c.parentName ? ` (${c.parentName})` : ''}` })));
+    $('mtIgnoreBadge').textContent = `${state.ignored.length} / ${state.limits.ignored}`;
+    $('mtIgnored').replaceChildren(...(state.ignored.length ? state.ignored.map(r => el('span', { class: 'cf-chip', title: r.kind === 'category' ? `${r.name || r.id} (and new channels in it)` : (r.name || r.id) },
+      r.kind === 'category' ? icon('fas fa-folder') : icon('fas fa-hashtag'),
+      el('span', { text: r.kind === 'category' ? `${r.name || r.id} (and new channels in it)` : (r.name || r.id) }),
+      el('button', { type: 'button', class: 'cf-chip-remove', title: 'Stop ignoring', 'aria-label': 'Stop ignoring', disabled: !can(), onclick: () => {
+        if (!confirm(`Check ${r.name || r.id} again?`)) return;
+        act(() => req(api(`/ignore/${r.kind}/${r.id}`), { method: 'DELETE' }), `${r.name || r.id} is checked again.`);
+      } }, icon('fas fa-times')),
+    )) : [el('span', { class: 'mt-muted', text: 'Nothing is ignored.' })]));
+  }
+
+  function evidenceBlock(row) {
+    const ev = row.evidence || {};
+    const bits = [];
+    if (row.content) bits.push(el('pre', { class: 'mt-content', text: String(row.content).slice(0, 2000) }));
+    const lines = [];
+    if (ev.techniques?.length) lines.push(`Obfuscation: ${ev.techniques.join(', ')}`);
+    if (ev.lure?.length) lines.push(`Lure words: ${ev.lure.join(', ')}`);
+    if (ev.qr?.length) lines.push(`QR payload: ${ev.qr.join(' | ').slice(0, 300)}`);
+    if (ev.phishingHosts?.length) lines.push(`Phishing domains: ${ev.phishingHosts.join(', ')}`);
+    if (ev.rule) lines.push(`Rule #${ev.rule.id} (${ev.rule.type}): ${ev.rule.pattern}`);
+    if (ev.ruleId) lines.push(`AutoMod rule ${ev.ruleId}${ev.matchedKeyword ? ` matched "${ev.matchedKeyword}"` : ''}`);
+    if (ev.webhook) lines.push(`Webhook: ${ev.webhook.name || ''} (${ev.webhook.id})`);
+    if (ev.held) lines.push(`Held: ${ev.held === 'paused' ? 'protections paused' : 'member is exempt'}`);
+    if (row.matched_url) lines.push(`Links: ${String(row.matched_url).slice(0, 300)}`);
+    if (lines.length) bits.push(el('ul', { class: 'mt-reasons' }, ...lines.map(l => el('li', { text: l }))));
+    return bits;
+  }
+
+  function userHead(u, extra = []) {
+    return el('div', { class: 'mt-rev-head' },
+      u?.avatar ? el('img', { src: u.avatar, alt: '', loading: 'lazy' }) : icon('fas fa-user'),
+      el('strong', { text: u?.displayName || u?.username || u?.id || 'Unknown' }),
+      el('span', { class: 'mt-muted', text: u?.id ? `${u.username || ''} · ${u.id}${u.inServer ? '' : ' · not in the server'}` : '' }),
+      ...extra);
+  }
+
+  async function loadReviews() {
+    const tabs = [['pending', 'Waiting'], ['banned', 'Banned'], ['safe', 'Dismissed'], ['all', 'All']];
+    $('mtReviewTabs').replaceChildren(...tabs.map(([k, label]) => el('button', { type: 'button', class: 'cf-segment' + (reviewTab === k ? ' active' : ''), 'aria-pressed': String(reviewTab === k),
+      onclick: () => { reviewTab = k; selected.clear(); loadReviews(); } }, label, k === 'pending' && state?.counts?.pending ? ` (${state.counts.pending})` : '')));
+    $('mtQueueCount').textContent = `${state?.counts?.pending || 0} waiting`;
+    try {
+      const out = await req(api(`/reviews?status=${reviewTab}`));
+      reviews = out.reviews;
+    } catch (err) { showError(err.message); reviews = []; }
+    renderReviews();
+  }
+
+  function renderReviews() {
+    $('mtSelCount').textContent = `${selected.size} selected`;
+    $('mtSelectAll').checked = reviews.length > 0 && reviews.every(r => selected.has(r.user_id));
+    $('mtReviews').replaceChildren(...(reviews.length ? reviews.map(r => {
+      const box = el('input', { type: 'checkbox', 'aria-label': 'Select' });
+      box.checked = selected.has(r.user_id);
+      box.addEventListener('change', () => { if (box.checked) selected.add(r.user_id); else selected.delete(r.user_id); renderReviews(); });
+      const pending = r.status === 'pending';
+      return el('div', { class: 'mt-rev' },
+        userHead(r.user, [pending ? box : null, el('span', { class: 'cf-pill', text: r.filter_label || 'Message threat' }),
+          el('span', { class: 'mt-muted', text: when(r.found_at) }),
+          !pending ? el('span', { class: 'cf-pill ' + (r.status === 'banned' ? 'is-bad' : 'is-ok'), text: r.status === 'safe' ? 'Dismissed' : (r.status === 'banned' ? 'Banned' : r.status) }) : null]),
+        r.detail ? el('div', { class: 'mt-muted', text: r.detail }) : null,
+        r.ai_verdict ? el('div', { class: 'mt-muted' }, icon('fas fa-robot'), ` AI second opinion: ${r.ai_verdict === 'scam' ? 'Scam' : 'Not a scam'}${r.ai_confidence != null ? `, ${Math.round(Number(r.ai_confidence) * 100)}%` : ''}${r.ai_reason ? `: ${r.ai_reason}` : ''}`) : null,
+        ...evidenceBlock(r),
+        pending ? el('div', { class: 'mt-actions' },
+          el('button', { type: 'button', class: 'btn btn-sm btn-danger', disabled: !state.actor.canBan, onclick: () => decide([r.user_id], 'ban') }, 'Ban'),
+          el('button', { type: 'button', class: 'btn btn-sm btn-secondary', disabled: !can(), onclick: () => decide([r.user_id], 'dismiss') }, 'Dismiss'),
+          el('button', { type: 'button', class: 'btn btn-sm btn-secondary', disabled: !can(), title: 'Ask the AI whether this message is a scam (advice only; counts against the daily AI cap)',
+            onclick: () => act(() => post(`/reviews/${r.user_id}/ai`, {}), (o) => `AI second opinion: ${o.line}`) }, 'Ask AI')) : null);
+    }) : [stateRow(reviewTab === 'pending' ? 'Nobody is waiting for a decision.' : 'Nothing here.')]));
+  }
+
+  function decide(ids, decision) {
+    if (!ids.length) return;
+    if (decision === 'ban' && !confirm(`Ban ${ids.length} member(s) and delete their last hour of messages?`)) return;
+    act(() => post('/reviews/decide', { userIds: ids, decision }), (o) => {
+      const parts = [`${o.done.length} ${decision === 'ban' ? 'banned' : 'dismissed'}`];
+      if (o.failed.length) parts.push(`${o.failed.length} could not be banned: ${o.failed[0].why}`);
+      selected.clear();
+      return parts.join('. ') + '.';
+    });
+  }
+
+  async function loadDetections() {
+    const tabs = [['', 'All'], ['obfuscated_url', 'Obfuscated URL'], ['automod_escalation', 'AutoMod'], ['anti_everyone', '@everyone'], ['qr', 'QR'], ['image_rule', 'Image text'], ['auto-list', 'Phishing']];
+    $('mtDetTabs').replaceChildren(...tabs.map(([k, label]) => el('button', { type: 'button', class: 'cf-segment' + (detTab === k ? ' active' : ''), 'aria-pressed': String(detTab === k), onclick: () => { detTab = k; loadDetections(); } }, label)));
+    try {
+      const out = await req(api(`/detections?limit=50${detTab ? `&source=${encodeURIComponent(detTab)}` : ''}`));
+      $('mtDetections').replaceChildren(...(out.detections.length ? out.detections.map(d => el('details', { class: 'mt-rev' },
+        el('summary', { class: 'mt-rev-head' },
+          el('span', { class: 'cf-pill', text: SOURCE_LABEL[d.source] || d.source || 'Detection' }),
+          el('strong', { text: OUTCOME_LABEL[d.action_taken] || d.action_taken || '' }),
+          window.CFUser ? CFUser.cell(out.users[d.user_id] || d.user_id, { size: 'sm', plain: true }) : el('span', { text: out.users[d.user_id]?.displayName || out.users[d.user_id]?.username || d.user_id }),
+          el('span', { class: 'mt-muted', text: `${d.matched_domain || ''} · ${when(d.created_at)}${d.score != null ? ` · score ${d.score}` : ''}` })),
+        userHead(out.users[d.user_id]),
+        ...evidenceBlock(d))) : [stateRow('Nothing detected yet.')]));
+    } catch (err) {
+      $('mtDetections').replaceChildren(stateRow(err.message, 'error'));
+    }
+  }
+
+  async function load() {
+    try {
+      state = await req(api('/'));
+    } catch (err) {
+      showError(err.message);
+      // Leave the panels in a deliberate state rather than "Loading" forever.
+      $('mtStats').replaceChildren(el('div', { class: 'cf-kpi' }, el('dt', { text: 'Status' }), el('dd', { class: 'cf-kpi-value is-small', text: 'Not loaded' })));
+      $('mtBreakerState').textContent = 'Not loaded.';
+      $('mtBreakerBadge').textContent = 'Unknown';
+      $('mtRules').replaceChildren(stateRow('Could not load this page\'s settings. Refresh to try again.', 'error'));
+      $('mtReviews').replaceChildren(stateRow('Not loaded.'));
+      $('mtDetections').replaceChildren(stateRow('Not loaded.'));
+      return;
+    }
+    $('mtMigrate').hidden = state.migrated !== false;
+    renderStats();
+    renderBreaker();
+    renderSettings();
+    renderOcrRules();
+    renderIgnore();
+    await Promise.all([loadRules(), loadReviews(), loadDetections()]);
+  }
+
+  // ── events ──────────────────────────────────────────────────────────────
+  const SAVES = {
+    card: () => ({ threat_channel_id: $('mtCardChannel').value || null }),
+    obf: () => ({ obf_enabled: $('mtObfEnabled').checked, obf_action: $('mtObfAction').value, obf_timeout_minutes: Number($('mtObfTimeout').value), obf_review_alerts: $('mtObfReview').checked }),
+    everyone: () => ({ everyone_enabled: $('mtEveryoneEnabled').checked, everyone_timeout_minutes: Number($('mtEveryoneTimeout').value), everyone_strict: $('mtEveryoneStrict').checked,
+      everyone_webhooks: $('mtEveryoneWebhooks').value, everyone_allowed_roles: everyoneRoles }),
+    esc: () => ({ esc_enabled: $('mtEscEnabled').checked, esc_action: $('mtEscAction').value, esc_review_alerts: $('mtEscReview').checked }),
+    qr: () => ({ qr_enabled: $('mtQrEnabled').checked, qr_strict: $('mtQrStrict').checked, qr_action: $('mtQrAction').value, qr_timeout_minutes: Number($('mtQrTimeout').value) }),
+    ocr: () => ({ ocr_rules_enabled: $('mtOcrEnabled').checked, ocr_timeout_minutes: Number($('mtOcrTimeout').value) }),
+  };
+  for (const b of root.querySelectorAll('[data-save]')) {
+    b.addEventListener('click', () => {
+      const body = SAVES[b.dataset.save]();
+      const banning = (body.obf_enabled && body.obf_action === 'ban') || (body.esc_enabled && body.esc_action === 'ban') || (body.qr_enabled && body.qr_action === 'ban');
+      if (banning && !confirm('This switches on automatic bans for that stage. Bans pass the circuit breaker and respect the allowlist and pause. Continue?')) return;
+      act(() => post('/settings', body), 'Saved.');
+    });
+  }
+  $('mtEveryoneRoleAdd').addEventListener('click', () => {
+    const id = $('mtEveryoneRolePick').value;
+    if (id && !everyoneRoles.includes(id)) { everyoneRoles.push(id); renderEveryoneRoles(); notice('Role added: press Save to keep it.'); }
+  });
+  $('mtBreakerReset').addEventListener('click', () => {
+    if (!confirm('Turn automatic bans back on? Check the recent bans first.')) return;
+    act(() => post('/breaker/reset'), 'Circuit breaker reset. Automatic bans are back on.');
+  });
+  $('mtInstallRule').addEventListener('click', () => {
+    if (!confirm(`Create (or refresh) the "${state.automodRule.name}" AutoMod rule? It blocks messages using these obfuscation tricks and is enforced by escalation.`)) return;
+    act(() => post('/automod-rules/install'), (o) => `${o.created ? 'Installed' : 'Updated'} the AutoMod rule (${o.ruleId}) and enforced it.`);
+  });
+  $('mtUrlBtn').addEventListener('click', async () => {
+    const url = $('mtUrl').value.trim();
+    if (!url) return;
+    showError('');
+    try {
+      const r = await post('/checkurl', { url });
+      $('mtUrlResult').replaceChildren(el('div', { class: `mt-verdict ${r.verdict}` },
+        el('strong', { text: r.title }),
+        el('ul', { class: 'mt-reasons' }, ...r.reasons.map(x => el('li', { text: x.replace(/\*\*/g, '') }))),
+        el('div', { class: 'mt-muted', text: r.listSize ? `Phishing list: ${r.listSize.toLocaleString()} domains` : 'The phishing list is not loaded in this process.' }),
+        r.host && r.verdict !== 'safe' ? el('a', { class: 'btn btn-sm btn-secondary',
+          href: `/manage/${guildId}?page=domain-reports&kind=${r.verdict === 'malicious' && r.listed ? 'dispute' : 'report'}&url=${encodeURIComponent(r.host)}` },
+          r.verdict === 'malicious' && r.listed ? 'Dispute this block' : 'Report as phishing') : null));
+    } catch (err) { showError(err.message); }
+  });
+  $('mtUrl').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('mtUrlBtn').click(); });
+  $('mtOcrAdd').addEventListener('click', () => {
+    const pattern = $('mtOcrPattern').value.trim();
+    if (!pattern) return showError('Type the text, regex or domain to match.');
+    act(() => post('/ocr-rules', { type: $('mtOcrType').value, pattern, action: $('mtOcrAction').value, reason: $('mtOcrReason').value.trim() || null }),
+      (o) => { $('mtOcrPattern').value = ''; $('mtOcrReason').value = ''; return `Rule #${o.id} added.`; });
+  });
+  $('mtIgnoreAdd').addEventListener('click', () => {
+    const id = $('mtIgnorePick').value;
+    if (!id) return;
+    act(() => post('/ignore', { id }), (o) => (o.kind === 'category' ? 'Category ignored, including channels created in it later.' : 'Channel ignored.'));
+  });
+  $('mtSelectAll').addEventListener('change', (e) => {
+    for (const r of reviews) { if (r.status !== 'pending') continue; if (e.target.checked) selected.add(r.user_id); else selected.delete(r.user_id); }
+    renderReviews();
+  });
+  for (const b of root.querySelectorAll('[data-bulk]')) b.addEventListener('click', () => decide([...selected], b.dataset.bulk));
+
+  load();
+})();
+</script>

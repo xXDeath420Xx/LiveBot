@@ -372,39 +372,6 @@ class RPGShopManager {
     }
 
     /**
-     * Create a new item (admin function)
-     */
-    async createItem(itemData) {
-        try {
-            const {
-                item_name,
-                item_type,
-                rarity,
-                value,
-                description,
-                damage_bonus = 0,
-                defense_bonus = 0,
-                heal_amount = 0,
-                mana_amount = 0,
-                stat_bonuses = null
-            } = itemData;
-
-            const [result] = await pool.execute(
-                `INSERT INTO dnd_items (item_name, item_type, rarity, value, description, damage_bonus, defense_bonus, heal_amount, mana_amount, stat_bonuses)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-                [item_name, item_type, rarity, value, description, damage_bonus, defense_bonus, heal_amount, mana_amount, stat_bonuses]
-            );
-
-            logger.info(`[RPGShopManager] Created new item: ${item_name} (ID: ${result.insertId})`);
-            return result.insertId;
-
-        } catch (error) {
-            logger.error(`[RPGShopManager] Error creating item: ${error.message}`);
-            throw error;
-        }
-    }
-
-    /**
      * Get shop statistics
      */
     async getShopStats(zoneName = null) {

@@ -104,6 +104,7 @@ class CFSettings extends CFBaseComponent {
 
     _logout() {
         localStorage.removeItem('cfx_token');
+        localStorage.removeItem('cfx_refresh');
         localStorage.removeItem('cfx_settings');
         store.reset();
         window.location.reload();

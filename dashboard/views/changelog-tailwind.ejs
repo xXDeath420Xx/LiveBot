@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>">
+<head>
+<%- include('partials/site-head', { title: 'Changelog · CertiFried', description: 'Changes to the CertiFried Discord bot that needed a database change, newest first.', path: '/changelog' }) %>
+    <style>
+        .cl-month { margin: var(--cf-8) 0 var(--cf-3); font-size: var(--cf-text-sm); font-weight: 600; color: var(--cf-text-2); }
+        .cl-month:first-of-type { margin-top: 0; }
+        .cl-entry { display: grid; grid-template-columns: 64px minmax(0, 1fr); gap: var(--cf-3); padding: var(--cf-3) var(--cf-4); border-top: 1px solid var(--cf-border); }
+        .cl-entry:first-child { border-top: 0; }
+        .cl-id { font-family: var(--cf-mono); font-size: var(--cf-text-xs); color: var(--cf-text-3); padding-top: 2px; }
+        .cl-title { margin: 0; font-size: var(--cf-text-md); font-weight: 500; color: var(--cf-text); }
+        .cl-title::first-letter { text-transform: uppercase; }
+        .cl-desc { margin: 2px 0 0; font-size: var(--cf-text-sm); color: var(--cf-text-2); line-height: 1.55; overflow-wrap: anywhere; }
+        .cl-date { font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+        .cl-more { margin-top: var(--cf-4); }
+        @media (max-width: 480px) { .cl-entry { grid-template-columns: minmax(0, 1fr); gap: 2px; } }
+    </style>
+</head>
+<body class="cfs-body">
+<%- include('partials/site-header', { active: '', user: locals.user || null, returnTo: '/changelog' }) %>
+<%
+    const _entries = (typeof entries !== 'undefined' && Array.isArray(entries)) ? entries : [];
+    const _monthName = (iso) => {
+        if (!iso) return 'Undated';
+        const d = new Date(iso + 'T00:00:00Z');
+        return isNaN(d) ? 'Undated' : d.toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+    };
+    const _groups = [];
+    _entries.forEach(e => {
+        const m = _monthName(e.date);
+        let g = _groups[_groups.length - 1];
+        if (!g || g.month !== m) { g = { month: m, items: [] }; _groups.push(g); }
+        g.items.push(e);
+    });
+%>
+    <main id="main-content" tabindex="-1" class="cfs-main cfs-main--narrow">
+        <div class="cfs-pagehead">
+            <h1>Changelog</h1>
+            <p class="cfs-lede">Changes to the bot that needed a database change, newest first. Fixes and dashboard changes that did not touch the database are not listed here.</p>
+            <p class="cfs-meta"><%= _entries.length.toLocaleString('en-US') %> changes</p>
+        </div>
+
+        <% if (!_entries.length) { %>
+            <div class="cfs-rows"><div class="cfs-empty"><h2>Nothing to show</h2><p>The changelog could not be read just now. Try again in a minute.</p></div></div>
+        <% } else { %>
+            <% _groups.forEach(function (g, gi) { %>
+                <h2 class="cl-month"><%= g.month %></h2>
+                <div class="cfs-rows">
+                    <% g.items.forEach(function (e) { %>
+                    <div class="cl-entry" id="m<%= e.id %>">
+                        <span class="cl-id">#<%= e.id %></span>
+                        <div>
+                            <p class="cl-title"><%= e.title %></p>
+                            <% if (e.desc) { %><p class="cl-desc"><%= e.desc %></p><% } %>
+                            <% if (e.date) { %><span class="cl-date"><%= e.date %></span><% } %>
+                        </div>
+                    </div>
+                    <% }); %>
+                </div>
+            <% }); %>
+        <% } %>
+    </main>
+<%- include('partials/site-footer') %>
+</body>
+</html>

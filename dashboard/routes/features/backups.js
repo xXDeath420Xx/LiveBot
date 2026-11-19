@@ -1,20 +1,32 @@
 /**
- * Server Backup Routes — create, delete, restore
- * Extracted from server.js for cleanliness
+ * Server Backup Routes — create, delete, restore, and "what changed".
+ *
+ * The default export is mounted by dashboard/server.js at '/manage/:guildId' (with checkAuth and
+ * checkGuildAdmin), so its paths are relative to that: POST /manage/:guildId/create-backup etc.
+ * `backupApiRouter` serves GET /api/guilds/:guildId/backup-diff/:backupId and is mounted by
+ * dashboard/routes/api/index.js under '/guilds/:guildId' (behind apiCheckGuildAdmin).
+ *
+ * Until 2026-11-18 every route here declared its full path while being mounted under
+ * /manage/:guildId, so the real URLs were /manage/:id/manage/:id/... and all four page actions
+ * returned 404 (register H-302).
  */
 
 import express from 'express';
 import pool from '../../../utils/db.js';
 import logger from '../../../utils/logger.js';
 import { createSnapshot, saveBackup, BACKUP_CONFIG_TABLES } from '../../../utils/backup-utils.js';
+import { logFeatureEvent, userLabel } from '../../../core/feature-log.js';
 
-const router = express.Router();
+const router = express.Router({ mergeParams: true });
+export const backupApiRouter = express.Router({ mergeParams: true });
+
+const liveGuild = (guildId) => global.botManager?.getClientForGuild?.(guildId)?.guilds.cache.get(guildId);
 
 // Create backup
-router.post('/manage/:guildId/create-backup', async (req, res) => {
+router.post('/create-backup', async (req, res) => {
     const guildId = req.params.guildId;
     try {
-        const snapshotName = (req.body.snapshot_name || '').trim();
+        const snapshotName = String(req.body.snapshot_name || '').trim().slice(0, 100);
         if (!snapshotName) return res.redirect(`/manage/${guildId}?page=backups&error=name_required`);
 
         const botClient = global.botManager?.getClientForGuild(guildId) || req.app.locals.client;
@@ -26,6 +38,19 @@ router.post('/manage/:guildId/create-backup', async (req, res) => {
 
         const m = snapshot.meta;
         logger.info(`[Backup] Created v5 backup "${snapshotName}" for ${guild.name} (${guildId}) — ${m.roleCount} roles, ${m.channelCount} channels, ${m.emojiCount} emojis, ${m.stickerCount} stickers, ${snapshot.discord.members.length} members, ${m.webhookCount} webhooks, ${m.banCount} bans, ${m.configTablesCount} config tables (${m.configRowsCount} rows)`);
+        void logFeatureEvent(() => (guild), 'backup.created', () => ({
+            title: '💾 Backup Created',
+            description: `Server backup **${snapshotName}** was saved from the dashboard.`,
+            fields: [
+                ['Name', snapshotName],
+                ['By', userLabel(req.user)],
+                ['Roles', m.roleCount],
+                ['Channels', m.channelCount],
+                ['Emojis', m.emojiCount],
+                ['Members', snapshot.discord?.members?.length],
+                ['Bot settings', `${m.configTablesCount} tables (${m.configRowsCount} rows)`],
+            ],
+        }));
         res.redirect(`/manage/${guildId}?page=backups&success=created`);
     } catch (error) {
         logger.error('[Backup] Error creating backup:', { error: error.message, stack: error.stack, guildId });
@@ -34,13 +59,23 @@ router.post('/manage/:guildId/create-backup', async (req, res) => {
 });
 
 // Delete backup
-router.post('/manage/:guildId/delete-backup', async (req, res) => {
+router.post('/delete-backup', async (req, res) => {
     const guildId = req.params.guildId;
     try {
         const backupId = req.body.backupId;
         if (!backupId) return res.redirect(`/manage/${guildId}?page=backups&error=no_id`);
-        await pool.execute('DELETE FROM server_backups WHERE id = ? AND guild_id = ?', [backupId, guildId]);
+        // Name read first so the server log can say what was deleted (best-effort).
+        const [[doomed]] = await pool.execute('SELECT snapshot_name FROM server_backups WHERE id = ? AND guild_id = ?', [backupId, guildId])
+            .catch(() => [[null]]);
+        const [deleted] = await pool.execute('DELETE FROM server_backups WHERE id = ? AND guild_id = ?', [backupId, guildId]);
         logger.info(`[Backup] Deleted backup ${backupId} for guild ${guildId} by ${req.user.username}`);
+        if (deleted?.affectedRows > 0) {
+            void logFeatureEvent(() => (liveGuild(guildId)), 'backup.deleted', () => ({
+                title: '🗑️ Backup Deleted',
+                description: `Server backup **${doomed?.snapshot_name || `#${backupId}`}** was deleted from the dashboard.`,
+                fields: [['Name', doomed?.snapshot_name], ['Backup ID', String(backupId)], ['By', userLabel(req.user)]],
+            }));
+        }
         res.redirect(`/manage/${guildId}?page=backups&success=deleted`);
     } catch (error) {
         logger.error('[Backup] Error deleting backup:', { error: error.message, guildId });
@@ -49,7 +84,7 @@ router.post('/manage/:guildId/delete-backup', async (req, res) => {
 });
 
 // Restore backup — full server restore
-router.post('/manage/:guildId/restore-backup', async (req, res) => {
+router.post('/restore-backup', async (req, res) => {
     const guildId = req.params.guildId;
     try {
         const backupId = req.body.backupId;
@@ -66,6 +101,16 @@ router.post('/manage/:guildId/restore-backup', async (req, res) => {
         const disc = snapshot.discord || snapshot;
 
         logger.warn(`[Backup Restore] Starting v${snapshot.version || '?'} restore of "${rows[0].snapshot_name}" for ${guild.name} (${guildId}) by ${req.user.username}`);
+        void logFeatureEvent(() => (guild), 'backup.restoreStarted', () => ({
+            title: '⏳ Backup Restore Started',
+            description: `Restoring server backup **${rows[0].snapshot_name}** from the dashboard. Roles, channels, emojis and members' roles are being re-created or updated.`,
+            fields: [
+                ['Name', rows[0].snapshot_name],
+                ['By', userLabel(req.user)],
+                ['Roles', disc.roles?.length],
+                ['Channels', (disc.categories?.length || 0) + (disc.channels?.length || 0)],
+            ],
+        }));
 
         const log = [];
         const delay = (ms) => new Promise(r => setTimeout(r, ms));
@@ -114,7 +159,9 @@ router.post('/manage/:guildId/restore-backup', async (req, res) => {
         }
 
         // Phase 1.6: Pending rejoin restores
-        const gracePeriodDays = parseInt(req.body.gracePeriod) || 30;
+        // 0 = "Disabled" on the page; only a missing or unreadable value falls back to 30 days.
+        const graceRaw = parseInt(req.body.gracePeriod, 10);
+        const gracePeriodDays = Number.isFinite(graceRaw) ? Math.min(Math.max(graceRaw, 0), 365) : 30;
         if (disc.members && disc.members.length > 0 && gracePeriodDays > 0) {
             try {
                 const pendingRestores = disc.members.map(m => ({
@@ -221,17 +268,43 @@ router.post('/manage/:guildId/restore-backup', async (req, res) => {
 
         // Phase 5: Bot Config (DB)
         if (snapshot.botConfig) {
+            // Table and column names go into SQL: only tables the backup system exports, only plain
+            // identifiers, and every row is pinned to this guild.
+            const allowedTables = new Set(BACKUP_CONFIG_TABLES);
             for (const [table, tRows] of Object.entries(snapshot.botConfig)) {
+                if (!allowedTables.has(table) || !Array.isArray(tRows)) {
+                    log.push(`Skipped unknown table ${String(table).slice(0, 64)}`);
+                    continue;
+                }
+                // Only columns the table still has: an older snapshot can carry one that was dropped since
+                // (e.g. log_event_config.embed_color), which used to fail every insert. And replace the rows
+                // in one transaction, so a failed insert can never leave this server's table emptied.
+                let conn;
                 try {
-                    await pool.execute(`DELETE FROM \`${table}\` WHERE guild_id = ?`, [guildId]);
+                    const [colRows] = await pool.execute(
+                        'SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ?', [table]);
+                    const known = new Set(colRows.map(r => r.COLUMN_NAME));
+                    if (!known.has('guild_id')) { log.push(`Skipped ${table}: not in this database`); continue; }
+                    const ignored = new Set();
+                    conn = await pool.getConnection();
+                    await conn.beginTransaction();
+                    await conn.execute(`DELETE FROM \`${table}\` WHERE guild_id = ?`, [guildId]);
                     for (const row of tRows) {
-                        const cols = Object.keys(row);
-                        const placeholders = cols.map(() => '?').join(', ');
-                        const values = cols.map(c => row[c]);
-                        await pool.execute(`INSERT INTO \`${table}\` (${cols.map(c => '`' + c + '`').join(', ')}) VALUES (${placeholders})`, values);
+                        const cols = Object.keys(row).filter(c => /^[A-Za-z0-9_]{1,64}$/.test(c));
+                        for (const c of cols) if (!known.has(c)) ignored.add(c);
+                        const usable = cols.filter(c => known.has(c));
+                        const placeholders = usable.map(() => '?').join(', ');
+                        const values = usable.map(c => (c === 'guild_id' ? guildId : row[c]));
+                        await conn.execute(`INSERT INTO \`${table}\` (${usable.map(c => '`' + c + '`').join(', ')}) VALUES (${placeholders})`, values);
                     }
-                    log.push(`Restored ${tRows.length} rows in ${table}`);
-                } catch (err) { log.push(`Failed DB table ${table}: ${err.message}`); }
+                    await conn.commit();
+                    log.push(`Restored ${tRows.length} rows in ${table}${ignored.size ? ` (ignored columns no longer in the database: ${[...ignored].join(', ')})` : ''}`);
+                } catch (err) {
+                    if (conn) await conn.rollback().catch(() => {});
+                    log.push(`Failed DB table ${table} (left as it was): ${err.message}`);
+                } finally {
+                    if (conn) conn.release();
+                }
             }
         }
 
@@ -294,16 +367,34 @@ router.post('/manage/:guildId/restore-backup', async (req, res) => {
         const updated = log.filter(l => l.startsWith('Updated') || l.startsWith('Assigned') || l.startsWith('Stored')).length;
         const failed = log.filter(l => l.startsWith('Failed')).length;
         logger.info(`[Backup Restore] Completed v${snapshot.version || '?'} restore of "${rows[0].snapshot_name}" for ${guild.name} — ${log.length} ops: ${created} created/restored, ${updated} updated, ${failed} failed`);
+        const pendingLine = log.find(l => l.startsWith('Stored') && l.includes('pending member restores'));
+        void logFeatureEvent(() => (guild), 'backup.restored', () => ({
+            title: '♻️ Backup Restored',
+            description: `Server backup **${rows[0].snapshot_name}** was restored from the dashboard.`,
+            fields: [
+                ['Name', rows[0].snapshot_name],
+                ['By', userLabel(req.user)],
+                ['Created / restored', created],
+                ['Updated', updated],
+                ['Failed', failed],
+                ['Rejoin window', pendingLine ? `${gracePeriodDays} days — members who rejoin get their roles back` : null, false],
+            ],
+        }));
 
         res.redirect(`/manage/${guildId}?page=backups&success=restored`);
     } catch (error) {
         logger.error('[Backup Restore] Error:', { error: error.message, stack: error.stack, guildId });
+        void logFeatureEvent(() => (liveGuild(guildId)), 'backup.failed', () => ({
+            title: '❌ Backup Failed',
+            description: 'A backup restore started from the dashboard stopped with an error. Part of the backup may already have been applied.',
+            fields: [['Action', 'Restore'], ['By', userLabel(req.user)], ['Why', String(error.message || 'Unknown error').slice(0, 300), false]],
+        }));
         res.redirect(`/manage/${guildId}?page=backups&error=restore_failed`);
     }
 });
 
 // Backup diff — compare a backup against current server state
-router.get('/api/guilds/:guildId/backup-diff/:backupId', async (req, res) => {
+backupApiRouter.get('/backup-diff/:backupId', async (req, res) => {
     try {
         const { guildId, backupId } = req.params;
         const [rows] = await pool.execute('SELECT snapshot_name, snapshot_json FROM server_backups WHERE id = ? AND guild_id = ?', [backupId, guildId]);

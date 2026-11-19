@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>" lang="en">
+<head>
+<%- include('partials/site-head', { title: 'Stream of ' + (new Date(session.started_at).toISOString().slice(0, 10)) + ' — Twitch analytics | CertiFried', noindex: true }) %>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="/css/cf-settings.css">
+    <link rel="stylesheet" href="/css/cf-analytics.css">
+    <style>
+        .ss-kind { display: inline-block; min-width: 6.5rem; font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+        .ss-ai-out { font-size: var(--cf-text-sm); color: var(--cf-text-2); min-height: 1.5em; }
+        .ss-ai-out ul { margin: 6px 0 0; padding-left: 1.2rem; }
+        .ss-ai-out .ss-lead { color: var(--cf-text); font-weight: 600; margin-bottom: 6px; }
+        .ss-title { margin: 6px 0 0; font-size: var(--cf-text-md); color: var(--cf-text-2); overflow-wrap: anywhere; }
+    </style>
+</head>
+<%
+    const fmt = n => Number(n || 0).toLocaleString('en-US');
+    const durMin = Number(session.duration_minutes) || 0;
+    const durH = Math.floor(durMin / 60), durM = durMin % 60;
+    const when = (d) => new Date(d).toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
+    const clock = (d) => new Date(d).toISOString().slice(11, 16);
+    const kindLabel = { hype_train: 'Hype train', poll: 'Poll', prediction: 'Prediction', charity: 'Charity' };
+    const safeJson = (v) => JSON.stringify(v).replace(/</g, '\\u003c');
+%>
+<body class="cf-an-body">
+<%- include('partials/site-header') %>
+<main id="main-content" class="cf-an-page" tabindex="-1">
+    <a href="/manage/<%= guildId %>/twitch-analytics#sessions" class="cf-an-crumb"><i class="fas fa-arrow-left" aria-hidden="true"></i> Back to recent sessions</a>
+    <header class="cf-an-head">
+        <span class="cf-an-head-icon" aria-hidden="true"><i class="fab fa-twitch"></i></span>
+        <div class="cf-an-head-text">
+            <h1 class="cf-an-title">Stream on <%= new Date(session.started_at).toISOString().slice(0, 10) %>
+                <% if (!session.ended_at) { %><span class="cf-status is-live">Live now</span><% } %></h1>
+            <p class="cf-an-sub"><%= when(session.started_at) %><%= session.ended_at ? ' to ' + clock(session.ended_at) + ' UTC' : '' %> · <%= durMin ? `${durH}h ${durM}m` : 'in progress' %><% if (session.primary_category_name) { %> · <%= session.primary_category_name %><% } %></p>
+            <% if (session.title_at_start) { %><p class="ss-title"><%= session.title_at_start %></p><% } %>
+        </div>
+        <div class="cf-an-actions">
+            <% if (snapshots.length) { %><button type="button" class="btn btn-secondary btn-sm" id="csvBtn"><i class="fas fa-file-csv" aria-hidden="true"></i> Export minutes CSV</button><% } %>
+        </div>
+    </header>
+<%- include('partials/analytics/twitch-nav', { active: 'overview' }) %>
+
+    <dl class="cf-kpis">
+        <div class="cf-kpi"><dt>Peak viewers</dt><dd><%= fmt(session.peak_viewers) %></dd></div>
+        <div class="cf-kpi"><dt>Average viewers</dt><dd><%= fmt(Math.round(Number(session.avg_viewers) || 0)) %></dd></div>
+        <div class="cf-kpi"><dt>Chat messages</dt><dd><%= fmt(session.total_msgs) %></dd></div>
+        <div class="cf-kpi"><dt>Chatters</dt><dd><%= fmt(session.unique_chatters) %></dd></div>
+        <div class="cf-kpi"><dt>Follows</dt><dd><%= fmt(session.total_follows) %></dd></div>
+        <div class="cf-kpi"><dt>Subs</dt><dd><%= fmt(session.total_subs) %></dd><span class="cf-kpi-sub"><%= fmt(session.total_gift_subs) %> gifted</span></div>
+        <div class="cf-kpi"><dt>Bits</dt><dd><%= fmt(session.total_bits) %></dd></div>
+    </dl>
+
+    <div class="cf-an-grid is-2">
+        <section class="cf-an-card" aria-labelledby="ss-v">
+            <div class="cf-an-card-head"><h2 class="cf-an-card-title" id="ss-v">Viewers</h2></div>
+            <% if (!snapshots.length) { %>
+            <div class="cf-state cf-state--compact"><p class="cf-state-text">No minute-by-minute data was recorded for this stream.</p></div>
+            <% } else { %>
+            <div class="cf-an-canvas"><canvas id="ssViewers" aria-label="Viewers each minute" role="img"></canvas></div>
+            <% } %>
+        </section>
+        <section class="cf-an-card" aria-labelledby="ss-c">
+            <div class="cf-an-card-head"><h2 class="cf-an-card-title" id="ss-c">Chat messages per minute</h2></div>
+            <% if (!snapshots.length) { %>
+            <div class="cf-state cf-state--compact"><p class="cf-state-text">No minute-by-minute data was recorded for this stream.</p></div>
+            <% } else { %>
+            <div class="cf-an-canvas"><canvas id="ssChat" aria-label="Chat messages each minute" role="img"></canvas></div>
+            <% } %>
+        </section>
+    </div>
+
+    <h2 class="cf-an-section-title">AI review</h2>
+    <div class="cf-an-grid is-3">
+        <section class="cf-an-card" aria-labelledby="ss-recap">
+            <div class="cf-an-card-head"><h3 class="cf-an-card-title" id="ss-recap">Recap</h3>
+                <% if (!(aiRecap && aiRecap.recap_text)) { %><button type="button" class="btn btn-secondary btn-sm" id="recapBtn">Write recap</button><% } %></div>
+            <% if (aiRecap && aiRecap.recap_text) { %>
+            <p class="cf-an-pre ss-ai-out"><%= aiRecap.recap_text %></p>
+            <p class="cf-an-muted" style="margin: 8px 0 0; font-size: var(--cf-text-xs);"><%= aiRecap.mood ? 'Mood: ' + aiRecap.mood + ' · ' : '' %><%= aiRecap.provider %><%= aiRecap.model ? ' / ' + aiRecap.model : '' %></p>
+            <% } else { %>
+            <div class="ss-ai-out" id="recapOut" role="status" aria-live="polite">A short summary of how the stream went.</div>
+            <% } %>
+        </section>
+        <section class="cf-an-card" aria-labelledby="ss-coach">
+            <div class="cf-an-card-head"><h3 class="cf-an-card-title" id="ss-coach">Coaching notes</h3><button type="button" class="btn btn-secondary btn-sm" id="coachBtn">Get notes</button></div>
+            <div class="ss-ai-out" id="coachOut" role="status" aria-live="polite">Feedback on pacing, chat gaps and what to try next stream.</div>
+        </section>
+        <section class="cf-an-card" aria-labelledby="ss-hl">
+            <div class="cf-an-card-head"><h3 class="cf-an-card-title" id="ss-hl">Clip-worthy moments</h3><button type="button" class="btn btn-secondary btn-sm" id="highlightsBtn">Find moments</button></div>
+            <div class="ss-ai-out" id="highlightsOut" role="status" aria-live="polite">Chat spikes and hype events worth clipping.</div>
+        </section>
+    </div>
+    <p class="cf-an-muted" style="font-size: var(--cf-text-xs); margin: 0;">Each button uses one AI call from the channel's daily allowance.</p>
+
+    <div class="cf-an-grid is-2" style="margin-top: var(--cf-6);">
+        <section class="cf-an-card" aria-labelledby="ss-ev">
+            <div class="cf-an-card-head"><h2 class="cf-an-card-title" id="ss-ev">Events <span class="cf-an-muted"><%= events.length %></span></h2></div>
+            <% if (!events.length) { %>
+            <div class="cf-state cf-state--compact"><p class="cf-state-text">No hype trains, polls, predictions or charity events during this stream.</p></div>
+            <% } %>
+            <% events.forEach(ev => { %>
+            <div class="cf-an-row">
+                <div class="cf-an-row-main"><div class="cf-an-row-title"><span class="ss-kind"><%= kindLabel[ev.kind] || ev.kind %></span><%= String(ev.event_type || '').replace(/_/g, ' ') %><%= ev.detail ? ': ' + ev.detail : '' %></div></div>
+                <div class="cf-an-row-side"><%= clock(ev.occurred_at) %></div>
+            </div>
+            <% }) %>
+        </section>
+        <section class="cf-an-card" aria-labelledby="ss-cat">
+            <div class="cf-an-card-head"><h2 class="cf-an-card-title" id="ss-cat">Title and category changes <span class="cf-an-muted"><%= categoryChanges.length %></span></h2></div>
+            <% if (!categoryChanges.length) { %>
+            <div class="cf-state cf-state--compact"><p class="cf-state-text">The title and category did not change during this stream.</p></div>
+            <% } %>
+            <% categoryChanges.forEach(c => { %>
+            <div class="cf-an-row">
+                <div class="cf-an-row-main"><div class="cf-an-row-title"><%= c.category_name || 'No category' %></div><div class="cf-an-row-meta"><%= c.title || 'No title' %></div></div>
+                <div class="cf-an-row-side"><%= clock(c.changed_at) %></div>
+            </div>
+            <% }) %>
+        </section>
+    </div>
+
+    <section class="cf-an-card" aria-labelledby="ss-clips">
+        <div class="cf-an-card-head"><h2 class="cf-an-card-title" id="ss-clips">Clips made during this stream <span class="cf-an-muted"><%= clips.length %></span></h2></div>
+        <% if (!clips.length) { %>
+        <div class="cf-state cf-state--compact"><p class="cf-state-text">Nobody clipped this stream.</p></div>
+        <% } %>
+        <% clips.forEach(c => { %>
+        <div class="cf-an-row">
+            <div class="cf-an-row-main"><div class="cf-an-row-title"><a href="<%= /^https:\/\//.test(String(c.url || '')) ? c.url : 'https://clips.twitch.tv/' + encodeURIComponent(c.clip_id) %>" target="_blank" rel="noopener"><%= c.title || 'Untitled clip' %></a></div></div>
+            <div class="cf-an-row-side"><%= fmt(c.view_count) %> views · <%= clock(c.created_at_twitch) %></div>
+        </div>
+        <% }) %>
+    </section>
+    <p class="cf-an-foot">Times in UTC.</p>
+</main>
+<%- include('partials/site-footer') %>
+
+<script>
+(function () {
+    var sid = '<%= String(session.id).replace(/[^\d]/g, '') %>';
+    var guild = '<%= String(guildId).replace(/[^\d]/g, '') %>';
+    function clear(el) { while (el.firstChild) el.removeChild(el.firstChild); }
+    function el(tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text != null) n.textContent = text; return n; }
+    async function call(path, btn, out, render, again) {
+        var label = btn.textContent;
+        btn.disabled = true; btn.textContent = 'Working…';
+        try {
+            var res = await fetch('/manage/' + guild + '/twitch-ai/session/' + sid + '/' + path, { method: 'POST' });
+            var j = await res.json().catch(function () { return { ok: false, error: 'HTTP ' + res.status }; });
+            clear(out);
+            if (!j.ok) { out.textContent = 'The AI could not answer: ' + (j.error || 'unknown error'); return false; }
+            render(out, j);
+            return true;
+        } catch (e) { out.textContent = 'Request failed: ' + e.message; return false; }
+        finally { btn.disabled = false; btn.textContent = again || label; }
+    }
+    var recapBtn = document.getElementById('recapBtn');
+    if (recapBtn) recapBtn.addEventListener('click', function () {
+        call('recap', recapBtn, document.getElementById('recapOut'), function (out, j) {
+            var text = j.recap_text || j.recap || j.text;
+            if (text) { out.appendChild(el('p', 'cf-an-pre', text)); recapBtn.hidden = true; }
+            else location.reload();
+        }, 'Write again');
+    });
+    var coachBtn = document.getElementById('coachBtn');
+    coachBtn.addEventListener('click', function () {
+        call('coach', coachBtn, document.getElementById('coachOut'), function (out, j) {
+            if (j.overall) out.appendChild(el('div', 'ss-lead', j.overall));
+            if (j.tips && j.tips.length) { var ul = el('ul'); j.tips.forEach(function (t) { ul.appendChild(el('li', null, t)); }); out.appendChild(ul); }
+            if (j.gaps_detected !== undefined) out.appendChild(el('div', 'cf-an-muted', j.gaps_detected + ' quiet stretch' + (j.gaps_detected === 1 ? '' : 'es') + ' in chat'));
+            if (!out.firstChild) out.textContent = 'No notes for this stream.';
+        }, 'Get notes again');
+    });
+    var hlBtn = document.getElementById('highlightsBtn');
+    hlBtn.addEventListener('click', function () {
+        call('highlights', hlBtn, document.getElementById('highlightsOut'), function (out, j) {
+            if (!j.moments || !j.moments.length) { out.textContent = j.note || 'No standout moments in this stream.'; return; }
+            j.moments.forEach(function (m) {
+                var row = el('div', 'cf-an-row');
+                var main = el('div', 'cf-an-row-main');
+                var what = m.events && m.events.length ? m.events.map(function (e) { return String(e.kind).replace(/_/g, ' '); }).join(', ') : 'Chat spike';
+                main.appendChild(el('div', 'cf-an-row-title', what));
+                main.appendChild(el('div', 'cf-an-row-meta', m.peak + ' messages a minute at the peak · ' + m.viewer_count + ' viewers'));
+                row.appendChild(main);
+                row.appendChild(el('div', 'cf-an-row-side', new Date(m.start_t * 1000).toISOString().slice(11, 16)));
+                out.appendChild(row);
+            });
+        }, 'Find again');
+    });
+})();
+</script>
+<% if (snapshots.length) { %>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="/js/cf-chart-theme.js"></script>
+<script>
+(function () {
+    var snaps = <%- safeJson(snapshots.map(s => [Number(s.t), Number(s.viewer_count) || 0, Number(s.chat_msg_count) || 0])) %>;
+    var V = window.cfViz;
+    var labels = snaps.map(function (s) { return new Date(s[0] * 1000).toISOString().slice(11, 16); });
+    function line(id, label, data, color) {
+        new Chart(document.getElementById(id), {
+            type: 'line',
+            data: { labels: labels, datasets: [{ label: label, data: data, borderColor: color, backgroundColor: V.alpha(color, 0.14), fill: true }] },
+            options: { maintainAspectRatio: false, plugins: { legend: { display: false } },
+                scales: { x: { ticks: { maxTicksLimit: 8 }, grid: { display: false } }, y: { beginAtZero: true } } },
+        });
+    }
+    line('ssViewers', 'Viewers', snaps.map(function (s) { return s[1]; }), V.series[0]);
+    line('ssChat', 'Messages per minute', snaps.map(function (s) { return s[2]; }), V.series[2]);
+    document.getElementById('csvBtn').addEventListener('click', function () {
+        V.csv('twitch-stream-<%= String(session.id).replace(/[^\d]/g, '') %>-minutes.csv',
+            [['time_utc', 'viewers', 'chat_messages']].concat(snaps.map(function (s) { return [new Date(s[0] * 1000).toISOString(), s[1], s[2]]; })));
+    });
+})();
+</script>
+<% } %>
+</body>
+</html>

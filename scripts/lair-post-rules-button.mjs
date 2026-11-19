@@ -4,15 +4,14 @@
 
 import 'dotenv/config';
 import pool from '../utils/db.js';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 
 const GUILD_ID = '1216126780767731722';
 const RULES_CH = '1216603920542208000';
-const BOT_ID   = '1496406792417185802';
+// The acting bot comes from guild_bot_mapping — never pinned here.
 
-const [rows] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id = ?', [BOT_ID]);
-if (!rows.length) { console.error('CertiFried Bear token not found'); process.exit(1); }
-const token = encryption.decrypt(JSON.parse(rows[0].bot_token));
+const bot = await resolveBotForGuild(GUILD_ID, { db: pool });
+const token = bot.token;
 
 const body = {
   embeds: [{

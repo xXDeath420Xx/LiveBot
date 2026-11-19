@@ -1,235 +1,306 @@
+<%
+// Bot appearance: nickname, avatar and embed colour for this server (one form), and the custom bot
+// instance (set up, replace or remove, through the custom-bot JSON API). Built on the settings-row
+// kit (cf-settings.css); field names, ids and the page script's hooks are unchanged.
+// guild_config.embed_color is no longer read by the bot (embed colours come from the Theme page);
+// it is carried through as a hidden field so saving this form does not change the stored value.
+const apEmbedColor = /^#[0-9a-fA-F]{6}$/.test(String(settings.embed_color || '')) ? settings.embed_color : '#a78bfa';
+const apMe = (guild && guild.members && guild.members.me) ? guild.members.me : null;
+const apDefaultName = (apMe && apMe.user && (apMe.user.globalName || apMe.user.username)) || 'CertiFried MultiTool';
+const apDefaultAvatar = (apMe && apMe.user && typeof apMe.user.displayAvatarURL === 'function') ? apMe.user.displayAvatarURL({ size: 64 }) : '';
+const apBot = (typeof customBotInfo !== 'undefined' && customBotInfo) ? customBotInfo : null;
+%>
+<style>
+    .ap-remove .cf-row-control { align-items: flex-end; }
+    .ap-msg { display: flex; gap: var(--cf-3); padding: var(--cf-4) var(--cf-5); min-width: 0; background: var(--cf-surface-2); }
+    .ap-msg-av { flex: none; width: 40px; height: 40px; border-radius: 50%; overflow: hidden; display: inline-flex; align-items: center; justify-content: center;
+        background: var(--cf-surface-3); color: var(--cf-text-2); }
+    .ap-msg-av img { width: 100%; height: 100%; object-fit: cover; }
+    .ap-msg-text { min-width: 0; }
+    .ap-msg-head { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 2px; }
+    .ap-msg-name { font-weight: 600; color: var(--cf-text); overflow-wrap: anywhere; }
+    .ap-msg-tag { padding: 0 4px; border-radius: 3px; font-size: 10px; font-weight: 600; line-height: 16px; color: var(--cf-on-accent); background: var(--cf-accent); }
+    .ap-msg-body { margin: 0; font-size: var(--cf-text-sm); color: var(--cf-text-2); }
+    @media (max-width: 640px) { .ap-msg { padding: var(--cf-4); } }
+
+    .ap-bot { display: flex; align-items: center; gap: var(--cf-4); min-width: 0; }
+    .ap-bot-av { flex: none; width: 48px; height: 48px; border-radius: 50%; overflow: hidden;
+        display: inline-flex; align-items: center; justify-content: center; background: var(--cf-surface-3); color: var(--cf-text-3); }
+    .ap-bot-av img { width: 100%; height: 100%; object-fit: cover; }
+    .ap-bot-text { min-width: 0; }
+    .ap-bot-name { margin: 0; font-size: var(--cf-text-md); font-weight: 600; color: var(--cf-text); overflow-wrap: anywhere; }
+    .ap-bot-meta { display: flex; flex-wrap: wrap; align-items: center; gap: var(--cf-2); margin-top: 4px;
+        font-size: var(--cf-text-xs); color: var(--cf-text-3); font-variant-numeric: tabular-nums; }
+    .ap-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); gap: var(--cf-3) var(--cf-5); margin: 0; }
+    .ap-facts dt { margin: 0 0 2px; font-size: var(--cf-text-xs); font-weight: 500; color: var(--cf-text-3); }
+    .ap-facts dd { margin: 0; font-size: var(--cf-text-sm); color: var(--cf-text); min-width: 0; overflow-wrap: anywhere; }
+
+    .ap-secret { display: flex; gap: var(--cf-2); min-width: 0; }
+    .ap-secret > input { flex: 1 1 auto; min-width: 0; width: 100%; margin: 0; }
+    .ap-secret > .btn { flex: none; }
+    .ap-intro { margin: 0; font-size: var(--cf-text-sm); line-height: 1.55; color: var(--cf-text-2); }
+    .ap-intro a { color: var(--cf-accent-fg); }
+    .ap-intro strong { color: var(--cf-text); font-weight: 600; }
+    @media (max-width: 640px) {
+        .ap-secret > .btn { min-width: 44px; }
+        .ap-remove .cf-row-control { align-items: stretch; }
+    }
+</style>
+
 <div class="page-section">
     <div class="page-section-header">
         <div>
             <div class="page-section-title">
-                <i class="fas fa-paint-brush"></i>
-                <span>Bot Appearance</span>
-            </div>
-            <div class="page-section-subtitle">
-                Customize how the bot appears in your server
+                <i class="fas fa-paint-brush" aria-hidden="true"></i>
+                <span>Bot appearance</span>
             </div>
         </div>
     </div>
 
-    <form action="/manage/<%= guild.id %>/update-bot-appearance" method="POST" enctype="multipart/form-data">
-        <!-- Bot Nickname -->
-        <div style="margin-bottom: var(--spacing-6);">
-            <label class="form-label">Bot Nickname</label>
-            <input type="text" class="form-control" name="bot_nickname" value="<%= settings.bot_nickname || '' %>" placeholder="Leave blank for default">
-            <div class="form-help">
-                Customize the bot's display name in this server. Type "reset" to clear.
-            </div>
-        </div>
-
-        <!-- Bot Avatar -->
-        <div style="margin-bottom: var(--spacing-6);">
-            <label class="form-label">Bot Avatar</label>
-            <div class="grid grid-cols-2" style="gap: var(--spacing-4);">
+    <form class="ap-form" action="/manage/<%= guild.id %>/update-bot-appearance" method="POST" enctype="multipart/form-data">
+        <section class="cf-section" aria-labelledby="ap-profile-title">
+            <header class="cf-section-head">
                 <div>
-                    <label class="form-sublabel">Avatar URL</label>
-                    <input type="text" class="form-control" name="bot_avatar_url" value="<%= settings.bot_avatar_url || '' %>" placeholder="https://i.imgur.com/example.png">
+                    <h2 class="cf-section-title" id="ap-profile-title">Profile</h2>
+                    <p class="cf-section-desc">How the bot shows up in this server's member list and messages.</p>
                 </div>
-                <div>
-                    <label class="form-sublabel">Or Upload Image</label>
-                    <input class="form-control" type="file" name="bot_avatar_file" accept="image/*">
-                </div>
-            </div>
-            <div class="form-check" style="margin-top: var(--spacing-3);">
-                <input class="form-check-input" type="checkbox" id="reset_bot_avatar" name="reset_bot_avatar">
-                <label class="form-check-label" for="reset_bot_avatar">
-                    Reset to default avatar
-                </label>
-            </div>
-        </div>
-
-        <!-- Embed Color -->
-        <div style="margin-bottom: var(--spacing-6);">
-            <label class="form-label">Embed Color</label>
-            <div style="display: flex; align-items: center; gap: var(--spacing-4);">
-                <input type="color" class="form-control-color" name="embed_color" value="<%= settings.embed_color || '#a78bfa' %>" style="width: 100px; height: 50px; cursor: pointer; border-radius: var(--radius-md);">
-                <div>
-                    <div style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: var(--color-text-primary);"><%= settings.embed_color || '#a78bfa' %></div>
-                    <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">Color used for announcement embeds</div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Preview -->
-        <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6); margin-bottom: var(--spacing-6);">
-            <div style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: var(--color-text-muted); margin-bottom: var(--spacing-4);">
-                PREVIEW
-            </div>
-            <div style="display: flex; gap: var(--spacing-3); border-left: 4px solid <%= settings.embed_color || '#a78bfa' %>; padding: var(--spacing-4); background: var(--color-dark-700); border-radius: var(--radius-md);">
-                <div style="width: 40px; height: 40px; border-radius: 50%; background: var(--color-primary-500); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                    <i class="fas fa-robot" style="color: white;"></i>
-                </div>
-                <div style="flex: 1;">
-                    <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-2);">
-                        <%= settings.bot_nickname || 'CertiFried MultiTool' %>
+            </header>
+            <div class="cf-rows">
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-appearance-bot_nickname">Nickname</label>
+                        <p class="cf-row-desc" id="f-appearance-bot_nickname-desc">The bot's name in this server's member list and messages. Leave blank to use its own name.</p>
                     </div>
-                    <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">
-                        This is how announcement embeds will appear with your custom settings
+                    <div class="cf-row-control">
+                        <input id="f-appearance-bot_nickname" type="text" class="form-control" name="bot_nickname" value="<%= settings.bot_nickname || '' %>" placeholder="<%= apDefaultName %>" maxlength="32" autocomplete="off" aria-describedby="f-appearance-bot_nickname-desc">
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-appearance-bot_avatar_url">Announcement avatar</label>
+                        <p class="cf-row-desc" id="f-appearance-bot_avatar_url-desc">A direct link to an image. Used on go-live alerts posted as the bot: with an avatar set, they are sent through a webhook with this avatar and the nickname above.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input id="f-appearance-bot_avatar_url" type="text" inputmode="url" maxlength="512" class="form-control" name="bot_avatar_url" value="<%= settings.bot_avatar_url || '' %>" placeholder="https://i.imgur.com/example.png" aria-describedby="f-appearance-bot_avatar_url-desc">
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-appearance-bot_avatar_file">Upload an avatar</label>
+                        <p class="cf-row-desc">Or upload a PNG, JPG, GIF or WebP instead of a link. It is resized to 256 pixels, and a GIF becomes a still image.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input id="f-appearance-bot_avatar_file" class="form-control" type="file" name="bot_avatar_file" accept="image/png,image/jpeg,image/gif,image/webp">
+                    </div>
+                </div>
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="reset_bot_avatar">Use the default avatar</label>
+                        <p class="cf-row-desc">Removes the announcement avatar when you save.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input class="cf-switch" role="switch" type="checkbox" id="reset_bot_avatar" name="reset_bot_avatar">
                     </div>
                 </div>
             </div>
-        </div>
+        </section>
 
-        <div style="display: flex; gap: var(--spacing-3);">
-            <button type="submit" class="btn btn-primary">
-                <i class="fas fa-save"></i>
-                <span>Save Appearance Settings</span>
-            </button>
-            <button type="button" class="btn btn-secondary" onclick="location.reload()">
-                <i class="fas fa-undo"></i>
-                <span>Reset Form</span>
-            </button>
+        <section class="cf-section" aria-labelledby="ap-preview-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="ap-preview-title">Preview</h2>
+                    <p class="cf-section-desc">A go-live alert with these settings. Embed colours are set on the <a href="/manage/<%= guild.id %>?page=theme">Theme</a> page.</p>
+                </div>
+            </header>
+            <div class="cf-rows">
+                <input type="hidden" name="embed_color" value="<%= apEmbedColor %>">
+                <div class="ap-msg" id="apPreview" data-default-name="<%= apDefaultName %>" data-default-avatar="<%= apDefaultAvatar %>">
+                    <span class="ap-msg-av" id="apPreviewAv" aria-hidden="true"><i class="fas fa-robot"></i></span>
+                    <div class="ap-msg-text">
+                        <p class="ap-msg-head"><span class="ap-msg-name" id="apPreviewName"><%= settings.bot_nickname || apDefaultName %></span><span class="ap-msg-tag">APP</span></p>
+                        <p class="ap-msg-body">A streamer you follow just went live.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="cf-section" aria-labelledby="ap-modlog-v2-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="ap-modlog-v2-title">Modlog layout</h2>
+                    <p class="cf-section-desc">How entries look in the moderation log channel.</p>
+                </div>
+            </header>
+            <div class="cf-rows">
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-appearance-modlog_components_v2">Use Discord's newer message layout</label>
+                        <p class="cf-row-desc" id="f-appearance-modlog_components_v2-desc">Each log entry is drawn as a panel with sections instead of a classic embed. Applies from the next logged event.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input class="cf-switch" role="switch" type="checkbox" id="f-appearance-modlog_components_v2" name="modlog_components_v2" <%= settings.modlog_components_v2 ? 'checked' : '' %> aria-describedby="f-appearance-modlog_components_v2-desc">
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <div class="cf-form-actions">
+            <button type="reset" class="btn btn-secondary" id="apDiscard">Discard changes</button>
+            <button type="submit" class="btn btn-primary">Save</button>
         </div>
     </form>
-</div>
 
-<!-- Custom Bot Instance Section -->
-<div class="page-section" style="margin-top: var(--spacing-6);">
-    <div class="page-section-header">
-        <div>
-            <div class="page-section-title">
-                <i class="fas fa-robot"></i>
-                <span>Custom Bot Instance</span>
-            </div>
-            <div class="page-section-subtitle">
-                Run your own bot application for this server instead of using the shared CertiFried Utility bot
-            </div>
-        </div>
-    </div>
-
-    <% if (typeof customBotInfo !== 'undefined' && customBotInfo) { %>
-    <!-- Has custom bot — show status card -->
-    <div id="custom-bot-status" style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6);">
-        <div style="display: flex; align-items: center; gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
-            <div style="width: 56px; height: 56px; border-radius: 50%; background: var(--color-dark-500); display: flex; align-items: center; justify-content: center; flex-shrink: 0; overflow: hidden;">
-                <% if (customBotInfo.bot_avatar) { %>
-                    <img src="<%= customBotInfo.bot_avatar %>" alt="Bot Avatar" style="width: 100%; height: 100%; object-fit: cover;">
-                <% } else { %>
-                    <i class="fas fa-robot" style="font-size: 24px; color: var(--color-text-muted);"></i>
-                <% } %>
-            </div>
-            <div style="flex: 1;">
-                <div style="font-size: var(--font-size-lg); font-weight: var(--font-weight-semibold); color: var(--color-text-primary);">
-                    <%= customBotInfo.bot_name %>
+    <% if (apBot) { %>
+    <div id="custom-bot-status">
+        <section class="cf-section" aria-labelledby="ap-bot-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="ap-bot-title">Custom bot</h2>
+                    <p class="cf-section-desc">This server runs on its own bot application instead of the shared CertiFried Utility bot.</p>
                 </div>
-                <div style="display: flex; align-items: center; gap: var(--spacing-2); margin-top: var(--spacing-1);">
-                    <span style="width: 8px; height: 8px; border-radius: 50%; background: <%= customBotInfo.is_online ? 'var(--accent-green)' : 'var(--color-text-muted)' %>; display: inline-block;"></span>
-                    <span style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">
-                        <%= customBotInfo.is_online ? 'Online' : 'Offline' %>
-                    </span>
-                    <span style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-left: var(--spacing-2);">
-                        ID: <%= customBotInfo.bot_id %>
-                    </span>
-                </div>
-            </div>
-        </div>
-
-        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--spacing-3); margin-bottom: var(--spacing-4);">
-            <div style="background: var(--color-dark-700); border-radius: var(--radius-md); padding: var(--spacing-3);">
-                <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); text-transform: uppercase;">Status</div>
-                <div style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: <%= customBotInfo.enabled && customBotInfo.approved ? 'var(--accent-green)' : 'var(--color-warning)' %>;">
-                    <%= customBotInfo.enabled && customBotInfo.approved ? 'Active' : !customBotInfo.approved ? 'Pending Approval' : 'Disabled' %>
-                </div>
-            </div>
-            <div style="background: var(--color-dark-700); border-radius: var(--radius-md); padding: var(--spacing-3);">
-                <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); text-transform: uppercase;">Managed By</div>
-                <div style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: var(--color-text-primary);">
-                    <%= customBotInfo.owner_name || ('User ' + customBotInfo.owner_user_id) %>
-                </div>
-            </div>
-            <div style="background: var(--color-dark-700); border-radius: var(--radius-md); padding: var(--spacing-3);">
-                <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); text-transform: uppercase;">Type</div>
-                <div style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: var(--color-text-primary);">
-                    <%= customBotInfo.self_service ? 'Self-Service' : 'Managed by Bot Manager' %>
-                </div>
-            </div>
-            <div style="background: var(--color-dark-700); border-radius: var(--radius-md); padding: var(--spacing-3);">
-                <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); text-transform: uppercase;">Assigned</div>
-                <div style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: var(--color-text-primary);">
-                    <%= customBotInfo.assigned_at ? new Date(customBotInfo.assigned_at).toLocaleDateString() : (customBotInfo.created_at ? new Date(customBotInfo.created_at).toLocaleDateString() : 'Unknown') %>
-                </div>
-            </div>
-        </div>
-
-        <div style="display: flex; gap: var(--spacing-3); align-items: center; flex-wrap: wrap; margin-bottom: var(--spacing-4);">
-            <button type="button" id="remove-custom-bot-btn" class="btn btn-danger">
-                <i class="fas fa-trash"></i>
-                <span>Remove Custom Bot</span>
-            </button>
-            <div class="form-help" style="margin-top: 0;">Removes this bot and switches the server back to the default CertiFried Utility bot.</div>
-        </div>
-
-        <!-- Replace with own bot -->
-        <details style="border-top: 1px solid var(--color-border); padding-top: var(--spacing-4);">
-            <summary style="cursor: pointer; font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: var(--color-text-secondary); user-select: none;">
-                <i class="fas fa-exchange-alt" style="margin-right: var(--spacing-2);"></i>
-                Replace with a different bot
-            </summary>
-            <div style="margin-top: var(--spacing-4);">
-                <div id="replace-bot-error" style="display: none; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: var(--radius-md); padding: var(--spacing-3); margin-bottom: var(--spacing-4); color: var(--color-danger); font-size: var(--font-size-sm);"></div>
-                <div style="margin-bottom: var(--spacing-4);">
-                    <label class="form-label">Application ID (Client ID)</label>
-                    <input type="text" class="form-control" id="replace-bot-client-id" placeholder="e.g. 1234567890123456789" maxlength="20">
-                    <div class="form-help">Found on your application's General Information page</div>
-                </div>
-                <div style="margin-bottom: var(--spacing-4);">
-                    <label class="form-label">Bot Token</label>
-                    <div style="position: relative;">
-                        <input type="password" class="form-control" id="replace-bot-token" placeholder="Your bot token" style="padding-right: 40px;">
-                        <button type="button" id="toggle-replace-token" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--color-text-muted); cursor: pointer; padding: 4px;">
-                            <i class="fas fa-eye"></i>
-                        </button>
+            </header>
+            <div class="cf-rows">
+                <div class="cf-row cf-row--stack">
+                    <div class="ap-bot">
+                        <span class="ap-bot-av">
+                            <% if (apBot.bot_avatar) { %>
+                                <img src="<%= apBot.bot_avatar %>" alt="Bot avatar">
+                            <% } else { %>
+                                <i class="fas fa-robot" aria-hidden="true"></i>
+                            <% } %>
+                        </span>
+                        <div class="ap-bot-text">
+                            <p class="ap-bot-name"><%= apBot.bot_name %></p>
+                            <div class="ap-bot-meta">
+                                <span class="cf-pill <%= apBot.is_online ? 'is-ok' : '' %>"><%= apBot.is_online ? 'Online' : 'Offline' %></span>
+                                <span>ID <%= apBot.bot_id %></span>
+                            </div>
+                        </div>
                     </div>
                 </div>
-                <button type="button" id="replace-custom-bot-btn" class="btn btn-primary">
-                    <i class="fas fa-exchange-alt"></i>
-                    <span>Replace Bot</span>
-                </button>
-            </div>
-        </details>
-    </div>
-
-    <% } else { %>
-    <!-- No custom bot — show setup form -->
-    <div id="custom-bot-setup">
-        <div style="background: rgba(167, 139, 250, 0.05); border: 1px solid rgba(167, 139, 250, 0.15); border-radius: var(--radius-lg); padding: var(--spacing-4); margin-bottom: var(--spacing-6);">
-            <div style="display: flex; gap: var(--spacing-3); align-items: flex-start;">
-                <i class="fas fa-info-circle" style="color: var(--accent-purple); margin-top: 2px;"></i>
-                <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary); line-height: 1.5;">
-                    Set up your own Discord bot application for this server. Your bot will handle all features (announcements, commands, music, etc.) with your own branding.
-                    You'll need to <a href="https://discord.com/developers/applications" target="_blank" style="color: var(--accent-purple);">create a bot in the Discord Developer Portal</a>,
-                    enable the <strong>Server Members</strong>, <strong>Message Content</strong>, and <strong>Presence</strong> privileged intents, then invite it to your server with <strong>bot + applications.commands</strong> scope.
+                <div class="cf-row cf-row--stack">
+                    <dl class="ap-facts">
+                        <div>
+                            <dt>Status</dt>
+                            <dd><span class="cf-pill <%= apBot.enabled && apBot.approved ? 'is-ok' : 'is-warn' %>"><%= apBot.enabled && apBot.approved ? 'Active' : !apBot.approved ? 'Pending approval' : 'Disabled' %></span></dd>
+                        </div>
+                        <div>
+                            <dt>Managed by</dt>
+                            <dd><% if (apBot.owner_name) { %><%= apBot.owner_name %><% } else { %><%- include('_user-cell', { cfUser: null, cfUserId: apBot.owner_user_id, cfUserName: null, cfUserSize: 'sm' }) %><% } %></dd>
+                        </div>
+                        <div>
+                            <dt>Type</dt>
+                            <dd><%= apBot.self_service ? 'Self-service' : 'Managed by the bot manager' %></dd>
+                        </div>
+                        <div>
+                            <dt>Assigned</dt>
+                            <dd><%= apBot.assigned_at ? new Date(apBot.assigned_at).toLocaleDateString() : (apBot.created_at ? new Date(apBot.created_at).toLocaleDateString() : 'Unknown') %></dd>
+                        </div>
+                    </dl>
                 </div>
             </div>
-        </div>
+        </section>
 
-        <div id="custom-bot-error" style="display: none; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: var(--radius-md); padding: var(--spacing-3); margin-bottom: var(--spacing-4); color: var(--color-danger); font-size: var(--font-size-sm);"></div>
-
-        <div style="margin-bottom: var(--spacing-4);">
-            <label class="form-label">Application ID (Client ID)</label>
-            <input type="text" class="form-control" id="custom-bot-client-id" placeholder="e.g. 1234567890123456789" maxlength="20" pattern="\d{17,20}">
-            <div class="form-help">Found on your application's General Information page in the Developer Portal</div>
-        </div>
-
-        <div style="margin-bottom: var(--spacing-6);">
-            <label class="form-label">Bot Token</label>
-            <div style="position: relative;">
-                <input type="password" class="form-control" id="custom-bot-token" placeholder="Your bot token" style="padding-right: 40px;">
-                <button type="button" id="toggle-token-visibility" style="position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--color-text-muted); cursor: pointer; padding: 4px;">
-                    <i class="fas fa-eye"></i>
-                </button>
+        <section class="cf-section" aria-labelledby="ap-replace-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="ap-replace-title">Replace with a different bot</h2>
+                    <p class="cf-section-desc">Switch this server to another bot application. Stream announcements are recreated.</p>
+                </div>
+            </header>
+            <div class="cf-rows">
+                <p class="ap-error cf-notice is-bad" id="replace-bot-error" role="alert" hidden></p>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="replace-bot-client-id">Application ID</label>
+                        <p class="cf-row-desc">The client ID on your application's General Information page.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="text" class="form-control" id="replace-bot-client-id" placeholder="1234567890123456789" maxlength="20" inputmode="numeric" autocomplete="off">
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="replace-bot-token">Bot token</label>
+                        <p class="cf-row-desc">From your application's Bot page.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="ap-secret">
+                            <input type="password" class="form-control" id="replace-bot-token" placeholder="Bot token" autocomplete="off">
+                            <button type="button" id="toggle-replace-token" class="btn btn-secondary" aria-label="Show or hide the token"><i class="fas fa-eye" aria-hidden="true"></i></button>
+                        </div>
+                    </div>
+                </div>
+                <div class="cf-section-foot">
+                    <button type="button" id="replace-custom-bot-btn" class="btn btn-primary"><i class="fas fa-exchange-alt" aria-hidden="true"></i> <span>Replace bot</span></button>
+                </div>
             </div>
-            <div class="form-help">Found on your application's Bot page. Click "Reset Token" if you don't have it saved</div>
-        </div>
+        </section>
 
-        <button type="button" id="setup-custom-bot-btn" class="btn btn-primary">
-            <i class="fas fa-rocket"></i>
-            <span>Set Up Custom Bot</span>
-        </button>
+        <section class="cf-section cf-section--danger ap-remove" aria-labelledby="ap-remove-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="ap-remove-title">Remove custom bot</h2>
+                </div>
+            </header>
+            <div class="cf-rows">
+                <p class="cf-notice is-bad" id="remove-bot-error" role="alert" hidden></p>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <span class="cf-row-label">Switch back to the shared bot</span>
+                        <p class="cf-row-desc">Removes this bot and moves the server back to the default CertiFried Utility bot. Stream announcements are recreated.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <button type="button" id="remove-custom-bot-btn" class="btn btn-danger"><i class="fas fa-trash" aria-hidden="true"></i> <span>Remove custom bot</span></button>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+    <% } else { %>
+    <div id="custom-bot-setup">
+        <section class="cf-section" aria-labelledby="ap-setup-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="ap-setup-title">Custom bot</h2>
+                    <p class="cf-section-desc">Run this server on a bot application of your own instead of the shared CertiFried Utility bot. It handles every feature (announcements, commands, music) under your own name and avatar.</p>
+                </div>
+            </header>
+            <div class="cf-rows">
+                <div class="cf-row cf-row--stack">
+                    <p class="ap-intro">
+                        <a href="https://discord.com/developers/applications" target="_blank" rel="noopener">Create a bot in the Discord Developer Portal</a>,
+                        turn on the <strong>Server Members</strong>, <strong>Message Content</strong> and <strong>Presence</strong> privileged intents,
+                        then invite it to this server with the <strong>bot</strong> and <strong>applications.commands</strong> scopes.
+                    </p>
+                </div>
+                <p class="ap-error cf-notice is-bad" id="custom-bot-error" role="alert" hidden></p>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="custom-bot-client-id">Application ID</label>
+                        <p class="cf-row-desc">The client ID on your application's General Information page in the Developer Portal.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="text" class="form-control" id="custom-bot-client-id" placeholder="1234567890123456789" maxlength="20" pattern="\d{17,20}" inputmode="numeric" autocomplete="off">
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="custom-bot-token">Bot token</label>
+                        <p class="cf-row-desc">From your application's Bot page. Use "Reset Token" there if you have not saved it.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="ap-secret">
+                            <input type="password" class="form-control" id="custom-bot-token" placeholder="Bot token" autocomplete="off">
+                            <button type="button" id="toggle-token-visibility" class="btn btn-secondary" aria-label="Show or hide the token"><i class="fas fa-eye" aria-hidden="true"></i></button>
+                        </div>
+                    </div>
+                </div>
+                <div class="cf-section-foot">
+                    <button type="button" id="setup-custom-bot-btn" class="btn btn-primary"><i class="fas fa-link" aria-hidden="true"></i> <span>Set up custom bot</span></button>
+                </div>
+            </div>
+        </section>
     </div>
     <% } %>
 </div>
@@ -237,6 +308,46 @@
 <script>
 (function() {
     var guildId = '<%= guild.id %>';
+
+    // Live preview of the announcement name and avatar.
+    var pv = document.getElementById('apPreview');
+    var pvName = document.getElementById('apPreviewName');
+    var pvAv = document.getElementById('apPreviewAv');
+    var nick = document.getElementById('f-appearance-bot_nickname');
+    var avUrl = document.getElementById('f-appearance-bot_avatar_url');
+    var avFile = document.getElementById('f-appearance-bot_avatar_file');
+    var avReset = document.getElementById('reset_bot_avatar');
+    var fileUrl = null;
+    function setAvatar(src) {
+        pvAv.replaceChildren();
+        if (src) {
+            var img = document.createElement('img');
+            img.alt = ''; img.referrerPolicy = 'no-referrer'; img.src = src;
+            img.addEventListener('error', function () { setAvatar(null); });
+            pvAv.appendChild(img);
+        } else {
+            var i = document.createElement('i'); i.className = 'fas fa-robot'; pvAv.appendChild(i);
+        }
+    }
+    function paintPreview() {
+        if (!pv) return;
+        var n = nick ? nick.value.trim() : '';
+        pvName.textContent = (n && n.toLowerCase() !== 'reset') ? n : pv.dataset.defaultName;
+        var url = avUrl ? avUrl.value.trim() : '';
+        var src = (avReset && avReset.checked) ? pv.dataset.defaultAvatar
+            : (fileUrl || (/^https?:[/][/][^ ]+$/i.test(url) ? url : pv.dataset.defaultAvatar));
+        setAvatar(src || null);
+    }
+    if (avFile) avFile.addEventListener('change', function () {
+        if (fileUrl) URL.revokeObjectURL(fileUrl);
+        fileUrl = avFile.files && avFile.files[0] ? URL.createObjectURL(avFile.files[0]) : null;
+        paintPreview();
+    });
+    [nick, avUrl].forEach(function (el) { if (el) el.addEventListener('input', paintPreview); });
+    if (avReset) avReset.addEventListener('change', paintPreview);
+    var apForm = document.querySelector('.ap-form');
+    if (apForm) apForm.addEventListener('reset', function () { if (fileUrl) { URL.revokeObjectURL(fileUrl); fileUrl = null; } setTimeout(paintPreview, 0); });
+    paintPreview();
 
     // Token visibility toggle
     var toggleBtn = document.getElementById('toggle-token-visibility');
@@ -262,16 +373,16 @@
             var botToken = document.getElementById('custom-bot-token').value.trim();
             var errorDiv = document.getElementById('custom-bot-error');
 
-            errorDiv.style.display = 'none';
+            errorDiv.hidden = true;
 
             if (!clientId || !/^\d{17,20}$/.test(clientId)) {
                 errorDiv.textContent = 'Please enter a valid Application ID (17-20 digit number).';
-                errorDiv.style.display = 'block';
+                errorDiv.hidden = false;
                 return;
             }
             if (!botToken) {
                 errorDiv.textContent = 'Please enter your bot token.';
-                errorDiv.style.display = 'block';
+                errorDiv.hidden = false;
                 return;
             }
 
@@ -288,20 +399,20 @@
             .then(function(result) {
                 if (!result.ok) {
                     errorDiv.textContent = result.data.details || result.data.error || 'Failed to set up bot';
-                    errorDiv.style.display = 'block';
+                    errorDiv.hidden = false;
                     setupBtn.disabled = false;
-                    setupBtn.querySelector('i').className = 'fas fa-rocket';
-                    setupBtn.querySelector('span').textContent = 'Set Up Custom Bot';
+                    setupBtn.querySelector('i').className = 'fas fa-link';
+                    setupBtn.querySelector('span').textContent = 'Set up custom bot';
                     return;
                 }
                 window.location.reload();
             })
             .catch(function() {
                 errorDiv.textContent = 'Network error. Please try again.';
-                errorDiv.style.display = 'block';
+                errorDiv.hidden = false;
                 setupBtn.disabled = false;
-                setupBtn.querySelector('i').className = 'fas fa-rocket';
-                setupBtn.querySelector('span').textContent = 'Set Up Custom Bot';
+                setupBtn.querySelector('i').className = 'fas fa-link';
+                setupBtn.querySelector('span').textContent = 'Set up custom bot';
             });
         });
     }
@@ -324,16 +435,16 @@
             var clientId = document.getElementById('replace-bot-client-id').value.trim();
             var botToken = document.getElementById('replace-bot-token').value.trim();
             var errorDiv = document.getElementById('replace-bot-error');
-            errorDiv.style.display = 'none';
+            errorDiv.hidden = true;
 
             if (!clientId || !/^\d{17,20}$/.test(clientId)) {
                 errorDiv.textContent = 'Please enter a valid Application ID (17-20 digit number).';
-                errorDiv.style.display = 'block';
+                errorDiv.hidden = false;
                 return;
             }
             if (!botToken) {
                 errorDiv.textContent = 'Please enter your bot token.';
-                errorDiv.style.display = 'block';
+                errorDiv.hidden = false;
                 return;
             }
             if (!confirm('This will replace the current custom bot. Stream announcements will be recreated. Continue?')) return;
@@ -351,20 +462,20 @@
             .then(function(result) {
                 if (!result.ok) {
                     errorDiv.textContent = result.data.details || result.data.error || 'Failed to replace bot';
-                    errorDiv.style.display = 'block';
+                    errorDiv.hidden = false;
                     replaceBtn.disabled = false;
                     replaceBtn.querySelector('i').className = 'fas fa-exchange-alt';
-                    replaceBtn.querySelector('span').textContent = 'Replace Bot';
+                    replaceBtn.querySelector('span').textContent = 'Replace bot';
                     return;
                 }
                 window.location.reload();
             })
             .catch(function() {
                 errorDiv.textContent = 'Network error. Please try again.';
-                errorDiv.style.display = 'block';
+                errorDiv.hidden = false;
                 replaceBtn.disabled = false;
                 replaceBtn.querySelector('i').className = 'fas fa-exchange-alt';
-                replaceBtn.querySelector('span').textContent = 'Replace Bot';
+                replaceBtn.querySelector('span').textContent = 'Replace bot';
             });
         });
     }
@@ -385,74 +496,25 @@
             .then(function(res) { return res.json().then(function(data) { return { ok: res.ok, data: data }; }); })
             .then(function(result) {
                 if (!result.ok) {
-                    alert(result.data.error || 'Failed to remove bot');
+                    var rmErr = document.getElementById('remove-bot-error');
+                    rmErr.textContent = result.data.error || 'Could not remove the bot.';
+                    rmErr.hidden = false;
                     removeBtn.disabled = false;
                     removeBtn.querySelector('i').className = 'fas fa-trash';
-                    removeBtn.querySelector('span').textContent = 'Remove Custom Bot';
+                    removeBtn.querySelector('span').textContent = 'Remove custom bot';
                     return;
                 }
                 window.location.reload();
             })
             .catch(function() {
-                alert('Network error. Please try again.');
+                var rmErr = document.getElementById('remove-bot-error');
+                rmErr.textContent = 'Network error. Please try again.';
+                rmErr.hidden = false;
                 removeBtn.disabled = false;
                 removeBtn.querySelector('i').className = 'fas fa-trash';
-                removeBtn.querySelector('span').textContent = 'Remove Custom Bot';
+                removeBtn.querySelector('span').textContent = 'Remove custom bot';
             });
         });
     }
 })();
 </script>
-
-<style>
-.form-label {
-    display: block;
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-primary);
-    margin-bottom: var(--spacing-2);
-}
-
-.form-sublabel {
-    display: block;
-    font-size: var(--font-size-xs);
-    font-weight: var(--font-weight-medium);
-    color: var(--color-text-secondary);
-    margin-bottom: var(--spacing-2);
-}
-
-.form-help {
-    font-size: var(--font-size-xs);
-    color: var(--color-text-muted);
-    margin-top: var(--spacing-2);
-}
-
-.form-control-color {
-    border: 2px solid var(--color-dark-400);
-    background: var(--color-dark-600);
-    transition: all var(--transition-base);
-}
-
-.form-control-color:hover {
-    border-color: var(--color-primary-400);
-}
-
-.form-check {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-2);
-}
-
-.form-check-input {
-    width: 18px;
-    height: 18px;
-    cursor: pointer;
-}
-
-.form-check-label {
-    font-size: var(--font-size-sm);
-    color: var(--color-text-secondary);
-    cursor: pointer;
-    user-select: none;
-}
-</style>

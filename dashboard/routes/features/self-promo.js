@@ -63,6 +63,16 @@ router.put('/:guildId/self-promo/config', ensureAuth, ensureGuildPerms, async (r
 
         const has = key => Object.prototype.hasOwnProperty.call(body, key);
 
+        // Channels and roles must belong to this server.
+        const spGuild = global.botManager?.getClientForGuild?.(req.guildId)?.guilds.cache.get(req.guildId);
+        const badChannel = (id) => id && (!SNOWFLAKE_RE.test(String(id)) || (spGuild && !spGuild.channels.cache.get(String(id))?.isTextBased?.()));
+        if (has('channel_id') && badChannel(body.channel_id)) return res.status(400).json({ error: 'That request channel is not a text channel in this server.' });
+        if (has('announcement_channel_id') && badChannel(body.announcement_channel_id)) return res.status(400).json({ error: 'That announcement channel is not a text channel in this server.' });
+        if (has('announce_required_role_ids') && spGuild && Array.isArray(body.announce_required_role_ids)
+            && body.announce_required_role_ids.some((id) => !spGuild.roles.cache.has(String(id)))) {
+            return res.status(400).json({ error: 'One of the required roles is not in this server.' });
+        }
+
         const enabled = has('enabled') ? (body.enabled ? 1 : 0) : (existing.enabled ?? 0);
         const channel_id = has('channel_id') ? (body.channel_id || null) : (existing.channel_id ?? null);
         const auto_subscribe = has('auto_subscribe') ? (body.auto_subscribe ? 1 : 0) : (existing.auto_subscribe ?? 1);

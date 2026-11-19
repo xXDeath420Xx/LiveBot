@@ -1,0 +1,411 @@
+<%#
+  Bulk roles: paste a list of names and create them all at once (GET/POST /api/guilds/:id/bulk-roles,
+  /preview, /create). API-driven; needs `guild` in locals. Built on the settings-row kit
+  (cf-settings.css); ids are the ones the page script and the settings search use.
+%>
+<style>
+    #bulkRolesPage .br-names { font-family: var(--cf-mono); font-size: var(--cf-text-sm); resize: vertical; min-height: 14rem; }
+    #bulkRolesPage .br-meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--cf-1) var(--cf-3); font-size: var(--cf-text-sm); color: var(--cf-text-2); font-variant-numeric: tabular-nums; }
+    #bulkRolesPage .br-muted { color: var(--cf-text-3); }
+    #bulkRolesPage .br-syntax p { margin: 0 0 var(--cf-2); font-size: var(--cf-text-sm); color: var(--cf-text-3); }
+    #bulkRolesPage .br-syntax ul, #bulkRolesPage .br-list { margin: 0; padding-left: 1.1rem; display: grid; gap: 4px; font-size: var(--cf-text-sm); color: var(--cf-text-2); }
+    #bulkRolesPage .br-syntax code { font-size: 0.88em; padding: 1px 5px; border-radius: var(--cf-radius-sm); background: var(--cf-surface-2); border: 1px solid var(--cf-border); color: var(--cf-text-2); overflow-wrap: anywhere; }
+    #bulkRolesPage .cf-section-desc code { white-space: nowrap; }
+    #bulkRolesPage .br-color { display: grid; grid-template-columns: 2.75rem minmax(0, 1fr) auto; gap: var(--cf-2); align-items: center; }
+    #bulkRolesPage .br-color input[type="color"] { width: 2.75rem; height: 38px; padding: 3px; margin: 0; cursor: pointer; border: 1px solid var(--cf-border-strong); border-radius: var(--cf-radius); background: var(--cf-surface-2); }
+    #bulkRolesPage .br-color input[type="text"] { width: 100%; margin: 0; }
+    #bulkRolesPage #brPermCatalog { display: grid; gap: var(--cf-3); margin-bottom: var(--cf-3); }
+    #bulkRolesPage .br-permgroup { margin: 0 0 4px; font-size: var(--cf-text-xs); font-weight: 600; color: var(--cf-text-3); }
+    #bulkRolesPage .br-permlist { --cf-check-min: 12rem; }
+    #bulkRolesPage .br-permlist .br-denied { color: var(--cf-text-3); cursor: not-allowed; }
+    #bulkRolesPage #brStatus { margin-right: auto; }
+    #bulkRolesPage .br-section:has(#brResults:empty) { display: none; }
+    /* Role chips are .cf-chip in the role's colour; the flags read quieter. */
+    #bulkRolesPage .br-flag { font-weight: 400; color: var(--cf-text-3); }
+    #bulkRolesPage .br-placement { margin: var(--cf-2) 0 0; font-size: var(--cf-text-sm); color: var(--cf-text-3); }
+    #bulkRolesPage .br-blocked { color: var(--cf-danger); font-size: var(--cf-text-sm); }
+    #bulkRolesPage .br-starts { display: flex; flex-wrap: wrap; gap: var(--cf-2); }
+    @media (max-width: 640px) {
+        #bulkRolesPage .br-color { grid-template-columns: 2.75rem minmax(0, 1fr); }
+        #bulkRolesPage .br-color .btn { grid-column: 1 / -1; }
+        #bulkRolesPage .br-color input[type="color"] { height: 44px; }
+    }
+</style>
+
+<div class="page-section" id="bulkRolesPage" data-guild-id="<%= guild.id %>">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-layer-group"></i>
+                <span>Bulk roles</span>
+            </div>
+            <div class="page-section-subtitle">Nothing is created until you preview the list and confirm.</div>
+        </div>
+    </div>
+
+    <div id="brError" class="cf-notice is-bad" role="alert" hidden></div>
+    <div id="brWarn" class="cf-notice is-warn" role="status" hidden></div>
+
+    <section class="cf-section" aria-labelledby="br-names-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="br-names-title">Role names</h2>
+                <p class="cf-section-desc">One name per line. The settings below apply to every role; you can change them for a single line with <code>Name | #ff0000 | hoist</code>.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--stack">
+                <div class="cf-row-text">
+                    <span class="cf-row-label">Start from a list</span>
+                    <p class="cf-row-desc">Fills the box below with ready-made names and colours. Edit them before you preview.</p>
+                </div>
+                <div class="br-starts" role="group" aria-label="Start from a list">
+                    <button type="button" class="btn btn-secondary btn-sm br-start" value="rainbow">Rainbow colours</button>
+                    <button type="button" class="btn btn-secondary btn-sm br-start" value="pastel">Pastel colours</button>
+                    <button type="button" class="btn btn-secondary btn-sm br-start" value="muted">Muted colours</button>
+                    <button type="button" class="btn btn-secondary btn-sm br-start" value="pronouns">Pronouns</button>
+                    <button type="button" class="btn btn-secondary btn-sm br-start" value="pings">Notification pings</button>
+                </div>
+            </div>
+            <div class="cf-row cf-row--stack">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="brNames">Names</label>
+                    <p class="cf-row-desc" id="brNames-desc">Lines starting with <code>//</code> are ignored.</p>
+                </div>
+                <div class="cf-row-control">
+                    <textarea id="brNames" class="form-control br-names" rows="14" spellcheck="false" aria-describedby="brNames-desc"
+                              placeholder="Moderator&#10;Event Team&#10;Subscriber | #ff69b4 | hoist&#10;VIP | gold | mentionable&#10;// lines starting with // are ignored"></textarea>
+                    <div class="br-meta">
+                        <span id="brCount">0 names</span>
+                        <span id="brRoom" class="br-muted"></span>
+                    </div>
+                </div>
+            </div>
+            <details class="cf-expand br-syntax">
+                <summary>Settings for a single line</summary>
+                <div class="cf-expand-body">
+                    <p>Add tokens after a name, separated by <code>|</code>, to override the defaults for that role:</p>
+                    <ul>
+                        <li><code>#ff0000</code>, <code>blurple</code> or <code>random</code>: colour</li>
+                        <li><code>hoist</code> or <code>nohoist</code>: show separately in the member list</li>
+                        <li><code>mentionable</code> or <code>nomentionable</code></li>
+                        <li><code>perms=moderator</code> or <code>perms=ManageMessages+KickMembers</code></li>
+                    </ul>
+                </div>
+            </details>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="br-defaults-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="br-defaults-title">Settings for every role</h2>
+                <p class="cf-section-desc">Preview first: Create roles is enabled once the preview has run, and any change disables it again.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--wide">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="brColorText">Colour</label>
+                    <p class="cf-row-desc" id="brColorText-desc">A hex code, a name such as <code>blurple</code>, or <code>random</code>. Leave it empty for no colour.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="br-color">
+                        <input type="color" id="brColor" value="#5865f2" aria-label="Pick a colour">
+                        <input type="text" id="brColorText" class="form-control" value="" placeholder="#5865F2, blurple, or random" aria-describedby="brColorText-desc">
+                        <button type="button" class="btn btn-secondary btn-sm" id="brColorClear">No colour</button>
+                    </div>
+                </div>
+            </div>
+            <div class="cf-row cf-row--wide">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="brPreset">Permissions</label>
+                    <p class="cf-row-desc" id="brPresetHelp" aria-live="polite"></p>
+                </div>
+                <div class="cf-row-control">
+                    <select id="brPreset" class="form-select"></select>
+                </div>
+            </div>
+            <details class="cf-expand br-perms">
+                <summary>Choose individual permissions instead</summary>
+                <div class="cf-expand-body">
+                    <div id="brPermCatalog"></div>
+                    <button type="button" class="btn btn-secondary btn-sm" id="brPermClear">Clear all</button>
+                </div>
+            </details>
+            <div class="cf-row cf-row--wide">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="brBelow">Placement</label>
+                    <p class="cf-row-desc" id="brBelow-desc">New roles go directly below the role you pick, in the order listed, so the first line ends up highest. The bot cannot place roles above its own highest role.</p>
+                </div>
+                <div class="cf-row-control">
+                    <select id="brBelow" class="form-select" aria-describedby="brBelow-desc"></select>
+                </div>
+            </div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="brHoist">Display separately</label>
+                    <p class="cf-row-desc" id="brHoist-desc">Members with the role show in their own group in the member list.</p>
+                </div>
+                <div class="cf-row-control">
+                    <input type="checkbox" class="cf-switch" role="switch" id="brHoist" aria-describedby="brHoist-desc">
+                </div>
+            </div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="brMentionable">Allow @mention</label>
+                    <p class="cf-row-desc" id="brMentionable-desc">Anyone can mention the role.</p>
+                </div>
+                <div class="cf-row-control">
+                    <input type="checkbox" class="cf-switch" role="switch" id="brMentionable" aria-describedby="brMentionable-desc">
+                </div>
+            </div>
+            <div class="cf-section-foot">
+                <span class="cf-status-line" id="brStatus" role="status" aria-live="polite"></span>
+                <button type="button" class="btn btn-secondary" id="brPreview">Preview</button>
+                <button type="button" class="btn btn-primary" id="brCreate" disabled>Create roles</button>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section br-section" aria-labelledby="br-results-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="br-results-title">Result</h2>
+                <p class="cf-section-desc">What the preview found, or what was created.</p>
+            </div>
+        </header>
+        <div id="brResults" class="cf-rows"></div>
+    </section>
+</div>
+
+<script>
+(function () {
+  const root = document.getElementById('bulkRolesPage');
+  if (!root) return;
+  const guildId = root.dataset.guildId;
+  const api = (p) => `/api/guilds/${guildId}/bulk-roles${p}`;
+  const $ = (id) => document.getElementById(id);
+
+  let state = { presets: [], catalog: [], limits: {}, customPerms: new Set(), lastPreview: null };
+
+  // Ready-made lists for "Start from a list" (one role per line, "Name | colour").
+  const STARTS = {
+    rainbow: 'Red | #e74c3c\nOrange | #e67e22\nYellow | #f1c40f\nGreen | #2ecc71\nTeal | #1abc9c\nBlue | #3498db\nPurple | #9b59b6\nPink | #ff6fae',
+    pastel: 'Pastel red | #ffadad\nPastel orange | #ffd6a5\nPastel yellow | #fdffb6\nPastel green | #caffbf\nPastel blue | #9bf6ff\nPastel lavender | #bdb2ff\nPastel pink | #ffc6ff',
+    muted: 'Slate | #64748b\nSage | #84a98c\nSand | #c2b280\nClay | #b5651d\nDusk | #6d597a\nStorm | #4a5568',
+    pronouns: 'He/him\nShe/her\nThey/them\nAny pronouns\nAsk my pronouns',
+    pings: 'Announcements\nEvents\nGiveaways\nGoing live\nPolls\nUpdates',
+  };
+
+  // Every server value is set as text.
+  function el(tag, props, ...kids) {
+    const n = document.createElement(tag);
+    if (props) for (const [k, v] of Object.entries(props)) {
+      if (v === null || v === undefined || v === false) continue;
+      if (k === 'text') n.textContent = v;
+      else if (k === 'className') n.className = v;
+      else if (k === 'value') n.value = v;
+      else n.setAttribute(k, v === true ? '' : v);
+    }
+    for (const kid of kids.flat(Infinity)) if (kid !== null && kid !== undefined && kid !== false) n.appendChild(typeof kid === 'string' ? document.createTextNode(kid) : kid);
+    return n;
+  }
+
+  async function req(url, options) {
+    const res = await fetch(url, { credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, ...options });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
+    return body;
+  }
+  const showError = (m) => { const box = $('brError'); if (!m) { box.hidden = true; return; } box.textContent = m; box.hidden = false; };
+  const showWarn = (nodes) => { const box = $('brWarn'); if (!nodes) { box.hidden = true; return; } box.replaceChildren(el('div', { className: 'cf-notice-body' }, nodes)); box.hidden = false; };
+  const flash = (m, ok = true) => { const box = $('brStatus'); box.textContent = m; box.classList.toggle('is-ok', ok && !!m); box.classList.toggle('is-bad', !ok); };
+  // One group in the results panel: a small heading and its content.
+  const group = (title, inner) => [el('div', { className: 'cf-rows-head', text: title }), el('div', { className: 'cf-row cf-row--stack' }, inner)];
+  const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+  // ── payload ──────────────────────────────────────────────────────────────
+  function body() {
+    const colorText = $('brColorText').value.trim();
+    const payload = {
+      names: $('brNames').value,
+      color: colorText,
+      hoist: $('brHoist').checked,
+      mentionable: $('brMentionable').checked,
+      below: $('brBelow').value || null,
+    };
+    // An explicit checkbox selection wins over the preset dropdown server-side too.
+    if (state.customPerms.size) payload.permissions = [...state.customPerms];
+    else payload.preset = $('brPreset').value;
+    return payload;
+  }
+
+  // ── initial load ─────────────────────────────────────────────────────────
+  async function load() {
+    try {
+      const data = await req(api('/'));
+      state.presets = data.presets;
+      state.catalog = data.permissionCatalog;
+      state.limits = data.limits;
+
+      const keepPreset = $('brPreset').value;
+      $('brPreset').replaceChildren(...data.presets.map(p => el('option', { value: p.key, text: p.label })));
+      if (keepPreset && data.presets.some(p => p.key === keepPreset)) $('brPreset').value = keepPreset;
+      updatePresetHelp();
+
+      const keepBelow = $('brBelow').value;
+      $('brBelow').replaceChildren(el('option', { value: '', text: 'Bottom of the role list' }),
+        ...data.roles.filter(r => r.creatableBelow).map(r => el('option', { value: r.id, text: `Below ${r.name}` })));
+      if (keepBelow) $('brBelow').value = keepBelow;
+
+      $('brPermCatalog').replaceChildren(...data.permissionCatalog.map(g => el('div', null,
+        el('div', { className: 'br-permgroup', text: g.group }),
+        el('div', { className: 'cf-check-grid br-permlist' }, g.perms.map(p =>
+          el('label', { className: 'cf-choice' + (p.allowed ? '' : ' br-denied'), title: p.allowed ? null : 'You do not have this permission yourself' },
+            el('input', { type: 'checkbox', 'data-perm': p.key, disabled: !p.allowed, checked: state.customPerms.has(p.key) || null }),
+            el('span', { text: p.label })))))));
+
+      $('brRoom').textContent = `${state.limits.currentRoleCount} of ${state.limits.guildRoleLimit} roles used, ${state.limits.remaining} left`;
+
+      showWarn(data.botCanManageRoles ? null : ['The bot does not have the ', el('strong', { text: 'Manage Roles' }), ' permission in this server, so no roles can be created yet.']);
+      countNames();
+    } catch (err) {
+      showError(err.message);
+    }
+  }
+
+  function updatePresetHelp() {
+    const preset = state.presets.find(p => p.key === $('brPreset').value);
+    $('brPresetHelp').textContent = preset
+      ? `${preset.description}${preset.permissions.length ? ` (${plural(preset.permissions.length, 'permission')})` : ''}`
+      : '';
+  }
+
+  function countNames() {
+    const lines = $('brNames').value.split(/\r?\n/).filter(l => l.trim() && !l.trim().startsWith('//'));
+    $('brCount').textContent = plural(lines.length, 'name');
+    if (state.limits.maxPerBatch && lines.length > state.limits.maxPerBatch) {
+      $('brCount').textContent += ` (at most ${state.limits.maxPerBatch} per run)`;
+    }
+    // Any edit invalidates the preview the Create button was enabled against.
+    $('brCreate').disabled = true;
+    state.lastPreview = null;
+  }
+
+  // ── preview ──────────────────────────────────────────────────────────────
+  // A role as a .cf-chip in its colour (--cf-chip), with optional quiet flags after the name.
+  function chip(name, color, flags) {
+    const c = el('span', { className: 'cf-chip' }, color ? el('span', { className: 'cf-chip-dot' }) : null,
+      el('span', null, name, flags ? el('span', { className: 'br-flag', text: ' ' + flags }) : null));
+    if (color) c.style.setProperty('--cf-chip', color);
+    return c;
+  }
+  function roleChip(r) {
+    const flags = [r.hoist ? 'hoisted' : null, r.mentionable ? 'mentionable' : null,
+                   r.permissions.length ? plural(r.permissions.length, 'perm') : null].filter(Boolean).join(' · ');
+    return chip(r.name, r.color, flags);
+  }
+  const chips = (list, fn, empty) => el('div', { className: 'cf-chips' }, list.length ? list.map(fn) : el('span', { className: 'br-muted', text: empty }));
+  const lines = (items) => el('ul', { className: 'br-list' }, items.map(t => el('li', { text: t })));
+
+  function renderPreview(data) {
+    const parts = [];
+    if (data.blocked) parts.push(el('div', { className: 'cf-row cf-row--stack' }, el('div', { className: 'br-blocked', role: 'alert', text: data.blocked })));
+
+    parts.push(...group(`Will create ${plural(data.create.length, 'role')}`, [
+      chips(data.create, roleChip, 'Nothing to create.'),
+      data.placement ? el('p', { className: 'br-placement' }, 'Placed directly below ', el('strong', { text: data.placement.anchor.name }),
+        data.placement.clamped ? ' (lowered: the bot cannot place roles that high).' : '.') : null,
+    ]));
+    if (data.skip.length) parts.push(...group(`Skipped, already exist (${data.skip.length})`, chips(data.skip, s => chip(s.name))));
+    if (data.errors.length) parts.push(...group(`Ignored lines (${data.errors.length})`, lines(data.errors.map(e => `Line ${Number(e.line)}: ${e.error}`))));
+
+    const notes = data.permissionNotes || {};
+    if (notes.blockedByActor?.length || notes.blockedByBot?.length) parts.push(...group('Permissions that will not be granted', [
+      notes.blockedByActor?.length ? el('div', { className: 'br-muted', text: `You do not have these yourself: ${notes.blockedByActor.join(', ')}` }) : null,
+      notes.blockedByBot?.length ? el('div', { className: 'br-muted', text: `The bot does not have these: ${notes.blockedByBot.join(', ')}` }) : null,
+    ]));
+    $('brResults').replaceChildren(...parts);
+  }
+
+  async function preview() {
+    showError('');
+    flash('Checking…');
+    try {
+      const data = await req(api('/preview'), { method: 'POST', body: JSON.stringify(body()) });
+      state.lastPreview = data;
+      renderPreview(data);
+      $('brCreate').disabled = !!data.blocked || !data.create.length;
+      flash(data.blocked ? '' : `${data.create.length} ready to create.`, !data.blocked);
+    } catch (err) {
+      flash('', false);
+      showError(err.message);
+    }
+  }
+
+  async function create() {
+    const count = state.lastPreview?.create?.length ?? 0;
+    if (count && !confirm(`Create ${plural(count, 'role')} in this server?`)) return;
+
+    showError('');
+    $('brCreate').disabled = true;
+    flash('Creating…');
+    try {
+      const data = await req(api('/create'), { method: 'POST', body: JSON.stringify(body()) });
+      const parts = [...group(`Created ${plural(data.created.length, 'role')}`, chips(data.created, r => chip(r.name, r.color), 'None.'))];
+      if (data.failed.length) parts.push(...group(`Failed (${data.failed.length})`, lines(data.failed.map(f => `${f.name}: ${f.error}`))));
+      if (data.skip.length) parts.push(...group(`Skipped, already existed (${data.skip.length})`, chips(data.skip, s => chip(s.name))));
+      $('brResults').replaceChildren(...parts);
+      flash(`Done: ${data.created.length} created.`);
+      state.lastPreview = null;
+      load();
+    } catch (err) {
+      flash('', false);
+      showError(err.message);
+      $('brCreate').disabled = false;
+    }
+  }
+
+  // ── wiring ───────────────────────────────────────────────────────────────
+  root.querySelectorAll('.br-start').forEach(btn => btn.addEventListener('click', () => {
+    const text = STARTS[btn.value];
+    if (!text) return;
+    if ($('brNames').value.trim() && !confirm('Replace the names already in the box?')) return;
+    $('brNames').value = text;
+    countNames();
+    $('brNames').focus();
+  }));
+  $('brNames').addEventListener('input', countNames);
+  $('brPreset').addEventListener('change', () => { updatePresetHelp(); $('brCreate').disabled = true; });
+  $('brColor').addEventListener('input', () => { $('brColorText').value = $('brColor').value; $('brCreate').disabled = true; });
+  $('brColorText').addEventListener('input', () => {
+    const v = $('brColorText').value.trim();
+    if (/^#[0-9a-f]{6}$/i.test(v)) $('brColor').value = v;
+    $('brCreate').disabled = true;
+  });
+  $('brColorClear').addEventListener('click', () => { $('brColorText').value = ''; $('brCreate').disabled = true; });
+  $('brPermClear').addEventListener('click', () => {
+    state.customPerms.clear();
+    root.querySelectorAll('#brPermCatalog input[data-perm]').forEach(i => { i.checked = false; });
+    $('brPreset').disabled = false;
+    updatePresetHelp();
+    $('brCreate').disabled = true;
+  });
+  $('brPermCatalog').addEventListener('change', (e) => {
+    const key = e.target?.dataset?.perm;
+    if (!key) return;
+    if (e.target.checked) state.customPerms.add(key); else state.customPerms.delete(key);
+    $('brPreset').disabled = state.customPerms.size > 0;
+    if (state.customPerms.size) $('brPresetHelp').textContent = `${plural(state.customPerms.size, 'permission')} chosen below; the preset is ignored.`;
+    else updatePresetHelp();
+    $('brCreate').disabled = true;
+  });
+  ['brHoist', 'brMentionable', 'brBelow'].forEach(id =>
+    $(id).addEventListener('change', () => { $('brCreate').disabled = true; }));
+  $('brPreview').addEventListener('click', preview);
+  $('brCreate').addEventListener('click', create);
+
+  load();
+})();
+</script>

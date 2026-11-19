@@ -1,4 +1,5 @@
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
+import { themeColor } from '../../core/guild-theme.js';
 
 export default {
     category: 'tools',
@@ -28,7 +29,7 @@ export default {
     ].filter(Boolean).join(' ');
 
     const embed = new EmbedBuilder()
-      .setColor('#5865F2')
+      .setColor(themeColor(interaction.guildId, 'primary'))
       .setTitle('🏓 Pong!')
       .addFields(
         { name: 'Roundtrip Latency', value: `${roundtripLatency}ms`, inline: true },

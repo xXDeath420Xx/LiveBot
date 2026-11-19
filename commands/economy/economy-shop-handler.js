@@ -2,6 +2,7 @@ import { EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 import shopManager from '../../core/shop-manager.js';
 import economyManager from '../../core/economy-manager.js';
 import logger from '../../utils/logger.js';
+import { themeColor } from '../../core/guild-theme.js';
 
 export async function handleBrowse(interaction) {
     const category = interaction.options.getString('category') || 'all';
@@ -75,7 +76,7 @@ export async function handleBuy(interaction) {
     }
 
     const embed = new EmbedBuilder()
-        .setColor('#00FF00')
+        .setColor(themeColor(interaction.guildId, 'success'))
         .setTitle('\u2705 Purchase Successful!')
         .setDescription(`You purchased **${quantity}x ${result.item.item_emoji || '\ud83d\udce6'} ${result.item.item_name}**`)
         .addFields(
@@ -101,7 +102,7 @@ export async function handleSell(interaction) {
     const result = await shopManager.sellItem(interaction.guild.id, interaction.user.id, itemId, quantity);
 
     const embed = new EmbedBuilder()
-        .setColor('#00FF00')
+        .setColor(themeColor(interaction.guildId, 'success'))
         .setTitle('\u2705 Sale Successful!')
         .setDescription(`You sold **${quantity}x ${result.item.item_emoji || '\ud83d\udce6'} ${result.item.item_name}**`)
         .addFields(
@@ -221,7 +222,7 @@ export async function handleUse(interaction) {
     const result = await shopManager.useItem(interaction.guild.id, interaction.user.id, itemId);
 
     const embed = new EmbedBuilder()
-        .setColor('#00FF00')
+        .setColor(themeColor(interaction.guildId, 'success'))
         .setTitle('\u2705 Item Used!')
         .setDescription(`You used **${result.item.item_emoji || '\ud83d\udce6'} ${result.item.item_name}**`)
         .addFields(
@@ -260,14 +261,16 @@ export async function handleCreate(interaction) {
         price,
         sellValue: Math.floor(price * 0.5),
         stock,
-        roleId: role ? role.id : null
+        roleId: role ? role.id : null,
+        // Consumables exist to be used; without this no command-created item could ever be /economy shop use'd.
+        usable: type === 'consumable'
     };
 
     const item = await shopManager.createShopItem(interaction.guild.id, itemData);
     const config = await economyManager.getEconomyConfig(interaction.guild.id);
 
     const embed = new EmbedBuilder()
-        .setColor('#00FF00')
+        .setColor(themeColor(interaction.guildId, 'success'))
         .setTitle('\u2705 Shop Item Created!')
         .setDescription(`**${item.item_emoji} ${item.item_name}** has been added to the shop!`)
         .addFields(
@@ -292,7 +295,7 @@ export async function handleDelete(interaction) {
     await shopManager.deleteShopItem(itemId, interaction.guild.id);
 
     const embed = new EmbedBuilder()
-        .setColor('#FF0000')
+        .setColor(themeColor(interaction.guildId, 'danger'))
         .setTitle('\u2705 Shop Item Deleted!')
         .setDescription(`Item ID ${itemId} has been removed from the shop.`);
 
@@ -331,7 +334,7 @@ export async function handleEdit(interaction) {
     const config = await economyManager.getEconomyConfig(interaction.guild.id);
 
     const embed = new EmbedBuilder()
-        .setColor('#00FF00')
+        .setColor(themeColor(interaction.guildId, 'success'))
         .setTitle('\u2705 Shop Item Updated!')
         .setDescription(`Item ID ${itemId} has been updated.`);
 

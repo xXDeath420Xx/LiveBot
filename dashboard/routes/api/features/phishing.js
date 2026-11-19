@@ -6,8 +6,26 @@
 import express from 'express';
 import pool from '../../../../utils/db.js';
 import logger from '../../../../utils/logger.js';
+import { normalizeHost } from '../../../../core/safe-domains.js';
 
 const router = express.Router({ mergeParams: true });
+
+/**
+ * Store allowlist entries as bare hosts.
+ *
+ * The field is labelled "domains" but people paste what they copied, so
+ * "https://www.example.com/" arrives here regularly. Detection compares against
+ * an extracted hostname, so storing the raw string produced an allowlist that
+ * displayed correctly and matched nothing.
+ */
+function normalizeWhitelist(raw) {
+    if (!raw || raw === '[]') return '[]';
+    let parsed;
+    try { parsed = JSON.parse(raw); } catch { return raw; }
+    if (!Array.isArray(parsed)) return raw;
+    const hosts = [...new Set(parsed.map(normalizeHost).filter(Boolean))];
+    return JSON.stringify(hosts);
+}
 
 /**
  * GET /api/guilds/:guildId/phishing
@@ -85,10 +103,11 @@ router.put('/', async (req, res) => {
         `, [
             guildId,
             enabled ? 1 : 0,
-            action || 'delete',
-            mute_duration_minutes || 30,
+            ['delete', 'warn', 'mute', 'kick', 'ban'].includes(action) ? action : 'delete',
+            // The page's range: 1 minute to 7 days.
+            Math.min(10080, Math.max(1, Number.parseInt(mute_duration_minutes, 10) || 30)),
             alert_channel_id || null,
-            whitelist_domains || '[]',
+            normalizeWhitelist(whitelist_domains),
             log_detections ? 1 : 0,
             exempt_channels || '[]',
             report_channel_id || null

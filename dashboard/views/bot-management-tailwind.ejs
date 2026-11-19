@@ -1,503 +1,498 @@
+<%#
+  /bot-management — custom bots. Bot creators see their own bots; super-admins also get every
+  owner's bots (?scope=all), which is the owner console's bot list, plus who may create bots.
+  Data: GET /api/bots/fleet (dashboard/routes/bots.js). Actions: PUT/DELETE /api/bots/:id,
+  POST /api/bots/:id/reconnect, POST /api/bots, super-admin approve + bot creators.
+%>
+<%
+// Locals from dashboard/server.js; the defaults keep the page working with an older route.
+const _scope = (typeof scope !== 'undefined' && scope) ? scope : 'mine';
+const _sa = !!((typeof isSuperAdmin !== 'undefined' && isSuperAdmin) || (user && user.isSuperAdmin));
+const _all = _scope === 'all';
+%>
 <!DOCTYPE html>
-<html lang="en">
+<html data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>" lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="Bot Management - CertiFried MultiTool">
-    <meta name="csrf-token" content="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
-    <meta name="theme-color" content="#a78bfa">
-    <title>Bot Management - CertiFried MultiTool</title>
-    <link rel="icon" type="image/png" href="/images/CertiFried.png">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<%- include('partials/site-head', { title: ('Custom bots') + ' · CertiFried', noindex: true }) %>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-        :root {
-            --bg-primary: #0b0f11;
-            --bg-secondary: #0f1316;
-            --bg-card: rgba(255, 255, 255, 0.03);
-            --bg-card-hover: rgba(255, 255, 255, 0.06);
-            --border-color: rgba(255, 255, 255, 0.08);
-            --text-primary: #ffffff;
-            --text-secondary: rgba(255, 255, 255, 0.7);
-            --text-muted: rgba(255, 255, 255, 0.5);
-            --accent-purple: #a78bfa;
-            --accent-blue: #60a5fa;
-            --accent-green: #23f56b;
-            --accent-cyan: #22d3ee;
-            --accent-yellow: #fbbf24;
-            --accent-red: #f87171;
-            --accent-orange: #fb923c;
-        }
-        html { scroll-behavior: smooth; }
-        body {
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-            background: var(--bg-primary);
-            color: var(--text-primary);
-            min-height: 100vh;
-            line-height: 1.6;
-        }
-
-        /* Background Effects */
-        .bg-effects { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; overflow: hidden; }
-        .orb { position: absolute; border-radius: 50%; filter: blur(100px); opacity: 0.15; animation: float 25s ease-in-out infinite; }
-        .orb-1 { width: 500px; height: 500px; background: linear-gradient(135deg, #7c3aed, #a78bfa); top: -15%; right: -10%; }
-        .orb-2 { width: 400px; height: 400px; background: linear-gradient(135deg, #3b82f6, #60a5fa); bottom: -15%; left: -10%; animation-delay: -12s; }
-        @keyframes float { 0%, 100% { transform: translate(0, 0) scale(1); } 50% { transform: translate(30px, 30px) scale(1.05); } }
-
-        .container { width: 100%; max-width: 1200px; margin: 0 auto; padding: 0 clamp(1rem, 4vw, 2rem); }
-
-        /* Navbar */
-        .navbar { position: fixed; top: 0; left: 0; right: 0; z-index: 1000; padding: 1rem 0; background: rgba(11, 15, 17, 0.9); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-bottom: 1px solid var(--border-color); }
-        .navbar-content { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
-        .navbar-brand { display: flex; align-items: center; gap: 0.75rem; text-decoration: none; color: var(--text-primary); font-weight: 700; font-size: 1.1rem; }
-        .navbar-logo { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 2px solid var(--accent-purple); }
-        .navbar-links { display: flex; align-items: center; gap: 1.5rem; }
-        .navbar-links a { color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; font-weight: 500; transition: color 0.2s; }
-        .navbar-links a:hover, .navbar-links a.active { color: var(--text-primary); }
-
-        /* User Menu */
-        .user-menu-container { position: relative; }
-        .user-menu { display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 1rem; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 50px; cursor: pointer; transition: all 0.2s; }
-        .user-menu:hover { background: var(--bg-card-hover); border-color: var(--accent-purple); }
-        .user-avatar { width: 28px; height: 28px; border-radius: 50%; }
-        .user-name { font-size: 0.85rem; font-weight: 600; color: var(--text-primary); }
-        .user-menu-chevron { font-size: 0.7rem; color: var(--text-muted); transition: transform 0.2s; }
-        .user-menu-container.open .user-menu-chevron { transform: rotate(180deg); }
-        .user-dropdown { position: absolute; top: calc(100% + 8px); right: 0; min-width: 220px; background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 14px; box-shadow: 0 20px 50px rgba(0,0,0,0.5); opacity: 0; visibility: hidden; transform: translateY(-10px); transition: all 0.2s ease; z-index: 1001; overflow: hidden; }
-        .user-menu-container.open .user-dropdown { opacity: 1; visibility: visible; transform: translateY(0); }
-        .dropdown-header { padding: 1rem; border-bottom: 1px solid var(--border-color); }
-        .dropdown-user-info { font-size: 0.8rem; color: var(--text-muted); }
-        .dropdown-divider { height: 1px; background: var(--border-color); margin: 0.5rem 0; }
-        .dropdown-item { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem; color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; transition: all 0.15s; }
-        .dropdown-item:hover { background: var(--bg-card-hover); color: var(--text-primary); }
-        .dropdown-item i { width: 18px; text-align: center; }
-        .dropdown-item.text-warning { color: var(--accent-yellow); }
-        .dropdown-item.text-warning:hover { background: rgba(251, 191, 36, 0.1); }
-        .dropdown-item.text-danger { color: var(--accent-red); }
-        .dropdown-item.text-danger:hover { background: rgba(248, 113, 113, 0.1); }
-
-        /* Mobile Menu */
-        .mobile-menu-btn { display: none; background: none; border: none; color: var(--text-secondary); padding: 0.5rem; cursor: pointer; }
-        @media (max-width: 768px) {
-            .navbar-links { display: none; }
-            .mobile-menu-btn { display: block; }
-        }
-
-        /* Main Content */
-        main { position: relative; z-index: 1; padding: 100px 0 4rem; min-height: 100vh; }
-
-        /* Page Header */
-        .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem; }
-        .page-header-content { display: flex; align-items: center; gap: 1rem; }
-        .page-icon { width: 56px; height: 56px; background: linear-gradient(135deg, rgba(167, 139, 250, 0.2), rgba(124, 58, 237, 0.2)); border: 1px solid rgba(167, 139, 250, 0.3); border-radius: 16px; display: flex; align-items: center; justify-content: center; }
-        .page-icon i { font-size: 1.5rem; color: var(--accent-purple); }
-        .page-title { font-size: clamp(1.5rem, 4vw, 2rem); font-weight: 800; background: linear-gradient(135deg, var(--text-primary), var(--accent-purple)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
-        .page-subtitle { color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.25rem; }
-
-        /* Cards */
-        .card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; overflow: hidden; backdrop-filter: blur(10px); transition: all 0.2s; }
-        .card:hover { border-color: rgba(167, 139, 250, 0.3); }
-        .card-header { display: flex; align-items: center; justify-content: space-between; padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border-color); flex-wrap: wrap; gap: 1rem; }
-        .card-title { display: flex; align-items: center; gap: 0.75rem; font-weight: 600; font-size: 1.1rem; }
-        .card-body { padding: 1.5rem; }
-
-        /* Info Alert */
-        .info-alert { background: rgba(167, 139, 250, 0.1); border: 1px solid rgba(167, 139, 250, 0.3); border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 1.5rem; display: flex; align-items: flex-start; gap: 0.75rem; }
-        .info-alert i { color: var(--accent-purple); margin-top: 2px; }
-        .info-alert p { color: var(--text-secondary); font-size: 0.9rem; margin: 0; }
-
-        /* Bot Cards */
-        .bot-card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 14px; padding: 1.25rem; margin-bottom: 1rem; transition: all 0.2s; }
-        .bot-card:hover { border-color: rgba(167, 139, 250, 0.4); transform: translateY(-2px); }
-        .bot-card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
-        .bot-info { flex: 1; min-width: 200px; }
-        .bot-name-row { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem; flex-wrap: wrap; }
-        .bot-name { font-weight: 600; font-size: 1.1rem; color: var(--text-primary); }
-        .status-dot { width: 8px; height: 8px; border-radius: 50%; }
-        .status-dot.online { background: var(--accent-green); box-shadow: 0 0 8px var(--accent-green); }
-        .status-dot.offline { background: var(--accent-red); }
-        .badge { padding: 0.25rem 0.75rem; font-size: 0.7rem; font-weight: 600; border-radius: 6px; text-transform: uppercase; letter-spacing: 0.5px; }
-        .badge-success { background: rgba(35, 245, 107, 0.15); color: var(--accent-green); border: 1px solid rgba(35, 245, 107, 0.3); }
-        .badge-warning { background: rgba(251, 191, 36, 0.15); color: var(--accent-yellow); border: 1px solid rgba(251, 191, 36, 0.3); }
-        .bot-id { font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.25rem; }
-        .bot-id code { background: rgba(0,0,0,0.3); padding: 0.15rem 0.5rem; border-radius: 4px; font-size: 0.8rem; }
-        .bot-stats { font-size: 0.8rem; color: var(--text-muted); }
-        .bot-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
-
-        /* Buttons */
-        .btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.6rem 1.25rem; font-size: 0.9rem; font-weight: 600; border-radius: 10px; border: none; cursor: pointer; transition: all 0.2s; text-decoration: none; }
-        .btn-primary { background: linear-gradient(135deg, #7c3aed, #a78bfa); color: white; }
-        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(167, 139, 250, 0.4); color: white; }
-        .btn-outline { background: transparent; border: 1px solid var(--accent-purple); color: var(--accent-purple); }
-        .btn-outline:hover { background: var(--accent-purple); color: white; }
-        .btn-danger-outline { background: transparent; border: 1px solid var(--accent-red); color: var(--accent-red); }
-        .btn-danger-outline:hover { background: var(--accent-red); color: white; }
-        .btn-sm { padding: 0.4rem 0.9rem; font-size: 0.8rem; }
-
-        /* Empty State */
-        .empty-state { text-align: center; padding: 3rem 1rem; color: var(--text-muted); }
-        .empty-state i { font-size: 3rem; margin-bottom: 1rem; opacity: 0.5; }
-        .empty-state p { font-size: 1rem; }
-
-        /* Modal */
-        .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 2000; align-items: center; justify-content: center; padding: 1rem; }
-        .modal-overlay.active { display: flex; }
-        .modal-content { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 16px; max-width: 450px; width: 100%; max-height: 90vh; overflow-y: auto; }
-        .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border-color); }
-        .modal-title { font-weight: 600; font-size: 1.1rem; }
-        .modal-close { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 0.25rem; transition: color 0.2s; }
-        .modal-close:hover { color: var(--text-primary); }
-        .modal-body { padding: 1.5rem; }
-        .modal-footer { display: flex; gap: 0.75rem; padding: 1rem 1.5rem; border-top: 1px solid var(--border-color); }
-        .modal-footer .btn { flex: 1; }
-
-        /* Form */
-        .form-group { margin-bottom: 1.25rem; }
-        .form-label { display: block; font-size: 0.9rem; font-weight: 500; color: var(--text-secondary); margin-bottom: 0.5rem; }
-        .form-input { width: 100%; padding: 0.75rem 1rem; background: rgba(0,0,0,0.3); border: 1px solid var(--border-color); border-radius: 10px; color: var(--text-primary); font-size: 0.95rem; transition: all 0.2s; }
-        .form-input::placeholder { color: var(--text-muted); }
-        .form-input:focus { outline: none; border-color: var(--accent-purple); box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.15); }
-        .form-hint { font-size: 0.8rem; color: var(--text-muted); margin-top: 0.35rem; }
-
-        /* Loading */
-        .loading { display: flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 2rem; color: var(--text-muted); }
-    </style>
+    <link rel="stylesheet" href="/css/cf-settings.css">
 </head>
-<body>
-    <div class="bg-effects"><div class="orb orb-1"></div><div class="orb orb-2"></div></div>
+<body class="cfs-body cf-site">
+<%- include('partials/site-header', { user }) %>
+<main id="main-content" class="cf-main" tabindex="-1">
+<div class="cf-page">
+    <% if (_sa) { %><%- include('partials/site/_owner-nav', { ownerActive: _all ? 'bots' : '' }) %><% } %>
 
-    <!-- Navbar -->
-    <nav class="navbar">
-        <div class="container">
-            <div class="navbar-content">
-                <a href="/" class="navbar-brand">
-                    <img src="/images/CertiFried.png" alt="CertiFried" class="navbar-logo">
-                    <span>CertiFried</span>
-                </a>
-                <div class="navbar-links">
-                    <a href="/">Home</a>
-                    <a href="/commands">Commands</a>
-                    <a href="/cards">Cards</a>
-                    <a href="/cah">🃏 CAH</a>
-                    <a href="/sprites">👾 Sprites</a>
-                    <a href="/status">Status</a>
-                    <a href="/dashboard">Dashboard</a>
-                </div>
-                <% if (user) { %>
-                <div class="user-menu-container" id="userMenuContainer">
-                    <div class="user-menu" id="userMenuBtn">
-                        <img src="https://cdn.discordapp.com/avatars/<%= user.id %>/<%= user.avatar %>.png?size=64" alt="" class="user-avatar" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
-                        <span class="user-name"><%= user.username %></span>
-                        <i class="fas fa-chevron-down user-menu-chevron"></i>
-                    </div>
-                    <div class="user-dropdown">
-                        <div class="dropdown-header">
-                            <div class="dropdown-user-info">Signed in as <strong><%= user.username %></strong></div>
-                        </div>
-                        <a href="/profile" class="dropdown-item">
-                            <i class="fas fa-user"></i>
-                            <span>Profile</span>
-                        </a>
-                        <a href="/servers" class="dropdown-item">
-                            <i class="fas fa-server"></i>
-                            <span>My Servers</span>
-                        </a>
-                        <% if (user.isSuperAdmin || user.canCreateBots) { %>
-                        <div class="dropdown-divider"></div>
-                        <% } %>
-                        <% if (user.canCreateBots || user.isSuperAdmin) { %>
-                        <a href="/bot-management" class="dropdown-item text-warning">
-                            <i class="fas fa-robot"></i>
-                            <span>Bot Management</span>
-                        </a>
-                        <% } %>
-                        <% if (user.isSuperAdmin) { %>
-                        <a href="/super-admin" class="dropdown-item text-warning">
-                            <i class="fas fa-shield-alt"></i>
-                            <span>Super Admin</span>
-                        </a>
-                        <a href="/admin/cah" class="dropdown-item text-warning">
-                            <span style="display:inline-block;width:1em;text-align:center;">🃏</span>
-                            <span>CAH Admin</span>
-                        </a>
-                        <% } %>
-                        <div class="dropdown-divider"></div>
-                        <a href="/logout" class="dropdown-item text-danger">
-                            <i class="fas fa-sign-out-alt"></i>
-                            <span>Log Out</span>
-                        </a>
-                    </div>
-                </div>
-                <% } else { %>
-                <a href="/auth/discord" class="btn btn-primary">
-                    <i class="fab fa-discord"></i>
-                    Login
-                </a>
-                <% } %>
-                <button class="mobile-menu-btn" id="mobileMenuBtn">
-                    <i class="fas fa-bars fa-lg"></i>
-                </button>
-            </div>
+    <div class="cf-page-head">
+        <div class="cf-page-icon"><i class="fas fa-robot" aria-hidden="true"></i></div>
+        <div>
+            <h1 class="cf-page-title">Custom bots</h1>
+            <p class="cf-page-sub"><%= _all ? 'Every custom bot on the network, who owns it and where it runs.' : 'Bots you run on CertiFried under your own name and avatar.' %></p>
         </div>
-    </nav>
-
-    <main>
-        <div class="container">
-            <!-- Page Header -->
-            <div class="page-header">
-                <div class="page-header-content">
-                    <div class="page-icon">
-                        <i class="fas fa-robot"></i>
-                    </div>
-                    <div>
-                        <h1 class="page-title">Bot Management</h1>
-                        <p class="page-subtitle">Create and manage your custom Discord bots</p>
-                    </div>
-                </div>
-                <button class="btn btn-primary" id="addBotBtn">
-                    <i class="fas fa-plus"></i>
-                    Add Custom Bot
-                </button>
+        <div class="cf-page-actions">
+            <% if (_sa) { %>
+            <div class="cf-segmented" role="group" aria-label="Which bots">
+                <a href="/bot-management?scope=mine"<% if (!_all) { %> aria-pressed="true" class="is-active"<% } %>>My bots</a>
+                <a href="/bot-management?scope=all"<% if (_all) { %> aria-pressed="true" class="is-active"<% } %>>All bots</a>
             </div>
-
-            <!-- Main Card -->
-            <div class="card">
-                <div class="card-header">
-                    <div class="card-title">
-                        <i class="fas fa-server" style="color: var(--accent-purple);"></i>
-                        Your Custom Bots
-                    </div>
-                </div>
-                <div class="card-body">
-                    <!-- Info Alert -->
-                    <div class="info-alert">
-                        <i class="fas fa-info-circle"></i>
-                        <p>Custom bots allow you to use your own Discord bot for specific servers while sharing the same backend and database. Your bot token is encrypted and securely stored.</p>
-                    </div>
-
-                    <!-- Bots List -->
-                    <div id="bots-list">
-                        <div class="loading">
-                            <i class="fas fa-spinner fa-spin"></i>
-                            <span>Loading your bots...</span>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </main>
-
-    <!-- Add Bot Modal -->
-    <div class="modal-overlay" id="addBotModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">Add Custom Bot</h5>
-                <button class="modal-close" id="closeModalBtn">
-                    <i class="fas fa-times fa-lg"></i>
-                </button>
-            </div>
-            <div class="modal-body">
-                <form id="addBotForm">
-                    <div class="form-group">
-                        <label class="form-label">Client ID</label>
-                        <input type="text" class="form-input" name="client_id" placeholder="123456789012345678" required>
-                        <p class="form-hint">Found in Discord Developer Portal</p>
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Bot Token</label>
-                        <input type="password" class="form-input" name="bot_token" placeholder="Your bot token" required>
-                        <p class="form-hint">Token will be encrypted before storage. Bot name is automatically fetched from Discord.</p>
-                    </div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-outline" id="cancelModalBtn">Cancel</button>
-                <button class="btn btn-primary" id="submitBotBtn">Add Bot</button>
-            </div>
+            <% } %>
+            <% if (user.canCreateBots || _sa) { %>
+            <button type="button" class="btn btn-primary btn-sm" id="bm-add-open"><i class="fas fa-plus" aria-hidden="true"></i> Add a bot</button>
+            <% } %>
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-    const csrfToken = '<%= typeof csrfToken !== "undefined" ? csrfToken : "" %>';
+    <dl class="cf-kpis" id="bm-kpis" aria-label="Bots at a glance">
+        <div class="cf-kpi"><dt>Bots</dt><dd class="cf-kpi-value" data-kpi="total">–</dd></div>
+        <div class="cf-kpi"><dt>Online</dt><dd class="cf-kpi-value" data-kpi="online">–</dd></div>
+        <div class="cf-kpi"><dt>Need attention</dt><dd class="cf-kpi-value" data-kpi="attention">–</dd></div>
+        <div class="cf-kpi"><dt>Servers served</dt><dd class="cf-kpi-value" data-kpi="servers">–</dd></div>
+    </dl>
 
-    // User menu dropdown
-    const userMenuContainer = document.getElementById('userMenuContainer');
-    const userMenuBtn = document.getElementById('userMenuBtn');
-
-    if (userMenuBtn && userMenuContainer) {
-        userMenuBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            userMenuContainer.classList.toggle('open');
-        });
-
-        document.addEventListener('click', (e) => {
-            if (!userMenuContainer.contains(e.target)) {
-                userMenuContainer.classList.remove('open');
-            }
-        });
-
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') {
-                userMenuContainer.classList.remove('open');
-            }
-        });
-    }
-
-    // Modal functions
-    function showAddBotModal() {
-        document.getElementById('addBotModal').classList.add('active');
-        document.getElementById('addBotForm').reset();
-    }
-
-    function hideAddBotModal() {
-        document.getElementById('addBotModal').classList.remove('active');
-    }
-
-    // Bind button event listeners (not inline onclick - blocked by CSP script-src-attr)
-    document.getElementById('addBotBtn').addEventListener('click', showAddBotModal);
-    document.getElementById('closeModalBtn').addEventListener('click', hideAddBotModal);
-    document.getElementById('cancelModalBtn').addEventListener('click', hideAddBotModal);
-    document.getElementById('submitBotBtn').addEventListener('click', addBot);
-
-    // Close modal on overlay click
-    document.getElementById('addBotModal').addEventListener('click', (e) => {
-        if (e.target.classList.contains('modal-overlay')) {
-            hideAddBotModal();
-        }
-    });
-
-    // Load bots on page load
-    document.addEventListener('DOMContentLoaded', () => {
-        loadBots();
-    });
-
-    async function loadBots() {
-        try {
-            const response = await fetch('/api/bots');
-            if (!response.ok) {
-                const err = await response.json().catch(() => ({}));
-                throw new Error(err.error || `HTTP ${response.status}`);
-            }
-            const bots = await response.json();
-            if (!Array.isArray(bots)) {
-                throw new Error('Invalid response');
-            }
-            displayBots(bots);
-        } catch (error) {
-            console.error('Error loading bots:', error);
-            document.getElementById('bots-list').innerHTML = '<div class="empty-state"><i class="fas fa-exclamation-triangle" style="color: var(--accent-red);"></i><p>Error loading bots: ' + escapeHtml(error.message) + '</p></div>';
-        }
-    }
-
-    function displayBots(bots) {
-        const container = document.getElementById('bots-list');
-
-        if (bots.length === 0) {
-            container.innerHTML = '<div class="empty-state"><i class="fas fa-robot"></i><p>No custom bots configured yet.<br>Click "Add Custom Bot" to get started.</p></div>';
-            return;
-        }
-
-        container.innerHTML = bots.map(bot => {
-            const avatarUrl = bot.bot_avatar || bot.status?.avatar || `https://cdn.discordapp.com/embed/avatars/${(BigInt(bot.bot_id) >> 22n) % 6n}.png`;
-            return `
-            <div class="bot-card">
-                <div class="bot-card-header">
-                    <div class="bot-info" style="display: flex; gap: 0.75rem; align-items: flex-start;">
-                        <img src="${escapeHtml(avatarUrl)}" alt="" style="width: 40px; height: 40px; border-radius: 50%; flex-shrink: 0; border: 2px solid var(--border-color);" onerror="this.src='https://cdn.discordapp.com/embed/avatars/0.png'">
-                        <div>
-                            <div class="bot-name-row">
-                                <span class="bot-name">${escapeHtml(bot.bot_name)}</span>
-                                <span class="status-dot ${bot.status?.isReady ? 'online' : 'offline'}"></span>
-                                ${bot.approved
-                                    ? '<span class="badge badge-success">Approved</span>'
-                                    : '<span class="badge badge-warning">Pending</span>'}
-                            </div>
-                            <p class="bot-id">Bot ID: <code>${bot.bot_id}</code></p>
-                            ${bot.status ? `<p class="bot-stats">${bot.status.guilds || 0} servers &bull; ${bot.status.users || 0} users</p>` : '<p class="bot-stats">Offline</p>'}
-                        </div>
-                    </div>
-                    <div class="bot-actions">
-                        <a href="/bot-management/assign/${bot.bot_id}" class="btn btn-outline btn-sm">
-                            <i class="fas fa-diagram-project"></i>
-                            Assign
-                        </a>
-                        <button class="btn btn-danger-outline btn-sm" data-bot-id="${bot.bot_id}" data-bot-name="${escapeHtml(bot.bot_name)}">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </div>
+    <section class="cf-section" aria-labelledby="bm-list-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="bm-list-title">Bots<span class="cf-count" id="bm-count"></span></h2>
+                <p class="cf-section-desc">A bot shows as online once it has logged in to Discord. A server marked "not joined" is assigned, but the bot has not been invited there yet.</p>
+            </div>
+            <div class="cf-section-actions">
+                <button type="button" class="btn btn-secondary btn-sm" id="bm-refresh"><i class="fas fa-rotate" aria-hidden="true"></i> Refresh</button>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-toolbar" id="bm-toolbar" hidden>
+                <label class="cf-search"><i class="fas fa-magnifying-glass" aria-hidden="true"></i><input type="search" id="bm-search" placeholder="Search by name, ID, owner or server" aria-label="Search bots"></label>
+                <div class="cf-segmented" role="group" aria-label="Filter" id="bm-filter">
+                    <button type="button" data-filter="all" aria-pressed="true">All</button>
+                    <button type="button" data-filter="online" aria-pressed="false">Online</button>
+                    <button type="button" data-filter="attention" aria-pressed="false">Needs attention</button>
+                    <button type="button" data-filter="off" aria-pressed="false">Turned off</button>
                 </div>
             </div>
-        `}).join('');
+            <div class="cf-state cf-state--loading" id="bm-state" role="status" aria-live="polite"><span class="cf-spinner" aria-hidden="true"></span><p class="cf-state-title">Loading bots</p></div>
+            <div class="cf-list" id="bm-list"></div>
+        </div>
+    </section>
 
-        // Bind delete buttons via event delegation
-        container.querySelectorAll('[data-bot-id]').forEach(btn => {
-            btn.addEventListener('click', () => {
-                deleteBot(btn.dataset.botId, btn.dataset.botName);
-            });
+    <% if (_sa) { %>
+    <section class="cf-section" aria-labelledby="bm-creators-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="bm-creators-title">Bot creators<span class="cf-count" id="bm-creators-count"></span></h2>
+                <p class="cf-section-desc">People allowed to add their own custom bots on this page.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <form class="cf-row" id="bm-creator-form">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="bm-creator-id">Add a creator</label>
+                    <p class="cf-row-desc">Their Discord user ID.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-group">
+                        <input type="text" id="bm-creator-id" inputmode="numeric" pattern="\d{17,20}" maxlength="20" placeholder="123456789012345678" autocomplete="off" required>
+                        <button type="submit" class="btn btn-primary btn-sm">Add</button>
+                    </div>
+                </div>
+            </form>
+            <div class="cf-state cf-state--loading cf-state--compact" id="bm-creators-state"><span class="cf-spinner" aria-hidden="true"></span><p class="cf-state-title">Loading</p></div>
+            <div class="cf-list" id="bm-creators"></div>
+        </div>
+    </section>
+    <% } %>
+</div>
+</main>
+
+<div class="cf-modal" id="bm-add" hidden>
+    <div class="cf-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="bm-add-title">
+        <header class="cf-modal-head">
+            <div>
+                <h2 class="cf-modal-title" id="bm-add-title">Add a custom bot</h2>
+                <p class="cf-modal-desc">Create the application in the Discord Developer Portal first. The name and avatar come from Discord.</p>
+            </div>
+            <button type="button" class="cf-modal-close" data-close aria-label="Close"><i class="fas fa-xmark" aria-hidden="true"></i></button>
+        </header>
+        <form id="bm-add-form" class="cf-modal-body" autocomplete="off">
+            <div class="cf-rows">
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-bot-management-tailwind-client_id">Application ID</label>
+                        <p class="cf-row-desc">General Information, Application ID.</p>
+                    </div>
+                    <div class="cf-row-control"><input id="f-bot-management-tailwind-client_id" type="text" name="client_id" inputmode="numeric" pattern="\d{17,20}" maxlength="20" placeholder="123456789012345678" required></div>
+                </div>
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-bot-management-tailwind-bot_token">Bot token</label>
+                        <p class="cf-row-desc">Bot, Reset Token. It is checked with Discord, then stored encrypted.</p>
+                    </div>
+                    <div class="cf-row-control"><input id="f-bot-management-tailwind-bot_token" type="password" name="bot_token" maxlength="200" placeholder="Paste the token" required></div>
+                </div>
+            </div>
+            <p class="cf-status-line" id="bm-add-status" aria-live="polite"></p>
+        </form>
+        <footer class="cf-modal-foot">
+            <button type="button" class="btn btn-secondary btn-sm" data-close>Cancel</button>
+            <button type="submit" form="bm-add-form" class="btn btn-primary btn-sm" id="bm-add-submit">Add bot</button>
+        </footer>
+    </div>
+</div>
+
+<div class="cf-modal" id="bm-confirm" hidden>
+    <div class="cf-modal-dialog" role="alertdialog" aria-modal="true" aria-labelledby="bm-confirm-title" aria-describedby="bm-confirm-text">
+        <header class="cf-modal-head">
+            <div><h2 class="cf-modal-title" id="bm-confirm-title">Are you sure?</h2></div>
+            <button type="button" class="cf-modal-close" data-close aria-label="Close"><i class="fas fa-xmark" aria-hidden="true"></i></button>
+        </header>
+        <div class="cf-modal-body"><p id="bm-confirm-text" class="bm-confirm-text"></p></div>
+        <footer class="cf-modal-foot">
+            <button type="button" class="btn btn-secondary btn-sm" data-close>Cancel</button>
+            <button type="button" class="btn btn-danger btn-sm" id="bm-confirm-ok">Confirm</button>
+        </footer>
+    </div>
+</div>
+
+<script>
+(function () {
+    'use strict';
+    var SCOPE = <%- JSON.stringify(_scope).replace(/</g, '\\u003c') %>;
+    var SUPER = <%- JSON.stringify(_sa) %>;
+    var ME = <%- JSON.stringify(String(user.id)).replace(/</g, '\\u003c') %>;
+    var bots = [];
+    var filter = 'all';
+
+    function h(tag, attrs, kids) {
+        var el = document.createElement(tag);
+        if (attrs) Object.keys(attrs).forEach(function (k) {
+            var v = attrs[k];
+            if (v == null || v === false) return;
+            if (k === 'class') el.className = v;
+            else if (k === 'text') el.textContent = v;
+            else el.setAttribute(k, v === true ? '' : v);
         });
+        (kids || []).forEach(function (c) { if (c != null && c !== false) el.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
+        return el;
+    }
+    function icon(cls) { return h('i', { class: 'fas ' + cls, 'aria-hidden': 'true' }); }
+    function toast(t, tone) { if (window.cfSite) window.cfSite.toast(t, tone); }
+    function ago(iso) {
+        if (!iso) return '';
+        var s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+        if (s < 90) return 'just now';
+        if (s < 5400) return Math.round(s / 60) + ' min ago';
+        if (s < 129600) return Math.round(s / 3600) + ' h ago';
+        return Math.round(s / 86400) + ' days ago';
+    }
+    function dur(ms) {
+        if (ms == null) return '';
+        var m = Math.floor(ms / 60000), d = Math.floor(m / 1440), hh = Math.floor((m % 1440) / 60);
+        if (d) return d + 'd ' + hh + 'h';
+        if (hh) return hh + 'h ' + (m % 60) + 'm';
+        return Math.max(1, m) + 'm';
+    }
+    function date(iso) { try { return new Date(iso).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }); } catch (e) { return ''; } }
+    async function api(url, opts) {
+        var r = await fetch(url, Object.assign({ headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' } }, opts || {}));
+        var ct = r.headers.get('content-type') || '';
+        var fail = function (msg) { var e = new Error(msg); e.status = r.status; return e; };
+        if (ct.indexOf('application/json') === -1) throw fail(r.status === 401 ? 'Your session expired. Reload the page to sign in again.' : 'Unexpected response (' + r.status + ').');
+        var d = await r.json();
+        if (!r.ok || d.success === false) throw fail(d.message || d.details || d.error || ('Request failed (' + r.status + ')'));
+        return d;
     }
 
-    async function addBot() {
-        const form = document.getElementById('addBotForm');
-        const formData = new FormData(form);
-        const data = Object.fromEntries(formData);
+    var STATE = {
+        online: { label: 'Online', tone: 'is-ok', dot: 'is-ok' },
+        connecting: { label: 'Connecting', tone: 'is-warn', dot: 'is-warn' },
+        offline: { label: 'Offline', tone: 'is-bad', dot: 'is-bad' },
+        disabled: { label: 'Turned off', tone: '', dot: '' },
+        pending: { label: 'Waiting for approval', tone: 'is-warn', dot: 'is-warn' },
+    };
+    function needsAttention(b) { return b.state === 'offline' || b.state === 'connecting' || b.state === 'pending' || (b.state === 'online' && b.counts.waiting > 0); }
 
+    // ---------------------------------------------------------------- dialogs
+    var lastFocus = null;
+    function openModal(m) { lastFocus = document.activeElement; m.hidden = false; var f = m.querySelector('input') || m.querySelector('.cf-modal-foot .btn:last-child'); if (f) f.focus(); }
+    function closeModal(m) { m.hidden = true; if (lastFocus && lastFocus.focus) lastFocus.focus(); }
+    document.querySelectorAll('.cf-modal').forEach(function (m) {
+        m.addEventListener('click', function (e) { if (e.target === m || e.target.closest('[data-close]')) closeModal(m); });
+        m.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeModal(m); });
+    });
+    var confirmEl = document.getElementById('bm-confirm');
+    var confirmCb = null;
+    function ask(title, text, okLabel, cb) {
+        document.getElementById('bm-confirm-title').textContent = title;
+        document.getElementById('bm-confirm-text').textContent = text;
+        document.getElementById('bm-confirm-ok').textContent = okLabel || 'Confirm';
+        confirmCb = cb;
+        openModal(confirmEl);
+    }
+    document.getElementById('bm-confirm-ok').addEventListener('click', function () { var cb = confirmCb; confirmCb = null; closeModal(confirmEl); if (cb) cb(); });
+
+    // ---------------------------------------------------------------- list
+    async function load() {
+        var state = document.getElementById('bm-state');
         try {
-            const response = await fetch('/api/bots', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-CSRF-Token': csrfToken
-                },
-                body: JSON.stringify(data)
-            });
-
-            const result = await response.json();
-
-            if (response.ok) {
-                alert(result.message);
-                hideAddBotModal();
-                loadBots();
-            } else {
-                alert('Error: ' + (result.details || result.error));
+            var d;
+            try { d = await api('/api/bots/fleet?scope=' + encodeURIComponent(SCOPE)); }
+            catch (e) {
+                // Until the dashboard restarts with /api/bots/fleet, fall back to the older list.
+                if (e.status !== 404) throw e;
+                var old = await api('/api/bots');
+                d = { bots: (Array.isArray(old) ? old : []).map(function (b) {
+                    var st = b.status;
+                    return {
+                        bot_id: b.bot_id, name: b.bot_name, avatar: b.bot_avatar, owner_user_id: b.owner_user_id, mine: true,
+                        enabled: !!b.enabled, approved: !!b.approved, created_at: b.created_at,
+                        state: !b.approved ? 'pending' : !b.enabled ? 'disabled' : !st ? 'offline' : st.isReady ? 'online' : 'connecting',
+                        uptime_ms: st && st.isReady ? st.uptime : null, error: null,
+                        servers: (st && st.assignedGuilds || []).map(function (id) { return { id: id, name: null, mapped: true, present: true }; }),
+                        counts: { assigned: st ? (st.assignedGuilds || []).length : 0, joined: st ? st.guilds : 0, waiting: 0 },
+                        invite_url: 'https://discord.com/oauth2/authorize?client_id=' + encodeURIComponent(b.client_id || b.bot_id) + '&permissions=1643797540086&scope=bot+applications.commands',
+                    };
+                }) };
             }
-        } catch (error) {
-            alert('Failed to add bot: ' + error.message);
+            bots = d.bots || [];
+            state.hidden = true;
+            render();
+        } catch (e) {
+            state.hidden = false;
+            state.className = 'cf-state cf-state--error';
+            state.replaceChildren(h('p', { class: 'cf-state-title', text: 'Could not load the bots' }), h('p', { class: 'cf-state-text', text: e.message }));
         }
     }
 
-    async function deleteBot(botId, botName) {
-        if (!confirm(`Are you sure you want to delete "${botName}"? All guild assignments will be removed.`)) {
+    function kpis() {
+        var servers = new Set();
+        bots.forEach(function (b) { b.servers.forEach(function (s) { if (s.present) servers.add(s.id); }); });
+        var set = function (k, v) { var el = document.querySelector('[data-kpi="' + k + '"]'); if (el) el.textContent = v; };
+        set('total', bots.length);
+        set('online', bots.filter(function (b) { return b.state === 'online'; }).length);
+        set('attention', bots.filter(needsAttention).length);
+        set('servers', servers.size);
+    }
+
+    function matches(b, q) {
+        if (filter === 'online' && b.state !== 'online') return false;
+        if (filter === 'attention' && !needsAttention(b)) return false;
+        if (filter === 'off' && b.state !== 'disabled') return false;
+        if (!q) return true;
+        var hay = [b.name, b.bot_id, b.owner_name || '', b.owner_user_id].concat(b.servers.map(function (s) { return (s.name || '') + ' ' + s.id; })).join(' ').toLowerCase();
+        return hay.indexOf(q) !== -1;
+    }
+
+    function render() {
+        kpis();
+        var list = document.getElementById('bm-list');
+        var q = (document.getElementById('bm-search').value || '').trim().toLowerCase();
+        document.getElementById('bm-toolbar').hidden = bots.length <= 15 && filter === 'all' && !q;
+        var shown = bots.filter(function (b) { return matches(b, q); });
+        // Problems first, then by name.
+        var rank = { offline: 0, connecting: 1, pending: 2, online: 3, disabled: 4 };
+        shown.sort(function (a, b) { return (rank[a.state] - rank[b.state]) || String(a.name).localeCompare(String(b.name)); });
+        document.getElementById('bm-count').textContent = bots.length ? (shown.length === bots.length ? String(bots.length) : shown.length + ' of ' + bots.length) : '';
+        if (!bots.length) {
+            list.replaceChildren(h('div', { class: 'cf-state' }, [
+                h('p', { class: 'cf-state-title', text: SCOPE === 'all' ? 'No custom bots yet' : 'You have no custom bots yet' }),
+                h('p', { class: 'cf-state-text', text: 'Add a bot with its application ID and token, then assign it to your servers.' }),
+            ]));
             return;
         }
+        if (!shown.length) { list.replaceChildren(h('div', { class: 'cf-state cf-state--compact' }, [h('p', { class: 'cf-state-title', text: 'No bots match.' })])); return; }
+        list.replaceChildren.apply(list, shown.map(row));
+    }
 
+    function serverChip(b, s) {
+        var label = s.name || s.id;
+        if (s.mapped && !s.present) {
+            return h('a', { class: 'cf-chip is-warn', href: b.invite_url + '&guild_id=' + encodeURIComponent(s.id) + '&disable_guild_select=true', target: '_blank', rel: 'noopener', title: 'Assigned, but the bot is not in this server. Click to invite it.' },
+                [h('span', { text: label }), h('span', { text: '· not joined' })]);
+        }
+        if (!s.mapped) return h('span', { class: 'cf-chip is-info', title: 'The bot is in this server but not assigned to it, so the main bot answers there.' }, [h('span', { text: label }), h('span', { text: '· not assigned' })]);
+        return h('span', { class: 'cf-chip', title: (s.members ? s.members.toLocaleString() + ' members · ' : '') + s.id }, [h('span', { text: label })]);
+    }
+
+    function btn(label, cls, onclick, ic) {
+        var el = h('button', { type: 'button', class: 'btn btn-sm ' + cls }, [ic ? icon(ic) : null, ic ? ' ' + label : label]);
+        el.addEventListener('click', function () { onclick(el); });
+        return el;
+    }
+    function busy(el, on, label) {
+        el.disabled = on;
+        if (on) { el._kids = Array.prototype.slice.call(el.childNodes); el.textContent = label || 'Working…'; }
+        else if (el._kids) { el.replaceChildren.apply(el, el._kids); }
+    }
+
+    function row(b) {
+        var st = STATE[b.state] || STATE.offline;
+        var meta = [h('span', { class: 'cf-mono', text: b.bot_id })];
+        meta.push(h('span', { text: b.counts.joined + (b.counts.joined === 1 ? ' server' : ' servers') }));
+        if (b.state === 'online' && b.uptime_ms != null) meta.push(h('span', { text: 'up ' + dur(b.uptime_ms) }));
+        if (SCOPE === 'all') meta.push(h('span', { text: 'owner ' + (b.mine ? 'you' : (b.owner_name || b.owner_user_id)) }));
+        if (b.created_at) meta.push(h('span', { text: 'added ' + date(b.created_at) }));
+
+        var main = [
+            h('p', { class: 'cf-list-title' }, [h('span', { text: b.name }), h('span', { class: 'cf-pill ' + st.tone }, [h('span', { class: 'cf-dot ' + st.dot }), st.label])]),
+            h('p', { class: 'cf-list-meta' }, meta),
+        ];
+        if (b.error) main.push(h('p', { class: 'cf-list-body bm-error' }, [icon('fa-triangle-exclamation'), ' ' + b.error.message, h('span', { class: 'cf-muted', text: ' · ' + ago(b.error.at) })]));
+        if (b.state === 'offline' && !b.error) main.push(h('p', { class: 'cf-list-body cf-muted', text: b.counts.assigned ? 'Not logged in. It may have failed at the last restart; Reconnect tries again.' : 'Not running: assign it to a server first.' }));
+        if (b.state === 'pending' && b.approval_notes) main.push(h('p', { class: 'cf-list-body is-pre cf-muted', text: b.approval_notes }));
+
+        var chips = h('div', { class: 'cf-chips' });
+        var LIMIT = 4;
+        b.servers.slice(0, LIMIT).forEach(function (s) { chips.appendChild(serverChip(b, s)); });
+        if (b.servers.length > LIMIT) {
+            var more = h('button', { type: 'button', class: 'cf-chip', text: '+' + (b.servers.length - LIMIT) + ' more' });
+            more.addEventListener('click', function () { more.remove(); b.servers.slice(LIMIT).forEach(function (s) { chips.appendChild(serverChip(b, s)); }); });
+            chips.appendChild(more);
+        }
+        if (!b.servers.length) chips.appendChild(h('span', { class: 'cf-chip', text: 'No servers yet' }));
+        main.push(chips);
+
+        var actions = [];
+        if (b.state === 'pending' && SUPER) actions.push(btn('Approve', 'btn-primary', function (el) { approve(b, el); }));
+        actions.push(h('a', { class: 'btn btn-secondary btn-sm', href: '/bot-management/assign/' + encodeURIComponent(b.bot_id) }, [icon('fa-diagram-project'), ' Servers']));
+        actions.push(h('a', { class: 'btn btn-secondary btn-sm', href: b.invite_url, target: '_blank', rel: 'noopener', title: 'Invite this bot to a server' }, [icon('fa-user-plus'), ' Invite']));
+        if (b.enabled && b.approved) actions.push(btn('Reconnect', 'btn-secondary', function (el) { reconnect(b, el); }, 'fa-plug'));
+        if (b.approved) actions.push(btn(b.enabled ? 'Turn off' : 'Turn on', 'btn-secondary', function (el) { toggle(b, el); }, b.enabled ? 'fa-power-off' : 'fa-play'));
+        actions.push(btn('Delete', 'btn-danger', function (el) { del(b, el); }, 'fa-trash'));
+
+        return h('div', { class: 'cf-list-item cf-list-item--multi bm-bot' + (b.state === 'disabled' ? ' is-off' : ''), 'data-bot': b.bot_id }, [
+            h('div', { class: 'cf-list-lead' }, [h('img', { src: b.avatar || 'https://cdn.discordapp.com/embed/avatars/0.png', alt: '', loading: 'lazy', 'data-cf-fallback': 'https://cdn.discordapp.com/embed/avatars/0.png' })]),
+            h('div', { class: 'cf-list-main' }, main),
+            h('div', { class: 'cf-list-actions' }, actions),
+        ]);
+    }
+
+    async function reconnect(b, el) {
+        busy(el, true, 'Reconnecting…');
+        try { var d = await api('/api/bots/' + encodeURIComponent(b.bot_id) + '/reconnect', { method: 'POST' }); toast(d.message || 'Reconnected.', 'ok'); await load(); }
+        catch (e) { toast(b.name + ': ' + e.message, 'bad'); busy(el, false); }
+    }
+    function toggle(b, el) {
+        var go = async function () {
+            busy(el, true);
+            try {
+                var d = await api('/api/bots/' + encodeURIComponent(b.bot_id), { method: 'PUT', body: JSON.stringify({ enabled: !b.enabled }) });
+                toast(d.message || (b.enabled ? 'Turned off.' : 'Turned on.'), d.started === false ? 'bad' : 'ok');
+                await load();
+            } catch (e) { toast(e.message, 'bad'); busy(el, false); }
+        };
+        if (b.enabled) ask('Turn off ' + b.name + '?', 'It logs out of Discord now. Its servers are answered by the main CertiFried bot until you turn it back on.', 'Turn off', go);
+        else go();
+    }
+    function del(b, el) {
+        ask('Delete ' + b.name + '?', 'Its token and server assignments are removed and its servers fall back to the main CertiFried bot. This cannot be undone.', 'Delete bot', async function () {
+            busy(el, true, 'Deleting…');
+            try { await api('/api/bots/' + encodeURIComponent(b.bot_id), { method: 'DELETE' }); toast(b.name + ' deleted.', 'ok'); await load(); }
+            catch (e) { toast(e.message, 'bad'); busy(el, false); }
+        });
+    }
+    async function approve(b, el) {
+        busy(el, true, 'Checking…');
+        try { var d = await api('/api/super-admin/bots/' + encodeURIComponent(b.bot_id) + '/approve', { method: 'POST', body: JSON.stringify({ approved: true }) }); toast(d.message || 'Approved.', 'ok'); await load(); }
+        catch (e) { toast(e.message, 'bad'); busy(el, false); }
+    }
+
+    document.getElementById('bm-search').addEventListener('input', render);
+    document.getElementById('bm-filter').addEventListener('click', function (e) {
+        var b = e.target.closest('button[data-filter]');
+        if (!b) return;
+        filter = b.dataset.filter;
+        this.querySelectorAll('button').forEach(function (x) { x.setAttribute('aria-pressed', x === b ? 'true' : 'false'); });
+        render();
+    });
+    document.getElementById('bm-refresh').addEventListener('click', function () { load(); });
+
+    // ---------------------------------------------------------------- add a bot
+    var addModal = document.getElementById('bm-add');
+    var addOpen = document.getElementById('bm-add-open');
+    if (addOpen) addOpen.addEventListener('click', function () { document.getElementById('bm-add-form').reset(); document.getElementById('bm-add-status').textContent = ''; openModal(addModal); });
+    document.getElementById('bm-add-form').addEventListener('submit', async function (e) {
+        e.preventDefault();
+        var status = document.getElementById('bm-add-status');
+        var submit = document.getElementById('bm-add-submit');
+        var data = Object.fromEntries(new FormData(this));
+        submit.disabled = true;
+        status.className = 'cf-status-line is-busy';
+        status.textContent = 'Checking the token with Discord…';
         try {
-            const response = await fetch(`/api/bots/${botId}`, {
-                method: 'DELETE',
-                headers: { 'X-CSRF-Token': csrfToken }
-            });
-            const result = await response.json();
+            var d = await api('/api/bots', { method: 'POST', body: JSON.stringify(data) });
+            closeModal(addModal);
+            toast(d.message || 'Bot added.', 'ok');
+            await load();
+        } catch (err) {
+            status.className = 'cf-status-line is-bad';
+            status.textContent = err.message;
+        } finally { submit.disabled = false; }
+    });
 
-            if (response.ok) {
-                alert(result.message);
-                loadBots();
-            } else {
-                alert('Error: ' + result.error);
-            }
-        } catch (error) {
-            alert('Failed to delete bot: ' + error.message);
+    // ---------------------------------------------------------------- bot creators (super-admin)
+    async function loadCreators() {
+        var wrap = document.getElementById('bm-creators');
+        if (!wrap) return;
+        var state = document.getElementById('bm-creators-state');
+        try {
+            var d = await api('/api/super-admin/bot-managers');
+            var list = d.managers || [];
+            state.hidden = true;
+            document.getElementById('bm-creators-count').textContent = list.length ? String(list.length) : '';
+            if (!list.length) { wrap.replaceChildren(h('div', { class: 'cf-state cf-state--compact' }, [h('p', { class: 'cf-state-title', text: 'Nobody else can add bots yet.' })])); return; }
+            var owned = {};
+            bots.forEach(function (b) { owned[b.owner_user_id] = (owned[b.owner_user_id] || 0) + 1; });
+            wrap.replaceChildren.apply(wrap, list.map(function (m) {
+                var rm = null;
+                if (m.user_id !== ME) {
+                    rm = h('button', { type: 'button', class: 'btn btn-secondary btn-sm', text: 'Remove' });
+                    rm.addEventListener('click', function () {
+                        ask('Remove ' + (m.username || m.user_id) + '?', 'They can no longer add bots. Bots they already own keep running.', 'Remove', async function () {
+                            try { await api('/api/super-admin/bot-managers/' + encodeURIComponent(m.user_id), { method: 'DELETE' }); toast('Removed.', 'ok'); loadCreators(); }
+                            catch (e) { toast(e.message, 'bad'); }
+                        });
+                    });
+                }
+                var n = SCOPE === 'all' ? (owned[m.user_id] || 0) : null;
+                return h('div', { class: 'cf-list-item' }, [
+                    h('div', { class: 'cf-list-main' }, [
+                        h('span', { class: 'cf-em', text: m.username || 'Unknown user' }), ' ',
+                        h('span', { class: 'cf-muted cf-mono', text: m.user_id }),
+                        n != null ? h('span', { class: 'cf-muted', text: ' · ' + n + (n === 1 ? ' bot' : ' bots') }) : null,
+                    ]),
+                    h('div', { class: 'cf-list-actions' }, [rm]),
+                ]);
+            }));
+        } catch (e) {
+            state.hidden = false;
+            state.className = 'cf-state cf-state--error cf-state--compact';
+            state.replaceChildren(h('p', { class: 'cf-state-title', text: 'Could not load: ' + e.message }));
         }
     }
+    var cform = document.getElementById('bm-creator-form');
+    if (cform) cform.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        var input = document.getElementById('bm-creator-id');
+        var id = input.value.trim();
+        if (!/^\d{17,20}$/.test(id)) { toast('Enter a Discord user ID (17-20 digits).', 'bad'); input.focus(); return; }
+        try { await api('/api/super-admin/bot-managers', { method: 'POST', body: JSON.stringify({ userId: id }) }); input.value = ''; toast('Added.', 'ok'); loadCreators(); }
+        catch (err) { toast(err.message, 'bad'); }
+    });
 
-    function escapeHtml(text) {
-        const div = document.createElement('div');
-        div.textContent = text;
-        return div.innerHTML;
+    load().then(loadCreators);
+})();
+</script>
+<style>
+    .bm-bot.is-off .cf-list-lead img { filter: grayscale(1); opacity: 0.6; }
+    .bm-bot .cf-pill { gap: 6px; }
+    .bm-error { color: var(--cf-danger) !important; }
+    .bm-error .fas { font-size: 12px; }
+    .bm-confirm-text { margin: 0; color: var(--cf-text-2); }
+    @media (max-width: 640px) {
+        .bm-bot { flex-wrap: wrap; }
+        .bm-bot > .cf-list-actions { width: 100%; margin-left: 0; }
     }
-    </script>
-    <script src="/js/csrf.js"></script>
+</style>
+<%- include('partials/site-footer') %>
+<script src="/js/csrf.js"></script>
 </body>
 </html>

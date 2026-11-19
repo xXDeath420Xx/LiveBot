@@ -37,7 +37,7 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 };
 var generative_ai_1 = require("@google/generative-ai");
 var logger_1 = require("./logger.cjs");
-var GEMINI_API_KEY = process.env.GOOGLE_API_KEY;
+var GEMINI_API_KEY = process.env.GOOGLE_API_KEY || process.env.GOOGLE_AI_KEY;
 if (!GEMINI_API_KEY) {
     logger_1.default.error("[Gemini API] GOOGLE_API_KEY is not set in environment variables.");
 }
@@ -45,7 +45,7 @@ else {
     logger_1.default.info("[Gemini API] GOOGLE_API_KEY is loaded.");
 }
 var genAI = new generative_ai_1.GoogleGenerativeAI(GEMINI_API_KEY || "");
-var model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+var model = genAI.getGenerativeModel({ model: process.env.GEMINI_MODEL || "gemini-2.5-flash" });
 function withRetry(fn_1) {
     return __awaiter(this, arguments, void 0, function (fn, retries, delay) {
         var lastError, _loop_1, i, state_1;

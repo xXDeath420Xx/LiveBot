@@ -1,4 +1,8 @@
 /**
+ * Timer (scheduled) messages: the Kick channel page timers and, since migration 456, the stream bot timers.
+ * The minute cycle is core/stream-bot/timer-job.js runDueTimers (rotation, only while live, chat lines,
+ * automations, Twitch through the CertiFried bot account). What follows is the original Kick description.
+ *
  * Per-channel timer (scheduled) messages for the Kick bot.
  *
  * Every minute, find enabled timers whose interval has elapsed for a channel
@@ -39,6 +43,18 @@ export async function sendChannelMessage(channelId, content, deps = {}) {
 
 async function runDueTimers() {
     try {
+        const { runDueTimers: run } = await import('../core/stream-bot/timer-job.js');
+        const r = await run({ pool, logger, sendKick: (channelId, text) => sendChannelMessage(String(channelId), text) });
+        if (r?.sent) logger.info(`[KickTimers] Sent ${r.sent}/${r.due} due timer(s)`);
+    } catch (error) {
+        logger.error('[KickTimers] Cycle error', { error: error.message });
+    }
+}
+
+/** The pre-456 cycle, kept for reference; timer-job.js falls back to the same query when the migration is missing. */
+// eslint-disable-next-line no-unused-vars
+async function runDueTimersLegacy() {
+    try {
         // Due = enabled timer whose interval has elapsed (or never sent), on a
         // channel that is enrolled (defender_enabled) and enabled. We compare in
         // SQL against last_sent_at so a restart doesn't reset the clock.
@@ -58,7 +74,8 @@ async function runDueTimers() {
         let sent = 0;
         for (const t of rows) {
             try {
-                const ok = await sendChannelMessage(t.kick_channel_id, t.message);
+                const text = String(t.message || '').replace(/\{\{channel_name\}\}/g, () => t.channel_name || '');
+                const ok = await sendChannelMessage(t.kick_channel_id, text);
                 if (ok) {
                     await pool.execute(
                         'UPDATE tokes_timers SET last_sent_at = NOW(), send_count = send_count + 1 WHERE id = ?',

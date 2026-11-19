@@ -1,0 +1,213 @@
+<%#
+  Channel post rules: per-channel limits enforced by core/channel-post-rules.js (images only, blocked link
+  domains, level / activity / membership-age gates, cooldown, exempt roles). Loads and saves through
+  /api/guilds/:id/channel-post-rules (GET, PUT /:channelId, DELETE /:channelId). One collapsible row per
+  channel, built on the settings-row kit (cf-settings.css); field names match the API body.
+%>
+<%
+const cprIsVoice = (c) => !!(c && typeof c.isVoiceBased === 'function' && c.isVoiceBased());
+const cprChannels = (typeof channels !== 'undefined' ? channels : []).filter(c => !cprIsVoice(c)).map(c => ({ id: c.id, name: c.name }));
+const cprRoles = (typeof roles !== 'undefined' ? roles : []).map(r => ({ id: r.id, name: r.name, color: r.hexColor && r.hexColor !== '#000000' ? r.hexColor : '' }));
+%>
+<style>
+    #cprPage .cpr-summary { display: flex; align-items: center; gap: var(--cf-3); flex-wrap: wrap; min-width: 0; }
+    #cprPage .cpr-summary-name { font-weight: 500; color: var(--cf-text); }
+    #cprPage .cpr-summary .cf-chips { gap: 4px; }
+    #cprPage .cpr-item + .cpr-item { border-top: 1px solid var(--cf-border); }
+    #cprPage textarea[name="blocked_link_domains"] { min-height: 5rem; }
+</style>
+
+<div class="page-section" id="cprPage">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title"><i class="fas fa-filter"></i><span>Channel post rules</span></div>
+            <div class="page-section-subtitle">Pick a channel, then set who may post there and what.</div>
+        </div>
+    </div>
+
+    <section class="cf-section" aria-labelledby="cpr-list-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="cpr-list-title">Channels with rules</h2>
+                <p class="cf-section-desc">Open a channel to change its rules; nothing changes until you press Save. Members with Manage Messages or Manage Channels always post freely.</p>
+            </div>
+            <div class="cf-section-actions"><span class="cf-pill" id="cpr-count" hidden></span></div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="cpr-add">Add a channel</label>
+                    <p class="cf-row-desc">Starts with images only, rule-breaking posts deleted and the member told why.</p>
+                </div>
+                <div class="cf-row-control">
+                    <select id="cpr-add" class="form-select"><option value="">Choose a channel</option></select>
+                </div>
+            </div>
+            <div id="cpr-list">
+                <%- include('../kit/_state', { kind: 'loading', title: 'Loading the rules', text: null, id: null, boxed: false, compact: true }) %>
+            </div>
+        </div>
+    </section>
+</div>
+
+<script>
+(function () {
+    const GID = <%- JSON.stringify(String(guild.id)).replace(/</g, '\\u003c') %>;
+    const CHANNELS = <%- JSON.stringify(cprChannels).replace(/</g, '\\u003c') %>;
+    const ROLES = <%- JSON.stringify(cprRoles).replace(/</g, '\\u003c') %>;
+    const API = `/api/guilds/${GID}/channel-post-rules`;
+    const list = document.getElementById('cpr-list');
+    const add = document.getElementById('cpr-add');
+    const count = document.getElementById('cpr-count');
+    const chName = id => { const c = CHANNELS.find(x => x.id === id); return c ? '#' + c.name : 'Deleted channel ' + id; };
+    let rules = [];
+    let uid = 0;
+
+    const el = (tag, attrs, ...kids) => {
+        const e = document.createElement(tag);
+        for (const k in (attrs || {})) { if (attrs[k] == null || attrs[k] === false) continue; if (k === 'text') e.textContent = attrs[k]; else e.setAttribute(k, attrs[k] === true ? '' : attrs[k]); }
+        kids.forEach(k => { if (k != null) e.append(k); });
+        return e;
+    };
+    function state(kind, title, text) {
+        const box = el('div', { class: 'cf-state cf-state--' + kind + ' cf-state--compact', role: kind === 'error' ? 'alert' : null });
+        box.append(el('p', { class: 'cf-state-title', text: title }));
+        if (text) box.append(el('p', { class: 'cf-state-text', text }));
+        return box;
+    }
+    function row(label, desc, control, opts = {}) {
+        const id = control.id || ('cpr-f-' + (++uid));
+        if (!control.id) control.id = id;
+        const descId = desc ? id + '-desc' : null;
+        if (descId) control.setAttribute('aria-describedby', descId);
+        return el('div', { class: 'cf-row' + (opts.sw ? ' cf-row--switch' : '') + (opts.stack ? ' cf-row--stack' : '') },
+            el('div', { class: 'cf-row-text' }, el('label', { class: 'cf-row-label', for: id, text: label }), desc ? el('p', { class: 'cf-row-desc', id: descId, text: desc }) : null),
+            el('div', { class: 'cf-row-control' }, control));
+    }
+    function sw(name, on) { const c = el('input', { type: 'checkbox', class: 'cf-switch', role: 'switch', name }); c.checked = !!on; return c; }
+    function numRow(label, desc, name, value, min, max, unit) {
+        const input = el('input', { type: 'number', class: 'form-control', name, min: String(min), max: String(max), step: '1' });
+        input.value = value ?? 0;
+        const r = row(label, desc, input);
+        if (unit) r.querySelector('.cf-row-control').replaceChildren(el('div', { class: 'cf-input-unit' }, input, el('span', { class: 'cf-unit', text: unit })));
+        return r;
+    }
+    function chips(rule) {
+        const out = [];
+        const chip = (text, cls) => out.push(el('span', { class: 'cf-chip' + (cls ? ' ' + cls : ''), text }));
+        if (!rule.enabled) chip('Off', 'is-warn');
+        if (rule.require_image) chip('Images only');
+        if ((rule.blocked_link_domains || []).length) chip(rule.blocked_link_domains.length + ' blocked ' + (rule.blocked_link_domains.length === 1 ? 'site' : 'sites'));
+        if (Number(rule.min_level) > 0) chip('Level ' + rule.min_level + '+');
+        if (Number(rule.min_messages) > 0) chip(rule.min_messages + ' messages in ' + rule.activity_window_days + ' days');
+        if (Number(rule.min_member_days) > 0) chip(rule.min_member_days + ' days in server');
+        if (Number(rule.cooldown_hours) > 0) chip(rule.cooldown_hours + 'h cooldown');
+        if (!out.length) chip('No limits set');
+        return el('span', { class: 'cf-chips' }, ...out);
+    }
+
+    function item(rule, open) {
+        const details = el('details', { class: 'cf-expand cpr-item' });
+        if (open) details.open = true;
+        const summaryChips = chips(rule);
+        details.append(el('summary', {}, el('span', { class: 'cpr-summary' }, el('span', { class: 'cpr-summary-name', text: chName(rule.channel_id) }), summaryChips)));
+
+        const form = el('form', { class: 'cf-rows', novalidate: true });
+        form.append(
+            row('Rules on', 'Off keeps the settings but stops checking posts here.', sw('enabled', rule.enabled), { sw: true }),
+            row('Images only', 'Posts need an image attached, or a direct link to an image file. Videos and link previews do not count.', sw('require_image', rule.require_image), { sw: true }),
+            row('Delete posts that break a rule', 'Off only logs them.', sw('delete_violations', rule.delete_violations), { sw: true }),
+            row('Tell the member why', 'By DM. When the post is deleted and their DMs are closed, a note in the channel for 30 seconds instead.', sw('notify_user', rule.notify_user), { sw: true }),
+            numRow('Minimum level', '0 means no level is needed.', 'min_level', rule.min_level, 0, 500, null),
+            numRow('Minimum messages', 'Messages sent in other channels during the activity window below. 0 means none needed.', 'min_messages', rule.min_messages, 0, 100000, 'messages'),
+            numRow('Activity window', 'How far back those messages are counted.', 'activity_window_days', rule.activity_window_days, 1, 365, 'days'),
+            numRow('Time in the server', '0 lets new members post straight away.', 'min_member_days', rule.min_member_days, 0, 3650, 'days'),
+            numRow('Cooldown between posts', '0 means no cooldown.', 'cooldown_hours', rule.cooldown_hours, 0, 720, 'hours'));
+
+        const dom = el('textarea', { class: 'form-control', name: 'blocked_link_domains', rows: '3', placeholder: 'example.com' });
+        dom.value = (rule.blocked_link_domains || []).join('\n');
+        form.append(row('Blocked link sites', 'One site per line, up to 100. Posts linking to them break the rules.', dom, { stack: true }));
+
+        const rs = el('select', { class: 'form-select', name: 'exempt_role_ids', multiple: true, size: '4' });
+        ROLES.forEach(r => { const o = new Option(r.name, r.id); o.dataset.kind = 'role'; if (r.color) o.dataset.color = r.color; o.selected = (rule.exempt_role_ids || []).includes(r.id); rs.add(o); });
+        form.append(row('Exempt roles', 'Members with any of these roles skip every rule here.', rs));
+
+        const ls = el('select', { class: 'form-select', name: 'log_channel_id' });
+        ls.add(new Option('No log', ''));
+        CHANNELS.forEach(c => { const o = new Option('#' + c.name, c.id); o.selected = c.id === rule.log_channel_id; ls.add(o); });
+        form.append(row('Log channel', 'Where removed posts are reported.', ls));
+
+        const status = el('span', { class: 'cf-foot-note', role: 'status', 'aria-live': 'polite', text: rule._new ? 'Not saved yet.' : '' });
+        const remove = el('button', { type: 'button', class: 'btn btn-danger', text: rule._new ? 'Discard' : 'Remove rules' });
+        const save = el('button', { type: 'submit', class: 'btn btn-primary', text: 'Save' });
+        form.append(el('div', { class: 'cf-section-foot' }, status, remove, save));
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault(); save.disabled = true; status.textContent = 'Saving...';
+            const fd = new FormData(form);
+            const body = {
+                enabled: form.elements.enabled.checked, require_image: form.elements.require_image.checked,
+                delete_violations: form.elements.delete_violations.checked, notify_user: form.elements.notify_user.checked,
+                min_level: fd.get('min_level'), min_messages: fd.get('min_messages'), activity_window_days: fd.get('activity_window_days'),
+                min_member_days: fd.get('min_member_days'), cooldown_hours: fd.get('cooldown_hours'),
+                blocked_link_domains: String(fd.get('blocked_link_domains') || '').split(/[\s,]+/).filter(Boolean),
+                exempt_role_ids: Array.from(rs.selectedOptions).map(o => o.value), log_channel_id: fd.get('log_channel_id') || null,
+            };
+            try {
+                const r = await fetch(`${API}/${rule.channel_id}`, { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+                const j = await r.json().catch(() => ({}));
+                if (!r.ok) throw new Error(j.error || 'Could not save.');
+                Object.assign(rule, body, j.rule || {});
+                delete rule._new;
+                remove.textContent = 'Remove rules';
+                summaryChips.replaceWith(chips(rule));
+                status.textContent = 'Saved.';
+                paintCount();
+            } catch (err) { status.textContent = err.message || 'Could not reach the server.'; }
+            save.disabled = false;
+        });
+        remove.addEventListener('click', async () => {
+            if (!rule._new && !confirm('Remove every post rule from ' + chName(rule.channel_id) + '? Anyone will be able to post there again.')) return;
+            if (rule._new) { rules = rules.filter(x => x !== rule); render(); return; }
+            remove.disabled = true; status.textContent = 'Removing...';
+            try {
+                const r = await fetch(`${API}/${rule.channel_id}`, { method: 'DELETE', credentials: 'same-origin' });
+                if (r.ok) { rules = rules.filter(x => x.channel_id !== rule.channel_id); render(); return; }
+                status.textContent = 'Could not remove the rules.';
+            } catch { status.textContent = 'Could not reach the server.'; }
+            remove.disabled = false;
+        });
+        details.append(el('div', { class: 'cf-expand-body' }, form));
+        return details;
+    }
+
+    function paintCount() {
+        const saved = rules.filter(r => !r._new).length;
+        count.hidden = false;
+        count.textContent = saved + (saved === 1 ? ' channel' : ' channels');
+        count.className = 'cf-pill' + (rules.some(r => !r._new && r.enabled) ? ' is-ok' : '');
+    }
+    function render(openId) {
+        list.replaceChildren();
+        if (!rules.length) list.append(state('empty', 'No channel has post rules yet', 'Choose a channel above to add some.'));
+        rules.forEach(r => list.append(item(r, r.channel_id === openId)));
+        while (add.options.length > 1) add.remove(1);
+        CHANNELS.filter(c => !rules.some(r => r.channel_id === c.id)).forEach(c => add.add(new Option('#' + c.name, c.id)));
+        add.value = '';
+        paintCount();
+    }
+
+    add.addEventListener('change', () => {
+        if (!add.value) return;
+        const id = add.value;
+        rules.push({ _new: true, channel_id: id, enabled: true, require_image: true, blocked_link_domains: [], min_level: 0, min_messages: 0,
+            activity_window_days: 30, min_member_days: 0, cooldown_hours: 0, exempt_role_ids: [], delete_violations: true, notify_user: true, log_channel_id: null });
+        render(id);
+        const opened = list.querySelector('details[open]');
+        if (opened) opened.scrollIntoView({ block: 'nearest' });
+    });
+
+    fetch(API, { credentials: 'same-origin' }).then(r => { if (!r.ok) throw new Error(); return r.json(); }).then(j => { rules = j.rules || []; render(); })
+        .catch(() => { list.replaceChildren(state('error', 'Could not load the rules', 'Reload the page to try again.')); });
+})();
+</script>

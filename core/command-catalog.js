@@ -6,14 +6,16 @@
  *
  *   1. How do I run it?      Every prefix, plus the @mention form.
  *   2. What are its aliases? Two independent systems, see below.
- *   3. Can I alias it?       Only if the legacy registry knows it — `/alias add` validates
- *                            against `prefix-command-registry`, not the universal bridge.
- *   4. Why is it slash-only? A modal cannot be opened from a chat message, and an attachment
- *                            cannot be passed as text. Those paths are `/` only, permanently.
+ *   3. Can I alias it?       Yes if chat can reach it. Aliases are added in the dashboard's Command
+ *                            Center, which accepts a registry name or any bridge path
+ *                            (dashboard/routes/api/features/prefix-commands.js POST /aliases).
+ *   4. Why is it slash-only? A modal cannot be opened from a chat message. A file option is not a
+ *                            reason: typed in chat, the files attached to the message fill the
+ *                            file options in order (core/universal-commands.js parseOptions).
  *
  * On the two alias systems:
  *   • `prefix-command-registry.js` — a curated registry with hand-written `aliases: []`. This is
- *     what `/alias add` checks against, so it alone decides what is user-aliasable.
+ *     is one of the two things the Command Center accepts as an alias target.
  *   • `universal-commands.js` — the bridge that exposes *every* slash command to chat. It adds
  *     `CURATED` shortcuts (`p` → `music play`) and auto-derives unambiguous bare-subcommand
  *     shortcuts. These are built in and cannot be changed per-server.
@@ -22,10 +24,12 @@ import { readFileSync, existsSync } from 'node:fs';
 import { dirname, resolve as resolvePath } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { PermissionsBitField } from 'discord.js';
-import { DEFAULT_PREFIXES, listCommandPaths, getGroups, _internals } from './universal-commands.js';
+import { DEFAULT_PREFIXES, listCommandPaths, getGroups, _internals, describePath, SLASH_TEXT_PREFIX } from './universal-commands.js';
+import { commandType } from './command-registration.js';
 import { getAllCommands } from './prefix-command-registry.js';
 import { _internals as owoInternals } from './owo-natural-prefix.js';
 import logger from '../utils/logger.js';
+import { MOUNTS, slashPath, isContainer } from './command-mounts.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const SUB = 1, GROUP = 2, ATTACHMENT = 11;
@@ -146,7 +150,7 @@ export function buildCatalog(client) {
         return null;
     };
 
-    // Legacy registry — the only thing `/alias add` will accept as a target.
+    // Legacy registry: its names (and their built-in aliases) are alias targets too.
     const registry = new Map(getAllCommands().map(c => [c.name, c]));
 
     const commands = [];
@@ -154,13 +158,14 @@ export function buildCatalog(client) {
     for (const cmd of client.commands.values()) {
         const json = typeof cmd.data?.toJSON === 'function' ? cmd.data.toJSON() : null;
         if (!json) continue;
+        // /creator and /moderation only hold moved commands; their children have their own cards.
+        if (isContainer(json.name, json)) continue;
 
         const perms = decodePermissions(json.default_member_permissions);
         const modal = opensModal(cmd.__filePath ?? null);
         const reg = registry.get(json.name);
 
         const paths = pathsFor(json).map(p => {
-            const attachment = p.options.filter(o => o.type === ATTACHMENT).map(o => o.name);
             const bridged = bridgePaths.has(p.path);
 
             // Built-in shortcuts pointing at this exact path.
@@ -172,13 +177,21 @@ export function buildCatalog(client) {
             ];
 
             const slashOnlyReasons = [];
-            if (attachment.length) slashOnlyReasons.push(`takes a file (${attachment.join(', ')}) — a chat message cannot attach one to a command`);
             if (!bridged) slashOnlyReasons.push('not reachable from chat');
 
             const slashOnly = slashOnlyReasons.length > 0;
+            // Slash/text split (core/command-registration.js): `slash` is null for a text command, and
+            // `text` is the "/" form typed as a message (null when that first word is a registered command).
+            const form = (() => { try { return describePath(p.path); } catch { return null; } })();
 
             return {
                 path: p.path,
+                // The slash form differs from the chat path for moved commands (`/fun owoify`, chat `!owoify`)
+                // and does not exist for dropped aliases (core/command-mounts.js) or text commands.
+                slash: (json.type ?? 1) !== 1 ? json.name : form ? (form.slash ? form.slash.slice(1) : null)
+                    : (MOUNTS[json.name]?.drop ? null : slashPath(json.name) + p.path.slice(json.name.length)),
+                text: form?.text ?? null,
+                type: form?.type ?? 'slash',
                 description: p.description,
                 options: p.options
                     .filter(o => o.type !== SUB && o.type !== GROUP)
@@ -192,14 +205,26 @@ export function buildCatalog(client) {
                 slashOnly,
                 slashOnlyReasons,
 
-                // `/alias add` accepts any target the chat bridge can resolve — a bare name or a
+                // The Command Center accepts any target the chat bridge can resolve — a bare name or a
                 // full slash path. A path chat cannot reach cannot usefully be aliased either.
                 aliasable: !slashOnly,
             };
         });
 
+        const type = (json.type ?? 1) !== 1 ? 'slash' : commandType(json.name, cmd, json);
+        const firstSlash = paths.find(p => p.slash);
+        const textFirsts = [...new Set(paths.map(p => p.text && p.text.split(' ')[0]).filter(Boolean))];
         commands.push({
             name: json.name,
+            // What a member types in Discord (`fun owoify` for owoify); null for a dropped alias or a text
+            // command (`text` is then what to type as a message, "/owo").
+            slash: type === 'text' || MOUNTS[json.name]?.drop ? null
+                : (firstSlash ? firstSlash.slash.split(' ').slice(0, firstSlash.slash.split(' ').length - (firstSlash.path.split(' ').length - 1)).join(' ') : slashPath(json.name)),
+            text: type === 'text' && textFirsts.length === 1 ? textFirsts[0] : null,
+            type,
+            menu: (json.type ?? 1) !== 1,
+            // Deployed only to the servers that use it (cannabis, /ban, /modreason, /weekly-recap).
+            serverOnly: Boolean(cmd.guildScoped),
             description: json.description,
             category: cmd.category ?? 'General',
             paths,
@@ -213,7 +238,7 @@ export function buildCatalog(client) {
             // At least one subcommand opens a modal, so that subcommand is `/` only.
             opensModal: modal,
 
-            // Aliasing. Custom aliases are per-server (`/alias add`, or the Command Center).
+            // Aliasing. Custom aliases are per-server, added in the Command Center.
             aliasable: paths.some(p => p.aliasable),
             builtinAliases: reg?.aliases?.length ? [...reg.aliases].sort() : [],
 
@@ -226,11 +251,18 @@ export function buildCatalog(client) {
 
     const allPaths = commands.flatMap(c => c.paths);
     return {
-        prefixes: DEFAULT_PREFIXES,
+        // "/" is listed on its own: it is the text-command prefix, shown as /command already.
+        prefixes: DEFAULT_PREFIXES.filter(p => p !== SLASH_TEXT_PREFIX),
         mentionForm: client.user ? `@${client.user.username}` : '@bot',
         commands,
         stats: {
             commands: commands.length,
+            textCommands: commands.filter(c => c.type === 'text').length,
+            textPaths: allPaths.filter(p => !p.slash && p.text).length,
+            // Top-level slash commands as Discord lists them in every server (moved ones count under their
+            // parent), and the extra ones only some servers get.
+            topLevel: new Set(commands.filter(c => !c.menu && !c.serverOnly).map(c => c.slash?.split(' ')[0]).filter(Boolean)).size,
+            serverOnly: commands.filter(c => !c.menu && c.serverOnly && c.slash).length,
             paths: allPaths.length,
             slashOnly: allPaths.filter(p => p.slashOnly).length,
             gated: commands.filter(c => c.gated).length,

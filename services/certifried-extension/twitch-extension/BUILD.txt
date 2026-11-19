@@ -1,0 +1,4 @@
+Built 2026-11-18T23:30:59.854Z
+EBS (API base baked into app.js): https://certifriedmultitool.com/cfx-api
+Files: app.js, config.html, main.css, panel.css, panel.html, panel.js
+Content hash: 0eb4ef6dcc

@@ -1,5 +1,7 @@
 import logger from '../utils/logger.js';
 import pool from '../utils/db.js';
+import { isSnowflake } from './streamer-departure.js';
+import { getStreamEndDefaults } from './stream-end-defaults.js';
 
 // In-memory config cache per guild
 const configCache = new Map();
@@ -116,17 +118,34 @@ export async function findBestTwitchMatch(nameSources, guildId, discordUserId = 
 
         if (!bestMatch) return null;
 
-        // Cache the result in community_twitch_links
-        const cacheDiscordId = discordUserId || 'api_lookup';
+        // Cache the affiliate lookup under the Twitch id ONLY — never under discordUserId.
+        //
+        // This match is a *guess*: it is the first candidate login derived from a Discord
+        // display name that happens to exist on Twitch. Nothing here proves the account
+        // belongs to that Discord user, and dormant accounts squatting a common handle are
+        // everywhere — binding one to a member permanently pinned real streamers to
+        // non-affiliate (their actual channel was a variant like `<name>_` or `<name>52`).
+        // Discord→Twitch identity may only be written by writers that actually verify
+        // ownership: the OAuth link flow, the streamers/subscriptions table, presence.
         await pool.execute(
-            `INSERT INTO community_twitch_links (guild_id, discord_user_id, twitch_username, twitch_user_id, is_affiliate, last_checked)
-             VALUES (?, ?, ?, ?, ?, NOW())
-             ON DUPLICATE KEY UPDATE is_affiliate = ?, twitch_username = ?, twitch_user_id = ?, last_checked = NOW()`,
-            [guildId, cacheDiscordId, bestMatch.canonicalUsername, bestMatch.twitchId, bestMatch.isAffiliate ? 1 : 0,
+            `INSERT INTO community_twitch_links (guild_id, discord_user_id, twitch_username, twitch_user_id, is_affiliate, affiliate_checked_at, last_checked)
+             VALUES (?, ?, ?, ?, ?, NOW(), NOW())
+             ON DUPLICATE KEY UPDATE is_affiliate = ?, twitch_username = ?, twitch_user_id = ?, affiliate_checked_at = NOW(), last_checked = NOW()`,
+            [guildId, `tw:${bestMatch.twitchId}`, bestMatch.canonicalUsername, bestMatch.twitchId, bestMatch.isAffiliate ? 1 : 0,
              bestMatch.isAffiliate ? 1 : 0, bestMatch.canonicalUsername, bestMatch.twitchId]
         );
 
         logger.info(`[CommunitySupport] findBestTwitchMatch: candidates=[${orderedCandidates.join(',')}] → ${bestMatch.canonicalUsername} (affiliate=${bestMatch.isAffiliate})`);
+
+        // Surface unverified guesses so a human can confirm or correct the handle.
+        // scripts/list-unverified-support-targets.mjs reports these.
+        if (discordUserId) {
+            logger.warn(`[CommunitySupport] UNVERIFIED MATCH — guessed Twitch '${bestMatch.canonicalUsername}' for Discord ${discordUserId} from name candidates; NOT binding as identity`, {
+                guildId, discordUserId, guessedLogin: bestMatch.canonicalUsername,
+                twitchId: bestMatch.twitchId, isAffiliate: bestMatch.isAffiliate,
+                candidates: orderedCandidates.join(','), category: 'community-support-unverified'
+            });
+        }
         return bestMatch;
     } catch (error) {
         logger.warn(`[CommunitySupport] findBestTwitchMatch failed for candidates [${orderedCandidates.join(',')}]:`, {
@@ -182,15 +201,22 @@ export function extractTwitchUsernames(content) {
 export async function checkAffiliateStatus(guildId, twitchUsername) {
     const cleanName = twitchUsername.toLowerCase();
 
-    // Check DB cache first (refreshes every 24 hours)
+    // Check DB cache first (refreshes every 24 hours).
+    // Freshness comes from affiliate_checked_at, NOT last_checked: identity writers
+    // (presenceUpdate, dashboard link flows) bump last_checked on every go-live while
+    // leaving is_affiliate at its DEFAULT 0, which used to make an unverified 0 look
+    // freshly verified forever. affiliate_checked_at is only set once we've actually
+    // read broadcaster_type from Twitch.
     const [cached] = await pool.execute(
-        `SELECT is_affiliate, twitch_user_id, last_checked FROM community_twitch_links
+        `SELECT is_affiliate, twitch_user_id, affiliate_checked_at FROM community_twitch_links
          WHERE guild_id = ? AND twitch_username = ?`,
         [guildId, cleanName]
     );
 
-    if (cached.length > 0) {
-        const age = Date.now() - new Date(cached[0].last_checked).getTime();
+    const verified = cached.length > 0 && cached[0].affiliate_checked_at !== null;
+
+    if (verified) {
+        const age = Date.now() - new Date(cached[0].affiliate_checked_at).getTime();
         if (age < 24 * 60 * 60 * 1000) { // Less than 24 hours old
             return { isAffiliate: !!cached[0].is_affiliate, twitchId: cached[0].twitch_user_id || null, canonicalUsername: cleanName };
         }
@@ -203,8 +229,10 @@ export async function checkAffiliateStatus(guildId, twitchUsername) {
 
         if (!user) {
             // getTwitchUser returns null for both "not found" AND API errors.
-            // If we have a stale cache entry, trust it over assuming non-affiliate.
-            if (cached.length > 0) {
+            // If we have a stale but genuinely verified entry, trust it over assuming
+            // non-affiliate. An unverified row is just the DEFAULT 0 placeholder and
+            // says nothing about broadcaster_type, so it must not be used as evidence.
+            if (verified) {
                 logger.info(`[CommunitySupport] Twitch API returned null for ${cleanName}, using stale cache: affiliate=${cached[0].is_affiliate}`);
                 return { isAffiliate: !!cached[0].is_affiliate, twitchId: cached[0].twitch_user_id || null, canonicalUsername: cleanName };
             }
@@ -216,20 +244,33 @@ export async function checkAffiliateStatus(guildId, twitchUsername) {
         const twitchId = user.id;
         const canonicalUsername = user.login;
 
-        // Update cache
+        // Correct the real rows for this username FIRST. This used to be gated on
+        // twitch_user_id differing, but the identity writers already store the correct
+        // id — so the gate was almost always false and the poisoned is_affiliate = 0
+        // survived every check.
         await pool.execute(
-            `INSERT INTO community_twitch_links (guild_id, discord_user_id, twitch_username, twitch_user_id, is_affiliate, last_checked)
-             VALUES (?, ?, ?, ?, ?, NOW())
-             ON DUPLICATE KEY UPDATE is_affiliate = ?, twitch_username = ?, twitch_user_id = ?, last_checked = NOW()`,
-            [guildId, 'api_lookup', canonicalUsername, twitchId, isAffiliate ? 1 : 0, isAffiliate ? 1 : 0, canonicalUsername, twitchId]
+            `UPDATE community_twitch_links
+             SET is_affiliate = ?, twitch_user_id = ?, affiliate_checked_at = NOW(), last_checked = NOW()
+             WHERE guild_id = ? AND twitch_username IN (?, ?)`,
+            [isAffiliate ? 1 : 0, twitchId, guildId, cleanName, canonicalUsername]
         );
 
-        // Also update the real discord user's cache row if it exists (PK is guild_id + discord_user_id)
-        if (cached.length > 0 && cached[0].twitch_user_id !== twitchId) {
+        // No Discord user is linked to this Twitch account yet, so park the verified
+        // result on a row keyed by the Twitch id. Keying it on a literal 'api_lookup'
+        // gave the whole guild ONE cache slot (PK is guild_id + discord_user_id) that
+        // every subsequent lookup overwrote.
+        const [linked] = await pool.execute(
+            `SELECT 1 FROM community_twitch_links
+             WHERE guild_id = ? AND twitch_username IN (?, ?) LIMIT 1`,
+            [guildId, cleanName, canonicalUsername]
+        );
+        if (linked.length === 0) {
             await pool.execute(
-                `UPDATE community_twitch_links SET is_affiliate = ?, twitch_user_id = ?, last_checked = NOW()
-                 WHERE guild_id = ? AND twitch_username = ?`,
-                [isAffiliate ? 1 : 0, twitchId, guildId, cleanName]
+                `INSERT INTO community_twitch_links (guild_id, discord_user_id, twitch_username, twitch_user_id, is_affiliate, affiliate_checked_at, last_checked)
+                 VALUES (?, ?, ?, ?, ?, NOW(), NOW())
+                 ON DUPLICATE KEY UPDATE is_affiliate = ?, twitch_username = ?, twitch_user_id = ?, affiliate_checked_at = NOW(), last_checked = NOW()`,
+                [guildId, `tw:${twitchId}`, canonicalUsername, twitchId, isAffiliate ? 1 : 0,
+                 isAffiliate ? 1 : 0, canonicalUsername, twitchId]
             );
         }
 
@@ -238,8 +279,8 @@ export async function checkAffiliateStatus(guildId, twitchUsername) {
         logger.warn(`[CommunitySupport] Failed to check affiliate status for ${cleanName}:`, {
             error: error.message
         });
-        // If API fails but we have a stale cache entry, use it instead of defaulting to false
-        if (cached.length > 0) {
+        // If API fails but we have a stale *verified* entry, use it instead of defaulting to false
+        if (verified) {
             logger.info(`[CommunitySupport] Using stale cache for ${cleanName}: affiliate=${cached[0].is_affiliate}`);
             return { isAffiliate: !!cached[0].is_affiliate, twitchId: cached[0].twitch_user_id || null, canonicalUsername: cleanName };
         }
@@ -249,7 +290,7 @@ export async function checkAffiliateStatus(guildId, twitchUsername) {
 
 /**
  * Try to resolve a Discord user to their Twitch username and ID.
- * Checks: community_twitch_links, streamers table, streamer_discord_links
+ * Checks: streamers (this guild, then any guild), community_twitch_links
  * @returns {{ username: string, twitchId: string|null }|null}
  */
 export async function resolveTwitchUsername(guildId, discordUserId) {
@@ -266,11 +307,11 @@ export async function resolveTwitchUsername(guildId, discordUserId) {
     );
     if (streamers.length > 0) return { username: streamers[0].username, twitchId: streamers[0].platform_user_id || null };
 
-    // Check streamer_discord_links (verified links across all guilds)
+    // A streamer linked to this Discord user in any guild (streamers.discord_user_id holds the
+    // verified links; the streamer_discord_links table was never written)
     const [discordLinks] = await pool.execute(
-        `SELECT s.username, s.platform_user_id FROM streamer_discord_links sdl
-         JOIN streamers s ON sdl.streamer_id = s.streamer_id
-         WHERE sdl.discord_user_id = ? AND s.platform = 'twitch'
+        `SELECT username, platform_user_id FROM streamers
+         WHERE discord_user_id = ? AND platform = 'twitch'
          LIMIT 1`,
         [discordUserId]
     );
@@ -464,6 +505,17 @@ async function ensureStreamerSubscription(guildId, discordUserId, twitchUsername
             ['twitch', twitchUser.id]
         );
 
+        /*
+         * A Discord USERNAME reaching this column is not hypothetical — two rows carried the literal
+         * string 'SuperMike242', which made every membership check on them fail with 400/50035 forever.
+         * Coerced to NULL rather than thrown, so the subscription is still created; it is simply
+         * unlinked, and honestly so, instead of carrying an id that can never resolve.
+         */
+        const linkedDiscordId = isSnowflake(String(discordUserId ?? '')) ? String(discordUserId) : null;
+        if (discordUserId && !linkedDiscordId) {
+            logger.warn(`[CommunitySupport] refusing non-snowflake discord_user_id ${JSON.stringify(discordUserId)} for twitch/${twitchUser.login}`);
+        }
+
         let streamerId;
         if (existing.length > 0) {
             streamerId = existing[0].streamer_id;
@@ -472,13 +524,13 @@ async function ensureStreamerSubscription(guildId, discordUserId, twitchUsername
                 `UPDATE streamers SET discord_user_id = COALESCE(NULLIF(discord_user_id, ''), ?),
                  profile_image_url = COALESCE(profile_image_url, ?)
                  WHERE streamer_id = ?`,
-                [discordUserId, twitchUser.profile_image_url || null, streamerId]
+                [linkedDiscordId, twitchUser.profile_image_url || null, streamerId]
             );
         } else {
             const [result] = await pool.execute(
                 `INSERT INTO streamers (platform, platform_user_id, username, discord_user_id, profile_image_url)
                  VALUES ('twitch', ?, ?, ?, ?)`,
-                [twitchUser.id, twitchUser.login, discordUserId, twitchUser.profile_image_url || null]
+                [twitchUser.id, twitchUser.login, linkedDiscordId, twitchUser.profile_image_url || null]
             );
             streamerId = result.insertId;
         }
@@ -490,10 +542,13 @@ async function ensureStreamerSubscription(guildId, discordUserId, twitchUsername
         );
 
         if (existingSub.length === 0) {
+            const streamEnd = await getStreamEndDefaults(guildId);
             await pool.execute(
-                `INSERT INTO subscriptions (guild_id, streamer_id, announcement_channel_id, delete_on_end)
-                 VALUES (?, ?, ?, 1)`,
-                [guildId, streamerId, channelId]
+                // 'external': a community-support shoutout promotes a streamer the members raid
+                // and support. Their own server membership is not what the tracking rests on.
+                `INSERT INTO subscriptions (guild_id, streamer_id, announcement_channel_id, delete_on_end, edit_on_end, tracking_origin)
+                 VALUES (?, ?, ?, ?, ?, 'external')`,
+                [guildId, streamerId, channelId, streamEnd.delete_on_end, streamEnd.edit_on_end]
             );
             logger.info(`[CommunitySupport] Added streamer subscription: ${twitchUsername} -> channel ${channelId}`);
         }

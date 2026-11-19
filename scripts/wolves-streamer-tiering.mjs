@@ -12,10 +12,10 @@
 
 import 'dotenv/config';
 import pool from '../utils/db.js';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 
 const GUILD_ID = '1428091358522114090';
-const BOT_ID   = '1506374126594691092';
+// The acting bot comes from guild_bot_mapping — never pinned here.
 const SELF_PROMO_CH  = '1428140205151621191';
 const ROLES_CH       = '1506378069022212188';
 const STREAMERS_ROLE = '1428139684290232392';
@@ -32,9 +32,8 @@ const STAFF_ROLES = [
 
 const MIN_LEVEL = 3;
 
-const [rows] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id = ?', [BOT_ID]);
-if (!rows.length) { console.error('Bot row missing'); process.exit(1); }
-const TOKEN = encryption.decrypt(JSON.parse(rows[0].bot_token));
+const bot = await resolveBotForGuild(GUILD_ID, { db: pool });
+const TOKEN = bot.token;
 
 async function api(method, path, body) {
     await new Promise(r => setTimeout(r, 120));

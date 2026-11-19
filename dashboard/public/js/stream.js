@@ -10,7 +10,6 @@
     twitch:    { icon: '<i class="fab fa-twitch"></i>',     cls: 'platform-twitch' },
     youtube:   { icon: '<i class="fab fa-youtube"></i>',    cls: 'platform-youtube' },
     kick:      { icon: '<b>K</b>',                          cls: 'platform-kick' },
-    trovo:     { icon: '<b>T</b>',                          cls: 'platform-trovo' },
     tiktok:    { icon: '<i class="fab fa-tiktok"></i>',     cls: 'platform-tiktok' },
     rumble:    { icon: '<b>R</b>',                          cls: 'platform-rumble' },
     facebook:  { icon: '<i class="fab fa-facebook-f"></i>', cls: 'platform-facebook' },
@@ -216,15 +215,79 @@
     });
   }
 
+  /* ---------- recent sessions (per-destination results) ---------- */
+  const STATE_LABEL = { live: 'Live', connecting: 'Connecting', failed: 'Failed', ended: 'Ended' };
+
+  function el(tag, cls, text) {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text !== undefined && text !== null) n.textContent = String(text);
+    return n;
+  }
+
+  function fmtDuration(sec) {
+    if (sec === null || sec === undefined) return '';
+    const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
+    return h ? `${h}h ${m}m` : (m ? `${m}m ${s}s` : `${s}s`);
+  }
+
+  function renderSessions(sessions) {
+    const list = $('#sessionList'), empty = $('#sessionEmpty');
+    if (!list) return;
+    list.replaceChildren();
+    if (empty) empty.style.display = sessions.length ? 'none' : '';
+    for (const s of sessions) {
+      const item = el('div', 'session-item');
+      const head = el('div', 'session-head');
+      head.append(el('span', 'session-when', s.startedAt ? new Date(s.startedAt).toLocaleString() : 'Session'));
+      const meta = s.status === 'active' && !s.endedAt ? 'In progress'
+        : (s.status === 'error' ? 'Did not start' : (s.durationSeconds !== null && s.durationSeconds !== undefined ? fmtDuration(s.durationSeconds) : 'Ended'));
+      head.append(el('span', 'session-meta', meta));
+      item.append(head);
+      if (s.error) item.append(el('div', 'session-error', s.error));
+      const ul = el('ul', 'session-targets');
+      for (const d of s.destinations || []) {
+        const li = el('li', 'session-target');
+        const state = el('span', 'dest-state s-' + (STATE_LABEL[d.state] ? d.state : 'ended'));
+        state.append(el('span', 'dot'), el('span', 'lbl', STATE_LABEL[d.state] || d.state));
+        const name = el('span', 'session-target-name', d.name || d.platform || 'Destination');
+        if (d.name && d.platform) name.title = d.platform;
+        if (d.lastError) name.append(el('span', 'session-target-error', d.lastError));
+        li.append(state, name);
+        ul.append(li);
+      }
+      if (!(s.destinations || []).length) ul.append(el('li', 'session-meta', 'No destination results were recorded for this session.'));
+      item.append(ul);
+      list.append(item);
+    }
+  }
+
+  async function loadSessions() {
+    try {
+      const res = await fetch('/stream/api/sessions');
+      if (!res.ok) return;
+      const data = await res.json();
+      renderSessions(Array.isArray(data.sessions) ? data.sessions : []);
+    } catch {}
+  }
+
+  // Refresh the sessions list when a stream starts or ends, and every 15s while live.
+  let wasLive = null, liveTicks = 0;
   async function pollStatus() {
     try {
       const res = await fetch('/stream/api/status');
       if (!res.ok) return;
-      applyStatus(await res.json());
+      const s = await res.json();
+      applyStatus(s);
+      const live = !!s.live;
+      if (wasLive !== null && live !== wasLive) setTimeout(loadSessions, 1500);
+      else if (live && ++liveTicks % 8 === 0) loadSessions();
+      wasLive = live;
     } catch {}
   }
 
   loadDestinations();
+  loadSessions();
   pollStatus();
   setInterval(pollStatus, 2000);
 

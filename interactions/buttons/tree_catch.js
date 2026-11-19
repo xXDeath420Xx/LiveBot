@@ -11,10 +11,31 @@
  * channel full of "you were too slow" for one bug.
  */
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
-import { claim, lookup, BASKETS } from '../../core/growtree/critters.js';
+import { claim, BASKETS, clearEncounterMessage } from '../../core/growtree/critters.js';
 import logger from '../../utils/logger.js';
+import { displayNameFor } from '../../utils/display-name.js';
 
 const EPHEMERAL = { flags: 64 };
+
+// How long the "caught it!" result stays up before the message removes itself. Long enough that the
+// channel sees who won, short enough that the tree is the only thing left standing.
+const LINGER_MS = 8000;
+
+/**
+ * Show the outcome, then take the message away again.
+ *
+ * The tree message is the point of the channel; every encounter is transient by design, so it cleans
+ * up after itself rather than leaving a stack of "Caught — Ladybird!" embeds above the tree. The DB's
+ * message_id is cleared alongside, which both stops the reaper re-visiting it and lets the reaper
+ * find this message if a restart kills the timer below before it fires.
+ */
+function vanish(interaction, encounterId) {
+  setTimeout(() => {
+    interaction.message.delete()
+      .then(() => clearEncounterMessage(encounterId))
+      .catch(() => clearEncounterMessage(encounterId).catch(() => {}));
+  }, LINGER_MS);
+}
 
 const RARITY_COLOUR = {
   common: 0x9BA3AF, uncommon: 0x57C97E, rare: 0x4EA1F2, epic: 0xA97BF0, legendary: 0xF0B23B,
@@ -49,23 +70,25 @@ export async function handleTreeCatch(interaction) {
         .setColor(RARITY_COLOUR[t.rarity] ?? 0x57C97E)
         .setTitle(`${t.emoji} Caught — ${t.name}!`)
         .setDescription(
-          `**${interaction.user.username}** swung the net and got it.\n`
+          `**${displayNameFor(interaction.user, interaction.guild)}** swung the net and got it.\n`
           + `${res.isNew ? '✨ **New sticker!** It goes in the book.\n' : 'Another one for the pile.\n'}`
           + `**+${t.coins}** 🪙`)
         .setFooter({ text: `${t.rarity}${res.isNew ? ' · first time' : ''}` });
 
       // The bug is caught — the net button must not linger, or people keep clicking a dead race.
       await interaction.update({ embeds: [embed], components: [] });
+      vanish(interaction, encounterId);
       return;
     }
 
     const embed = new EmbedBuilder()
       .setColor(0xE8A33D)
       .setTitle(`${t.emoji} Caught — ${t.name}!`)
-      .setDescription(`**${interaction.user.username}** guessed the right basket.\n**+${t.coins}** 🪙`)
+      .setDescription(`**${displayNameFor(interaction.user, interaction.guild)}** guessed the right basket.\n**+${t.coins}** 🪙`)
       .setFooter({ text: 'Spend coins with /tree compost to grow the tree faster' });
 
     await interaction.update({ embeds: [embed], components: [] });
+    vanish(interaction, encounterId);
   } catch (err) {
     logger.error(`[GrowTree] catch failed: ${err.message}`, { stack: err.stack });
     if (!interaction.replied) {
@@ -114,18 +137,7 @@ export function encounterMessage(spawn) {
   return { embeds: [embed], components: [row] };
 }
 
-/** What the message becomes when nobody got there in time. */
-export function missedMessage(row) {
-  const t = lookup(row.code);
-  return {
-    embeds: [new EmbedBuilder()
-      .setColor(0x4A4F58)
-      .setTitle(row.kind === 'bug' ? `${t?.emoji ?? '🦋'} It flew away…` : `${t?.emoji ?? '🍎'} It hit the ground.`)
-      .setDescription(row.kind === 'bug'
-        ? `The ${t?.name ?? 'bug'} got bored of waiting. Nobody swung in time.`
-        : `The ${t?.name ?? 'fruit'} splatted. Basket **${Number(row.answer) + 1}** was the one.`)],
-    components: [],
-  };
-}
+// A missed encounter used to be edited into an "it flew away…" embed. It is now simply deleted by
+// jobs/growtree-reaper.js — the tree is the only thing that stays in the channel.
 
 export default handleTreeCatch;

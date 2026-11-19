@@ -17,6 +17,7 @@ import { hasFeatureUnlock, hasResearch } from '../game/research-helper.js';
 import { getWorkerBonuses } from '../routes/workers-enhanced.js';
 import { awardReputation } from '../routes/reputation.js';
 import { claimBreeding, startBreeding } from '../game/breeding-engine.js';
+import { autoBuySeeds } from '../routes/automation.js';
 
 // Dynamic imports for optional systems (may not exist yet)
 let updateTournamentScore = null;
@@ -57,7 +58,7 @@ export async function workersTick() {
 
         const duration = Date.now() - startTime;
         if (totalActions > 0) {
-            logger.info('[IdleTycoon] Tick complete', {
+            logger.debug('[IdleTycoon] Tick complete', {
                 players: playersProcessed,
                 actions: totalActions,
                 duration
@@ -388,10 +389,11 @@ async function executeAutoPlant(playerId, efficiency = 1.0) {
         // No seeds - try auto-buy if enabled
         if (config.auto_buy_seeds_enabled) {
             try {
-                const { autoBuySeeds } = await import('../routes/automation.js');
                 const buyResult = await autoBuySeeds(playerId, globalPreferredStrainId);
                 if (buyResult.purchased) return executeAutoPlant(playerId, efficiency);
-            } catch (e) {}
+            } catch (e) {
+                logger.warn('[IdleTycoon] Auto-plant seed auto-buy failed', { playerId, err: e.message });
+            }
         }
         return { type: 'auto_plant', actionsPerformed: 0 };
     }
@@ -937,26 +939,11 @@ async function executeAutoBuy(playerId, efficiency = 1.0) {
         }
     }
 
-    // Regular shop items
-    const [shopSeeds] = await pool.execute(
-        `SELECT si.*, s.name as strain_name, s.base_price
-         FROM cfx_shop_items si
-         JOIN cfx_strains s ON si.strain_id = s.id
-         WHERE si.category = 'seeds' AND si.price <= ?
-         ORDER BY s.rarity DESC, si.price ASC
-         LIMIT 1`,
-        [Math.min(maxPrice, player.cash)]
-    );
-
-    if (shopSeeds.length > 0) {
-        const seed = shopSeeds[0];
-        const packSize = seed.pack_size || 1;
-        await pool.execute('UPDATE cfx_players SET cash = cash - ? WHERE id = ?', [seed.price, playerId]);
-        await pool.execute(
-            `INSERT INTO cfx_seed_inventory (player_id, strain_id, quantity) VALUES (?, ?, ?)
-             ON DUPLICATE KEY UPDATE quantity = quantity + ?`,
-            [playerId, seed.strain_id, packSize, packSize]
-        );
+    // Regular seed shop: cfx_shop_items holds boosters/workers/upgrades, not seeds — the seed
+    // catalogue is SHOP_SEEDS in routes/shop.js. autoBuySeeds() buys from it (respecting the
+    // player's auto-buy quantity / max price) and refunds on failure.
+    const bought = await autoBuySeeds(playerId);
+    if (bought.purchased) {
         return { type: 'auto_buy', actionsPerformed: 1 };
     }
 
@@ -1036,7 +1023,7 @@ async function executeAutoResearch(playerId) {
 
             await conn.commit();
 
-            logger.info('[IdleTycoon] Auto-started research', { playerId, research: node.name });
+            logger.debug('[IdleTycoon] Auto-started research', { playerId, research: node.name });
             return { type: 'auto_research', actionsPerformed: 1, research: node.name };
         } catch (e) {
             await conn.rollback();
@@ -1163,7 +1150,7 @@ async function executeAutoTrain(playerId) {
             availableCash -= cost;
             trained++;
 
-            logger.info('[IdleTycoon] Auto-started training', {
+            logger.debug('[IdleTycoon] Auto-started training', {
                 playerId, worker: worker.worker_key, trait: trait.name, level: targetLevel
             });
         } catch (e) {
@@ -1203,7 +1190,7 @@ async function executeAutoBreed(playerId) {
             const result = await claimBreeding(playerId, op.id);
             actionsPerformed++;
 
-            logger.info('[IdleTycoon] Auto-claimed breed', {
+            logger.debug('[IdleTycoon] Auto-claimed breed', {
                 playerId,
                 operationId: op.id,
                 resultStrain: result.resultStrain?.name,
@@ -1277,7 +1264,7 @@ async function executeAutoBreed(playerId) {
             if (seeds.length > 0 && seeds[0] === parent2 && parent2.quantity <= 0) seeds.splice(0, 1);
             else if (seeds.length > 1 && seeds[1] === parent2 && parent2.quantity <= 0) seeds.splice(1, 1);
 
-            logger.info('[IdleTycoon] Auto-started breed', {
+            logger.debug('[IdleTycoon] Auto-started breed', {
                 playerId, parent1: parent1.name, parent2: parent2.name
             });
         } catch (err) {
@@ -1354,7 +1341,7 @@ async function executeAutoBooster(playerId) {
         activeTypes.add(booster.effect_type);
         activated++;
 
-        logger.info('[IdleTycoon] Auto-activated booster', {
+        logger.debug('[IdleTycoon] Auto-activated booster', {
             playerId, booster: booster.item_name || booster.item_id, effect: booster.effect_type
         });
     }

@@ -1,6 +1,8 @@
 import { EmbedBuilder } from 'discord.js';
 import pool from '../../utils/db.js';
 import logger from '../../utils/logger.js';
+import { themeColor } from '../../core/guild-theme.js';
+import { getStreamEndDefaults } from '../../core/stream-end-defaults.js';
 
 export async function handleApproveAnnouncement(interaction) {
     try {
@@ -76,15 +78,16 @@ export async function handleApproveAnnouncement(interaction) {
 
                 const announcementChannelId = guildConfig.length > 0 ? guildConfig[0].announcement_channel_id : null;
 
+                const streamEnd = await getStreamEndDefaults(interaction.guildId);
                 await connection.query(
-                    'INSERT INTO subscriptions (guild_id, streamer_id, announcement_channel_id, delete_on_end) VALUES (?, ?, ?, 1)',
-                    [interaction.guildId, streamerId, announcementChannelId]
+                    'INSERT INTO subscriptions (guild_id, streamer_id, announcement_channel_id, delete_on_end, edit_on_end) VALUES (?, ?, ?, ?, ?)',
+                    [interaction.guildId, streamerId, announcementChannelId, streamEnd.delete_on_end, streamEnd.edit_on_end]
                 );
 
                 // Update the embed to show it was approved
                 const originalEmbed = interaction.message.embeds[0];
                 const approvedEmbed = EmbedBuilder.from(originalEmbed)
-                    .setColor('#57F287') // Green
+                    .setColor(themeColor(interaction.guildId, 'success')) // Green
                     .setFooter({ text: `Approved by ${interaction.user.tag} • User ID: ${userId}` });
 
                 await interaction.message.edit({
@@ -97,7 +100,7 @@ export async function handleApproveAnnouncement(interaction) {
                     await user.send({
                         embeds: [
                             new EmbedBuilder()
-                                .setColor('#57F287')
+                                .setColor(themeColor(interaction.guildId, 'success'))
                                 .setTitle('✅ Stream Announcement Request Approved!')
                                 .setDescription(`Your request to add **${username}** (${platform}) to the announcement list has been **approved** by the admins in **${interaction.guild.name}**!`)
                                 .addFields(
@@ -159,7 +162,7 @@ export async function handleDenyAnnouncement(interaction) {
         // Update the embed to show it was denied
         const originalEmbed = interaction.message.embeds[0];
         const deniedEmbed = EmbedBuilder.from(originalEmbed)
-            .setColor('#ED4245') // Red
+            .setColor(themeColor(interaction.guildId, 'danger')) // Red
             .setFooter({ text: `Denied by ${interaction.user.tag} • User ID: ${userId}` });
 
         await interaction.message.edit({
@@ -176,7 +179,7 @@ export async function handleDenyAnnouncement(interaction) {
                 await user.send({
                     embeds: [
                         new EmbedBuilder()
-                            .setColor('#ED4245')
+                            .setColor(themeColor(interaction.guildId, 'danger'))
                             .setTitle('❌ Stream Announcement Request Denied')
                             .setDescription(`Your request to add **${username}** (${platform}) to the announcement list in **${interaction.guild.name}** has been **denied** by the admins.`)
                             .addFields(

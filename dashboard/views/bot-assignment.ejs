@@ -1,374 +1,170 @@
+<%#
+  /bot-management/assign/:botId — which servers a custom bot answers in.
+  Locals (dashboard/server.js): bot { id, name, avatar, online, enabled, approved, servers, inviteBase },
+  userGuilds [{ id, name, icon, canEdit, currentBot, present }]. Saves through POST /api/bots/:id/assign
+  (this bot) and POST /api/bots/default/assign (back to the main bot), only for servers that changed.
+%>
+<%
+// Locals from dashboard/server.js; the defaults keep the page working with an older route.
+const _bot = locals.bot || { id: botId, name: 'Custom bot', avatar: null, online: false, enabled: true, approved: true, servers: 0,
+    inviteBase: 'https://discord.com/oauth2/authorize?client_id=' + encodeURIComponent(botId) + '&permissions=1643797540086&scope=bot+applications.commands' };
+%>
 <!DOCTYPE html>
-<html lang="en">
+<html data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>" lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="csrf-token" content="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
-    <title>Assign Bot to Servers - CertiFried Utility</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
-    <style>
-        :root {
-            --background-primary: #0b0f11;
-            --background-secondary: #0f1316;
-            --background-tertiary: #171c20;
-            --border-color: rgba(167, 139, 250, 0.15);
-            --color-text-primary: #e9edf0;
-            --color-text-secondary: #a9b4b9;
-            --accent-color: #a78bfa;
-        }
-
-        body {
-            background: var(--background-primary);
-            min-height: 100vh;
-            color: var(--color-text-primary);
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        }
-
-        .container { max-width: 900px; padding: 40px 20px; }
-
-        .header { color: var(--color-text-primary); margin-bottom: 30px; }
-        .header h1 { font-weight: 700; }
-
-        .card {
-            background: var(--background-secondary);
-            border: 1px solid var(--border-color);
-            border-radius: 12px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.4);
-            margin-bottom: 24px;
-        }
-
-        .card-body { padding: 24px; }
-
-        .bot-info {
-            background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%);
-            color: white;
-            border: none;
-        }
-
-        .status-online { color: #22C55E; }
-        .status-offline { color: #EF4444; }
-
-        .guild-item {
-            padding: 15px;
-            border-bottom: 1px solid var(--border-color);
-            transition: background 0.2s;
-        }
-        .guild-item:last-child { border-bottom: none; }
-        .guild-item:hover { background: var(--background-tertiary); }
-        .guild-item label { color: var(--color-text-primary); }
-
-        .guild-checkbox {
-            width: 20px;
-            height: 20px;
-            cursor: pointer;
-            accent-color: var(--accent-color);
-        }
-
-        .current-bot { font-size: 0.85em; color: var(--color-text-secondary); }
-
-        .btn-primary {
-            background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%);
-            border: none;
-            font-weight: 600;
-            box-shadow: 0 4px 15px rgba(167, 139, 250, 0.35);
-        }
-        .btn-primary:hover {
-            background: linear-gradient(135deg, #8b5cf6 0%, #c4b5fd 100%);
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(167, 139, 250, 0.5);
-        }
-
-        .btn-light {
-            background: var(--background-secondary);
-            border: 1px solid var(--border-color);
-            color: var(--color-text-primary);
-        }
-        .btn-light:hover {
-            background: var(--background-tertiary);
-            color: var(--color-text-primary);
-        }
-
-        .btn-outline-primary {
-            border-color: var(--accent-color);
-            color: var(--accent-color);
-            background: transparent;
-        }
-        .btn-outline-primary:hover {
-            background: var(--accent-color);
-            color: white;
-        }
-
-        .btn-outline-secondary {
-            border-color: var(--border-color);
-            color: var(--color-text-secondary);
-            background: transparent;
-        }
-        .btn-outline-secondary:hover {
-            background: var(--background-tertiary);
-            color: var(--color-text-primary);
-            border-color: var(--border-color);
-        }
-
-        .guild-icon {
-            width: 48px;
-            height: 48px;
-            border-radius: 50%;
-            object-fit: cover;
-            margin-right: 15px;
-        }
-
-        .guild-icon-placeholder {
-            width: 48px;
-            height: 48px;
-            border-radius: 50%;
-            background: var(--accent-color);
-            color: white;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-right: 15px;
-            font-weight: bold;
-            font-size: 20px;
-        }
-
-        .text-muted { color: var(--color-text-secondary) !important; }
-        .text-danger { color: #EF4444 !important; }
-
-        h5 { color: var(--color-text-primary); }
-    </style>
+<%- include('partials/site-head', { title: ('Assign ' + _bot.name) + ' · CertiFried', noindex: true }) %>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="/css/cf-settings.css">
 </head>
-<body>
-    <div class="container">
-        <div class="header">
-            <a href="/bot-management" class="btn btn-light mb-3">
-                <i class="bi bi-arrow-left"></i> Back to Bot Management
-            </a>
-            <h1><i class="bi bi-diagram-3"></i> Assign Bot to Servers</h1>
-        </div>
-
-        <!-- Bot Info Card -->
-        <div class="card bot-info">
-            <div class="card-body">
-                <h3 id="bot-name">Loading...</h3>
-                <p class="mb-2" id="bot-status">
-                    <i class="bi bi-circle-fill"></i> <span id="status-text">Checking...</span>
-                </p>
-                <p class="mb-0" id="bot-stats">
-                    <i class="bi bi-server"></i> <span id="guilds-count">-</span> Servers |
-                    <i class="bi bi-people"></i> <span id="users-count">-</span> Users
-                </p>
-            </div>
-        </div>
-
-        <!-- Guild Assignment Card -->
-        <div class="card">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <h5 class="mb-0">Select Servers</h5>
-                    <div>
-                        <button class="btn btn-sm btn-outline-primary me-2" onclick="selectAll()">
-                            <i class="bi bi-check-all"></i> Select All
-                        </button>
-                        <button class="btn btn-sm btn-outline-secondary" onclick="clearAll()">
-                            <i class="bi bi-x-circle"></i> Clear All
-                        </button>
-                    </div>
-                </div>
-
-                <div id="guilds-list">
-                    <p class="text-muted">Loading your servers...</p>
-                </div>
-
-                <div class="d-grid gap-2 mt-4">
-                    <button class="btn btn-primary btn-lg" onclick="saveAssignments()">
-                        <i class="bi bi-save"></i> Save Assignments
-                    </button>
-                    <button class="btn btn-outline-secondary" onclick="window.location.href='/bot-management'">
-                        Cancel
-                    </button>
-                </div>
-            </div>
+<body class="cfs-body cf-site">
+<%- include('partials/site-header', { user }) %>
+<main id="main-content" class="cf-main" tabindex="-1">
+<div class="cf-page is-narrow">
+    <a class="cf-back" href="/bot-management"><i class="fas fa-arrow-left" aria-hidden="true"></i> Custom bots</a>
+    <div class="cf-page-head">
+        <div class="cf-page-icon"><% if (_bot.avatar) { %><img src="<%= _bot.avatar %>" alt="" data-cf-fallback="https://cdn.discordapp.com/embed/avatars/0.png"><% } else { %><i class="fas fa-robot" aria-hidden="true"></i><% } %></div>
+        <div>
+            <h1 class="cf-page-title"><%= _bot.name %></h1>
+            <p class="cf-page-sub">
+                <span class="cf-pill <%= !_bot.enabled ? '' : _bot.online ? 'is-ok' : 'is-bad' %>"><%= !_bot.enabled ? 'Turned off' : _bot.online ? 'Online' : 'Offline' %></span>
+                <span class="ba-sub-gap"><%= _bot.servers %> <%= _bot.servers === 1 ? 'server' : 'servers' %> joined</span>
+            </p>
         </div>
     </div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        const botId = '<%= botId %>';
-        const csrfToken = '<%= typeof csrfToken !== "undefined" ? csrfToken : "" %>';
-        let guilds = [];
-        let currentAssignments = new Set();
+    <% if (!_bot.enabled || !_bot.approved) { %>
+    <div class="cf-notice is-warn"><i class="fas fa-circle-exclamation" aria-hidden="true"></i><div class="cf-notice-body">This bot is <%= _bot.approved ? 'turned off' : 'waiting for approval' %>, so it cannot be assigned until it is running. Turn it on from <a href="/bot-management">Custom bots</a>.</div></div>
+    <% } %>
 
-        document.addEventListener('DOMContentLoaded', async () => {
-            await loadBotInfo();
-            await loadGuilds();
+    <form id="ba-form">
+    <section class="cf-section" aria-labelledby="ba-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="ba-title">Servers<span class="cf-count"><%= userGuilds.length %></span></h2>
+                <p class="cf-section-desc">Ticked servers are answered by <%= _bot.name %>; the rest by the main CertiFried bot. The bot must also be invited to a server before it can answer there.</p>
+            </div>
+            <% if (userGuilds.length > 1) { %>
+            <div class="cf-section-actions">
+                <button type="button" class="btn btn-secondary btn-sm" id="ba-all">Tick all</button>
+                <button type="button" class="btn btn-secondary btn-sm" id="ba-none">Clear</button>
+            </div>
+            <% } %>
+        </header>
+        <div class="cf-rows">
+            <% if (userGuilds.length > 15) { %>
+            <div class="cf-toolbar"><label class="cf-search"><i class="fas fa-magnifying-glass" aria-hidden="true"></i><input type="search" id="ba-search" placeholder="Search servers" aria-label="Search servers"></label></div>
+            <% } %>
+            <% if (!userGuilds.length) { %>
+            <div class="cf-state"><p class="cf-state-title">No servers to assign</p><p class="cf-state-text">You need the Administrator permission in a server to give it a custom bot.</p></div>
+            <% } %>
+            <div class="cf-list" id="ba-list">
+            <% userGuilds.forEach(function (g) {
+                const mine = g.currentBot === _bot.id;
+                const other = !mine && g.currentBot !== 'default';
+                const icon = g.icon ? (String(g.icon).startsWith('http') ? g.icon : `https://cdn.discordapp.com/icons/${g.id}/${g.icon}.png?size=64`) : null;
+            %>
+                <label class="cf-list-item ba-item" data-name="<%= String(g.name).toLowerCase() %>">
+                    <span class="ba-check"><input type="checkbox" name="guild" value="<%= g.id %>" data-was="<%= mine ? '1' : '0' %>"<% if (mine) { %> checked<% } %><% if (g.canEdit === false || !_bot.enabled || !_bot.approved) { %> disabled<% } %>></span>
+                    <span class="ba-icon"><% if (icon) { %><img src="<%= icon %>" alt="" loading="lazy" data-cf-fallback="https://cdn.discordapp.com/embed/avatars/0.png"><% } else { %><%= String(g.name).charAt(0).toUpperCase() %><% } %></span>
+                    <span class="cf-list-main ba-main">
+                        <span class="cf-em"><%= g.name %></span>
+                        <span class="cf-list-meta ba-meta">
+                            <% if (mine) { %><span>Assigned to this bot</span><% } else if (other && g.currentBot) { %><span>Assigned to another custom bot</span><% } else if (g.currentBot) { %><span>Main CertiFried bot</span><% } %>
+                            <% if (g.canEdit === false) { %><span>You are not an administrator there</span><% } %>
+                        </span>
+                    </span>
+                    <span class="ba-presence">
+                        <% if (g.present === undefined) { %><% } else if (g.present) { %><span class="cf-pill is-ok">Joined</span>
+                        <% } else { %><a class="cf-pill is-warn" href="<%= _bot.inviteBase %>&guild_id=<%= g.id %>&disable_guild_select=true" target="_blank" rel="noopener">Invite</a><% } %>
+                    </span>
+                </label>
+            <% }); %>
+            </div>
+            <% if (userGuilds.length) { %>
+            <div class="cf-section-foot">
+                <span class="cf-status-line" id="ba-status" aria-live="polite"></span>
+                <a class="btn btn-secondary btn-sm" href="/bot-management">Cancel</a>
+                <button type="submit" class="btn btn-primary btn-sm" id="ba-save"<% if (!_bot.enabled || !_bot.approved) { %> disabled<% } %>>Save</button>
+            </div>
+            <% } %>
+        </div>
+    </section>
+    </form>
+</div>
+</main>
+<style>
+    .ba-sub-gap { margin-left: 8px; }
+    .cf-rows .ba-item { justify-content: flex-start; cursor: pointer; }
+    .cf-rows .ba-item:hover { background: color-mix(in srgb, var(--cf-surface-2) 50%, transparent); }
+    .ba-check { flex: none; display: inline-flex; }
+    .ba-check input { width: 18px; height: 18px; accent-color: var(--cf-accent); margin: 0; }
+    .ba-icon {
+        flex: none; width: 36px; height: 36px; border-radius: 50%; overflow: hidden; display: inline-flex; align-items: center; justify-content: center;
+        background: var(--cf-surface-3); color: var(--cf-text-2); font-weight: 600;
+    }
+    .ba-icon img { width: 100%; height: 100%; object-fit: cover; }
+    .cf-rows .ba-main { flex: 1 1 auto; display: grid; gap: 2px; }
+    .ba-presence { flex: none; margin-left: auto; }
+    .ba-item[hidden] { display: none !important; }
+    .cf-rows .cf-section-foot { display: flex; align-items: center; justify-content: flex-end; gap: var(--cf-2); flex-wrap: wrap; }
+    .cf-rows .cf-section-foot .cf-status-line { margin-right: auto; }
+</style>
+<script>
+(function () {
+    'use strict';
+    var BOT = <%- JSON.stringify(_bot.id).replace(/</g, '\\u003c') %>;
+    var form = document.getElementById('ba-form');
+    var boxes = function () { return Array.prototype.slice.call(document.querySelectorAll('#ba-list input[name="guild"]:not(:disabled)')); };
+    var all = document.getElementById('ba-all'), none = document.getElementById('ba-none'), search = document.getElementById('ba-search');
+    if (all) all.addEventListener('click', function () { boxes().forEach(function (b) { if (!b.closest('.ba-item').hidden) b.checked = true; }); });
+    if (none) none.addEventListener('click', function () { boxes().forEach(function (b) { if (!b.closest('.ba-item').hidden) b.checked = false; }); });
+    if (search) search.addEventListener('input', function () {
+        var q = search.value.trim().toLowerCase();
+        document.querySelectorAll('#ba-list .ba-item').forEach(function (it) { it.hidden = !!q && it.dataset.name.indexOf(q) === -1; });
+    });
+
+    async function post(botId, guildId) {
+        var r = await fetch('/api/bots/' + encodeURIComponent(botId) + '/assign', {
+            method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, body: JSON.stringify({ guildId: guildId }),
         });
+        var d = {};
+        try { d = await r.json(); } catch (e) { /* not JSON */ }
+        if (!r.ok || d.success === false) throw new Error(d.error || ('HTTP ' + r.status));
+        return d;
+    }
 
-        async function loadBotInfo() {
+    if (form) form.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        var status = document.getElementById('ba-status');
+        var save = document.getElementById('ba-save');
+        // Only servers whose box changed: re-saving an unchanged server used to clear its live announcements.
+        var changes = boxes().filter(function (b) { return b.checked !== (b.dataset.was === '1'); });
+        if (!changes.length) { status.className = 'cf-status-line'; status.textContent = 'Nothing changed.'; return; }
+        save.disabled = true;
+        status.className = 'cf-status-line is-busy';
+        status.textContent = 'Saving ' + changes.length + (changes.length === 1 ? ' server' : ' servers') + '…';
+        var failed = [];
+        for (var i = 0; i < changes.length; i++) {
+            var b = changes[i];
             try {
-                const response = await fetch(`/api/bots/${botId}/status`);
-                if (!response.ok) {
-                    throw new Error('Failed to load bot info');
-                }
-                const bot = await response.json();
-
-                document.getElementById('bot-name').textContent = bot.username || 'Custom Bot';
-
-                const statusEl = document.getElementById('bot-status');
-                if (bot.isReady) {
-                    statusEl.innerHTML = '<i class="bi bi-circle-fill status-online"></i> <span id="status-text">Online</span>';
-                } else {
-                    statusEl.innerHTML = '<i class="bi bi-circle-fill status-offline"></i> <span id="status-text">Offline</span>';
-                }
-
-                document.getElementById('guilds-count').textContent = bot.guilds || 0;
-                document.getElementById('users-count').textContent = bot.users || 0;
-
-            } catch (error) {
-                console.error('Error loading bot info:', error);
-                document.getElementById('bot-name').textContent = 'Error Loading Bot';
+                await post(b.checked ? BOT : 'default', b.value);
+                b.dataset.was = b.checked ? '1' : '0';
+            } catch (err) {
+                failed.push(b.closest('.ba-item').querySelector('.cf-em').textContent + ': ' + err.message);
             }
         }
-
-        async function loadGuilds() {
-            try {
-                // Load user's guilds from the page data
-                const userGuilds = <%- JSON.stringify(userGuilds) %>;
-                guilds = userGuilds;
-
-                // Load current assignments
-                for (const guild of guilds) {
-                    try {
-                        const response = await fetch(`/api/guilds/${guild.id}/bot`);
-                        const assignment = await response.json();
-                        if (assignment.botId === botId) {
-                            currentAssignments.add(guild.id);
-                        }
-                        guild.currentBot = assignment.botId || 'default';
-                    } catch (error) {
-                        guild.currentBot = 'default';
-                    }
-                }
-
-                displayGuilds();
-            } catch (error) {
-                console.error('Error loading guilds:', error);
-                document.getElementById('guilds-list').innerHTML = '<p class="text-danger">Error loading servers</p>';
-            }
+        save.disabled = false;
+        if (failed.length) {
+            status.className = 'cf-status-line is-bad';
+            status.textContent = 'Not saved for ' + failed.join('; ');
+        } else {
+            status.className = 'cf-status-line is-ok';
+            status.textContent = 'Saved. Live announcements in changed servers are re-posted by the new bot shortly.';
         }
-
-        function displayGuilds() {
-            const container = document.getElementById('guilds-list');
-
-            if (guilds.length === 0) {
-                container.innerHTML = '<p class="text-muted">No servers found where you have admin permissions.</p>';
-                return;
-            }
-
-            container.innerHTML = guilds.map(guild => {
-                const isAssigned = currentAssignments.has(guild.id);
-                const currentBotText = guild.currentBot === botId ? 'This Bot' :
-                                       guild.currentBot === 'default' ? 'Default Bot' :
-                                       'Other Custom Bot';
-
-                const iconUrl = guild.icon ?
-                    `https://cdn.discordapp.com/icons/${guild.id}/${guild.icon}.png?size=96` :
-                    null;
-
-                return `
-                    <div class="guild-item">
-                        <div class="d-flex align-items-center">
-                            <input type="checkbox"
-                                   class="guild-checkbox me-3"
-                                   id="guild-${guild.id}"
-                                   data-guild-id="${guild.id}"
-                                   ${isAssigned ? 'checked' : ''}>
-                            ${iconUrl ?
-                                `<img src="${iconUrl}" alt="${escapeHtml(guild.name)}" class="guild-icon">` :
-                                `<div class="guild-icon-placeholder">${guild.name.charAt(0).toUpperCase()}</div>`
-                            }
-                            <div class="flex-grow-1">
-                                <label for="guild-${guild.id}" class="mb-0" style="cursor: pointer;">
-                                    <strong>${escapeHtml(guild.name)}</strong>
-                                </label>
-                                <div class="current-bot">
-                                    Currently: ${currentBotText}
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            }).join('');
-        }
-
-        function selectAll() {
-            document.querySelectorAll('.guild-checkbox').forEach(checkbox => {
-                checkbox.checked = true;
-            });
-        }
-
-        function clearAll() {
-            document.querySelectorAll('.guild-checkbox').forEach(checkbox => {
-                checkbox.checked = false;
-            });
-        }
-
-        async function saveAssignments() {
-            const checkboxes = document.querySelectorAll('.guild-checkbox');
-            const selectedGuilds = [];
-
-            checkboxes.forEach(checkbox => {
-                if (checkbox.checked) {
-                    selectedGuilds.push(checkbox.dataset.guildId);
-                }
-            });
-
-            // Show loading state
-            const saveBtn = event.target;
-            const originalText = saveBtn.innerHTML;
-            saveBtn.disabled = true;
-            saveBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Saving...';
-
-            try {
-                // Assign to selected guilds
-                for (const guildId of selectedGuilds) {
-                    await fetch(`/api/bots/${botId}/assign`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
-                        body: JSON.stringify({ guildId })
-                    });
-                }
-
-                // Unassign from unchecked guilds
-                const unselectedGuilds = guilds
-                    .filter(g => !selectedGuilds.includes(g.id) && currentAssignments.has(g.id))
-                    .map(g => g.id);
-
-                for (const guildId of unselectedGuilds) {
-                    await fetch(`/api/bots/default/assign`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrfToken },
-                        body: JSON.stringify({ guildId })
-                    });
-                }
-
-                alert(`✓ Successfully assigned bot to ${selectedGuilds.length} server(s)`);
-                window.location.href = '/bot-management';
-
-            } catch (error) {
-                console.error('Error saving assignments:', error);
-                alert('Error saving assignments. Please try again.');
-                saveBtn.disabled = false;
-                saveBtn.innerHTML = originalText;
-            }
-        }
-
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
-    </script>
-    <script src="/js/csrf.js"></script>
+    });
+})();
+</script>
+<%- include('partials/site-footer') %>
+<script src="/js/csrf.js"></script>
 </body>
 </html>

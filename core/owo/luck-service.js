@@ -2,12 +2,15 @@
  * CC-BY-NC-SA-4.0 derivative module. See /LICENSE-OWO-NOTICE.md.
  *
  * Daily luck roll. Once every 24 hours per user: roll a weighted prize
- * (currency tiers + rare chance at a crate). Tracks lifetime lcount in
- * owo_luck. Streak bonuses can be layered on later.
+ * (currency tiers + rare chance at a crate).
  *
- * Upstream splits lottery (weekly pool draw) and luck (daily roll).
- * We implement the luck side only here; a full pool-draw lottery can
- * come later via a scheduler job.
+ * owo_luck holds two different numbers:
+ *   lcount — LUCK POINTS, upstream's meaning: moved by `owo pray` / `owo curse`
+ *            (core/owo/social-service.js), ranked by `owo top luck|curse`, shown on profiles.
+ *   rolls  — how many daily /luck rolls this member has made (migration 310 moved the old
+ *            roll counts out of lcount, which this file used to misuse as a roll counter).
+ *
+ * The draw itself is in core/owo/lottery-service.js (owo lottery).
  */
 
 import pool from '../../utils/db.js';
@@ -53,8 +56,8 @@ async function recordRoll(guildId, userId) {
 
 async function bumpLifetime(guildId, userId) {
     await pool.execute(
-        `INSERT INTO owo_luck (guild_id, id, lcount) VALUES (?, ?, 1)
-         ON DUPLICATE KEY UPDATE lcount = lcount + 1`,
+        `INSERT INTO owo_luck (guild_id, id, lcount, rolls) VALUES (?, ?, 0, 1)
+         ON DUPLICATE KEY UPDATE rolls = rolls + 1`,
         [guildId, userId]
     );
 }
@@ -80,10 +83,11 @@ export async function rollDailyLuck(guildId, userId) {
     return { cooldown: false, prize };
 }
 
+/** lifetimeRolls = daily /luck rolls made; luckPoints = pray/curse luck (can be negative). */
 export async function getLuckStats(guildId, userId) {
     const [[row]] = await pool.execute(
-        'SELECT lcount FROM owo_luck WHERE guild_id = ? AND id = ?',
+        'SELECT lcount, rolls FROM owo_luck WHERE guild_id = ? AND id = ?',
         [guildId, userId]
     );
-    return { lifetimeRolls: Number(row?.lcount) || 0 };
+    return { lifetimeRolls: Number(row?.rolls) || 0, luckPoints: Number(row?.lcount) || 0 };
 }

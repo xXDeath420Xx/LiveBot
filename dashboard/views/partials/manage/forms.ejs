@@ -1,508 +1,1298 @@
+<%
+// Forms — ONE page.
+//
+// This replaced eight separate modals (create, edit, questions, preview, post panel, edit panel,
+// attach, responses). Every one of them hid the form you were working on behind a dialog, so
+// building a form meant a tour of pop-ups and you could never see the thing you were editing while
+// you edited it. Now: pick a form on the left, everything about it is on the right, and the
+// preview sits beside it and updates as you type.
+//
+// Reads ticket_forms / ticket_form_questions — the same rows ticket panels and /support forms use.
+// Built on the settings-row kit (cf-settings.css); ids, the fx-dest radios and every class the
+// script looks up (fx-list-item, dest-choice, dest-option, dm-self) are unchanged. The lists the
+// script fills (questions, panels, saved replies, responses) sit in .fx-slot boxes inside kit panels.
+%>
 <div class="page-section">
     <div class="page-section-header">
         <div>
             <div class="page-section-title">
                 <i class="fas fa-file-alt"></i>
-                <span>Forms Management</span>
+                <span>Forms</span>
             </div>
             <div class="page-section-subtitle">
-                Create custom forms with questions and collect user responses
+                Build a set of questions once, then post it as its own panel or attach it to a ticket panel.
             </div>
         </div>
-        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#create-form-modal">
-            <i class="fas fa-plus"></i>
-            <span>Create Form</span>
-        </button>
+        <button type="button" class="btn btn-primary" id="fx-new"><span>New form</span></button>
     </div>
 
-    <!-- Stats Overview -->
-    <% if (forms && forms.length > 0) { %>
-        <div class="grid grid-cols-4" style="margin-bottom: var(--spacing-6);">
-            <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-                <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Total Forms</div>
-                <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary);"><%= forms.length %></div>
-            </div>
-            <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-                <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Total Questions</div>
-                <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-primary-400);"><%= forms.reduce((sum, f) => sum + (f.question_count || 0), 0) %></div>
-            </div>
-            <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-                <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Total Responses</div>
-                <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-success);"><%= forms.reduce((sum, f) => sum + (f.submission_count || 0), 0) %></div>
-            </div>
-            <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-                <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Active Forms</div>
-                <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-accent-purple);"><%= forms.length %></div>
-            </div>
-        </div>
-    <% } %>
+    <div id="fx-banner"></div>
 
-    <!-- Alerts -->
-    <% if (locals.success) { %>
-        <div style="background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(34, 197, 94, 0.05)); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: var(--radius-md); padding: var(--spacing-4); margin-bottom: var(--spacing-4); display: flex; align-items: center; justify-content: space-between;">
-            <div style="display: flex; align-items: center; gap: var(--spacing-2);">
-                <i class="fas fa-check-circle" style="color: var(--color-success);"></i>
-                <span style="color: var(--color-text-primary);"><%= success %></span>
-            </div>
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        </div>
-    <% } %>
+    <div class="fx-layout">
+        <!-- ── form list ─────────────────────────────────────────────────── -->
+        <aside class="fx-list cf-rows" aria-label="Your forms">
+            <div class="cf-rows-head">Your forms</div>
+            <% if (forms && forms.length > 0) { %>
+                <% forms.forEach(form => { %>
+                    <button type="button" class="fx-list-item" data-form-id="<%= form.form_id %>">
+                        <span class="fx-list-name"><%= form.form_name %></span>
+                        <span class="fx-list-meta">
+                            <span class="fx-dot <%= (form.question_count || 0) === 0 ? 'is-warn' : '' %>"><%= form.question_count || 0 %> question<%= (form.question_count || 0) === 1 ? '' : 's' %></span>
+                            <span class="fx-dot"><%= form.submission_count || 0 %> response<%= (form.submission_count || 0) === 1 ? '' : 's' %></span>
+                            <% if ((form.panel_count || 0) > 0) { %><span class="fx-dot is-ok"><%= form.panel_count %> ticket panel<%= form.panel_count === 1 ? '' : 's' %></span><% } %>
+                        </span>
+                    </button>
+                <% }); %>
+            <% } else { %>
+                <%- include('../kit/_state', { kind: 'empty', title: 'No forms yet', text: 'Create one with New form.', id: null, boxed: false, compact: false }) %>
+            <% } %>
+        </aside>
 
-    <% if (locals.error) { %>
-        <div style="background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(239, 68, 68, 0.05)); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: var(--radius-md); padding: var(--spacing-4); margin-bottom: var(--spacing-4); display: flex; align-items: center; justify-content: space-between;">
-            <div style="display: flex; align-items: center; gap: var(--spacing-2);">
-                <i class="fas fa-exclamation-circle" style="color: var(--color-danger);"></i>
-                <span style="color: var(--color-text-primary);"><%= error %></span>
+        <!-- ── editor ────────────────────────────────────────────────────── -->
+        <section class="fx-editor" id="fx-editor" hidden>
+            <div class="fx-editor-head">
+                <label class="visually-hidden" for="fx-name">Form name</label>
+                <input type="text" id="fx-name" class="fx-title-input" maxlength="255" placeholder="Form name">
+                <div class="fx-editor-actions">
+                    <span class="cf-status-line fx-save-state" id="fx-save-state" role="status" aria-live="polite"></span>
+                    <button type="button" class="btn btn-sm btn-danger" id="fx-delete">Delete form</button>
+                </div>
             </div>
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        </div>
-    <% } %>
 
-    <!-- Forms Table/Cards -->
-    <% if (forms && forms.length > 0) { %>
-        <div class="table-container">
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th>Form</th>
-                        <th>Stats</th>
-                        <th>Submit Channel</th>
-                        <th class="text-end">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <% forms.forEach(form => { %>
-                        <tr>
-                            <td>
-                                <div>
-                                    <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-1);"><%= form.form_name %></div>
-                                    <div style="font-size: var(--font-size-sm); color: var(--color-text-muted);"><%= form.form_description || 'No description' %></div>
+            <div class="fx-cols">
+                <div class="fx-main">
+
+                    <section class="cf-section" aria-labelledby="fx-details-title">
+                        <header class="cf-section-head">
+                            <div>
+                                <h2 class="cf-section-title" id="fx-details-title">Details and delivery</h2>
+                                <p class="cf-section-desc">Changes save as you make them.</p>
+                            </div>
+                        </header>
+                        <div class="cf-rows">
+                            <div class="cf-row cf-row--stack">
+                                <div class="cf-field">
+                                    <label for="fx-description">Description</label>
+                                    <textarea id="fx-description" class="form-control" rows="2" placeholder="Shown on the panel unless you set the panel's own text"></textarea>
                                 </div>
-                            </td>
-                            <td>
-                                <div style="display: flex; gap: var(--spacing-2); flex-wrap: wrap;">
-                                    <span class="badge" style="background: var(--color-primary-500);"><%= form.question_count || 0 %> questions</span>
-                                    <span class="badge badge-success"><%= form.submission_count || 0 %> responses</span>
+                            </div>
+                            <div class="cf-row cf-row--stack">
+                                <div class="cf-row-text">
+                                    <span class="cf-row-label" id="fx-dest-head">Where responses go</span>
                                 </div>
-                            </td>
-                            <td>
-                                <% if (form.submit_channel_id) { %>
-                                    <% const channel = channels.find(c => c.id === form.submit_channel_id); %>
-                                    <div style="display: flex; align-items: center; gap: var(--spacing-2); color: var(--color-text-secondary);">
-                                        <i class="fas fa-hashtag" style="font-size: 0.75rem;"></i>
-                                        <span><%= channel ? channel.name : 'Unknown' %></span>
+                                <div class="dest-choice" role="radiogroup" aria-labelledby="fx-dest-head">
+                                    <label class="dest-option">
+                                        <input type="radio" name="fx-dest" value="dashboard" checked>
+                                        <span class="dest-body">
+                                            <span class="dest-title">Dashboard only</span>
+                                            <span class="dest-hint">Stored here and listed under Responses. Nothing is posted to Discord.</span>
+                                        </span>
+                                    </label>
+                                    <label class="dest-option">
+                                        <input type="radio" name="fx-dest" value="channel">
+                                        <span class="dest-body">
+                                            <span class="dest-title">Post to a channel</span>
+                                            <span class="dest-hint">Still stored here, and also posted as an embed in the channel you choose.</span>
+                                        </span>
+                                    </label>
+                                </div>
+                                <select id="fx-channel" class="form-select" aria-label="Channel for responses" hidden>
+                                    <%- include('../kit/_pick-options', { items: channels, selected: null, kind: 'text', only: 'text', empty: 'Choose a channel' }) %>
+                                </select>
+                            </div>
+                            <div class="cf-row cf-row--switch">
+                                <div class="cf-row-text">
+                                    <label class="cf-row-label" for="fx-auto-reply">Answer them straight away</label>
+                                    <p class="cf-row-desc">Shows the matching saved reply on their confirmation screen and DMs them a copy. Set the rules under Saved replies.</p>
+                                </div>
+                                <div class="cf-row-control">
+                                    <input type="checkbox" class="cf-switch" role="switch" id="fx-auto-reply">
+                                </div>
+                            </div>
+                            <div class="cf-row cf-row--switch">
+                                <div class="cf-row-text">
+                                    <label class="cf-row-label" for="fx-show-questions">List the questions on the panel</label>
+                                    <p class="cf-row-desc">Shows every question and its choices, so members know what they are starting.</p>
+                                </div>
+                                <div class="cf-row-control">
+                                    <input type="checkbox" class="cf-switch" role="switch" id="fx-show-questions" checked>
+                                </div>
+                            </div>
+                            <div class="cf-rows-head">Direct messages</div>
+                            <div class="cf-row cf-row--switch dm-self">
+                                <div class="cf-row-text">
+                                    <label class="cf-row-label" for="fx-dm-me">DM me every response</label>
+                                    <p class="cf-row-desc">Sent to <%= locals.viewerName || 'you' %> as soon as someone submits.</p>
+                                </div>
+                                <div class="cf-row-control">
+                                    <input type="checkbox" class="cf-switch" role="switch" id="fx-dm-me">
+                                </div>
+                            </div>
+                            <div class="cf-row cf-row--stack">
+                                <div class="cf-row-text">
+                                    <label class="cf-row-label" for="fx-dm-picker">Also DM</label>
+                                    <p class="cf-row-desc">A DM can be blocked by the recipient's privacy settings. Use Test to check.</p>
+                                </div>
+                                <div class="cf-row-control">
+                                    <div class="cf-chips fx-dm-chips" id="fx-dm-chips"></div>
+                                    <div class="fx-post-row">
+                                        <select id="fx-dm-picker" class="form-select">
+                                            <option value="">Add someone</option>
+                                            <% (locals.guildMembers || []).forEach(m => { %>
+                                                <option value="<%= m.id %>"><%= m.display || m.username %> (@<%= m.username %>)</option>
+                                            <% }); %>
+                                        </select>
+                                        <button type="button" class="btn btn-sm btn-secondary" id="fx-test-dm">Test</button>
                                     </div>
-                                <% } else { %>
-                                    <span style="color: var(--color-text-muted); font-size: var(--font-size-sm);">None</span>
-                                <% } %>
-                            </td>
-                            <td class="text-end">
-                                <div style="display: flex; gap: var(--spacing-2); justify-content: flex-end;">
-                                    <button type="button" class="btn btn-sm btn-secondary" onclick="editForm(<%= form.form_id %>, '<%= form.form_name.replace(/'/g, "\\'") %>', '<%= (form.form_description || '').replace(/'/g, "\\'") %>', '<%= form.submit_channel_id || '' %>')" title="Edit Form">
-                                        <i class="fas fa-edit"></i>
-                                    </button>
-                                    <button type="button" class="btn btn-sm btn-secondary" onclick="viewQuestions(<%= form.form_id %>)" title="View Questions">
-                                        <i class="fas fa-list"></i>
-                                    </button>
-                                    <button type="button" class="btn btn-sm btn-secondary" onclick="createPanel(<%= form.form_id %>, '<%= form.form_name.replace(/'/g, "\\'") %>')" title="Create Panel">
-                                        <i class="fas fa-clipboard"></i>
-                                    </button>
-                                    <button type="button" class="btn btn-sm btn-secondary" onclick="viewSubmissions(<%= form.form_id %>)" title="View Submissions">
-                                        <i class="fas fa-inbox"></i>
-                                    </button>
-                                    <form action="/manage/<%= guild.id %>/forms/delete/<%= form.form_id %>" method="POST" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this form and all its submissions?');">
-                                        <button type="submit" class="btn btn-sm btn-danger" title="Delete">
-                                            <i class="fas fa-trash"></i>
-                                        </button>
-                                    </form>
+                                    <div id="fx-dm-result"></div>
                                 </div>
-                            </td>
-                        </tr>
-                    <% }); %>
-                </tbody>
-            </table>
-        </div>
-    <% } else { %>
-        <div class="empty-state">
-            <div class="empty-state-icon">
-                <i class="fas fa-file-alt"></i>
-            </div>
-            <div class="empty-state-title">No Forms Created</div>
-            <div class="empty-state-description">
-                Create your first form to start collecting user responses
-            </div>
-            <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#create-form-modal">
-                <i class="fas fa-plus"></i>
-                <span>Create First Form</span>
-            </button>
-        </div>
-    <% } %>
-</div>
+                            </div>
+                            <div class="cf-row cf-row--switch">
+                                <div class="cf-row-text">
+                                    <label class="cf-row-label" for="fx-dm-on-submit">Message them on every submission</label>
+                                    <p class="cf-row-desc">Turn this off for a form that answers people by itself. The people above are still told when an applicant replies to the bot, so a question never goes unanswered.</p>
+                                </div>
+                                <div class="cf-row-control">
+                                    <input type="checkbox" class="cf-switch" role="switch" id="fx-dm-on-submit" checked>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
 
-<!-- Create Form Modal -->
-<div class="modal fade" id="create-form-modal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content" style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400);">
-            <form action="/manage/<%= guild.id %>/forms/create" method="POST">
-                <div class="modal-header" style="border-bottom: 1px solid var(--color-dark-400);">
-                    <h5 class="modal-title" style="color: var(--color-text-primary);"><i class="fas fa-plus"></i> Create New Form</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div style="margin-bottom: var(--spacing-4);">
-                        <label class="form-label">Form Name <span style="color: var(--color-danger);">*</span></label>
-                        <input type="text" name="form_name" class="form-control" required>
-                    </div>
-                    <div style="margin-bottom: var(--spacing-4);">
-                        <label class="form-label">Description</label>
-                        <textarea name="form_description" class="form-control" rows="3"></textarea>
-                    </div>
-                    <div style="margin-bottom: var(--spacing-4);">
-                        <label class="form-label">Submit to Channel (optional)</label>
-                        <select name="submit_channel_id" class="form-select">
-                            <option value="">None</option>
-                            <% channels.forEach(c => { %>
-                                <option value="<%= c.id %>">#<%= c.name %></option>
-                            <% }); %>
-                        </select>
-                        <div class="form-help">When someone submits this form, send a message to this channel</div>
-                    </div>
-                </div>
-                <div class="modal-footer" style="border-top: 1px solid var(--color-dark-400);">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Create Form</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
+                    <section class="cf-section" aria-labelledby="fx-questions-title">
+                        <header class="cf-section-head">
+                            <div>
+                                <h2 class="cf-section-title" id="fx-questions-title">Questions</h2>
+                                <p class="cf-section-desc"><span id="fx-q-count"></span></p>
+                            </div>
+                        </header>
+                        <div class="cf-rows fx-slots">
+                            <div id="fx-questions" class="fx-slot fx-slot--list"></div>
+                            <div id="fx-q-editor" class="fx-slot"></div>
+                        </div>
+                    </section>
 
-<!-- Edit Form Modal -->
-<div class="modal fade" id="edit-form-modal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content" style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400);">
-            <form id="edit-form-form" method="POST">
-                <div class="modal-header" style="border-bottom: 1px solid var(--color-dark-400);">
-                    <h5 class="modal-title" style="color: var(--color-text-primary);"><i class="fas fa-edit"></i> Edit Form</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div style="margin-bottom: var(--spacing-4);">
-                        <label class="form-label">Form Name <span style="color: var(--color-danger);">*</span></label>
-                        <input type="text" name="form_name" id="edit-form-name" class="form-control" required>
-                    </div>
-                    <div style="margin-bottom: var(--spacing-4);">
-                        <label class="form-label">Description</label>
-                        <textarea name="form_description" id="edit-form-description" class="form-control" rows="3"></textarea>
-                    </div>
-                    <div style="margin-bottom: var(--spacing-4);">
-                        <label class="form-label">Submit to Channel (optional)</label>
-                        <select name="submit_channel_id" id="edit-submit-channel" class="form-select">
-                            <option value="">None</option>
-                            <% channels.forEach(c => { %>
-                                <option value="<%= c.id %>">#<%= c.name %></option>
-                            <% }); %>
-                        </select>
-                    </div>
-                </div>
-                <div class="modal-footer" style="border-top: 1px solid var(--color-dark-400);">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Save Changes</button>
-                </div>
-            </form>
-        </div>
-    </div>
-</div>
+                    <section class="cf-section" aria-labelledby="fx-posted-title">
+                        <header class="cf-section-head">
+                            <div>
+                                <h2 class="cf-section-title" id="fx-posted-title">Where it's posted</h2>
+                                <p class="cf-section-desc">Panels showing this form, and where to post or attach it.</p>
+                            </div>
+                        </header>
+                        <div class="cf-rows">
+                            <div id="fx-panels" class="fx-slot"></div>
+                            <div class="cf-rows-head">Post to a channel</div>
+                            <div class="cf-row cf-row--stack">
+                                <div class="fx-post-row">
+                                    <select id="fx-post-channel" class="form-select" aria-label="Channel to post in">
+                                        <%- include('../kit/_pick-options', { items: channels, selected: null, kind: 'text', only: 'text', empty: 'Choose a channel' }) %>
+                                    </select>
+                                    <button type="button" class="btn btn-primary" id="fx-post"><span>Post</span></button>
+                                </div>
+                                <p class="cf-field-hint">Posting to a channel that already has this form updates that message instead of adding a second one.</p>
+                            </div>
+                            <div class="cf-rows-head">Attach to a ticket panel</div>
+                            <div id="fx-ticket-panels" class="fx-slot"></div>
+                            <div class="cf-rows-head">Adopt a panel posted by hand</div>
+                            <div class="cf-row cf-row--stack">
+                                <div class="fx-post-row">
+                                    <input type="text" id="fx-adopt" class="form-control" placeholder="Paste the message link" aria-label="Message link">
+                                    <button type="button" class="btn btn-secondary" id="fx-adopt-btn">Manage it</button>
+                                </div>
+                                <p class="cf-field-hint">In Discord, right-click the panel and choose Copy Message Link.</p>
+                            </div>
+                            <div id="fx-panel-result" class="fx-slot"></div>
+                        </div>
+                    </section>
 
-<!-- View Questions Modal -->
-<div class="modal fade" id="questions-modal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content" style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400);">
-            <div class="modal-header" style="border-bottom: 1px solid var(--color-dark-400);">
-                <h5 class="modal-title" style="color: var(--color-text-primary);"><i class="fas fa-list"></i> Form Questions</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <div id="questions-list">
-                    <div style="text-align: center; padding: var(--spacing-8);">
-                        <div class="spinner-border text-primary" role="status"></div>
-                        <p style="margin-top: var(--spacing-2); color: var(--color-text-muted);">Loading questions...</p>
-                    </div>
-                </div>
-            </div>
-            <div class="modal-footer" style="border-top: 1px solid var(--color-dark-400);">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-                <button type="button" class="btn btn-primary" onclick="addQuestion()">
-                    <i class="fas fa-plus"></i>
-                    <span>Add Question</span>
-                </button>
-            </div>
-        </div>
-    </div>
-</div>
+                    <section class="cf-section" aria-labelledby="fx-replies-title">
+                        <header class="cf-section-head">
+                            <div>
+                                <h2 class="cf-section-title" id="fx-replies-title">Saved replies</h2>
+                                <p class="cf-section-desc">Offered on the notification DM; one click sends a reply to the applicant from the bot. Give a reply a rule and it is suggested only when their answer matches. Placeholders: <code>{name}</code> <code>{user}</code> <code>{username}</code> <code>{form}</code> <code>{server}</code></p>
+                            </div>
+                        </header>
+                        <div class="cf-rows fx-slots">
+                            <div id="fx-templates" class="fx-slot fx-slot--list"></div>
+                            <div id="fx-template-editor" class="fx-slot"></div>
+                        </div>
+                    </section>
 
-<!-- View Submissions Modal -->
-<div class="modal fade" id="submissions-modal" tabindex="-1">
-    <div class="modal-dialog modal-xl">
-        <div class="modal-content" style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400);">
-            <div class="modal-header" style="border-bottom: 1px solid var(--color-dark-400);">
-                <h5 class="modal-title" style="color: var(--color-text-primary);"><i class="fas fa-inbox"></i> Form Submissions</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <div id="submissions-list">
-                    <div style="text-align: center; padding: var(--spacing-8);">
-                        <div class="spinner-border text-primary" role="status"></div>
-                        <p style="margin-top: var(--spacing-2); color: var(--color-text-muted);">Loading submissions...</p>
-                    </div>
+                    <section class="cf-section" aria-labelledby="fx-responses-title">
+                        <header class="cf-section-head">
+                            <div>
+                                <h2 class="cf-section-title" id="fx-responses-title">Responses</h2>
+                                <p class="cf-section-desc">Newest first.</p>
+                            </div>
+                            <div class="cf-section-actions">
+                                <button type="button" class="btn btn-sm btn-secondary" id="fx-refresh-responses">Refresh</button>
+                            </div>
+                        </header>
+                        <div class="cf-rows fx-slots">
+                            <div id="fx-responses" class="fx-slot"></div>
+                        </div>
+                    </section>
                 </div>
-            </div>
-        </div>
-    </div>
-</div>
 
-<!-- Create Panel Modal -->
-<div class="modal fade" id="create-panel-modal" tabindex="-1">
-    <div class="modal-dialog">
-        <div class="modal-content" style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400);">
-            <form action="/manage/<%= guild.id %>/forms/create-panel" method="POST">
-                <input type="hidden" name="form_id" id="panel-form-id">
-                <div class="modal-header" style="border-bottom: 1px solid var(--color-dark-400);">
-                    <h5 class="modal-title" style="color: var(--color-text-primary);"><i class="fas fa-clipboard"></i> Create Form Panel: <span id="panel-form-title"></span></h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div style="margin-bottom: var(--spacing-4);">
-                        <label class="form-label">Channel <span style="color: var(--color-danger);">*</span></label>
-                        <select name="channel_id" class="form-select" required>
-                            <option value="">Select a channel...</option>
-                            <% channels.forEach(c => { %>
-                                <option value="<%= c.id %>">#<%= c.name %></option>
-                            <% }); %>
-                        </select>
-                        <div class="form-help">The channel where the form panel button will be posted</div>
+                <!-- Live preview -->
+                <aside class="fx-preview" aria-label="Live preview">
+                    <div class="fx-preview-inner cf-rows">
+                        <div class="cf-rows-head">Live preview</div>
+                        <div id="fx-preview-body" class="fx-slot"></div>
                     </div>
-                    <div style="margin-bottom: var(--spacing-4);">
-                        <label class="form-label">Panel Title</label>
-                        <input type="text" name="panel_title" class="form-control" placeholder="Click to fill out this form">
-                        <div class="form-help">Optional custom title for the panel message</div>
-                    </div>
-                    <div style="margin-bottom: var(--spacing-4);">
-                        <label class="form-label">Panel Description</label>
-                        <textarea name="panel_description" class="form-control" rows="2" placeholder="Fill out this form to..."></textarea>
-                        <div class="form-help">Optional description shown on the panel</div>
-                    </div>
-                    <div style="margin-bottom: var(--spacing-4);">
-                        <label class="form-label">Button Text</label>
-                        <input type="text" name="button_text" class="form-control" placeholder="Open Form">
-                        <div class="form-help">Optional custom text for the button</div>
-                    </div>
-                </div>
-                <div class="modal-footer" style="border-top: 1px solid var(--color-dark-400);">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Create Panel</button>
-                </div>
-            </form>
-        </div>
+                </aside>
+            </div>
+        </section>
+
+        <section class="fx-editor fx-placeholder" id="fx-placeholder">
+            <%- include('../kit/_state', { kind: 'empty', title: 'Pick a form', text: 'Choose one from the list, or create a new one. Everything about it opens here.', id: null, boxed: true, compact: false }) %>
+        </section>
     </div>
 </div>
 
 <style>
-.table-container {
-    overflow-x: auto;
-    border: 1px solid var(--color-dark-400);
-    border-radius: var(--radius-lg);
-}
+.fx-layout { display: grid; grid-template-columns: 260px minmax(0, 1fr); gap: var(--cf-6); align-items: start; }
+.fx-layout > * { min-width: 0; }
+@media (max-width: 900px) { .fx-layout { grid-template-columns: minmax(0, 1fr); } }
 
-.data-table {
-    width: 100%;
-    border-collapse: collapse;
-}
+.fx-list { position: sticky; top: var(--cf-4); overflow: hidden; }
+.fx-list-item { display: block; width: 100%; min-width: 0; text-align: left; background: transparent; border: 0; padding: var(--cf-3) var(--cf-4);
+    cursor: pointer; color: var(--cf-text); box-shadow: inset 3px 0 0 transparent; transition: background var(--cf-fast) var(--cf-ease); }
+.fx-list-item:hover { background: var(--cf-surface-2); }
+.fx-list-item:focus-visible { outline: 2px solid var(--cf-accent); outline-offset: -2px; }
+.fx-list-item.is-active { background: var(--cf-accent-soft); box-shadow: inset 3px 0 0 var(--cf-accent); }
+.fx-list-name { display: block; color: var(--cf-text); font-weight: 500; font-size: var(--cf-text-sm); overflow-wrap: anywhere; margin-bottom: 4px; }
+.fx-list-meta { display: flex; gap: 6px; flex-wrap: wrap; }
+.fx-dot { font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+.fx-dot + .fx-dot::before { content: '\00B7'; margin-right: 6px; }
+.fx-dot.is-warn { color: var(--cf-warning); }
+.fx-dot.is-ok { color: var(--cf-accent-fg); }
 
-.data-table thead {
-    background: var(--color-dark-600);
-    border-bottom: 2px solid var(--color-dark-400);
-}
+.fx-editor-head { display: flex; align-items: center; gap: var(--cf-3); flex-wrap: wrap; margin-bottom: var(--cf-5); }
+.fx-title-input { flex: 1 1 16rem; min-width: 0; background: transparent; border: 1px solid transparent; border-radius: var(--cf-radius); color: var(--cf-text);
+    font-size: var(--cf-text-xl); font-weight: 600; padding: 6px 10px; margin-left: -10px; }
+.fx-title-input:hover { border-color: var(--cf-border); }
+.fx-title-input:focus { outline: none; border-color: var(--cf-accent); background: var(--cf-surface); box-shadow: 0 0 0 3px var(--cf-accent-soft); }
+.fx-editor-actions { display: flex; align-items: center; gap: var(--cf-3); flex-shrink: 0; }
+.fx-save-state { min-width: 84px; justify-content: flex-end; }
 
-.data-table th {
-    padding: var(--spacing-4);
-    text-align: left;
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
+.fx-cols { display: grid; grid-template-columns: minmax(0, 1fr) 360px; gap: var(--cf-6); align-items: start; }
+/* The preview sits beside the editor only when there is room for both; otherwise it follows it. */
+@media (max-width: 1760px) { .fx-cols { grid-template-columns: minmax(0, 1fr); } .fx-preview { position: static; } .fx-preview-inner { max-height: none; } }
+.fx-main { min-width: 0; }
+.fx-preview { position: sticky; top: var(--cf-4); min-width: 0; }
+.fx-preview-inner { max-height: calc(100vh - 120px); overflow-y: auto; }
 
-.data-table td {
-    padding: var(--spacing-4);
-    border-bottom: 1px solid var(--color-dark-400);
-}
+/* Boxes the script fills; empty ones take no room (and draw no extra divider). */
+.fx-slot { padding: var(--cf-4) var(--cf-5); min-width: 0; }
+.cf-rows > .fx-slot:empty { display: none; }
+/* A panel made only of script-filled boxes is hidden until the script fills one. */
+.cf-rows.fx-slots:not(:has(> .fx-slot:not(:empty))) { display: none; }
+.fx-slot--list { padding-top: var(--cf-3); padding-bottom: var(--cf-3); }
+.fx-post-row { display: flex; gap: var(--cf-2); flex-wrap: wrap; min-width: 0; }
+.fx-post-row .form-select, .fx-post-row .form-control { flex: 1 1 12rem; min-width: 0; width: auto; }
+.fx-preview .fx-slot { padding: var(--cf-4); }
 
-.data-table tbody tr {
-    transition: background var(--transition-base);
-}
+/* Markup the script builds (question editor, saved replies, responses). */
+.fx-layout .form-label { display: block; font-size: var(--cf-text-sm); font-weight: 500; color: var(--cf-text); margin-bottom: 6px; }
+.fx-layout .form-help { font-size: var(--cf-text-xs); color: var(--cf-text-3); margin-top: 6px; line-height: 1.45; }
+.fx-layout .req { color: var(--cf-danger); }
+.fx-layout .field { margin-bottom: var(--cf-4); }
 
-.data-table tbody tr:hover {
-    background: var(--color-dark-600);
-}
+.dest-choice { display: grid; gap: var(--cf-2); margin-top: var(--cf-2); }
+.dest-option { display: flex; gap: var(--cf-3); align-items: flex-start; margin: 0; padding: var(--cf-3) var(--cf-4); background: transparent;
+    border: 1px solid var(--cf-border); border-radius: var(--cf-radius); cursor: pointer; transition: border-color var(--cf-fast) var(--cf-ease), background var(--cf-fast) var(--cf-ease); }
+.dest-option:hover { background: var(--cf-surface-2); }
+.dest-option.is-active { border-color: var(--cf-accent); background: var(--cf-accent-soft); }
+.dest-option input { margin-top: 3px; flex-shrink: 0; width: 16px; height: 16px; accent-color: var(--cf-accent); }
+.dest-body { display: block; min-width: 0; }
+.dest-title { display: block; color: var(--cf-text); font-weight: 500; font-size: var(--cf-text-sm); margin-bottom: 2px; }
+.dest-hint { display: block; color: var(--cf-text-3); font-size: var(--cf-text-xs); line-height: 1.45; }
+#fx-channel { margin-top: var(--cf-3); }
 
-.data-table tbody tr:last-child td {
-    border-bottom: none;
-}
+.q-row { display: flex; gap: var(--cf-3); align-items: flex-start; padding: var(--cf-3) 0; }
+.q-row + .q-row { border-top: 1px solid var(--cf-border); }
+.q-row.q-overflow { opacity: .55; }
+.q-index { font-weight: 600; color: var(--cf-text-3); min-width: 1.5rem; padding-top: 2px; font-variant-numeric: tabular-nums; }
+.q-body { flex-grow: 1; min-width: 0; }
+.q-text { color: var(--cf-text); font-weight: 500; margin-bottom: 6px; overflow-wrap: anywhere; }
+.q-actions { display: flex; gap: 4px; flex-shrink: 0; flex-wrap: wrap; justify-content: flex-end; }
+.q-editor { background: var(--cf-surface-2); border: 1px solid var(--cf-border-strong); border-radius: var(--cf-radius); padding: var(--cf-4); margin-bottom: var(--cf-3); }
+.q-editor .field { margin-bottom: var(--cf-3); }
+.q-editor-actions { display: flex; gap: var(--cf-2); justify-content: flex-end; flex-wrap: wrap; }
+.q-add-btn { width: 100%; }
 
-.empty-state {
-    text-align: center;
-    padding: var(--spacing-12) var(--spacing-8);
-}
+/* Result lines are kit notices (.cf-notice); stacked inside the editor they sit closer together. */
+.fx-layout .cf-notice { margin-bottom: var(--cf-3); border-radius: var(--cf-radius); }
+.fx-layout .cf-notice:last-child { margin-bottom: 0; }
+.forms-loading { text-align: center; padding: var(--cf-6); color: var(--cf-text-3); }
 
-.empty-state-icon {
-    font-size: 4rem;
-    color: var(--color-text-muted);
-    margin-bottom: var(--spacing-4);
-}
+.sub-card { border: 1px solid var(--cf-border); border-radius: var(--cf-radius); margin-bottom: var(--cf-3); overflow: hidden; }
+.sub-card:last-child { margin-bottom: 0; }
+.sub-head { background: var(--cf-surface-2); padding: var(--cf-3); border-bottom: 1px solid var(--cf-border); display: flex; align-items: center; gap: var(--cf-3); flex-wrap: wrap; }
+.sub-avatar { width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0; object-fit: cover; }
+.sub-avatar-fallback { background: var(--cf-surface-3); color: var(--cf-text); display: flex; align-items: center; justify-content: center; font-weight: 600; }
+.sub-name { color: var(--cf-text); font-weight: 500; overflow-wrap: anywhere; }
+.sub-handle { color: var(--cf-text-2); font-weight: 400; font-size: var(--cf-text-sm); }
+.sub-meta { color: var(--cf-text-3); font-size: var(--cf-text-xs); margin-top: 2px; }
+.sub-replies { display: grid; gap: var(--cf-2); margin-bottom: var(--cf-3); }
+.sub-reply { background: color-mix(in srgb, var(--cf-success) 7%, transparent); border: 1px solid color-mix(in srgb, var(--cf-success) 25%, transparent); border-radius: var(--cf-radius); padding: var(--cf-3); }
+.sub-reply.is-failed { background: color-mix(in srgb, var(--cf-danger) 7%, transparent); border-color: color-mix(in srgb, var(--cf-danger) 30%, transparent); }
+.sub-reply.is-inbound { background: color-mix(in srgb, var(--cf-info) 8%, transparent); border-color: color-mix(in srgb, var(--cf-info) 30%, transparent); margin-left: var(--cf-5); }
+.sub-reply-head { font-size: var(--cf-text-xs); color: var(--cf-text-3); margin-bottom: 6px; }
+.sub-reply-body { color: var(--cf-text-2); font-size: var(--cf-text-sm); white-space: pre-wrap; overflow-wrap: anywhere; }
+.sub-reply-controls { display: flex; gap: var(--cf-2); align-items: center; margin-top: var(--cf-2); flex-wrap: wrap; }
+.sub-reply-controls .form-select { flex: 1 1 12rem; min-width: 0; }
+.sub-write-box { margin-top: var(--cf-3); }
+.sub-result:not(:empty) { margin-top: var(--cf-3); }
+.fx-check { display: flex; align-items: center; gap: var(--cf-2); margin: 0; color: var(--cf-text); font-size: var(--cf-text-sm); cursor: pointer; }
+.fx-check input { width: 16px; height: 16px; accent-color: var(--cf-accent); }
+.fx-optional { font-weight: 400; color: var(--cf-text-3); }
+.fx-gap-top { margin-top: var(--cf-2); }
+.fx-layout .form-help.fx-flush { margin-top: 0; }
+.pv-button.pv-button--flush { margin-top: 0; }
+.sub-body-wrap { padding: var(--cf-4); }
+.sub-answer { margin-bottom: var(--cf-3); padding-bottom: var(--cf-3); border-bottom: 1px solid var(--cf-border); }
+.sub-q { display: block; margin-bottom: 4px; color: var(--cf-text); }
+.sub-a { color: var(--cf-text-2); white-space: pre-wrap; overflow-wrap: anywhere; }
+.fx-template-body { color: var(--cf-text-3); font-size: var(--cf-text-xs); white-space: pre-wrap; overflow-wrap: anywhere; margin-top: 6px; line-height: 1.5; }
 
-.empty-state-title {
-    font-size: var(--font-size-xl);
-    font-weight: var(--font-weight-bold);
-    color: var(--color-text-primary);
-    margin-bottom: var(--spacing-2);
-}
+/* Preview — a picture of Discord, not of the dashboard: Discord's dark colours here, its light theme in Light and Sand (below). */
+.pv-caption { font-size: var(--cf-text-xs); color: var(--cf-text-3); font-weight: 600; margin: var(--cf-4) 0 var(--cf-2); }
+.pv-caption:first-child { margin-top: 0; }
+.pv-stage { background: #313338; border-radius: 8px; padding: 12px; font-family: "gg sans", "Noto Sans", system-ui, sans-serif; }
+.pv-msg { display: flex; gap: 10px; }
+.pv-avatar { width: 36px; height: 36px; border-radius: 50%; background: #5865F2; flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 14px; font-weight: 700; }
+.pv-msg-body { min-width: 0; flex-grow: 1; }
+.pv-author { color: #f2f3f5; font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+.pv-author .pv-tag { background: #5865F2; color: #fff; font-size: 10px; font-weight: 600; border-radius: 3px; padding: 1px 4px; margin-left: 6px; vertical-align: 1px; }
+.pv-embed { border-left: 4px solid #5865F2; background: #2b2d31; border-radius: 4px; padding: 10px 12px; }
+.pv-embed-title { color: #f2f3f5; font-weight: 600; font-size: 14px; margin-bottom: 6px; overflow-wrap: anywhere; }
+.pv-embed-desc { color: #dbdee1; font-size: 13px; line-height: 1.4; white-space: pre-wrap; overflow-wrap: anywhere; }
+.pv-embed-fields { margin-top: 10px; display: grid; gap: 8px; }
+.pv-embed-fieldname { color: #f2f3f5; font-size: 13px; font-weight: 600; margin-bottom: 2px; }
+.pv-embed-fieldvalue { color: #dbdee1; font-size: 13px; line-height: 1.45; overflow-wrap: anywhere; }
+.pv-button { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; background: #5865F2; color: #fff; border-radius: 4px; padding: 7px 14px; font-size: 13px; font-weight: 500; }
+.pv-modal { background: #313338; border-radius: 8px; overflow: hidden; box-shadow: 0 8px 24px rgba(0,0,0,.4); }
+.pv-modal-head { padding: 12px; color: #f2f3f5; font-size: 17px; font-weight: 600; overflow-wrap: anywhere; }
+.pv-modal-body { padding: 0 12px 12px; }
+.pv-modal-foot { background: #2b2d31; padding: 12px; display: flex; justify-content: flex-end; gap: 8px; }
+.pv-btn-primary { background: #5865F2; color: #fff; border-radius: 3px; padding: 7px 14px; font-size: 13px; font-weight: 500; }
+.pv-step-head { color: #949ba4; font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+.pv-step-foot { color: #949ba4; font-size: 11px; margin-top: 8px; }
+.pv-only-you { font-weight: 400; color: var(--cf-text-3); }
+.pv-navrow { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.pv-btn-success { background: #248046; color: #fff; border-radius: 4px; padding: 7px 14px; font-size: 13px; font-weight: 500; }
+.pv-btn-ghost { background: #4e5058; color: #fff; border-radius: 4px; padding: 7px 14px; font-size: 13px; font-weight: 500; }
+.pv-btn-ghost.is-disabled { opacity: .4; }
+.pv-steps { display: flex; gap: 4px; flex-wrap: wrap; margin-top: var(--cf-3); }
+.pv-stepdot { width: 26px; height: 26px; border-radius: 50%; border: 1px solid var(--cf-border-strong); background: var(--cf-surface-2); color: var(--cf-text-3); font-size: 11px; cursor: pointer; }
+.pv-stepdot.is-on { background: var(--cf-accent); color: var(--cf-on-accent); border-color: transparent; }
+.pv-field { margin-bottom: 14px; }
+.pv-label { color: #dbdee1; font-size: 11px; font-weight: 700; text-transform: uppercase; margin-bottom: 6px; overflow-wrap: anywhere; }
+.pv-label .pv-req { color: #f23f42; margin-left: 3px; }
+.pv-desc { color: #949ba4; font-size: 11px; font-weight: 400; text-transform: none; margin-top: 4px; line-height: 1.4; }
+.pv-input { border-radius: 3px; padding: 9px; color: #87898c; font-size: 13px; min-height: 36px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.pv-input.pv-tall { min-height: 72px; align-items: flex-start; }
+.pv-options { margin-top: 6px; border-radius: 3px; padding: 4px 0; }
+:where(:root:not([data-theme="light"]):not([data-theme="sand"])) :is(.pv-input, .pv-options) { background: #1e1f22; }
+.pv-option { display: flex; align-items: flex-start; gap: 8px; padding: 6px 9px; color: #dbdee1; font-size: 13px; overflow-wrap: anywhere; }
+.pv-option + .pv-option { border-top: 1px solid #2b2d31; }
+.pv-option-desc { display: block; color: #949ba4; font-size: 11px; line-height: 1.4; margin-top: 2px; }
+.pv-cut { color: #f0b232; font-style: italic; }
+.pv-empty { color: #949ba4; font-size: 13px; text-align: center; padding: 20px 0; }
+/* Light and Sand: Discord's light theme. */
+:root:is([data-theme="light"], [data-theme="sand"]) :is(.pv-stage, .pv-modal) { background: #ffffff; box-shadow: inset 0 0 0 1px #e3e5e8; }
+:root:is([data-theme="light"], [data-theme="sand"]) .pv-modal { box-shadow: inset 0 0 0 1px #e3e5e8, 0 8px 24px rgba(0,0,0,.12); }
+:root:is([data-theme="light"], [data-theme="sand"]) :is(.pv-author, .pv-embed-title, .pv-embed-fieldname, .pv-modal-head) { color: #060607; }
+:root:is([data-theme="light"], [data-theme="sand"]) :is(.pv-embed-desc, .pv-embed-fieldvalue, .pv-embed-fieldvalue *, .pv-option, .pv-option *, .pv-label) { color: #313338; }
+:root:is([data-theme="light"], [data-theme="sand"]) :is(.pv-step-head, .pv-step-foot, .pv-desc, .pv-option-desc, .pv-empty, .pv-input, .pv-input *) { color: #5c5e66; }
+:root:is([data-theme="light"], [data-theme="sand"]) .pv-embed { background: #f2f3f5; }
+:root:is([data-theme="light"], [data-theme="sand"]) .pv-modal-foot { background: #f2f3f5; }
+:root:is([data-theme="light"], [data-theme="sand"]) :is(.pv-input, .pv-options) { background: #ebedef; }
+:root:is([data-theme="light"], [data-theme="sand"]) .pv-option + .pv-option { border-top-color: #e3e5e8; }
+:root:is([data-theme="light"], [data-theme="sand"]) .pv-btn-ghost { background: #6d6f78; }
+:root:is([data-theme="light"], [data-theme="sand"]) .pv-label .pv-req { color: #da373c; }
+:root:is([data-theme="light"], [data-theme="sand"]) .pv-cut { color: #94620a; }
 
-.empty-state-description {
-    font-size: var(--font-size-base);
-    color: var(--color-text-secondary);
-    margin-bottom: var(--spacing-6);
-}
-
-.form-label {
-    display: block;
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-primary);
-    margin-bottom: var(--spacing-2);
-}
-
-.form-help {
-    font-size: var(--font-size-xs);
-    color: var(--color-text-muted);
-    margin-top: var(--spacing-2);
-}
-
-.modal-content {
-    border-radius: var(--radius-lg);
-}
-
-.btn-close {
-    filter: invert(1);
-    opacity: 0.5;
-}
-
-.btn-close:hover {
-    opacity: 1;
+@media (max-width: 900px) { .fx-list { position: static; } .fx-preview { position: static; } }
+@media (max-width: 640px) {
+    .fx-slot { padding: var(--cf-4); }
+    .fx-post-row .btn { flex: 1 1 auto; }
+    .fx-editor-actions { width: 100%; justify-content: space-between; }
+    .fx-list-item { min-height: 44px; }
+    .sub-reply.is-inbound { margin-left: var(--cf-3); }
 }
 </style>
 
 <script>
-let currentFormId = null;
+(function () {
+    const GUILD_ID = '<%= guild.id %>';
+    const VIEWER_ID = <%- JSON.stringify(locals.viewerId || null).replace(/</g, '\\u003c') %>;
+    const BOT_NAME = <%- JSON.stringify(String(locals.botName || 'CertiFried Utility')).replace(/</g, '\\u003c') %>;
+    const MEMBER_NAMES = new Map(<%- JSON.stringify((locals.guildMembers || []).map(m => [String(m.id), (m.display || m.username)])).replace(/</g, '\\u003c') %>);
+    const CHANNEL_NAMES = new Map(<%- JSON.stringify((channels || []).map(c => [String(c.id), String(c.name)])).replace(/</g, '\\u003c') %>);
 
-function editForm(formId, formName, formDescription, submitChannelId) {
-    document.getElementById('edit-form-name').value = formName;
-    document.getElementById('edit-form-description').value = formDescription || '';
-    document.getElementById('edit-submit-channel').value = submitChannelId || '';
-    document.getElementById('edit-form-form').action = `/manage/<%= guild.id %>/forms/edit/${formId}`;
-    new bootstrap.Modal(document.getElementById('edit-form-modal')).show();
-}
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-async function viewQuestions(formId) {
-    currentFormId = formId;
-    const modal = new bootstrap.Modal(document.getElementById('questions-modal'));
-    modal.show();
+    function banner(target, kind, message) {
+        if (!target) return;
+        const icon = kind === 'is-success' ? 'fa-check-circle' : kind === 'is-warning' ? 'fa-triangle-exclamation' : 'fa-exclamation-circle';
+        const tone = { 'is-success': 'is-ok', 'is-warning': 'is-warn', 'is-error': 'is-bad' }[kind] || 'is-info';
+        target.innerHTML = `<div class="cf-notice ${tone}"><i class="fas ${icon}" aria-hidden="true"></i><span class="cf-notice-body">${message}</span></div>`;
+    }
 
-    try {
-        const response = await fetch(`/manage/<%= guild.id %>/forms/${formId}/questions`);
-        const questions = await response.json();
+    // X-Requested-With is what makes the redirect-style routes answer with JSON instead of a 302,
+    // so the page never navigates away mid-edit.
+    async function api(url, body, method) {
+        try {
+            const res = await fetch(url, {
+                method: method || (body ? 'POST' : 'GET'),
+                headers: body ? { 'Content-Type': 'application/json', 'X-Requested-With': 'XMLHttpRequest' }
+                              : { 'X-Requested-With': 'XMLHttpRequest' },
+                body: body ? JSON.stringify(body) : undefined
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) return { error: data.error || `Request failed (${res.status})` };
+            return data;
+        } catch (e) {
+            return { error: 'Network error — please retry.' };
+        }
+    }
 
-        const listEl = document.getElementById('questions-list');
+    // ── shared vocabulary ────────────────────────────────────────────────────
+    let TYPES = null, FIELD_LIMIT = 5, OPTION_LIMIT = 25;
+    const LABEL_LIMIT = 45;
+
+    async function loadTypes() {
+        if (TYPES) return;
+        const d = await api(`/manage/${GUILD_ID}/forms/question-types`);
+        TYPES = d.types || {}; FIELD_LIMIT = d.fieldLimit || 5; OPTION_LIMIT = d.optionLimit || 25;
+    }
+
+    // Mirrors labelFor() in core/form-questions.js — trims at a word boundary, never ellipsises.
+    function labelFor(text) {
+        const full = String(text || '').trim();
+        if (full.length <= LABEL_LIMIT) return full;
+        const head = full.slice(0, LABEL_LIMIT);
+        const lastSpace = head.lastIndexOf(' ');
+        const trimmed = (lastSpace > 12 ? head.slice(0, lastSpace) : head).replace(/[\s,;:.\-–—]+$/, '');
+        return trimmed || head;
+    }
+    // Mirrors headingFor()/needsDescription() in core/form-questions.js. An authored heading means
+    // the question is never repeated; without one, a long question is trimmed and restated.
+    function headingFor(q) {
+        const authored = String(q.field_label || '').trim();
+        return authored ? authored.slice(0, LABEL_LIMIT) : labelFor(q.question_text);
+    }
+    function needsDescription(q) {
+        const text = String((q && q.question_text !== undefined ? q.question_text : q) || '').trim();
+        const authored = String((q && q.field_label) || '').trim();
+        if (authored) return authored !== text;
+        return text.length > LABEL_LIMIT;
+    }
+
+    // ── state ────────────────────────────────────────────────────────────────
+    let form = null;          // { form_id, form_name, ... }
+    let questions = [];
+    let dmIds = [];
+    let saveTimer = null;
+
+    const $ = (id) => document.getElementById(id);
+
+    // ── autosave ─────────────────────────────────────────────────────────────
+    // Details save themselves. A form editor with a Save button you can forget is how a change
+    // gets lost between switching forms; there is no Save button here, so there is nothing to
+    // forget. Debounced so typing does not fire a request per keystroke.
+    function markSaving() {
+        const el = $('fx-save-state');
+        el.className = 'cf-status-line fx-save-state';
+        el.textContent = 'Saving…';
+    }
+    function markSaved(error) {
+        const el = $('fx-save-state');
+        el.className = 'cf-status-line fx-save-state ' + (error ? 'is-bad' : 'is-ok');
+        el.textContent = error || 'Saved';
+        if (!error) setTimeout(() => { if (el.textContent === 'Saved') el.textContent = ''; }, 2000);
+    }
+
+    function queueSave() {
+        if (!form) return;
+        markSaving();
+        clearTimeout(saveTimer);
+        saveTimer = setTimeout(saveDetails, 600);
+    }
+
+    async function saveDetails() {
+        if (!form) return;
+        const useChannel = document.querySelector('input[name="fx-dest"]:checked').value === 'channel';
+        const payload = {
+            form_name: $('fx-name').value.trim() || form.form_name,
+            form_description: $('fx-description').value.trim(),
+            submit_channel_id: useChannel ? $('fx-channel').value : '',
+            dm_user_ids: dmIds,
+            show_questions_on_panel: $('fx-show-questions').checked,
+            auto_reply: $('fx-auto-reply').checked,
+            dm_on_submit: $('fx-dm-on-submit').checked
+        };
+        const r = await api(`/manage/${GUILD_ID}/forms/edit/${form.form_id}`, payload);
+        markSaved(r.error);
+        if (!r.error) {
+            form.form_name = payload.form_name;
+            form.form_description = payload.form_description;
+            form.submit_channel_id = payload.submit_channel_id || null;
+            const item = document.querySelector(`.fx-list-item[data-form-id="${form.form_id}"] .fx-list-name`);
+            if (item) item.textContent = payload.form_name;
+            renderPreview();
+            loadPanels();   // a posted panel embeds this wording
+        }
+    }
+
+    $('fx-show-questions').addEventListener('change', () => { renderPreview(); queueSave(); });
+    $('fx-auto-reply').addEventListener('change', () => { renderPreview(); queueSave(); });
+    $('fx-dm-on-submit').addEventListener('change', () => { renderPreview(); queueSave(); });
+
+    ['fx-name', 'fx-description', 'fx-channel'].forEach(id => {
+        $(id).addEventListener('input', queueSave);
+        $(id).addEventListener('change', queueSave);
+    });
+
+    // ── destination ──────────────────────────────────────────────────────────
+    function syncDest() {
+        const useChannel = document.querySelector('input[name="fx-dest"]:checked').value === 'channel';
+        $('fx-channel').hidden = !useChannel;
+        document.querySelectorAll('.dest-choice .dest-option').forEach(o =>
+            o.classList.toggle('is-active', o.querySelector('input').checked));
+        renderPreview();
+    }
+    document.querySelectorAll('input[name="fx-dest"]').forEach(r =>
+        r.addEventListener('change', () => { syncDest(); queueSave(); }));
+
+    // ── DM recipients ────────────────────────────────────────────────────────
+    function syncDm() {
+        if (VIEWER_ID) $('fx-dm-me').checked = dmIds.includes(VIEWER_ID);
+        else $('fx-dm-me').closest('.dm-self').hidden = true;
+
+        const others = dmIds.filter(id => id !== VIEWER_ID);
+        $('fx-dm-chips').innerHTML = others.map(id => `
+            <span class="cf-chip dm-chip">${esc(MEMBER_NAMES.get(id) || id)}
+                <button type="button" class="cf-chip-remove dm-chip-x" data-id="${esc(id)}" aria-label="Remove">&times;</button>
+            </span>`).join('');
+        $('fx-dm-chips').querySelectorAll('.dm-chip-x').forEach(btn =>
+            btn.addEventListener('click', () => {
+                dmIds = dmIds.filter(id => id !== btn.dataset.id);
+                syncDm(); queueSave();
+            }));
+        $('fx-dm-picker').value = '';
+        renderPreview();
+    }
+
+    $('fx-dm-me').addEventListener('change', (e) => {
+        if (!VIEWER_ID) return;
+        dmIds = e.target.checked
+            ? (dmIds.includes(VIEWER_ID) ? dmIds : [VIEWER_ID, ...dmIds])
+            : dmIds.filter(id => id !== VIEWER_ID);
+        syncDm(); queueSave();
+    });
+    $('fx-dm-picker').addEventListener('change', (e) => {
+        if (e.target.value && !dmIds.includes(e.target.value)) dmIds = [...dmIds, e.target.value];
+        syncDm(); queueSave();
+    });
+    $('fx-test-dm').addEventListener('click', async () => {
+        if (dmIds.length === 0) return banner($('fx-dm-result'), 'is-error', 'Tick “DM me” or add someone first.');
+        banner($('fx-dm-result'), 'is-warning', 'Sending…');
+        const r = await api(`/manage/${GUILD_ID}/forms/${form.form_id}/test-dm`, { dm_user_ids: dmIds });
+        banner($('fx-dm-result'), r.error ? 'is-error' : 'is-success', esc(r.error || r.message));
+    });
+
+    // ── questions ────────────────────────────────────────────────────────────
+    function questionRow(q, i, overflow, actions) {
+        const meta = TYPES[q.question_type] || { label: q.question_type };
+        const choices = Array.isArray(q.question_options) ? q.question_options : [];
+        return `
+            <div class="q-row ${overflow ? 'q-overflow' : ''}">
+                <div class="q-index">${i + 1}.</div>
+                <div class="q-body">
+                    <div class="q-text">${esc(q.question_text)}</div>
+                    <div class="cf-chips q-meta">
+                        <span class="cf-chip is-accent">${esc(meta.label)}</span>
+                        ${Number(q.is_required) ? '<span class="cf-chip is-bad">Required</span>' : '<span class="cf-chip">Optional</span>'}
+                        ${choices.length ? `<span class="cf-chip">${choices.length} choice${choices.length === 1 ? '' : 's'}</span>` : ''}
+                        ${overflow ? '<span class="cf-chip">Not asked</span>' : ''}
+                    </div>
+                </div>
+                <div class="q-actions">${actions}</div>
+            </div>`;
+    }
+
+    function renderQuestions(editing) {
+        const list = $('fx-questions');
+        const editor = $('fx-q-editor');
+        $('fx-q-count').textContent = questions.length
+            ? `${questions.length} question${questions.length === 1 ? '' : 's'}`
+            : '';
 
         if (questions.length === 0) {
-            listEl.innerHTML = '<div style="text-align: center; color: var(--color-text-muted); padding: var(--spacing-8);">No questions yet. Add some!</div>';
-            return;
+            list.innerHTML = `<div class="cf-notice is-warn"><i class="fas fa-triangle-exclamation"></i><span>No questions yet — a form with none can't be posted.</span></div>`;
+        } else {
+            list.innerHTML = questions.map((q, i) => questionRow(q, i, false, `
+                    <button type="button" class="btn btn-sm btn-secondary" data-act="up" data-i="${i}" ${i === 0 ? 'disabled' : ''}><i class="fas fa-arrow-up"></i></button>
+                    <button type="button" class="btn btn-sm btn-secondary" data-act="down" data-i="${i}" ${i === questions.length - 1 ? 'disabled' : ''}><i class="fas fa-arrow-down"></i></button>
+                    <button type="button" class="btn btn-sm btn-secondary" data-act="edit" data-i="${i}"><i class="fas fa-edit"></i></button>
+                    <button type="button" class="btn btn-sm btn-danger" data-act="del" data-i="${i}"><i class="fas fa-trash"></i></button>`)).join('');
+
+            list.querySelectorAll('button[data-act]').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const i = Number(btn.dataset.i), act = btn.dataset.act;
+                    if (act === 'edit') return renderQuestions(i);
+                    if (act === 'del') {
+                        if (!confirm('Delete this question?')) return;
+                        await api(`/manage/${GUILD_ID}/forms/questions/delete/${questions[i].question_id}`, {});
+                        return loadQuestions();
+                    }
+                    const moved = questions.slice();
+                    moved.splice(act === 'up' ? i - 1 : i + 1, 0, moved.splice(i, 1)[0]);
+                    questions = moved;
+                    renderQuestions(); renderPreview();
+                    await api(`/manage/${GUILD_ID}/forms/${form.form_id}/questions/reorder`, { order: moved.map(q => q.question_id) });
+                });
+            });
         }
 
-        listEl.innerHTML = questions.map((q, idx) => `
-            <div style="background: var(--color-dark-700); border: 1px solid var(--color-dark-400); border-radius: var(--radius-md); padding: var(--spacing-4); margin-bottom: var(--spacing-3);">
-                <div style="display: flex; justify-content: space-between; align-items-start;">
-                    <div style="flex-grow: 1;">
-                        <h6 style="color: var(--color-text-primary); margin-bottom: var(--spacing-2);">${idx + 1}. ${q.question_text}</h6>
-                        <div style="display: flex; gap: var(--spacing-2); flex-wrap: wrap;">
-                            <span class="badge badge-secondary">${q.question_type}</span>
-                            ${q.is_required ? '<span class="badge badge-danger">Required</span>' : ''}
-                            ${q.question_options ? `<span class="badge" style="background: var(--color-dark-600);">Options: ${q.question_options}</span>` : ''}
+        if (editing === undefined) {
+            editor.innerHTML = `<button type="button" class="btn btn-secondary q-add-btn" id="fx-add-q"><i class="fas fa-plus"></i> <span>Add a question</span></button>`;
+            $('fx-add-q').addEventListener('click', () => renderQuestions(-1));
+            renderPreview();
+            return;
+        }
+        renderQuestionEditor(editor, editing >= 0 ? questions[editing] : null);
+    }
+
+    function renderQuestionEditor(container, q) {
+        const cur = q || { question_text: '', question_type: 'text', question_options: [], is_required: 1, placeholder: '' };
+        const typeOptions = Object.entries(TYPES).map(([k, m]) =>
+            `<option value="${esc(k)}" ${cur.question_type === k ? 'selected' : ''}>${esc(m.label)} — ${esc(m.hint)}</option>`).join('');
+
+        container.innerHTML = `
+            <div class="q-editor">
+                <div class="field">
+                    <label class="form-label">Question <span class="req">*</span></label>
+                    <input type="text" class="form-control qe-text" maxlength="300" value="${esc(cur.question_text)}" placeholder="What would you like to ask?">
+                    <div class="form-help qe-length"></div>
+                </div>
+                <div class="field qe-label-field" hidden>
+                    <label class="form-label">Short heading</label>
+                    <input type="text" class="form-control qe-label" maxlength="45" value="${esc(cur.field_label || '')}" placeholder="">
+                    <div class="form-help qe-label-note"></div>
+                </div>
+                <div class="field">
+                    <label class="form-label">Answer format</label>
+                    <select class="form-select qe-type">${typeOptions}</select>
+                </div>
+                <div class="field qe-options-field" hidden>
+                    <label class="form-label">Choices <span class="req">*</span></label>
+                    <textarea class="form-control qe-options" rows="4" placeholder="One choice per line">${esc((cur.question_options || []).join('\n'))}</textarea>
+                    <div class="form-help qe-options-note"></div>
+                </div>
+                <div class="field qe-placeholder-field">
+                    <label class="form-label">Placeholder / hint</label>
+                    <input type="text" class="form-control qe-placeholder" maxlength="100" value="${esc(cur.placeholder || '')}">
+                </div>
+                <div class="field">
+                    <label class="fx-check">
+                        <input type="checkbox" class="qe-required" ${Number(cur.is_required) ? 'checked' : ''}>
+                        <span>Required</span>
+                    </label>
+                </div>
+                <div class="qe-error"></div>
+                <div class="q-editor-actions">
+                    <button type="button" class="btn btn-secondary btn-sm qe-cancel">Cancel</button>
+                    <button type="button" class="btn btn-primary btn-sm qe-save">Save question</button>
+                </div>
+            </div>`;
+
+        const text = container.querySelector('.qe-text');
+        const typeSel = container.querySelector('.qe-type');
+        const optionsField = container.querySelector('.qe-options-field');
+        const optionsInput = container.querySelector('.qe-options');
+        const placeholderField = container.querySelector('.qe-placeholder-field');
+
+        const labelField = container.querySelector('.qe-label-field');
+        const labelInput = container.querySelector('.qe-label');
+
+        // A Discord field is a short HEADING plus optional help text. Once the question outgrows
+        // the 45-character heading it has to be split, and the only person who can write a good
+        // heading is whoever wrote the question — so ask, rather than chopping their sentence and
+        // then repeating it underneath.
+        // No character coaching any more. Questions are asked one per message, so the whole
+        // question is shown verbatim however long it is. The short heading is now only used as a
+        // label on the review screen and on the typing box, and is entirely optional.
+        const syncLength = () => {
+            const n = text.value.trim().length;
+            labelField.hidden = n <= 60;
+            if (!labelField.hidden) {
+                labelInput.placeholder = labelFor(text.value.trim());
+                container.querySelector('.qe-label-note').textContent =
+                    'Optional. A short name for this question, used on the review screen. The question itself is always shown in full.';
+            }
+            container.querySelector('.qe-length').textContent = `${n} characters — shown in full.`;
+        };
+        const syncOptions = () => {
+            const list = optionsInput.value.split('\n').map(v => v.trim()).filter(Boolean);
+            // A select option in a MESSAGE gets 100 characters, not the 45 a modal allows.
+            const over = list.filter(v => v.length > 100).length;
+            container.querySelector('.qe-options-note').innerHTML = over
+                ? `One per line, up to ${OPTION_LIMIT}. <strong>${over} over 100 characters</strong> — Discord shortens a choice past that.`
+                : `One per line, up to ${OPTION_LIMIT}. Up to 100 characters each.`;
+        };
+        const syncType = () => {
+            const meta = TYPES[typeSel.value] || {};
+            optionsField.hidden = !meta.needsOptions;
+            placeholderField.hidden = ['user', 'role', 'channel'].includes(typeSel.value);
+        };
+
+        text.addEventListener('input', syncLength);
+        labelInput.addEventListener('input', syncLength);
+        optionsInput.addEventListener('input', syncOptions);
+        typeSel.addEventListener('change', syncType);
+        syncLength(); syncOptions(); syncType();
+
+        container.querySelector('.qe-cancel').addEventListener('click', () => renderQuestions());
+        container.querySelector('.qe-save').addEventListener('click', async () => {
+            const errBox = container.querySelector('.qe-error');
+            errBox.innerHTML = '';
+            const type = typeSel.value;
+            const choices = optionsInput.value.split('\n').map(s => s.trim()).filter(Boolean);
+            const payload = {
+                question_text: text.value.trim(),
+                field_label: labelField.hidden ? '' : labelInput.value.trim(),
+                question_type: type,
+                question_options: choices,
+                placeholder: placeholderField.hidden ? '' : container.querySelector('.qe-placeholder').value.trim(),
+                is_required: container.querySelector('.qe-required').checked
+            };
+            if (!payload.question_text) return banner(errBox, 'is-error', 'A question needs some text.');
+            if (TYPES[type].needsOptions && choices.length === 0)
+                return banner(errBox, 'is-error', `“${esc(TYPES[type].label)}” needs at least one choice.`);
+
+            const r = q
+                ? await api(`/manage/${GUILD_ID}/forms/questions/edit/${q.question_id}`, payload)
+                : await api(`/manage/${GUILD_ID}/forms/${form.form_id}/questions`, payload);
+            if (r.error) return banner(errBox, 'is-error', esc(r.error));
+            await loadQuestions();
+            loadPanels();
+        });
+        text.focus();
+    }
+
+    async function loadQuestions() {
+        const d = await api(`/manage/${GUILD_ID}/forms/${form.form_id}/questions`);
+        if (d.error) return banner($('fx-questions'), 'is-error', 'Failed to load questions.');
+        questions = d.questions || [];
+        Object.assign(form, d.form);
+        renderQuestions();
+    }
+
+    // ── preview ──────────────────────────────────────────────────────────────
+    // The preview shows the STEPPER, because that is what a member actually gets: one ephemeral
+    // message per question, the question in full. There is no 45/100-character heading limit and
+    // no five-field cap here — those belong to modals, which this flow deliberately does not use.
+    let previewStep = 0;
+
+    function previewControl(q) {
+        const type = TYPES[q.question_type] ? q.question_type : 'text';
+        const choices = Array.isArray(q.question_options) ? q.question_options : [];
+        if ((type === 'select' || type === 'multiselect') && choices.length) {
+            return `<div class="pv-input">${type === 'multiselect' ? 'Choose any that apply' : 'Choose one'}<i class="fas fa-chevron-down"></i></div>
+                <div class="pv-options">${choices.map(c =>
+                    `<div class="pv-option"><span>${type === 'multiselect' ? '☐' : '○'}</span><span>${esc(c)}</span></div>`).join('')}</div>`;
+        }
+        if (type === 'user') return `<div class="pv-input">Pick a member<i class="fas fa-chevron-down"></i></div>`;
+        if (type === 'role') return `<div class="pv-input">Pick a role<i class="fas fa-chevron-down"></i></div>`;
+        if (type === 'channel') return `<div class="pv-input">Pick a channel<i class="fas fa-chevron-down"></i></div>`;
+        return `<div class="pv-button pv-button--flush">✏️ Type your answer</div>`;
+    }
+
+    function renderPreview() {
+        if (!form || !TYPES) return;
+        const body = $('fx-preview-body');
+        const total = questions.length;
+        const name = $('fx-name').value.trim() || form.form_name || 'Untitled form';
+        const desc = $('fx-description').value.trim();
+        const useChannel = document.querySelector('input[name="fx-dest"]:checked').value === 'channel';
+        const channelName = useChannel ? CHANNEL_NAMES.get($('fx-channel').value) : null;
+
+        if (previewStep > total) previewStep = total;
+        const atReview = total > 0 && previewStep >= total;
+        const q = atReview ? null : questions[previewStep];
+
+        const stepBody = total === 0
+            ? '<div class="pv-empty">No questions yet.</div>'
+            : atReview
+                ? `<div class="pv-embed-title">Review — ${esc(name)}</div>
+                   <div class="pv-embed-desc">Check your answers, then submit.</div>
+                   <div class="pv-embed-fields">${questions.map(x => `
+                       <div><div class="pv-embed-fieldname">${esc(x.field_label || x.question_text)}</div>
+                       <div class="pv-embed-fieldvalue"><em>Not answered</em></div></div>`).join('')}</div>`
+                : `<div class="pv-step-head">${esc(name)}</div>
+                   <div class="pv-embed-title">Question ${previewStep + 1} of ${total}</div>
+                   <div class="pv-embed-desc">${esc(q.question_text)}</div>
+                   ${q.placeholder ? `<div class="pv-embed-fields"><div><div class="pv-embed-fieldname">Hint</div><div class="pv-embed-fieldvalue">${esc(q.placeholder)}</div></div></div>` : ''}
+                   <div class="pv-step-foot">${Number(q.is_required) ? 'Required' : 'Optional — you can skip this'}</div>`;
+
+        const controls = total === 0 ? '' : atReview
+            ? `<div class="pv-navrow"><div class="pv-btn-ghost">Back</div><div class="pv-btn-success">✅ Submit</div></div>`
+            : `${previewControl(q)}
+               <div class="pv-navrow">
+                   <div class="pv-btn-ghost${previewStep === 0 ? ' is-disabled' : ''}">Back</div>
+                   <div class="pv-btn-ghost">${previewStep === total - 1 ? 'Review' : 'Next'}</div>
+               </div>`;
+
+        body.innerHTML = `
+            <div class="pv-caption">In the channel</div>
+            <div class="pv-stage"><div class="pv-msg">
+                <div class="pv-avatar">${esc(name.charAt(0).toUpperCase())}</div>
+                <div class="pv-msg-body">
+                    <div class="pv-author">${esc(BOT_NAME)}<span class="pv-tag">APP</span></div>
+                    <div class="pv-embed">
+                        <div class="pv-embed-title">${esc(name)}</div>
+                        <div class="pv-embed-desc">${esc(desc || 'Click the button below to fill out this form')}</div>
+                        ${total && $('fx-show-questions').checked ? `
+                            <div class="pv-embed-fields">
+                                <div class="pv-embed-fieldname">What you will be asked</div>
+                                ${questions.map((x, i) => {
+                                    const t = TYPES[x.question_type] ? x.question_type : 'text';
+                                    const ch = Array.isArray(x.question_options) ? x.question_options : [];
+                                    return `<div>
+                                        <div class="pv-embed-fieldname">${i + 1}. ${esc(x.field_label || TYPES[t]?.label || t)}</div>
+                                        <div class="pv-embed-fieldvalue">${esc(x.question_text)}${ch.length ? '<br>' + ch.map(c => '• ' + esc(c)).join('<br>') : ''}${Number(x.is_required) ? '' : '<br><em>Optional</em>'}</div>
+                                    </div>`;
+                                }).join('')}
+                            </div>` : ''}
+                        ${total ? `<div class="pv-step-foot">${total} question${total === 1 ? '' : 's'}</div>` : ''}
+                    </div>
+                    <div class="pv-button">📝 Open Form</div>
+                </div>
+            </div></div>
+
+            <div class="pv-caption">What they step through <span class="pv-only-you">only visible to them</span></div>
+            <div class="pv-stage">
+                <div class="pv-embed">${stepBody}</div>
+                ${controls}
+            </div>
+            ${total > 1 ? `<div class="pv-steps">${questions.map((_, i) =>
+                `<button type="button" class="pv-stepdot${i === previewStep ? ' is-on' : ''}" data-step="${i}">${i + 1}</button>`).join('')
+                }<button type="button" class="pv-stepdot${atReview ? ' is-on' : ''}" data-step="${total}">✓</button></div>` : ''}
+
+            <div class="pv-caption">Answers go to</div>
+            <div class="cf-notice ${channelName ? 'is-ok' : 'is-warn'}">
+                <i class="fas ${channelName ? 'fa-hashtag' : 'fa-gauge-high'}"></i>
+                <span>${channelName ? `Dashboard <strong>and</strong> #${esc(channelName)}` : 'Dashboard only'}</span>
+            </div>
+            ${dmIds.length ? `<div class="cf-notice ${$('fx-dm-on-submit').checked ? 'is-ok' : 'is-warn'}"><i class="fas fa-envelope"></i><span>${
+                $('fx-dm-on-submit').checked
+                    ? `DM'd to ${dmIds.map(id => `<strong>${esc(MEMBER_NAMES.get(id) || id)}</strong>`).join(', ')} on every submission`
+                    : `No submission pings. ${dmIds.map(id => `<strong>${esc(MEMBER_NAMES.get(id) || id)}</strong>`).join(', ')} still get anything an applicant replies.`
+            }</span></div>` : ''}
+            ${$('fx-auto-reply').checked ? `<div class="cf-notice is-ok"><i class="fas fa-bolt"></i><span>They get the matching saved reply on screen <strong>and</strong> in their DMs the moment they submit.</span></div>` : ''}
+            ${form.ticket_attached ? `<div class="cf-notice is-warn"><i class="fas fa-triangle-exclamation"></i><span>This form is also attached to a ticket panel. That path still uses a Discord pop-up, which shows only the first ${FIELD_LIMIT} questions and shortens long wording.</span></div>` : ''}`;
+
+        body.querySelectorAll('.pv-stepdot').forEach(btn => btn.addEventListener('click', () => {
+            previewStep = Number(btn.dataset.step);
+            renderPreview();
+        }));
+    }
+
+    // ── panels ───────────────────────────────────────────────────────────────
+    async function loadPanels() {
+        const box = $('fx-panels');
+        const d = await api(`/manage/${GUILD_ID}/forms/${form.form_id}/posted-panels`);
+        if (d.error) return banner(box, 'is-error', 'Failed to load posted panels.');
+        const panels = d.panels || [];
+        box.innerHTML = panels.length === 0
+            ? `<div class="cf-notice is-warn"><i class="fas fa-circle-info"></i><span>Not posted anywhere yet.</span></div>`
+            : panels.map(p => `
+                <div class="q-row">
+                    <div class="q-body">
+                        <div class="q-text">#${esc(p.channel_name || p.channel_id)}</div>
+                        <div class="cf-chips q-meta">
+                            ${p.live ? '<span class="cf-chip is-accent">Live</span>' : '<span class="cf-chip is-bad">Message deleted</span>'}
+                            ${p.message_url && p.live ? `<a class="cf-chip" href="${esc(p.message_url)}" target="_blank" rel="noopener">Open in Discord</a>` : ''}
                         </div>
                     </div>
-                    <form action="/manage/<%= guild.id %>/forms/questions/delete/${q.question_id}" method="POST" style="display: inline;" onsubmit="return confirm('Delete this question?');">
-                        <button type="submit" class="btn btn-sm btn-danger">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                    </form>
-                </div>
-            </div>
-        `).join('');
-    } catch (error) {
-        document.getElementById('questions-list').innerHTML = '<div style="background: var(--color-danger); background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(239, 68, 68, 0.05)); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: var(--radius-md); padding: var(--spacing-4); color: var(--color-text-primary);">Failed to load questions.</div>';
+                    <div class="q-actions">
+                        ${p.live ? '' : `<button type="button" class="btn btn-sm btn-primary" data-panel="repost" data-id="${p.panel_id}">Re-post</button>`}
+                        <button type="button" class="btn btn-sm btn-danger" data-panel="delete" data-id="${p.panel_id}"><i class="fas fa-trash"></i></button>
+                    </div>
+                </div>`).join('');
+
+        box.querySelectorAll('button[data-panel]').forEach(btn => btn.addEventListener('click', async () => {
+            if (btn.dataset.panel === 'delete' && !confirm('Delete this panel message?')) return;
+            const url = btn.dataset.panel === 'delete'
+                ? `/manage/${GUILD_ID}/forms/panels/${btn.dataset.id}/delete`
+                : `/manage/${GUILD_ID}/forms/panels/${btn.dataset.id}/edit`;
+            const r = await api(url, {});
+            if (r.error) return banner($('fx-panel-result'), 'is-error', esc(r.error));
+            loadPanels();
+        }));
+
+        loadTicketPanels();
     }
-}
 
-async function viewSubmissions(formId) {
-    const modal = new bootstrap.Modal(document.getElementById('submissions-modal'));
-    modal.show();
+    async function loadTicketPanels() {
+        const box = $('fx-ticket-panels');
+        const d = await api(`/manage/${GUILD_ID}/forms/${form.form_id}/panels`);
+        if (d.error) return;
+        const panels = d.panels || [];
+        box.innerHTML = panels.length === 0
+            ? `<div class="form-help fx-flush">This server has no ticket panels yet. <a href="/manage/${GUILD_ID}?page=tickets">Create one on the Tickets page</a>.</div>`
+            : panels.map(p => `
+                <div class="q-row">
+                    <div class="q-body">
+                        <div class="q-text">${esc(p.panel_name)}</div>
+                        <div class="cf-chips q-meta">
+                            ${p.attached ? '<span class="cf-chip is-accent">Using this form</span>' : ''}
+                            ${p.other_form_name ? `<span class="cf-chip">Uses: ${esc(p.other_form_name)}</span>` : ''}
+                        </div>
+                    </div>
+                    <div class="q-actions">
+                        <button type="button" class="btn btn-sm ${p.attached ? 'btn-danger' : 'btn-secondary'}"
+                            data-tp="${p.panel_id}" data-attach="${p.attached ? '0' : '1'}">
+                            ${p.attached ? 'Detach' : (p.other_form_name ? 'Replace' : 'Attach')}
+                        </button>
+                    </div>
+                </div>`).join('');
 
-    try {
-        const response = await fetch(`/manage/<%= guild.id %>/forms/${formId}/submissions`);
-        const submissions = await response.json();
+        box.querySelectorAll('button[data-tp]').forEach(btn => btn.addEventListener('click', async () => {
+            btn.disabled = true;
+            const r = await api(`/manage/${GUILD_ID}/forms/${form.form_id}/panels`,
+                { panel_id: btn.dataset.tp, attach: btn.dataset.attach === '1' });
+            if (r.error) { btn.disabled = false; return banner($('fx-panel-result'), 'is-error', esc(r.error)); }
+            loadTicketPanels();
+        }));
+    }
 
-        const listEl = document.getElementById('submissions-list');
+    $('fx-post').addEventListener('click', async () => {
+        const channelId = $('fx-post-channel').value;
+        if (!channelId) return banner($('fx-panel-result'), 'is-error', 'Pick a channel first.');
+        banner($('fx-panel-result'), 'is-warning', 'Posting…');
+        const r = await api(`/manage/${GUILD_ID}/forms/create-panel`, { form_id: form.form_id, channel_id: channelId });
+        if (r.error) return banner($('fx-panel-result'), 'is-error', esc(r.error));
+        banner($('fx-panel-result'), 'is-success', esc(r.message || 'Panel posted.'));
+        loadPanels();
+    });
 
-        if (submissions.length === 0) {
-            listEl.innerHTML = '<div style="text-align: center; color: var(--color-text-muted); padding: var(--spacing-8);">No submissions yet.</div>';
+    $('fx-adopt-btn').addEventListener('click', async () => {
+        const value = $('fx-adopt').value.trim();
+        if (!value) return banner($('fx-panel-result'), 'is-error', 'Paste the message link first.');
+        banner($('fx-panel-result'), 'is-warning', 'Looking it up…');
+        const r = await api(`/manage/${GUILD_ID}/forms/${form.form_id}/adopt-panel`, { message: value });
+        if (r.error) return banner($('fx-panel-result'), 'is-error', esc(r.error));
+        $('fx-adopt').value = '';
+        banner($('fx-panel-result'), 'is-success', 'Now managed here.');
+        loadPanels();
+    });
+
+    // ── saved replies ────────────────────────────────────────────────────────
+    let templates = [];
+
+    async function loadTemplates() {
+        const d = await api(`/manage/${GUILD_ID}/forms/${form.form_id}/reply-templates`);
+        if (d.error) return banner($('fx-templates'), 'is-error', 'Failed to load saved replies.');
+        templates = d.templates || [];
+        renderTemplates();
+    }
+
+    function renderTemplates(editing) {
+        const list = $('fx-templates');
+        const editor = $('fx-template-editor');
+
+        list.innerHTML = templates.length === 0
+            ? `<div class="cf-notice is-warn"><i class="fas fa-circle-info"></i><span>No saved replies yet. Without one the notification still offers a free-text box, but you'd be typing the same instructions every time.</span></div>`
+            : templates.map((t, i) => {
+                const q = t.match_question_id
+                    ? questions.find(x => String(x.question_id) === String(t.match_question_id))
+                    : null;
+                return `
+                    <div class="q-row">
+                        <div class="q-body">
+                            <div class="q-text">${esc(t.name)}</div>
+                            <div class="cf-chips q-meta">
+                                ${q
+                                    ? `<span class="cf-chip is-accent">When Q${questions.indexOf(q) + 1} contains “${esc(t.match_contains)}”</span>`
+                                    : '<span class="cf-chip">Always offered</span>'}
+                                <span class="cf-chip">${t.body.length} chars</span>
+                            </div>
+                            <div class="fx-template-body">${esc(t.body.slice(0, 220))}${t.body.length > 220 ? '…' : ''}</div>
+                        </div>
+                        <div class="q-actions">
+                            <button type="button" class="btn btn-sm btn-secondary" data-tpl="edit" data-i="${i}"><i class="fas fa-edit"></i></button>
+                            <button type="button" class="btn btn-sm btn-danger" data-tpl="del" data-i="${i}"><i class="fas fa-trash"></i></button>
+                        </div>
+                    </div>`;
+            }).join('');
+
+        list.querySelectorAll('button[data-tpl]').forEach(btn => btn.addEventListener('click', async () => {
+            const i = Number(btn.dataset.i);
+            if (btn.dataset.tpl === 'edit') return renderTemplates(i);
+            if (!confirm(`Delete the saved reply “${templates[i].name}”?`)) return;
+            await api(`/manage/${GUILD_ID}/forms/reply-templates/${templates[i].template_id}/delete`, {});
+            loadTemplates();
+        }));
+
+        if (editing === undefined) {
+            editor.innerHTML = `<button type="button" class="btn btn-secondary q-add-btn" id="fx-add-tpl"><i class="fas fa-plus"></i> <span>Add a saved reply</span></button>`;
+            $('fx-add-tpl').addEventListener('click', () => renderTemplates(-1));
             return;
         }
-
-        listEl.innerHTML = submissions.map(sub => {
-            const data = JSON.parse(sub.submission_data);
-            const dataHtml = Object.entries(data).map(([q, a]) => `
-                <div style="margin-bottom: var(--spacing-3); padding-bottom: var(--spacing-3); border-bottom: 1px solid var(--color-dark-500);">
-                    <strong style="color: var(--color-text-primary); display: block; margin-bottom: var(--spacing-1);">${q}:</strong>
-                    <span style="color: var(--color-text-secondary);">${a || '<em>No answer</em>'}</span>
-                </div>
-            `).join('');
-
-            return `
-                <div style="background: var(--color-dark-700); border: 1px solid var(--color-dark-400); border-radius: var(--radius-md); margin-bottom: var(--spacing-4);">
-                    <div style="background: var(--color-dark-600); padding: var(--spacing-3); border-bottom: 1px solid var(--color-dark-400); border-radius: var(--radius-md) var(--radius-md) 0 0;">
-                        <strong style="color: var(--color-text-primary);">User ID:</strong> <span style="color: var(--color-text-secondary);">${sub.user_id}</span> &nbsp; | &nbsp;
-                        <strong style="color: var(--color-text-primary);">Submitted:</strong> <span style="color: var(--color-text-secondary);">${new Date(sub.submitted_at).toLocaleString()}</span>
-                    </div>
-                    <div style="padding: var(--spacing-4);">
-                        ${dataHtml}
-                    </div>
-                </div>
-            `;
-        }).join('');
-    } catch (error) {
-        document.getElementById('submissions-list').innerHTML = '<div style="background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(239, 68, 68, 0.05)); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: var(--radius-md); padding: var(--spacing-4); color: var(--color-text-primary);">Failed to load submissions.</div>';
+        renderTemplateEditor(editor, editing >= 0 ? templates[editing] : null);
     }
-}
 
-function addQuestion() {
-    if (!currentFormId) return;
-    window.location.href = `/manage/<%= guild.id %>/forms/${currentFormId}/add-question`;
-}
+    function renderTemplateEditor(container, t) {
+        const cur = t || { name: '', body: '', match_question_id: null, match_contains: '' };
+        const qOptions = questions.map((q, i) =>
+            `<option value="${q.question_id}" ${String(cur.match_question_id) === String(q.question_id) ? 'selected' : ''}>Q${i + 1}. ${esc(labelFor(q.question_text))}</option>`).join('');
 
-function createPanel(formId, formName) {
-    document.getElementById('panel-form-id').value = formId;
-    document.getElementById('panel-form-title').textContent = formName;
-    new bootstrap.Modal(document.getElementById('create-panel-modal')).show();
-}
+        container.innerHTML = `
+            <div class="q-editor">
+                <div class="field">
+                    <label class="form-label">Name <span class="req">*</span></label>
+                    <input type="text" class="form-control tpl-name" maxlength="80" value="${esc(cur.name)}" placeholder="Steam access code">
+                    <div class="form-help">Shown on the button in your DM. Keep it short.</div>
+                </div>
+                <div class="field">
+                    <label class="form-label">Message <span class="req">*</span></label>
+                    <textarea class="form-control tpl-body" rows="8" placeholder="What they receive…">${esc(cur.body)}</textarea>
+                    <div class="form-help tpl-count"></div>
+                </div>
+                <div class="field">
+                    <label class="form-label">Only suggest this when… <span class="fx-optional">(optional)</span></label>
+                    <select class="form-select tpl-question">
+                        <option value="">Always offer it</option>
+                        ${qOptions}
+                    </select>
+                    <input type="text" class="form-control tpl-contains fx-gap-top" maxlength="255" value="${esc(cur.match_contains || '')}" placeholder="…their answer contains this text" ${cur.match_question_id ? '' : 'hidden'}>
+                    <div class="form-help">Matching replies are starred and listed first. Everything else stays available — a rule is a suggestion, not a lock.</div>
+                </div>
+                <div class="tpl-error"></div>
+                <div class="q-editor-actions">
+                    <button type="button" class="btn btn-secondary btn-sm tpl-cancel">Cancel</button>
+                    <button type="button" class="btn btn-primary btn-sm tpl-save">Save reply</button>
+                </div>
+            </div>`;
+
+        const body = container.querySelector('.tpl-body');
+        const qSel = container.querySelector('.tpl-question');
+        const contains = container.querySelector('.tpl-contains');
+        const syncCount = () => {
+            container.querySelector('.tpl-count').textContent = `${body.value.length} characters — up to 4000.`;
+        };
+        body.addEventListener('input', syncCount); syncCount();
+        qSel.addEventListener('change', () => { contains.hidden = !qSel.value; });
+
+        container.querySelector('.tpl-cancel').addEventListener('click', () => renderTemplates());
+        container.querySelector('.tpl-save').addEventListener('click', async () => {
+            const errBox = container.querySelector('.tpl-error');
+            errBox.innerHTML = '';
+            const payload = {
+                name: container.querySelector('.tpl-name').value.trim(),
+                body: body.value.trim(),
+                match_question_id: qSel.value || null,
+                match_contains: qSel.value ? contains.value.trim() : null
+            };
+            const r = t
+                ? await api(`/manage/${GUILD_ID}/forms/reply-templates/${t.template_id}/edit`, payload)
+                : await api(`/manage/${GUILD_ID}/forms/${form.form_id}/reply-templates`, payload);
+            if (r.error) return banner(errBox, 'is-error', esc(r.error));
+            loadTemplates();
+        });
+    }
+
+    // ── responses ────────────────────────────────────────────────────────────
+    async function loadResponses() {
+        const box = $('fx-responses');
+        box.innerHTML = '<div class="forms-loading"><div class="spinner-border text-primary" role="status"></div></div>';
+        const d = await api(`/manage/${GUILD_ID}/forms/${form.form_id}/submissions`);
+        if (d.error) return banner(box, 'is-error', 'Failed to load responses.');
+
+        const failed = (d.deliveries || []).filter(x => x.status === 'failed');
+        const notice = failed.length
+            ? `<div class="cf-notice is-bad"><i class="fas fa-envelope"></i><span>${failed.length} DM notification${failed.length === 1 ? '' : 's'} could not be delivered: ${failed.slice(0, 3).map(f => `<strong>${esc(MEMBER_NAMES.get(String(f.user_id)) || f.user_id)}</strong> — ${esc(f.error || 'unknown')}`).join('; ')}</span></div>`
+            : '';
+
+        const replies = d.replies || [];
+        const ranked = d.ranked || {};
+
+        const subs = d.submissions || [];
+        if (subs.length === 0) {
+            box.innerHTML = notice + `<div class="cf-notice is-warn"><i class="fas fa-inbox"></i><span>No responses yet. A form attached to a ticket panel puts its answers in the ticket, not here.</span></div>`;
+            return;
+        }
+        box.innerHTML = notice + subs.map(sub => {
+            let data = {};
+            try { data = JSON.parse(sub.submission_data); } catch (e) { data = { Response: sub.submission_data }; }
+            const display = sub.display_name || sub.username || null;
+            const handle = sub.username && sub.username !== display ? `@${sub.username}` : null;
+            const avatar = sub.avatar_url
+                ? `<img src="${esc(sub.avatar_url)}" alt="" class="sub-avatar">`
+                : `<span class="sub-avatar sub-avatar-fallback">${esc((display || '?').trim().charAt(0).toUpperCase())}</span>`;
+            const rows = Object.entries(data).map(([q, a]) => `
+                <div class="sub-answer">
+                    <strong class="sub-q">${esc(q)}</strong>
+                    <span class="sub-a">${a ? esc(a) : '<em>No answer</em>'}</span>
+                </div>`).join('');
+            const mine = replies.filter(r => String(r.submission_id) === String(sub.submission_id));
+            const suggestions = ranked[sub.submission_id] || [];
+
+            // A two-sided transcript: what was sent to them, and what they sent back.
+            const history = mine.length ? `
+                <div class="sub-replies">
+                    ${mine.map(r => {
+                        const inbound = r.direction === 'in';
+                        const cls = inbound ? 'is-inbound' : (r.status === 'sent' ? '' : 'is-failed');
+                        const icon = inbound ? 'fa-reply' : (r.status === 'sent' ? 'fa-paper-plane' : 'fa-triangle-exclamation');
+                        const label = inbound
+                            ? `${esc(display || 'They')} replied`
+                            : (r.status === 'sent' ? 'You replied' : 'Reply failed');
+                        return `
+                        <div class="sub-reply ${cls}">
+                            <div class="sub-reply-head">
+                                <i class="fas ${icon}"></i> ${label}
+                                · ${new Date(r.sent_at).toLocaleString()}
+                                ${r.error ? `· ${esc(r.error)}` : ''}
+                            </div>
+                            <div class="sub-reply-body">${esc(r.body)}</div>
+                        </div>`;
+                    }).join('')}
+                </div>` : '';
+
+            return `<div class="sub-card" data-sub="${sub.submission_id}">
+                <div class="sub-head">${avatar}
+                    <div>
+                        <div class="sub-name">${display ? esc(display) : 'Unknown member'}${handle ? ` <span class="sub-handle">${esc(handle)}</span>` : ''}</div>
+                        <div class="sub-meta">${esc(sub.user_id)} · ${new Date(sub.submitted_at).toLocaleString()}${mine.length ? ` · ${mine.filter(r => r.direction !== 'in' && r.status === 'sent').length} sent, ${mine.filter(r => r.direction === 'in').length} received` : ''}</div>
+                    </div>
+                </div>
+                <div class="sub-body-wrap">${rows}${history}
+                    <div class="sub-reply-controls">
+                        ${suggestions.length ? `
+                            <select class="form-select sub-tpl">
+                                <option value="">Send a saved reply…</option>
+                                ${suggestions.map(t => `<option value="${t.template_id}">${t.matched ? 'Suggested: ' : ''}${esc(t.name)}</option>`).join('')}
+                            </select>` : ''}
+                        <button type="button" class="btn btn-sm btn-secondary sub-write">Write</button>
+                    </div>
+                    <div class="sub-write-box" hidden>
+                        <textarea class="form-control sub-body" rows="5" placeholder="Sent to them as a DM from the bot…"></textarea>
+                        <div class="q-editor-actions fx-gap-top">
+                            <button type="button" class="btn btn-sm btn-secondary sub-cancel">Cancel</button>
+                            <button type="button" class="btn btn-sm btn-primary sub-send">Send DM</button>
+                        </div>
+                    </div>
+                    <div class="sub-result"></div>
+                </div>
+            </div>`;
+        }).join('');
+
+        box.querySelectorAll('.sub-card').forEach(card => {
+            const id = card.dataset.sub;
+            const result = card.querySelector('.sub-result');
+            const writeBox = card.querySelector('.sub-write-box');
+
+            card.querySelector('.sub-write').addEventListener('click', () => {
+                writeBox.hidden = !writeBox.hidden;
+                if (!writeBox.hidden) card.querySelector('.sub-body').focus();
+            });
+            card.querySelector('.sub-cancel').addEventListener('click', () => { writeBox.hidden = true; });
+
+            const send = async (payload, button) => {
+                button.disabled = true;
+                banner(result, 'is-warning', 'Sending…');
+                const r = await api(`/manage/${GUILD_ID}/forms/submissions/${id}/reply`, payload);
+                button.disabled = false;
+                if (r.error) return banner(result, 'is-error', esc(r.error));
+                loadResponses();
+            };
+
+            card.querySelector('.sub-send').addEventListener('click', (e) =>
+                send({ body: card.querySelector('.sub-body').value.trim() }, e.currentTarget));
+
+            // Picking a saved reply LOADS it, it does not send it. A browser confirm() asking
+            // "send this?" without showing the text is not a real check — you would be agreeing to
+            // something you cannot see. The finished text lands in the box instead, placeholders
+            // already filled in, and Send DM is the deliberate press.
+            const tpl = card.querySelector('.sub-tpl');
+            if (tpl) tpl.addEventListener('change', async () => {
+                if (!tpl.value) return;
+                banner(result, 'is-warning', 'Loading…');
+                const p = await api(`/manage/${GUILD_ID}/forms/submissions/${id}/reply-preview?template_id=${encodeURIComponent(tpl.value)}`);
+                tpl.value = '';
+                if (p.error) return banner(result, 'is-error', esc(p.error));
+                card.querySelector('.sub-body').value = p.body;
+                writeBox.hidden = false;
+                banner(result, 'is-warning', `Loaded <strong>${esc(p.name)}</strong> — read it over, edit if you like, then press <strong>Send DM</strong>. Nothing has gone out yet.`);
+                card.querySelector('.sub-body').focus();
+            });
+        });
+    }
+    $('fx-refresh-responses').addEventListener('click', loadResponses);
+
+    // ── selection ────────────────────────────────────────────────────────────
+    async function selectForm(formId) {
+        await loadTypes();
+        document.querySelectorAll('.fx-list-item').forEach(el =>
+            el.classList.toggle('is-active', el.dataset.formId === String(formId)));
+        $('fx-placeholder').hidden = true;
+        $('fx-editor').hidden = false;
+
+        const d = await api(`/manage/${GUILD_ID}/forms/${formId}/questions`);
+        if (d.error) return banner($('fx-banner'), 'is-error', 'Could not open that form.');
+
+        form = d.form;
+        questions = d.questions || [];
+        dmIds = (d.form.dm_user_ids || []).map(String);
+
+        $('fx-name').value = form.form_name || '';
+        $('fx-description').value = form.form_description || '';
+        document.querySelector(`input[name="fx-dest"][value="${form.submit_channel_id ? 'channel' : 'dashboard'}"]`).checked = true;
+        $('fx-channel').value = form.submit_channel_id || '';
+        $('fx-show-questions').checked = Number(form.show_questions_on_panel ?? 1) === 1;
+        $('fx-auto-reply').checked = Number(form.auto_reply ?? 0) === 1;
+        $('fx-dm-on-submit').checked = Number(form.dm_on_submit ?? 1) === 1;
+        $('fx-save-state').textContent = '';
+        $('fx-dm-result').innerHTML = '';
+        $('fx-panel-result').innerHTML = '';
+
+        previewStep = 0;
+        syncDest();
+        syncDm();
+        renderQuestions();
+        loadTemplates();
+        loadPanels();
+        loadResponses();
+    }
+
+    document.querySelectorAll('.fx-list-item').forEach(el =>
+        el.addEventListener('click', () => selectForm(el.dataset.formId)));
+
+    $('fx-new').addEventListener('click', async () => {
+        const name = prompt('Name for the new form:');
+        if (!name || !name.trim()) return;
+        const r = await api(`/manage/${GUILD_ID}/forms/create`, { form_name: name.trim() });
+        if (r.error) return banner($('fx-banner'), 'is-error', esc(r.error));
+        location.reload();
+    });
+
+    $('fx-delete').addEventListener('click', async () => {
+        if (!form || !confirm(`Delete “${form.form_name}”, its questions, its panels and all responses?`)) return;
+        const r = await api(`/manage/${GUILD_ID}/forms/delete/${form.form_id}`, {});
+        if (r.error) return banner($('fx-banner'), 'is-error', esc(r.error));
+        location.reload();
+    });
+
+    // Open the first form straight away — the page is an editor, not a directory.
+    const first = document.querySelector('.fx-list-item');
+    if (first) selectForm(first.dataset.formId);
+})();
 </script>

@@ -1,0 +1,18 @@
+<%# Short status page for the Kick Defender pages and the Kick sign-in flow (errors, bans, "not found").
+    Locals: heading, message, actionHref?, actionLabel?, kickUser?, csrfToken? %>
+<%- include('_head', { pageTitle: typeof heading !== 'undefined' ? heading : 'Kick Defender', csrfToken: typeof csrfToken !== 'undefined' ? csrfToken : '', kickUser: typeof kickUser !== 'undefined' ? kickUser : null }) %>
+
+  <div class="kick-eyebrow">Kick Defender</div>
+  <section class="cf-section">
+    <div class="cf-rows">
+      <div class="cf-state">
+        <p class="cf-state-title"><%= typeof heading !== 'undefined' ? heading : 'Something went wrong' %></p>
+        <p class="cf-state-text"><%= typeof message !== 'undefined' ? message : '' %></p>
+        <% if (typeof actionHref !== 'undefined' && actionHref) { %>
+          <a class="btn btn-primary" href="<%= actionHref %>"><%= typeof actionLabel !== 'undefined' && actionLabel ? actionLabel : 'Continue' %></a>
+        <% } %>
+      </div>
+    </div>
+  </section>
+
+<%- include('_foot') %>

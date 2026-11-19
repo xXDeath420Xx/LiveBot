@@ -9,14 +9,14 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import pool from '../utils/db.js';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, '..');
 
 const GUILD_ID  = '1216126780767731722';
 const RULES_CH  = '1216603920542208000';
-const BOT_ID    = '1496406792417185802';
+// The acting bot comes from guild_bot_mapping — never pinned here.
 const DISCORD_EPOCH = 1420070400000n;
 const FOURTEEN_DAYS_MS = 14n * 24n * 60n * 60n * 1000n;
 
@@ -30,13 +30,8 @@ const IMAGES_IN_ORDER = [
   'Shouties.png',
 ];
 
-const [rows] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id = ?', [BOT_ID]);
-if (rows.length === 0) {
-  console.error(`CertiFried Bear bot row not found (bot_id=${BOT_ID})`);
-  process.exit(1);
-}
-const token = encryption.decrypt(JSON.parse(rows[0].bot_token));
-const AUTH = `Bot ${token}`;
+const bot = await resolveBotForGuild(GUILD_ID, { db: pool });
+const AUTH = bot.auth;
 
 async function api(method, urlPath, body) {
   await new Promise(r => setTimeout(r, 80));

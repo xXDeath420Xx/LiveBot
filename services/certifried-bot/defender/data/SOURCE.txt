@@ -1,0 +1,4 @@
+Copied from KumaBot Defender v4.17.0 (BearOrso / orsokuma), src/utils/, on 2026-11-18.
+bot-name-patterns.json = botNamePatterns.json (regex, matched against the login)
+spam-patterns.json     = spam.json (regex body; anchored ^...$, first space -> \s*, case-insensitive, as in isMessageSpam)
+strip-emotes.json      = emotes.json (removed from a message before the spam check, as in isBuyFollowersBot)

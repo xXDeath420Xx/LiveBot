@@ -3,18 +3,19 @@
 // (default-bot-authored) messages, positions Kitsune's bot role for management, then kicks the default bot.
 import 'dotenv/config';
 import pool from '../utils/db.js';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 
 const GUILD = '1469931133981687873';
-const KITSUNE_ID = '1498486251576229958';
-const DEFAULT_BOT_ID = '1409904443125665875';
+// The acting bot comes from guild_bot_mapping — never pinned here; filled in by getKitsuneToken().
+let KITSUNE_ID = null;
+const DEFAULT_BOT_ID = '1409904443125665875';  // bot-id-ok: the bot being removed from the guild — an identity to kick, not a credential
 
 const log = (...a) => console.log('[transfer]', ...a);
 
 async function getKitsuneToken() {
-  const [rows] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id = ?', [KITSUNE_ID]);
-  if (!rows.length) throw new Error('Kitsune row missing');
-  return encryption.decrypt(JSON.parse(rows[0].bot_token));
+  const bot = await resolveBotForGuild(GUILD, { db: pool });
+  KITSUNE_ID = bot.botId;
+  return bot.token;
 }
 
 const BASE = 'https://discord.com/api/v10';

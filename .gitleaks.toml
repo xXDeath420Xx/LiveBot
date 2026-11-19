@@ -1,0 +1,36 @@
+# gitleaks config: the default rule set, scoped allowlists for known false positives.
+# Used by scripts/publish-github.sh and CI. Every entry names the rule it silences.
+# A real secret is fixed in the code, never added here. See docs/publishing.md.
+title = "CertiFried gitleaks config"
+
+[extend]
+useDefault = true
+# Any 18-digit Discord snowflake matches this rule. IDs are not secrets; dumps of member IDs are
+# caught by scripts/publish/secret-scan.mjs (discord-id-dump) instead.
+disabledRules = ["discord-client-id"]
+
+[[allowlists]]
+description = "Invented credentials in test fixtures"
+paths = [
+  '''(^|/)tests/fixtures/stream-bot-import\.js$''',
+  '''(^|/)tests/stream-bot-events\.test\.js$''',
+]
+
+[[allowlists]]
+description = "Epic's publicly documented launcher / Android client credentials"
+targetRules = ["generic-api-key"]
+paths = ['''(^|/)core/epic-sprites\.js$''']
+
+[[allowlists]]
+description = "generic-api-key on object keys, CSS selectors, RFC 6455 sample nonce, mock passwords"
+targetRules = ["generic-api-key"]
+paths = [
+  '''(^|/)core/game-news-presets\.js$''',
+  '''(^|/)tests/cfx/''',
+  '''(^|/)desktop/studio/test/''',
+]
+
+[[allowlists]]
+description = "Public Twitch extension client id (served in every extension URL); env lookups"
+targetRules = ["twitch-api-token", "generic-api-key"]
+paths = ['''(^|/)services/cfx/config/env\.js$''']

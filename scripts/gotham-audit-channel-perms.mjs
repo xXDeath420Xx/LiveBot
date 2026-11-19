@@ -7,13 +7,13 @@
 
 import 'dotenv/config';
 import pool from '../utils/db.js';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 
 const GUILD = '800157336458231848';
 const EVERYONE_ID = GUILD;  // @everyone role is the guild ID
 const GOTHAM_CITIZEN_ID = '800252381513777158';
 const MUTED_ROLE_ID = '1503946366542548992';
-const BOT_ID = '1503936879635202149';  // Harley's Bat
+// The acting bot comes from guild_bot_mapping — never pinned here.
 
 const WELCOME_CH = '1503938671857106955';
 const RULES_CH = '800256456997863434';
@@ -34,17 +34,13 @@ let token = null;
 async function fetchBotToken() {
   if (tokenFetched) return token;
   try {
-    const [rows] = await pool.execute(
-      'SELECT bot_token FROM custom_bots WHERE bot_id = ?',
-      [BOT_ID]
-    );
-    if (rows.length === 0) {
-      console.error(`[!] Harley's Bat token not found in custom_bots table`);
+    const actingBot = await resolveBotForGuild(GUILD, { db: pool });
+    if (!actingBot?.token) {
+      console.error(`[!] No bot token resolved for guild ${GUILD}`);
       return null;
     }
-    const decrypted = encryption.decrypt(JSON.parse(rows[0].bot_token));
     tokenFetched = true;
-    token = decrypted;
+    token = actingBot.token;
     return token;
   } catch (err) {
     console.error(`[!] Failed to decrypt bot token:`, err.message);

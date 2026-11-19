@@ -19,15 +19,25 @@ function parseTimezoneOffsetMs(tz) {
 }
 
 /**
- * Get current local time for a guild as HH:MM string
+ * The server's local time as "HH:MM". guild_settings.timezone holds an IANA name from Core settings
+ * (America/New_York, Australia/Adelaide; daylight saving included); older rows may hold "UTC+5:30".
+ * Anything unknown counts as UTC. (Before 2026-11-19 IANA names were read as UTC, so daily purges
+ * ran at the UTC time instead of the server's.)
  */
-function getGuildLocalTime(offsetMs) {
-    const now = new Date();
-    const utcMs = now.getTime() + (now.getTimezoneOffset() * 60000);
-    const local = new Date(utcMs + offsetMs);
-    const hh = local.getHours().toString().padStart(2, '0');
-    const mm = local.getMinutes().toString().padStart(2, '0');
-    return `${hh}:${mm}`;
+export function guildLocalTime(tz, now = new Date()) {
+    const fixed = /^UTC([+-]\d+(?::\d+)?)?$/.test(String(tz || '')) || !tz;
+    let ms = now.getTime();
+    let zone = 'UTC';
+    if (fixed) ms += parseTimezoneOffsetMs(tz);
+    else zone = tz;
+    try {
+        const parts = new Intl.DateTimeFormat('en-GB', { timeZone: zone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+            .formatToParts(new Date(ms));
+        const get = (t) => parts.find((p) => p.type === t)?.value || '00';
+        return `${get('hour')}:${get('minute')}`;
+    } catch {
+        return guildLocalTime('UTC', now);
+    }
 }
 
 /**
@@ -115,7 +125,6 @@ async function checkPurges() {
 
         for (const config of configs) {
             try {
-                const offsetMs = parseTimezoneOffsetMs(config.timezone);
                 let shouldPurge = false;
 
                 if (config.interval_hours) {
@@ -128,7 +137,7 @@ async function checkPurges() {
                     }
                 } else {
                     // Time-of-day mode: check if current local time matches purge_time
-                    const localTime = getGuildLocalTime(offsetMs);
+                    const localTime = guildLocalTime(config.timezone);
                     if (localTime === config.purge_time) {
                         // Prevent double-fire: must be >23 hours since last purge
                         if (!config.last_purge_at) {

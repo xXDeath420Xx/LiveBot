@@ -2,6 +2,7 @@ import { EmbedBuilder } from 'discord.js';
 import pool from '../../utils/db.js';
 import logger from '../../utils/logger.js';
 import { invalidateCommandCache } from '../../core/custom-command-handler.js';
+import { themeColor } from '../../core/guild-theme.js';
 
 export async function handleCreate(interaction) {
     await interaction.deferReply({ ephemeral: true });
@@ -178,7 +179,7 @@ export async function handleListCommands(interaction) {
         }
 
         const embed = new EmbedBuilder()
-            .setColor('#5865F2')
+            .setColor(themeColor(interaction.guildId, 'primary'))
             .setTitle(`Custom Commands for ${interaction.guild.name}`)
             .setDescription(
                 commands.map(cmd => `\`${cmd.command_name}\` - *${cmd.action_type}*`).join('\n')

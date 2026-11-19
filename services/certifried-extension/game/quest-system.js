@@ -72,7 +72,7 @@ export async function assignQuests(playerId) {
             }
 
             if (dailyQuests.length > 0) {
-                logger.info('[Quests] Assigned daily quests', {
+                logger.debug('[Quests] Assigned daily quests', {
                     playerId,
                     count: dailyQuests.length
                 });
@@ -117,7 +117,7 @@ export async function assignQuests(playerId) {
             }
 
             if (weeklyQuests.length > 0) {
-                logger.info('[Quests] Assigned weekly quests', {
+                logger.debug('[Quests] Assigned weekly quests', {
                     playerId,
                     count: weeklyQuests.length
                 });
@@ -150,7 +150,7 @@ export async function assignQuests(playerId) {
         }
 
         if (unassignedAchievements.length > 0) {
-            logger.info('[Quests] Assigned achievement quests', {
+            logger.debug('[Quests] Assigned achievement quests', {
                 playerId,
                 count: unassignedAchievements.length
             });
@@ -233,7 +233,7 @@ export async function updateQuestProgress(playerId, objectiveType, amount, param
                     [quest.id]
                 );
 
-                logger.info('[Quests] Quest completed', {
+                logger.debug('[Quests] Quest completed', {
                     playerId,
                     questId: quest.id
                 });

@@ -252,7 +252,7 @@ router.put('/config', async (req, res) => {
             ]
         );
 
-        logger.info('[Workers] Config updated', {
+        logger.debug('[Workers] Config updated', {
             playerId,
             autoReplantEnabled,
             autoReplantStrainId,
@@ -298,7 +298,7 @@ router.post('/toggle', async (req, res) => {
             return res.status(404).json({ error: 'Worker not found', code: 'NOT_FOUND' });
         }
 
-        logger.info('[Workers] Toggle', {
+        logger.debug('[Workers] Toggle', {
             playerId,
             workerType,
             enabled

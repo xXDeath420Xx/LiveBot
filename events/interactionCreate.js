@@ -6,10 +6,141 @@ import { getButtonHandler, getSelectMenuHandler, getModalHandler } from '../inte
 import pool from '../utils/db.js';
 import configCache from '../utils/configCache.js';
 import { isSuperAdmin } from '../utils/constants.js';
+import { translatorFor, tMaybe } from '../utils/i18n.js';
+import { getRestriction, evaluate, ephemeralPreference, applyReplyPolicy } from '../core/command-restrictions.js';
+import { featureForCommand } from '../core/feature-config-spec.js';
+import { checkAccess as checkFeatureAccess } from '../core/feature-config.js';
+import { checkAccess as checkContextMenuAccess } from '../core/context-menu-config.js';
 import crypto from 'crypto';
+import { themeColor, themeReplies } from '../core/guild-theme.js';
+import { updateChallengeProgress } from '../core/daily-challenges-manager.js';
+import { applyMount } from '../core/command-mounts.js';
+import { applyShortcut } from '../core/guild-shortcuts.js';
+import { flagGateFor } from '../core/feature-flags.js';
+import { recordCommandUse, interactionPath, errorCodeOf } from '../core/command-usage.js';
 
 // Commands in these categories require ManageGuild by default (no DB row needed)
 const ADMIN_CATEGORIES = new Set(['admin', 'streams']);
+
+// Discord interaction error codes worth naming.
+const UNKNOWN_INTERACTION = 10062;   // token expired — the handler took >3s before acking
+const ALREADY_ACKNOWLEDGED = 40060;  // something replied/deferred twice
+
+/**
+ * Is this client in a state where running a handler can actually succeed?
+ *
+ * Both halves matter: `isReady()` covers the gateway (a reconnect in progress), and
+ * `managersReady` covers our own initialisation, which finishes well after login. Neither one
+ * alone closes the restart window.
+ */
+function isClientReadyForWork(client) {
+  if (client?.managersReady !== true) return false;
+  if (typeof client.isReady === 'function' && !client.isReady()) return false;
+  return true;
+}
+
+/**
+ * One command_usage row (core/command-usage.js) for a slash command or context menu that ran.
+ * Buffered and fire-and-forget: it cannot slow down or break the command.
+ */
+function trackUse(interaction, kind, startedAt, error) {
+  recordCommandUse({
+    guildId: interaction.guildId,
+    channelId: interaction.channelId,
+    userId: interaction.user?.id,
+    appId: interaction.applicationId || interaction.client?.application?.id || interaction.client?.user?.id,
+    command: interaction.commandName,
+    path: kind === 'context' ? interaction.commandName : interactionPath(interaction),
+    kind,
+    success: !error,
+    errorCode: errorCodeOf(error),
+    latencyMs: Date.now() - startedAt,
+  });
+}
+
+/** Short description of an interaction for logs. */
+function describeInteraction(interaction) {
+  try {
+    if (interaction.isChatInputCommand?.()) {
+      const group = interaction.options.getSubcommandGroup(false);
+      const sub = interaction.options.getSubcommand(false);
+      return `/${interaction.commandName}${group ? ' ' + group : ''}${sub ? ' ' + sub : ''}`;
+    }
+    if (interaction.isButton?.()) return `button ${interaction.customId}`;
+    if (interaction.isAnySelectMenu?.()) return `select ${interaction.customId}`;
+    if (interaction.isModalSubmit?.()) return `modal ${interaction.customId}`;
+    if (interaction.isAutocomplete?.()) return `autocomplete /${interaction.commandName}`;
+    return `interaction type=${interaction.type}`;
+  } catch { return 'interaction'; }
+}
+
+/**
+ * Tell the user their action did NOT run because the bot is still starting.
+ * Autocomplete can only be answered with choices, never with content.
+ */
+async function replyStartingUp(interaction) {
+  const notice = '⏳ I\'m still starting up, so that didn\'t run — **nothing was changed**. '
+    + 'Give me a few seconds and try again.';
+  try {
+    if (interaction.isAutocomplete?.()) {
+      await interaction.respond([]);
+      return;
+    }
+    if (!interaction.isRepliable?.()) return;
+    if (interaction.deferred && !interaction.replied) await interaction.editReply({ content: notice });
+    else if (interaction.replied) await interaction.followUp({ content: notice, flags: 64 });
+    else await interaction.reply({ content: notice, flags: 64 });
+  } catch (err) {
+    // Token may already be dead; the log above is the record that matters.
+    logger.debug(`[Interaction] Could not deliver startup notice: ${err.message}`);
+  }
+}
+
+/**
+ * Last-resort handler for ANY interaction that throws without being caught deeper.
+ *
+ * Before this existed, a button / select / modal handler that threw fell straight through the
+ * event with no catch: Discord showed the user its raw "This interaction failed", and NOTHING
+ * was logged — no customId, no stack — so these failures were invisible in the logs even as
+ * users hit them. Now every uncaught interaction failure is logged WITH what it was (command
+ * name / customId), the 3-second-timeout case is named explicitly, and the user gets a clean
+ * message instead of the scary native one.
+ */
+async function handleInteractionFailure(interaction, err) {
+  let kind;
+  try {
+    kind = interaction.isChatInputCommand?.() ? `command /${interaction.commandName}`
+      : interaction.isButton?.() ? `button ${interaction.customId}`
+      : interaction.isAnySelectMenu?.() ? `select ${interaction.customId}`
+      : interaction.isModalSubmit?.() ? `modal ${interaction.customId}`
+      : interaction.isAutocomplete?.() ? `autocomplete /${interaction.commandName}`
+      : `interaction type=${interaction.type}`;
+  } catch { kind = 'interaction'; }
+
+  if (err?.code === UNKNOWN_INTERACTION) {
+    // The token died before we answered. Almost always: >3s of work (network / yt-dlp / AI)
+    // ran before the first deferReply/reply. This IS the "This action failed" the user sees.
+    logger.error(`[Interaction] TIMED OUT (Unknown Interaction 10062) on ${kind} — handler took >3s before acknowledging. Defer earlier. Guild ${interaction.guildId}, user ${interaction.user?.tag}`, { stack: err.stack });
+    return;
+  }
+  if (err?.code === ALREADY_ACKNOWLEDGED) {
+    logger.warn(`[Interaction] double-acknowledge (40060) on ${kind} — a handler replied/deferred twice. Guild ${interaction.guildId}, user ${interaction.user?.tag}`);
+    return;
+  }
+
+  logger.error(`[Interaction] Unhandled error on ${kind}: ${err?.message}`, {
+    stack: err?.stack, guildId: interaction.guildId, user: interaction.user?.tag, customId: interaction.customId,
+  });
+
+  // Replace Discord's raw "This interaction failed" with something the user can act on.
+  const notice = '⚠️ Something went wrong with that action — it has been logged. Please try again.';
+  try {
+    if (!interaction.isRepliable?.()) return;
+    if (interaction.deferred && !interaction.replied) await interaction.editReply({ content: notice });
+    else if (interaction.replied) await interaction.followUp({ content: notice, flags: 64 });
+    else await interaction.reply({ content: notice, flags: 64 });
+  } catch { /* interaction already dead — nothing more we can do */ }
+}
 
 // Make crypto available globally for libraries that expect it
 if (typeof globalThis.crypto === 'undefined') {
@@ -19,6 +150,7 @@ if (typeof globalThis.crypto === 'undefined') {
 export default {
   name: Events.InteractionCreate,
   async execute(interaction) {
+   try {
     // Log ALL interactions for debugging
     console.log(`[INTERACTION] Guild: ${interaction.guildId} | Type: ${interaction.type} | CustomId: ${interaction.customId || 'N/A'} | User: ${interaction.user.tag}`);
 
@@ -37,8 +169,95 @@ export default {
       return;
     }
 
+    // Refuse work until this client is actually able to do it.
+    //
+    // The gateway starts delivering interactions as soon as login completes, which is BEFORE
+    // index.js attaches the managers (and before Discord has filled the role/channel/member
+    // caches). Handlers run happily in that window: the DB write lands, the Discord-side
+    // effect silently no-ops against an undefined manager or an empty cache, and the handler
+    // still sends its "✅ done". The user is told an operation finished that never ran.
+    //
+    // Telling them to try again in a moment is the honest answer, and it is the only one that
+    // does not leave them believing a half-completed operation succeeded.
+    if (!isClientReadyForWork(interaction.client)) {
+      logger.warn(`[Interaction] Refused during startup (managersReady=${interaction.client.managersReady === true}, `
+        + `gatewayReady=${interaction.client.isReady?.() === true}): ${describeInteraction(interaction)} `
+        + `in guild ${interaction.guildId} by ${interaction.user?.tag}`);
+      await replyStartingUp(interaction);
+      return;
+    }
+
+    // Handle context-menu (right-click) commands.
+    //
+    // Placed before the chat-input branch because `isChatInputCommand()` is false for these and
+    // they would otherwise fall through to the autocomplete/component branches and be dropped
+    // silently. They share the commands collection — a ContextMenuCommandBuilder exposes the
+    // same `data.name` the loader keys on — but not the slash-command gauntlet: restrictions,
+    // cooldowns and the prefix bridge are all keyed on a slash-command path that these have no
+    // equivalent of. Their gating is per-menu, in context_menu_config.
+    if (interaction.isUserContextMenuCommand?.() || interaction.isMessageContextMenuCommand?.()) {
+      const command = interaction.client.commands.get(interaction.commandName);
+      if (!command) {
+        logger.warn(`[Interaction] Unknown context menu: ${interaction.commandName}`);
+        return;
+      }
+
+      try {
+        if (interaction.guild) {
+          const access = await checkContextMenuAccess(
+            interaction.guild.id, interaction.commandName, interaction.member
+          );
+          if (!access.allowed) {
+            return interaction.reply({ content: access.reason, ephemeral: true });
+          }
+
+          // Same usage record a slash command gets. Not awaited: the menu must ack within 3s,
+          // and neither call can throw (both catch and log their own errors).
+          const isUserMenu = interaction.isUserContextMenuCommand();
+          saveAuditLog(
+            interaction.guild.id,
+            'COMMAND_USAGE',
+            interaction.user.id,
+            interaction.targetId || null,
+            null,
+            interaction.channelId,
+            `[${isUserMenu ? 'user' : 'message'} menu] ${interaction.commandName}`,
+            null,
+            null,
+            null,
+            { contextMenu: isUserMenu ? 'user' : 'message', targetId: interaction.targetId || null }
+          );
+          interaction.client.serverStatsManager?.trackCommand(interaction.guild.id);
+          updateChallengeProgress(interaction.guild.id, interaction.user.id, 'commands', 1)
+            .catch(err => logger.warn('[DailyChallenges] commands progress failed', { error: err.message }));
+        }
+        const usageStart = Date.now();
+        themeReplies(interaction);   // the Embed theme footer on its embeds (H-719)
+        try {
+          await command.execute(interaction);
+        } catch (runError) {
+          trackUse(interaction, 'context', usageStart, runError);
+          throw runError;
+        }
+        trackUse(interaction, 'context', usageStart, null);
+      } catch (error) {
+        logger.error(`[ContextMenu] Error executing "${interaction.commandName}"`, {
+          error: error.message, stack: error.stack, user: interaction.user.tag,
+        });
+        const msg = { content: 'There was an error running that action.', ephemeral: true };
+        if (interaction.replied || interaction.deferred) await interaction.followUp(msg).catch(() => {});
+        else await interaction.reply(msg).catch(() => {});
+      }
+      return;
+    }
+
     // Handle slash commands
     if (interaction.isChatInputCommand()) {
+      // `/fun owoify` arrives as fun; from here on it is /owoify, so every gate below reads the
+      // command's own restriction rows, feature switch, category and cooldown (core/command-mounts.js).
+      // A per-server shortcut goes first: /confess becomes /fun confess (core/guild-shortcuts.js).
+      applyShortcut(interaction);
+      applyMount(interaction);
       const command = interaction.client.commands.get(interaction.commandName);
 
       if (!command) {
@@ -46,63 +265,111 @@ export default {
         return;
       }
 
+      // A moved command inherits its parent's DM visibility; keep server-only commands in servers.
+      if (interaction.mountedFrom && !interaction.guild && command.data?.dm_permission === false) {
+        return interaction.reply({ content: 'This command only works in a server.', ephemeral: true });
+      }
+
+      // Locale-bound translator, attached before the gates below rather than
+      // just before dispatch. The restriction and cooldown messages are some of
+      // the most-seen strings the bot produces, and a user who has set their
+      // language to German should not be told "This command is restricted to
+      // moderators" in English.
+      //
+      // Every command also gets interaction.t() for free, so commands written
+      // before i18n existed can adopt it one string at a time.
+      //
+      // Failure here is non-fatal — t() falls back to English, and an English
+      // reply beats no reply.
+      try {
+        interaction.t = await translatorFor(interaction);
+      } catch (localeError) {
+        logger.debug(`[i18n] Could not attach translator: ${localeError.message}`);
+      }
+      // tMaybe, not t: these call sites carry their own English fallback, and
+      // t() renders a missing key as the key itself — which would show the user
+      // `errors.admin_only` instead of the English sentence sitting right here.
+      const tr = (key, vars) => tMaybe(key, vars, { locale: interaction.t?.locale });
+
       // Per-guild command restrictions (including channel locks)
       // Bot owner / super admins bypass ALL per-guild gates in EVERY guild a
       // CertiFried bot lives in. Reason: the dev must always be able to
       // diagnose/repair a guild even after a heavy lockdown (e.g. YYZ Studio).
       const ownerBypass = isSuperAdmin(interaction.user.id);
       if (interaction.guild && !ownerBypass) {
-        // Check for subcommand-group-specific restriction first (e.g., fun:games, arcade:trivia)
+        // Per-guild command gating. One shared reader (core/command-restrictions.js)
+        // so slash commands and the prefix bridge cannot disagree about what
+        // "restricted" means — they used to each carry their own copy of this.
         const subGroup = interaction.options?.getSubcommandGroup?.(false);
         const subCmd = interaction.options?.getSubcommand?.(false);
         const subKey = subGroup ? `${interaction.commandName}:${subGroup}` : (subCmd ? `${interaction.commandName}:${subCmd}` : null);
 
-        let restriction = null;
-
-        // Try subcommand-specific restriction first
-        if (subKey) {
-          restriction = await configCache.get(
-            'cmd_restrict',
-            `${interaction.guildId}:${subKey}`,
-            async () => {
-              const [rows] = await pool.execute(
-                'SELECT allowed, admin_only, channel_id FROM guild_command_restrictions WHERE guild_id = ? AND command_name = ?',
-                [interaction.guildId, subKey]
-              );
-              return rows[0] || null;
-            }
-          );
-        }
-
-        // Fall back to top-level command restriction
-        if (!restriction) {
-          restriction = await configCache.get(
-            'cmd_restrict',
-            `${interaction.guildId}:${interaction.commandName}`,
-            async () => {
-              const [rows] = await pool.execute(
-                'SELECT allowed, admin_only, channel_id FROM guild_command_restrictions WHERE guild_id = ? AND command_name = ?',
-                [interaction.guildId, interaction.commandName]
-              );
-              return rows[0] || null;
-            }
-          );
-        }
+        const restriction = await getRestriction(interaction.guildId, interaction.commandName, subKey);
 
         if (restriction) {
-          if (!restriction.allowed) {
-            return interaction.reply({ content: 'This command is not available in this server.', ephemeral: true });
+          const verdict = evaluate(restriction, {
+            member: interaction.member,
+            channelId: interaction.channelId,
+            userId: interaction.user.id,
+            guildId: interaction.guildId,
+            commandKey: subKey || interaction.commandName,
+          });
+
+          if (!verdict.ok) {
+            // A guild-authored denial message wins over the built-in text —
+            // the point of letting them write one is that it can explain the
+            // server's own rule, which we cannot.
+            return interaction.reply({
+              content: verdict.custom || tr(verdict.reasonKey, verdict.vars) || 'You can\'t use that command here.',
+              ephemeral: true,
+            });
           }
-          if (restriction.admin_only && !interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
-            return interaction.reply({ content: 'This command is restricted to moderators in this server.', ephemeral: true });
-          }
-          // Channel lock — command can only be used in a specific channel
-          if (restriction.channel_id && interaction.channelId !== restriction.channel_id) {
-            return interaction.reply({ content: `This command can only be used in <#${restriction.channel_id}>.`, ephemeral: true });
-          }
+
+          interaction._restrictionEphemeral = ephemeralPreference(restriction);
+          // Private replies and "delete the reply after N seconds" (Commands page drawer), for
+          // every command: the interaction's reply methods are wrapped before it runs.
+          applyReplyPolicy(interaction, restriction);
         } else if (ADMIN_CATEGORIES.has(command.category) && !interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
-          // No explicit restriction row, but command category is admin-only by default
-          return interaction.reply({ content: 'This command is restricted to moderators.', ephemeral: true });
+          // No explicit rule, but the category is admin-only by default.
+          return interaction.reply({ content: tr('errors.admin_only') || 'This command is restricted to moderators.', ephemeral: true });
+        }
+
+        // Per-feature settings (enabled / channel allowlist / age-gate role) from the
+        // dashboard's feature pages. Enforced centrally for the same reason the restriction
+        // gate above is: seventeen commands each remembering to call it is seventeen chances
+        // to forget, and a setting a server can change but the bot ignores is worse than no
+        // setting at all. A failure here must never block a command, so it is caught.
+        try {
+          const gate = featureForCommand(interaction.commandName, subKey);
+          if (gate) {
+            const access = await checkFeatureAccess(gate.feature, interaction, gate.enabledKey);
+            if (!access.allowed) {
+              return interaction.reply({ content: access.reason, ephemeral: true });
+            }
+          }
+          // A feature turned off in the dashboard's feature catalog that has no switch of its own
+          // (core/feature-flags.js SWITCHES `flag`): its commands stay registered but refuse.
+          const flaggedOff = await flagGateFor(interaction.guildId, interaction.commandName, subKey);
+          if (flaggedOff) {
+            return interaction.reply({ content: `**${flaggedOff.name}** is turned off in this server.`, ephemeral: true });
+          }
+        } catch (err) {
+          logger.error(`[Command] Feature-access check failed for /${interaction.commandName}`, {
+            error: err.message,
+          });
+        }
+      }
+
+      // The owner skips the gates above, but the server's reply settings still apply, so the
+      // owner sees what members see. A lookup failure never blocks the owner's repair path.
+      if (interaction.guild && ownerBypass) {
+        try {
+          const g = interaction.options?.getSubcommandGroup?.(false);
+          const s = interaction.options?.getSubcommand?.(false);
+          const key = g ? `${interaction.commandName}:${g}` : (s ? `${interaction.commandName}:${s}` : null);
+          applyReplyPolicy(interaction, await getRestriction(interaction.guildId, interaction.commandName, key));
+        } catch (err) {
+          logger.debug(`[Command] Reply settings lookup failed for /${interaction.commandName}: ${err.message}`);
         }
       }
 
@@ -169,7 +436,7 @@ export default {
         if (interaction.guild) {
           const options = interaction.options.data.map(o => `${o.name}: ${o.value}`).join(', ');
           const embed = new EmbedBuilder()
-            .setColor(0x5865F2)
+            .setColor(themeColor(interaction.guildId, 'primary'))
             .setTitle('⚡ Command Used')
             .setDescription(`${interaction.user} used a slash command`)
             .addFields(
@@ -184,7 +451,8 @@ export default {
             embed.addFields({ name: 'Options', value: options.substring(0, 1024), inline: false });
           }
 
-          await sendLogEmbed(interaction.guild, 'commandUsage', embed);
+          await sendLogEmbed(interaction.guild, 'commandUsage', embed, 'commandUsage',
+            { channel: interaction.channel, member: interaction.member, user: interaction.user });
 
           await saveAuditLog(
             interaction.guild.id,
@@ -192,16 +460,31 @@ export default {
             interaction.user.id,
             null,
             null,
-            interaction.channel.id,
+            interaction.channelId,
             `/${interaction.commandName}`,
             null,
             null,
             null,
             { options: interaction.options.data.map(o => ({ name: o.name, value: o.value })) }
           );
+
+          // Daily "Commands Used" counter behind /server stats (activity_stats.commands_used).
+          // Not awaited — it catches and logs its own errors.
+          interaction.client.serverStatsManager?.trackCommand(interaction.guild.id);
+          // Daily challenges ("Use 10 bot commands" …); members without an open challenge cost no query.
+          updateChallengeProgress(interaction.guild.id, interaction.user.id, 'commands', 1)
+            .catch(err => logger.warn('[DailyChallenges] commands progress failed', { error: err.message }));
         }
 
-        await command.execute(interaction);
+        const usageStart = Date.now();
+        themeReplies(interaction);   // the Embed theme footer on its embeds (H-719)
+        try {
+          await command.execute(interaction);
+        } catch (runError) {
+          trackUse(interaction, 'slash', usageStart, runError);
+          throw runError;
+        }
+        trackUse(interaction, 'slash', usageStart, null);
       } catch (error) {
         const botIdentifier = interaction.client.isDefaultBot
           ? 'Default Bot'
@@ -229,6 +512,8 @@ export default {
 
     // Handle autocomplete
     else if (interaction.isAutocomplete()) {
+      applyShortcut(interaction);
+      applyMount(interaction);
       const command = interaction.client.commands.get(interaction.commandName);
 
       if (!command || !command.autocomplete) {
@@ -438,6 +723,28 @@ export default {
       }
     }
 
+    // Role select menus — same prefix registry. This branch was missing, so a role
+    // picker posted in a MESSAGE rendered fine, accepted a choice, and then went
+    // nowhere: the /setup role pickers (core/setup-wizard.js) and role questions in
+    // the form stepper (core/form-flow.js) both silently did nothing. Role selects
+    // inside a MODAL were never affected — those arrive on isModalSubmit.
+    else if (interaction.isRoleSelectMenu()) {
+      const roleSelectHandler = getSelectMenuHandler(interaction.customId);
+      if (roleSelectHandler) {
+        await roleSelectHandler(interaction);
+        return;
+      }
+    }
+
+    // Mentionable selects (users and roles in one picker) route the same way.
+    else if (interaction.isMentionableSelectMenu?.()) {
+      const mentionableHandler = getSelectMenuHandler(interaction.customId);
+      if (mentionableHandler) {
+        await mentionableHandler(interaction);
+        return;
+      }
+    }
+
     // Handle modal submissions
     else if (interaction.isModalSubmit()) {
       logger.debug(`[Modal] ${interaction.customId} submitted by ${interaction.user.tag}`);
@@ -515,6 +822,19 @@ export default {
                 }
               }
 
+              // Same as /music play: a typed song name resolves to the real Spotify track first,
+              // so it plays through the linked Spotify account (go-librespot) rather than YouTube.
+              if (!/^https?:\/\//i.test(songQuery) && !songQuery.startsWith('spotify:')) {
+                try {
+                  const { searchSpotifyTrack } = await import('../core/spotify-resolver.js');
+                  const hit = await searchSpotifyTrack(songQuery);
+                  if (hit?.url) {
+                    logger.info(`[Music Panel] search "${songQuery}" resolved to Spotify: ${hit.artist} - ${hit.title}`);
+                    songQuery = hit.url;
+                  }
+                } catch (e) { logger.warn(`[Music Panel] Spotify search failed, using YouTube search: ${e.message}`); }
+              }
+
               const searchResult = await player.search(songQuery, {
                 requestedBy: interaction.user
               });
@@ -542,6 +862,9 @@ export default {
                 }
                 return t;
               });
+              // player.play() only queues tracks[0] of a non-playlist result — keep dedup and the
+              // reply honest (and stop dedup from swapping in search result #2).
+              if (!searchResult.playlist) validTracks = validTracks.slice(0, 1);
               if (validTracks.length === 0) {
                 return interaction.editReply({
                   content: `No playable results found for: ${songQuery}`
@@ -581,19 +904,20 @@ export default {
                 logger.warn('[Music Panel] Deduplication failed, continuing without:', dedupeError.message);
               }
 
-              // Load DJ settings from database
+              // Load DJ settings from database. The AI DJ switch is ai_dj_config.enabled (H-667).
               let djEnabled = false;
               let djVoice = 'amy';
               try {
                 const pool = (await import('../utils/db.js')).default;
                 const [rows] = await pool.query(
-                  'SELECT dj_enabled, dj_voice FROM music_config WHERE guild_id = ?',
+                  'SELECT dj_voice FROM music_config WHERE guild_id = ?',
                   [interaction.guildId]
                 );
                 if (rows && rows.length > 0) {
-                  djEnabled = Boolean(rows[0].dj_enabled);
                   djVoice = rows[0].dj_voice || 'amy';
                 }
+                const { isAIDJEnabled } = await import('../utils/music_helpers.js');
+                djEnabled = await isAIDJEnabled(interaction.guildId);
               } catch (error) {
                 logger.error('[Music Panel] Error loading DJ settings:', error);
               }
@@ -628,12 +952,12 @@ export default {
               await interaction.editReply({ content: responseMsg });
 
               // Generate DJ commentary AFTER replying (fire-and-forget so it never blocks)
-              if (djEnabled && interaction.client.djManager && searchResult.playlist && searchResult.tracks.length > 1) {
+              if (djEnabled && (interaction.client.djManager || global.djManager) && searchResult.playlist && searchResult.tracks.length > 1) {
                 const queue = player.nodes.get(interaction.guildId);
                 if (queue) {
                   const remainingTracks = searchResult.tracks.slice(1);
                   logger.info(`[DJ Mode] Generating commentary for playlist with ${remainingTracks.length} remaining track(s)`);
-                  interaction.client.djManager.playPlaylistIntro(queue, remainingTracks, queue.isPlaying())
+                  (interaction.client.djManager || global.djManager).playPlaylistIntro(queue, remainingTracks, queue.isPlaying())
                     .catch(djError => logger.error('[DJ Mode] Error generating commentary:', djError));
                 }
               }
@@ -669,6 +993,17 @@ export default {
                   return; // Can't respond at all, bail out
                 }
               }
+            }
+
+            // The panel's Start DJ form obeys the same switches as /music dj: Music, the music channels,
+            // the DJ role and the AI DJ switch (H-667).
+            try {
+              const { checkAIDJAccess } = await import('../utils/music_helpers.js');
+              const access = await checkAIDJAccess(interaction);
+              if (!access.permitted) return interaction.editReply({ content: access.message });
+            } catch (accessError) {
+              logger.warn('[AI DJ Modal] Could not check AI DJ access:', accessError.message);
+              return interaction.editReply({ content: 'Could not check whether the AI DJ is allowed here. Try again shortly.' });
             }
 
             // Get all field values including the new playlist link
@@ -759,12 +1094,12 @@ export default {
                   });
 
                   // Generate DJ intro if DJ manager is available
-                  if (interaction.client.djManager) {
+                  if ((interaction.client.djManager || global.djManager)) {
                     const queue = player.nodes.get(interaction.guildId);
                     if (queue && searchResult.tracks.length > 1) {
                       try {
                         logger.info(`[AI DJ] Generating intro for playlist with ${searchResult.tracks.length} tracks`);
-                        await interaction.client.djManager.playPlaylistIntro(queue, searchResult.tracks.slice(0, 5), queue.isPlaying());
+                        await (interaction.client.djManager || global.djManager).playPlaylistIntro(queue, searchResult.tracks.slice(0, 5), queue.isPlaying());
                       } catch (djError) {
                         logger.error('[AI DJ] Error generating DJ intro:', djError);
                       }
@@ -821,7 +1156,12 @@ export default {
                   const path = await import('path');
 
                   logger.info('[AI DJ] Calling Gemini for recommendations...');
-                  const recommendations = await geminiApi.generatePlaylistRecommendations(song, artist, genre, [], prompt || context);
+                  // The server's AI DJ blocklist: excluded in the prompt, and filtered out of this first batch too.
+                  const djm = interaction.client.djManager || global.djManager;
+                  const blocked = djm ? await djm.getBlocklist(interaction.guildId) : [];
+                  const exclusion = (await import('../core/dj-blocklist.cjs')).default.exclusionText(blocked);
+                  const rawRecommendations = await geminiApi.generatePlaylistRecommendations(song, artist, genre, [], [prompt || context, exclusion].filter(Boolean).join(' '));
+                  const recommendations = djm ? djm.filterBlocked(rawRecommendations, blocked, interaction.guildId, 'recommendations') : rawRecommendations;
                   logger.info(`[AI DJ] Gemini returned ${recommendations ? recommendations.length : 0} recommendations`);
 
                   if (!recommendations || recommendations.length === 0) {
@@ -1000,6 +1340,18 @@ export default {
                       commentaryPath = path.join(tempDir, `dj_intro_${Date.now()}.wav`);
 
                       logger.info('[AI DJ] Generating TTS audio...');
+                      // A Kokoro voice (kokoro_*, utils/kokoro-tts.js) writes the WAV itself; if it
+                      // can't, the Piper voice below speaks instead.
+                      let spoken = false;
+                      if (String(djVoice).startsWith('kokoro_')) {
+                        try {
+                          const { kokoroToFile } = await import('../utils/kokoro-tts.js');
+                          await kokoroToFile(djText, djVoice, commentaryPath);
+                          spoken = true;
+                        } catch (kokoroError) {
+                          logger.warn(`[AI DJ] Kokoro voice ${djVoice} unavailable (${kokoroError.message}); using the default Piper voice`);
+                        }
+                      }
                       // Map voice name to model path
                       const piperPath = process.env.PIPER_PATH || '/home/death/.local/bin/piper';
                       const piperModelsDir = process.env.PIPER_MODEL_DIR || '/home/death/CertiFriedUtility/piper_models';
@@ -1010,9 +1362,9 @@ export default {
                         'cori': `${piperModelsDir}/en_GB/cori/high/en_GB-cori-high.onnx`
                       };
                       const modelPath = voiceModels[djVoice] || voiceModels['alan'];
-                      logger.info(`[AI DJ] Using TTS voice: ${djVoice} (${modelPath}), piper: ${piperPath}`);
+                      if (!spoken) logger.info(`[AI DJ] Using TTS voice: ${djVoice} (${modelPath}), piper: ${piperPath}`);
 
-                      await new Promise((resolve, reject) => {
+                      if (!spoken) await new Promise((resolve, reject) => {
                         const piper = spawn(piperPath, [
                           '--model', modelPath,
                           '--output_file', commentaryPath
@@ -1150,7 +1502,12 @@ export default {
                   const path = await import('path');
 
                   logger.info('[AI DJ] Calling Gemini for recommendations (existing queue)...');
-                  const recommendations = await geminiApi.generatePlaylistRecommendations(song, artist, genre, [], prompt || context);
+                  // The server's AI DJ blocklist: excluded in the prompt, and filtered out of this first batch too.
+                  const djm = interaction.client.djManager || global.djManager;
+                  const blocked = djm ? await djm.getBlocklist(interaction.guildId) : [];
+                  const exclusion = (await import('../core/dj-blocklist.cjs')).default.exclusionText(blocked);
+                  const rawRecommendations = await geminiApi.generatePlaylistRecommendations(song, artist, genre, [], [prompt || context, exclusion].filter(Boolean).join(' '));
+                  const recommendations = djm ? djm.filterBlocked(rawRecommendations, blocked, interaction.guildId, 'recommendations') : rawRecommendations;
                   logger.info(`[AI DJ] Gemini returned ${recommendations ? recommendations.length : 0} recommendations`);
 
                   if (!recommendations || recommendations.length === 0) {
@@ -1256,16 +1613,15 @@ export default {
         return;
       }
 
-      // Check if it's a confession modal
-      if (interaction.customId === 'confession_modal') {
-        const confessCommand = interaction.client.commands.get('confess');
-        if (confessCommand && confessCommand.handleModal) {
-          await confessCommand.handleModal(interaction);
-          return;
-        }
-      }
+      // confession_modal is handled by the registry above (interactions/handlerRegistry.js). It
+      // used to be routed here via commands.get('confess'), which has resolved to undefined ever
+      // since confess.js became the /fun confess subcommand.
 
       // Other modal handlers can be added here
     }
+   } catch (err) {
+      // Safety net for every interaction path (buttons/selects/modals were previously unguarded).
+      await handleInteractionFailure(interaction, err);
+   }
   }
 };

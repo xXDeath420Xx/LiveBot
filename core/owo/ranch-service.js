@@ -5,10 +5,11 @@
  * same compute-on-claim pattern as autohunt. Income rate per pet depends
  * on the pet's rank.
  *
- * Storage reuses owo_timers with a new column-free fallback by storing
- * last claim in owo_cooldowns under command='ranch'. Lifetime totals are
- * tracked in owo_cowoncydrop (fits the "passive drop" semantics upstream
- * used for this feature).
+ * Storage: the last claim time lives in owo_cooldowns under command='ranch';
+ * the payout itself is credited to owo_cowoncy via addCowoncy. Nothing else is
+ * persisted. (owo_cowoncydrop is NOT a ranch ledger — it is upstream's
+ * per-channel cowoncy-drop pool keyed by (guild_id, channel), so ranch claims
+ * must not write user ids into it.)
  */
 
 import pool from '../../utils/db.js';
@@ -85,15 +86,6 @@ export async function claim(guildId, userId) {
     }
     await addCowoncy(guildId, userId, payout, `Ranch claim: ${hours}h × ${hourly}`);
     await recordClaim(guildId, userId);
-
-    // Bump lifetime drop total (non-fatal if table missing expected columns)
-    try {
-        await pool.execute(
-            `INSERT INTO owo_cowoncydrop (guild_id, id, amount) VALUES (?, ?, ?)
-             ON DUPLICATE KEY UPDATE amount = amount + VALUES(amount)`,
-            [guildId, userId, payout]
-        );
-    } catch { /* ignore — schema may differ */ }
 
     return { claimed: payout, hourly, hours };
 }

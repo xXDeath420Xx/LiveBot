@@ -181,4 +181,100 @@ router.put('/config', async (req, res) => {
     }
 });
 
+
+
+// ─── Shop-tracker subscriptions (v2 catalog tracker — migration 341) ─────────
+// These manage the fourthwall_tracked_shops rows that drive the public-scraper-based
+// catalog change notifications. Separate from the /connections endpoints above which
+// manage merchant-authenticated webhook integrations (ptkn_).
+
+const SHOP_HANDLE_RE = /^[a-z0-9-]{1,100}$/i;
+
+router.get('/tracked', async (req, res) => {
+    try {
+        const [rows] = await pool.execute(
+            `SELECT id, shop_handle, shop_name, channel_id,
+                    notify_new_products, notify_price_drops, notify_price_increases,
+                    notify_sold_out, notify_restocked,
+                    notify_variant_added, notify_variant_restocked, notify_variant_low_stock,
+                    notify_variant_sold_out, notify_name_changed, notify_image_changed,
+                    notify_product_renamed, notify_on_sale,
+                    added_at, last_checked_at, last_error, consecutive_failures
+               FROM fourthwall_tracked_shops WHERE guild_id = ?
+               ORDER BY added_at DESC`,
+            [req.guildObject.id]);
+        res.json({ ok: true, subscriptions: rows });
+    } catch (err) {
+        logger.error('[API fourthwall] list tracked failed', { err: err.message });
+        res.status(500).json({ error: 'Could not load tracked shops.' });
+    }
+});
+
+router.post('/tracked', async (req, res) => {
+    const shopHandle = String(req.body?.shop_handle ?? '').trim().toLowerCase();
+    const channelId = String(req.body?.channel_id ?? '').trim();
+    if (!SHOP_HANDLE_RE.test(shopHandle)) return res.status(400).json({ error: 'Invalid shop handle.' });
+    if (!/^[0-9]{17,20}$/.test(channelId)) return res.status(400).json({ error: 'Pick a valid channel.' });
+    const ch = req.guildObject.channels.cache.get(channelId);
+    if (!ch) return res.status(400).json({ error: 'No such channel in this server.' });
+    try {
+        await pool.execute(
+            `INSERT INTO fourthwall_tracked_shops (guild_id, shop_handle, channel_id, added_by)
+             VALUES (?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE added_by = VALUES(added_by)`,
+            [req.guildObject.id, shopHandle, channelId, req.user?.id || null]);
+        res.json({ ok: true });
+    } catch (err) {
+        logger.error('[API fourthwall] add tracked failed', { err: err.message });
+        res.status(500).json({ error: 'Could not add the subscription.' });
+    }
+});
+
+router.put('/tracked/:id', async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: 'Bad id.' });
+    const b = req.body || {};
+    const BOOL_FIELDS = [
+        'notify_new_products', 'notify_price_drops', 'notify_price_increases',
+        'notify_sold_out', 'notify_restocked',
+        'notify_variant_added', 'notify_variant_restocked', 'notify_variant_low_stock',
+        'notify_variant_sold_out', 'notify_name_changed', 'notify_image_changed',
+        'notify_product_renamed', 'notify_on_sale',
+    ];
+    const updates = [];
+    const params = [];
+    for (const f of BOOL_FIELDS) {
+        if (f in b) { updates.push(`${f} = ?`); params.push(b[f] ? 1 : 0); }
+    }
+    if (b.channel_id && /^[0-9]{17,20}$/.test(String(b.channel_id)) && req.guildObject.channels.cache.has(String(b.channel_id))) {
+        updates.push('channel_id = ?'); params.push(String(b.channel_id));
+    }
+    if (!updates.length) return res.status(400).json({ error: 'Nothing to update.' });
+    params.push(id, req.guildObject.id);
+    try {
+        const [r] = await pool.execute(
+            `UPDATE fourthwall_tracked_shops SET ${updates.join(', ')} WHERE id = ? AND guild_id = ?`,
+            params);
+        res.json({ ok: true, updated: r.affectedRows > 0 });
+    } catch (err) {
+        logger.error('[API fourthwall] update tracked failed', { err: err.message });
+        res.status(500).json({ error: 'Could not update the subscription.' });
+    }
+});
+
+router.delete('/tracked/:id', async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error: 'Bad id.' });
+    try {
+        const [r] = await pool.execute(
+            `DELETE FROM fourthwall_tracked_shops WHERE id = ? AND guild_id = ?`,
+            [id, req.guildObject.id]);
+        res.json({ ok: true, removed: r.affectedRows > 0 });
+    } catch (err) {
+        logger.error('[API fourthwall] delete tracked failed', { err: err.message });
+        res.status(500).json({ error: 'Could not remove.' });
+    }
+});
+
 export default router;
+

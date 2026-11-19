@@ -65,7 +65,6 @@ export async function handleMode(interaction) {
     const failMode = interaction.options.getString('on-wrong-number');
     if (failMode) fields.fail_mode = failMode;
     for (const [opt, col] of [
-        ['allow-same-user', 'allow_same_user'],
         ['react-on-valid', 'react_on_valid'],
         ['announce-milestones', 'announce_milestones'],
         ['delete-chatter', 'delete_chatter'],

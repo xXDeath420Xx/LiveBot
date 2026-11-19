@@ -2,6 +2,7 @@
  * Shared utilities for RPG command handlers
  */
 import { EmbedBuilder } from 'discord.js';
+import { themeColor } from '../../../core/guild-theme.js';
 
 /**
  * Create a progress bar
@@ -26,7 +27,7 @@ export function formatAbilityScore(score) {
  */
 export function errorEmbed(message) {
     return new EmbedBuilder()
-        .setColor('#FF0000')
+        .setColor(themeColor(message.guild?.id, 'danger'))
         .setDescription(`❌ ${message}`);
 }
 

@@ -31,13 +31,17 @@ class CFHeader extends CFBaseComponent {
             this._updateXpBar();
         });
 
-        this.subscribe('ui.isConnected', (value) => {
+        const paintDot = () => {
             const dot = this.$('.cf-connection__dot');
-            if (dot) {
-                dot.classList.toggle('cf-connection__dot--offline', !value);
-                dot.style.background = value ? 'var(--color-success)' : 'var(--color-error)';
-            }
-        });
+            if (!dot) return;
+            const live = !!this.getState('ui.isConnected');
+            const polling = !live && this.getState('ui.liveMode') === 'polling';
+            dot.classList.toggle('cf-connection__dot--offline', !live && !polling);
+            dot.style.background = live ? 'var(--color-success)' : polling ? 'var(--color-warning, #d4a017)' : 'var(--color-error)';
+            dot.title = live ? 'Live updates on' : polling ? 'Live updates unavailable: refreshing every 15 seconds' : 'Connecting';
+        };
+        this.subscribe('ui.isConnected', paintDot);
+        this.subscribe('ui.liveMode', paintDot);
     }
 
     _updateXpBar() {

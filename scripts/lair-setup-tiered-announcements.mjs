@@ -9,10 +9,10 @@
 // REST-only — does not open a gateway, safe to run while PM2 is up.
 
 import pool from '../utils/db.js';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 
 const GUILD_ID = '1216126780767731722';
-const BOT_ID   = '1496406792417185802';
+// The acting bot comes from guild_bot_mapping — never pinned here.
 
 // Roles
 const TWITCH_STREAMER_ROLE = '1414792796912746576'; // granted to level-2 opt-ins
@@ -41,16 +41,8 @@ const BUTTON_LABEL      = 'Auto-Live (Level 2+)';
 const BUTTON_EMOJI      = '🎙️';
 const BUTTON_STYLE      = 'primary';
 
-const [tokenRow] = await pool.execute(
-  'SELECT bot_token FROM custom_bots WHERE bot_id=?',
-  [BOT_ID]
-);
-if (!tokenRow.length) {
-  console.error('FATAL: no custom_bots row for bot_id=' + BOT_ID);
-  await pool.end();
-  process.exit(1);
-}
-const token = encryption.decrypt(JSON.parse(tokenRow[0].bot_token));
+const bot = await resolveBotForGuild(GUILD_ID, { db: pool });
+const token = bot.token;
 
 async function api(method, path, body) {
   const r = await fetch(`https://discord.com/api/v10${path}`, {
@@ -99,7 +91,7 @@ await pool.execute(
     SIGNUP_CH,
     SELF_ANN_CH,
     JSON.stringify([]), // no role required — level 1 is the gate
-    JSON.stringify(['twitch', 'kick', 'youtube', 'tiktok', 'trovo', 'facebook']),
+    JSON.stringify(['twitch', 'kick', 'youtube', 'tiktok', 'facebook']),
     JSON.stringify([CUBS_ROLE, TWITCH_STREAMER_ROLE]),
   ]
 );

@@ -16,14 +16,33 @@ import { researchTick } from './research-tick.js';
 import { resolveEndedWars } from '../routes/territories.js';
 import { rotateShopDeals } from './shop-rotation.js';
 import { tournamentTick } from './tournament-tick.js';
+import { seasonTick, refreshSeasonColumns } from '../game/season-system.js';
+import { isFrozen } from '../freeze.js';
+import { isGreenhouseLive } from '../../cfx/integrations/cutover.js';
 
 const jobs = [];
+let seasonStartupTimer = null;
 
 /**
  * Start all background jobs
  */
 export async function startJobs() {
-    logger.info('[Jobs] Starting background jobs...');
+    // Replaced by Greenhouse Tycoon (GREENHOUSE_LIVE=1, phase 5): never start, whatever CFX_FROZEN says.
+    if (isGreenhouseLive()) {
+        logger.info('[Jobs] Greenhouse Tycoon is live (GREENHOUSE_LIVE=1): no old game jobs started');
+        return;
+    }
+    // CertiFried Tycoon is frozen until v2 replaces it (CFX_FROZEN, H-636). None of the jobs below run:
+    // market prices, growth, quest resets, bonus sync, cleanup, workers (idle cycle), raids, research,
+    // turf wars, shop rotation, tournaments, season rollover (and its start-up run).
+    if (isFrozen()) {
+        logger.info('[Jobs] CertiFried Tycoon is frozen (CFX_FROZEN): no game jobs started');
+        return;
+    }
+    logger.debug('[Jobs] Starting background jobs...');
+
+    // Season counters are written only once their columns exist (see game/season-system.js)
+    await refreshSeasonColumns();
 
     // Market price tick - every 5 minutes
     jobs.push(new CronJob('*/5 * * * *', async () => {
@@ -111,7 +130,7 @@ export async function startJobs() {
         try {
             const resolved = await resolveEndedWars();
             if (resolved > 0) {
-                logger.info('[Jobs] Resolved turf wars', { count: resolved });
+                logger.debug('[Jobs] Resolved turf wars', { count: resolved });
             }
         } catch (error) {
             logger.error('[Jobs] Territory war resolution failed', { error: error.message });
@@ -136,6 +155,19 @@ export async function startJobs() {
         }
     }, null, true, 'UTC'));
 
+    // Season rollover - every 5 minutes, plus once shortly after start so an overdue
+    // season (e.g. after downtime) closes without waiting (H-408)
+    const runSeasonTick = async () => {
+        try {
+            await seasonTick();
+        } catch (error) {
+            logger.error('[Jobs] Season tick failed', { error: error.message });
+        }
+    };
+    jobs.push(new CronJob('*/5 * * * *', runSeasonTick, null, true, 'UTC'));
+    seasonStartupTimer = setTimeout(runSeasonTick, 30_000);
+    seasonStartupTimer.unref?.();
+
     logger.info('[Jobs] Started', { count: jobs.length });
 }
 
@@ -143,14 +175,15 @@ export async function startJobs() {
  * Stop all background jobs
  */
 export async function stopJobs() {
-    logger.info('[Jobs] Stopping background jobs...');
+    logger.debug('[Jobs] Stopping background jobs...');
+    if (seasonStartupTimer) clearTimeout(seasonStartupTimer);
 
     for (const job of jobs) {
         job.stop();
     }
 
     jobs.length = 0;
-    logger.info('[Jobs] Stopped');
+    logger.debug('[Jobs] Stopped');
 }
 
 export default { startJobs, stopJobs };

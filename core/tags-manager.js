@@ -2,6 +2,13 @@ import { EmbedBuilder } from 'discord.js';
 import logger from '../utils/logger.js';
 import pool from '../utils/db.js';
 
+// The text lives in `tags.tag_content` (the dashboard's Tags page reads that column too). Callers of
+// this manager — /engage tags and the `!name` trigger in events/messageCreate.js — read `tag.content`,
+// so every SELECT exposes it under both names. use_count / embed_data / updated_at come from migration
+// 265; updated_at stays NULL until a tag is first edited, so it falls back to created_at.
+const TAG_COLUMNS = `id, guild_id, tag_name, tag_content, tag_content AS content, embed_data, creator_id,
+  use_count, created_at, COALESCE(updated_at, created_at) AS updated_at`;
+
 /**
  * Tags Manager - Handles tag creation, retrieval, and management
  */
@@ -18,7 +25,7 @@ class TagsManager {
    */
   async loadTags(guildId) {
     try {
-      const [tags] = await pool.execute('SELECT * FROM tags WHERE guild_id = ?', [guildId]);
+      const [tags] = await pool.execute(`SELECT ${TAG_COLUMNS} FROM tags WHERE guild_id = ?`, [guildId]);
 
       if (!this.tagCache.has(guildId)) {
         this.tagCache.set(guildId, new Map());
@@ -56,21 +63,24 @@ class TagsManager {
         return { success: false, error: 'A tag with this name already exists!' };
       }
 
-      await pool.execute(
-        `INSERT INTO tags (guild_id, tag_name, content, embed_data, creator_id)
+      const embedJson = embedData ? JSON.stringify(embedData) : null;
+      const [result] = await pool.execute(
+        `INSERT INTO tags (guild_id, tag_name, tag_content, embed_data, creator_id)
          VALUES (?, ?, ?, ?, ?)`,
-        [guildId, tagName.toLowerCase(), content, embedData ? JSON.stringify(embedData) : null, creatorId]
+        [guildId, tagName.toLowerCase(), content, embedJson, creatorId]
       );
 
       if (!this.tagCache.has(guildId)) {
         this.tagCache.set(guildId, new Map());
       }
 
+      // Same shape as a DB row: embed_data is the JSON string (callers JSON.parse it).
       this.tagCache.get(guildId).set(tagName.toLowerCase(), {
-        id: 0,
+        id: result.insertId,
         tag_name: tagName.toLowerCase(),
+        tag_content: content,
         content,
-        embed_data: embedData,
+        embed_data: embedJson,
         creator_id: creatorId,
         use_count: 0,
         created_at: new Date(),
@@ -95,15 +105,11 @@ class TagsManager {
    */
   async getTag(guildId, tagName) {
     try {
-      // Check cache first
-      if (this.tagCache.has(guildId)) {
-        const cached = this.tagCache.get(guildId).get(tagName.toLowerCase());
-        if (cached) return cached;
-      }
-
-      // Fetch from database
+      // Always read the row: /engage tags and events/messageCreate.js each hold their own manager
+      // instance and the dashboard deletes tags directly, so a cached copy goes stale (edits not
+      // showing, deleted tags still answering). Every use has to bump use_count anyway.
       const [rows] = await pool.execute(
-        'SELECT * FROM tags WHERE guild_id = ? AND tag_name = ?',
+        `SELECT ${TAG_COLUMNS} FROM tags WHERE guild_id = ? AND tag_name = ?`,
         [guildId, tagName.toLowerCase()]
       );
 
@@ -207,19 +213,21 @@ class TagsManager {
         return { success: false, error: 'You can only edit tags you created!' };
       }
 
+      const newEmbedJson = newEmbedData ? JSON.stringify(newEmbedData) : null;
       await pool.execute(
         `UPDATE tags
-         SET content = ?, embed_data = ?, updated_at = NOW()
+         SET tag_content = ?, embed_data = ?, updated_at = NOW()
          WHERE id = ?`,
-        [newContent, newEmbedData ? JSON.stringify(newEmbedData) : null, tag.id]
+        [newContent, newEmbedJson, tag.id]
       );
 
       // Update cache
       if (this.tagCache.has(guildId)) {
         const cached = this.tagCache.get(guildId).get(tagName.toLowerCase());
         if (cached) {
+          cached.tag_content = newContent;
           cached.content = newContent;
-          cached.embed_data = newEmbedData;
+          cached.embed_data = newEmbedJson;
         }
       }
 
@@ -338,7 +346,7 @@ class TagsManager {
   async getTagInfo(guildId, tagName) {
     try {
       const [rows] = await pool.execute(
-        'SELECT * FROM tags WHERE guild_id = ? AND tag_name = ?',
+        `SELECT ${TAG_COLUMNS} FROM tags WHERE guild_id = ? AND tag_name = ?`,
         [guildId, tagName.toLowerCase()]
       );
 

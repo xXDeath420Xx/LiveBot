@@ -107,7 +107,7 @@ router.get('/enhanced', async (req, res) => {
                         await pool.execute(`UPDATE cfx_player_workers SET current_quality_bonus = current_quality_bonus + ? WHERE id = ?`, [ev, stuck.id]);
                     }
 
-                    logger.info('[Workers] Auto-claimed completed training', { workerId: stuck.id, trait: trainingRecord.trait_name });
+                    logger.debug('[Workers] Auto-claimed completed training', { workerId: stuck.id, trait: trainingRecord.trait_name });
                 } catch (claimErr) {
                     logger.warn('[Workers] Auto-claim failed', { workerId: stuck.id, error: claimErr.message });
                 }

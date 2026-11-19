@@ -1,6 +1,7 @@
 import { EmbedBuilder } from 'discord.js';
 import pool from '../../../utils/db.js';
 import logger from '../../../utils/logger.js';
+import { themeColor } from '../../../core/guild-theme.js';
 
 export async function execute(interaction) {
     const subcommand = interaction.options.getSubcommand();
@@ -121,7 +122,7 @@ async function handleConfig(interaction, guildId) {
     );
 
     const embed = new EmbedBuilder()
-        .setColor(0x2ecc71)
+        .setColor(themeColor(interaction.guildId, 'success'))
         .setTitle('✅ Anti-Nuke Configuration Updated')
         .setDescription('The following settings have been updated:');
 
@@ -162,7 +163,7 @@ async function handleStatus(interaction, guildId) {
     );
 
     const embed = new EmbedBuilder()
-        .setColor(0x3498db)
+        .setColor(themeColor(interaction.guildId, 'primary'))
         .setTitle('🛡️ Anti-Nuke Protection Status')
         .setDescription('Current anti-nuke configuration:')
         .addFields(
@@ -206,7 +207,7 @@ async function handleWhitelist(interaction, guildId) {
         }
 
         const embed = new EmbedBuilder()
-            .setColor(0x3498db)
+            .setColor(themeColor(interaction.guildId, 'primary'))
             .setTitle('📋 Anti-Nuke Whitelist')
             .setDescription(`**${rows.length}** whitelisted user${rows.length !== 1 ? 's' : ''}:\n\n${userList.join('\n')}`);
 

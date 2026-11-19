@@ -130,7 +130,7 @@ router.post('/', async (req, res) => {
             [req.player.id, strainId, alertType, thresholdValue]
         );
 
-        logger.info('[MarketAlerts] Created', {
+        logger.debug('[MarketAlerts] Created', {
             playerId: req.player.id,
             alertId: result.insertId,
             strainId,
@@ -233,7 +233,7 @@ router.delete('/:id', async (req, res) => {
             return res.status(404).json({ error: 'Alert not found', code: 'NOT_FOUND' });
         }
 
-        logger.info('[MarketAlerts] Deleted', {
+        logger.debug('[MarketAlerts] Deleted', {
             playerId: req.player.id,
             alertId
         });

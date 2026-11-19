@@ -1,0 +1,34 @@
+<%#
+  GET /stream/bot/overlay/music/:key (dashboard/routes/stream-bot-music.js): the song request player for an OBS browser source
+  ("CertiFried Music", audio controlled by OBS). Locals: key (null when the link is not valid). A fixed look on a transparent
+  background (stream-facing, like the other OBS overlays); /js/stream-bot-music-overlay.js plays and reports back.
+%>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<meta name="referrer" content="no-referrer">
+<title>CertiFried Music</title>
+<link rel="stylesheet" href="/css/stream-bot-music-overlay.css">
+</head>
+<body class="sbmo">
+<% if (key) { %>
+<div class="sbmo-card" id="sbmo-card" hidden>
+    <img class="sbmo-art" id="sbmo-art" alt="" hidden>
+    <div class="sbmo-text">
+        <p class="sbmo-title" id="sbmo-title"></p>
+        <p class="sbmo-artist" id="sbmo-artist"></p>
+        <p class="sbmo-by" id="sbmo-by"></p>
+    </div>
+    <div class="sbmo-bar"><span id="sbmo-progress"></span></div>
+</div>
+<audio id="sbmo-audio" preload="auto"></audio>
+<script type="application/json" id="sbmo-data"><%- JSON.stringify({ key }).replace(/</g, '\\u003c') %></script>
+<script src="/js/stream-bot-music-overlay.js" defer></script>
+<% } else { %>
+<p class="sbmo-gone">This music player link is not valid any more. Copy the current one from the Music page.</p>
+<% } %>
+</body>
+</html>

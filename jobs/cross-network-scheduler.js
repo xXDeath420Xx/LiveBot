@@ -28,13 +28,12 @@ let syncRunning = false;
 let cycleCount = 0;
 const EMBED_UPDATE_INTERVAL = 5; // Refresh embeds every 5th cycle (5 minutes)
 
-const platformColors = { twitch: 0x9146FF, kick: 0x52E252, youtube: 0xFF0000, tiktok: 0x000000, trovo: 0x30C67C, facebook: 0x1877F2, instagram: 0xE4405F };
+const platformColors = { twitch: 0x9146FF, kick: 0x52E252, youtube: 0xFF0000, tiktok: 0x000000, facebook: 0x1877F2, instagram: 0xE4405F };
 const platformUrls = {
     twitch: u => `https://twitch.tv/${u}`,
     kick: u => `https://kick.com/${u}`,
     youtube: u => `https://youtube.com/channel/${u}`,
     tiktok: u => `https://tiktok.com/@${u}`,
-    trovo: u => `https://trovo.live/s/${u}`,
     facebook: u => `https://facebook.com/gaming/${u}`,
     instagram: u => `https://instagram.com/${u}`
 };

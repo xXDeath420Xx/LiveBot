@@ -6,10 +6,10 @@ import 'dotenv/config';
 import { REST } from '@discordjs/rest';
 import { Routes } from 'discord-api-types/v10';
 import pool from '../utils/db.js';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 
 const GUILD_ID = '1469931133981687873';
-const KITSUNE_BOT_ID = '1498486251576229958';
+// The acting bot comes from guild_bot_mapping — never pinned here.
 
 const MOVES = [
   { name: 'support',      id: '1498965812898172998', parent_id: '1469931134845456531' /* 𝒯𝒽𝑒 𝒞𝒽𝒶𝓃𝓃𝑒𝓁𝓈 */ },
@@ -18,8 +18,8 @@ const MOVES = [
   { name: 'music',        id: '1498965817050792038', parent_id: '1470598657412960297' /* 𝐵🏵𝒯𝒮 (BOTS) */ },
 ];
 
-const [rows] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id = ?', [KITSUNE_BOT_ID]);
-const token = encryption.decrypt(JSON.parse(rows[0].bot_token));
+const bot = await resolveBotForGuild(GUILD_ID, { db: pool });
+const token = bot.token;
 const rest = new REST({ version: '10' }).setToken(token);
 
 for (const m of MOVES) {

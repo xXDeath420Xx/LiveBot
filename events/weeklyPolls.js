@@ -9,6 +9,7 @@
 
 import { EmbedBuilder } from 'discord.js';
 import logger from '../utils/logger.js';
+import { themeColor } from '../core/guild-theme.js';
 
 // STRICT RESTRICTION: Only these IDs are allowed
 const ALLOWED_GUILD_ID = '1452972683867459657';
@@ -164,7 +165,7 @@ async function postWeeklyPoll(guild) {
     } catch (error) {
         // Fallback to embed-based poll if native polls not supported
         const embed = new EmbedBuilder()
-            .setColor(0x9B59B6)
+            .setColor(themeColor(message.guild?.id, 'accent'))
             .setTitle(`📊 Weekly Poll`)
             .setDescription(`**${poll.question}**\n\n${poll.options.map((opt, i) => `${['1️⃣', '2️⃣', '3️⃣', '4️⃣'][i]} ${opt}`).join('\n')}`)
             .setFooter({ text: 'React to vote!' })
@@ -212,7 +213,7 @@ export async function postPollNow(channel) {
     } catch {
         // Fallback
         const embed = new EmbedBuilder()
-            .setColor(0x9B59B6)
+            .setColor(themeColor(message.guild?.id, 'accent'))
             .setTitle(`📊 Community Poll`)
             .setDescription(`**${poll.question}**\n\n${poll.options.map((opt, i) => `${['1️⃣', '2️⃣', '3️⃣', '4️⃣'][i]} ${opt}`).join('\n')}`)
             .setFooter({ text: 'React to vote!' });

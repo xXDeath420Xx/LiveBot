@@ -1,0 +1,954 @@
+<%# Avatar protection — protected images (staff avatars, roles, server icon, uploads), exact scam avatars, thresholds, Auto-Pilot, cleanse + review queue (core/avatar-protection.js). API-driven (dashboard/routes/api/features/avatar-protection.js); needs `guild` in locals. Laid out with the settings-row kit (cf-settings.css), like name-filters.ejs and nsfw-protection.ejs; every id the script below uses is unchanged. %>
+<div class="page-section" id="avatarProtectionPage" data-guild-id="<%= guild.id %>">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-user-secret"></i>
+                <span>Avatar protection</span>
+            </div>
+            <div class="page-section-subtitle">Avatars and server avatars, checked on join and on every change.</div>
+        </div>
+    </div>
+
+    <div id="apError" class="cf-notice is-bad" role="alert" hidden></div>
+    <div id="apNotice" class="cf-notice is-info" role="status" hidden></div>
+
+    <div class="cf-kpis" id="apStats" aria-label="Avatar protection at a glance">
+        <div class="cf-state cf-state--loading cf-state--compact" role="status" aria-live="polite"><span class="cf-spinner" aria-hidden="true"></span><p class="cf-state-title">Loading...</p></div>
+    </div>
+
+    <!-- Settings -->
+    <section class="cf-section" aria-labelledby="ap-settings-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="ap-settings-title">Settings</h2>
+                <p class="cf-section-desc">At or above the act threshold your action is carried out; between the two thresholds the member waits in the review queue. Members you mark "not a match" are skipped too. Staff and allowlisted members are never acted on. The allowlist, and the pause that holds every protection, are on <a href="/manage/<%= guild.id %>?page=protection-settings">Protection settings</a>.</p>
+            </div>
+            <div class="cf-section-actions"><span id="apOnBadge" class="cf-pill" hidden></span></div>
+        </header>
+        <div class="cf-rows">
+            <div id="apPermWarn" class="cf-notice is-warn" hidden></div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="apEnabled">Check avatars</label>
+                    <p class="cf-row-desc">On join and on every avatar or server-avatar change.</p>
+                </div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="apEnabled" data-feature-switch></div>
+            </div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="apDm">Tell people why by DM</label>
+                    <p class="cf-row-desc">When they are kicked, banned or timed out.</p>
+                </div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="apDm"></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="apAuto">Act threshold</label>
+                    <p class="cf-row-desc">Near-exact copies: a re-uploaded staff avatar usually scores 0.92 to 1.00.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-range"><input type="range" id="apAuto" min="0.70" max="1" step="0.01"><span class="cf-range-value" id="apAutoVal"></span></div>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="apReview">Review threshold</label>
+                    <p class="cf-row-desc">Zoomed, recoloured or screenshotted copies usually score 0.75 to 0.90. Unrelated avatars stay far below 0.70.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-range"><input type="range" id="apReview" min="0.70" max="1" step="0.01"><span class="cf-range-value" id="apReviewVal"></span></div>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="apAction">Action at the act threshold</label>
+                    <p class="cf-row-desc">Log only posts to the server log and puts the member in the review queue.</p>
+                </div>
+                <div class="cf-row-control"><select id="apAction" class="form-select"></select></div>
+            </div>
+            <div class="cf-row cf-row--sub">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="apFlagRole">Role for the flag action</label>
+                    <p class="cf-row-desc">Taken off again when they change to an avatar that does not match. It must sit below the bot's highest role.</p>
+                </div>
+                <div class="cf-row-control"><select id="apFlagRole" class="form-select"></select></div>
+            </div>
+            <div class="cf-row cf-row--sub">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="apTimeout">Timeout length</label>
+                    <p class="cf-row-desc">Used when the action is Timeout. From 1 to 40320 minutes (28 days).</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-unit"><input id="apTimeout" type="number" min="1" max="40320" class="form-control"><span class="cf-unit">minutes</span></div>
+                </div>
+            </div>
+            <div class="cf-section-foot">
+                <button type="button" class="btn btn-primary" id="apSaveSettings"><span>Save settings</span></button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Protected images -->
+    <section class="cf-section" aria-labelledby="ap-images-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="ap-images-title">Protected images</h2>
+                <p class="cf-section-desc">Avatars that look like one of these are caught. Adding an image re-checks everyone already here and sends matches to the review queue. Pictures too plain to compare (flat colours, faint gradients) are refused.</p>
+            </div>
+            <div class="cf-section-actions"><span id="apImgCount" class="cf-pill"></span></div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="apFind">A member's avatar</label>
+                    <p class="cf-row-desc">Find them, then protect their avatar, their server avatar or both.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="ap-inline">
+                        <input id="apFind" class="form-control" maxlength="64" placeholder="Name, @mention or user ID">
+                        <button type="button" class="btn btn-secondary" id="apFindBtn"><span>Find</span></button>
+                    </div>
+                </div>
+            </div>
+            <div id="apFindResults" class="ap-list"></div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="apRolePick">Every member of a role</label>
+                    <p class="cf-row-desc">A snapshot of who has the role now (up to 200). Auto-Pilot below keeps staff avatars current automatically.</p>
+                </div>
+                <div class="cf-row-control ap-stack">
+                    <select id="apRolePick" class="form-select"></select>
+                    <select id="apRoleScope" class="form-select" aria-label="Which avatars">
+                        <option value="both">Avatar and server avatar</option>
+                        <option value="global">Avatar only</option>
+                        <option value="server">Server avatar only</option>
+                    </select>
+                    <button type="button" class="btn btn-secondary" id="apRoleAdd"><span>Protect this role's avatars</span></button>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <span class="cf-row-label">The server icon</span>
+                    <p class="cf-row-desc">Catches accounts that use the server's own icon as their avatar.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="ap-inline ap-inline--end"><img id="apIconPreview" class="ap-thumb" alt="" hidden>
+                        <button type="button" class="btn btn-secondary" id="apIconAdd"><span>Protect the server icon</span></button></div>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="apUploadFile">Upload an image</label>
+                    <p class="cf-row-desc">Protect it, so similar avatars match, or add it as a known scam avatar, so only exact copies match.</p>
+                </div>
+                <div class="cf-row-control ap-stack">
+                    <input type="file" id="apUploadFile" class="form-control" accept="image/png,image/jpeg,image/webp,image/gif">
+                    <input id="apUploadLabel" class="form-control" maxlength="120" placeholder="Label (optional)" aria-label="Image label">
+                    <select id="apUploadTarget" class="form-select" aria-label="Use as">
+                        <option value="protect">Protect it (similar avatars match)</option>
+                        <option value="scam">Known scam avatar (exact copies only)</option>
+                    </select>
+                    <button type="button" class="btn btn-secondary" id="apUploadBtn"><span>Add image</span></button>
+                </div>
+            </div>
+            <div class="ap-bar"><div class="cf-segmented ap-tabs" id="apImgTabs" role="group" aria-label="Which images"></div>
+                <div class="cf-search ap-search" id="cfk-ap-img-search-wrap" hidden><i class="fas fa-magnifying-glass" aria-hidden="true"></i><input type="search" id="cfk-ap-img-search" class="form-control form-control-sm" placeholder="Search images" aria-label="Search protected images"></div></div>
+            <div id="apImages" class="ap-list"></div>
+        </div>
+    </section>
+
+    <!-- Scam avatars -->
+    <section class="cf-section" aria-labelledby="ap-scam-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="ap-scam-title">Known scam avatars</h2>
+                <p class="cf-section-desc">Exact copies only, because flat images like these are too plain to score. Avatars you ban from the review queue are added here automatically.</p>
+            </div>
+            <div class="cf-section-actions"><span id="apScamBadge" class="cf-pill"></span></div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="apScamEnabled">Check scam avatars</label>
+                    <p class="cf-row-desc">Some real people use a plain black avatar; log only is the safer start.</p>
+                </div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="apScamEnabled"></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="apScamAction">Action for scam avatars</label>
+                </div>
+                <div class="cf-row-control"><select id="apScamAction" class="form-select"></select></div>
+            </div>
+            <div class="cf-section-foot">
+                <button type="button" class="btn btn-primary" id="apScamSave"><span>Save</span></button>
+            </div>
+            <div class="cf-rows-head" id="ap-scam-list-head">Scam avatar list</div>
+            <div id="apScamList" class="ap-list"></div>
+        </div>
+    </section>
+
+    <!-- Test -->
+    <section class="cf-section" aria-labelledby="ap-test-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="ap-test-title">Test a member or an image</h2>
+                <p class="cf-section-desc">Scores an avatar against every protected image and the scam list. Nothing is stored or acted on.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="apTestFind">Member</label>
+                    <p class="cf-row-desc">Their avatar and server avatar are both tested.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="ap-inline">
+                        <input id="apTestFind" class="form-control" maxlength="64" placeholder="Name, @mention or ID">
+                        <button type="button" class="btn btn-secondary" id="apTestFindBtn"><span>Find</span></button>
+                    </div>
+                </div>
+            </div>
+            <div id="apTestFindResults" class="ap-list"></div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="apTestFile">Image</label>
+                    <p class="cf-row-desc">PNG, JPEG, WebP or GIF.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="ap-inline">
+                        <input type="file" id="apTestFile" class="form-control" accept="image/png,image/jpeg,image/webp,image/gif">
+                        <button type="button" class="btn btn-secondary" id="apTestFileBtn"><span>Test image</span></button>
+                    </div>
+                </div>
+            </div>
+            <div id="apTestResult" class="ap-out" role="status" aria-live="polite"></div>
+        </div>
+    </section>
+
+    <!-- Auto-Pilot -->
+    <section class="cf-section" aria-labelledby="ap-ap-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="ap-ap-title">Auto-Pilot: protect staff avatars</h2>
+                <p class="cf-section-desc">Keeps each covered staff member's avatars protected and follows them when they change. Default avatars and pictures too plain to compare are skipped.</p>
+            </div>
+            <div class="cf-section-actions"><span id="apApBadge" class="cf-pill"></span></div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-notice is-info">Auto-Pilot is shared with <a href="/manage/<%= guild.id %>?page=name-filters">Name filters</a>: changes here apply there too.</div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="apApEnabled">Auto-Pilot on</label>
+                </div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="apApEnabled"></div>
+            </div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="apApManagers">Cover bot managers and allowlisted members</label>
+                </div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="apApManagers"></div>
+            </div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="apApAvatars">Protect their avatars</label>
+                    <p class="cf-row-desc">Off means Auto-Pilot protects names only.</p>
+                </div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="apApAvatars"></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="apApRolePick">Staff roles covered</label>
+                    <p class="cf-row-desc">Everyone with one of these roles has their avatars protected.</p>
+                    <div id="apApRoles" class="cf-chips ap-chips"></div>
+                </div>
+                <div class="cf-row-control">
+                    <div class="ap-inline">
+                        <select id="apApRolePick" class="form-select"></select>
+                        <button type="button" class="btn btn-secondary" id="apApRoleAdd"><span>Cover role</span></button>
+                    </div>
+                </div>
+            </div>
+            <div class="cf-section-foot">
+                <span class="cf-foot-note" id="apApSynced"></span>
+                <button type="button" class="btn btn-secondary" id="apApSync"><span>Sync now</span></button>
+                <button type="button" class="btn btn-primary" id="apApSave"><span>Save Auto-Pilot</span></button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Cleanse -->
+    <section class="cf-section" id="apCleanseCard" aria-labelledby="ap-cleanse-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="ap-cleanse-title">Cleanse: check everyone already here</h2>
+                <p class="cf-section-desc">Each avatar is downloaded once, a few at a time, so a large server takes a few minutes.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--stack">
+                <div class="ap-lines">
+                    <p class="ap-line"><span class="ap-term">Review first</span> checks every member's avatars and puts matches in the review queue.</p>
+                    <p class="ap-line"><span class="ap-term">Force</span> acts at once on near-exact matches and scam avatars with your actions. Log-only and review-band matches still go to the queue.</p>
+                </div>
+                <div class="ap-progress" id="apProgressWrap" hidden><div class="ap-progress-bar" id="apProgress"></div></div>
+            </div>
+            <div class="cf-section-foot">
+                <span id="apCleanseState" class="cf-foot-note" role="status" aria-live="polite"></span>
+                <button type="button" class="btn btn-danger" id="apCleanseForce"><span>Force cleanse</span></button>
+                <button type="button" class="btn btn-primary" id="apCleanseReview"><span>Start review scan</span></button>
+            </div>
+        </div>
+    </section>
+
+    <!-- Review queue -->
+    <section class="cf-section" aria-labelledby="ap-review-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="ap-review-title">Review queue</h2>
+                <p class="cf-section-desc">Ban and kick re-check each member first (still here, same avatar); staff and exempt members are left alone. Not a match stops those avatars being flagged against those images again.</p>
+            </div>
+            <div class="cf-section-actions"><span id="apQueueCount" class="cf-pill"></span></div>
+        </header>
+        <div class="cf-rows">
+            <div class="ap-bar"><div class="cf-segmented ap-tabs" id="apReviewTabs" role="group" aria-label="Which entries"></div></div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="apMinScore">Lowest score shown</label>
+                    <p class="cf-row-desc">Hide weaker matches from the list.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-range"><input type="range" id="apMinScore" min="0.70" max="1" step="0.01" value="0.70"><span class="cf-range-value" id="apMinScoreVal"></span></div>
+                </div>
+            </div>
+            <div class="ap-bar" id="apBulk">
+                <label class="cf-choice ap-select-all" for="apSelectAll"><input type="checkbox" id="apSelectAll"> <span>Select all</span></label>
+                <span class="ap-muted" id="apSelCount">0 selected</span>
+                <span class="ap-actions">
+                    <button type="button" class="btn btn-sm btn-danger" data-bulk="ban">Ban</button>
+                    <button type="button" class="btn btn-sm btn-secondary" data-bulk="kick">Kick</button>
+                    <button type="button" class="btn btn-sm btn-secondary" data-bulk="safe">Not a match</button>
+                    <button type="button" class="btn btn-sm btn-secondary" data-bulk="skip">Skip</button>
+                </span>
+            </div>
+            <div id="apReviews" class="ap-reviews"></div>
+        </div>
+    </section>
+
+    <!-- Recent hits -->
+    <section class="cf-section" aria-labelledby="ap-hits-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="ap-hits-title">Recent hits</h2>
+                <p class="cf-section-desc">What avatar checks did most recently.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div id="apHits" class="ap-list"></div>
+        </div>
+    </section>
+
+    <!-- Export / import (versioned JSON) -->
+    <section class="cf-section" id="apIoCard" aria-labelledby="ap-io-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="ap-io-title">Export and import</h2>
+                <p class="cf-section-desc">This server's protected images and scam avatars as a JSON file of fingerprints; no pictures leave the server.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <span class="cf-row-label">Download</span>
+                    <p class="cf-row-desc">Every protected image and scam avatar on this server.</p>
+                </div>
+                <div class="cf-row-control ap-control-end"><a class="btn btn-secondary" id="apExport" href="#" download><span>Download JSON</span></a></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="apImportFile">Fingerprint file to import</label>
+                    <p class="cf-row-desc">Previewed first (added, already there, damaged). Imported entries have no picture to show, and the AI second opinion skips them. Adding entries re-checks the members in the background.</p>
+                </div>
+                <div class="cf-row-control"><input type="file" id="apImportFile" accept="application/json,.json" class="form-control"></div>
+            </div>
+            <div id="apImportPlan" class="ap-out" hidden></div>
+            <div class="cf-section-foot">
+                <button type="button" class="btn btn-secondary" id="apImportPreview"><span>Preview import</span></button>
+                <button type="button" class="btn btn-primary" id="apImportApply" hidden><span>Import</span></button>
+            </div>
+        </div>
+    </section>
+</div>
+
+<style>
+  /* Pieces the script draws (tabs, lists, chips, review rows, test output), on the kit's tokens. */
+  #avatarProtectionPage .cf-kpis .cf-state { grid-column: 1 / -1; }
+  /* A tab bar the script has not filled is hidden by :has(), which the kit's panel dividers cannot see. */
+  #avatarProtectionPage .cf-rows { overflow: clip; }
+  #avatarProtectionPage .cf-rows > .ap-bar:first-child:has(> .ap-tabs:empty) + * { border-top-color: transparent; }
+  #avatarProtectionPage .cf-kpi-value.ap-ok { color: var(--cf-success); }
+  #avatarProtectionPage .cf-kpi-value.ap-hit { color: var(--cf-danger); }
+  #avatarProtectionPage .cf-pill:empty { display: none; }
+  #avatarProtectionPage .ap-stack { display: flex; flex-direction: column; gap: var(--cf-2); align-items: stretch; }
+  #avatarProtectionPage .ap-stack > .btn { align-self: flex-start; }
+  #avatarProtectionPage .ap-search { margin-left: auto; flex: 0 1 16rem; min-width: 0; }
+  #avatarProtectionPage .ap-search[hidden] { display: none; }
+  #avatarProtectionPage .ap-muted { color: var(--cf-text-3); font-size: var(--cf-text-sm); }
+  #avatarProtectionPage .ap-hit { color: var(--cf-danger); }
+  #avatarProtectionPage .ap-ok { color: var(--cf-success); }
+  #avatarProtectionPage .ap-mid { color: var(--cf-warning); }
+  #avatarProtectionPage .ap-out .ap-warn { color: var(--cf-warning); }
+  #avatarProtectionPage .ap-lines { display: grid; gap: var(--cf-2); }
+  #avatarProtectionPage .ap-line { margin: 0; font-size: var(--cf-text-sm); color: var(--cf-text-2); line-height: 1.5; }
+  #avatarProtectionPage .ap-term { font-weight: 600; color: var(--cf-text); }
+  #avatarProtectionPage .ap-control-end { align-items: flex-end; }
+  #avatarProtectionPage .ap-inline { display: flex; flex-wrap: wrap; gap: var(--cf-2); align-items: center; }
+  #avatarProtectionPage .ap-inline--end { justify-content: flex-end; }
+  #avatarProtectionPage .ap-inline > input, #avatarProtectionPage .ap-inline > select { flex: 1 1 10rem; min-width: 0; width: auto; margin: 0; }
+
+  /* Toolbars above a list: segmented tabs, bulk actions. */
+  #avatarProtectionPage .ap-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--cf-2) var(--cf-3); padding: var(--cf-3) var(--cf-5); }
+  #avatarProtectionPage .ap-bar[hidden], #avatarProtectionPage .ap-bar:has(> .ap-tabs:empty) { display: none; }
+  #avatarProtectionPage .cf-rows-head:has(+ .ap-list:empty) { display: none; }
+  #avatarProtectionPage .ap-tabs .cf-segment { font-variant-numeric: tabular-nums; }
+  #avatarProtectionPage .ap-actions { display: inline-flex; flex-wrap: wrap; gap: var(--cf-1); align-items: center; }
+  #avatarProtectionPage .ap-bar .ap-actions { margin-left: auto; }
+  #avatarProtectionPage .ap-select-all { min-height: 0; }
+
+  /* Lists of members, images and entries. */
+  #avatarProtectionPage .ap-list { max-height: 28rem; overflow-y: auto; }
+  #avatarProtectionPage .ap-list:empty, #avatarProtectionPage .ap-out:empty, #avatarProtectionPage .ap-reviews:empty { display: none; }
+  #avatarProtectionPage .ap-item { display: flex; align-items: center; flex-wrap: wrap; gap: var(--cf-2) var(--cf-3); font-size: var(--cf-text-sm); color: var(--cf-text); min-width: 0; }
+  #avatarProtectionPage .ap-list > .ap-item { padding: var(--cf-2) var(--cf-5); }
+  #avatarProtectionPage .ap-list > .ap-item + .ap-item { border-top: 1px solid var(--cf-border); }
+  #avatarProtectionPage .ap-item.ap-off { opacity: 0.55; }
+  #avatarProtectionPage .ap-item img, #avatarProtectionPage img.ap-thumb, #avatarProtectionPage span.ap-thumb { width: 32px; height: 32px; border-radius: 50%; flex: none; object-fit: cover; background: var(--cf-surface-3); }
+  #avatarProtectionPage span.ap-thumb { display: inline-flex; align-items: center; justify-content: center; color: var(--cf-text-3); font-size: 12px; }
+  #avatarProtectionPage .ap-item img.ap-big { width: 48px; height: 48px; border-radius: var(--cf-radius); }
+  #avatarProtectionPage .ap-swatch-black { background: black; border: 1px solid var(--cf-border-strong); }
+  #avatarProtectionPage .ap-swatch-clear { background: none; border: 1px dashed var(--cf-border-strong); }
+  #avatarProtectionPage .ap-grow { flex: 1 1 12rem; min-width: 0; overflow-wrap: anywhere; }
+  #avatarProtectionPage .ap-sub { display: block; font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+  #avatarProtectionPage .ap-chips { margin-top: var(--cf-2); }
+  #avatarProtectionPage .ap-progress { height: 6px; background: var(--cf-surface-3); border-radius: 999px; overflow: hidden; margin-top: var(--cf-3); }
+  #avatarProtectionPage .ap-progress[hidden] { display: none; }
+  #avatarProtectionPage .ap-progress-bar { height: 100%; width: 0; background: var(--cf-accent); transition: width 0.4s; }
+
+  /* Test output and import plan: padded blocks inside the panel. */
+  #avatarProtectionPage .ap-out { display: grid; gap: var(--cf-2); padding: var(--cf-4) var(--cf-5); font-size: var(--cf-text-sm); min-width: 0; }
+  #avatarProtectionPage .ap-out[hidden] { display: none; }
+  #avatarProtectionPage .ap-out .ap-list { border: 1px solid var(--cf-border); border-radius: var(--cf-radius); }
+  #avatarProtectionPage .ap-out .ap-list > .ap-item { padding: var(--cf-2) var(--cf-3); }
+  #avatarProtectionPage .ap-out ul { margin: var(--cf-1) 0 0; padding-left: 1.2rem; color: var(--cf-text-2); }
+  #avatarProtectionPage details summary { cursor: pointer; color: var(--cf-text-2); font-size: var(--cf-text-sm); }
+  #avatarProtectionPage .ap-score { font-size: var(--cf-text-lg); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  /* Review entries: their avatar beside the matched picture, the score, details and decisions. */
+  #avatarProtectionPage .ap-rev { display: grid; grid-template-columns: auto auto auto minmax(0, 1fr) auto; gap: var(--cf-3) var(--cf-4); align-items: center; padding: var(--cf-3) var(--cf-5); }
+  #avatarProtectionPage .ap-rev + .ap-rev { border-top: 1px solid var(--cf-border); }
+  #avatarProtectionPage .ap-rev .ap-check { width: 16px; height: 16px; accent-color: var(--cf-accent); }
+  #avatarProtectionPage .ap-pair { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+  #avatarProtectionPage .ap-pair img, #avatarProtectionPage .ap-pair span.ap-thumb { width: 64px; height: 64px; border-radius: var(--cf-radius); object-fit: cover; background: var(--cf-surface-3); }
+  #avatarProtectionPage .ap-rev-info { display: grid; gap: 2px; min-width: 0; font-size: var(--cf-text-sm); overflow-wrap: anywhere; }
+  #avatarProtectionPage .ap-rev-actions { display: flex; flex-wrap: wrap; gap: var(--cf-1); justify-content: flex-end; }
+
+  @media (max-width: 800px) {
+    #avatarProtectionPage .ap-rev { grid-template-columns: auto auto auto minmax(0, 1fr); }
+    #avatarProtectionPage .ap-rev .ap-rev-actions { grid-column: 1 / -1; justify-content: flex-start; }
+  }
+  @media (max-width: 640px) {
+    #avatarProtectionPage .ap-inline > input[type="file"] { flex-basis: 100%; }
+    #avatarProtectionPage .ap-bar, #avatarProtectionPage .ap-list > .ap-item, #avatarProtectionPage .ap-out,
+    #avatarProtectionPage .ap-rev { padding-left: var(--cf-4); padding-right: var(--cf-4); }
+    #avatarProtectionPage .ap-bar .ap-actions, #avatarProtectionPage .ap-search { margin-left: 0; flex: 1 1 100%; }
+    #avatarProtectionPage .ap-rev { grid-template-columns: auto auto minmax(0, 1fr); }
+    #avatarProtectionPage .ap-rev > :first-child:empty { display: none; }
+    #avatarProtectionPage .ap-rev-score { grid-column: 1 / -1; }
+    #avatarProtectionPage .ap-pair img, #avatarProtectionPage .ap-pair span.ap-thumb { width: 52px; height: 52px; }
+  }
+</style>
+
+<script>
+(function () {
+  const root = document.getElementById('avatarProtectionPage');
+  if (!root) return;
+  const guildId = root.dataset.guildId;
+  const api = (p) => `/api/guilds/${guildId}/avatar-protection${p}`;
+  const $ = (id) => document.getElementById(id);
+  const ACTION_LABEL = { log: 'Log only and review', flag: 'Flag with role', timeout: 'Timeout', kick: 'Kick', ban: 'Ban' };
+  const HIT_WORD = { avatar_banned: 'Banned', avatar_kicked: 'Kicked', avatar_timeout: 'Timed out', avatar_flagged: 'Flagged',
+    avatar_logged: 'Logged', avatar_queued: 'Sent to review', failed: 'Could not act' };
+  let state = null;
+  let imgTab = 'active';
+  let reviewTab = 'pending';
+  let reviews = [];
+  const selected = new Set();
+  let apRoles = [];
+  let loading = false;     // true while load() writes values into controls (header switch mirror)
+  let imgQuery = '';
+
+  // DOM builder: every server value goes in through textContent / attributes, never markup.
+  function el(tag, attrs = {}, ...kids) {
+    const n = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (v == null || v === false) continue;
+      if (k === 'class') n.className = v;
+      else if (k === 'text') n.textContent = v;
+      else if (k.startsWith('on')) n.addEventListener(k.slice(2), v);
+      else n.setAttribute(k, v === true ? '' : v);
+    }
+    for (const kid of kids.flat()) if (kid != null && kid !== false) n.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
+    return n;
+  }
+  const icon = (cls) => el('i', { class: cls, 'aria-hidden': 'true' });
+  const when = (t) => (t ? new Date(t).toLocaleString() : '');
+  const day = (t) => (t ? new Date(t).toLocaleDateString() : '');
+  const pct = (s) => `${Math.round(Number(s) * 100)}%`;
+  const can = () => state && state.actor.canConfigure;
+  const img = (src, cls) => (src ? el('img', { src, alt: '', class: cls || '', loading: 'lazy' }) : el('span', { class: 'ap-thumb' }, icon('fas fa-user')));
+  // Kit empty / loading / error states (cf-settings.css .cf-state).
+  function stateBox(title, text, kind = 'empty', compact = false) {
+    return el('div', { class: `cf-state cf-state--${kind}${compact ? ' cf-state--compact' : ''}`, role: kind === 'error' ? 'alert' : kind === 'loading' ? 'status' : null },
+      kind === 'loading' ? el('span', { class: 'cf-spinner', 'aria-hidden': 'true' }) : null,
+      el('p', { class: 'cf-state-title', text: title }), text ? el('p', { class: 'cf-state-text', text }) : null);
+  }
+  const tab = (label, active, onclick) => el('button', { type: 'button', class: 'cf-segment', 'aria-pressed': active ? 'true' : 'false', onclick }, label);
+
+  async function req(url, options = {}) {
+    const res = await fetch(url, { credentials: 'same-origin', headers: options.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }, ...options });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
+    return body;
+  }
+  const post = (p, body, method = 'POST') => req(api(p), { method, body: JSON.stringify(body || {}) });
+  const showError = (m) => { const e = $('apError'); e.hidden = !m; e.textContent = m || ''; if (m) e.scrollIntoView({ block: 'nearest' }); };
+  const notice = (m) => { const e = $('apNotice'); e.hidden = !m; e.textContent = m || ''; };
+  async function act(fn, done, reload = true) {
+    showError('');
+    try { const out = await fn(); if (done) notice(typeof done === 'function' ? done(out) : done); if (reload) await load(); return out; } catch (err) { showError(err.message); return null; }
+  }
+  function actionSelect(select, value) {
+    select.replaceChildren(...state.actions.map(a => el('option', { value: a, text: ACTION_LABEL[a] + (a !== 'log' && !state.botPerms[a] ? ' (bot lacks permission)' : '') })));
+    select.value = value || 'log';
+  }
+  // gate: a role the bot gives (the flag role). Roles at or above the bot's highest role are listed but
+  // disabled and marked, except the one already saved (as on the Security page).
+  function roleOptions(select, roles, placeholder, value, gate = false) {
+    const top = state && typeof state.botTopPosition === 'number' ? state.botTopPosition : null;
+    select.replaceChildren(el('option', { value: '', text: placeholder }), ...roles.map(r => {
+      const above = gate && top !== null && typeof r.position === 'number' && r.position >= top;
+      const name = r.members != null ? `${r.name} (${r.members})` : r.name;
+      return el('option', { value: r.id, text: name + (above ? ' (above the bot)' : ''), 'data-color': r.color || null, disabled: above && r.id !== value });
+    }));
+    select.value = value || '';
+  }
+  function addedText(o) {
+    const parts = [`${o.added.length} image(s) protected`];
+    if (o.existing) parts.push(`${o.existing} already protected`);
+    if (o.skipped && o.skipped.length) parts.push(`${o.skipped.length} skipped (${o.skipped.slice(0, 2).map(s => `${s.label}: ${s.why}`).join('; ')})`);
+    return parts.join(', ') + '. Everyone is being re-checked in the background; matches go to the review queue.';
+  }
+
+  // ── status + settings ────────────────────────────────────────────────────
+  function stat(label, value, cls) {
+    const small = !/^\d/.test(String(value));
+    return el('div', { class: 'cf-kpi' }, el('div', { class: 'cf-kpi-label', text: label }),
+      el('div', { class: 'cf-kpi-value' + (small ? ' is-small' : '') + (cls ? ` ${cls}` : ''), text: String(value) }));
+  }
+  function renderStats() {
+    const o = state.overview; const s = state.settings;
+    $('apStats').replaceChildren(
+      stat('Avatar checks', s.enabled ? 'On' : 'Off', s.enabled ? 'ap-ok' : ''),
+      stat('Protected images', `${o.protected.active} of ${o.protected.limit}`), stat('By Auto-Pilot', o.protected.autopilot),
+      stat('Scam avatars', s.scam.enabled ? o.scamAvatars : 'Off'),
+      stat('Hits, last 30 days', o.hits30d),
+      stat('Waiting for review', (o.reviews && o.reviews.pending) || 0, (o.reviews && o.reviews.pending) ? 'ap-hit' : ''),
+      stat('Not a match', (o.reviews && o.reviews.safe) || 0),
+      stat('Last hit', o.lastHitAt ? day(o.lastHitAt) : 'Never'));
+  }
+  function syncSliders() {
+    $('apAutoVal').textContent = Number($('apAuto').value).toFixed(2);
+    $('apReviewVal').textContent = Number($('apReview').value).toFixed(2);
+  }
+  $('apAuto').addEventListener('input', () => { if (Number($('apReview').value) > Number($('apAuto').value)) $('apReview').value = $('apAuto').value; syncSliders(); });
+  $('apReview').addEventListener('input', () => { if (Number($('apReview').value) > Number($('apAuto').value)) $('apAuto').value = $('apReview').value; syncSliders(); });
+  function renderSettings() {
+    const s = state.settings;
+    $('apEnabled').checked = s.enabled;
+    $('apDm').checked = s.dm;
+    $('apAuto').value = s.autoThreshold; $('apReview').value = s.reviewThreshold; syncSliders();
+    actionSelect($('apAction'), s.action);
+    $('apTimeout').value = s.timeoutMinutes;
+    roleOptions($('apFlagRole'), state.guildRoles, '"Flagged Avatar" (made when first needed)', s.flagRoleId, true);
+    const missing = Object.entries(state.botPerms).filter(([, ok]) => !ok).map(([a]) => ACTION_LABEL[a]);
+    $('apPermWarn').hidden = !missing.length;
+    $('apPermWarn').textContent = missing.length ? `The bot is missing the permission for: ${missing.join(', ')}. Those actions will log "could not act" instead.` : '';
+    for (const id of ['apEnabled', 'apDm', 'apAuto', 'apReview', 'apAction', 'apTimeout', 'apFlagRole', 'apSaveSettings']) $(id).disabled = !can();
+    loading = true; $('apEnabled').dispatchEvent(new Event('change')); loading = false;   // mirror into the header switch
+  }
+  $('apEnabled').addEventListener('change', () => {
+    const b = $('apOnBadge');
+    const on = $('apEnabled').checked;
+    b.hidden = false;
+    b.className = 'cf-pill' + (on ? ' is-ok' : '');
+    b.textContent = on && state && state.settings ? `On, ${ACTION_LABEL[state.settings.action] || state.settings.action}` : (on ? 'On' : 'Off');
+  });
+  // The master switch lives in the page header (data-feature-switch); a toggle there saves at once.
+  $('apEnabled').addEventListener('change', async (e) => {
+    if (loading || !state) return;
+    const on = e.target.checked;
+    if (on === state.settings.enabled) return;
+    if (on && !confirm(`Switch avatar checks on? From now on every join and every avatar change is checked. Near-exact matches: ${ACTION_LABEL[state.settings.action]}.`)) {
+      loading = true; e.target.checked = false; e.target.dispatchEvent(new Event('change')); loading = false; return;
+    }
+    const out = await act(() => post('/settings', { enabled: on }), on ? 'Avatar checks switched on.' : 'Avatar checks switched off.', false);
+    if (out) { state.settings.enabled = on; renderStats(); paintApBadge(); }
+    else { loading = true; e.target.checked = !on; e.target.dispatchEvent(new Event('change')); loading = false; }
+  });
+  $('apSaveSettings').addEventListener('click', () => {
+    const enabling = $('apEnabled').checked && !state.settings.enabled;
+    const action = $('apAction').value;
+    if (enabling && !confirm(`Switch avatar checks on? From now on every join and every avatar change is checked. Near-exact matches: ${ACTION_LABEL[action]}.`)) return;
+    if (action !== 'log' && action !== state.settings.action && !confirm(`${ACTION_LABEL[action]} members whose avatar scores ${Number($('apAuto').value).toFixed(2)} or more? Log only (review queue) is the safer start.`)) return;
+    act(() => post('/settings', { enabled: $('apEnabled').checked, dm: $('apDm').checked, autoThreshold: Number($('apAuto').value),
+      reviewThreshold: Number($('apReview').value), action, flagRoleId: $('apFlagRole').value || null, timeoutMinutes: Number($('apTimeout').value) }), 'Settings saved.');
+  });
+
+  // ── protected images ─────────────────────────────────────────────────────
+  const ITABS = [['active', 'Active'], ['manual', 'Added by staff'], ['autopilot', 'Auto-Pilot'], ['removed', 'Removed']];
+  const inTab = (i, t) => (t === 'removed' ? i.removed : !i.removed && (t === 'active' || (t === 'autopilot' ? i.source === 'autopilot' : i.source !== 'autopilot')));
+  function renderImages() {
+    $('apImgCount').textContent = `${state.images.filter(i => !i.removed).length} of ${state.limits.protected}`;
+    $('apImgTabs').replaceChildren(...ITABS.map(([t, label]) => tab(`${label} (${state.images.filter(i => inTab(i, t)).length})`, t === imgTab, () => { imgTab = t; renderImages(); })));
+    $('cfk-ap-img-search-wrap').hidden = state.images.length <= 15 && !imgQuery;
+    const q = imgQuery.toLowerCase();
+    const rows = state.images.filter(i => inTab(i, imgTab)).filter(i => !q || `#${i.id} ${i.label || ''} ${i.sourceLabel || ''}`.toLowerCase().includes(q));
+    if (!rows.length) { $('apImages').replaceChildren(q ? stateBox('No images match', 'Try another word.') : imgTab === 'active' ? stateBox('Nothing protected yet', 'Add a staff member, a role, the server icon or an image above, or switch on Auto-Pilot.') : stateBox('Nothing here')); return; }
+    $('apImages').replaceChildren(...rows.map(i => {
+      const u = i.protectedUserId ? state.users[i.protectedUserId] : null;
+      const btn = i.removed
+        ? el('button', { type: 'button', class: 'btn btn-sm btn-secondary', disabled: !can(), onclick: () => act(() => post(`/images/${i.id}/restore`), `Image #${i.id} restored.`) }, 'Restore')
+        : el('button', { type: 'button', class: 'btn btn-sm btn-secondary', disabled: !can(), onclick: () => {
+          if (!confirm(`Stop protecting image #${i.id}?${i.source === 'autopilot' ? ' Auto-Pilot will remember and not add it again.' : ''}`)) return;
+          act(() => req(api(`/images/${i.id}`), { method: 'DELETE' }), `Image #${i.id} removed.`);
+        } }, 'Remove');
+      return el('div', { class: 'ap-item' + (i.removed ? ' ap-off' : '') },
+        img(i.thumb, 'ap-big'),
+        el('span', { class: 'ap-grow' },
+          el('span', { title: i.label || '', text: `#${i.id} ${i.label || ''}` }),
+          el('span', { class: 'ap-sub', text: i.sourceLabel + (u && !u.inServer ? ', left the server' : '') }),
+          el('span', { class: 'ap-sub', text: `${i.hits} hit(s)${i.lastHitAt ? `, last ${day(i.lastHitAt)}` : ''}${i.notMatches ? `, ${i.notMatches} not a match` : ''}` })),
+        btn);
+    }));
+  }
+  $('cfk-ap-img-search').addEventListener('input', (e) => { imgQuery = e.target.value.trim(); if (state) renderImages(); });
+  async function findMembers(q, box, render) {
+    if (!q) { box.replaceChildren(); return; }
+    box.replaceChildren(el('div', { class: 'ap-item ap-muted', text: 'Searching...' }));
+    try {
+      const { members } = await req(api(`/members?q=${encodeURIComponent(q)}`));
+      box.replaceChildren(...(members.length ? members.map(render) : [el('div', { class: 'ap-item ap-muted', text: 'No one found. Try their user ID.' })]));
+    } catch (err) { box.replaceChildren(el('div', { class: 'ap-item ap-hit', text: err.message })); }
+  }
+  function protectRow(m) {
+    const buttons = [];
+    const add = (scope, label) => el('button', { type: 'button', class: 'btn btn-sm btn-secondary', disabled: !can(), onclick: () =>
+      act(() => post('/protected', { source: 'member', userId: m.id, scope }), addedText).then(() => { $('apFindResults').replaceChildren(); loadReviewsSoon(); }) }, label);
+    if (m.globalAvatar) buttons.push(add('global', 'Avatar'));
+    if (m.serverAvatar) buttons.push(add('server', 'Server avatar'));
+    if (m.globalAvatar && m.serverAvatar) buttons.push(add('both', 'Both'));
+    return el('div', { class: 'ap-item' },
+      img(m.serverAvatar || m.globalAvatar),
+      m.serverAvatar && m.globalAvatar ? img(m.globalAvatar) : null,
+      el('span', { class: 'ap-grow' }, m.displayName, ' ', el('span', { class: 'ap-muted', text: `@${m.username}${m.bot ? ', bot' : ''}` })),
+      buttons.length ? el('span', { class: 'ap-actions' }, buttons) : el('span', { class: 'ap-muted', text: 'Default avatar' }));
+  }
+  $('apFindBtn').addEventListener('click', () => findMembers($('apFind').value.trim(), $('apFindResults'), protectRow));
+  $('apFind').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('apFindBtn').click(); } });
+  $('apRoleAdd').addEventListener('click', () => {
+    const roleId = $('apRolePick').value; if (!roleId) { notice('Pick a role first.'); return; }
+    const role = state.guildRoles.find(r => r.id === roleId);
+    if (!confirm(`Protect the avatars of everyone with ${role ? role.name : 'this role'}${role && role.members ? ` (${role.members})` : ''}?`)) return;
+    act(() => post('/protected', { source: 'role', roleId, scope: $('apRoleScope').value }), addedText).then(loadReviewsSoon);
+  });
+  $('apIconAdd').addEventListener('click', () => act(() => post('/protected', { source: 'server_icon' }), addedText).then(loadReviewsSoon));
+  $('apUploadBtn').addEventListener('click', () => {
+    const file = $('apUploadFile').files[0]; if (!file) { notice('Choose an image first.'); return; }
+    const fd = new FormData(); fd.append('image', file); fd.append('label', $('apUploadLabel').value.trim()); fd.append('target', $('apUploadTarget').value);
+    const scam = $('apUploadTarget').value === 'scam';
+    act(() => req(api('/protected/upload'), { method: 'POST', body: fd }), (o) => (scam ? (o.existing ? 'That scam avatar was already on the list.' : `Added as scam avatar #${o.id}.`) : addedText(o)))
+      .then((o) => { if (o) { $('apUploadFile').value = ''; $('apUploadLabel').value = ''; loadReviewsSoon(); } });
+  });
+
+  // ── scam avatars ─────────────────────────────────────────────────────────
+  function renderScam() {
+    const s = state.settings.scam;
+    $('apScamBadge').className = 'cf-pill ' + (s.enabled ? 'is-ok' : '');
+    $('apScamBadge').textContent = s.enabled ? ACTION_LABEL[s.action] : 'Off';
+    $('apScamEnabled').checked = s.enabled; actionSelect($('apScamAction'), s.action);
+    for (const id of ['apScamEnabled', 'apScamAction', 'apScamSave']) $(id).disabled = !can();
+    $('apScamList').replaceChildren(...state.scam.map(e => el('div', { class: 'ap-item' },
+      e.builtin ? el('span', { class: 'ap-thumb ' + (e.key === 'black' ? 'ap-swatch-black' : 'ap-swatch-clear') }) : img(e.thumb),
+      el('span', { class: 'ap-grow' }, e.label, ' ', el('span', { class: 'ap-muted', text: e.builtin ? 'Built in' : e.central ? 'Central list' : `${e.sourceLabel || 'This server'}${e.hits ? `, ${e.hits} hit(s)` : ''}` })),
+      !e.builtin && !e.central ? el('button', { type: 'button', class: 'btn btn-sm btn-secondary', disabled: !can(), onclick: () => {
+        if (!confirm('Remove this scam avatar from the list?')) return;
+        act(() => req(api(`/images/${e.id}`), { method: 'DELETE' }), 'Removed.');
+      } }, 'Remove') : null)));
+  }
+  $('apScamSave').addEventListener('click', () => {
+    const action = $('apScamAction').value;
+    if ($('apScamEnabled').checked && action !== 'log' && action !== state.settings.scam.action
+      && !confirm(`${ACTION_LABEL[action]} everyone using one of these exact avatars? Some real people use a plain black avatar; log only (review queue) is the safer start.`)) return;
+    act(() => post('/settings', { scam: { enabled: $('apScamEnabled').checked, action } }), 'Scam-avatar check saved.');
+  });
+
+  // ── test ─────────────────────────────────────────────────────────────────
+  function renderTest(r) {
+    const out = [];
+    if (r.member) out.push(el('div', { class: 'ap-item' }, img(r.member.avatar), el('strong', { text: r.member.displayName || r.member.username })));
+    if (!r.avatars.length) out.push(el('div', { class: 'ap-muted', text: 'No avatar to test.' }));
+    for (const a of r.avatars) {
+      const head = el('div', { class: 'ap-item' }, a.thumb ? img(a.thumb) : null, el('strong', { text: a.scope === 'server' ? 'Server avatar' : a.scope === 'upload' ? 'Your image' : 'Avatar' }));
+      out.push(head);
+      if (a.error) { out.push(el('div', { class: 'ap-hit', text: a.error })); continue; }
+      if (a.scam) out.push(el('div', { class: a.scam.enabled ? 'ap-hit' : 'ap-muted', text: `Exact scam avatar: ${a.scam.label}. The check is ${a.scam.enabled ? `on (${ACTION_LABEL[a.scam.action]})` : 'off'}.` }));
+      if (!a.usable) out.push(el('div', { class: 'ap-muted', text: `Too plain to score (${a.flat ? `${a.flat} image` : `${a.bits}/256 bits, contrast ${a.contrast}`}); only the exact scam list applies to it.` }));
+      if (a.usable && !a.scores.length) out.push(el('div', { class: 'ap-muted', text: 'No protected images to compare with yet.' }));
+      if (a.scores.length) {
+        out.push(el('div', { class: 'ap-list' }, ...a.scores.map(s => el('div', { class: 'ap-item' }, img(s.thumb),
+          el('span', { class: 'ap-grow' }, `#${s.id} ${s.label || ''}`, ' ', el('span', { class: 'ap-muted', text: `(${s.variantLabel})` })),
+          el('span', { class: 'ap-score ' + (s.decision === 'auto' ? 'ap-hit' : s.decision === 'review' ? 'ap-mid' : 'ap-muted'), text: pct(s.score) }),
+          el('span', { class: 'cf-pill' + (s.decision === 'auto' ? ' is-bad' : s.decision === 'review' ? ' is-warn' : ''), text: s.decision === 'auto' ? ACTION_LABEL[r.settings.action] : s.decision === 'review' ? 'Review' : 'No match' })))));
+      }
+    }
+    for (const n of r.notes || []) out.push(el('div', { class: 'ap-muted', text: n }));
+    if (!r.settings.enabled) out.push(el('div', { class: 'ap-warn', text: 'Avatar checks are switched off, so nothing happens on join or avatar change yet.' }));
+    $('apTestResult').replaceChildren(...out);
+  }
+  async function runTest(body) {
+    $('apTestResult').replaceChildren(el('div', { class: 'ap-muted', text: 'Testing...' }));
+    try { renderTest(body instanceof FormData ? await req(api('/test/upload'), { method: 'POST', body }) : await post('/test', body)); }
+    catch (err) { $('apTestResult').replaceChildren(el('div', { class: 'ap-hit', text: err.message })); }
+  }
+  const testRow = (m) => el('div', { class: 'ap-item' }, img(m.serverAvatar || m.globalAvatar),
+    el('span', { class: 'ap-grow' }, m.displayName, ' ', el('span', { class: 'ap-muted', text: `@${m.username}` })),
+    el('button', { type: 'button', class: 'btn btn-sm btn-secondary', onclick: () => { $('apTestFindResults').replaceChildren(); runTest({ userId: m.id }); } }, 'Test'));
+  $('apTestFindBtn').addEventListener('click', () => findMembers($('apTestFind').value.trim(), $('apTestFindResults'), testRow));
+  $('apTestFind').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('apTestFindBtn').click(); } });
+  $('apTestFileBtn').addEventListener('click', () => {
+    const file = $('apTestFile').files[0]; if (!file) { notice('Choose an image first.'); return; }
+    const fd = new FormData(); fd.append('image', file); runTest(fd);
+  });
+
+  // ── Auto-Pilot ───────────────────────────────────────────────────────────
+  function paintApBadge() {
+    const a = state.settings.autopilot;
+    const on = a.enabled && a.avatars;
+    $('apApBadge').className = 'cf-pill ' + (on && state.settings.enabled ? 'is-ok' : '');
+    $('apApBadge').textContent = !a.enabled ? 'Off' : !a.avatars ? 'Names only' : state.settings.enabled ? 'Protecting avatars' : 'Waiting for avatar checks';
+  }
+  function renderAutoPilot() {
+    const a = state.settings.autopilot;
+    paintApBadge();
+    $('apApEnabled').checked = a.enabled; $('apApManagers').checked = a.managers; $('apApAvatars').checked = a.avatars;
+    apRoles = state.autopilotRoles.map(r => r.id);
+    renderApRoles();
+    $('apApSynced').textContent = state.overview.autoPilotSyncedAt ? `Last synced ${when(state.overview.autoPilotSyncedAt)}` : '';
+    for (const id of ['apApEnabled', 'apApManagers', 'apApAvatars', 'apApRolePick', 'apApRoleAdd', 'apApSave', 'apApSync']) $(id).disabled = !can();
+  }
+  function renderApRoles() {
+    const byId = new Map(state.guildRoles.map(r => [r.id, r]));
+    $('apApRoles').replaceChildren(...apRoles.map(id => el('span', { class: 'cf-chip' }, el('span', { text: (byId.get(id) || {}).name || `deleted role ${id}` }),
+      el('button', { type: 'button', class: 'cf-chip-remove', 'aria-label': 'Remove role', disabled: !can(), onclick: () => { apRoles = apRoles.filter(x => x !== id); renderApRoles(); } }, icon('fas fa-times')))));
+    roleOptions($('apApRolePick'), state.guildRoles.filter(r => !apRoles.includes(r.id)), 'Add a staff role to cover...');
+  }
+  $('apApRoleAdd').addEventListener('click', () => { const id = $('apApRolePick').value; if (id && !apRoles.includes(id)) { apRoles.push(id); renderApRoles(); } });
+  $('apApSave').addEventListener('click', () => act(() => post('/settings', { autopilot: { enabled: $('apApEnabled').checked, managers: $('apApManagers').checked,
+    avatars: $('apApAvatars').checked, roles: apRoles } }), 'Auto-Pilot saved (also for Name filters); protected avatars update in a moment.'));
+  $('apApSync').addEventListener('click', () => act(() => post('/autopilot/sync'), (o) => `Synced: ${o.protected} covered member(s), ${o.created} image(s) added, ${o.retired} retired${o.skipped ? `, ${o.skipped} skipped (plain avatar or limit)` : ''}.`));
+
+  // ── cleanse ──────────────────────────────────────────────────────────────
+  let poll = null;
+  async function cleanseState() {
+    try {
+      const s = await req(api('/cleanse'));
+      const box = $('apCleanseState');
+      $('apCleanseReview').disabled = $('apCleanseForce').disabled = !!s.running || !can();
+      $('apProgressWrap').hidden = !s.running;
+      if (s.running) {
+        const done = s.total ? Math.min(100, Math.round((s.checked / s.total) * 100)) : 0;
+        $('apProgress').style.width = `${done}%`;
+        box.textContent = `${s.mode === 'force' ? 'Force cleanse' : 'Scan'} running${s.reason ? ` (${s.reason})` : ''}: ${s.checked || 0} of ${s.total || '?'} members checked, ${s.downloads || 0} avatar download(s)...`;
+        clearTimeout(poll); poll = setTimeout(cleanseState, 2500);
+        return;
+      }
+      if (s.error) box.textContent = `The last scan stopped: ${s.error}`;
+      else if (s.result) {
+        const r = s.result;
+        box.textContent = `Last ${s.mode === 'force' ? 'force cleanse' : 'scan'} (${when(s.finishedAt)}${s.reason ? `, ${s.reason}` : ''}): ${r.total} checked${r.complete ? '' : ' (list incomplete)'}, ${r.matched} matched (${r.scam} scam avatar(s)), `
+          + `${r.queued} queued${s.mode === 'force' ? `, ${r.acted.done} acted on${r.acted.failed ? `, ${r.acted.failed} could not` : ''}` : ''}; skipped ${r.skipped.staff} staff, ${r.skipped.protected} protected, ${r.skipped.exempt} exempt, ${r.skipped.safe} not-a-match.`;
+      } else box.textContent = '';
+      if (poll) { poll = null; load(); loadReviews(); loadHits(); }
+    } catch (err) { $('apCleanseState').textContent = err.message; }
+  }
+  function loadReviewsSoon() { clearTimeout(poll); poll = setTimeout(cleanseState, 1500); }
+  $('apCleanseReview').addEventListener('click', () => act(() => post('/cleanse', { mode: 'review' }), 'Scan started. Matches will appear in the review queue.', false).then(() => cleanseState()));
+  $('apCleanseForce').addEventListener('click', () => {
+    if (!confirm('Force cleanse: every member whose avatar scores at or above the act threshold, and every exact scam avatar, is acted on NOW with your actions. Review-band and log-only matches go to the queue. Continue?')) return;
+    act(() => post('/cleanse', { mode: 'force' }), 'Force cleanse started.', false).then(() => cleanseState());
+  });
+
+  // ── review queue ─────────────────────────────────────────────────────────
+  const RTABS = [['pending', 'Waiting'], ['safe', 'Not a match'], ['banned,kicked,actioned', 'Acted on'], ['skipped,gone,failed', 'Skipped or gone']];
+  const AI_WORD = { match: 'Same picture (impersonation)', no_match: 'Not the same picture', scam: 'Scam', not_scam: 'Not a scam', nsfw: 'Explicit', not_nsfw: 'Not explicit' };
+  $('apMinScore').addEventListener('input', () => { $('apMinScoreVal').textContent = Number($('apMinScore').value).toFixed(2); });
+  $('apMinScore').addEventListener('change', () => loadReviews());
+  async function loadReviews() {
+    try {
+      $('apMinScoreVal').textContent = Number($('apMinScore').value).toFixed(2);
+      const out = await req(api(`/reviews?status=${encodeURIComponent(reviewTab)}&minScore=${encodeURIComponent($('apMinScore').value)}`));
+      reviews = out.rows;
+      selected.clear();
+      const c = out.counts || {};
+      $('apQueueCount').textContent = c.pending ? `${c.pending} waiting` : 'None waiting';
+      $('apQueueCount').className = 'cf-pill' + (c.pending ? ' is-warn' : '');
+      $('apReviewTabs').replaceChildren(...RTABS.map(([t, label]) => tab(`${label} (${t.split(',').reduce((n, s) => n + (c[s] || 0), 0)})`, t === reviewTab, () => { reviewTab = t; loadReviews(); })));
+      renderReviews();
+    } catch (err) { $('apBulk').hidden = true; $('apReviews').replaceChildren(stateBox('Could not load the review queue', err.message, 'error')); }
+  }
+  function renderReviews() {
+    const pending = reviewTab === 'pending';
+    $('apBulk').hidden = !pending || !reviews.length || !can();
+    $('apSelectAll').checked = false; updateSel();
+    if (!reviews.length) { $('apReviews').replaceChildren(pending ? stateBox('Nothing waiting', 'Run a scan to check everyone already here.') : stateBox('Nothing here')); return; }
+    $('apReviews').replaceChildren(...reviews.map(r => {
+      const box = el('input', { type: 'checkbox', class: 'ap-check', 'aria-label': 'Select', onchange: (e) => { if (e.target.checked) selected.add(r.id); else selected.delete(r.id); updateSel(); } });
+      const ageDays = r.createdAt ? Math.floor((Date.now() - r.createdAt) / 86400000) : null;
+      const info = el('div', { class: 'ap-rev-info' },
+        el('div', {}, el('strong', { text: r.displayName || r.username || r.id }), ' ', el('span', { class: 'ap-muted', text: r.username ? `@${r.username}` : '' })),
+        el('div', { class: 'ap-muted', text: r.scam ? `Exact scam avatar: ${r.imageLabel || ''}` : `Looks like #${r.imageId ?? '?'} ${r.imageLabel || ''}` }),
+        el('div', { class: 'ap-muted', text: [r.scope === 'server' ? 'Server avatar' : 'Avatar',
+          ageDays != null ? `account ${ageDays} day(s) old` : null, r.joinedAt ? `joined ${day(r.joinedAt)}` : null, r.inServer ? null : 'not in the server'].filter(Boolean).join(', ') }),
+        r.roles && r.roles.length ? el('div', { class: 'ap-muted', text: `Roles: ${r.roles.join(', ')}` }) : (r.roles ? el('div', { class: 'ap-muted', text: 'No roles' }) : null),
+        el('div', { class: 'ap-muted', text: pending ? `Found ${when(r.foundAt)}` : `${r.status}${r.detail ? `: ${r.detail}` : ''}, ${when(r.decidedAt)}` }),
+        r.ai ? el('div', { class: 'ap-muted', text: `AI second opinion: ${AI_WORD[r.ai.verdict] || r.ai.verdict}${r.ai.confidence != null ? `, ${Math.round(r.ai.confidence * 100)}%` : ''}${r.ai.reason ? `: ${r.ai.reason}` : ''}` }) : null);
+      const buttons = el('div', { class: 'ap-rev-actions' });
+      if (pending && can()) {
+        buttons.append(
+          el('button', { type: 'button', class: 'btn btn-sm btn-danger', onclick: () => decide([r.id], 'ban') }, 'Ban'),
+          el('button', { type: 'button', class: 'btn btn-sm btn-secondary', onclick: () => decide([r.id], 'kick') }, 'Kick'),
+          el('button', { type: 'button', class: 'btn btn-sm btn-secondary', onclick: () => decide([r.id], 'safe') }, 'Not a match'),
+          el('button', { type: 'button', class: 'btn btn-sm btn-secondary', onclick: () => decide([r.id], 'skip') }, 'Skip'));
+        if (!r.scam && r.imageThumb) {
+          buttons.append(el('button', { type: 'button', class: 'btn btn-sm btn-secondary', title: 'Ask the AI whether this is the same picture (advice only; counts against the daily AI cap)',
+            onclick: () => act(() => post(`/reviews/${r.id}/ai`, {}), (o) => `AI second opinion: ${o.line}`, false).then(o => { if (o) loadReviews(); }) }, 'Ask AI'));
+        }
+      }
+      const score = r.score == null ? null : Number(r.score);
+      return el('div', { class: 'ap-rev' },
+        pending && can() ? el('span', {}, box) : el('span'),
+        el('div', { class: 'ap-pair' }, img(r.avatarThumb || r.avatarUrl), el('span', { text: 'Their avatar' })),
+        el('div', { class: 'ap-pair' }, r.scam && !r.imageThumb ? el('span', { class: 'ap-thumb ap-swatch-black' }) : img(r.imageThumb), el('span', { text: r.scam ? 'Scam avatar' : 'Protected' })),
+        el('div', { class: 'ap-rev-score' }, el('div', { class: 'ap-score ' + (r.scam || (score != null && score >= state.settings.autoThreshold) ? 'ap-hit' : 'ap-mid'), text: r.scam ? '100%' : score != null ? pct(score) : '' }), info),
+        buttons);
+    }));
+  }
+  function updateSel() { $('apSelCount').textContent = `${selected.size} selected`; }
+  $('apSelectAll').addEventListener('change', (e) => {
+    selected.clear();
+    for (const b of document.querySelectorAll('#apReviews input[type=checkbox]')) b.checked = e.target.checked;
+    if (e.target.checked) reviews.forEach(r => selected.add(r.id));
+    updateSel();
+  });
+  for (const b of document.querySelectorAll('#apBulk [data-bulk]')) {
+    b.addEventListener('click', () => {
+      if (!selected.size) { notice('Select some members first.'); return; }
+      decide([...selected], b.dataset.bulk);
+    });
+  }
+  async function decide(ids, decision) {
+    const word = { ban: 'Ban', kick: 'Kick', safe: 'Not a match', skip: 'Skip' }[decision];
+    if ((decision === 'ban' || decision === 'kick') && !confirm(`${word} ${ids.length} member(s)? Each is re-checked first (still here, same avatar); staff and exempt members are left alone.`)) return;
+    const out = await act(() => post('/reviews/decide', { userIds: ids, decision }), (o) =>
+      `${word}: ${o.done} done${o.skipped ? `, ${o.skipped} skipped` : ''}${o.failed.length ? `, ${o.failed.length} failed (${o.failed.map(f => f.problem).slice(0, 2).join('; ')})` : ''}.`
+      + (decision === 'safe' ? ' Those avatars will not be flagged against those images again.' : ''), false);
+    if (out) { loadReviews(); loadHits(); }
+  }
+
+  // ── hits ─────────────────────────────────────────────────────────────────
+  async function loadHits() {
+    try {
+      const { hits } = await req(api('/hits'));
+      $('apHits').replaceChildren(...(hits.length ? hits.map(h => el('div', { class: 'ap-item' },
+        img(h.avatar),
+        el('span', { class: 'cf-pill' + (h.action === 'avatar_logged' || h.action === 'avatar_queued' ? '' : h.action === 'failed' ? ' is-warn' : ' is-bad'), text: HIT_WORD[h.action] || h.action }),
+        el('span', { class: 'ap-grow' }, (window.CFUser ? CFUser.cell({ id: h.userId, username: h.username, displayName: h.displayName || h.username, avatar: null, inServer: h.inServer }, { size: 'sm', plain: true }) : (h.username || h.userId)), ' ', el('span', { class: 'ap-muted', text: h.detail || '' })),
+        el('span', { class: 'ap-muted', text: when(h.at) }),
+        h.inServer && can() ? el('button', { type: 'button', class: 'btn btn-sm btn-secondary', onclick: () => { runTest({ userId: h.userId }); $('apTestResult').scrollIntoView({ block: 'nearest' }); } }, 'Check') : null))
+        : [stateBox('No hits yet', 'Members caught by an avatar check are listed here.')]));
+    } catch (err) { $('apHits').replaceChildren(stateBox('Could not load recent hits', err.message, 'error')); }
+  }
+
+  // ── export / import ──────────────────────────────────────────────────────
+  $('apExport').href = api('/export');
+  async function importReq(apply) {
+    const f = $('apImportFile').files[0];
+    if (!f) throw new Error('Choose an export file first.');
+    const fd = new FormData();
+    fd.append('file', f);
+    fd.append('apply', apply ? '1' : '0');
+    const res = await fetch(api('/import'), { method: 'POST', credentials: 'same-origin', body: fd });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
+    return body;
+  }
+  function renderImportPlan(plan) {
+    const describe = (x) => `${x.kind === 'scam_avatar' || x.kind === 'scam' ? 'Scam avatar' : 'Protected image'}: ${x.label || 'no label'}`;
+    const group = (title, list, total, extra) => (total ? el('details', { open: title === 'Will be added' },
+      el('summary', { text: `${title}: ${total}` }),
+      el('ul', {}, ...list.map(x => el('li', { text: describe(x) + (extra ? extra(x) : '') })), total > list.length ? el('li', { text: `...and ${total - list.length} more` }) : null)) : null);
+    const c = plan.counts;
+    $('apImportPlan').replaceChildren(
+      el('div', { class: 'ap-muted', text: plan.added != null ? `Imported: ${plan.added} added.` : 'Preview: nothing has been changed yet.' }),
+      group('Will be added', plan.add, c.add),
+      group('Skipped (already there)', plan.duplicates, c.duplicates),
+      group('Rejected', plan.rejected, c.rejected, (x) => ` (${x.why})`),
+      group('Over the limit (not added)', plan.overCap, c.overCap));
+    $('apImportPlan').hidden = false;
+  }
+  $('apImportFile').addEventListener('change', () => { $('apImportApply').hidden = true; $('apImportPlan').hidden = true; });
+  $('apImportPreview').addEventListener('click', async () => {
+    showError('');
+    try {
+      const plan = await importReq(false);
+      renderImportPlan(plan);
+      $('apImportApply').hidden = !plan.counts.add || !can();
+    } catch (err) { showError(err.message); }
+  });
+  $('apImportApply').addEventListener('click', async () => {
+    if (!confirm(`Import ${$('apImportPlan').querySelector('summary')?.textContent || 'entries'}? Duplicates and rejected entries are left out.`)) return;
+    const out = await act(() => importReq(true), (o) => `Imported ${o.added} entries.`);
+    if (out) { renderImportPlan(out); $('apImportApply').hidden = true; }
+  });
+
+  async function load() {
+    try {
+      state = await req(api('/'));
+      if (!state.actor.canConfigure) notice('This page is view-only for you.');
+      renderStats(); renderSettings(); renderImages(); renderScam(); renderAutoPilot();
+      roleOptions($('apRolePick'), state.guildRoles, 'Pick a role...', $('apRolePick').value);
+      if (state.serverIcon) { $('apIconPreview').src = state.serverIcon; $('apIconPreview').hidden = false; }
+      $('apIconAdd').disabled = !can() || !state.serverIcon;
+      for (const id of ['apRoleAdd', 'apUploadBtn', 'apFindBtn']) $(id).disabled = !can();
+    } catch (err) {
+      showError(err.message);
+      if (!state) {
+        $('apStats').replaceChildren(stateBox('Could not load avatar protection', 'Reload the page to try again.', 'error', true));
+        $('apImages').replaceChildren(stateBox('Protected images not loaded', err.message, 'error'));
+      }
+    }
+  }
+  load().then(() => { loadReviews(); loadHits(); cleanseState(); });
+})();
+</script>

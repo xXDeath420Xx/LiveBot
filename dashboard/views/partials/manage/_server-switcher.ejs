@@ -1,0 +1,200 @@
+<%#
+  Server switcher: the current server's icon and name at the top of the manage sidebar (Cards and
+  Compact) or in the server header (Classic). Opens a list of every server this user manages
+  (GET /api/me/servers, the same list /dashboard shows) with a filter box; choosing one opens the
+  same page (?page=) on that server. Self-contained (markup, style, script) so both manage
+  templates include it. Locals: guild, guildIconUrl, variant ('sidebar' | 'header').
+%>
+<% const _swVariant = (typeof variant !== 'undefined' && variant) || 'sidebar'; %>
+<div class="cf-switcher cf-switcher--<%= _swVariant %>" id="cfSwitcher" data-guild="<%= guild.id %>">
+    <button type="button" class="cf-switcher-btn" id="cfSwitcherBtn" aria-haspopup="true" aria-expanded="false" aria-controls="cfSwitcherPanel">
+        <img src="<%= guildIconUrl %>" class="cf-switcher-icon" alt="" width="32" height="32">
+        <span class="cf-switcher-text">
+            <span class="cf-switcher-name" title="<%= guild.name %>"><%= guild.name %></span>
+            <span class="cf-switcher-hint">Switch server</span>
+        </span>
+        <i class="fas fa-chevron-down cf-switcher-caret" aria-hidden="true"></i>
+    </button>
+    <div class="cf-switcher-panel" id="cfSwitcherPanel" hidden>
+        <div class="cf-switcher-search">
+            <i class="fas fa-magnifying-glass" aria-hidden="true"></i>
+            <input type="search" id="cfSwitcherFilter" placeholder="Filter servers" aria-label="Filter servers" autocomplete="off" spellcheck="false">
+        </div>
+        <ul class="cf-switcher-list" id="cfSwitcherList" aria-label="Your servers"></ul>
+        <div class="cf-switcher-state" id="cfSwitcherState" role="status">Loading your servers…</div>
+        <a class="cf-switcher-all" href="/dashboard"><i class="fas fa-table-cells-large" aria-hidden="true"></i>All servers</a>
+    </div>
+</div>
+<style>
+    .cf-switcher { position: relative; }
+    .cf-switcher--sidebar { margin: 0 0 var(--cf-2, 8px); padding-bottom: var(--cf-3, 12px); border-bottom: 1px solid var(--cf-border); }
+    .cf-switcher-btn {
+        display: flex; align-items: center; gap: var(--cf-3, 12px); width: 100%; min-width: 0;
+        padding: 6px var(--cf-2, 8px); border: 1px solid transparent; border-radius: var(--cf-radius, 8px);
+        background: transparent; color: var(--cf-text); text-align: left; cursor: pointer; font: inherit;
+        transition: background-color var(--cf-fast, 120ms) ease, border-color var(--cf-fast, 120ms) ease;
+    }
+    .cf-switcher-btn:hover, .cf-switcher-btn[aria-expanded="true"] { background: var(--cf-surface-2); border-color: var(--cf-border); }
+    .cf-switcher-icon { width: 32px; height: 32px; border-radius: var(--cf-radius-lg, 10px); flex: none; object-fit: cover; background: var(--cf-surface-3); }
+    .cf-switcher-text { display: flex; flex-direction: column; min-width: 0; flex: 1; line-height: 1.25; }
+    .cf-switcher-name { font-weight: 600; font-size: var(--cf-text-md, 15px); color: var(--cf-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .cf-switcher-hint { font-size: var(--cf-text-xs, 13px); color: var(--cf-text-3); }
+    .cf-switcher-caret { font-size: 11px; color: var(--cf-text-3); transition: transform var(--cf-base, 180ms) ease; }
+    .cf-switcher-btn[aria-expanded="true"] .cf-switcher-caret { transform: rotate(180deg); }
+    .cf-switcher-panel {
+        position: absolute; z-index: 1200; top: calc(100% + 4px); left: 0; width: max(100%, 300px); max-width: calc(100vw - 24px);
+        display: flex; flex-direction: column; padding: 6px;
+        background: var(--cf-surface); color: var(--cf-text);
+        border: 1px solid var(--cf-border-strong); border-radius: var(--cf-radius-lg, 10px);
+        box-shadow: var(--cf-shadow-pop, 0 8px 24px rgba(0,0,0,.4));
+    }
+    .cf-switcher-panel[hidden] { display: none; }
+    .cf-switcher--header .cf-switcher-panel { left: auto; right: 0; }
+    /* In the sidebar the list fits the column: wider would scroll the sidebar sideways. */
+    .cf-switcher--sidebar .cf-switcher-panel { width: 100%; }
+    .cf-switcher-search { position: relative; margin-bottom: 6px; }
+    .cf-switcher-search i { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); font-size: 12px; color: var(--cf-text-3); pointer-events: none; }
+    .cf-switcher-search input {
+        width: 100%; min-height: 34px; padding: 6px 10px 6px 30px !important; font: inherit; font-size: var(--cf-text-sm, 14px);
+        color: var(--cf-text); background: var(--cf-inset); border: 1px solid var(--cf-border-strong); border-radius: var(--cf-radius, 8px);
+    }
+    .cf-switcher-search input:focus { outline: none; border-color: var(--cf-accent); box-shadow: 0 0 0 3px var(--cf-accent-soft); }
+    .cf-switcher-list { list-style: none; margin: 0; padding: 0; max-height: min(360px, 55vh); overflow-y: auto; overscroll-behavior: contain; }
+    .cf-switcher-item {
+        display: flex; align-items: center; gap: 10px; min-height: 38px; padding: 4px 8px; border-radius: var(--cf-radius, 8px);
+        color: var(--cf-text-2); text-decoration: none; font-size: var(--cf-text-sm, 14px); font-weight: 500;
+    }
+    .cf-switcher-item:hover, .cf-switcher-item:focus-visible { background: var(--cf-surface-2); color: var(--cf-text); outline: none; }
+    .cf-switcher-item[aria-current="true"] { color: var(--cf-text); }
+    .cf-switcher-item img, .cf-switcher-initials { width: 26px; height: 26px; border-radius: var(--cf-radius, 8px); flex: none; object-fit: cover; }
+    .cf-switcher-initials {
+        display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600;
+        background: var(--cf-surface-3); color: var(--cf-text-2);
+    }
+    .cf-switcher-item span.cf-switcher-label { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .cf-switcher-item .fa-check { color: var(--cf-accent-fg); font-size: 12px; }
+    .cf-switcher-state { padding: 10px 8px; font-size: var(--cf-text-sm, 14px); color: var(--cf-text-3); }
+    .cf-switcher-state:empty { display: none; }
+    .cf-switcher-all {
+        display: flex; align-items: center; gap: 8px; margin-top: 6px; padding: 8px; border-top: 1px solid var(--cf-border);
+        font-size: var(--cf-text-sm, 14px); color: var(--cf-text-2); text-decoration: none; border-radius: 0 0 var(--cf-radius, 8px) var(--cf-radius, 8px);
+    }
+    .cf-switcher-all:hover { color: var(--cf-text); background: var(--cf-surface-2); }
+</style>
+<script>
+(function () {
+    var root = document.getElementById('cfSwitcher');
+    if (!root || root.dataset.ready) return;
+    root.dataset.ready = '1';
+    var btn = document.getElementById('cfSwitcherBtn');
+    var panel = document.getElementById('cfSwitcherPanel');
+    var filter = document.getElementById('cfSwitcherFilter');
+    var list = document.getElementById('cfSwitcherList');
+    var state = document.getElementById('cfSwitcherState');
+    var current = root.getAttribute('data-guild');
+    var servers = null;
+    var loading = null;
+    var CACHE_KEY = 'cf-switcher-servers';
+
+    // Same page on the other server (the overview when there is no ?page=).
+    function targetFor(id) {
+        var page = new URLSearchParams(window.location.search).get('page');
+        return '/manage/' + encodeURIComponent(id) + (page && page !== 'overview' && /^[a-z0-9-]{1,40}$/.test(page) ? '?page=' + page : '');
+    }
+    function initials(name) {
+        return String(name || '?').split(/\s+/).filter(Boolean).slice(0, 2).map(function (w) { return w.charAt(0); }).join('').toUpperCase() || '?';
+    }
+    function load() {
+        if (servers) return Promise.resolve(servers);
+        try {
+            var cached = JSON.parse(sessionStorage.getItem(CACHE_KEY) || 'null');
+            if (cached && cached.at > Date.now() - 5 * 60 * 1000 && Array.isArray(cached.servers)) {
+                servers = cached.servers;
+                return Promise.resolve(servers);
+            }
+        } catch (e) { /* storage off: just fetch */ }
+        if (!loading) {
+            loading = fetch('/api/me/servers', { credentials: 'same-origin', headers: { Accept: 'application/json' } })
+                .then(function (res) {
+                    if (!res.ok) throw new Error('Request failed (' + res.status + ')');
+                    return res.json();
+                })
+                .then(function (data) {
+                    servers = Array.isArray(data.servers) ? data.servers : [];
+                    try { sessionStorage.setItem(CACHE_KEY, JSON.stringify({ at: Date.now(), servers: servers })); } catch (e) { /* ignore */ }
+                    return servers;
+                })
+                .catch(function (err) { loading = null; throw err; });
+        }
+        return loading;
+    }
+    function render() {
+        var q = (filter.value || '').trim().toLowerCase();
+        list.textContent = '';
+        var shown = (servers || []).filter(function (s) { return !q || s.name.toLowerCase().indexOf(q) !== -1 || s.id === q; });
+        shown.forEach(function (s) {
+            var li = document.createElement('li');
+            var a = document.createElement('a');
+            a.className = 'cf-switcher-item';
+            a.href = targetFor(s.id);
+            if (s.id === current) a.setAttribute('aria-current', 'true');
+            if (s.icon) {
+                var img = document.createElement('img');
+                img.src = 'https://cdn.discordapp.com/icons/' + s.id + '/' + s.icon + '.png?size=64';
+                img.alt = '';
+                img.loading = 'lazy';
+                img.referrerPolicy = 'no-referrer';
+                a.appendChild(img);
+            } else {
+                var ini = document.createElement('span');
+                ini.className = 'cf-switcher-initials';
+                ini.setAttribute('aria-hidden', 'true');
+                ini.textContent = initials(s.name);
+                a.appendChild(ini);
+            }
+            var label = document.createElement('span');
+            label.className = 'cf-switcher-label';
+            label.textContent = s.name;
+            a.appendChild(label);
+            if (s.id === current) {
+                var check = document.createElement('i');
+                check.className = 'fas fa-check';
+                check.setAttribute('aria-label', 'Current server');
+                a.appendChild(check);
+            }
+            li.appendChild(a);
+            list.appendChild(li);
+        });
+        state.textContent = shown.length ? '' : (q ? 'No server matches "' + filter.value.trim() + '"' : 'No other servers to manage');
+    }
+    function open() {
+        panel.hidden = false;
+        btn.setAttribute('aria-expanded', 'true');
+        filter.value = '';
+        filter.focus();
+        load().then(render).catch(function (err) {
+            list.textContent = '';
+            state.textContent = 'Could not load your servers: ' + err.message;
+        });
+    }
+    function close(focusBtn) {
+        panel.hidden = true;
+        btn.setAttribute('aria-expanded', 'false');
+        if (focusBtn) btn.focus();
+    }
+    btn.addEventListener('click', function () { panel.hidden ? open() : close(false); });
+    filter.addEventListener('input', function () { if (servers) render(); });
+    filter.addEventListener('keydown', function (e) {
+        if (e.key === 'ArrowDown') { var first = list.querySelector('a'); if (first) { e.preventDefault(); first.focus(); } }
+        if (e.key === 'Enter') { var only = list.querySelector('a'); if (only) { e.preventDefault(); window.location.href = only.href; } }
+    });
+    list.addEventListener('keydown', function (e) {
+        var items = Array.prototype.slice.call(list.querySelectorAll('a'));
+        var i = items.indexOf(document.activeElement);
+        if (e.key === 'ArrowDown' && i < items.length - 1) { e.preventDefault(); items[i + 1].focus(); }
+        if (e.key === 'ArrowUp') { e.preventDefault(); if (i > 0) items[i - 1].focus(); else filter.focus(); }
+    });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && !panel.hidden) close(true); });
+    document.addEventListener('click', function (e) { if (!panel.hidden && !root.contains(e.target)) close(false); });
+})();
+</script>

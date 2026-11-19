@@ -6,10 +6,10 @@ dotenv.config({ path: '/home/death/CertiFriedUtility/.env' });
 import { Client, GatewayIntentBits, ChannelType, PermissionsBitField } from 'discord.js';
 import { writeFile } from 'fs/promises';
 import pool from '../utils/db.js';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 
 const GUILD_ID = '980331356196311070';
-const BOT_ID = '1482157000426258493';
+// The acting bot comes from guild_bot_mapping — never pinned here.
 const MEE6_ID = '159985870458322944';
 const TICKETS_BOT_ID = '508391840525975553';
 const UZOX_ID = '760027263046909992';
@@ -79,12 +79,13 @@ function parseStreamUrl(url) {
 
 async function audit() {
     // Fetch bot token from DB
-    const [bots] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id = ?', [BOT_ID]);
-    if (!bots.length) {
-        console.error('Bot not found in custom_bots table');
+    const bot = await resolveBotForGuild(GUILD_ID, { db: pool });
+    const BOT_ID = bot.botId;
+    if (!bot.token) {
+        console.error('No bot resolved for this guild');
         process.exit(1);
     }
-    const token = encryption.decrypt(JSON.parse(bots[0].bot_token));
+    const token = bot.token;
 
     const client = new Client({
         intents: [

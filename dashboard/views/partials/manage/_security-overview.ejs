@@ -1,0 +1,141 @@
+<%# Server security panel on the overview (core/security-overview.js via /api/guilds/:id/insight/overview):
+    protections grid + score, threats stopped (30d), 30-day ban chart, top rules, lockdown history,
+    last scans, recent automated bans. Loaded after the page renders; DOM nodes only. Colours come
+    from the --cf-* tokens so the panel follows the colour theme. %>
+<style>
+  .sov { background: var(--cf-surface); border: 1px solid var(--cf-border); border-radius: var(--cf-radius-lg); padding: var(--cf-4) var(--cf-5); margin-bottom: var(--cf-6); min-width: 0; }
+  .sov-head { display: flex; align-items: center; justify-content: space-between; gap: var(--cf-3); flex-wrap: wrap; margin-bottom: var(--cf-3); }
+  .sov-head h3 { margin: 0; }
+  .sov-status { display: inline-flex; align-items: center; gap: var(--cf-2); flex-wrap: wrap; font-size: var(--cf-text-sm); color: var(--cf-text-3); }
+  .sov-muted { color: var(--cf-text-3); font-size: var(--cf-text-xs); }
+  .sov-grid { margin-bottom: var(--cf-4); }
+  .sov-grid .cf-chip:not(.is-ok) { opacity: 0.75; }
+  .sov-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr)); gap: var(--cf-3); }
+  .sov-box { background: var(--cf-surface-2); border: 1px solid var(--cf-border); border-radius: var(--cf-radius); padding: var(--cf-3) var(--cf-4); min-width: 0; }
+  .sov-box h4 { margin: 0 0 var(--cf-2); font-size: var(--cf-text-sm); font-weight: 600; color: var(--cf-text); }
+  .sov-row { display: flex; justify-content: space-between; align-items: center; gap: var(--cf-2); font-size: var(--cf-text-sm); color: var(--cf-text-2); padding: 4px 0; min-width: 0; }
+  .sov-row + .sov-row { border-top: 1px solid var(--cf-border); }
+  .sov-row > :first-child { min-width: 0; overflow-wrap: anywhere; }
+  .sov-row > :last-child { flex: none; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .sov-who { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; }
+  .sov-row a { color: inherit; }
+  .sov-big { font-size: var(--cf-text-2xl, 1.5rem); font-weight: 600; color: var(--cf-text); font-variant-numeric: tabular-nums; }
+  .sov-chart { width: 100%; height: 90px; display: block; margin: var(--cf-2) 0; }
+  .sov-chart .sov-auto { fill: var(--cf-accent); }
+  .sov-chart .sov-manual { fill: var(--cf-text-3); }
+  .sov-chart g:hover rect { opacity: 0.8; }
+  .sov-legend { display: flex; gap: var(--cf-3); flex-wrap: wrap; font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+  .sov-legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .sov-legend span::before { content: ''; width: 9px; height: 9px; border-radius: 2px; background: var(--cf-accent); }
+  .sov-legend .is-manual::before { background: var(--cf-text-3); }
+  .sov-link { display: inline-block; margin-top: var(--cf-2); font-size: var(--cf-text-xs); color: var(--cf-accent-fg); }
+  @media (max-width: 640px) { .sov { padding: var(--cf-4); } }
+</style>
+<section class="sov" id="securityOverview" aria-labelledby="sovTitle">
+    <div class="sov-head">
+        <h3 id="sovTitle"><i class="fas fa-shield-halved" aria-hidden="true"></i> Server security</h3>
+        <span class="sov-status" id="sovScoreText" role="status">Loading…</span>
+    </div>
+    <div class="cf-chips sov-grid" id="sovGrid"></div>
+    <div class="sov-cols">
+        <div class="sov-box"><h4>Threats stopped (30 days)</h4><div class="sov-big" id="sovThreatTotal">–</div><div id="sovThreats"></div></div>
+        <div class="sov-box"><h4>Bans (30 days)</h4><div class="sov-muted" id="sovBanTotals"></div><svg class="sov-chart" id="sovChart" viewBox="0 0 300 90" preserveAspectRatio="none" role="img" aria-label="Bans per day for the last 30 days"></svg>
+            <div class="sov-legend"><span>Automatic</span><span class="is-manual">By people</span></div></div>
+        <div class="sov-box"><h4>Top rules and filters (30 days)</h4><div id="sovRules"></div></div>
+        <div class="sov-box"><h4>Recent automatic bans</h4><div id="sovBans"></div>
+            <a class="sov-link" href="/manage/<%= guild.id %>?page=moderation#banLogSection">Full ban log</a></div>
+        <div class="sov-box"><h4>Lockdown history</h4><div id="sovLockdowns"></div></div>
+        <div class="sov-box"><h4>Last scans</h4><div id="sovScans"></div></div>
+    </div>
+</section>
+<script>
+(function () {
+    const guildId = <%- JSON.stringify(String(guild.id)).replace(/</g, '\\u003c') %>;
+    const $ = (id) => document.getElementById(id);
+    const el = (tag, props, ...kids) => {
+        const node = document.createElement(tag);
+        if (props) Object.assign(node, props);
+        for (const k of kids) if (k != null) node.append(k);
+        return node;
+    };
+    const row = (a, b) => el('div', { className: 'sov-row' }, el('span', { textContent: a }), el('span', { textContent: String(b) }));
+    const empty = (t) => el('div', { className: 'sov-muted', textContent: t });
+    const when = (t) => (t ? new Date(t).toLocaleString() : 'never');
+    const TONE = { Strong: 'is-ok', Good: 'is-ok', Basic: 'is-warn', Weak: 'is-bad' };
+
+    function chart(days) {
+        const svg = $('sovChart');
+        const NS = 'http://www.w3.org/2000/svg';
+        while (svg.firstChild) svg.removeChild(svg.firstChild);
+        const max = Math.max(1, ...days.map(d => d.total));
+        const w = 300 / days.length;
+        days.forEach((d, i) => {
+            const autoH = (d.automated / max) * 86;
+            const manH = (d.manual / max) * 86;
+            const x = i * w + 1;
+            const g = document.createElementNS(NS, 'g');
+            const title = document.createElementNS(NS, 'title');
+            title.textContent = d.date + ': ' + d.automated + ' automatic, ' + d.manual + ' by people';
+            const hit = document.createElementNS(NS, 'rect');
+            hit.setAttribute('x', i * w); hit.setAttribute('width', w); hit.setAttribute('y', 0); hit.setAttribute('height', 90); hit.setAttribute('fill', 'transparent');
+            const a = document.createElementNS(NS, 'rect');
+            a.setAttribute('class', 'sov-auto');
+            a.setAttribute('x', x); a.setAttribute('width', Math.max(1, w - 2));
+            a.setAttribute('y', 90 - autoH); a.setAttribute('height', autoH);
+            const m = document.createElementNS(NS, 'rect');
+            m.setAttribute('class', 'sov-manual');
+            m.setAttribute('x', x); m.setAttribute('width', Math.max(1, w - 2));
+            m.setAttribute('y', 90 - autoH - manH); m.setAttribute('height', manH);
+            g.append(title, hit, a, m);
+            svg.appendChild(g);
+        });
+    }
+
+    async function load() {
+        let d;
+        try {
+            const res = await fetch('/api/guilds/' + guildId + '/insight/overview', { credentials: 'same-origin' });
+            d = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(d.error || ('Request failed (' + res.status + ')'));
+        } catch (e) {
+            $('sovScoreText').textContent = 'Could not load: ' + e.message;
+            return;
+        }
+        const s = d.score;
+        $('sovScoreText').replaceChildren(
+            el('span', { className: 'cf-pill ' + (TONE[s.level] || ''), textContent: s.level + ' · ' + s.percent + '%' }),
+            el('span', { textContent: s.on + ' of ' + s.total + ' protections on' }));
+        $('sovGrid').replaceChildren(...d.protections.map(p => {
+            const state = p.on ? 'On' : p.on === null ? 'Unknown' : 'Off';
+            const dot = el('span', { className: 'cf-chip-dot' });
+            dot.setAttribute('aria-hidden', 'true');
+            const chip = el('a', {
+                className: 'cf-chip' + (p.on ? ' is-ok' : ''), href: '/manage/' + guildId + '?page=' + encodeURIComponent(p.page),
+                title: p.on ? 'On' : p.on === null ? 'Unknown' : 'Off. Open the page to set it up.',
+            }, dot, el('span', { textContent: p.label + (p.on && p.detail ? ' (' + p.detail + ')' : '') }));
+            chip.setAttribute('aria-label', p.label + ': ' + state);
+            return chip;
+        }));
+        // The overview's page list shows the same on/off state as badges (public/js/cf-manage.js).
+        window.__cfProtections = d.protections;   // for a listener that attaches after this resolves
+        document.dispatchEvent(new CustomEvent('cf:protections', { detail: d.protections }));
+        $('sovThreatTotal').textContent = d.threats.total;
+        $('sovThreats').replaceChildren(...(d.threats.byProtection.length ? d.threats.byProtection.slice(0, 8).map(t => row(t.label, t.n)) : [empty('Nothing stopped in 30 days.')]));
+        $('sovBanTotals').textContent = d.bans30d.automated + ' automatic · ' + d.bans30d.manual + ' by people or other bots';
+        chart(d.banChart);
+        $('sovRules').replaceChildren(...(d.topRules.length ? d.topRules.map(r => row(r.label, r.n)) : [empty('No rule fired in 30 days.')]));
+        $('sovBans').replaceChildren(...(d.recentBans.length ? d.recentBans.slice(0, 6).map(b => el('div', { className: 'sov-row' },
+            el('span', { className: 'sov-who' },
+                window.CFUser ? CFUser.cell(b.user || { id: b.userId, username: b.username }, { size: 'sm' }) : (b.username || b.userId),
+                el('span', { className: 'sov-muted', textContent: b.label + (b.unbanned ? ' (lifted)' : '') })),
+            el('span', { textContent: new Date(b.at).toLocaleDateString() }))) : [empty('No automatic bans in 30 days.')]));
+        $('sovLockdowns').replaceChildren(...(d.lockdowns.length ? d.lockdowns.slice(0, 6).map(l => row(
+            (l.status === 'active' ? 'Active · ' : '') + l.action + ' · ' + (l.trigger_kind || 'manual') + (l.joins_blocked ? ' · ' + l.joins_blocked + ' blocked' : ''),
+            new Date(l.started_at).toLocaleDateString())) : [empty('No lockdowns yet.')]));
+        $('sovScans').replaceChildren(...d.lastScans.map(sc => el('div', { className: 'sov-row' },
+            el('a', { href: '/manage/' + guildId + '?page=' + encodeURIComponent(sc.page), textContent: sc.label }),
+            el('span', { textContent: when(sc.at), className: 'sov-muted' }))));
+    }
+    load();
+})();
+</script>

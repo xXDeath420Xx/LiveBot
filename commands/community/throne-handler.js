@@ -3,6 +3,7 @@ import pool from '../../utils/db.js';
 import logger from '../../utils/logger.js';
 import Colors from '../../utils/colors.js';
 import { getCachedProfile, getCachedWishlist, queueProfileFetch, cacheProfileAndWishlist, refreshWishlistIfStale } from '../../core/throne-manager.js';
+import { normalizeThroneUsername, fetchThroneProfile, ThroneUserNotFoundError } from '../../utils/scrapers/throne-scraper.js';
 
 const LOG_TAG = '[Throne]';
 
@@ -10,7 +11,7 @@ const LOG_TAG = '[Throne]';
 
 async function resolveUsername(interaction) {
     const provided = interaction.options.getString('username');
-    if (provided) return provided.toLowerCase().trim();
+    if (provided) return normalizeThroneUsername(provided);
 
     // Fall back to linked username
     const [rows] = await pool.execute(
@@ -20,7 +21,7 @@ async function resolveUsername(interaction) {
 
     if (rows.length === 0) {
         await interaction.editReply({
-            content: 'No username provided and you haven\'t linked a Throne account. Use `/throne link <username>` first, or provide a username.',
+            content: 'No username provided and you haven\'t linked a Throne account. Use `/creator throne link <username>` first, or provide a username.',
             ephemeral: true,
         });
         return null;
@@ -361,13 +362,17 @@ export async function handleGifts(interaction) {
                 .setTimestamp();
 
             for (const gift of pageGifts) {
-                const gifters = gift.gifters.map(g => g.username).join(', ') || 'Anonymous';
+                const gifters = gift.gifters.length
+                    ? gift.gifters.map(g => g.amountFormatted ? `${g.username} (${g.amountFormatted})` : g.username).join(', ')
+                    : 'Anonymous';
                 const date = gift.purchasedAt ? `<t:${Math.floor(gift.purchasedAt.getTime() / 1000)}:R>` : 'Unknown';
                 const crowdfunded = gift.isCrowdfunded ? ` (Crowdfunded — ${gift.contributorCount} contributors)` : '';
+                // Throne only publishes an amount for crowdfunding contributions.
+                const value = gift.totalFormatted ? `Value: ${gift.totalFormatted} | ` : '';
 
                 embed.addFields({
                     name: gift.name,
-                    value: `From: **${gifters}**\nValue: ${gift.totalFormatted} | Status: ${gift.status} | ${date}${crowdfunded}`,
+                    value: `From: **${gifters}**\n${value}Status: ${gift.status} | ${date}${crowdfunded}`,
                     inline: false,
                 });
             }
@@ -471,7 +476,7 @@ export async function handleLeaderboard(interaction) {
 export async function handleLink(interaction) {
     await interaction.deferReply({ ephemeral: true });
 
-    const username = interaction.options.getString('username').toLowerCase().trim();
+    const username = normalizeThroneUsername(interaction.options.getString('username'));
 
     if (!username || username.length > 100) {
         return interaction.editReply({ content: 'Please provide a valid Throne username.' });
@@ -489,9 +494,9 @@ export async function handleLink(interaction) {
     const embed = new EmbedBuilder()
         .setColor(Colors.THRONE)
         .setTitle('Throne Account Linked')
-        .setDescription(`Your Discord account is now linked to **${username}** on Throne.\nYour profile data will be fetched in the background. Use \`/throne me\` in a few minutes.`)
+        .setDescription(`Your Discord account is now linked to **${username}** on Throne.\nYour profile data will be fetched in the background. Use \`/creator throne me\` in a few minutes.`)
         .setURL(`https://throne.com/${username}`)
-        .setFooter({ text: 'If the username is wrong, just run /throne link again' });
+        .setFooter({ text: 'If the username is wrong, just run /creator throne link again' });
 
     await interaction.editReply({ embeds: [embed] });
 }
@@ -528,7 +533,7 @@ export async function handleMe(interaction) {
 
     if (rows.length === 0) {
         return interaction.editReply({
-            content: 'You haven\'t linked a Throne account yet. Use `/throne link <username>` first.',
+            content: 'You haven\'t linked a Throne account yet. Use `/creator throne link <username>` first.',
         });
     }
 
@@ -549,11 +554,27 @@ export async function handleTrack(interaction) {
 
     await interaction.deferReply({ ephemeral: true });
 
-    const username = interaction.options.getString('username').toLowerCase().trim();
+    const username = normalizeThroneUsername(interaction.options.getString('username'));
     const channel = interaction.options.getChannel('channel');
 
     if (!username || username.length > 100) {
         return interaction.editReply({ content: 'Please provide a valid Throne username.' });
+    }
+
+    // Validate the creator actually exists on Throne BEFORE persisting a tracking row —
+    // otherwise the row sits in throne_notifications forever, every scheduler cycle warns
+    // about the missing user, and the setup person has no idea their alerts never worked.
+    try {
+        await fetchThroneProfile(username);
+    } catch (err) {
+        if (err instanceof ThroneUserNotFoundError) {
+            return interaction.editReply({
+                content: `Throne doesn't have a creator named **${username}**. Double-check the spelling at https://throne.com/${username} and try again.`,
+            });
+        }
+        // Transient issue (Throne down, Firestore flaking) — do not block the setup; the
+        // next scheduler cycle will retry. Fall through to persist.
+        logger.warn(`${LOG_TAG} track-time validation couldn't confirm "${username}": ${err.message} — proceeding anyway`);
     }
 
     await pool.execute(
@@ -585,7 +606,7 @@ export async function handleUntrack(interaction) {
 
     await interaction.deferReply({ ephemeral: true });
 
-    const username = interaction.options.getString('username').toLowerCase().trim();
+    const username = normalizeThroneUsername(interaction.options.getString('username'));
 
     const [result] = await pool.execute(
         'DELETE FROM throne_notifications WHERE guild_id = ? AND throne_username = ?',
@@ -615,7 +636,7 @@ export async function handleTracked(interaction) {
     );
 
     if (rows.length === 0) {
-        return interaction.editReply({ content: 'No Throne users are being tracked in this server. Use `/throne track` to set one up.' });
+        return interaction.editReply({ content: 'No Throne users are being tracked in this server. Use `/creator throne track` to set one up.' });
     }
 
     const lines = rows.map(row => {
@@ -651,7 +672,7 @@ export async function handleFeatured(interaction) {
         );
 
         if (rows.length === 0) {
-            return interaction.editReply({ content: 'This server has no featured Throne wishlist. An admin can set one with `/throne featured set <username>`.' });
+            return interaction.editReply({ content: 'This server has no featured Throne wishlist. An admin can set one with `/creator throne featured set <username>`.' });
         }
 
         const { profile, error: fetchErr } = await getOrFetchProfile(rows[0].featured_username, interaction);
@@ -675,7 +696,7 @@ export async function handleFeatured(interaction) {
 
         await interaction.deferReply({ ephemeral: true });
 
-        const cleanUsername = username.toLowerCase().trim();
+        const cleanUsername = normalizeThroneUsername(username);
         await pool.execute(
             `INSERT INTO throne_guild_config (guild_id, featured_username, set_by)
              VALUES (?, ?, ?)

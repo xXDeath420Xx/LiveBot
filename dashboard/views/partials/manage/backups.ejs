@@ -1,361 +1,265 @@
+<%
+// Server backups: create a snapshot, restore or delete one, and compare one with the server as it
+// is now (the compare dialog). Built on the settings-row kit (cf-settings.css). Forms, field names
+// (snapshot_name, backupId, gracePeriod) and routes (dashboard/routes/features/backups.js) are
+// unchanged; the list is one row per backup with its actions.
+const bkList = (typeof backups !== 'undefined' && Array.isArray(backups)) ? backups.slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at)) : [];
+const bkNow = Date.now();
+const bkAge = (d) => {
+    const days = Math.floor((bkNow - new Date(d).getTime()) / 86400000);
+    return days <= 0 ? 'Today' : days === 1 ? 'Yesterday' : days < 60 ? `${days} days ago` : `${Math.round(days / 30)} months ago`;
+};
+const bkBy = (id) => {
+    if (!id) return null;
+    const m = guild && guild.members && guild.members.cache && typeof guild.members.cache.get === 'function' ? guild.members.cache.get(String(id)) : null;
+    return m ? (m.displayName || (m.user && m.user.username)) : null;
+};
+%>
+<style>
+    .bk-list .cf-list-actions form { display: inline-flex; margin: 0; }
+    .bk-list .cf-list-item[hidden] { display: none; }
+    .diff-overlay { display: none; }
+    .diff-overlay.active { display: flex; }
+    .diff-modal { --cf-modal-w: 40rem; }
+    .diff-body { font-size: var(--cf-text-sm); color: var(--cf-text-2); }
+    .diff-section + .diff-section { margin-top: var(--cf-4); }
+    .diff-section-title { margin: 0 0 var(--cf-2); font-size: var(--cf-text-xs); font-weight: 600; color: var(--cf-text-3); }
+    .diff-item { padding: 6px 10px; border-radius: var(--cf-radius-sm); font-size: var(--cf-text-sm); overflow-wrap: anywhere; }
+    .diff-item + .diff-item { margin-top: 4px; }
+    .diff-added { color: var(--cf-success); background: color-mix(in srgb, var(--cf-success) 10%, transparent); }
+    .diff-removed { color: var(--cf-danger); background: color-mix(in srgb, var(--cf-danger) 10%, transparent); }
+    .diff-changed { color: var(--cf-warning); background: color-mix(in srgb, var(--cf-warning) 10%, transparent); }
+    .diff-summary { justify-content: flex-start; font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+    .diff-summary:empty { display: none; }
+</style>
+
 <div class="page-section">
     <div class="page-section-header">
         <div>
             <div class="page-section-title">
                 <i class="fas fa-database"></i>
-                <span>Server Backups</span>
+                <span>Server backups</span>
             </div>
-            <div class="page-section-subtitle">
-                Create and manage snapshots of your server configuration
-            </div>
+            <div class="page-section-subtitle">Make one before big changes. Restoring replaces what is there now.</div>
         </div>
     </div>
 
-    <!-- Stats Overview -->
-    <% if (backups && backups.length > 0) { %>
-        <div class="grid grid-cols-3" style="margin-bottom: var(--spacing-6);">
-            <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-                <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Total Backups</div>
-                <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary);"><%= backups.length %></div>
-            </div>
-            <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-                <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Latest Backup</div>
-                <% const latest = backups.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0]; %>
-                <div style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: var(--color-primary-400); margin-top: var(--spacing-1);">
-                    <%= new Date(latest.created_at).toLocaleDateString() %>
-                </div>
-            </div>
-            <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-                <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Status</div>
-                <div style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-success); margin-top: var(--spacing-1);">
-                    <i class="fas fa-shield-alt"></i> Protected
-                </div>
-            </div>
-        </div>
+    <% if (bkList.length) { %>
+    <%- include('../kit/_kpis', { label: 'Backups at a glance', items: [
+        { label: 'Backups', value: bkList.length },
+        { label: 'Latest', value: bkAge(bkList[0].created_at), small: true },
+    ] }) %>
     <% } %>
 
-    <!-- Create Backup Card -->
-    <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6); margin-bottom: var(--spacing-6);">
-        <div style="display: flex; align-items: center; gap: var(--spacing-3); margin-bottom: var(--spacing-4);">
-            <div style="width: 48px; height: 48px; background: linear-gradient(135deg, var(--color-primary-500), var(--color-primary-600)); border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                <i class="fas fa-plus" style="color: white; font-size: 1.25rem;"></i>
-            </div>
+    <section class="cf-section" aria-labelledby="bk-create-title">
+        <header class="cf-section-head">
             <div>
-                <h4 style="margin: 0; font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary);">Create New Backup</h4>
-                <p style="margin: 0; font-size: var(--font-size-sm); color: var(--color-text-muted);">Create a snapshot of your server's current configuration</p>
+                <h2 class="cf-section-title" id="bk-create-title">Create a backup</h2>
+                <p class="cf-section-desc">Saves roles, channels and categories with their permissions, server settings, emojis, stickers, webhooks, bans, every member's roles and all of the bot's settings for this server.</p>
             </div>
-        </div>
-
-        <form action="/manage/<%= guild.id %>/create-backup" method="POST">
-            <div class="grid grid-cols-3" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
-                <div style="grid-column: span 2;">
-                    <label class="form-label">Snapshot Name</label>
-                    <input type="text" name="snapshot_name" class="form-control" required placeholder="e.g., Pre-raid setup, Before event, Initial config">
-                    <div class="form-help">Choose a descriptive name to easily identify this backup later</div>
+        </header>
+        <form class="cf-rows" action="/manage/<%= guild.id %>/create-backup" method="POST">
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="f-backups-snapshot_name">Name</label>
+                    <p class="cf-row-desc" id="f-backups-snapshot_name-desc">Something you will recognise later, such as "Before the event".</p>
                 </div>
-
-                <div style="display: flex; align-items: flex-end;">
-                    <button type="submit" class="btn btn-primary" style="width: 100%;">
-                        <i class="fas fa-save"></i>
-                        <span>Create Backup</span>
-                    </button>
+                <div class="cf-row-control">
+                    <input id="f-backups-snapshot_name" type="text" name="snapshot_name" class="form-control" required maxlength="100" placeholder="Before the event" aria-describedby="f-backups-snapshot_name-desc">
                 </div>
             </div>
-
-            <div style="background: linear-gradient(135deg, rgba(167, 139, 250, 0.1), rgba(167, 139, 250, 0.05)); border: 1px solid rgba(167, 139, 250, 0.3); border-radius: var(--radius-md); padding: var(--spacing-3);">
-                <div style="display: flex; gap: var(--spacing-3);">
-                    <i class="fas fa-info-circle" style="color: var(--color-primary-400); margin-top: 2px;"></i>
-                    <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">
-                        Backups include: roles, channels, categories, permission overwrites, server settings, emojis, stickers, webhooks, bans, member role assignments, all bot configuration, and a full member snapshot for rejoin restoration.
-                    </div>
-                </div>
+            <div class="cf-section-foot">
+                <span class="cf-foot-note">Takes a few seconds on large servers.</span>
+                <button type="submit" class="btn btn-primary">Create backup</button>
             </div>
         </form>
+    </section>
 
-        <!-- Restore Settings -->
-        <div style="margin-top: var(--spacing-4); padding-top: var(--spacing-4); border-top: 1px solid var(--color-dark-400);">
-            <div style="display: flex; align-items: center; gap: var(--spacing-3); margin-bottom: var(--spacing-3);">
-                <i class="fas fa-user-clock" style="color: var(--color-primary-400); font-size: 1.1rem;"></i>
-                <div>
-                    <div style="font-size: var(--font-size-sm); font-weight: var(--font-weight-bold); color: var(--color-text-primary);">Rejoin Restoration Window</div>
-                    <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">When restoring, members who rejoin within this period get their roles automatically reassigned</div>
+    <section class="cf-section" aria-labelledby="bk-list-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="bk-list-title">Saved backups<% if (bkList.length) { %> <span class="cf-chip"><%= bkList.length %></span><% } %></h2>
+                <p class="cf-section-desc">Compare shows what changed since the backup. Restore re-creates missing roles and channels and resets the ones that changed; it cannot be undone.</p>
+            </div>
+            <% if (bkList.length > 15) { %>
+            <div class="cf-section-actions">
+                <label class="cf-search">
+                    <i class="fas fa-magnifying-glass" aria-hidden="true"></i>
+                    <span class="visually-hidden">Search backups</span>
+                    <input type="search" class="form-control form-control-sm" id="bkSearch" placeholder="Search backups" autocomplete="off">
+                </label>
+            </div>
+            <% } %>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="restore-grace-period">Give roles back to members who rejoin</label>
+                    <p class="cf-row-desc" id="restore-grace-period-desc">After a restore, members who left and come back within this time get the roles they had in the backup.</p>
+                </div>
+                <div class="cf-row-control">
+                    <select id="restore-grace-period" class="form-select" aria-describedby="restore-grace-period-desc">
+                        <option value="7">For 7 days</option>
+                        <option value="14">For 14 days</option>
+                        <option value="30" selected>For 30 days</option>
+                        <option value="60">For 60 days</option>
+                        <option value="90">For 90 days</option>
+                        <option value="0">Off</option>
+                    </select>
                 </div>
             </div>
-            <div style="display: flex; align-items: center; gap: var(--spacing-3);">
-                <select id="restore-grace-period" class="form-select" style="max-width: 200px;">
-                    <option value="7">7 days</option>
-                    <option value="14">14 days</option>
-                    <option value="30" selected>30 days (default)</option>
-                    <option value="60">60 days</option>
-                    <option value="90">90 days</option>
-                    <option value="0">Disabled</option>
-                </select>
-                <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">
-                    Applied when you click Restore on a backup below
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Backups List -->
-    <% if (backups && backups.length > 0) { %>
-        <div class="table-container">
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th>Snapshot</th>
-                        <th>Created</th>
-                        <th>Age</th>
-                        <th class="text-end">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <% backups.sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).forEach(backup => {
-                        const createdDate = new Date(backup.created_at);
-                        const now = new Date();
-                        const diffDays = Math.floor((now - createdDate) / (1000 * 60 * 60 * 24));
-                        const ageText = diffDays === 0 ? 'Today' : diffDays === 1 ? '1 day ago' : `${diffDays} days ago`;
-                    %>
-                        <tr>
-                            <td>
-                                <div style="display: flex; align-items: center; gap: var(--spacing-3);">
-                                    <div style="width: 40px; height: 40px; background: var(--color-dark-700); border: 2px solid var(--color-primary-500); border-radius: var(--radius-md); display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
-                                        <i class="fas fa-archive" style="color: var(--color-primary-400);"></i>
-                                    </div>
-                                    <div>
-                                        <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary);"><%= backup.snapshot_name %></div>
-                                        <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">ID: <%= backup.id %></div>
-                                    </div>
-                                </div>
-                            </td>
-                            <td>
-                                <div style="color: var(--color-text-secondary); font-size: var(--font-size-sm);">
-                                    <%= createdDate.toLocaleDateString() %><br>
-                                    <span style="color: var(--color-text-muted); font-size: var(--font-size-xs);"><%= createdDate.toLocaleTimeString() %></span>
-                                </div>
-                            </td>
-                            <td>
-                                <span class="badge badge-secondary"><%= ageText %></span>
-                            </td>
-                            <td class="text-end">
-                                <div style="display: flex; gap: var(--spacing-2); justify-content: flex-end;">
-                                    <button type="button" class="btn btn-sm btn-secondary" title="Compare with current" onclick="showDiff('<%= guild.id %>', '<%= backup.id %>')">
-                                        <i class="fas fa-code-branch"></i>
-                                        <span>Diff</span>
-                                    </button>
-                                    <form action="/manage/<%= guild.id %>/restore-backup" method="POST" style="display: inline;" onsubmit="this.querySelector('[name=gracePeriod]').value = document.getElementById('restore-grace-period').value; return confirm('Are you sure you want to restore this backup? This will overwrite current server settings!');">
-                                        <input type="hidden" name="backupId" value="<%= backup.id %>">
-                                        <input type="hidden" name="gracePeriod" value="30">
-                                        <button type="submit" class="btn btn-sm btn-secondary" title="Restore">
-                                            <i class="fas fa-undo"></i>
-                                            <span>Restore</span>
-                                        </button>
-                                    </form>
-                                    <form action="/manage/<%= guild.id %>/delete-backup" method="POST" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this backup? This action cannot be undone.');">
-                                        <input type="hidden" name="backupId" value="<%= backup.id %>">
-                                        <button type="submit" class="btn btn-sm btn-danger" title="Delete">
-                                            <i class="fas fa-trash"></i>
-                                        </button>
-                                    </form>
-                                </div>
-                            </td>
-                        </tr>
-                    <% }); %>
-                </tbody>
-            </table>
-        </div>
-
-        <!-- Warning Banner -->
-        <div style="margin-top: var(--spacing-6); background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(239, 68, 68, 0.05)); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: var(--radius-lg); padding: var(--spacing-4);">
-            <div style="display: flex; gap: var(--spacing-3);">
-                <i class="fas fa-exclamation-triangle" style="color: var(--color-danger); font-size: 1.25rem; margin-top: 2px;"></i>
-                <div>
-                    <div style="font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-2);">
-                        Important: Restore with Caution
+            <% if (bkList.length) { %>
+            <div class="cf-list bk-list" id="bkList">
+                <% bkList.forEach(function (backup) {
+                    const created = new Date(backup.created_at);
+                    const by = bkBy(backup.created_by_id);
+                %>
+                <div class="cf-list-item cf-list-item--multi" data-name="<%= String(backup.snapshot_name || '').toLowerCase() %>">
+                    <div class="cf-list-main">
+                        <p class="cf-list-title"><%= backup.snapshot_name %></p>
+                        <p class="cf-list-meta">
+                            <span title="<%= created.toISOString() %>"><%= created.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) %> <%= created.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }) %> UTC</span>
+                            <span><%= bkAge(backup.created_at) %></span>
+                            <% if (by) { %><span>by <%= by %></span><% } %>
+                        </p>
                     </div>
-                    <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary); line-height: 1.6;">
-                        Restoring a backup will <strong style="color: var(--color-danger);">overwrite your current server configuration</strong>. This includes roles, channels, and permissions. This action cannot be undone. Consider creating a new backup of your current state before restoring.
+                    <div class="cf-list-actions">
+                        <button type="button" class="btn btn-sm btn-secondary" data-bk-compare="<%= backup.id %>">Compare</button>
+                        <form action="/manage/<%= guild.id %>/restore-backup" method="POST" class="bk-restore" data-name="<%= backup.snapshot_name %>">
+                            <input type="hidden" name="backupId" value="<%= backup.id %>">
+                            <input type="hidden" name="gracePeriod" value="30">
+                            <button type="submit" class="btn btn-sm btn-secondary">Restore</button>
+                        </form>
+                        <form action="/manage/<%= guild.id %>/delete-backup" method="POST" class="bk-delete" data-name="<%= backup.snapshot_name %>">
+                            <input type="hidden" name="backupId" value="<%= backup.id %>">
+                            <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                        </form>
                     </div>
                 </div>
+                <% }); %>
             </div>
+            <div class="cf-state cf-state--compact" id="bkNoMatch" hidden><p class="cf-state-text">No backups match that search.</p></div>
+            <% } else { %>
+            <%- include('../kit/_state', { kind: 'empty', title: 'No backups yet', text: 'Name one above and press Create backup.' }) %>
+            <% } %>
         </div>
-    <% } else { %>
-        <div class="empty-state">
-            <div class="empty-state-icon">
-                <i class="fas fa-database"></i>
-            </div>
-            <div class="empty-state-title">No Backups Created</div>
-            <div class="empty-state-description">
-                Create your first backup to protect your server configuration
-            </div>
-        </div>
-    <% } %>
+    </section>
 </div>
 
-<style>
-.table-container {
-    overflow-x: auto;
-    border: 1px solid var(--color-dark-400);
-    border-radius: var(--radius-lg);
-}
-
-.data-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-.data-table thead {
-    background: var(--color-dark-600);
-    border-bottom: 2px solid var(--color-dark-400);
-}
-
-.data-table th {
-    padding: var(--spacing-4);
-    text-align: left;
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-
-.data-table td {
-    padding: var(--spacing-4);
-    border-bottom: 1px solid var(--color-dark-400);
-}
-
-.data-table tbody tr {
-    transition: background var(--transition-base);
-}
-
-.data-table tbody tr:hover {
-    background: var(--color-dark-600);
-}
-
-.data-table tbody tr:last-child td {
-    border-bottom: none;
-}
-
-.empty-state {
-    text-align: center;
-    padding: var(--spacing-12) var(--spacing-8);
-}
-
-.empty-state-icon {
-    font-size: 4rem;
-    color: var(--color-text-muted);
-    margin-bottom: var(--spacing-4);
-}
-
-.empty-state-title {
-    font-size: var(--font-size-xl);
-    font-weight: var(--font-weight-bold);
-    color: var(--color-text-primary);
-    margin-bottom: var(--spacing-2);
-}
-
-.empty-state-description {
-    font-size: var(--font-size-base);
-    color: var(--color-text-secondary);
-    margin-bottom: var(--spacing-6);
-}
-
-.form-label {
-    display: block;
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-primary);
-    margin-bottom: var(--spacing-2);
-}
-
-.form-help {
-    font-size: var(--font-size-xs);
-    color: var(--color-text-muted);
-    margin-top: var(--spacing-2);
-}
-.diff-overlay { display:none; position:fixed; top:0;left:0;right:0;bottom:0; background:rgba(0,0,0,0.7); z-index:10000; justify-content:center; align-items:center; backdrop-filter:blur(4px); }
-.diff-overlay.active { display:flex; }
-.diff-modal { background:#1a1d23; border:1px solid rgba(167,139,250,0.3); border-radius:16px; width:90%; max-width:600px; max-height:85vh; overflow-y:auto; box-shadow:0 24px 48px rgba(0,0,0,0.5); }
-.diff-header { padding:1.25rem 1.5rem; border-bottom:1px solid rgba(255,255,255,0.08); display:flex; justify-content:space-between; align-items:center; }
-.diff-header h3 { margin:0; font-size:1.1rem; font-weight:700; color:#fff; }
-.diff-close { background:none; border:none; color:rgba(255,255,255,0.5); font-size:1.2rem; cursor:pointer; }
-.diff-body { padding:1.5rem; }
-.diff-section { margin-bottom:1.25rem; }
-.diff-section-title { font-size:0.8rem; font-weight:700; text-transform:uppercase; letter-spacing:0.06em; color:rgba(255,255,255,0.5); margin-bottom:0.5rem; }
-.diff-item { padding:0.4rem 0.75rem; border-radius:6px; font-size:0.82rem; margin-bottom:0.25rem; }
-.diff-added { background:rgba(35,245,107,0.1); color:#23f56b; }
-.diff-removed { background:rgba(248,113,113,0.1); color:#f87171; }
-.diff-changed { background:rgba(251,191,36,0.1); color:#fbbf24; }
-.diff-identical { text-align:center; padding:2rem; color:rgba(255,255,255,0.4); }
-.diff-summary { padding:1rem 1.5rem; border-top:1px solid rgba(255,255,255,0.08); font-size:0.8rem; color:rgba(255,255,255,0.5); }
-</style>
-
-<div class="diff-overlay" id="diffOverlay">
-    <div class="diff-modal">
-        <div class="diff-header">
-            <h3 id="diffTitle">Backup Diff</h3>
-            <button class="diff-close" onclick="closeDiff()">&times;</button>
+<div class="diff-overlay cf-modal" id="diffOverlay" role="dialog" aria-modal="true" aria-labelledby="diffTitle">
+    <div class="diff-modal cf-modal-dialog">
+        <div class="cf-modal-head">
+            <h3 class="cf-modal-title" id="diffTitle">Backup comparison</h3>
+            <button type="button" class="cf-modal-close" id="diffClose" aria-label="Close">&times;</button>
         </div>
-        <div class="diff-body" id="diffBody"></div>
-        <div class="diff-summary" id="diffSummary"></div>
+        <div class="diff-body cf-modal-body" id="diffBody"></div>
+        <div class="diff-summary cf-modal-foot" id="diffSummary"></div>
     </div>
 </div>
 
 <script>
-async function showDiff(guildId, backupId) {
-    document.getElementById('diffOverlay').classList.add('active');
-    document.getElementById('diffBody').textContent = 'Comparing...';
-    document.getElementById('diffSummary').textContent = '';
-    try {
-        var resp = await fetch('/api/guilds/' + guildId + '/backup-diff/' + backupId, { credentials: 'include' });
-        var data = await resp.json();
-        if (!data.success) throw new Error(data.error);
-        renderDiff(data.diff);
-    } catch (err) {
-        document.getElementById('diffBody').textContent = 'Error: ' + err.message;
-    }
-}
-function closeDiff() { document.getElementById('diffOverlay').classList.remove('active'); }
-function renderDiff(diff) {
-    var body = document.getElementById('diffBody');
-    var summary = document.getElementById('diffSummary');
-    document.getElementById('diffTitle').textContent = 'Diff: ' + (diff.summary.backupName || 'Backup');
-    if (diff.summary.identical) {
-        body.textContent = 'Server matches this backup perfectly. No differences found.';
-        summary.textContent = '0 changes';
-        return;
-    }
-    body.textContent = '';
-    function addItems(title, items) {
-        if (!items.length) return;
-        var sec = document.createElement('div'); sec.className = 'diff-section';
-        var t = document.createElement('div'); t.className = 'diff-section-title'; t.textContent = title; sec.appendChild(t);
-        items.forEach(function(item) {
-            var el = document.createElement('div'); el.className = 'diff-item ' + item.c;
-            el.textContent = item.t; sec.appendChild(el);
+(function () {
+    var gid = '<%= guild.id %>';
+    var overlay = document.getElementById('diffOverlay');
+    var lastFocus = null;
+
+    // Restore and delete ask first; restore carries the rejoin window chosen above.
+    document.querySelectorAll('form.bk-restore').forEach(function (f) {
+        f.addEventListener('submit', function (e) {
+            var grace = document.getElementById('restore-grace-period');
+            f.querySelector('[name=gracePeriod]').value = grace ? grace.value : '30';
+            if (!confirm('Restore "' + f.dataset.name + '"? Roles, channels and permissions are reset to the backup. This cannot be undone, and can take several minutes.')) e.preventDefault();
+        }, true);
+    });
+    document.querySelectorAll('form.bk-delete').forEach(function (f) {
+        f.addEventListener('submit', function (e) {
+            if (!confirm('Delete the backup "' + f.dataset.name + '"? This cannot be undone.')) e.preventDefault();
+        }, true);
+    });
+
+    var search = document.getElementById('bkSearch');
+    if (search) {
+        search.addEventListener('input', function () {
+            var q = search.value.trim().toLowerCase(), shown = 0;
+            document.querySelectorAll('#bkList > .cf-list-item').forEach(function (row) {
+                var hit = !q || (row.dataset.name || '').indexOf(q) !== -1;
+                row.hidden = !hit;
+                if (hit) shown++;
+            });
+            document.getElementById('bkNoMatch').hidden = shown !== 0;
         });
-        body.appendChild(sec);
     }
-    var ri = [];
-    diff.roles.removed.forEach(function(r) { ri.push({c:'diff-removed',t:'- Missing: '+r}); });
-    diff.roles.added.forEach(function(r) { ri.push({c:'diff-added',t:'+ New: '+r}); });
-    diff.roles.changed.forEach(function(r) { ri.push({c:'diff-changed',t:'~ '+r.name+': '+r.changes.join(', ')}); });
-    addItems('Roles', ri);
-    var ci = [];
-    diff.categories.removed.forEach(function(c) { ci.push({c:'diff-removed',t:'- Missing: '+c}); });
-    diff.categories.added.forEach(function(c) { ci.push({c:'diff-added',t:'+ New: '+c}); });
-    addItems('Categories', ci);
-    var ch = [];
-    diff.channels.removed.forEach(function(c) { ch.push({c:'diff-removed',t:'- Missing: #'+c}); });
-    diff.channels.added.forEach(function(c) { ch.push({c:'diff-added',t:'+ New: '+c}); });
-    addItems('Channels', ch);
-    var si = [];
-    diff.settings.forEach(function(s) { si.push({c:'diff-changed',t:'~ '+s}); });
-    addItems('Settings', si);
-    var ei = [];
-    if (diff.emojis.removed) ei.push({c:'diff-removed',t:'- '+diff.emojis.removed+' emoji(s) removed since backup'});
-    if (diff.emojis.added) ei.push({c:'diff-added',t:'+ '+diff.emojis.added+' emoji(s) added since backup'});
-    addItems('Emojis', ei);
-    summary.textContent = diff.summary.totalChanges + ' change(s) \u00b7 Backup v' + diff.summary.backupVersion + ' from ' + new Date(diff.summary.backupDate).toLocaleDateString();
-}
+
+    document.querySelectorAll('[data-bk-compare]').forEach(function (b) {
+        b.addEventListener('click', function () { lastFocus = b; showDiff(gid, b.getAttribute('data-bk-compare')); });
+    });
+    document.getElementById('diffClose').addEventListener('click', closeDiff);
+    overlay.addEventListener('click', function (e) { if (e.target === overlay) closeDiff(); });
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && overlay.classList.contains('active')) closeDiff(); });
+
+    async function showDiff(guildId, backupId) {
+        overlay.classList.add('active');
+        document.getElementById('diffTitle').textContent = 'Backup comparison';
+        document.getElementById('diffBody').textContent = 'Comparing with the server…';
+        document.getElementById('diffSummary').textContent = '';
+        document.getElementById('diffClose').focus();
+        try {
+            var resp = await fetch('/api/guilds/' + guildId + '/backup-diff/' + encodeURIComponent(backupId), { credentials: 'include' });
+            var data = await resp.json();
+            if (!data.success) throw new Error(data.error || 'Request failed');
+            renderDiff(data.diff);
+        } catch (err) {
+            document.getElementById('diffBody').textContent = 'Could not compare: ' + err.message;
+        }
+    }
+    function closeDiff() {
+        overlay.classList.remove('active');
+        if (lastFocus) lastFocus.focus();
+    }
+    function renderDiff(diff) {
+        var body = document.getElementById('diffBody');
+        var summary = document.getElementById('diffSummary');
+        document.getElementById('diffTitle').textContent = 'Compared with ' + (diff.summary.backupName || 'the backup');
+        if (diff.summary.identical) {
+            body.textContent = 'The server matches this backup.';
+            summary.textContent = 'No changes';
+            return;
+        }
+        body.textContent = '';
+        function addItems(title, items) {
+            if (!items.length) return;
+            var sec = document.createElement('div'); sec.className = 'diff-section';
+            var t = document.createElement('div'); t.className = 'diff-section-title'; t.textContent = title + ' (' + items.length + ')'; sec.appendChild(t);
+            items.forEach(function (item) {
+                var el = document.createElement('div'); el.className = 'diff-item ' + item.c;
+                el.textContent = item.t; sec.appendChild(el);
+            });
+            body.appendChild(sec);
+        }
+        var ri = [];
+        diff.roles.removed.forEach(function (r) { ri.push({ c: 'diff-removed', t: 'Deleted since the backup: ' + r }); });
+        diff.roles.added.forEach(function (r) { ri.push({ c: 'diff-added', t: 'New since the backup: ' + r }); });
+        diff.roles.changed.forEach(function (r) { ri.push({ c: 'diff-changed', t: r.name + ': ' + r.changes.join(', ') }); });
+        addItems('Roles', ri);
+        var ci = [];
+        diff.categories.removed.forEach(function (c) { ci.push({ c: 'diff-removed', t: 'Deleted since the backup: ' + c }); });
+        diff.categories.added.forEach(function (c) { ci.push({ c: 'diff-added', t: 'New since the backup: ' + c }); });
+        addItems('Categories', ci);
+        var ch = [];
+        diff.channels.removed.forEach(function (c) { ch.push({ c: 'diff-removed', t: 'Deleted since the backup: #' + c }); });
+        diff.channels.added.forEach(function (c) { ch.push({ c: 'diff-added', t: 'New since the backup: #' + c }); });
+        addItems('Channels', ch);
+        var si = [];
+        diff.settings.forEach(function (s) { si.push({ c: 'diff-changed', t: s }); });
+        addItems('Server settings', si);
+        var ei = [];
+        if (diff.emojis.removed) ei.push({ c: 'diff-removed', t: diff.emojis.removed + (diff.emojis.removed === 1 ? ' emoji' : ' emojis') + ' deleted since the backup' });
+        if (diff.emojis.added) ei.push({ c: 'diff-added', t: diff.emojis.added + (diff.emojis.added === 1 ? ' emoji' : ' emojis') + ' added since the backup' });
+        addItems('Emojis', ei);
+        var n = diff.summary.totalChanges;
+        summary.textContent = n + (n === 1 ? ' difference' : ' differences') + ' · backup made ' + new Date(diff.summary.backupDate).toLocaleDateString();
+    }
+    window.showDiff = showDiff;
+    window.closeDiff = closeDiff;
+})();
 </script>

@@ -65,7 +65,7 @@ export default {
             `\`\`\`${publicUrl()}/webhooks/kofi/${config.webhook_token}\`\`\`\n` +
             '**Treat that URL as a password** — anyone with it can post payments to this server.')
           .addFields(
-            { name: 'Next', value: 'Map a role with `/kofi tier`, then tell supporters to run `/kofi link`.' },
+            { name: 'Next', value: 'Map a role with `/creator kofi tier`, then tell supporters to run `/creator kofi link`.' },
             { name: 'Perk length', value: `${config.role_duration_days} days, extended on every renewal`, inline: true })],
         ...EPHEMERAL,
       });
@@ -74,7 +74,7 @@ export default {
     if (sub === 'url') {
       if (!isAdmin()) return needAdmin();
       const config = await getConfig(guildId);
-      if (!config) return interaction.reply({ content: 'Run `/kofi setup` first.', ...EPHEMERAL });
+      if (!config) return interaction.reply({ content: 'Run `/creator kofi setup` first.', ...EPHEMERAL });
       return interaction.reply({
         content: `Webhook URL (keep it secret):\n\`\`\`${publicUrl()}/webhooks/kofi/${config.webhook_token}\`\`\``,
         ...EPHEMERAL,
@@ -115,7 +115,7 @@ export default {
 
     if (sub === 'tiers') {
       const tiers = await getTiers(guildId);
-      if (!tiers.length) return interaction.reply({ content: 'No tiers mapped yet. `/kofi tier` sets one up.', ...EPHEMERAL });
+      if (!tiers.length) return interaction.reply({ content: 'No tiers mapped yet. `/creator kofi tier` sets one up.', ...EPHEMERAL });
       const body = tiers.map(t => t.tier_name
         ? `• Tier **${t.tier_name}** → <@&${t.role_id}>`
         : `• **${Number(t.min_amount).toFixed(2)}+** → <@&${t.role_id}>`).join('\n');
@@ -158,7 +158,7 @@ export default {
       if (!s) {
         return interaction.reply({
           content: who.id === interaction.user.id
-            ? 'You have no Ko-fi support recorded here. Run `/kofi link` to connect your account.'
+            ? 'You have no Ko-fi support recorded here. Run `/creator kofi link` to connect your account.'
             : `**${who.username}** has no Ko-fi support recorded here.`,
           ...EPHEMERAL,
         });

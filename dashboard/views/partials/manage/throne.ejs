@@ -1,368 +1,507 @@
+<%#
+  Throne: creators this server tracks, the alerts posted for them, extras (link embeds, birthday
+  reminders, monthly spotlight), the featured wishlist and optional instant webhook alerts.
+  API: /api/guilds/:id/throne (notifications, settings, featured, webhooks). Alerts are posted by
+  core/throne-manager.js: once a throne_guild_settings row exists its toggles apply to every
+  tracked creator; until then each creator's own choices (throne_notifications) apply.
+%>
+<%
+const thGuildId = guild.id;
+const thTracked = typeof throneNotifications !== 'undefined' && Array.isArray(throneNotifications) ? throneNotifications : [];
+const thFeat = typeof throneGuildConfig !== 'undefined' ? throneGuildConfig : null;
+const thSaved = typeof throneSettings !== 'undefined' ? throneSettings : null;
+const thText = (channels || []).filter(c => c.type === 0 || c.type === 5 || c.type === undefined);
+const thChannelName = (id) => { const c = (channels || []).find(x => String(x.id) === String(id)); return c ? '#' + c.name : 'a deleted channel'; };
+// What the alert switches show before the server has its own row: what the API will seed it with
+// (dashboard/routes/api/features/throne.js), so switching to server-wide alerts changes nothing.
+const thAny = (k) => thTracked.length === 0 || thTracked.some(n => Number(n[k]) === 1);
+const thS = thSaved || {
+    notify_item_added: thAny('notify_new_items') ? 1 : 0,
+    notify_gift_received: thAny('notify_gifts') ? 1 : 0,
+    notify_contribution: thAny('notify_contributions') ? 1 : 0,
+    notify_item_removed: 0, notify_price_change: 0, notify_milestone: 0,
+    auto_embed_links: 0, birthday_reminder: 0, monthly_spotlight: 0,
+    birthday_reminder_days: 3, price_change_threshold: 10,
+};
+const thOn = (k) => Number(thS[k]) === 1;
+const thChanOpts = (selected) => thText.map(c => `<option value="${c.id}" data-kind="text"${String(c.id) === String(selected || '') ? ' selected' : ''}>#${c.name.replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]))}</option>`).join('');
+%>
 <style>
-.throne-card {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(124, 58, 237, 0.15);
-    border-radius: 12px;
-    overflow: hidden;
-    margin-bottom: 16px;
-}
-.throne-card-header {
-    background: rgba(124, 58, 237, 0.08);
-    padding: 14px 18px;
-    border-bottom: 1px solid rgba(124, 58, 237, 0.15);
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-.throne-card-header i { font-size: 1rem; color: #7c3aed; }
-.throne-card-header h3 { font-size: 0.95rem; font-weight: 600; color: #ffffff; margin: 0; }
-.throne-card-header p { font-size: 0.75rem; color: rgba(255, 255, 255, 0.5); margin: 2px 0 0 0; }
-.throne-card-body { padding: 18px; }
-.throne-track-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 12px 16px;
-    background: rgba(0, 0, 0, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 10px;
-    margin-bottom: 8px;
-}
-.throne-track-row:hover { border-color: rgba(124, 58, 237, 0.3); }
-.throne-badges { display: flex; gap: 6px; flex-wrap: wrap; }
-.throne-badge {
-    font-size: 0.7rem;
-    padding: 2px 8px;
-    border-radius: 999px;
-    background: rgba(124, 58, 237, 0.15);
-    color: #a78bfa;
-    border: 1px solid rgba(124, 58, 237, 0.25);
-}
-.throne-badge.off { opacity: 0.4; text-decoration: line-through; }
-.throne-empty {
-    text-align: center;
-    padding: 32px;
-    color: rgba(255, 255, 255, 0.4);
-}
-.throne-empty i { font-size: 2rem; margin-bottom: 8px; display: block; opacity: 0.3; }
-.throne-form-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 12px;
-    margin-bottom: 12px;
-}
-.throne-form-row.three { grid-template-columns: 1fr 1fr 1fr; }
-.throne-input {
-    background: rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 8px;
-    padding: 8px 12px;
-    color: #fff;
-    font-size: 0.85rem;
-    width: 100%;
-}
-.throne-input:focus { border-color: #7c3aed; outline: none; }
-.throne-input::placeholder { color: rgba(255, 255, 255, 0.3); }
-.throne-btn {
-    background: #7c3aed;
-    color: #fff;
-    border: none;
-    border-radius: 8px;
-    padding: 8px 16px;
-    cursor: pointer;
-    font-size: 0.85rem;
-    font-weight: 500;
-    transition: all 0.2s;
-}
-.throne-btn:hover { background: #6d28d9; }
-.throne-btn.danger { background: rgba(239, 68, 68, 0.2); color: #f87171; border: 1px solid rgba(239, 68, 68, 0.3); }
-.throne-btn.danger:hover { background: rgba(239, 68, 68, 0.3); }
-.throne-btn.small { padding: 4px 10px; font-size: 0.75rem; }
+    #cfk-throne-page .th-name { font-weight: 500; color: var(--cf-text); overflow-wrap: anywhere; }
+    #cfk-throne-page .th-meta { display: block; font-size: var(--cf-text-xs); color: var(--cf-text-3); margin-top: 2px; overflow-wrap: anywhere; }
+    #cfk-throne-page .th-pills { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+    #cfk-throne-page .th-pill-off { opacity: 0.55; }
+    #cfk-throne-page .th-url { display: block; padding: var(--cf-3); border-radius: var(--cf-radius); background: var(--cf-surface-3); border: 1px solid var(--cf-border); font-family: var(--cf-mono); font-size: var(--cf-text-sm); color: var(--cf-text); overflow-wrap: anywhere; user-select: all; }
+    #cfk-throne-page .cf-section-foot > .cf-status-line { margin-right: auto; }
 </style>
 
-<%
-const guildId = guild.id;
-const notifications = typeof throneNotifications !== 'undefined' ? throneNotifications : [];
-const featured = typeof throneGuildConfig !== 'undefined' ? throneGuildConfig : null;
-%>
-
-<!-- Guild Settings -->
-<div class="throne-card">
-    <div class="throne-card-header">
-        <i class="fas fa-cog"></i>
+<div class="page-section" id="cfk-throne-page" data-guild-id="<%= thGuildId %>" data-has-settings="<%= thSaved ? '1' : '0' %>">
+    <div class="page-section-header">
         <div>
-            <h3>Throne Settings</h3>
-            <p>Configure which features are enabled (all off by default)</p>
+            <div class="page-section-title">
+                <i class="fas fa-crown" aria-hidden="true"></i>
+                <span>Throne</span>
+            </div>
+            <div class="page-section-subtitle">Wishlist, gift and contribution alerts for the creators you track.</div>
         </div>
     </div>
-    <div class="throne-card-body" id="throneSettingsBody">
-        <div style="text-align: center; color: rgba(255,255,255,0.4); padding: 16px;">Loading settings...</div>
-    </div>
-</div>
 
-<!-- Tracked Users -->
-<div class="throne-card">
-    <div class="throne-card-header">
-        <i class="fas fa-bell"></i>
-        <div>
-            <h3>Throne Notification Tracking</h3>
-            <p>Get alerts when tracked Throne users receive gifts or add new wishlist items</p>
-        </div>
-    </div>
-    <div class="throne-card-body">
-        <!-- Add Form -->
-        <form id="throneAddForm" onsubmit="addThroneTracking(event)" style="margin-bottom: 16px;">
-            <div class="throne-form-row">
-                <input type="text" class="throne-input" id="throneUsername" placeholder="Throne username" required>
-                <select class="throne-input" id="throneChannel" required>
-                    <option value="">Select channel...</option>
-                    <% channels.forEach(ch => { %>
-                        <option value="<%= ch.id %>"><%= ch.name %></option>
-                    <% }) %>
-                </select>
+    <section class="cf-section" aria-labelledby="th-track-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="th-track-title">Tracked creators <span class="cf-tab-count"><%= thTracked.length %></span></h2>
+                <p class="cf-section-desc">Checked about every two minutes. Each creator's alerts go to the channel shown, unless the Alerts section below names one channel for all of them.</p>
             </div>
-            <div class="throne-form-row three" style="margin-bottom: 12px;">
-                <label style="display: flex; align-items: center; gap: 8px; color: #d1d5db; font-size: 0.85rem;">
-                    <input type="checkbox" id="throneItems" checked> New Items
-                </label>
-                <label style="display: flex; align-items: center; gap: 8px; color: #d1d5db; font-size: 0.85rem;">
-                    <input type="checkbox" id="throneGifts" checked> Gift Alerts
-                </label>
-                <label style="display: flex; align-items: center; gap: 8px; color: #d1d5db; font-size: 0.85rem;">
-                    <input type="checkbox" id="throneContributions" checked> Contributions
-                </label>
-            </div>
-            <button type="submit" class="throne-btn"><i class="fas fa-plus" style="margin-right: 6px;"></i>Add Tracking</button>
-        </form>
-
-        <!-- List -->
-        <% if (notifications.length > 0) { %>
-            <% notifications.forEach(n => { %>
-                <div class="throne-track-row" id="throne-row-<%= n.throne_username %>">
-                    <div>
-                        <div style="font-weight: 600; color: #fff; font-size: 0.9rem;">
-                            <a href="https://throne.com/<%= n.throne_username %>" target="_blank" style="color: #a78bfa; text-decoration: none;"><%= n.throne_username %></a>
-                        </div>
-                        <div style="font-size: 0.75rem; color: rgba(255,255,255,0.4); margin-top: 2px;">
-                            Channel: <span style="color: #818cf8;">#<%= channels.find(c => c.id === n.channel_id)?.name || n.channel_id %></span>
-                        </div>
-                        <div class="throne-badges" style="margin-top: 6px;">
-                            <span class="throne-badge <%= n.notify_new_items ? '' : 'off' %>">Items</span>
-                            <span class="throne-badge <%= n.notify_gifts ? '' : 'off' %>">Gifts</span>
-                            <span class="throne-badge <%= n.notify_contributions ? '' : 'off' %>">Contributions</span>
-                        </div>
+        </header>
+        <div class="cf-rows">
+            <% if (thTracked.length) { %>
+            <div class="cf-list" id="cfk-throne-tracked">
+                <% thTracked.forEach(n => { %>
+                <div class="cf-list-item" id="throne-row-<%= n.throne_username %>" data-th-row="<%= n.throne_username %>">
+                    <div class="cf-list-main">
+                        <a class="th-name" href="https://throne.com/<%= encodeURIComponent(n.throne_username) %>" target="_blank" rel="noopener"><%= n.throne_username %></a>
+                        <span class="th-meta">Posts in <%= thChannelName(n.channel_id) %></span>
+                        <% if (!thSaved) { %>
+                        <span class="th-pills">
+                            <span class="cf-pill <%= n.notify_new_items ? 'is-ok' : 'th-pill-off' %>">New items <%= n.notify_new_items ? 'on' : 'off' %></span>
+                            <span class="cf-pill <%= n.notify_gifts ? 'is-ok' : 'th-pill-off' %>">Gifts <%= n.notify_gifts ? 'on' : 'off' %></span>
+                            <span class="cf-pill <%= n.notify_contributions ? 'is-ok' : 'th-pill-off' %>">Contributions <%= n.notify_contributions ? 'on' : 'off' %></span>
+                        </span>
+                        <% } %>
                     </div>
-                    <button onclick="removeThroneTracking('<%= n.throne_username %>')" class="throne-btn danger small">
-                        <i class="fas fa-trash"></i>
-                    </button>
+                    <div class="cf-list-actions">
+                        <button type="button" class="btn btn-sm btn-danger" onclick="removeThroneTracking('<%= n.throne_username %>')">Remove</button>
+                    </div>
                 </div>
-            <% }) %>
-        <% } else { %>
-            <div class="throne-empty">
-                <i class="fas fa-crown"></i>
-                <p>No Throne users tracked yet</p>
-                <p style="font-size: 0.75rem; margin-top: 4px;">Add a Throne username above to start receiving notifications</p>
+                <% }) %>
             </div>
-        <% } %>
-    </div>
-</div>
+            <% } else { %>
+            <%- include('../kit/_state', { kind: 'empty', title: 'No creators tracked yet', text: 'Add a Throne username below to start posting alerts.', id: null, boxed: false, compact: true }) %>
+            <% } %>
 
-<!-- Featured Wishlist -->
-<div class="throne-card">
-    <div class="throne-card-header">
-        <i class="fas fa-star"></i>
-        <div>
-            <h3>Featured Wishlist</h3>
-            <p>Set a featured Throne wishlist for your server</p>
-        </div>
-    </div>
-    <div class="throne-card-body">
-        <form id="throneFeaturedForm" onsubmit="updateFeatured(event)">
-            <div style="display: flex; gap: 8px; align-items: center;">
-                <input type="text" class="throne-input" id="throneFeaturedUsername" placeholder="Throne username" value="<%= featured?.featured_username || '' %>" style="flex: 1;">
-                <button type="submit" class="throne-btn">Save</button>
-                <% if (featured) { %>
-                    <button type="button" onclick="clearFeatured()" class="throne-btn danger">Clear</button>
+            <form id="throneAddForm" onsubmit="addThroneTracking(event)" novalidate>
+            <div class="cf-rows-head" id="th-add-head">Track a creator</div>
+            <div class="cf-row cf-row--stack">
+                <div class="cf-fields">
+                    <div class="cf-field">
+                        <label for="throneUsername">Throne username</label>
+                        <input type="text" class="form-control" id="throneUsername" maxlength="100" placeholder="username" autocomplete="off">
+                        <span class="cf-field-hint">As in throne.com/<em>username</em>.</span>
+                    </div>
+                    <div class="cf-field">
+                        <label for="throneChannel">Post in</label>
+                        <select class="form-select" id="throneChannel">
+                            <option value="">Choose a channel</option>
+                            <%- thChanOpts(null) %>
+                        </select>
+                    </div>
+                </div>
+                <% if (!thSaved) { %>
+                <div class="cf-check-grid" role="group" aria-label="Alerts for this creator">
+                    <label class="cf-choice"><input type="checkbox" id="throneItems" checked><span>New items</span></label>
+                    <label class="cf-choice"><input type="checkbox" id="throneGifts" checked><span>Gifts</span></label>
+                    <label class="cf-choice"><input type="checkbox" id="throneContributions" checked><span>Contributions</span></label>
+                </div>
                 <% } %>
             </div>
-            <% if (featured) { %>
-                <p style="font-size: 0.75rem; color: rgba(255,255,255,0.4); margin-top: 8px;">
-                    Currently featuring <a href="https://throne.com/<%= featured.featured_username %>" target="_blank" style="color: #a78bfa;"><%= featured.featured_username %></a>
-                </p>
+            <div class="cf-section-foot">
+                <span class="cf-status-line" id="cfk-throne-add-status" role="status" aria-live="polite"></span>
+                <button type="submit" class="btn btn-primary" id="cfk-throne-add">Track creator</button>
+            </div>
+            </form>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="th-alerts-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="th-alerts-title">Alerts</h2>
+                <p class="cf-section-desc">Which changes are posted, for every tracked creator. Changes save as you make them.</p>
+            </div>
+        </header>
+        <div class="cf-rows" id="throneSettingsBody" data-th-settings>
+            <% if (!thSaved) { %>
+            <div class="cf-notice" role="note"><i class="fas fa-circle-info" aria-hidden="true"></i><p class="cf-notice-body">Right now each creator uses the alerts picked when they were added (shown on their row). Changing anything here switches every creator to these settings.</p></div>
             <% } %>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="cfk-th-set-notify_item_added">New wishlist items</label>
+                    <p class="cf-row-desc">An item is added to the wishlist.</p>
+                </div>
+                <div class="cf-row-control">
+                    <input type="checkbox" class="cf-switch" role="switch" id="cfk-th-set-notify_item_added" data-th-set="notify_item_added" data-no-savebar <%= thOn('notify_item_added') ? 'checked' : '' %>>
+                </div>
+            </div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="cfk-th-set-notify_item_removed">Removed items</label>
+                    <p class="cf-row-desc">An item is taken off the wishlist.</p>
+                </div>
+                <div class="cf-row-control">
+                    <input type="checkbox" class="cf-switch" role="switch" id="cfk-th-set-notify_item_removed" data-th-set="notify_item_removed" data-no-savebar <%= thOn('notify_item_removed') ? 'checked' : '' %>>
+                </div>
+            </div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="cfk-th-set-notify_gift_received">Gifts</label>
+                    <p class="cf-row-desc">Someone buys an item for the creator.</p>
+                </div>
+                <div class="cf-row-control">
+                    <input type="checkbox" class="cf-switch" role="switch" id="cfk-th-set-notify_gift_received" data-th-set="notify_gift_received" data-no-savebar <%= thOn('notify_gift_received') ? 'checked' : '' %>>
+                </div>
+            </div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="cfk-th-set-notify_contribution">Contributions</label>
+                    <p class="cf-row-desc">Someone puts money towards a crowdfunded item.</p>
+                </div>
+                <div class="cf-row-control">
+                    <input type="checkbox" class="cf-switch" role="switch" id="cfk-th-set-notify_contribution" data-th-set="notify_contribution" data-no-savebar <%= thOn('notify_contribution') ? 'checked' : '' %>>
+                </div>
+            </div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="cfk-th-set-notify_milestone">Milestones</label>
+                    <p class="cf-row-desc">Every 10th gift a creator receives, and a crowdfunded item being fully funded.</p>
+                </div>
+                <div class="cf-row-control">
+                    <input type="checkbox" class="cf-switch" role="switch" id="cfk-th-set-notify_milestone" data-th-set="notify_milestone" data-no-savebar <%= thOn('notify_milestone') ? 'checked' : '' %>>
+                </div>
+            </div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="cfk-th-set-notify_price_change">Price changes</label>
+                    <p class="cf-row-desc">An item gets cheaper or more expensive by at least the threshold below.</p>
+                </div>
+                <div class="cf-row-control">
+                    <input type="checkbox" class="cf-switch" role="switch" id="cfk-th-set-notify_price_change" data-th-set="notify_price_change" data-no-savebar <%= thOn('notify_price_change') ? 'checked' : '' %>>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="cfk-th-set-price_change_threshold">Price change threshold</label>
+                    <p class="cf-row-desc">Smaller changes are not posted. From 1 to 50 percent.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-unit">
+                        <input type="number" class="form-control" id="cfk-th-set-price_change_threshold" data-th-set="price_change_threshold" data-no-savebar min="1" max="50" value="<%= Number(thS.price_change_threshold) || 10 %>">
+                        <span class="cf-unit">%</span>
+                    </div>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="cfk-th-set-notification_channel_id">Post every alert in</label>
+                    <p class="cf-row-desc">Leave on "Each creator's channel" to keep using the channel set per creator.</p>
+                </div>
+                <div class="cf-row-control">
+                    <select class="form-select" id="cfk-th-set-notification_channel_id" data-th-set="notification_channel_id" data-no-savebar>
+                        <option value="">Each creator's channel</option>
+                        <%- thChanOpts(thS.notification_channel_id) %>
+                    </select>
+                </div>
+            </div>
+            <div class="cf-section-foot">
+                <span class="cf-status-line" data-th-status role="status" aria-live="polite"></span>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="th-extras-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="th-extras-title">Extras</h2>
+                <p class="cf-section-desc">Changes save as you make them.</p>
+            </div>
+        </header>
+        <div class="cf-rows" data-th-settings>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="cfk-th-set-auto_embed_links">Preview Throne links</label>
+                    <p class="cf-row-desc">When someone posts a throne.com link in chat, the bot replies with a card for that wishlist.</p>
+                </div>
+                <div class="cf-row-control">
+                    <input type="checkbox" class="cf-switch" role="switch" id="cfk-th-set-auto_embed_links" data-th-set="auto_embed_links" data-no-savebar <%= thOn('auto_embed_links') ? 'checked' : '' %>>
+                </div>
+            </div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="cfk-th-set-birthday_reminder">Birthday reminders</label>
+                    <p class="cf-row-desc">Posts a reminder before a tracked creator's birthday, when their Throne profile shows one.</p>
+                </div>
+                <div class="cf-row-control">
+                    <input type="checkbox" class="cf-switch" role="switch" id="cfk-th-set-birthday_reminder" data-th-set="birthday_reminder" data-no-savebar <%= thOn('birthday_reminder') ? 'checked' : '' %>>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="cfk-th-set-birthday_channel_id">Birthday channel</label>
+                </div>
+                <div class="cf-row-control">
+                    <select class="form-select" id="cfk-th-set-birthday_channel_id" data-th-set="birthday_channel_id" data-no-savebar>
+                        <option value="">Choose a channel</option>
+                        <%- thChanOpts(thS.birthday_channel_id) %>
+                    </select>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="cfk-th-set-birthday_reminder_days">Remind this many days before</label>
+                    <p class="cf-row-desc">From 1 to 14.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-unit">
+                        <input type="number" class="form-control" id="cfk-th-set-birthday_reminder_days" data-th-set="birthday_reminder_days" data-no-savebar min="1" max="14" value="<%= Number(thS.birthday_reminder_days) || 3 %>">
+                        <span class="cf-unit">days</span>
+                    </div>
+                </div>
+            </div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="cfk-th-set-monthly_spotlight">Monthly spotlight</label>
+                    <p class="cf-row-desc">On the 1st of each month, posts a recap of the month's Throne activity for every tracked creator.</p>
+                </div>
+                <div class="cf-row-control">
+                    <input type="checkbox" class="cf-switch" role="switch" id="cfk-th-set-monthly_spotlight" data-th-set="monthly_spotlight" data-no-savebar <%= thOn('monthly_spotlight') ? 'checked' : '' %>>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="cfk-th-set-spotlight_channel_id">Spotlight channel</label>
+                </div>
+                <div class="cf-row-control">
+                    <select class="form-select" id="cfk-th-set-spotlight_channel_id" data-th-set="spotlight_channel_id" data-no-savebar>
+                        <option value="">Choose a channel</option>
+                        <%- thChanOpts(thS.spotlight_channel_id) %>
+                    </select>
+                </div>
+            </div>
+            <div class="cf-section-foot">
+                <span class="cf-status-line" data-th-status role="status" aria-live="polite"></span>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="th-featured-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="th-featured-title">Featured wishlist</h2>
+                <p class="cf-section-desc">The wishlist members see with <code>/creator throne featured</code>.</p>
+            </div>
+        </header>
+        <form class="cf-rows" id="throneFeaturedForm" onsubmit="updateFeatured(event)" novalidate>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="throneFeaturedUsername">Throne username</label>
+                    <p class="cf-row-desc"><% if (thFeat && thFeat.featured_username) { %>Featuring <a href="https://throne.com/<%= encodeURIComponent(thFeat.featured_username) %>" target="_blank" rel="noopener"><%= thFeat.featured_username %></a>.<% } else { %>Nothing featured.<% } %></p>
+                </div>
+                <div class="cf-row-control">
+                    <input type="text" class="form-control" id="throneFeaturedUsername" maxlength="100" placeholder="username" value="<%= (thFeat && thFeat.featured_username) || '' %>" autocomplete="off">
+                </div>
+            </div>
+            <div class="cf-section-foot">
+                <span class="cf-status-line" id="cfk-throne-featured-status" role="status" aria-live="polite"></span>
+                <% if (thFeat && thFeat.featured_username) { %><button type="button" class="btn btn-secondary" onclick="clearFeatured()">Clear</button><% } %>
+                <button type="submit" class="btn btn-primary">Save</button>
+            </div>
         </form>
-    </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="th-wh-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="th-wh-title">Instant gift alerts</h2>
+                <p class="cf-section-desc">Optional. Gift and contribution alerts within seconds instead of minutes. The creator pastes the URL into throne.com, Settings, Integrations, Webhooks on their own account; the regular check keeps running as a backup.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div id="cfk-throne-wh-list" class="cf-list"><%- include('../kit/_state', { kind: 'loading', title: 'Loading', text: null, id: null, boxed: false, compact: true }) %></div>
+            <div class="cf-rows-head" id="th-wh-add-head">New webhook URL</div>
+            <div class="cf-row cf-row--stack">
+                <div class="cf-fields">
+                    <div class="cf-field">
+                        <label for="cfk-throne-wh-channel">Post alerts in</label>
+                        <select id="cfk-throne-wh-channel" class="form-select">
+                            <option value="">Choose a channel</option>
+                            <%- thChanOpts(null) %>
+                        </select>
+                    </div>
+                    <div class="cf-field">
+                        <label for="cfk-throne-wh-creator">Creator (optional)</label>
+                        <input type="text" id="cfk-throne-wh-creator" class="form-control" maxlength="100" placeholder="Throne username" autocomplete="off">
+                        <span class="cf-field-hint">Only a label, so you can tell the URLs apart.</span>
+                    </div>
+                </div>
+                <div id="cfk-throne-wh-fresh" hidden>
+                    <p class="cf-row-desc">Give this URL to the creator. Anyone holding it can send events to the bot, so share it privately.</p>
+                    <code class="th-url" id="cfk-throne-wh-url"></code>
+                </div>
+            </div>
+            <div class="cf-section-foot">
+                <span class="cf-status-line" id="cfk-throne-wh-status" role="status" aria-live="polite"></span>
+                <button type="button" class="btn btn-secondary" id="cfk-throne-wh-copy" hidden>Copy URL</button>
+                <button type="button" class="btn btn-primary" id="cfk-throne-wh-create">Create URL</button>
+            </div>
+        </div>
+    </section>
 </div>
 
 <script>
-const throneGuildId = '<%= guildId %>';
+(function () {
+    const root = document.getElementById('cfk-throne-page');
+    if (!root) return;
+    const guildId = root.dataset.guildId;
+    const $ = (id) => document.getElementById(id);
+    const CHANNELS = <%- JSON.stringify(thText.map(c => ({ id: String(c.id), name: c.name }))).replace(/</g, '\\u003c') %>;
+    const chName = (id) => { const c = CHANNELS.find(x => x.id === String(id)); return c ? '#' + c.name : 'a deleted channel'; };
 
-async function throneApi(method, path, body) {
-    const opts = { method, headers: { 'Content-Type': 'application/json' } };
-    if (body) opts.body = JSON.stringify(body);
-    const res = await fetch(`/api/guilds/${throneGuildId}/throne${path}`, opts);
-    return res.json();
-}
+    async function call(method, path, body) {
+        const res = await fetch(`/api/guilds/${guildId}/throne${path}`, {
+            method, credentials: 'same-origin',
+            headers: body ? { 'Content-Type': 'application/json' } : {},
+            body: body ? JSON.stringify(body) : undefined,
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok || data.success === false || data.ok === false) throw new Error(data.error || ('Request failed (' + res.status + ')'));
+        return data;
+    }
+    function status(el, text, cls) {
+        if (!el) return;
+        el.textContent = text;
+        el.className = 'cf-status-line' + (cls ? ' ' + cls : '');
+    }
 
-async function addThroneTracking(e) {
-    e.preventDefault();
-    const username = document.getElementById('throneUsername').value.trim();
-    const channel_id = document.getElementById('throneChannel').value;
-    if (!username || !channel_id) return;
+    // Tracked creators (called from the markup's onsubmit / onclick).
+    window.addThroneTracking = async function (e) {
+        e.preventDefault();
+        const out = $('cfk-throne-add-status');
+        const btn = $('cfk-throne-add');
+        const username = document.getElementById('throneUsername').value.trim();
+        const channel_id = document.getElementById('throneChannel').value;
+        if (!username) return status(out, 'Enter a Throne username.', 'is-bad');
+        if (!channel_id) return status(out, 'Choose a channel to post in.', 'is-bad');
+        const box = (el) => (el ? el.checked : true);   // per-creator choices are only offered before the server has its own
+        btn.disabled = true;
+        status(out, 'Adding', 'is-busy');
+        try {
+            await call('POST', '/notifications', {
+                throne_username: username, channel_id,
+                notify_new_items: box(document.getElementById('throneItems')), notify_gifts: box(document.getElementById('throneGifts')), notify_contributions: box(document.getElementById('throneContributions')),
+            });
+            status(out, 'Added. Alerts start with the next change.', 'is-ok');
+            setTimeout(() => location.reload(), 800);
+        } catch (err) {
+            status(out, err.message, 'is-bad');
+            btn.disabled = false;
+        }
+    };
+    window.removeThroneTracking = async function (name) {
+        if (!confirm('Stop tracking ' + name + '? Alerts for them stop right away.')) return;
+        try {
+            await call('DELETE', '/notifications/' + encodeURIComponent(name));
+            const row = [...root.querySelectorAll('[data-th-row]')].find(r => r.getAttribute('data-th-row') === name);
+            if (row) row.remove();
+        } catch (err) {
+            alert(err.message);
+        }
+    };
 
-    const result = await throneApi('POST', '/notifications', {
-        throne_username: username,
-        channel_id,
-        notify_new_items: document.getElementById('throneItems').checked,
-        notify_gifts: document.getElementById('throneGifts').checked,
-        notify_contributions: document.getElementById('throneContributions').checked
+    // Settings: each control saves on change.
+    root.querySelectorAll('[data-th-set]').forEach((el) => {
+        el.addEventListener('change', async () => {
+            const key = el.getAttribute('data-th-set');
+            let value;
+            if (el.type === 'checkbox') value = el.checked ? 1 : 0;
+            else if (el.type === 'number') {
+                const min = Number(el.min), max = Number(el.max);
+                value = Math.min(max, Math.max(min, parseInt(el.value, 10) || min));
+                el.value = value;
+            } else value = el.value || null;
+            const out = el.closest('[data-th-settings]').querySelector('[data-th-status]');
+            status(out, 'Saving', 'is-busy');
+            try {
+                await call('PUT', '/settings', { [key]: value });
+                status(out, 'Saved', 'is-ok');
+                if (root.dataset.hasSettings !== '1') {
+                    // The server now has its own alert settings: the per-creator choices stop applying.
+                    root.dataset.hasSettings = '1';
+                    const note = document.getElementById('throneSettingsBody').querySelector('.cf-notice');
+                    if (note) note.remove();
+                    setTimeout(() => location.reload(), 700);
+                }
+            } catch (err) {
+                status(out, err.message, 'is-bad');
+            }
+        });
     });
 
-    if (result.success) {
-        location.reload();
-    } else {
-        alert(result.error || 'Failed to add tracking');
+    // Featured wishlist (called from the markup's onsubmit / onclick).
+    async function saveFeatured(name) {
+        const out = $('cfk-throne-featured-status');
+        status(out, 'Saving', 'is-busy');
+        try {
+            await call('PUT', '/featured', { featured_username: name || null });
+            status(out, 'Saved', 'is-ok');
+            setTimeout(() => location.reload(), 600);
+        } catch (err) { status(out, err.message, 'is-bad'); }
     }
-}
+    window.updateFeatured = function (e) { e.preventDefault(); saveFeatured(document.getElementById('throneFeaturedUsername').value.trim()); };
+    window.clearFeatured = function () { saveFeatured(null); };
 
-async function removeThroneTracking(username) {
-    if (!confirm(`Stop tracking ${username}?`)) return;
-    const result = await throneApi('DELETE', `/notifications/${username}`);
-    if (result.success) {
-        const row = document.getElementById(`throne-row-${username}`);
-        if (row) row.remove();
-    } else {
-        alert(result.error || 'Failed to remove tracking');
+    // Webhook subscriptions
+    const list = $('cfk-throne-wh-list');
+    function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+    function stateBox(text) { const s = el('div', 'cf-state cf-state--compact'); s.appendChild(el('p', 'cf-state-text', text)); return s; }
+    function whRow(sub) {
+        const row = el('div', 'cf-list-item');
+        const main = el('div', 'cf-list-main');
+        main.appendChild(el('span', 'th-name', sub.throne_username || 'Unlabelled URL'));
+        const last = sub.last_event_at ? new Date(sub.last_event_at).toLocaleString() : 'never';
+        main.appendChild(el('span', 'th-meta', 'Posts in ' + chName(sub.channel_id) + ' · ' + sub.event_count + ' event' + (sub.event_count === 1 ? '' : 's') + ' · last ' + last));
+        row.appendChild(main);
+        const actions = el('div', 'cf-list-actions');
+        const rm = el('button', 'btn btn-sm btn-danger', 'Remove');
+        rm.type = 'button';
+        rm.addEventListener('click', async () => {
+            if (!confirm('Remove this webhook URL? It stops accepting events right away.')) return;
+            rm.disabled = true;
+            try { await call('DELETE', '/webhooks/' + encodeURIComponent(sub.id)); loadHooks(); }
+            catch (err) { rm.disabled = false; alert(err.message); }
+        });
+        actions.appendChild(rm);
+        row.appendChild(actions);
+        return row;
     }
-}
-
-async function updateFeatured(e) {
-    e.preventDefault();
-    const username = document.getElementById('throneFeaturedUsername').value.trim();
-    const result = await throneApi('PUT', '/featured', { featured_username: username || null });
-    if (result.success) {
-        location.reload();
-    } else {
-        alert(result.error || 'Failed to update featured');
+    async function loadHooks() {
+        try {
+            const d = await call('GET', '/webhooks');
+            list.replaceChildren();
+            if (!d.subscriptions.length) { list.appendChild(stateBox('No webhook URLs yet.')); return; }
+            d.subscriptions.forEach(s => list.appendChild(whRow(s)));
+        } catch (err) {
+            list.replaceChildren(stateBox('Could not load: ' + err.message));
+        }
     }
-}
-
-async function clearFeatured() {
-    const result = await throneApi('PUT', '/featured', { featured_username: null });
-    if (result.success) {
-        location.reload();
-    } else {
-        alert(result.error || 'Failed to clear featured');
-    }
-}
-
-// ─── Settings ───────────────────────────────
-async function loadSettings() {
-    const result = await throneApi('GET', '/settings');
-    const s = result.settings || {};
-
-    const body = document.getElementById('throneSettingsBody');
-    body.innerHTML = `
-        <div style="margin-bottom: 16px;">
-            <h4 style="color: #a78bfa; font-size: 0.85rem; font-weight: 600; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.05em;">Notification Types</h4>
-            <div class="throne-form-row">
-                ${settingToggle('notify_item_added', 'New Items Added', s.notify_item_added)}
-                ${settingToggle('notify_item_removed', 'Items Removed', s.notify_item_removed)}
-            </div>
-            <div class="throne-form-row">
-                ${settingToggle('notify_gift_received', 'Gifts Received', s.notify_gift_received)}
-                ${settingToggle('notify_contribution', 'Contributions', s.notify_contribution)}
-            </div>
-            <div class="throne-form-row">
-                ${settingToggle('notify_price_change', 'Price Changes', s.notify_price_change)}
-                ${settingToggle('notify_milestone', 'Milestones', s.notify_milestone)}
-            </div>
-            <div class="throne-form-row">
-                ${settingToggle('notify_gift_thankyou', 'Gift Thank-Yous', s.notify_gift_thankyou)}
-            </div>
-        </div>
-
-        <div style="margin-bottom: 16px;">
-            <h4 style="color: #a78bfa; font-size: 0.85rem; font-weight: 600; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.05em;">Features</h4>
-            <div class="throne-form-row">
-                ${settingToggle('auto_embed_links', 'Auto-Embed Throne Links', s.auto_embed_links)}
-                ${settingToggle('birthday_reminder', 'Birthday Reminders', s.birthday_reminder)}
-            </div>
-            <div class="throne-form-row">
-                ${settingToggle('monthly_spotlight', 'Monthly Spotlight', s.monthly_spotlight)}
-                ${settingToggle('wishlist_role_enabled', 'Wishlist Role', s.wishlist_role_enabled)}
-            </div>
-        </div>
-
-        <div style="margin-bottom: 16px;">
-            <h4 style="color: #a78bfa; font-size: 0.85rem; font-weight: 600; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.05em;">Channels & Settings</h4>
-            <div class="throne-form-row">
-                <div>
-                    <label style="color: #d1d5db; font-size: 0.8rem; display: block; margin-bottom: 4px;">Notification Channel</label>
-                    <select class="throne-input" id="setting_notification_channel_id" onchange="saveSetting('notification_channel_id', this.value)">
-                        <option value="">None</option>
-                        ${generateChannelOptions(s.notification_channel_id)}
-                    </select>
-                </div>
-                <div>
-                    <label style="color: #d1d5db; font-size: 0.8rem; display: block; margin-bottom: 4px;">Birthday Channel</label>
-                    <select class="throne-input" id="setting_birthday_channel_id" onchange="saveSetting('birthday_channel_id', this.value)">
-                        <option value="">None</option>
-                        ${generateChannelOptions(s.birthday_channel_id)}
-                    </select>
-                </div>
-            </div>
-            <div class="throne-form-row">
-                <div>
-                    <label style="color: #d1d5db; font-size: 0.8rem; display: block; margin-bottom: 4px;">Spotlight Channel</label>
-                    <select class="throne-input" id="setting_spotlight_channel_id" onchange="saveSetting('spotlight_channel_id', this.value)">
-                        <option value="">None</option>
-                        ${generateChannelOptions(s.spotlight_channel_id)}
-                    </select>
-                </div>
-                <div>
-                    <label style="color: #d1d5db; font-size: 0.8rem; display: block; margin-bottom: 4px;">Birthday Reminder (days before)</label>
-                    <input type="number" class="throne-input" value="${s.birthday_reminder_days || 3}" min="1" max="14" onchange="saveSetting('birthday_reminder_days', this.value)">
-                </div>
-            </div>
-            <div class="throne-form-row">
-                <div>
-                    <label style="color: #d1d5db; font-size: 0.8rem; display: block; margin-bottom: 4px;">Price Change Threshold (%)</label>
-                    <input type="number" class="throne-input" value="${s.price_change_threshold || 10}" min="1" max="50" onchange="saveSetting('price_change_threshold', this.value)">
-                </div>
-                <div>
-                    <label style="color: #d1d5db; font-size: 0.8rem; display: block; margin-bottom: 4px;">Wishlist Role</label>
-                    <select class="throne-input" id="setting_wishlist_role_id" onchange="saveSetting('wishlist_role_id', this.value)">
-                        <option value="">None</option>
-                    </select>
-                </div>
-            </div>
-        </div>
-    `;
-}
-
-function settingToggle(name, label, value) {
-    const checked = value ? 'checked' : '';
-    return `
-        <label style="display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: rgba(0,0,0,0.2); border: 1px solid rgba(255,255,255,0.06); border-radius: 8px; cursor: pointer; transition: all 0.2s;"
-               onmouseenter="this.style.borderColor='rgba(124,58,237,0.3)'" onmouseleave="this.style.borderColor='rgba(255,255,255,0.06)'">
-            <input type="checkbox" ${checked} onchange="saveSetting('${name}', this.checked ? 1 : 0)" style="accent-color: #7c3aed; width: 16px; height: 16px;">
-            <span style="color: #d1d5db; font-size: 0.85rem;">${label}</span>
-        </label>
-    `;
-}
-
-function generateChannelOptions(selectedId) {
-    const channels = <%= JSON.stringify(channels.map(c => ({ id: c.id, name: c.name }))) %>;
-    return channels.map(c =>
-        '<option value="' + c.id + '"' + (c.id === selectedId ? ' selected' : '') + '>#' + c.name + '</option>'
-    ).join('');
-}
-
-async function saveSetting(key, value) {
-    await throneApi('PUT', '/settings', { [key]: value });
-}
-
-// Load settings on page load
-loadSettings();
+    $('cfk-throne-wh-create').addEventListener('click', async () => {
+        const out = $('cfk-throne-wh-status');
+        const channel_id = $('cfk-throne-wh-channel').value;
+        if (!channel_id) return status(out, 'Choose a channel first.', 'is-bad');
+        $('cfk-throne-wh-create').disabled = true;
+        try {
+            const d = await call('POST', '/webhooks', { channel_id, throne_username: $('cfk-throne-wh-creator').value.trim().toLowerCase() || undefined });
+            $('cfk-throne-wh-url').textContent = d.url;
+            $('cfk-throne-wh-fresh').hidden = false;
+            $('cfk-throne-wh-copy').hidden = false;
+            status(out, 'Created', 'is-ok');
+            loadHooks();
+        } catch (err) {
+            status(out, err.message, 'is-bad');
+        } finally { $('cfk-throne-wh-create').disabled = false; }
+    });
+    $('cfk-throne-wh-copy').addEventListener('click', () => {
+        navigator.clipboard?.writeText($('cfk-throne-wh-url').textContent);
+        status($('cfk-throne-wh-status'), 'Copied', 'is-ok');
+    });
+    loadHooks();
+})();
 </script>

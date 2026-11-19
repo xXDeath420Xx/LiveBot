@@ -20,7 +20,7 @@ async function phaseJ(ctx) {
             allowed_platforms = VALUES(allowed_platforms),
             delete_invalid = 1,
             announcement_channel_id = VALUES(announcement_channel_id)
-    `, [GUILD_ID, state.channels.selfPromo, JSON.stringify(['twitch', 'kick', 'youtube', 'tiktok', 'trovo', 'facebook']), state.channels.liveStreams]);
+    `, [GUILD_ID, state.channels.selfPromo, JSON.stringify(['twitch', 'kick', 'youtube', 'tiktok', 'facebook']), state.channels.liveStreams]);
     log('J', `self-promo enabled. Allowed only in <#${state.channels.selfPromo}>`);
 }
 
@@ -57,7 +57,7 @@ async function phaseK(ctx) {
             INSERT INTO ticket_panels (guild_id, panel_name, panel_channel_id, embed_title, embed_description, embed_color,
                                        button_text, button_emoji, ticket_category_id, support_role_id, ticket_name_format,
                                        save_transcripts, log_channel_id, alert_channel_id, is_active)
-            VALUES (?, 'Support', ?, 'Support Tickets', ?, '#5865F2', 'Open a ticket', '🎫', ?, ?, 'ticket-{user}', 1, ?, ?, 1)
+            VALUES (?, 'Support', ?, 'Support Tickets', ?, '#5865F2', 'Open a ticket', '🎫', ?, ?, 'ticket-{username}', 1, ?, ?, 1)
         `, [GUILD_ID, state.channels.ticketsPanel,
             'Click below to open a support ticket. A staff member will be with you shortly.',
             state.channels.ticketCategory, ROLES_EXISTING.Beta, state.channels.modLog, state.channels.modLog]);

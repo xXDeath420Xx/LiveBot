@@ -1,13 +1,13 @@
 import pool from '../utils/db.js';
-import encryption from '../utils/encryption.js';
+import { resolveBotIdForGuild, getBotToken } from '../utils/bot-resolver.js';
 import crypto from 'crypto';
 
-const botId = process.argv[2] || '1490499612262531303';
 const channelId = process.argv[3] || '1480521615514271777';
 const guildId = process.argv[4] || '1175199444187234305';
+// No pinned default: the acting bot comes from guild_bot_mapping unless overridden on argv.
+const botId = process.argv[2] || await resolveBotIdForGuild(guildId, { db: pool });
 
-const [[botRow]] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id = ?', [botId]);
-const token = encryption.decrypt(JSON.parse(botRow.bot_token));
+const token = await getBotToken(botId, { db: pool });
 
 const [[config]] = await pool.execute('SELECT * FROM twitch_schedule_sync_config WHERE guild_id = ? AND discord_channel_id = ?', [guildId, channelId]);
 const [[streamer]] = await pool.execute('SELECT username FROM streamers WHERE id = ?', [config.streamer_id]);

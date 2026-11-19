@@ -1,260 +1,327 @@
 <%
-const stats = serverStats || [];
-const latestStats = stats.length > 0 ? stats[stats.length - 1] : { total_members: 0, online_members: 0, message_count: 0 };
-const totalMessages = stats.reduce((sum, s) => sum + (s.message_count || 0), 0);
-const avgMessages = stats.length > 0 ? Math.round(totalMessages / stats.length) : 0;
-const memberGrowth = stats.length >= 2 ? stats[stats.length - 1].total_members - stats[0].total_members : 0;
+const stats = (typeof serverStats !== 'undefined' && Array.isArray(serverStats)) ? serverStats : [];
+// The route sends 30 days; each day also carries the same day of the 30 before it (prev_*), so
+// the page can compare a period with the one before (dashboard/server.js, "Daily server stats").
+const sum = (rows, k) => rows.reduce((s, r) => s + (Number(r[k]) || 0), 0);
+const joins30 = sum(stats, 'joins');
+const leaves30 = sum(stats, 'leaves');
+const messages30 = sum(stats, 'message_count');
+const latest = stats.length ? stats[stats.length - 1] : {};
+const hasActivity = stats.some(r => Number(r.message_count) || Number(r.joins) || Number(r.leaves) || Number(r.prev_message_count) || Number(r.prev_joins));
+const fmt = (n) => Number(n || 0).toLocaleString('en-US');
 %>
+<%#
+  Server analytics (Dyno / ProBot style): a period picker (7, 14 or 30 days), key numbers compared
+  with the period before, and three Chart.js charts drawn from the daily rows the route passes as
+  serverStats. CSV export is built in the browser from the same rows. Chart canvas ids and the
+  moving-average selects (.an-ma, data-target) are unchanged.
+%>
+<style>
+    .an-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--cf-3) var(--cf-4); margin: 0 0 var(--cf-4); }
+    .an-toolbar .an-toolbar-end { margin-left: auto; display: flex; flex-wrap: wrap; align-items: center; gap: var(--cf-2) var(--cf-4); }
+    .an-toolbar .cf-choice { display: inline-flex; align-items: center; gap: 8px; margin: 0; font-size: var(--cf-text-sm); color: var(--cf-text); cursor: pointer; }
+    .an-toolbar .cf-choice input { width: 16px; height: 16px; margin: 0; accent-color: var(--cf-accent); }
+    .cf-kpi .an-delta { display: block; margin-top: 2px; font-size: var(--cf-text-xs); font-weight: 400; color: var(--cf-text-3); letter-spacing: 0; }
+    .cf-kpi .an-delta.is-up { color: var(--cf-success); }
+    .cf-kpi .an-delta.is-down { color: var(--cf-danger); }
+    .an-chart-controls { display: flex; flex-wrap: wrap; gap: var(--cf-2) var(--cf-4); align-items: center; padding: var(--cf-3) var(--cf-5); font-size: var(--cf-text-sm); color: var(--cf-text-2); }
+    .an-chart-controls label { display: inline-flex; align-items: center; gap: 8px; margin: 0; }
+    .an-chart-controls select { width: auto; }
+    .an-chart-controls .an-hint { color: var(--cf-text-3); font-size: var(--cf-text-xs); }
+    .an-chart { position: relative; height: 300px; padding: var(--cf-4) var(--cf-5); min-width: 0; overflow: hidden; }
+    .an-chart canvas { max-width: 100%; }
+    @media (max-width: 640px) {
+        .an-toolbar .an-toolbar-end { margin-left: 0; width: 100%; }
+        .an-toolbar .an-toolbar-end .btn { flex: 1 1 auto; min-height: 44px; }
+        .an-chart { height: 240px; padding: var(--cf-3); }
+        .an-chart-controls { padding: var(--cf-3) var(--cf-4); }
+        .an-chart-controls .an-hint { display: none; }
+    }
+</style>
 
-<div class="page-section">
+<div class="page-section" id="cfk-an-page">
     <div class="page-section-header">
         <div>
             <div class="page-section-title">
                 <i class="fas fa-chart-line"></i>
-                <span>Server Analytics</span>
+                <span>Server analytics</span>
             </div>
-            <div class="page-section-subtitle">
-                Track your server's growth and activity over time
-            </div>
+            <div class="page-section-subtitle">Growth and activity, compared with the period before.</div>
         </div>
     </div>
 
-    <!-- Stats Overview -->
-    <div class="grid grid-cols-4" style="margin-bottom: var(--spacing-6);">
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Total Members</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary);"><%= latestStats.total_members || 0 %></div>
-            <% if (memberGrowth !== 0) { %>
-                <div style="font-size: var(--font-size-xs); margin-top: var(--spacing-1);">
-                    <span style="color: <%= memberGrowth > 0 ? 'var(--color-success)' : 'var(--color-danger)' %>;">
-                        <i class="fas fa-arrow-<%= memberGrowth > 0 ? 'up' : 'down' %>"></i>
-                        <%= Math.abs(memberGrowth) %> (30d)
-                    </span>
-                </div>
-            <% } %>
+    <div class="an-toolbar">
+        <div class="cf-segmented" role="group" aria-label="Period" id="cfk-an-range">
+            <button type="button" data-range="7" aria-pressed="false">7 days</button>
+            <button type="button" data-range="14" aria-pressed="false">14 days</button>
+            <button type="button" data-range="30" aria-pressed="true">30 days</button>
         </div>
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Online Members</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-success);"><%= latestStats.online_members || 0 %></div>
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-top: var(--spacing-1);">
-                <%= latestStats.total_members > 0 ? Math.round((latestStats.online_members / latestStats.total_members) * 100) : 0 %>% online
-            </div>
-        </div>
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Avg Messages/Day</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-primary-400);"><%= avgMessages %></div>
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-top: var(--spacing-1);">
-                Last 30 days
-            </div>
-        </div>
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Total Messages</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-accent-purple);"><%= totalMessages.toLocaleString() %></div>
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-top: var(--spacing-1);">
-                30 day period
-            </div>
+        <div class="an-toolbar-end">
+            <label class="cf-choice" for="cfk-an-compare"><input type="checkbox" id="cfk-an-compare" checked> Compare with the previous period</label>
+            <button type="button" class="btn btn-secondary btn-sm" id="cfk-an-csv"<%= stats.length ? '' : ' disabled' %>><i class="fas fa-download" aria-hidden="true"></i> Download CSV</button>
         </div>
     </div>
 
-    <!-- Charts -->
-    <% if (stats.length > 0) { %>
-        <!-- Member Chart -->
-        <div style="background: var(--color-dark-600); padding: var(--spacing-6); border-radius: var(--radius-lg); border: 1px solid var(--color-dark-400); margin-bottom: var(--spacing-6);">
-            <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin: 0 0 var(--spacing-4) 0;">
-                <i class="fas fa-users" style="color: var(--color-primary-400);"></i>
-                Member Growth
-            </h3>
-            <div style="position: relative; height: 300px;">
-                <canvas id="memberChart"></canvas>
-            </div>
-        </div>
+    <dl class="cf-kpis" aria-label="Analytics for the period" id="cfk-an-kpis">
+        <div class="cf-kpi"><dt>Members</dt><dd class="cf-kpi-value" data-kpi="members"><%= fmt(latest.total_members) %><span class="an-delta"></span></dd></div>
+        <div class="cf-kpi"><dt>Joined</dt><dd class="cf-kpi-value" data-kpi="joins"><%= fmt(joins30) %><span class="an-delta"></span></dd></div>
+        <div class="cf-kpi"><dt>Left</dt><dd class="cf-kpi-value" data-kpi="leaves"><%= fmt(leaves30) %><span class="an-delta"></span></dd></div>
+        <div class="cf-kpi"><dt>Net growth</dt><dd class="cf-kpi-value" data-kpi="net"><%= (joins30 - leaves30 > 0 ? '+' : '') + fmt(joins30 - leaves30) %><span class="an-delta"></span></dd></div>
+        <div class="cf-kpi"><dt>Messages</dt><dd class="cf-kpi-value" data-kpi="messages"><%= fmt(messages30) %><span class="an-delta"></span></dd></div>
+        <div class="cf-kpi"><dt>Messages a day</dt><dd class="cf-kpi-value" data-kpi="perday"><%= fmt(stats.length ? Math.round(messages30 / stats.length) : 0) %><span class="an-delta"></span></dd></div>
+        <div class="cf-kpi"><dt>Commands used</dt><dd class="cf-kpi-value" data-kpi="commands"><%= fmt(sum(stats, 'commands')) %><span class="an-delta"></span></dd></div>
+        <div class="cf-kpi"><dt>Online now</dt><dd class="cf-kpi-value" data-kpi="online"><%= fmt(latest.online_members) %><span class="an-delta"><%= latest.total_members > 0 ? Math.round((latest.online_members || 0) / latest.total_members * 100) + '% of members' : '' %></span></dd></div>
+    </dl>
 
-        <!-- Message Chart -->
-        <div style="background: var(--color-dark-600); padding: var(--spacing-6); border-radius: var(--radius-lg); border: 1px solid var(--color-dark-400); margin-bottom: var(--spacing-6);">
-            <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin: 0 0 var(--spacing-4) 0;">
-                <i class="fas fa-comment-dots" style="color: var(--color-primary-400);"></i>
-                Message Activity
-            </h3>
-            <div style="position: relative; height: 300px;">
-                <canvas id="messageChart"></canvas>
+    <% if (stats.length > 0 && hasActivity) { %>
+    <section class="cf-section" aria-labelledby="an-members-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="an-members-title">Member growth</h2>
+                <p class="cf-section-desc">Members at the end of each day, worked back from today's count with the joins and leaves the bot recorded.</p>
             </div>
+        </header>
+        <div class="cf-rows">
+            <div class="an-chart-controls" data-chart="memberChart">
+                <label>Smoothing <select class="form-select form-select-sm an-ma" data-target="memberChart"><option value="1">None</option><option value="3">3 days</option><option value="7">7 days</option></select></label>
+                <span class="an-hint">Click a legend entry to hide or show that line.</span>
+            </div>
+            <div class="an-chart"><canvas id="memberChart" aria-label="Member growth chart" role="img"></canvas></div>
         </div>
+    </section>
 
-        <!-- Voice Activity Chart -->
-        <div style="background: var(--color-dark-600); padding: var(--spacing-6); border-radius: var(--radius-lg); border: 1px solid var(--color-dark-400);">
-            <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin: 0 0 var(--spacing-4) 0;">
-                <i class="fas fa-microphone" style="color: var(--color-primary-400);"></i>
-                Engagement Overview
-            </h3>
-            <div style="position: relative; height: 300px;">
-                <canvas id="engagementChart"></canvas>
+    <section class="cf-section" aria-labelledby="an-engage-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="an-engage-title">Joins and leaves</h2>
+                <p class="cf-section-desc">Members who joined and left each day, with the net change as a line.</p>
             </div>
+        </header>
+        <div class="cf-rows">
+            <div class="an-chart-controls" data-chart="engagementChart">
+                <label>Smoothing <select class="form-select form-select-sm an-ma" data-target="engagementChart"><option value="1">None</option><option value="3">3 days</option><option value="7">7 days</option></select></label>
+            </div>
+            <div class="an-chart"><canvas id="engagementChart" aria-label="Joins and leaves chart" role="img"></canvas></div>
         </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="an-messages-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="an-messages-title">Message activity</h2>
+                <p class="cf-section-desc">Messages sent each day. With comparison on, the dashed line is the period before, day for day.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="an-chart-controls" data-chart="messageChart">
+                <label>Smoothing <select class="form-select form-select-sm an-ma" data-target="messageChart"><option value="1">None</option><option value="3">3 days</option><option value="7">7 days</option></select></label>
+            </div>
+            <div class="an-chart"><canvas id="messageChart" aria-label="Message activity chart" role="img"></canvas></div>
+        </div>
+    </section>
+    <div id="cfk-an-chart-error" class="cf-notice is-warn" role="alert" hidden><div class="cf-notice-body">The charts could not load (the chart library was blocked or failed to download). The numbers above are still correct.</div></div>
     <% } else { %>
-        <div class="empty-state">
-            <div class="empty-state-icon">
-                <i class="fas fa-chart-line"></i>
+    <section class="cf-section" aria-labelledby="an-empty-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="an-empty-title">Charts</h2>
             </div>
-            <div class="empty-state-title">No Analytics Data</div>
-            <div class="empty-state-description">
-                Server analytics will appear here once data collection has begun
-            </div>
+        </header>
+        <div class="cf-rows">
+            <%- include('../kit/_state', { kind: 'empty', title: 'No analytics yet', text: 'Charts appear here once the bot has recorded a day of messages or joins in this server.', id: null, boxed: false, compact: false }) %>
         </div>
+    </section>
     <% } %>
 </div>
 
-<% if (stats.length > 0) { %>
+<script type="application/json" id="cfk-an-data"><%- JSON.stringify(stats.map(s => ({
+    date: s.date, total_members: s.total_members || 0, online_members: s.online_members || 0, message_count: s.message_count || 0,
+    joins: s.joins || 0, leaves: s.leaves || 0, commands: s.commands || 0, voice_minutes: s.voice_minutes || 0,
+    prev_date: s.prev_date || null, prev_total_members: s.prev_total_members || 0, prev_message_count: s.prev_message_count || 0,
+    prev_joins: s.prev_joins || 0, prev_leaves: s.prev_leaves || 0, prev_commands: s.prev_commands || 0, prev_voice_minutes: s.prev_voice_minutes || 0,
+}))).replace(/</g, '\\u003c') %></script>
+<% if (stats.length > 0 && hasActivity) { %>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-    const statsData = <%- JSON.stringify(stats) %>;
-
-    const labels = statsData.map(s => {
-        const date = new Date(s.date);
-        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    });
-    const totalMembers = statsData.map(s => s.total_members || 0);
-    const onlineMembers = statsData.map(s => s.online_members || 0);
-    const messageCounts = statsData.map(s => s.message_count || 0);
-
-    const chartDefaults = {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-            legend: {
-                labels: {
-                    color: '#B9BBBE',
-                    font: { size: 12 }
-                }
-            }
-        },
-        scales: {
-            x: {
-                grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                ticks: { color: '#8E9297' }
-            },
-            y: {
-                grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                ticks: { color: '#8E9297' }
-            }
-        }
-    };
-
-    // Member Chart
-    new Chart(document.getElementById('memberChart').getContext('2d'), {
-        type: 'line',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: 'Total Members',
-                data: totalMembers,
-                borderColor: '#a78bfa',
-                backgroundColor: 'rgba(167, 139, 250, 0.1)',
-                tension: 0.4,
-                fill: true,
-                pointRadius: 3,
-                pointHoverRadius: 5
-            }, {
-                label: 'Online Members',
-                data: onlineMembers,
-                borderColor: '#3BA55D',
-                backgroundColor: 'rgba(59, 165, 93, 0.1)',
-                tension: 0.4,
-                fill: true,
-                pointRadius: 3,
-                pointHoverRadius: 5
-            }]
-        },
-        options: chartDefaults
-    });
-
-    // Message Chart
-    new Chart(document.getElementById('messageChart').getContext('2d'), {
-        type: 'bar',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: 'Messages per Day',
-                data: messageCounts,
-                backgroundColor: 'rgba(255, 170, 0, 0.7)',
-                borderColor: '#FFAA00',
-                borderWidth: 1,
-                borderRadius: 4
-            }]
-        },
-        options: chartDefaults
-    });
-
-    // Engagement Chart (Combined)
-    new Chart(document.getElementById('engagementChart').getContext('2d'), {
-        type: 'line',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: 'Messages',
-                data: messageCounts,
-                borderColor: '#FFAA00',
-                backgroundColor: 'rgba(255, 170, 0, 0.1)',
-                tension: 0.4,
-                fill: true,
-                yAxisID: 'y'
-            }, {
-                label: 'Member Growth',
-                data: totalMembers,
-                borderColor: '#a78bfa',
-                backgroundColor: 'rgba(167, 139, 250, 0.1)',
-                tension: 0.4,
-                fill: true,
-                yAxisID: 'y1'
-            }]
-        },
-        options: {
-            ...chartDefaults,
-            scales: {
-                x: chartDefaults.scales.x,
-                y: {
-                    type: 'linear',
-                    display: true,
-                    position: 'left',
-                    grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                    ticks: { color: '#8E9297' }
-                },
-                y1: {
-                    type: 'linear',
-                    display: true,
-                    position: 'right',
-                    grid: { drawOnChartArea: false },
-                    ticks: { color: '#8E9297' }
-                }
-            }
-        }
-    });
-});
-</script>
 <% } %>
+<script>
+(function () {
+    var dataEl = document.getElementById('cfk-an-data');
+    var rows = [];
+    try { rows = JSON.parse(dataEl ? dataEl.textContent : '[]') || []; } catch (e) { rows = []; }
+    var guildName = <%- JSON.stringify(String((guild && guild.id) || 'server')).replace(/</g, '\\u003c') %>;
 
-<style>
-.empty-state {
-    text-align: center;
-    padding: var(--spacing-12) var(--spacing-8);
-}
+    // One 60-day series, oldest first: the previous 30 days (prev_*) then the 30 shown.
+    var hasPrev = rows.some(function (r) { return r.prev_date; });
+    var full = (hasPrev ? rows.map(function (r) {
+        return { date: r.prev_date, total_members: r.prev_total_members, message_count: r.prev_message_count, joins: r.prev_joins,
+                 leaves: r.prev_leaves, commands: r.prev_commands, voice_minutes: r.prev_voice_minutes, isPrev: true };
+    }) : []).concat(rows.map(function (r) {
+        return { date: r.date, total_members: r.total_members, message_count: r.message_count, joins: r.joins,
+                 leaves: r.leaves, commands: r.commands, voice_minutes: r.voice_minutes };
+    }));
 
-.empty-state-icon {
-    font-size: 4rem;
-    color: var(--color-text-muted);
-    margin-bottom: var(--spacing-4);
-}
+    var range = 30;
+    var compare = document.getElementById('cfk-an-compare');
+    var charts = {};
 
-.empty-state-title {
-    font-size: var(--font-size-xl);
-    font-weight: var(--font-weight-bold);
-    color: var(--color-text-primary);
-    margin-bottom: var(--spacing-2);
-}
+    function total(list, k) { return list.reduce(function (s, r) { return s + (Number(r[k]) || 0); }, 0); }
+    function fmt(n) { return Number(n || 0).toLocaleString('en-US'); }
+    function signed(n) { return (n > 0 ? '+' : '') + fmt(n); }
+    function current() { return full.slice(-range); }
+    function previous() {
+        var start = full.length - 2 * range;
+        return start >= 0 ? full.slice(start, full.length - range) : null;
+    }
+    function label(d) {
+        var dt = new Date(d + 'T00:00:00Z');
+        return dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+    }
 
-.empty-state-description {
-    font-size: var(--font-size-base);
-    color: var(--color-text-secondary);
-    margin-bottom: var(--spacing-6);
-}
-</style>
+    // KPI value + "vs previous" line. `higherIsBad` flips the colour (more leaves is not good news).
+    function setKpi(key, value, prevValue, opts) {
+        opts = opts || {};
+        var dd = document.querySelector('#cfk-an-kpis [data-kpi="' + key + '"]');
+        if (!dd) return;
+        var note = dd.querySelector('.an-delta') || document.createElement('span');
+        note.className = 'an-delta';
+        dd.textContent = opts.text != null ? opts.text : fmt(value);
+        if (opts.note != null) {
+            note.textContent = opts.note;
+        } else if (!compare.checked || prevValue == null) {
+            note.textContent = '';
+        } else {
+            var diff = value - prevValue;
+            var pct = prevValue ? Math.round(diff / Math.abs(prevValue) * 100) : null;
+            note.textContent = (diff === 0 ? 'Same as' : (pct == null ? signed(diff) : (pct > 0 ? '+' : '') + pct + '%') + ' vs') + ' previous ' + range + ' days';
+            if (diff !== 0) note.classList.add((diff > 0) !== !!opts.higherIsBad ? 'is-up' : 'is-down');
+        }
+        dd.appendChild(note);
+    }
+
+    function renderKpis() {
+        var cur = current(), prev = previous();
+        var last = cur[cur.length - 1] || {};
+        var first = cur[0] || {};
+        var growth = (last.total_members || 0) - ((first.total_members || 0) - ((first.joins || 0) - (first.leaves || 0)));
+        setKpi('members', last.total_members || 0, null, { note: (growth > 0 ? '+' : '') + fmt(growth) + ' in ' + range + ' days (estimate)' });
+        var j = total(cur, 'joins'), l = total(cur, 'leaves'), m = total(cur, 'message_count'), c = total(cur, 'commands');
+        setKpi('joins', j, prev ? total(prev, 'joins') : null);
+        setKpi('leaves', l, prev ? total(prev, 'leaves') : null, { higherIsBad: true });
+        setKpi('net', j - l, prev ? total(prev, 'joins') - total(prev, 'leaves') : null, { text: signed(j - l) });
+        setKpi('messages', m, prev ? total(prev, 'message_count') : null);
+        setKpi('perday', Math.round(m / Math.max(1, cur.length)), prev ? Math.round(total(prev, 'message_count') / Math.max(1, prev.length)) : null);
+        setKpi('commands', c, prev ? total(prev, 'commands') : null);
+    }
+
+    // Trailing moving average; a window of 1 returns the values as they are.
+    function smooth(arr, w) {
+        w = Math.max(1, parseInt(w, 10) || 1);
+        if (w === 1) return arr.slice();
+        return arr.map(function (_, i) {
+            var s = arr.slice(Math.max(0, i - w + 1), i + 1);
+            return Math.round(s.reduce(function (a, b) { return a + (Number(b) || 0); }, 0) / s.length * 10) / 10;
+        });
+    }
+    function windowFor(id) {
+        var sel = document.querySelector('.an-ma[data-target="' + id + '"]');
+        return sel ? sel.value : 1;
+    }
+
+    var css = getComputedStyle(document.documentElement);
+    function tok(name, fallback) { return (css.getPropertyValue(name) || '').trim() || fallback; }
+    function wash(c, a) { return /^#[0-9a-f]{6}$/i.test(c) ? c + a : c; }
+    var ACCENT = tok('--cf-accent', '#a78bfa'), OK = tok('--cf-success', '#3BA55D'), BAD = tok('--cf-danger', '#ED4245');
+    var WARN = tok('--cf-warning', '#FFAA00'), MUTED = tok('--cf-text-3', '#8E9297'), LEGEND = tok('--cf-text-2', '#B9BBBE');
+    var GRID = tok('--cf-border', 'rgba(255, 255, 255, 0.06)');
+
+    function baseOptions() {
+        return {
+            responsive: true, maintainAspectRatio: false, animation: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: { legend: { labels: { color: LEGEND, font: { size: 12 }, boxWidth: 12 } } },
+            scales: { x: { grid: { color: GRID }, ticks: { color: MUTED, maxRotation: 0, autoSkip: true } },
+                      y: { grid: { color: GRID }, ticks: { color: MUTED, precision: 0 } } },
+        };
+    }
+
+    function datasets(id) {
+        var cur = current(), prev = previous(), w = windowFor(id);
+        var showPrev = compare.checked && prev;
+        var col = function (list, k) { return smooth(list.map(function (r) { return Number(r[k]) || 0; }), w); };
+        if (id === 'memberChart') {
+            var ds = [{ label: 'Members', data: col(cur, 'total_members'), borderColor: ACCENT, backgroundColor: wash(ACCENT, '1a'), fill: true, tension: 0.3, pointRadius: 2 }];
+            if (showPrev) ds.push({ label: 'Previous ' + range + ' days', data: col(prev, 'total_members'), borderColor: MUTED, borderDash: [5, 4], pointRadius: 0, fill: false, tension: 0.3 });
+            return ds;
+        }
+        if (id === 'engagementChart') {
+            var joins = col(cur, 'joins'), leaves = col(cur, 'leaves');
+            var out = [
+                { type: 'bar', label: 'Joined', data: joins, backgroundColor: wash(OK, 'b3'), borderRadius: 3 },
+                { type: 'bar', label: 'Left', data: leaves, backgroundColor: wash(BAD, 'b3'), borderRadius: 3 },
+                { type: 'line', label: 'Net', data: joins.map(function (v, i) { return Math.round((v - leaves[i]) * 10) / 10; }), borderColor: ACCENT, pointRadius: 2, tension: 0.3 },
+            ];
+            if (showPrev) {
+                var pj = col(prev, 'joins'), pl = col(prev, 'leaves');
+                out.push({ type: 'line', label: 'Net, previous ' + range + ' days', data: pj.map(function (v, i) { return Math.round((v - pl[i]) * 10) / 10; }), borderColor: MUTED, borderDash: [5, 4], pointRadius: 0, tension: 0.3 });
+            }
+            return out;
+        }
+        var msg = [{ type: 'bar', label: 'Messages', data: col(cur, 'message_count'), backgroundColor: wash(WARN, 'b3'), borderColor: WARN, borderWidth: 1, borderRadius: 3 }];
+        if (showPrev) msg.push({ type: 'line', label: 'Previous ' + range + ' days', data: col(prev, 'message_count'), borderColor: MUTED, borderDash: [5, 4], pointRadius: 0, tension: 0.3 });
+        return msg;
+    }
+
+    function drawCharts() {
+        if (typeof Chart === 'undefined') {
+            var err = document.getElementById('cfk-an-chart-error');
+            if (err && document.getElementById('memberChart')) err.hidden = false;
+            return;
+        }
+        var labels = current().map(function (r) { return label(r.date); });
+        ['memberChart', 'engagementChart', 'messageChart'].forEach(function (id) {
+            var canvas = document.getElementById(id);
+            if (!canvas) return;
+            if (charts[id]) {
+                charts[id].data.labels = labels;
+                charts[id].data.datasets = datasets(id);
+                charts[id].update('none');
+                return;
+            }
+            charts[id] = new Chart(canvas.getContext('2d'), { type: id === 'memberChart' ? 'line' : 'bar', data: { labels: labels, datasets: datasets(id) }, options: baseOptions() });
+        });
+    }
+
+    function render() { renderKpis(); drawCharts(); }
+
+    document.querySelectorAll('#cfk-an-range [data-range]').forEach(function (b) {
+        b.addEventListener('click', function () {
+            range = Number(b.getAttribute('data-range')) || 30;
+            document.querySelectorAll('#cfk-an-range [data-range]').forEach(function (o) { o.setAttribute('aria-pressed', String(o === b)); });
+            render();
+        });
+    });
+    compare.addEventListener('change', render);
+    document.querySelectorAll('.an-ma').forEach(function (sel) { sel.addEventListener('change', drawCharts); });
+
+    // CSV of the chosen period (and the one before, when comparing).
+    var csvBtn = document.getElementById('cfk-an-csv');
+    if (csvBtn) csvBtn.addEventListener('click', function () {
+        var list = (compare.checked && previous() ? previous().concat(current()) : current());
+        var lines = [['date', 'period', 'members_estimate', 'joined', 'left', 'net', 'messages', 'commands', 'voice_minutes'].join(',')];
+        var curStart = current()[0] ? current()[0].date : '';
+        list.forEach(function (r) {
+            lines.push([r.date, r.date < curStart ? 'previous' : 'current', r.total_members, r.joins, r.leaves, r.joins - r.leaves, r.message_count, r.commands, r.voice_minutes].join(','));
+        });
+        var blob = new Blob([lines.join('\r\n') + '\r\n'], { type: 'text/csv;charset=utf-8' });
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'analytics-' + guildName + '-' + range + 'd.csv';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+    });
+
+    if (!full.length) return;
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', render); else render();
+})();
+</script>

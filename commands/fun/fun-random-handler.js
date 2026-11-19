@@ -1,5 +1,6 @@
 import { EmbedBuilder } from 'discord.js';
 import axios from 'axios';
+import { themeColor } from '../../core/guild-theme.js';
 
 export async function handleNumber(interaction) {
   const min = interaction.options.getInteger('min');
@@ -78,7 +79,7 @@ export async function handleLetter(interaction) {
   const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
   const letters = Array.from({ length: count }, () => { let l = alphabet[Math.floor(Math.random() * alphabet.length)]; return uppercase ? l : l.toLowerCase(); });
   const embed = new EmbedBuilder()
-    .setColor('#4CAF50').setTitle('🔤 Random Letter Generator')
+    .setColor(themeColor(interaction.guildId, 'success')).setTitle('🔤 Random Letter Generator')
     .addFields({ name: '✨ Result', value: count === 1 ? `**${letters[0]}**` : letters.join(' ') })
     .setFooter({ text: `Generated ${count} random letter${count > 1 ? 's' : ''}` });
   return interaction.reply({ embeds: [embed] });

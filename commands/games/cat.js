@@ -21,6 +21,7 @@ import {
 } from '../../core/catbot/game-runner.js';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import pool from '../../utils/db.js';
+import { displayNameFor } from '../../utils/display-name.js';
 
 const EPHEMERAL = { flags: MessageFlags.Ephemeral };
 const COLOR = 0xF2A65A;
@@ -239,11 +240,11 @@ export default {
       const target = interaction.options.getUser('user') || interaction.user;
       const inv = await getInventory(guildId, target.id);
       if (!inv.total) {
-        return interaction.reply({ content: `**${target.username}** hasn't caught any cats yet.`, ...EPHEMERAL });
+        return interaction.reply({ content: `**${displayNameFor(target, interaction.guild)}** hasn't caught any cats yet.`, ...EPHEMERAL });
       }
       const lines = inv.cats.filter(c => c.count > 0).map(c => `${catEmoji(c.type)} **${c.type}** ×${c.count}`);
       const embed = new EmbedBuilder().setColor(COLOR)
-        .setTitle(`${target.username}'s cats`)
+        .setTitle(`${displayNameFor(target, interaction.guild)}'s cats`)
         .setDescription(lines.join('\n'))
         .setFooter({ text: `${inv.total} cats · ${inv.distinct}/${CAT_TYPES.length} types · ${inv.value.toFixed(2)} value` });
       return interaction.reply({ embeds: [embed] });
@@ -280,9 +281,9 @@ export default {
     if (sub === 'stats') {
       const target = interaction.options.getUser('user') || interaction.user;
       const [p, inv] = await Promise.all([getProfile(guildId, target.id), getInventory(guildId, target.id)]);
-      if (!p) return interaction.reply({ content: `**${target.username}** hasn't caught any cats yet.`, ...EPHEMERAL });
+      if (!p) return interaction.reply({ content: `**${displayNameFor(target, interaction.guild)}** hasn't caught any cats yet.`, ...EPHEMERAL });
       const embed = new EmbedBuilder().setColor(COLOR)
-        .setTitle(`${target.username}'s stats`)
+        .setTitle(`${displayNameFor(target, interaction.guild)}'s stats`)
         .addFields(
           { name: 'Cats caught', value: String(p.total_catches), inline: true },
           { name: 'Types', value: `${inv.distinct}/${CAT_TYPES.length}`, inline: true },
@@ -294,7 +295,7 @@ export default {
     }
 
     if (sub === 'prism') {
-      const name = (interaction.options.getString('name') || `${interaction.user.username}'s prism`).slice(0, 64);
+      const name = (interaction.options.getString('name') || `${displayNameFor(interaction.user, interaction.guild)}'s prism`).slice(0, 64);
       const check = await canCraftPrism(guildId, interaction.user.id);
       if (!check.ok) {
         const progress = await prismProgress(guildId, interaction.user.id);
@@ -307,7 +308,7 @@ export default {
       if (!res.ok) return interaction.reply({ content: `You no longer have a **${res.missing}** cat.`, ...EPHEMERAL });
       const all = await getPrisms(guildId);
       return interaction.reply({
-        content: `🔮 **${interaction.user.username}** crafted **${name}**! This server now has **${all.length}** prism${all.length === 1 ? '' : 's'}.\n` +
+        content: `🔮 **${displayNameFor(interaction.user, interaction.guild)}** crafted **${name}**! This server now has **${all.length}** prism${all.length === 1 ? '' : 's'}.\n` +
           'Prisms give every catch here a chance to upgrade a rarity tier.',
       });
     }
@@ -337,7 +338,7 @@ export default {
       for (const a of all) (byCategory[a.category] ??= []).push(a);
 
       const embed = new EmbedBuilder().setColor(COLOR)
-        .setTitle(`🏆 ${target.username}'s achievements`)
+        .setTitle(`🏆 ${displayNameFor(target, interaction.guild)}'s achievements`)
         .setFooter({ text: `${earned.length}/${all.length} unlocked` });
       for (const [category, list] of Object.entries(byCategory)) {
         embed.addFields({
@@ -362,7 +363,7 @@ export default {
         for (const t of res.cats) tally.set(t, (tally.get(t) || 0) + 1);
         const list = [...tally].map(([t, n]) => `${catEmoji(t, interaction.client.user?.id)} **${t}**${n > 1 ? ` ×${n}` : ''}`).join(' · ');
         const quests = questLine(await advanceQuests(guildId, interaction.user.id, [['pack_open', 1]]));
-        await interaction.reply({ content: `${res.pack.emoji} **${interaction.user.username}** opened a **${res.pack.name}** and found:\n${list}${quests}` });
+        await interaction.reply({ content: `${res.pack.emoji} **${displayNameFor(interaction.user, interaction.guild)}** opened a **${res.pack.name}** and found:\n${list}${quests}` });
         // Opening can complete a collection.
         const earned = await checkAndAward(guildId, interaction.user.id);
         if (earned.length) {
@@ -377,7 +378,7 @@ export default {
       const packs = await getPacks(guildId, interaction.user.id);
       const owned = packs.filter(p => p.count > 0);
       const embed = new EmbedBuilder().setColor(COLOR)
-        .setTitle(`📦 ${interaction.user.username}'s packs`)
+        .setTitle(`📦 ${displayNameFor(interaction.user, interaction.guild)}'s packs`)
         .setDescription(owned.length
           ? owned.map(p => `${p.emoji} **${p.name}** ×${p.count} — ${p.cats} cats, ${CAT_TYPES[p.minTier]} or better`).join('\n')
           : 'No packs yet. They drop occasionally when you catch a cat.')
@@ -392,7 +393,7 @@ export default {
         getGameStats(guildId, target.id), getGameProfile(guildId, target.id),
       ]);
       const embed = new EmbedBuilder().setColor(COLOR)
-        .setTitle(`🪙 ${target.username}'s Cat Coins`)
+        .setTitle(`🪙 ${displayNameFor(target, interaction.guild)}'s Cat Coins`)
         .setDescription(`**${wallet.coins.toLocaleString()}** on hand · **${wallet.lifetime.toLocaleString()}** earned all-time`);
 
       if (games.length) {

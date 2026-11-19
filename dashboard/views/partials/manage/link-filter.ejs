@@ -1,0 +1,353 @@
+<%#
+  Link filter: default-deny link policy. Built on the settings-row kit (cf-settings.css,
+  partials/kit/); form actions, field names and ids are unchanged.
+  Locals: guild, channels, linkConfig (row|null), linkDomains [], linkQueue [], linkRemovals [],
+          linkDefaults { social, media, blocked, monetisation }
+%>
+<% const cfg = locals.linkConfig || null;
+   const on = !!(cfg && cfg.enabled);
+   const domains = locals.linkDomains || [];
+   const allow = domains.filter(d => d.kind === 'allow');
+   const deny  = domains.filter(d => d.kind === 'deny');
+   const queue = locals.linkQueue || [];
+   const removals = locals.linkRemovals || [];
+   const def = locals.linkDefaults || { social: [], media: [], blocked: [], monetisation: [] };
+   const textChannels = (locals.channels || []).filter(c => c.type === 0 || c.type === 5);
+   const channelName = id => { const c = (locals.channels || []).find(x => String(x.id) === String(id)); return c ? c.name : id; };
+   const when = d => { try { return new Date(d).toISOString().slice(0, 16).replace('T', ' '); } catch (e) { return ''; } };
+   const cat = s => { const v = String(s || 'unknown').replace(/_/g, ' '); return v.charAt(0).toUpperCase() + v.slice(1); };
+   const trim = (s, n) => { const t = String(s || '').replace(/\s+/g, ' ').trim(); return t.length > n ? t.slice(0, n) + '…' : (t || '(no text)'); };
+%>
+
+<style>
+  #linkFilterPage .lf-chip > form { display: inline-flex; margin: 0; }
+  #linkFilterPage .lf-tier-label { display: flex; align-items: center; gap: var(--cf-2); }
+  #linkFilterPage .cf-pill:empty, #linkFilterPage .lf-domain:empty { display: none; }
+  #linkFilterPage .lf-none { font-size: var(--cf-text-sm); color: var(--cf-text-3); }
+  #linkFilterPage .lf-domain { font-weight: 600; font-size: var(--cf-text-sm); color: var(--cf-text); overflow-wrap: anywhere; }
+  #linkFilterPage .lf-when { font-variant-numeric: tabular-nums; }
+  #linkFilterPage .lf-quote {
+    margin: 6px 0 0; padding-left: var(--cf-3); border-left: 2px solid var(--cf-border-strong);
+    font-size: var(--cf-text-sm); line-height: 1.5; color: var(--cf-text-2); white-space: pre-wrap; overflow-wrap: anywhere;
+  }
+  #linkFilterPage .lf-entry .cf-list-actions > form { margin: 0; }
+  @media (max-width: 640px) {
+    #linkFilterPage .lf-entry .cf-list-actions > form { flex: 1 1 auto; }
+    #linkFilterPage .lf-entry .cf-list-actions .btn { width: 100%; justify-content: center; }
+  }
+</style>
+
+<div class="page-section" id="linkFilterPage" data-guild-id="<%= guild.id %>">
+  <div class="page-section-header">
+    <div>
+      <div class="page-section-title"><i class="fas fa-link"></i> <span>Link filter</span></div>
+      <div class="page-section-subtitle">Unknown sites wait for your decision; shorteners and commission marketplaces are removed.</div>
+    </div>
+  </div>
+
+  <%- include('../kit/_kpis', { label: 'Link filter at a glance', items: [
+    { label: 'Removed', value: (cfg?.deleted_count || 0).toLocaleString() },
+    { label: 'Awaiting you', value: queue.length },
+    { label: 'Allowed here', value: allow.length },
+  ] }) %>
+
+  <section class="cf-section" aria-labelledby="lf-tiers-title">
+    <header class="cf-section-head">
+      <div>
+        <h2 class="cf-section-title" id="lf-tiers-title">What gets through</h2>
+        <p class="cf-section-desc">The built-in lists, with a few examples from each; your own domain rules further down override them. Discord invites are handled by the invite filter. Staff and members on the <a href="/manage/<%= guild.id %>?page=protection-settings">Protection settings</a> allowlist are skipped, and the pause there stops every action.</p>
+      </div>
+    </header>
+    <div class="cf-rows">
+      <form method="POST" action="/manage/<%= guild.id %>/link-filter/toggle" id="cfk-lf-toggle-form">
+        <input type="hidden" name="enabled" id="cfk-lf-toggle-value" value="<%= on ? '0' : '1' %>">
+        <div class="cf-row cf-row--switch">
+          <div class="cf-row-text">
+            <label class="cf-row-label" for="cfk-lf-enabled">Link filter</label>
+            <p class="cf-row-desc" id="cfk-lf-enabled-desc">Check links in this server against the rules below.</p>
+          </div>
+          <div class="cf-row-control">
+            <input type="checkbox" class="cf-switch" role="switch" id="cfk-lf-enabled" data-feature-switch aria-describedby="cfk-lf-enabled-desc" <%= on ? 'checked' : '' %>>
+          </div>
+        </div>
+      </form>
+      <div class="cf-row cf-row--stack">
+        <div class="cf-row-text">
+          <div class="lf-tier-label"><span class="cf-row-label">Passes</span><span class="cf-pill is-ok">Allowed</span></div>
+          <p class="cf-row-desc">Social and streaming platforms, plus GIFs, Discord attachments and music. Filtering those would break normal chat.</p>
+        </div>
+        <div class="cf-chips-row"><% def.social.slice(0,8).concat(def.media.slice(0,4)).forEach(d => { %><span class="cf-token"><%= d %></span><% }) %></div>
+      </div>
+      <div class="cf-row cf-row--stack">
+        <div class="cf-row-text">
+          <div class="lf-tier-label"><span class="cf-row-label">Waits for you</span><span class="cf-pill is-warn">Review</span></div>
+          <p class="cf-row-desc">Unrecognised domains and monetisation links. The message stays up, and approving a domain allows it here permanently.</p>
+        </div>
+        <div class="cf-chips-row"><% def.monetisation.slice(0,5).forEach(d => { %><span class="cf-token"><%= d %></span><% }) %><span class="cf-token">anything unknown</span></div>
+      </div>
+      <div class="cf-row cf-row--stack">
+        <div class="cf-row-text">
+          <div class="lf-tier-label"><span class="cf-row-label">Removed</span><span class="cf-pill is-bad">Blocked</span></div>
+          <p class="cf-row-desc">Link shorteners that hide their destination, and sites that exist to sell commissioned work.</p>
+        </div>
+        <div class="cf-chips-row"><% def.blocked.slice(0,8).forEach(d => { %><span class="cf-token"><%= d %></span><% }) %></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="cf-section" aria-labelledby="lf-settings-title">
+    <header class="cf-section-head">
+      <div>
+        <h2 class="cf-section-title" id="lf-settings-title">Settings</h2>
+        <p class="cf-section-desc">What happens to each kind of link, and where reviews are posted.</p>
+      </div>
+    </header>
+    <form method="POST" action="/manage/<%= guild.id %>/link-filter/settings" class="cf-rows">
+      <div class="cf-row">
+        <div class="cf-row-text">
+          <label class="cf-row-label" for="lf-unknown">Unrecognised domains</label>
+          <p class="cf-row-desc">Domains that are on none of the lists.</p>
+        </div>
+        <div class="cf-row-control">
+          <select id="lf-unknown" name="unknown_action" class="form-select">
+            <option value="review" <%= (!cfg || cfg.unknown_action === 'review') ? 'selected' : '' %>>Ask me (message stays up)</option>
+            <option value="block"  <%= cfg?.unknown_action === 'block' ? 'selected' : '' %>>Remove immediately</option>
+          </select>
+        </div>
+      </div>
+      <div class="cf-row">
+        <div class="cf-row-text">
+          <label class="cf-row-label" for="lf-money">Tip and membership links</label>
+          <p class="cf-row-desc">Ko-fi, Patreon, Throne and similar sites.</p>
+        </div>
+        <div class="cf-row-control">
+          <select id="lf-money" name="monetisation_action" class="form-select">
+            <option value="allow"  <%= cfg?.monetisation_action === 'allow'  ? 'selected' : '' %>>Allow</option>
+            <option value="review" <%= (!cfg || cfg.monetisation_action === 'review') ? 'selected' : '' %>>Ask me</option>
+            <option value="block"  <%= cfg?.monetisation_action === 'block'  ? 'selected' : '' %>>Remove</option>
+          </select>
+        </div>
+      </div>
+      <div class="cf-row">
+        <div class="cf-row-text">
+          <label class="cf-row-label" for="lf-blocked">Shorteners and marketplaces</label>
+          <p class="cf-row-desc">The built-in blocked list.</p>
+        </div>
+        <div class="cf-row-control">
+          <select id="lf-blocked" name="blocked_action" class="form-select">
+            <option value="delete" <%= (!cfg || cfg.blocked_action === 'delete') ? 'selected' : '' %>>Remove</option>
+            <option value="review" <%= cfg?.blocked_action === 'review' ? 'selected' : '' %>>Ask me instead</option>
+          </select>
+        </div>
+      </div>
+      <div class="cf-row">
+        <div class="cf-row-text">
+          <label class="cf-row-label" for="lf-review">Review channel</label>
+          <p class="cf-row-desc">Optional. The queue on this page is the main place to decide; nothing is posted to a channel you have not chosen.</p>
+        </div>
+        <div class="cf-row-control">
+          <select id="lf-review" name="review_channel_id" class="form-select">
+            <option value="">Dashboard only</option>
+            <% textChannels.forEach(c => { %>
+              <option value="<%= c.id %>" data-kind="text" <%= cfg?.review_channel_id === c.id ? 'selected' : '' %>>#<%= c.name %></option>
+            <% }) %>
+          </select>
+        </div>
+      </div>
+      <div class="cf-row cf-row--switch">
+        <div class="cf-row-text">
+          <label class="cf-row-label" for="cfk-lf-dm">DM the poster</label>
+          <p class="cf-row-desc">Tell members by DM when one of their links is removed.</p>
+        </div>
+        <div class="cf-row-control">
+          <input type="checkbox" class="cf-switch" role="switch" id="cfk-lf-dm" name="dm_user" <%= (!cfg || cfg.dm_user) ? 'checked' : '' %>>
+        </div>
+      </div>
+      <div class="cf-section-foot">
+        <button class="btn btn-primary" type="submit">Save</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="cf-section" aria-labelledby="lf-queue-title">
+    <header class="cf-section-head">
+      <div>
+        <h2 class="cf-section-title" id="lf-queue-title">Waiting for a decision</h2>
+        <p class="cf-section-desc">These messages are still up. Allowing a domain adds it to this server permanently, so you are asked about each new site once.</p>
+      </div>
+      <div class="cf-section-actions"><span class="cf-pill<%= queue.length ? ' is-warn' : '' %>"><%= queue.length %> waiting</span></div>
+    </header>
+    <div class="cf-rows">
+      <% if (!queue.length) { %>
+      <%- include('../kit/_state', { kind: 'empty', title: 'Nothing waiting', text: 'Links that need a decision will appear here.', compact: false }) %>
+      <% } else { %>
+      <% if (queue.length > 15) { %>
+      <div class="cf-row cf-row--stack">
+        <div class="cf-search">
+          <i class="fas fa-magnifying-glass" aria-hidden="true"></i>
+          <label class="visually-hidden" for="cfk-lf-queue-search">Search the queue</label>
+          <input type="search" id="cfk-lf-queue-search" class="form-control" placeholder="Search by domain or message">
+        </div>
+      </div>
+      <% } %>
+      <div class="cf-list" id="cfk-lf-queue-list">
+      <% queue.forEach(q => { %>
+        <div class="cf-list-item cf-list-item--multi lf-entry">
+          <div class="cf-list-main">
+            <div class="cf-list-meta">
+              <span class="lf-domain"><%= q.domain %></span>
+              <span class="cf-pill"><%= cat(q.category) %></span>
+              <span>#<%= q.id %></span>
+            </div>
+            <div class="cf-list-meta">
+              <%- include('_user-cell', { cfUser: null, cfUserId: q.user_id, cfUserName: null, cfUserSize: 'sm' }) %>
+              <span>in #<%= channelName(q.channel_id) %></span>
+              <span class="lf-when"><%= when(q.created_at) %></span>
+            </div>
+            <p class="lf-quote"><%= trim(q.content, 300) %></p>
+          </div>
+          <div class="cf-list-actions">
+            <form method="POST" action="/manage/<%= guild.id %>/link-filter/rule">
+              <input type="hidden" name="decision_id" value="<%= q.id %>"><input type="hidden" name="decision" value="allow">
+              <button class="btn btn-sm btn-primary" type="submit">Allow domain</button>
+            </form>
+            <form method="POST" action="/manage/<%= guild.id %>/link-filter/rule">
+              <input type="hidden" name="decision_id" value="<%= q.id %>"><input type="hidden" name="decision" value="deny">
+              <button class="btn btn-sm btn-danger" type="submit">Block and remove</button>
+            </form>
+          </div>
+        </div>
+      <% }) %>
+      </div>
+      <% } %>
+    </div>
+  </section>
+
+  <section class="cf-section" aria-labelledby="lf-removed-title">
+    <header class="cf-section-head">
+      <div>
+        <h2 class="cf-section-title" id="lf-removed-title">Removed links</h2>
+        <p class="cf-section-desc">The most recent removals, with their text so a wrong call can be checked. Restoring also allows the domain.</p>
+      </div>
+      <div class="cf-section-actions"><span class="cf-pill"><%= removals.length %></span></div>
+    </header>
+    <div class="cf-rows">
+      <% if (!removals.length) { %>
+      <%- include('../kit/_state', { kind: 'empty', title: 'Nothing removed yet', text: 'Removed links will be listed here with their message text.', compact: false }) %>
+      <% } else { %>
+      <% if (removals.length > 15) { %>
+      <div class="cf-row cf-row--stack">
+        <div class="cf-search">
+          <i class="fas fa-magnifying-glass" aria-hidden="true"></i>
+          <label class="visually-hidden" for="cfk-lf-removed-search">Search removed links</label>
+          <input type="search" id="cfk-lf-removed-search" class="form-control" placeholder="Search by domain or message">
+        </div>
+      </div>
+      <% } %>
+      <div class="cf-list" id="cfk-lf-removed-list">
+      <% removals.forEach(r => { const undone = r.decision === 'false_positive'; %>
+        <div class="cf-list-item cf-list-item--multi lf-entry">
+          <div class="cf-list-main">
+            <div class="cf-list-meta">
+              <span class="lf-domain"><%= r.domain %></span>
+              <span class="cf-pill"><%= cat(r.category) %></span>
+              <span class="cf-pill <%= undone ? 'is-ok' : 'is-bad' %>"><%= undone ? 'Restored' : 'Removed' %></span>
+              <span>#<%= r.id %></span>
+            </div>
+            <div class="cf-list-meta">
+              <%- include('_user-cell', { cfUser: null, cfUserId: r.user_id, cfUserName: null, cfUserSize: 'sm' }) %>
+              <span>in #<%= channelName(r.channel_id) %></span>
+              <span class="lf-when"><%= when(r.created_at) %></span>
+            </div>
+            <p class="lf-quote"><%= trim(r.content, 300) %></p>
+          </div>
+          <% if (!undone) { %>
+          <div class="cf-list-actions">
+            <form method="POST" action="/manage/<%= guild.id %>/link-filter/rule">
+              <input type="hidden" name="decision_id" value="<%= r.id %>"><input type="hidden" name="decision" value="allow">
+              <button class="btn btn-sm btn-secondary" type="submit">Restore and allow</button>
+            </form>
+          </div>
+          <% } %>
+        </div>
+      <% }) %>
+      </div>
+      <% } %>
+    </div>
+  </section>
+
+  <section class="cf-section" aria-labelledby="lf-domains-title">
+    <header class="cf-section-head">
+      <div>
+        <h2 class="cf-section-title" id="lf-domains-title">This server's domains</h2>
+        <p class="cf-section-desc">Built as you rule on the queue. These override the built-in lists in both directions.</p>
+      </div>
+      <div class="cf-section-actions"><span class="cf-pill"><%= allow.length + deny.length %></span></div>
+    </header>
+    <div class="cf-rows">
+      <div class="cf-rows-head" id="lf-allow-head">Always allowed (<%= allow.length %>)</div>
+      <div class="cf-row cf-row--stack">
+        <div class="cf-chips">
+          <% if (!allow.length) { %><span class="lf-none">None yet. Allow a domain from the queue or add one below.</span><% } %>
+          <% allow.forEach(d => { %>
+            <span class="cf-chip is-ok lf-chip" title="<%= d.domain %>"><span><%= d.domain %></span><form method="POST" action="/manage/<%= guild.id %>/link-filter/unrule"><input type="hidden" name="domain" value="<%= d.domain %>"><button type="submit" class="cf-chip-remove" title="Forget" aria-label="Forget <%= d.domain %>"><i class="fas fa-times" aria-hidden="true"></i></button></form></span>
+          <% }) %>
+        </div>
+      </div>
+      <div class="cf-rows-head" id="lf-deny-head">Always blocked (<%= deny.length %>)</div>
+      <div class="cf-row cf-row--stack">
+        <div class="cf-chips">
+          <% if (!deny.length) { %><span class="lf-none">None yet. Block a domain from the queue or add one below.</span><% } %>
+          <% deny.forEach(d => { %>
+            <span class="cf-chip is-bad lf-chip" title="<%= d.domain %>"><span><%= d.domain %></span><form method="POST" action="/manage/<%= guild.id %>/link-filter/unrule"><input type="hidden" name="domain" value="<%= d.domain %>"><button type="submit" class="cf-chip-remove" title="Forget" aria-label="Forget <%= d.domain %>"><i class="fas fa-times" aria-hidden="true"></i></button></form></span>
+          <% }) %>
+        </div>
+      </div>
+      <form method="POST" action="/manage/<%= guild.id %>/link-filter/rule-domain">
+        <div class="cf-rows-head" id="lf-add-head">Add a domain</div>
+        <div class="cf-row cf-row--stack">
+          <div class="cf-fields">
+            <div class="cf-field">
+              <label for="cfk-lf-domain">Domain</label>
+              <input type="text" id="cfk-lf-domain" name="domain" class="form-control" placeholder="example.com" required>
+            </div>
+            <div class="cf-field">
+              <label for="cfk-lf-kind">Rule</label>
+              <select id="cfk-lf-kind" name="kind" class="form-select">
+                <option value="allow">Always allow</option>
+                <option value="deny">Always block</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        <div class="cf-section-foot">
+          <button class="btn btn-primary" type="submit">Add domain</button>
+        </div>
+      </form>
+    </div>
+  </section>
+</div>
+
+<script>
+(function () {
+  const page = document.getElementById('linkFilterPage');
+  if (!page) return;
+  // The master switch sits in the page header (data-feature-switch); a change posts the toggle form.
+  const sw = document.getElementById('cfk-lf-enabled');
+  const form = document.getElementById('cfk-lf-toggle-form');
+  sw.addEventListener('change', () => {
+    document.getElementById('cfk-lf-toggle-value').value = sw.checked ? '1' : '0';
+    sw.disabled = true;
+    form.submit();
+  });
+  [['cfk-lf-queue-search', 'cfk-lf-queue-list'], ['cfk-lf-removed-search', 'cfk-lf-removed-list']].forEach(([inputId, listId]) => {
+    const input = document.getElementById(inputId);
+    const list = document.getElementById(listId);
+    if (!input || !list) return;
+    input.addEventListener('input', () => {
+      const q = input.value.trim().toLowerCase();
+      for (const n of list.children) n.hidden = !!q && !n.textContent.toLowerCase().includes(q);
+    });
+  });
+})();
+</script>

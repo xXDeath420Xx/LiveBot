@@ -28,19 +28,18 @@ export function startAnnouncementScheduler(client) {
     }
   }
 
-  // Schedule to run every minute
+  // Schedule to run every minute. One pass covers every bot: the manager sends each due row with
+  // the client that serves its guild (core/scheduled-announcements-manager.js), so running a pass
+  // per bot would only make them race for the same rows. Custom bots that load after this point
+  // are covered the same way.
   scheduledTask = cron.schedule('* * * * *', async () => {
-    // Check announcements for all bots
-    for (const [botId, manager] of announcementsManagers.entries()) {
-      try {
-        await manager.checkDueAnnouncements();
-      } catch (error) {
-        logger.error(`[AnnouncementScheduler] Error in scheduled announcement check (bot ${botId})`, {
-          error: error.message,
-          stack: error.stack,
-          botId
-        });
-      }
+    try {
+      await announcementsManagers.get('default').checkDueAnnouncements();
+    } catch (error) {
+      logger.error('[AnnouncementScheduler] Error in scheduled announcement check', {
+        error: error.message,
+        stack: error.stack
+      });
     }
   });
 

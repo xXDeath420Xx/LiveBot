@@ -1,5 +1,6 @@
 import { EmbedBuilder } from 'discord.js';
 import axios from 'axios';
+import { themeColor } from '../../core/guild-theme.js';
 
 function formatNumber(num) {
   if (num >= 1e12) return (num / 1e12).toFixed(2) + 'T';
@@ -95,7 +96,7 @@ export async function handleTrending(interaction) {
   const trending = response.data.coins.slice(0, 7);
 
   const embed = new EmbedBuilder()
-    .setColor('#F39C12')
+    .setColor(themeColor(interaction.guildId, 'warning'))
     .setTitle('🔥 Trending Cryptocurrencies')
     .setDescription('Top trending coins on CoinGecko in the last 24 hours')
     .setFooter({ text: 'Powered by CoinGecko' })
@@ -131,7 +132,7 @@ export async function handleCompare(interaction) {
   const data2 = response2.data;
 
   const embed = new EmbedBuilder()
-    .setColor('#3498DB')
+    .setColor(themeColor(interaction.guildId, 'primary'))
     .setTitle('⚖️ Cryptocurrency Comparison')
     .addFields(
       {
@@ -158,7 +159,7 @@ export async function handleTop(interaction) {
   const response = await axios.get(url, { timeout: 10000 });
 
   const embed = new EmbedBuilder()
-    .setColor('#2ECC71')
+    .setColor(themeColor(interaction.guildId, 'success'))
     .setTitle('💎 Top Cryptocurrencies by Market Cap')
     .setFooter({ text: 'Powered by CoinGecko' })
     .setTimestamp();

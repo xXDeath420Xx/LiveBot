@@ -80,14 +80,7 @@ console.log('[2/6] Applying Twatwaffle-equivalent security profile…');
 // target so security configs are immediately functional.
 const ALERT_CH = '1466492477400809493';
 
-// anti_raid_config
-await pool.execute(
-  `INSERT INTO anti_raid_config (guild_id, is_enabled, join_limit, time_period_seconds, action, alert_channel_id)
-   VALUES (?, 1, 10, 20, 'kick', ?)
-   ON DUPLICATE KEY UPDATE is_enabled=1, join_limit=VALUES(join_limit), time_period_seconds=VALUES(time_period_seconds), action=VALUES(action), alert_channel_id=VALUES(alert_channel_id)`,
-  [GUILD, ALERT_CH]
-);
-console.log('       anti_raid_config ✓');
+// (anti_raid_config is gone: it was never enforced. Raid settings live in raid_detection_config.)
 
 // phishing_config
 await pool.execute(

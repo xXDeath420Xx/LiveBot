@@ -2,6 +2,8 @@ import { Events, EmbedBuilder } from 'discord.js';
 import logger from '../utils/logger.js';
 import { sendLogEmbed, saveAuditLog } from '../core/log-manager.js';
 import { shouldIgnoreGuild } from '../utils/custom-bot-check.js';
+import { themeColor } from '../core/guild-theme.js';
+import { handleEventCreate } from '../core/event-reminder-manager.js';
 
 export default {
     name: Events.GuildScheduledEventCreate,
@@ -12,6 +14,14 @@ export default {
 
             if (event.client.isDefaultBot && await shouldIgnoreGuild(guild.id)) return;
 
+            // Reminder / recurring-event bookkeeping (core/event-reminder-manager.js). Kept apart
+            // from the log embed below so a failure in one never suppresses the other.
+            try {
+                await handleEventCreate(event);
+            } catch (trackError) {
+                logger.error('[ScheduledEvent] Event tracking failed', { error: trackError.message, guildId: guild.id, eventId: event.id });
+            }
+
             logger.info(`[ScheduledEvent] Event created: ${event.name}`, {
                 guildId: guild.id,
                 eventId: event.id,
@@ -19,7 +29,7 @@ export default {
             });
 
             const embed = new EmbedBuilder()
-                .setColor(0x57F287)
+                .setColor(themeColor(guild?.id, 'success'))
                 .setTitle('📅 Scheduled Event Created')
                 .setDescription(`New event: **${event.name}**`)
                 .addFields(

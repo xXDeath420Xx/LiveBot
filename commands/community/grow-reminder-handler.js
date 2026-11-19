@@ -1,5 +1,13 @@
 import pool from '../../utils/db.js';
 import logger from '../../utils/logger.js';
+import { themeColor } from '../../core/guild-theme.js';
+import { getConfig } from '../../core/feature-config.js';
+
+/** Grow Toolkit page, "Send reminders by DM" (1/0 from the dashboard, true/false as the default). */
+function dmAllowed(cfg) {
+    const v = cfg?.reminder_dm;
+    return v === undefined || v === null ? true : (v === true || v === 1 || v === '1');
+}
 
 const REMINDER_TYPES = {
     water: { emoji: '', name: 'Water', color: '#3498DB' },
@@ -53,16 +61,37 @@ function parseTime(timeStr) {
 }
 
 export async function handleReminderSet(interaction) {
-    const reminderType = interaction.options.getString('type');
+    const reminderType = interaction.options.getString('type')?.toLowerCase();
     const timeStr = interaction.options.getString('time');
     const repeatHours = parseInt(interaction.options.getString('repeat') || '0');
     const customMessage = interaction.options.getString('message');
-    const useDm = interaction.options.getBoolean('dm') || false;
     const journalId = interaction.options.getInteger('journal');
+
+    // The server decides whether reminders may go by DM. When they may, DM is the default unless
+    // the member asks for the channel (dm: False); when they may not, they are posted here.
+    const allowDm = dmAllowed(await getConfig('grow', interaction.guild.id));
+    const askedDm = interaction.options.getBoolean('dm');
+    const useDm = allowDm && askedDm !== false;
+    const dmRefused = !allowDm && askedDm === true;
+
+    if (!REMINDER_TYPES[reminderType]) {
+        return interaction.reply({
+            content: `Unknown reminder type. Use one of: ${Object.keys(REMINDER_TYPES).join(', ')}.`,
+            ephemeral: true
+        });
+    }
 
     if (reminderType === 'custom' && !customMessage) {
         return interaction.reply({
             content: 'Custom reminders require a message.',
+            ephemeral: true
+        });
+    }
+
+    // grow_reminders.message is varchar(255).
+    if (customMessage && customMessage.length > 255) {
+        return interaction.reply({
+            content: 'Reminder messages must be 255 characters or fewer.',
             ephemeral: true
         });
     }
@@ -103,20 +132,21 @@ export async function handleReminderSet(interaction) {
 
     const { EmbedBuilder } = await import('discord.js');
 
+    // message = the custom text; frequency_hours = repeat interval (NULL = one-time — passed
+    // explicitly because the column defaults to 24); channel_id NULL = deliver by DM.
     const [result] = await pool.execute(
         `INSERT INTO grow_reminders
-        (guild_id, user_id, journal_id, reminder_type, custom_message, next_reminder, repeat_interval_hours, channel_id, use_dm)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        (guild_id, user_id, journal_id, reminder_type, message, next_reminder, frequency_hours, channel_id, is_active)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)`,
         [
             interaction.guild.id,
             interaction.user.id,
-            journalId,
+            journalId ?? null,
             reminderType,
-            customMessage,
+            customMessage ?? null,
             nextReminder,
             repeatHours || null,
-            useDm ? null : interaction.channelId,
-            useDm
+            useDm ? null : (interaction.channelId ?? null)
         ]
     );
 
@@ -141,7 +171,11 @@ export async function handleReminderSet(interaction) {
         embed.addFields({ name: 'Repeat', value: repeatText, inline: true });
     }
 
-    await interaction.reply({ embeds: [embed], ephemeral: true });
+    await interaction.reply({
+        content: dmRefused ? 'This server posts grow reminders in the channel rather than by DM, so this one will appear here.' : undefined,
+        embeds: [embed],
+        ephemeral: true
+    });
 
     logger.info('[GrowReminder] Reminder created', {
         reminderId,
@@ -157,7 +191,8 @@ export async function handleReminderList(interaction) {
     const { EmbedBuilder } = await import('discord.js');
 
     const [reminders] = await pool.execute(
-        `SELECT gr.*, gj.title as journal_title
+        `SELECT gr.*, gr.message AS custom_message, gr.frequency_hours AS repeat_interval_hours,
+                gj.title as journal_title
          FROM grow_reminders gr
          LEFT JOIN grow_journals gj ON gr.journal_id = gj.id
          WHERE gr.user_id = ?
@@ -173,13 +208,13 @@ export async function handleReminderList(interaction) {
     }
 
     const embed = new EmbedBuilder()
-        .setColor('#27AE60')
+        .setColor(themeColor(interaction.guildId, 'success'))
         .setTitle(' Your Grow Reminders')
         .setTimestamp();
 
     let description = '';
     for (const r of reminders) {
-        const typeInfo = REMINDER_TYPES[r.reminder_type];
+        const typeInfo = REMINDER_TYPES[r.reminder_type] || REMINDER_TYPES.custom;
         const status = r.is_active ? '' : '';
         const time = Math.floor(new Date(r.next_reminder).getTime() / 1000);
 
@@ -192,7 +227,7 @@ export async function handleReminderList(interaction) {
             description += `\nLinked: ${r.journal_title}`;
         }
         if (r.custom_message) {
-            description += `\n"${r.custom_message.substring(0, 50)}..."`;
+            description += `\n"${r.custom_message.substring(0, 50)}${r.custom_message.length > 50 ? '...' : ''}"`;
         }
         description += '\n\n';
     }
@@ -250,7 +285,7 @@ export async function handleReminderPause(interaction) {
 
     await pool.execute(
         'UPDATE grow_reminders SET is_active = ? WHERE id = ?',
-        [newStatus, reminderId]
+        [newStatus ? 1 : 0, reminderId]
     );
 
     await interaction.reply({

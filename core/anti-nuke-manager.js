@@ -5,6 +5,9 @@ import { BoundedMap } from '../utils/bounded-map.js';
 import { batchWithRateLimit } from '../utils/rate-limiter.js';
 import { MutexManager } from '../utils/mutex.js';
 import { isProtectedFromBanCommands } from '../utils/owner-protection.js';
+import { themeColor } from './guild-theme.js';
+import { protectionHold } from './protection-exempt.js';
+import { normaliseNukeAction } from './anti-nuke-action.js';
 
 /**
  * Anti-Nuke Manager - Tracks and prevents mass destructive actions
@@ -177,6 +180,8 @@ class AntiNukeManager {
 
             const config = rows.length > 0 ? rows[0] : null;
             if (config) {
+                // Older rows hold 'strip_roles' and similar, which the action switch below never matched.
+                config.action_on_trigger = normaliseNukeAction(config.action_on_trigger);
                 this.configCache.set(guildId, config);
             }
             return config;
@@ -312,6 +317,14 @@ class AntiNukeManager {
             return;
         }
 
+        // Global pause only (core/protection-exempt.js logs the skip). The general allowlist does NOT
+        // apply here: trust to delete channels and ban people is the anti-nuke whitelist's job, and
+        // bots stay in scope (a rogue bot is the classic nuke).
+        if (['kick', 'ban', 'strip'].includes(config.action_on_trigger)
+            && await protectionHold(member, config.action_on_trigger, 'Anti-nuke', { pauseOnly: true })) {
+            return;
+        }
+
         try {
             switch (config.action_on_trigger) {
                 case 'kick':
@@ -415,7 +428,7 @@ class AntiNukeManager {
         };
 
         const embed = new EmbedBuilder()
-            .setColor(0xff0000)
+            .setColor(themeColor(guild?.id, 'danger'))
             .setTitle(`${actionEmojis[actionType] || '\u26A0\uFE0F'} Anti-Nuke Triggered`)
             .setDescription(`**${executor.tag || executor.username}** (${executor.id}) triggered anti-nuke protection!`)
             .addFields(

@@ -3,6 +3,20 @@ import axios from 'axios';
 import * as cryptoHandler from './knowledge-crypto-handler.js';
 import * as githubHandler from './knowledge-github-handler.js';
 import * as recipeHandler from './knowledge-recipe-handler.js';
+import { themeColor } from '../../core/guild-theme.js';
+import { getConfig as getFeatureConfig } from '../../core/feature-config.js';
+
+/** Knowledge and lookups page, "Turned-off sections": the /knowledge groups a server can switch off. */
+export const KNOWLEDGE_SECTIONS = ['facts', 'knowledge', 'nasa', 'fortune', 'urban', 'inspire', 'jokes', 'crypto', 'github', 'recipe'];
+
+/** Why this /knowledge group is not available in a server, or null when it is. */
+export function knowledgeRefusal(cfg, group) {
+  const off = new Set(String(cfg?.disabled_groups || '').toLowerCase().split(/[\s,]+/).filter(s => KNOWLEDGE_SECTIONS.includes(s)));
+  if (off.has(group)) return `The **${group}** part of /knowledge is turned off in this server.`;
+  const urbanOn = cfg?.urban_nsfw === true || cfg?.urban_nsfw === 1 || cfg?.urban_nsfw === '1';
+  if (group === 'urban' && !urbanOn) return 'Urban Dictionary is turned off in this server.';
+  return null;
+}
 
 const NASA_API_KEY = process.env.NASA_API_KEY || 'DEMO_KEY';
 
@@ -460,6 +474,11 @@ export default {
     const subcommand = interaction.options.getSubcommand();
 
     try {
+      if (interaction.guildId) {
+        const refusal = knowledgeRefusal(await getFeatureConfig('knowledge', interaction.guildId), group);
+        if (refusal) return await interaction.reply({ content: refusal, ephemeral: true });
+      }
+
       // Route to appropriate group handler
       switch (group) {
         case 'facts':
@@ -1088,7 +1107,7 @@ export default {
       });
 
       const embed = new EmbedBuilder()
-        .setColor('#FFD700')
+        .setColor(themeColor(interaction.guildId, 'warning'))
         .setTitle('☄️ Near Earth Objects Today')
         .setDescription(`**${neos.length} asteroids** passing near Earth today`)
         .setFooter({ text: 'Data from NASA NEO Web Service' })
@@ -1277,7 +1296,7 @@ export default {
     const luckyNumber = (seed % 100) + 1;
 
     const embed = new EmbedBuilder()
-      .setColor('#FFD700')
+      .setColor(themeColor(interaction.guildId, 'warning'))
       .setTitle('🔮 Your Daily Fortune')
       .setDescription(fortune)
       .addFields(
@@ -1323,7 +1342,7 @@ export default {
       const isReversed = Math.random() > 0.5;
 
       const embed = new EmbedBuilder()
-        .setColor('#9B59B6')
+        .setColor(themeColor(interaction.guildId, 'accent'))
         .setTitle(`🃏 ${card.name}${isReversed ? ' (Reversed)' : ''}`)
         .setDescription(isReversed ? card.reversed : card.meaning)
         .setFooter({ text: 'Meditate on this card\'s message' })
@@ -1345,7 +1364,7 @@ export default {
       const positions = ['Past', 'Present', 'Future'];
 
       const embed = new EmbedBuilder()
-        .setColor('#9B59B6')
+        .setColor(themeColor(interaction.guildId, 'accent'))
         .setTitle('🃏 Three Card Tarot Spread')
         .setDescription('Past, Present, Future')
         .setFooter({ text: 'Reflect on the journey these cards reveal' })
@@ -1409,7 +1428,7 @@ export default {
     };
 
     const embed = new EmbedBuilder()
-      .setColor('#E74C3C')
+      .setColor(themeColor(interaction.guildId, 'danger'))
       .setTitle(`${signEmojis[sign]} ${sign.charAt(0).toUpperCase() + sign.slice(1)} Horoscope`)
       .addFields(
         { name: '✨ General', value: horoscopes.general[generalIndex] },
@@ -1436,7 +1455,7 @@ export default {
     }
 
     const embed = new EmbedBuilder()
-      .setColor('#2ECC71')
+      .setColor(themeColor(interaction.guildId, 'success'))
       .setTitle('🍀 Your Lucky Numbers')
       .setDescription(`**${luckyNumbers.join(', ')}**`)
       .addFields(
@@ -1612,7 +1631,7 @@ export default {
       const quoteData = response.data[0];
 
       const embed = new EmbedBuilder()
-        .setColor('#FFD700')
+        .setColor(themeColor(interaction.guildId, 'warning'))
         .setTitle('✨ Inspirational Quote')
         .setDescription(`*"${quoteData.q}"*`)
         .addFields({
@@ -1644,7 +1663,7 @@ export default {
       const quote = fallbackQuotes[Math.floor(Math.random() * fallbackQuotes.length)];
 
       const embed = new EmbedBuilder()
-        .setColor('#FFD700')
+        .setColor(themeColor(interaction.guildId, 'warning'))
         .setTitle('✨ Inspirational Quote')
         .setDescription(`*"${quote.text}"*`)
         .addFields({

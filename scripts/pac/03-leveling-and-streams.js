@@ -106,7 +106,7 @@ async function phaseI(ctx) {
             "• Reach **level 3** in the server (you'll get the **Shoutout Eligible** role automatically)",
             "• Click the button below and enter your platform + username",
             "",
-            "**Supported platforms:** Twitch, Kick, YouTube, TikTok, Trovo, Facebook.",
+            "**Supported platforms:** Twitch, Kick, YouTube, TikTok, Rumble, Facebook.",
             "",
             "At the start of each month the server XP resets — if you're below level 3 after the reset, your auto-shoutouts will pause until you earn level 3 again.",
         ].join('\n'));

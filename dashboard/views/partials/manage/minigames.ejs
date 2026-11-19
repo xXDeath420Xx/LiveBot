@@ -1,4 +1,8 @@
-<%# Cat Bot, Grow a Tree, Timezones. API-driven; needs `guild` and `channels` in locals. %>
+<%#
+  Cat Bot, Grow a Tree, Timezones. API-driven (/api/guilds/:id/minigames); needs `guild` and `channels`.
+  Rows are built with createElement/textContent.
+%>
+<%- include('_game-kit') %>
 <div class="page-section" id="minigamesPage" data-guild-id="<%= guild.id %>">
     <div class="page-section-header">
         <div>
@@ -6,79 +10,148 @@
                 <i class="fas fa-dice"></i>
                 <span>Minigames</span>
             </div>
-            <div class="page-section-subtitle">
-                Cat Bot, Grow a Tree and Timezones. All three are inert until you turn them on here.
-            </div>
+            <div class="page-section-subtitle">All three stay off until you turn them on here.</div>
         </div>
     </div>
 
-    <div id="mgError" class="alert alert-danger" hidden></div>
+    <div id="mgError" class="cf-notice is-bad" role="alert" hidden></div>
 
-    <!-- Cat Bot -->
-    <div class="mg-card">
-        <h3 class="mg-h">🐱 Cat Bot</h3>
-        <p class="form-help">
-            Cats appear on a timer. The first person to type <code>cat</code> catches it. Catching earns
-            Cat Coins, which buy catnip perks and twelve minigames (<code>/cat game</code>).
-        </p>
-
-        <div class="mg-add">
-            <select id="mgCatChannel" class="form-control">
-                <option value="">Choose a channel…</option>
-                <% (locals.channels || []).filter(c => c.type === 0 || c.type === 5).forEach(c => { %>
-                    <option value="<%= c.id %>">#<%= c.name %></option>
-                <% }) %>
-            </select>
-            <button class="btn btn-primary" id="mgCatAdd">Spawn cats here</button>
-        </div>
-        <span class="mg-status" id="mgCatStatus"></span>
-
-        <div id="mgCatChannels" class="mg-list">Loading…</div>
-    </div>
-
-    <!-- Grow a Tree -->
-    <div class="mg-card">
-        <h3 class="mg-h">🌳 Grow a Tree</h3>
-        <p class="form-help">
-            One communal tree per server. Members water it with the 💧 button; nobody may water twice
-            in a row. It is planted by running <code>/tree plant</code> in Discord — there is nothing to
-            configure here.
-        </p>
-        <div id="mgTree" class="mg-list">Loading…</div>
-    </div>
-
-    <!-- Timezones -->
-    <div class="mg-card">
-        <div class="mg-head">
+    <section class="cf-section" aria-labelledby="mg-cat-title">
+        <header class="cf-section-head">
             <div>
-                <h3 class="mg-h">🕰️ Timezones</h3>
-                <p class="form-help">
-                    Members set a zone with <code>/timezone set</code>. React 🕰️ to any message that
-                    mentions a time and the bot converts it for you.
-                </p>
+                <h2 class="cf-section-title" id="mg-cat-title">Cat Bot <span class="gk-cmd-count" id="mgCatCount"></span></h2>
+                <p class="cf-section-desc">Cats appear on a timer. The first person to type <code>cat</code> catches it and earns Cat Coins, which buy catnip perks and the <code>/cat game</code> minigames.</p>
             </div>
-            <label class="switch">
-                <input type="checkbox" id="mgTz">
-                <span class="slider"></span>
-            </label>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="mgCatChannel">Add a spawn channel</label>
+                    <p class="cf-row-desc">Cats start appearing there straight away.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-group">
+                        <select id="mgCatChannel" class="form-control">
+                            <option value="">Choose a channel</option>
+                            <% (locals.channels || []).filter(c => c.type === 0 || c.type === 5).forEach(c => { %>
+                                <option value="<%= c.id %>" data-kind="text">#<%= c.name %></option>
+                            <% }) %>
+                        </select>
+                        <button class="btn btn-primary" id="mgCatAdd" type="button">Add</button>
+                    </div>
+                    <span class="cf-status-line" id="mgCatStatus" role="status" aria-live="polite"></span>
+                </div>
+            </div>
+            <div id="mgCatChannels" class="cf-list">
+                <%- include('../kit/_state', { kind: 'loading', title: 'Loading', text: null, id: null, boxed: false, compact: true }) %>
+            </div>
         </div>
-        <span class="mg-status" id="mgTzStatus"></span>
-    </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="mg-catopts-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="mg-catopts-title">Cat Bot options</h2>
+                <p class="cf-section-desc">For every spawn channel. Each switch saves as soon as you change it. <span class="cf-status-line" id="mgOptStatus" role="status" aria-live="polite"></span></p>
+            </div>
+        </header>
+        <div class="cf-rows" id="mgCatOptions">
+            <% [
+                ['do_reactions', 'React to catches', 'The bot reacts to the winning "cat" message.'],
+                ['do_rain', 'Cat rain', 'A full prism or the Rainmaker perk can make cats rain in the channel.'],
+                ['auto_delete_catches', 'Delete catch messages', 'Removes the "caught a cat" message after 10 seconds to keep the channel tidy.'],
+                ['anti_double_catch', 'One catch at a time', 'A member who just caught a cat waits 5 minutes before catching in another channel.'],
+                ['legacy_catching', 'First catcher only', 'Late catchers get nothing; normally they get a plain cat for a few seconds after.'],
+                ['mute_achievements', 'Hide achievement messages', 'Achievements are still earned, just not announced.'],
+            ].forEach(function (o) { %>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="mgOpt-<%= o[0] %>"><%= o[1] %></label>
+                    <p class="cf-row-desc"><%= o[2] %></p>
+                </div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="mgOpt-<%= o[0] %>" data-cat-option="<%= o[0] %>" disabled></div>
+            </div>
+            <% }) %>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="mg-preview-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="mg-preview-title">In Discord</h2>
+                <p class="cf-section-desc">A cat appearing and being caught, with the messages of the first spawn channel. Each cat also shows its picture.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="gk-preview">
+                <div>
+                    <div class="cf-dc">
+                        <%- include('_gk-author') %>
+                        <div class="cf-dc-text" id="mgPvAppear"></div>
+                    </div>
+                    <div class="cf-dc">
+                        <%- include('_gk-author', { gkMember: 'Alex' }) %>
+                        <div class="cf-dc-text">cat</div>
+                    </div>
+                    <div class="cf-dc">
+                        <%- include('_gk-author') %>
+                        <div class="cf-dc-text" id="mgPvCaught"></div>
+                        <div class="cf-dc-text">🪙 +<strong>12</strong> Cat Coins.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="mg-tree-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="mg-tree-title">Grow a Tree</h2>
+                <p class="cf-section-desc">One shared tree per server. Members water it with the button under its message; nobody may water twice in a row. Plant it with <code>/tree plant</code> in Discord.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div id="mgTree" class="cf-list">
+                <%- include('../kit/_state', { kind: 'loading', title: 'Loading', text: null, id: null, boxed: false, compact: true }) %>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="mg-tz-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="mg-tz-title">Timezones</h2>
+                <p class="cf-section-desc">Members set their zone with <code>/timezone set</code>.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="mgTz">Convert times</label>
+                    <p class="cf-row-desc" id="mgTz-desc">The bot adds a clock reaction to messages that mention a time, once it knows the writer's zone (theirs or the server's). Anyone who clicks it gets that time in their own zone by DM. <span class="cf-status-line" id="mgTzStatus" role="status" aria-live="polite"></span></p>
+                </div>
+                <div class="cf-row-control">
+                    <input type="checkbox" class="cf-switch" role="switch" id="mgTz" aria-describedby="mgTz-desc">
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <%- include('_game-commands', { gkCommands: [{ cmd: 'cat' }, { cmd: 'tree' }, { cmd: 'timezone' }] }) %>
 </div>
 
 <style>
-  #minigamesPage .mg-card { background:#1e2028; border:1px solid #2c2f3a; border-radius:10px; padding:1.1rem 1.25rem; margin-bottom:1rem; }
-  #minigamesPage .mg-h { margin:0 0 .35rem; font-size:1rem; font-weight:600; }
-  #minigamesPage .mg-head { display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; }
-  #minigamesPage .mg-add { display:grid; grid-template-columns:1fr auto; gap:.5rem; }
-  @media (max-width:800px){ #minigamesPage .mg-add { grid-template-columns:1fr; } }
-  #minigamesPage .mg-status { font-size:.85rem; color:#57F287; min-height:1em; display:block; margin-top:.4rem; }
-  #minigamesPage .mg-list { margin-top:.9rem; display:grid; gap:.45rem; }
-  #minigamesPage .mg-row { display:flex; align-items:center; justify-content:space-between; gap:1rem;
-    padding:.6rem .8rem; border:1px solid #2c2f3a; border-radius:8px; background:#14161c; font-size:.9rem; }
-  #minigamesPage .mg-muted { color:#8b8f9e; }
-  #minigamesPage .mg-timing { display:flex; gap:.4rem; align-items:center; }
-  #minigamesPage .mg-timing input { width:5.5rem; }
+  #minigamesPage .mg-muted { color: var(--cf-text-3); font-size: var(--cf-text-sm); }
+  #minigamesPage .mg-timing { display: flex; flex-wrap: wrap; gap: var(--cf-2); align-items: center; }
+  #minigamesPage .mg-timing input { width: 5.5rem; }
+  #minigamesPage .mg-cat { display: block; padding: 0; }
+  #minigamesPage .mg-cat-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: var(--cf-3); padding: var(--cf-3) var(--cf-5); }
+  #minigamesPage .mg-cat .cf-expand > summary { padding-top: 0; }
+  #minigamesPage .mg-msgs { display: grid; gap: var(--cf-3); }
+  @media (max-width: 640px) {
+    #minigamesPage .mg-cat-top { padding: var(--cf-3) var(--cf-4); }
+    #minigamesPage .mg-timing input { flex: 1 1 4rem; }
+  }
 </style>
 
 <script>
@@ -88,42 +161,87 @@
   const guildId = root.dataset.guildId;
   const api = (p) => `/api/guilds/${guildId}/minigames${p}`;
   const $ = (id) => document.getElementById(id);
-  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  const channelNames = (window.GK_DATA && GK_DATA.channels) || {};
+  const APPEAR = '{emoji} {type} cat has appeared! Type "cat" to catch it!';
+  const CAUGHT = '{emoji} **{username}** caught a **{type}** cat! ({time})';
+  const SAMPLE = { emoji: '🐱', type: 'Fine', username: 'Alex', time: '2.418s' };
+  let channels = [];
 
+  function h(tag, props, ...kids) {
+    const n = document.createElement(tag);
+    const p = props || {};
+    if (p.className) n.className = p.className;
+    if (p.text !== undefined) n.textContent = String(p.text);
+    for (const [k, v] of Object.entries(p.attrs || {})) if (v !== false && v != null) n.setAttribute(k, v === true ? '' : v);
+    for (const [k, v] of Object.entries(p.data || {})) n.dataset[k] = v;
+    for (const kid of kids) if (kid != null) n.append(kid);
+    return n;
+  }
   async function req(url, options) {
     const res = await fetch(url, { credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, ...options });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
     return body;
   }
-  const showError = (m) => { const el = $('mgError'); if (!m) { el.hidden = true; return; } el.textContent = m; el.hidden = false; };
-  const flash = (el, m, ok = true) => { el.textContent = m; el.style.color = ok ? '#57F287' : '#ED4245'; setTimeout(() => { el.textContent = ''; }, 3000); };
+  const showError = (m) => { const el = $('mgError'); el.textContent = m || ''; el.hidden = !m; };
+  const flash = (el, m, ok = true) => { el.textContent = m; el.classList.remove('is-ok', 'is-bad'); el.classList.add(ok ? 'is-ok' : 'is-bad'); clearTimeout(el._t); el._t = setTimeout(() => { el.textContent = ''; el.classList.remove('is-ok', 'is-bad'); }, 3000); };
+  const nameOf = (c) => '#' + (c.channel_name || channelNames[c.channel_id] || 'unknown-channel');
 
-  function renderCats(channels) {
-    const el = $('mgCatChannels');
-    const live = channels.filter(c => c.enabled);
-    if (!live.length) { el.innerHTML = '<div class="mg-muted">Cats do not spawn anywhere yet.</div>'; return; }
-    el.innerHTML = live.map(c => `
-      <div class="mg-row">
-        <div><strong>${c.channel_name ? '#' + esc(c.channel_name) : esc(c.channel_id)}</strong></div>
-        <div class="mg-timing">
-          <span class="mg-muted">every</span>
-          <input type="number" class="form-control" min="20" value="${c.spawn_min ?? 60}" data-min="${c.channel_id}">
-          <span class="mg-muted">–</span>
-          <input type="number" class="form-control" min="20" value="${c.spawn_max ?? 600}" data-max="${c.channel_id}">
-          <span class="mg-muted">sec</span>
-          <button class="btn btn-sm btn-secondary" data-timing="${c.channel_id}">Save</button>
-          <button class="btn btn-sm btn-danger" data-catoff="${c.channel_id}">Stop</button>
-        </div>
-      </div>`).join('');
+  function drawPreview() {
+    const first = channels[0] || {};
+    GK.fill($('mgPvAppear'), first.appear_msg || APPEAR, SAMPLE);
+    GK.fill($('mgPvCaught'), first.caught_msg || CAUGHT, SAMPLE);
+  }
+
+  function msgField(id, label, hint, value, placeholder, kind, chId) {
+    const area = h('textarea', { className: 'form-control', attrs: { id, rows: '2', maxlength: '1000', placeholder }, data: { msg: kind, channel: chId } });
+    area.value = value || '';
+    return h('div', { className: 'cf-field' }, h('label', { attrs: { for: id }, text: label }), area, h('span', { className: 'cf-field-hint', text: hint }));
+  }
+
+  function catRow(c) {
+    const id = String(c.channel_id);
+    const min = h('input', { className: 'form-control', attrs: { type: 'number', min: '20', 'aria-label': 'Shortest gap in seconds' }, data: { min: id } });
+    const max = h('input', { className: 'form-control', attrs: { type: 'number', min: '20', 'aria-label': 'Longest gap in seconds' }, data: { max: id } });
+    min.value = c.spawn_min ?? 60; max.value = c.spawn_max ?? 600;
+    const status = h('span', { className: 'cf-status-line', attrs: { role: 'status' }, data: { status: id } });
+    return h('div', { className: 'cf-list-item mg-cat' },
+      h('div', { className: 'mg-cat-top' },
+        h('div', { className: 'cf-list-main' }, h('strong', { text: nameOf(c) })),
+        h('div', { className: 'mg-timing' },
+          h('span', { className: 'mg-muted', text: 'A cat every' }), min, h('span', { className: 'mg-muted', text: 'to' }), max,
+          h('span', { className: 'mg-muted', text: 'seconds' }),
+          h('button', { className: 'btn btn-sm btn-secondary', text: 'Save', attrs: { type: 'button' }, data: { timing: id } }),
+          h('button', { className: 'btn btn-sm btn-danger', text: 'Stop', attrs: { type: 'button' }, data: { catoff: id } }))),
+      h('details', { className: 'cf-expand' },
+        h('summary', { text: 'Messages' }),
+        h('div', { className: 'cf-expand-body mg-msgs' },
+          msgField('mgAppear-' + id, 'When a cat appears', 'Use {emoji} and {type}. Leave empty for the standard message.', c.appear_msg, APPEAR, 'appear', id),
+          msgField('mgCaught-' + id, 'When it is caught', 'Use {emoji}, {username}, {type} and {time}. Leave empty for the standard message.', c.caught_msg, CAUGHT, 'caught', id),
+          h('div', { className: 'cf-inline' }, h('button', { className: 'btn btn-sm btn-primary', text: 'Save messages', attrs: { type: 'button' }, data: { msgsave: id } }), status))));
+  }
+
+  function renderCats(list) {
+    channels = list.filter(c => c.enabled);
+    $('mgCatCount').textContent = channels.length ? String(channels.length) : '';
+    $('mgCatChannels').replaceChildren(...(channels.length ? channels.map(catRow)
+      : [h('div', { className: 'cf-state cf-state--compact' }, h('p', { className: 'cf-state-text', text: 'Cats do not appear anywhere yet. Add a channel above.' }))]));
+    drawPreview();
   }
 
   function renderTree(t) {
-    const el = $('mgTree');
-    el.innerHTML = t.planted
-      ? `<div class="mg-row"><div><strong>${esc(t.tree.name || 'The tree')}</strong></div>
-           <div class="mg-muted">size ${t.tree.size}</div></div>`
-      : '<div class="mg-muted">No tree planted yet. Run <code>/tree plant</code> in Discord.</div>';
+    $('mgTree').replaceChildren(t.planted
+      ? h('div', { className: 'cf-list-item' }, h('div', { className: 'cf-list-main' }, h('strong', { text: t.tree.name || 'The tree' })), h('div', { className: 'mg-muted', text: 'Size ' + (Number(t.tree.size) || 0) }))
+      : h('div', { className: 'cf-state cf-state--compact' }, h('p', { className: 'cf-state-text' }, 'No tree yet. Run ', h('code', { text: '/tree plant' }), ' in the channel it should live in.')));
+  }
+
+  function renderOptions(s) {
+    root.querySelectorAll('[data-cat-option]').forEach(box => {
+      const key = box.dataset.catOption;
+      const defaults = { do_reactions: 1, do_rain: 1 };
+      box.checked = !!Number(s ? s[key] : (defaults[key] || 0));
+      box.disabled = false;
+    });
   }
 
   async function load() {
@@ -131,6 +249,7 @@
       showError('');
       const data = await req(api('/'));
       renderCats(data.catbot.channels || []);
+      renderOptions(data.catbot.settings);
       renderTree(data.growtree);
       $('mgTz').checked = !!data.timezone.enabled;
     } catch (err) { showError(err.message); }
@@ -138,7 +257,7 @@
 
   $('mgCatAdd').addEventListener('click', async () => {
     const channel_id = $('mgCatChannel').value;
-    if (!channel_id) return flash($('mgCatStatus'), 'Pick a channel first.', false);
+    if (!channel_id) return flash($('mgCatStatus'), 'Choose a channel first.', false);
     try {
       await req(api('/catbot'), { method: 'POST', body: JSON.stringify({ channel_id, enabled: true }) });
       flash($('mgCatStatus'), 'Cats will start appearing.');
@@ -149,17 +268,35 @@
   $('mgTz').addEventListener('change', async (e) => {
     try {
       await req(api('/timezone'), { method: 'POST', body: JSON.stringify({ enabled: e.target.checked }) });
-      flash($('mgTzStatus'), e.target.checked ? 'Timezones enabled.' : 'Timezones disabled.');
+      flash($('mgTzStatus'), e.target.checked ? 'On.' : 'Off.');
     } catch (err) {
       flash($('mgTzStatus'), err.message, false);
       e.target.checked = !e.target.checked;
     }
   });
 
+  $('mgCatOptions').addEventListener('change', async (e) => {
+    const box = e.target.closest('[data-cat-option]');
+    if (!box) return;
+    try {
+      await req(api('/catbot/settings'), { method: 'PUT', body: JSON.stringify({ [box.dataset.catOption]: box.checked }) });
+      flash($('mgOptStatus'), 'Saved.');
+    } catch (err) {
+      box.checked = !box.checked;
+      flash($('mgOptStatus'), err.message, false);
+    }
+  });
+
+  root.addEventListener('input', (e) => {
+    const t = e.target.closest('[data-msg]');
+    if (!t || !channels.length || t.dataset.channel !== String(channels[0].channel_id)) return;
+    GK.fill(t.dataset.msg === 'appear' ? $('mgPvAppear') : $('mgPvCaught'), t.value || (t.dataset.msg === 'appear' ? APPEAR : CAUGHT), SAMPLE);
+  });
+
   root.addEventListener('click', async (e) => {
     const off = e.target.closest('[data-catoff]');
     if (off) {
-      if (!confirm('Stop spawning cats in this channel? Caught cats are kept.')) return;
+      if (!confirm('Stop cats appearing in this channel? Caught cats are kept.')) return;
       try {
         await req(api('/catbot'), { method: 'POST', body: JSON.stringify({ channel_id: off.dataset.catoff, enabled: false }) });
         await load();
@@ -178,6 +315,27 @@
         }) });
         flash($('mgCatStatus'), 'Timings saved.');
       } catch (err) { flash($('mgCatStatus'), err.message, false); }
+      return;
+    }
+
+    const msgs = e.target.closest('[data-msgsave]');
+    if (msgs) {
+      const id = msgs.dataset.msgsave;
+      const status = root.querySelector(`[data-status="${id}"]`);
+      try {
+        await req(api('/catbot/messages'), { method: 'PUT', body: JSON.stringify({
+          channel_id: id,
+          appear_msg: root.querySelector(`[data-msg="appear"][data-channel="${id}"]`).value,
+          caught_msg: root.querySelector(`[data-msg="caught"][data-channel="${id}"]`).value,
+        }) });
+        const c = channels.find(x => String(x.channel_id) === id);
+        if (c) {
+          c.appear_msg = root.querySelector(`[data-msg="appear"][data-channel="${id}"]`).value.trim() || null;
+          c.caught_msg = root.querySelector(`[data-msg="caught"][data-channel="${id}"]`).value.trim() || null;
+        }
+        drawPreview();
+        flash(status, 'Saved.');
+      } catch (err) { flash(status, err.message, false); }
     }
   });
 

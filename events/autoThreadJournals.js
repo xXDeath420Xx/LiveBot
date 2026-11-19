@@ -5,6 +5,7 @@
 
 import { ChannelType } from 'discord.js';
 import logger from '../utils/logger.js';
+import { displayNameFor } from '../utils/display-name.js';
 
 // Channel name keywords that should auto-thread
 const JOURNAL_KEYWORDS = ['grow-journal', 'growjournal', 'grow-diary', 'growdiary', 'plant-journal'];
@@ -41,7 +42,7 @@ export default {
 
             if (!threadName || threadName.length < 3) {
                 // Fallback to username's grow
-                threadName = `${message.author.username}'s Grow`;
+                threadName = `${displayNameFor(message.member || message.author, message.guild)}'s Grow`;
             }
 
             // Create the thread

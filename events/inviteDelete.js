@@ -2,6 +2,7 @@ import { Events } from 'discord.js';
 import logger from '../utils/logger.js';
 import { logInviteDelete } from '../core/log-manager.js';
 import { shouldIgnoreGuild } from '../utils/custom-bot-check.js';
+import { untrackInvite as untrackTempAccessInvite } from '../core/temp-access-manager.js';
 import pool from '../utils/db.js';
 
 export default {
@@ -26,6 +27,15 @@ export default {
                 logger.info(`[InviteDelete] Marked invite ${invite.code} as deleted in database`);
             } catch (dbError) {
                 logger.warn(`[InviteDelete] Could not update invite in database: ${dbError.message}`);
+            }
+
+            // A temporary-access invite that no longer exists can't attribute any
+            // more joins. Retiring it here keeps it out of the use-count diff,
+            // where a missing code is otherwise read as "just consumed".
+            try {
+                await untrackTempAccessInvite(guild.id, invite.code);
+            } catch (dbError) {
+                logger.warn(`[InviteDelete] Could not retire temp-access invite: ${dbError.message}`);
             }
 
         } catch (error) {

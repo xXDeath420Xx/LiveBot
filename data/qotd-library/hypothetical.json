@@ -1,0 +1,193 @@
+{
+  "theme": "hypothetical",
+  "label": "Hypotheticals",
+  "questions": [
+    {
+      "slug": "hypo-one-song-forever",
+      "text": "Every room you enter for the rest of your life plays one song as you walk in. Pick it, and think carefully."
+    },
+    {
+      "slug": "hypo-narrator",
+      "text": "Your life gets a permanent narrator. Whose voice, and what tone are they taking?"
+    },
+    {
+      "slug": "hypo-undo-button",
+      "text": "You get one undo button, usable once, on anything in your life. Do you use it now or save it forever?"
+    },
+    {
+      "slug": "hypo-skill-download",
+      "text": "You can download one skill perfectly, but you lose a skill you already have. What's the trade?",
+      "group": "instant-skill"
+    },
+    {
+      "slug": "hypo-time-machine-rules",
+      "text": "Time travel exists but you can only observe, never interact. Where and when are you going first?"
+    },
+    {
+      "slug": "hypo-frozen-age",
+      "text": "You stop ageing at whatever age you pick, forever. Which age, and what's the catch you're accepting?"
+    },
+    {
+      "slug": "hypo-language-fluency",
+      "text": "You wake up fluent in three languages you don't speak. Which three, and what do you do with them?"
+    },
+    {
+      "slug": "hypo-house-anywhere",
+      "text": "You're given a fully paid house anywhere on Earth, but you can never move again. Where do you put it?"
+    },
+    {
+      "slug": "hypo-superpower-mild",
+      "text": "You get a deliberately unimpressive superpower — always finding parking, perfect toast, never losing keys. Which is genuinely the strongest?"
+    },
+    {
+      "slug": "hypo-animal-size",
+      "text": "You can change the size of exactly one species permanently. Which one, and what size?"
+    },
+    {
+      "slug": "hypo-invisible-day",
+      "text": "You're invisible for 24 hours with no consequences. Realistically, what do you actually spend it doing?"
+    },
+    {
+      "slug": "hypo-money-strings",
+      "text": "Ten million arrives tomorrow, but you must spend it all within a year and can't give it away. What's the plan?",
+      "group": "sudden-money"
+    },
+    {
+      "slug": "hypo-last-meal",
+      "text": "Design your last meal, including the setting and who is at the table. Details matter."
+    },
+    {
+      "slug": "hypo-know-death-date",
+      "text": "You can learn the exact date you'll die, or never know. Which envelope do you take?"
+    },
+    {
+      "slug": "hypo-swap-lives",
+      "text": "You swap lives with anyone in this server for one week. Who, and what's the first thing you'd do with their life?"
+    },
+    {
+      "slug": "hypo-museum-exhibit",
+      "text": "A museum builds one exhibit about your life. Which three objects are behind the glass?"
+    },
+    {
+      "slug": "hypo-restart-country",
+      "text": "You restart your life at eighteen in a country you've never visited. Which country are you picking?"
+    },
+    {
+      "slug": "hypo-one-app",
+      "text": "Every app on your phone is deleted except three. Which three survive, and which loss hurts most?"
+    },
+    {
+      "slug": "hypo-mind-reading-limit",
+      "text": "You can read minds, but only when someone is thinking about you. Blessing or curse?"
+    },
+    {
+      "slug": "hypo-pause-button",
+      "text": "You can pause the world for an hour a day, but you age normally during it. How do you spend the hour?"
+    },
+    {
+      "slug": "hypo-perfect-clone",
+      "text": "You get a clone who shares your memories and must be paid a fair wage. What job do you give yourself?"
+    },
+    {
+      "slug": "hypo-shrink-ray",
+      "text": "You wake up six inches tall in your own home for one day. What's your survival plan?"
+    },
+    {
+      "slug": "hypo-teleport-cost",
+      "text": "You can teleport anywhere instantly, but you arrive completely naked. How often are you still using this?"
+    },
+    {
+      "slug": "hypo-one-lie-truth",
+      "text": "Everyone on Earth is forced to be honest for one hour. Are you excited or terrified?"
+    },
+    {
+      "slug": "hypo-rewrite-rule",
+      "text": "You get to add one law that everyone on the planet must follow. What's the law, and what's the loophole people will find?"
+    },
+    {
+      "slug": "hypo-immortal-friend",
+      "text": "One person you know becomes immortal and they get to choose you as their permanent companion. Do you accept?"
+    },
+    {
+      "slug": "hypo-lifetime-supply",
+      "text": "You get a lifetime supply of one thing, delivered weekly, no substitutions. What are you picking?"
+    },
+    {
+      "slug": "hypo-desert-island-three",
+      "text": "Desert island, one book, one album, one luxury item that isn't a boat. Go."
+    },
+    {
+      "slug": "hypo-remote-control-life",
+      "text": "You get a TV remote for real life: pause, rewind, fast-forward, mute. Which button do you wear out first?"
+    },
+    {
+      "slug": "hypo-alien-first-contact",
+      "text": "Aliens land and ask for one human to explain us. Who do you send, and what do they get wrong?"
+    },
+    {
+      "slug": "hypo-forget-one-thing",
+      "text": "You can permanently forget one thing — a memory, a skill, a song, an ex's phone number. What goes?"
+    },
+    {
+      "slug": "hypo-command-animal",
+      "text": "One animal species will now obey your commands, but only yours. Which species, and what's the first order?"
+    },
+    {
+      "slug": "hypo-see-one-year",
+      "text": "You get a five-minute video of your life exactly one year from today. Watch it or delete it?"
+    },
+    {
+      "slug": "hypo-career-swap",
+      "text": "You must switch to a completely different career tomorrow, with full training paid. What are you doing?"
+    },
+    {
+      "slug": "hypo-weather-control",
+      "text": "You control the weather in a ten-mile radius around yourself. How long before your neighbours turn on you?"
+    },
+    {
+      "slug": "hypo-perfect-sleep",
+      "text": "You only need two hours of sleep a night, forever. What do you fill the extra six with — honestly?"
+    },
+    {
+      "slug": "hypo-food-nutrition",
+      "text": "One food becomes nutritionally perfect and you may eat unlimited amounts of it. Which food are you choosing?"
+    },
+    {
+      "slug": "hypo-talk-to-past-self",
+      "text": "You get sixty seconds on the phone with yourself ten years ago. What do you say, knowing they might not listen?"
+    },
+    {
+      "slug": "hypo-warning-label",
+      "text": "You must wear a warning label about yourself for a year. What does it say?"
+    },
+    {
+      "slug": "hypo-theme-park-ride",
+      "text": "A theme park builds one ride based on your life. What's it called and what's the biggest drop?"
+    },
+    {
+      "slug": "hypo-inherit-business",
+      "text": "You inherit a struggling business tomorrow. Which industry would you actually want it to be in?"
+    },
+    {
+      "slug": "hypo-fictional-mentor",
+      "text": "Any fictional character becomes your real-life mentor for a year. Who, and what are they teaching you?"
+    },
+    {
+      "slug": "hypo-swap-senses",
+      "text": "You must give up one sense to sharpen another to superhuman levels. What's the trade you'd make?"
+    },
+    {
+      "slug": "hypo-anonymous-fame",
+      "text": "Would you rather be famous but hated, or brilliant at something and completely unknown?"
+    },
+    {
+      "slug": "hypo-second-life-genre",
+      "text": "Your next life is set in a fictional genre of your choosing. Which genre, and what role are you playing in it?",
+      "group": "fictional-world-live"
+    },
+    {
+      "slug": "hypo-vending-machine",
+      "text": "A vending machine appears in your home that dispenses anything under twenty dollars, once a day. What's your daily pull?"
+    }
+  ]
+}

@@ -39,7 +39,7 @@ export async function rotateShopDeals() {
                 [strains[0].id, discount, bonusSeeds, now, tomorrow]
             );
 
-            logger.info('[ShopRotation] New daily deal', {
+            logger.debug('[ShopRotation] New daily deal', {
                 strain: strains[0].name,
                 discount: `${discount}%`,
                 bonusSeeds
@@ -74,7 +74,7 @@ export async function rotateShopDeals() {
                 [strains[0].id, discount, bonusSeeds, now, nextWeek]
             );
 
-            logger.info('[ShopRotation] New weekly special', {
+            logger.debug('[ShopRotation] New weekly special', {
                 strain: strains[0].name,
                 discount: `${discount}%`,
                 bonusSeeds
@@ -104,10 +104,10 @@ export async function rotateShopDeals() {
                 [strains[0].id, discount, now, endsAt, maxPurchases]
             );
 
-            logger.info('[ShopRotation] Flash sale started!', {
+            logger.debug('[ShopRotation] Flash sale started!', {
                 strain: strains[0].name,
                 discount: `${discount}%`,
-                duration: `${duration / 3600000}h`,
+                saleLength: `${duration / 3600000}h`,
                 stock: maxPurchases
             });
         }

@@ -221,7 +221,6 @@ router.post('/update-score', async (req, res) => {
 
         // Validate amount to prevent score manipulation
         if (typeof amount !== 'number' || amount < 0 || amount > 100 || !Number.isFinite(amount)) {
-            conn.release();
             return res.status(400).json({ error: 'Invalid score amount', code: 'INVALID_AMOUNT' });
         }
 

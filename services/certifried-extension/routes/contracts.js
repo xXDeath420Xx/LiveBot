@@ -169,7 +169,7 @@ router.post('/:id/accept', async (req, res) => {
             [playerId, contractId, deadlineAt]
         );
 
-        logger.info('[Contracts] Accepted', {
+        logger.debug('[Contracts] Accepted', {
             playerId,
             contractId,
             playerContractId: result.insertId
@@ -318,7 +318,7 @@ router.post('/:id/deliver', async (req, res) => {
                 updateTournamentScore(playerId, 'sales', parseFloat(contract.reward_cash || 0)).catch(() => {});
             }
 
-            logger.info('[Contracts] Delivered', {
+            logger.debug('[Contracts] Delivered', {
                 playerId,
                 playerContractId,
                 delivered: actualDeliver,
@@ -489,7 +489,7 @@ router.post('/:id/quick-fulfill', async (req, res) => {
             checkAchievements(playerId).catch(() => {});
         }
 
-        logger.info('[Contracts] Quick-fulfilled', {
+        logger.debug('[Contracts] Quick-fulfilled', {
             playerId,
             playerContractId,
             delivered: totalDelivered,
@@ -546,7 +546,7 @@ router.post('/:id/cancel', async (req, res) => {
             return res.status(404).json({ error: 'Active contract not found', code: 'NOT_FOUND' });
         }
 
-        logger.info('[Contracts] Cancelled', { playerId, playerContractId });
+        logger.debug('[Contracts] Cancelled', { playerId, playerContractId });
 
         res.json({
             success: true,

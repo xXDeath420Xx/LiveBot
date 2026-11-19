@@ -1,0 +1,53 @@
+<%#
+  GET /legal (dashboard/routes/legal-pages.js). Locals: user, docs (LEGAL_DOCS from dashboard/content/legal/data-inventory.js).
+%>
+<!DOCTYPE html>
+<html lang="en" data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>">
+<head>
+<%- include('partials/site-head', { title: 'Legal and data · CertiFried', description: 'Every CertiFried policy in one place: Terms of Service, Privacy Policy, Data we collect, the EULA, CertiFried Studio privacy, the AGPL licence and the source code.', path: '/legal' }) %>
+    <link rel="stylesheet" href="/css/cf-studio-pages.css">
+</head>
+<body class="cfs-body">
+<%- include('partials/site-header', { active: '', user: locals.user || null, returnTo: '/legal' }) %>
+<% const _docs = Array.isArray(locals.docs) ? locals.docs : []; %>
+    <main id="main-content" tabindex="-1" class="cfs-main cfs-main--narrow">
+        <div class="cfs-pagehead">
+            <h1>Legal and data</h1>
+            <p class="cfs-lede">Every policy that covers CertiFried: the Discord bot, the dashboard, the stream bot, CertiFried Studio, song requests and Greenhouse Tycoon. They are written in plain language.</p>
+        </div>
+
+        <section class="cfs-section" aria-labelledby="lg-docs-h">
+            <h2 id="lg-docs-h">Policies</h2>
+            <ul class="sp-docs">
+                <% _docs.forEach((d) => { const ext = /^https:/.test(d.href); %>
+                <li>
+                    <a class="sp-doc-title" href="<%= d.href %>"<% if (ext) { %> rel="noopener"<% } %>><%= d.title %></a>
+                    <p><%= d.text %></p>
+                    <span class="sp-doc-date"><% if (d.updated) { %>Updated <time datetime="<%= d.updated %>"><%= d.updated %></time><% } else { %>On GitHub<% } %></span>
+                </li>
+                <% }) %>
+            </ul>
+        </section>
+
+        <section class="cfs-section" aria-labelledby="lg-rights-h">
+            <h2 id="lg-rights-h">Your data, in short</h2>
+            <div class="cfs-prose">
+                <ul>
+                    <li>We never sell, rent or trade your data, and we show no ads.</li>
+                    <li>CertiFried is free, with no paid tiers. Money from tips, Bits and subs is tracked so automations can react to it; CertiFried never processes a payment or sees payment details.</li>
+                    <li><code>/privacy export</code> and <code>/privacy delete</code> with the CertiFried bot cover the bot, the dashboard, the stream bot and Greenhouse saves linked to Discord. <a href="/privacy#your-rights">Your rights</a> explains the rest.</li>
+                    <li>Questions, or anything the commands do not cover: <a href="mailto:support@certifriedmultitool.com">support@certifriedmultitool.com</a>.</li>
+                </ul>
+            </div>
+        </section>
+
+        <section class="cfs-section" aria-labelledby="lg-source-h">
+            <h2 id="lg-source-h">Source code</h2>
+            <div class="cfs-prose">
+                <p>CertiFried's code, including the bot, the dashboard, the stream bot and CertiFried Studio, is licensed under the <a href="https://github.com/xXDeath420Xx/LiveBot/blob/dev/LICENSE" rel="noopener">GNU Affero General Public License, version 3 or later</a>. As that licence asks of a service run for others, the complete source is available to everyone who uses it: <a href="https://github.com/xXDeath420Xx/LiveBot" rel="noopener">github.com/xXDeath420Xx/LiveBot</a>.</p>
+            </div>
+        </section>
+    </main>
+<%- include('partials/site-footer') %>
+</body>
+</html>

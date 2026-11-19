@@ -180,6 +180,9 @@ class AutoResponseManager {
         // Send embed from JSON
         let embedData;
         try { embedData = JSON.parse(ar.embed_json); } catch { return; }
+        // The same {user}/{server}/… variables as a text reply.
+        if (typeof embedData.title === 'string') embedData.title = this.parseVariables(embedData.title, message).slice(0, 256);
+        if (typeof embedData.description === 'string') embedData.description = this.parseVariables(embedData.description, message).slice(0, 4096);
         const embed = new EmbedBuilder(embedData);
         if (ar.reply_to_user) {
           await message.reply({ embeds: [embed] });

@@ -1,7 +1,27 @@
-import axios from 'axios';
 import { EmbedBuilder } from 'discord.js';
 import pool from '../utils/db.js';
 import logger from '../utils/logger.js';
+import { fetchSubredditPosts } from '../utils/reddit.js';
+import { buildFeedContent, titlePasses, parseList } from './feed-message.js';
+import { pollsGuild } from './guild-presence-logic.js';
+
+/**
+ * A feed's filters (all optional; empty means off, so older rows post everything as before):
+ *   title_include / title_exclude  comma-separated keywords matched against the post title
+ *   flair_filter                   comma-separated flairs; only posts with one of them are posted.
+ *                                  Reddit reports flair through its API only (REDDIT_CLIENT_ID /
+ *                                  _SECRET); on the public feed the flair is unknown and, while a
+ *                                  flair filter is set, the post is held back.
+ */
+export function redditPostPasses(feed, post) {
+    if (!titlePasses({ include: feed.title_include, exclude: feed.title_exclude }, post.title)) return false;
+    const flairs = parseList(feed.flair_filter);
+    if (flairs.length) {
+        if (post.flair == null) return false;
+        if (!flairs.includes(String(post.flair).trim().toLowerCase())) return false;
+    }
+    return true;
+}
 
 /**
  * Check all Reddit feeds and post new content
@@ -11,7 +31,11 @@ async function checkRedditFeeds(client) {
     const [feeds] = await pool.execute('SELECT * FROM reddit_feeds');
     if (feeds.length === 0) return;
 
-    for (const feed of feeds) {
+    // Every bot client runs this check; each handles only the servers it is in (a feed for a server
+    // this client is not in was fetched and then dropped before any post or cursor update anyway).
+    // One bot per server (H-315: core/guild-presence-logic.js pollsGuild).
+    const mine = client?.guilds?.cache ? feeds.filter(feed => pollsGuild(client, feed.guild_id, global.botManager)) : feeds;
+    for (const feed of mine) {
       await processFeed(feed, client);
     }
   } catch (error) {
@@ -24,16 +48,9 @@ async function checkRedditFeeds(client) {
  */
 async function processFeed(feed, client) {
   try {
-    const response = await axios.get(
-      `https://www.reddit.com/r/${feed.subreddit}/new.json?limit=5`,
-      {
-        headers: {
-          'User-Agent': 'CertiFriedUtility/1.0'
-        }
-      }
-    );
-
-    const posts = response.data.data.children;
+    // Was a direct `new.json` call until Reddit started 403ing unauthenticated JSON
+    // requests; utils/reddit.js handles OAuth-or-Atom and hands back one post shape.
+    const { posts } = await fetchSubredditPosts(feed.subreddit, { sort: 'new', limit: 5 });
 
     if (posts.length === 0) return;
 
@@ -42,10 +59,10 @@ async function processFeed(feed, client) {
 
     // Find posts newer than the last one we saw
     for (const post of posts) {
-      if (post.data.id === feed.last_post_id) {
+      if (post.id === feed.last_post_id) {
         break; // We've reached the last post we announced
       }
-      newPosts.unshift(post.data); // Add to the beginning to send oldest first
+      newPosts.unshift(post); // Add to the beginning to send oldest first
     }
 
     if (newPosts.length > 0) {
@@ -57,26 +74,44 @@ async function processFeed(feed, client) {
       if (!channel) return;
 
       for (const post of newPosts) {
+        // Filtered-out posts are skipped but still move the cursor (latestPostId), so they are
+        // never reconsidered.
+        if (!redditPostPasses(feed, post)) continue;
         const embed = new EmbedBuilder()
           .setColor('#FF4500')
           .setTitle(post.title.substring(0, 256))
-          .setURL(`https://www.reddit.com${post.permalink}`)
+          .setURL(post.permalink)
           .setDescription(post.selftext ? post.selftext.substring(0, 400) : 'No text content.')
           .setAuthor({
             name: `New post in r/${feed.subreddit}`,
             iconURL: 'https://www.redditinc.com/assets/images/site/reddit-logo.png'
           })
-          .addFields(
-            { name: 'Author', value: `u/${post.author}`, inline: true },
-            { name: 'Upvotes', value: post.score.toString(), inline: true }
-          )
-          .setTimestamp(post.created_utc * 1000);
+          .addFields({ name: 'Author', value: `u/${post.author}`, inline: true })
+          .setTimestamp(post.createdAt || new Date());
 
-        if (post.thumbnail && post.thumbnail.startsWith('http')) {
+        // The Atom feed carries no score, so only show the field when we actually
+        // have one (i.e. when Reddit OAuth credentials are configured).
+        if (post.score !== null) {
+          embed.addFields({ name: 'Upvotes', value: post.score.toString(), inline: true });
+        }
+
+        if (post.thumbnail) {
           embed.setThumbnail(post.thumbnail);
         }
 
-        await channel.send({ embeds: [embed] });
+        // custom_message / ping_role_id empty: no content, exactly as before.
+        const { content, allowedMentions } = buildFeedContent({
+          template: feed.custom_message,
+          pingRoleId: feed.ping_role_id,
+          vars: {
+            subreddit: `r/${feed.subreddit}`,
+            title: post.title,
+            author: `u/${post.author}`,
+            flair: post.flair || '',
+            url: post.permalink,
+          },
+        });
+        await channel.send({ content, allowedMentions, embeds: [embed] });
       }
 
       await pool.execute(

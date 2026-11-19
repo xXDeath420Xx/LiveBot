@@ -1,0 +1,30 @@
+/* CertiFried Light: a Style for OBS Studio's Yami theme, built on Yami's own Light style, in CertiFried's light
+ * colours. Choose it in OBS under Settings, Appearance: Theme "Yami", Style "CertiFried Light". OBS 30.2 or later. */
+
+@OBSThemeMeta {
+    name: 'CertiFried Light';
+    id: 'com.certifried.studio.Light';
+    extends: 'com.obsproject.Yami.Light';
+    author: 'CertiFried';
+    dark: 'false';
+}
+
+@OBSThemeVars {
+    --grey1: #8a8f99;
+    --grey2: #ffffff;
+    --grey3: #ffffff;
+    --grey4: #f6f7f8;
+    --grey5: #f3f4f6;
+    --grey6: #e9ebee;
+    --grey7: #e1e3e7;
+    --grey8: #c3c7ce;
+
+    --primary: #b4e04f;
+    --primary_light: #c5ea6e;
+    --primary_lighter: #d6f193;
+    --primary_dark: #9fcc3a;
+    --primary_darker: #4a7a10;
+
+    --highlight_color: #4a7a10;
+    --input_border_focus: #4a7a10;
+}

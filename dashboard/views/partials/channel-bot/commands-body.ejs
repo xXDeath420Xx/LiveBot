@@ -1,0 +1,385 @@
+<%#
+  Channel bot commands, shared by the Kick page (views/kick/channel-commands.ejs) and the Twitch page
+  (views/stream-bot/channel-commands.ejs): built-in commands, your own commands, auto-responders and, where the
+  platform has them, timers. The page around it supplies the frame, the heading and the master switch, and loads
+  /js/kick-dashboard.js (window.KickDash) before this partial.
+  Locals: channel { id, channel_id, channel_name, features_enabled }, commands, channelCommands, customCommands,
+  apiBase (e.g. /kick/api/channel/<id>), showTimers (default true), timersNote (shown instead of the timers section).
+%>
+<%
+  var ov = {};
+  channelCommands.forEach(function (c) { ov[c.command_key] = c; });
+  // Master-switch state: chat commands are opt-in (off unless explicitly true).
+  var _feats = {};
+  try { _feats = channel.features_enabled ? (typeof channel.features_enabled === 'string' ? JSON.parse(channel.features_enabled) : channel.features_enabled) : {}; } catch (e) { _feats = {}; }
+  var commandsOn = !!(_feats && _feats.commands === true);
+  var aliasesOf = function (o) {
+    if (!o || !o.custom_aliases) return '';
+    try { var a = typeof o.custom_aliases === 'string' ? JSON.parse(o.custom_aliases) : o.custom_aliases; return Array.isArray(a) ? a.join(', ') : ''; } catch (e) { return ''; }
+  };
+  var cid = channel.channel_id;
+  var customData = customCommands.map(function (cc) { return { id: cc.id, response: cc.response || '', cooldown: cc.cooldown, mod_only: cc.mod_only === 1, is_enabled: cc.is_enabled !== 0 }; });
+%>
+  <script type="application/json" id="custom-json"><%- JSON.stringify(customData).replace(/</g, '\\u003c') %></script>
+
+  <dl class="cf-kpis">
+    <div class="cf-kpi"><dt>Built-in commands</dt><dd><%= commands.length %></dd></div>
+    <div class="cf-kpi"><dt>Customized</dt><dd><%= channelCommands.length %></dd></div>
+    <div class="cf-kpi"><dt>Your commands</dt><dd><%= customCommands.length %></dd></div>
+  </dl>
+
+  <!-- Built-in commands -->
+  <section class="cf-section">
+    <header class="cf-section-head">
+      <div>
+        <h2 class="cf-section-title">Built-in commands <span class="muted">(<%= commands.length %>)</span></h2>
+        <p class="cf-section-desc">Turn each one on or off, or open it to change its aliases, cooldown and reply.</p>
+      </div>
+      <% if (commands.length > 15) { %>
+        <div class="cf-section-actions"><input type="search" id="cmd-search" class="kick-search" placeholder="Search commands" aria-label="Search built-in commands"></div>
+      <% } %>
+    </header>
+    <div class="cf-rows" id="cmd-list">
+      <% if (!commands.length) { %>
+        <div class="cf-state cf-state--compact"><p class="cf-state-text">No built-in commands are available.</p></div>
+      <% } %>
+      <% commands.forEach(function (cmd) {
+           var o = ov[cmd.command_key] || {};
+           var enabled = o.is_enabled === undefined ? true : o.is_enabled === 1;
+           var hasOverride = ov[cmd.command_key] !== undefined;
+           var k = cmd.command_key; %>
+        <div class="cmd" data-key="<%= k %>" data-search="<%= (k + ' ' + (cmd.description || '') + ' ' + (cmd.category || '')).toLowerCase() %>">
+          <div class="cf-row cf-row--switch">
+            <div class="cf-row-text">
+              <label class="cf-row-label" for="cmd-on-<%= k %>"><code>!<%= k %></code>
+                <% if (hasOverride) { %><span class="pill warn">Customized</span><% } %></label>
+              <p class="cf-row-desc"><%= cmd.description || cmd.category || '' %></p>
+            </div>
+            <div class="cf-row-control">
+              <input type="checkbox" role="switch" class="cf-switch cmd-enabled" id="cmd-on-<%= k %>" data-key="<%= k %>" <%= enabled ? 'checked' : '' %>>
+            </div>
+          </div>
+          <details class="kick-cmd-more">
+            <summary>Customize <code>!<%= k %></code></summary>
+            <div class="cf-row cf-row--stack">
+              <div class="cf-fields">
+                <div class="cf-field">
+                  <label for="cmd-al-<%= k %>">Aliases</label>
+                  <input class="cmd-aliases" id="cmd-al-<%= k %>" data-key="<%= k %>" maxlength="300" value="<%= aliasesOf(o) %>" placeholder="comma-separated">
+                </div>
+                <div class="cf-field">
+                  <label for="cmd-cd-<%= k %>">Cooldown (seconds)</label>
+                  <input class="cmd-cd" id="cmd-cd-<%= k %>" data-key="<%= k %>" type="number" min="0" max="3600" value="<%= o.cooldown_override != null ? o.cooldown_override : '' %>" placeholder="<%= cmd.cooldown_default != null ? cmd.cooldown_default : 'default' %>">
+                </div>
+                <div class="cf-field">
+                  <label class="cf-choice"><input type="checkbox" class="cmd-mod" data-key="<%= k %>" <%= o.mod_only === 1 ? 'checked' : '' %>> Mods only</label>
+                </div>
+              </div>
+              <div class="kick-inline">
+                <button type="button" class="btn btn-primary btn-sm cmd-save" data-key="<%= k %>">Save</button>
+                <span class="kick-status cmd-msg" data-key="<%= k %>" role="status" aria-live="polite"></span>
+              </div>
+            </div>
+          </details>
+        </div>
+      <% }) %>
+      <div class="cf-state cf-state--compact" id="cmd-nomatch" hidden><p class="cf-state-text">No command matches that search.</p></div>
+    </div>
+  </section>
+
+  <!-- Custom commands -->
+  <section class="cf-section">
+    <header class="cf-section-head">
+      <div>
+        <h2 class="cf-section-title">Your commands <span class="muted">(<%= customCommands.length %>)</span></h2>
+        <p class="cf-section-desc">Commands that reply with your own text.</p>
+      </div>
+    </header>
+    <div class="cf-rows">
+      <div class="cf-row cf-row--stack">
+        <div class="cf-fields">
+          <div class="cf-field"><label for="new-name">Name</label><input id="new-name" maxlength="50" placeholder="socials (no !)" pattern="[A-Za-z0-9_-]+"></div>
+          <div class="cf-field"><label for="new-cd">Cooldown (seconds)</label><input id="new-cd" type="number" min="0" max="3600" value="5"></div>
+          <div class="cf-field"><label class="cf-choice"><input type="checkbox" id="new-mod"> Mods only</label></div>
+        </div>
+        <div class="cf-field">
+          <label for="new-resp">Reply</label>
+          <textarea id="new-resp" rows="2" maxlength="500"></textarea>
+          <span class="cf-field-hint">Variables: <code>{{username}}</code>, <code>{{lifetime_tokes}}</code>, <code>{{level}}</code>.</span>
+        </div>
+      </div>
+      <div class="cf-section-foot">
+        <span id="new-msg" class="kick-status cf-foot-note" role="status" aria-live="polite"></span>
+        <button type="button" id="new-add" class="btn btn-primary btn-sm">Add command</button>
+      </div>
+      <% if (!customCommands.length) { %>
+        <div class="cf-state cf-state--compact" id="custom-empty"><p class="cf-state-text">No commands of your own yet. Add one above.</p></div>
+      <% } %>
+      <div class="cf-list" id="custom-list">
+        <% customCommands.forEach(function (cc) { %>
+          <div class="cf-list-item" data-id="<%= cc.id %>">
+            <div class="cf-list-main">
+              <code>!<%= cc.command_name %></code>
+              <% if (cc.mod_only === 1) { %><span class="pill warn">Mods only</span><% } %>
+              <div class="muted"><%= (cc.response || '').slice(0, 120) %><%= (cc.response || '').length > 120 ? '…' : '' %></div>
+              <div class="muted">Used <%= cc.use_count || 0 %> times · <%= cc.cooldown || 0 %>s cooldown</div>
+            </div>
+            <div class="cf-list-actions">
+              <input type="checkbox" role="switch" class="cf-switch cc-on" data-id="<%= cc.id %>" aria-label="Turn !<%= cc.command_name %> on or off" <%= cc.is_enabled !== 0 ? 'checked' : '' %>>
+              <button type="button" class="btn btn-danger btn-sm cc-del" data-id="<%= cc.id %>">Delete</button>
+            </div>
+          </div>
+        <% }) %>
+      </div>
+    </div>
+  </section>
+
+  <!-- Auto-responders -->
+  <section class="cf-section">
+    <header class="cf-section-head">
+      <div>
+        <h2 class="cf-section-title">Auto-responders <span class="muted" id="ar-count"></span></h2>
+        <p class="cf-section-desc">When a chat message matches a trigger, the bot replies.</p>
+      </div>
+    </header>
+    <div class="cf-rows">
+      <div class="cf-row cf-row--stack">
+        <div class="cf-fields">
+          <div class="cf-field"><label for="ar-trigger">Trigger</label><input id="ar-trigger" maxlength="100" placeholder="discord"></div>
+          <div class="cf-field">
+            <label for="ar-match">Match</label>
+            <select id="ar-match">
+              <option value="contains">Contains</option>
+              <option value="exact">Exact message</option>
+              <option value="starts">Starts with</option>
+              <option value="word">Whole word</option>
+            </select>
+          </div>
+          <div class="cf-field"><label for="ar-cd">Cooldown (seconds)</label><input id="ar-cd" type="number" min="0" max="3600" value="10"></div>
+        </div>
+        <div class="cf-field">
+          <label for="ar-resp">Reply</label>
+          <textarea id="ar-resp" rows="2" maxlength="500"></textarea>
+          <span class="cf-field-hint">Variables: <code>{{username}}</code>, <code>{{channel_name}}</code>.</span>
+        </div>
+      </div>
+      <div class="cf-section-foot">
+        <span id="ar-msg" class="kick-status cf-foot-note" role="status" aria-live="polite"></span>
+        <button type="button" id="ar-add" class="btn btn-primary btn-sm">Add auto-responder</button>
+      </div>
+      <div class="cf-list" id="ar-list"><div class="cf-list-item"><span class="muted">Loading…</span></div></div>
+    </div>
+  </section>
+
+  <% if (locals.showTimers !== false) { %>
+  <!-- Timers -->
+  <section class="cf-section">
+    <header class="cf-section-head">
+      <div>
+        <h2 class="cf-section-title">Timers <span class="muted" id="tm-count"></span></h2>
+        <p class="cf-section-desc">Messages the bot posts to chat on a schedule while the defender is on for this channel.</p>
+      </div>
+    </header>
+    <div class="cf-rows">
+      <div class="cf-row cf-row--stack">
+        <div class="cf-fields">
+          <div class="cf-field"><label for="tm-int">Every (minutes)</label><input id="tm-int" type="number" min="1" max="1440" value="30"></div>
+        </div>
+        <div class="cf-field">
+          <label for="tm-msg">Message</label>
+          <textarea id="tm-msg" rows="2" maxlength="500"></textarea>
+          <span class="cf-field-hint">Variables: <code>{{channel_name}}</code>.</span>
+        </div>
+      </div>
+      <div class="cf-section-foot">
+        <span id="tm-status" class="kick-status cf-foot-note" role="status" aria-live="polite"></span>
+        <button type="button" id="tm-add" class="btn btn-primary btn-sm">Add timer</button>
+      </div>
+      <div class="cf-list" id="tm-list"><div class="cf-list-item"><span class="muted">Loading…</span></div></div>
+    </div>
+  </section>
+  <% } else if (locals.timersNote) { %>
+  <section class="cf-section">
+    <header class="cf-section-head"><div><h2 class="cf-section-title">Timers</h2><p class="cf-section-desc"><%= timersNote %></p></div></header>
+  </section>
+  <% } %>
+
+  <script>
+  (function () {
+    var K = window.KickDash;
+    var base = <%- JSON.stringify(String(locals.apiBase || ('/kick/api/channel/' + encodeURIComponent(String(cid))))).replace(/</g, '\\u003c') %>;
+    var $ = function (id) { return document.getElementById(id); };
+    var byKey = function (cls, k) { return document.querySelector('.' + cls + '[data-key="' + k + '"]'); };
+
+    // Search built-ins.
+    var search = $('cmd-search');
+    if (search) search.addEventListener('input', function () {
+      var t = search.value.trim().toLowerCase(), shown = 0;
+      document.querySelectorAll('#cmd-list .cmd').forEach(function (row) {
+        var hit = !t || row.dataset.search.indexOf(t) !== -1;
+        row.hidden = !hit; if (hit) shown++;
+      });
+      $('cmd-nomatch').hidden = shown > 0;
+    });
+
+    // Toggle a built-in command.
+    document.querySelectorAll('.cmd-enabled').forEach(function (cb) {
+      cb.addEventListener('change', async function () {
+        cb.disabled = true;
+        try { await K.post(base + '/commands/' + encodeURIComponent(cb.dataset.key) + '/toggle', { enabled: cb.checked }); }
+        catch (e) { cb.checked = !cb.checked; K.status(byKey('cmd-msg', cb.dataset.key), e.message || 'Could not change the command.', 'bad'); }
+        finally { cb.disabled = false; }
+      });
+    });
+
+    // Save a built-in override.
+    document.querySelectorAll('.cmd-save').forEach(function (btn) {
+      btn.addEventListener('click', async function () {
+        var k = btn.dataset.key, out = byKey('cmd-msg', k);
+        var aliases = byKey('cmd-aliases', k).value.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+        btn.disabled = true; K.status(out, 'Saving…');
+        try {
+          await K.put(base + '/commands/' + encodeURIComponent(k), {
+            custom_aliases: aliases,
+            cooldown_override: byKey('cmd-cd', k).value || null,
+            mod_only: byKey('cmd-mod', k).checked
+          });
+          K.status(out, 'Saved.', 'ok');
+        } catch (e) { K.status(out, e.message || 'Save failed.', 'bad'); }
+        finally { btn.disabled = false; }
+      });
+    });
+
+    // Your commands: add, on/off, delete.
+    $('new-add').addEventListener('click', async function (e) {
+      var btn = e.currentTarget, out = $('new-msg');
+      btn.disabled = true; K.status(out, 'Adding…');
+      try {
+        await K.post(base + '/custom', {
+          command_name: $('new-name').value.trim().replace(/^!/, ''),
+          response: $('new-resp').value,
+          cooldown: $('new-cd').value,
+          mod_only: $('new-mod').checked
+        });
+        location.reload();
+      } catch (err) { K.status(out, err.message || 'Add failed.', 'bad'); btn.disabled = false; }
+    });
+    var custom = {};
+    try { JSON.parse($('custom-json').textContent).forEach(function (c) { custom[c.id] = c; }); } catch (_) {}
+    document.querySelectorAll('.cc-on').forEach(function (sw) {
+      sw.addEventListener('change', async function () {
+        var c = custom[sw.dataset.id];
+        if (!c) return;
+        sw.disabled = true;
+        try { await K.put(base + '/custom/' + encodeURIComponent(c.id), { response: c.response, cooldown: c.cooldown, mod_only: c.mod_only, is_enabled: sw.checked }); c.is_enabled = sw.checked; }
+        catch (err) { sw.checked = !sw.checked; alert(err.message || 'Could not change the command.'); }
+        finally { sw.disabled = false; }
+      });
+    });
+    document.querySelectorAll('.cc-del').forEach(function (btn) {
+      btn.addEventListener('click', async function () {
+        if (!confirm('Delete this command?')) return;
+        btn.disabled = true;
+        try { await K.del(base + '/custom/' + encodeURIComponent(btn.dataset.id), {}); location.reload(); }
+        catch (e) { alert(e.message || 'Delete failed.'); btn.disabled = false; }
+      });
+    });
+
+    // A list row: main text nodes + an on/off switch + Delete.
+    function listRow(mainNodes, enabled, onToggle, onDelete, label) {
+      var row = K.el('div', 'cf-list-item');
+      var main = K.el('div', 'cf-list-main');
+      mainNodes.forEach(function (n) { main.appendChild(n); });
+      var actions = K.el('div', 'cf-list-actions');
+      var sw = document.createElement('input');
+      sw.type = 'checkbox'; sw.className = 'cf-switch'; sw.setAttribute('role', 'switch'); sw.checked = !!enabled;
+      sw.setAttribute('aria-label', label);
+      sw.addEventListener('change', async function () {
+        sw.disabled = true;
+        try { await onToggle(sw.checked); } catch (e) { sw.checked = !sw.checked; alert(e.message || 'Could not change it.'); }
+        finally { sw.disabled = false; }
+      });
+      var del = K.el('button', 'btn btn-danger btn-sm', 'Delete'); del.type = 'button';
+      del.addEventListener('click', async function () {
+        if (!confirm('Delete this?')) return;
+        del.disabled = true;
+        try { await onDelete(); } catch (e) { alert(e.message || 'Delete failed.'); del.disabled = false; }
+      });
+      actions.append(sw, del);
+      row.append(main, actions);
+      return row;
+    }
+    function emptyRow(text) { var r = K.el('div', 'cf-list-item'); r.appendChild(K.el('span', 'muted', text)); return r; }
+    var MATCH = { contains: 'Contains', exact: 'Exact message', starts: 'Starts with', word: 'Whole word' };
+
+    // Auto-responders.
+    async function loadResponders() {
+      var list = $('ar-list');
+      try {
+        var j = await K.get(base + '/responders');
+        var rows = j.responders || [];
+        $('ar-count').textContent = '(' + rows.length + ')';
+        list.replaceChildren();
+        if (!rows.length) { list.appendChild(emptyRow('No auto-responders yet. Add one above.')); return; }
+        rows.forEach(function (r) {
+          var head = K.el('div');
+          head.append(K.el('strong', null, r.trigger_text), ' ', K.el('span', 'pill off', MATCH[r.match_type] || r.match_type));
+          var resp = String(r.response || '');
+          var nodes = [head, K.el('div', 'muted', resp.length > 120 ? resp.slice(0, 120) + '…' : resp),
+            K.el('div', 'muted', 'Used ' + (r.use_count || 0) + ' times · ' + (r.cooldown || 0) + 's cooldown')];
+          list.appendChild(listRow(nodes, r.is_enabled !== 0, function (on) {
+            return K.put(base + '/responders/' + r.id, { trigger_text: r.trigger_text, match_type: r.match_type, response: r.response, cooldown: r.cooldown, is_enabled: on });
+          }, async function () { await K.del(base + '/responders/' + r.id, {}); await loadResponders(); }, 'Turn the "' + r.trigger_text + '" auto-responder on or off'));
+        });
+      } catch (e) { list.replaceChildren(emptyRow(e.message || 'Failed to load auto-responders.')); }
+    }
+    $('ar-add').addEventListener('click', async function (e) {
+      var btn = e.currentTarget, out = $('ar-msg');
+      btn.disabled = true; K.status(out, 'Adding…');
+      try {
+        await K.post(base + '/responders', { trigger_text: $('ar-trigger').value, match_type: $('ar-match').value, response: $('ar-resp').value, cooldown: $('ar-cd').value });
+        $('ar-trigger').value = ''; $('ar-resp').value = ''; $('ar-cd').value = '10';
+        K.status(out, 'Added.', 'ok');
+        await loadResponders();
+      } catch (err) { K.status(out, err.message || 'Add failed.', 'bad'); }
+      finally { btn.disabled = false; }
+    });
+
+    // Timers.
+    async function loadTimers() {
+      if (!$('tm-list')) return;
+      var list = $('tm-list');
+      try {
+        var j = await K.get(base + '/timers');
+        var rows = j.timers || [];
+        $('tm-count').textContent = '(' + rows.length + ')';
+        list.replaceChildren();
+        if (!rows.length) { list.appendChild(emptyRow('No timers yet. Add one above.')); return; }
+        rows.forEach(function (t) {
+          var msg = String(t.message || '');
+          var nodes = [K.el('div', null, msg.length > 140 ? msg.slice(0, 140) + '…' : msg),
+            K.el('div', 'muted', 'Every ' + t.interval_min + ' min · sent ' + (t.send_count || 0) + ' times' + (t.last_sent_at ? ' · last ' + K.fmtTime(t.last_sent_at) : ''))];
+          list.appendChild(listRow(nodes, !!t.is_enabled, function (on) {
+            return K.put(base + '/timers/' + t.id, { message: t.message, interval_min: t.interval_min, is_enabled: on });
+          }, async function () { await K.del(base + '/timers/' + t.id, {}); await loadTimers(); }, 'Turn this timer on or off'));
+        });
+      } catch (e) { list.replaceChildren(emptyRow(e.message || 'Failed to load timers.')); }
+    }
+    if ($('tm-add')) $('tm-add').addEventListener('click', async function (e) {
+      var btn = e.currentTarget, out = $('tm-status');
+      var msg = $('tm-msg').value.trim();
+      if (!msg) { K.status(out, 'Write the message first.', 'bad'); return; }
+      btn.disabled = true; K.status(out, 'Adding…');
+      try {
+        await K.post(base + '/timers', { message: msg, interval_min: $('tm-int').value });
+        $('tm-msg').value = '';
+        K.status(out, 'Added.', 'ok');
+        await loadTimers();
+      } catch (err) { K.status(out, err.message || 'Add failed.', 'bad'); }
+      finally { btn.disabled = false; }
+    });
+
+    loadResponders();
+    loadTimers();
+  })();
+  </script>

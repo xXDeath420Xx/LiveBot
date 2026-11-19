@@ -2,6 +2,7 @@ import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'disc
 import { validateUser, getUserTweets, getUserProfile } from '../../utils/platforms/twitter-api.js';
 import { addTwitterFeed, removeTwitterFeed, getTwitterFeeds, updateTwitterFeed } from '../../core/twitter-feed.js';
 import logger from '../../utils/logger.js';
+import { themeColor } from '../../core/guild-theme.js';
 
 function formatNumber(num) {
     if (!num) return '0';
@@ -74,7 +75,7 @@ export async function handleTwitterRemove(interaction) {
         }
 
         const embed = new EmbedBuilder()
-            .setColor('#FF0000')
+            .setColor(themeColor(interaction.guildId, 'danger'))
             .setTitle('Twitter Feed Removed')
             .setDescription(`Stopped tracking **@${username}**`)
             .setTimestamp();

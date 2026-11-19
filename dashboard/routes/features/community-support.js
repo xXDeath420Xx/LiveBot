@@ -37,11 +37,37 @@ router.get('/:guildId/community-support/config', ensureAuth, ensureGuildPerms, a
 // PUT /api/guilds/:guildId/community-support/config
 router.put('/:guildId/community-support/config', ensureAuth, ensureGuildPerms, async (req, res) => {
     try {
-        const {
-            enabled, raid_channel_id, support_channel_id, shoutout_channel_id,
-            affiliate_link_channel_id, non_affiliate_link_channel_id,
-            raid_affiliate_points, raid_non_affiliate_points, support_points
-        } = req.body;
+        const body = req.body || {};
+        const { enabled } = body;
+        // Channels must be text channels of this server; points are whole numbers from 1 to 100.
+        const csGuild = global.botManager?.getClientForGuild?.(req.guildId)?.guilds.cache.get(req.guildId);
+        const csChannel = (v) => {
+            if (v === undefined || v === null || v === '') return null;
+            const id = String(v);
+            if (!/^\d{15,25}$/.test(id)) throw Object.assign(new Error('bad channel'), { status: 400 });
+            const ch = csGuild?.channels.cache.get(id);
+            if (csGuild && (!ch || ![0, 5].includes(ch.type))) throw Object.assign(new Error('bad channel'), { status: 400 });
+            return id;
+        };
+        const csPoints = (v, dflt) => { const n = parseInt(v, 10); return Number.isFinite(n) ? Math.min(100, Math.max(1, n)) : dflt; };
+        let raid_channel_id, support_channel_id, shoutout_channel_id;
+        try {
+            raid_channel_id = csChannel(body.raid_channel_id);
+            support_channel_id = csChannel(body.support_channel_id);
+            shoutout_channel_id = csChannel(body.shoutout_channel_id);
+        } catch (e) {
+            return res.status(400).json({ error: 'Pick text channels from this server.' });
+        }
+        // The two link-channel columns are not used by the bot and no longer on the page; keep
+        // whatever is stored when a request leaves them out.
+        const [csPrev] = await pool.execute(
+            'SELECT affiliate_link_channel_id, non_affiliate_link_channel_id FROM community_support_config WHERE guild_id = ?',
+            [req.guildId]);
+        const affiliate_link_channel_id = 'affiliate_link_channel_id' in body ? (body.affiliate_link_channel_id || null) : (csPrev[0]?.affiliate_link_channel_id ?? null);
+        const non_affiliate_link_channel_id = 'non_affiliate_link_channel_id' in body ? (body.non_affiliate_link_channel_id || null) : (csPrev[0]?.non_affiliate_link_channel_id ?? null);
+        const raid_affiliate_points = csPoints(body.raid_affiliate_points, 5);
+        const raid_non_affiliate_points = csPoints(body.raid_non_affiliate_points, 10);
+        const support_points = csPoints(body.support_points, 3);
 
         await pool.execute(`
             INSERT INTO community_support_config

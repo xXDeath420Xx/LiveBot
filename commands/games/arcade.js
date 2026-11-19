@@ -1,5 +1,8 @@
-import { SlashCommandBuilder } from 'discord.js';
-import * as cfxHandler from './arcade-cfx-handler.js';
+import { SlashCommandBuilder, ChannelType } from 'discord.js';
+import logger from '../../utils/logger.js';
+import * as greenhouseHandler from './arcade-greenhouse-handler.js';
+import * as emojihuntHandler from './arcade-emojihunt-handler.js';
+import * as goalsHandler from './arcade-goals-handler.js';
 import * as countingHandler from './arcade-counting-handler.js';
 import * as serversHandler from './arcade-servers-handler.js';
 import * as hangmanHandler from './arcade-hangman-handler.js';
@@ -11,32 +14,21 @@ export default {
     category: 'games',
     data: new SlashCommandBuilder()
         .setName('arcade')
-        .setDescription('Games and activities — CFX, counting, game servers, hangman, LFG, music quiz, trivia')
+        .setDescription('Games and activities — Greenhouse, counting, emoji hunts, goals, hangman, LFG, music quiz, trivia')
 
-        // ─── cfx group (6 subcmds) ───
+        // The cfx group (CertiFried Tycoon) was removed (H-650): `/arcade cfx …` answers with where the game
+        // went, from core/retired-commands.js.
+        // ─── greenhouse group (Greenhouse Tycoon, the v2 game; 3 subcmds) ───
         .addSubcommandGroup(group =>
             group
-                .setName('cfx')
-                .setDescription('CertiFried Cannabis Tycoon game commands')
-                .addSubcommand(sub => sub.setName('stats').setDescription('View your CertiFried garden stats'))
-                .addSubcommand(sub => sub.setName('daily').setDescription('Claim your daily CertiFried reward'))
+                .setName('greenhouse')
+                .setDescription('Greenhouse Tycoon: your greenhouse, the daily reward and account linking')
+                .addSubcommand(sub => sub.setName('status').setDescription('Your greenhouse at a glance: level, benches, quests and the season'))
+                .addSubcommand(sub => sub.setName('daily').setDescription('Collect the daily reward (one a day across Discord, the website and Twitch)'))
                 .addSubcommand(sub =>
-                    sub.setName('leaderboard').setDescription('View the CertiFried leaderboard')
-                        .addStringOption(opt =>
-                            opt.setName('type').setDescription('Leaderboard type')
-                                .addChoices(
-                                    { name: '📊 Level', value: 'level' },
-                                    { name: '💰 Currency', value: 'currency' },
-                                    { name: '⭐ Prestige', value: 'prestige' }
-                                ))
+                    sub.setName('link').setDescription('Make a link code, or enter one to join the greenhouse you play elsewhere')
+                        .addStringOption(opt => opt.setName('code').setDescription('A link code from the website (leave out to make one)').setMaxLength(32))
                 )
-                .addSubcommand(sub => sub.setName('market').setDescription('View current market prices'))
-                .addSubcommand(sub =>
-                    sub.setName('sell').setDescription('Quick sell from inventory')
-                        .addStringOption(opt => opt.setName('strain').setDescription('Strain name to sell').setRequired(true))
-                        .addIntegerOption(opt => opt.setName('quantity').setDescription('Amount to sell (default: 1)').setMinValue(1).setMaxValue(100))
-                )
-                .addSubcommand(sub => sub.setName('play').setDescription('Get link to play CertiFried'))
         )
 
         // ─── counting group (5 subcmds) ───
@@ -76,7 +68,6 @@ export default {
                             .addChoices(
                                 { name: 'Reset the count to 0', value: 'reset' },
                                 { name: 'Delete the message, never reset (infinite attempts)', value: 'delete' }))
-                        .addBooleanOption(opt => opt.setName('allow-same-user').setDescription('Let one person count twice in a row'))
                         .addBooleanOption(opt => opt.setName('react-on-valid').setDescription('React ✅ on every valid count'))
                         .addBooleanOption(opt => opt.setName('announce-milestones').setDescription('Announce milestones and pay economy coins'))
                         .addBooleanOption(opt => opt.setName('delete-chatter').setDescription('Delete non-numeric messages (delete mode only)'))
@@ -181,7 +172,7 @@ export default {
                 .setDescription('Music trivia quiz game')
                 .addSubcommand(sub =>
                     sub.setName('start').setDescription('Start a music quiz session')
-                        .addIntegerOption(opt => opt.setName('rounds').setDescription('Number of rounds (default: 5)').setRequired(false).setMinValue(1).setMaxValue(10))
+                        .addIntegerOption(opt => opt.setName('rounds').setDescription('Number of rounds (default: set on the dashboard, else 5)').setRequired(false).setMinValue(1).setMaxValue(10))
                 )
                 .addSubcommand(sub => sub.setName('leaderboard').setDescription('View music quiz leaderboard'))
         )
@@ -222,6 +213,95 @@ export default {
                         .addUserOption(opt => opt.setName('user').setDescription('User to view stats for (defaults to you)'))
                 )
                 .addSubcommand(sub => sub.setName('leaderboard').setDescription('View the trivia leaderboard'))
+        )
+
+        // ─── emojihunt group (5 subcmds) ───
+        .addSubcommandGroup(group =>
+            group
+                .setName('emojihunt')
+                .setDescription('Find emoji the bot hides on recent messages')
+                .addSubcommand(sub =>
+                    sub.setName('start').setDescription('Start a hunt (staff)')
+                        .addStringOption(opt => opt.setName('emoji').setDescription('Emoji to hide').setMaxLength(64))
+                        .addIntegerOption(opt => opt.setName('count').setDescription('How many to hide').setMinValue(1).setMaxValue(25))
+                        .addIntegerOption(opt => opt.setName('minutes').setDescription('How long it runs').setMinValue(5).setMaxValue(1440))
+                        .addChannelOption(opt => opt.setName('channel').setDescription('Hide only in this channel')
+                            .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement))
+                )
+                .addSubcommand(sub => sub.setName('stop').setDescription('End the running hunt now (staff)'))
+                .addSubcommand(sub => sub.setName('status').setDescription('How the current hunt is going'))
+                .addSubcommand(sub => sub.setName('leaderboard').setDescription('All-time best hunters'))
+                .addSubcommand(sub =>
+                    sub.setName('config').setDescription('Hunt settings (Manage Server)')
+                        .addBooleanOption(opt => opt.setName('enabled').setDescription('Allow emoji hunts'))
+                        .addStringOption(opt => opt.setName('hunt-channels').setDescription('Channels to hide in, e.g. #general #memes ("none" clears)'))
+                        .addChannelOption(opt => opt.setName('announce-channel').setDescription('Where start/results are posted')
+                            .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement))
+                        .addRoleOption(opt => opt.setName('ping-role').setDescription('Role pinged when a hunt starts'))
+                        .addBooleanOption(opt => opt.setName('clear-ping-role').setDescription('Stop pinging a role'))
+                        .addStringOption(opt => opt.setName('emoji').setDescription('Default emoji').setMaxLength(64))
+                        .addIntegerOption(opt => opt.setName('count').setDescription('Default number hidden').setMinValue(1).setMaxValue(25))
+                        .addIntegerOption(opt => opt.setName('minutes').setDescription('Default length').setMinValue(5).setMaxValue(1440))
+                        .addIntegerOption(opt => opt.setName('finders').setDescription('Finders per emoji').setMinValue(1).setMaxValue(10))
+                        .addIntegerOption(opt => opt.setName('points').setDescription('Points per find').setMinValue(0).setMaxValue(10000))
+                        .addIntegerOption(opt => opt.setName('coins').setDescription('Coins per find').setMinValue(0).setMaxValue(100000))
+                        .addIntegerOption(opt => opt.setName('xp').setDescription('XP per find').setMinValue(0).setMaxValue(10000))
+                        .addIntegerOption(opt => opt.setName('max-age-minutes').setDescription('Only hide on messages newer than this').setMinValue(10).setMaxValue(10080))
+                        .addBooleanOption(opt => opt.setName('cleanup').setDescription('Remove unfound emoji when it ends'))
+                        .addBooleanOption(opt => opt.setName('auto').setDescription('Run hunts automatically'))
+                        .addIntegerOption(opt => opt.setName('auto-hours').setDescription('Hours between automatic hunts').setMinValue(1).setMaxValue(168))
+                )
+        )
+
+        // ─── goals group (6 subcmds) ───
+        .addSubcommandGroup(group =>
+            group
+                .setName('goals')
+                .setDescription('Server-wide community goals')
+                .addSubcommand(sub =>
+                    sub.setName('create').setDescription('Set a community goal (Manage Server)')
+                        .addStringOption(opt => opt.setName('title').setDescription('Goal name').setRequired(true).setMaxLength(100))
+                        .addStringOption(opt => opt.setName('type').setDescription('What counts').setRequired(true)
+                            .addChoices(
+                                { name: 'Messages sent', value: 'messages' },
+                                { name: 'Voice minutes', value: 'voice_minutes' },
+                                { name: 'Members', value: 'members' },
+                                { name: 'Boosts', value: 'boosts' },
+                                { name: 'Custom (staff count)', value: 'custom' }
+                            ))
+                        .addIntegerOption(opt => opt.setName('target').setDescription('Target number').setRequired(true).setMinValue(1).setMaxValue(2000000000))
+                        .addIntegerOption(opt => opt.setName('days').setDescription('Deadline in days').setMinValue(1).setMaxValue(365))
+                        .addChannelOption(opt => opt.setName('channel').setDescription('Where to post progress')
+                            .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement))
+                        .addIntegerOption(opt => opt.setName('coins').setDescription('Coins for each contributor').setMinValue(0).setMaxValue(1000000))
+                        .addIntegerOption(opt => opt.setName('xp').setDescription('XP for each contributor').setMinValue(0).setMaxValue(100000))
+                        .addRoleOption(opt => opt.setName('role').setDescription('Role for each contributor'))
+                        .addStringOption(opt => opt.setName('description').setDescription('Details').setMaxLength(500))
+                )
+                .addSubcommand(sub => sub.setName('list').setDescription('Current and past goals'))
+                .addSubcommand(sub =>
+                    sub.setName('view').setDescription('One goal in detail')
+                        .addIntegerOption(opt => opt.setName('goal').setDescription('Goal').setRequired(true).setAutocomplete(true))
+                )
+                .addSubcommand(sub =>
+                    sub.setName('add').setDescription('Move a custom goal (Manage Server)')
+                        .addIntegerOption(opt => opt.setName('goal').setDescription('Goal').setRequired(true).setAutocomplete(true))
+                        .addIntegerOption(opt => opt.setName('amount').setDescription('Amount (negative subtracts)').setRequired(true))
+                        .addBooleanOption(opt => opt.setName('set').setDescription('Set to this amount instead of adding'))
+                )
+                .addSubcommand(sub =>
+                    sub.setName('cancel').setDescription('Cancel a goal (Manage Server)')
+                        .addIntegerOption(opt => opt.setName('goal').setDescription('Goal').setRequired(true).setAutocomplete(true))
+                )
+                .addSubcommand(sub =>
+                    sub.setName('config').setDescription('Goal settings (Manage Server)')
+                        .addBooleanOption(opt => opt.setName('enabled').setDescription('Allow community goals'))
+                        .addChannelOption(opt => opt.setName('announce-channel').setDescription('Default progress channel')
+                            .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement))
+                        .addRoleOption(opt => opt.setName('ping-role').setDescription('Role pinged for new goals'))
+                        .addBooleanOption(opt => opt.setName('clear-ping-role').setDescription('Stop pinging a role'))
+                        .addBooleanOption(opt => opt.setName('milestones').setDescription('Announce 25/50/75%'))
+                )
         ),
 
     async execute(interaction) {
@@ -229,15 +309,13 @@ export default {
         const subcommand = interaction.options.getSubcommand();
 
         switch (group) {
-            // ─── cfx ───
-            case 'cfx':
+
+            // ─── greenhouse (v2) ───
+            case 'greenhouse':
                 switch (subcommand) {
-                    case 'stats': return cfxHandler.handleStats(interaction);
-                    case 'daily': return cfxHandler.handleDaily(interaction);
-                    case 'leaderboard': return cfxHandler.handleLeaderboard(interaction);
-                    case 'market': return cfxHandler.handleMarket(interaction);
-                    case 'sell': return cfxHandler.handleSell(interaction);
-                    case 'play': return cfxHandler.handlePlay(interaction);
+                    case 'status': return greenhouseHandler.handleStatus(interaction);
+                    case 'daily': return greenhouseHandler.handleDaily(interaction);
+                    case 'link': return greenhouseHandler.handleLink(interaction);
                 }
                 break;
 
@@ -298,6 +376,41 @@ export default {
                     case 'leaderboard': return triviaHandler.handleLeaderboard(interaction);
                 }
                 break;
+
+            // ─── emojihunt ───
+            case 'emojihunt':
+                switch (subcommand) {
+                    case 'start': return emojihuntHandler.handleStart(interaction);
+                    case 'stop': return emojihuntHandler.handleStop(interaction);
+                    case 'status': return emojihuntHandler.handleStatus(interaction);
+                    case 'leaderboard': return emojihuntHandler.handleLeaderboard(interaction);
+                    case 'config': return emojihuntHandler.handleConfig(interaction);
+                }
+                break;
+
+            // ─── goals ───
+            case 'goals':
+                switch (subcommand) {
+                    case 'create': return goalsHandler.handleCreate(interaction);
+                    case 'list': return goalsHandler.handleList(interaction);
+                    case 'view': return goalsHandler.handleView(interaction);
+                    case 'add': return goalsHandler.handleAdd(interaction);
+                    case 'cancel': return goalsHandler.handleCancel(interaction);
+                    case 'config': return goalsHandler.handleConfig(interaction);
+                }
+                break;
+        }
+    },
+
+    async autocomplete(interaction) {
+        try {
+            if (interaction.options.getSubcommandGroup(false) === 'goals') {
+                return await goalsHandler.autocompleteGoal(interaction);
+            }
+            return await interaction.respond([]);
+        } catch (err) {
+            logger.warn('[Arcade] Autocomplete failed', { error: err.message });
+            return interaction.respond([]).catch(() => {});
         }
     },
 

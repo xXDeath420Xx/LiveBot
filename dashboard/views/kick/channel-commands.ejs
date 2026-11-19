@@ -1,283 +1,32 @@
-<%- include('_head', { pageTitle: 'Commands — ' + channel.channel_name, csrfToken, kickUser: user }) %>
+<%- include('_head', { pageTitle: 'Commands for ' + channel.channel_name, csrfToken, kickUser: user }) %>
+<%
+  // Master-switch state: chat commands are opt-in (off unless explicitly true).
+  var _feats = {};
+  try { _feats = channel.features_enabled ? (typeof channel.features_enabled === 'string' ? JSON.parse(channel.features_enabled) : channel.features_enabled) : {}; } catch (e) { _feats = {}; }
+  var commandsOn = !!(_feats && _feats.commands === true);
+  var cid = channel.channel_id;
+%>
 
   <div class="pagehead">
     <div>
-      <h1>⌨ Commands — <%= channel.channel_name %></h1>
-      <div class="sub">Enable, customize, and create chat commands.</div>
+      <div class="kick-eyebrow">Kick Defender</div>
+      <h1><%= channel.channel_name %></h1>
+      <p class="sub">Built-in commands, your own commands, auto-responders and timers.</p>
     </div>
-    <nav class="subnav">
-      <a href="/kick/channel/<%= channel.channel_id %>">Settings</a>
-      <a href="/kick/channel/<%= channel.channel_id %>/commands" class="active">Commands</a>
-      <a href="/kick">← All channels</a>
-    </nav>
   </div>
-
-  <%
-    const ov = {};
-    channelCommands.forEach(c => { ov[c.command_key] = c; });
-    // Master-switch state: chat commands are opt-in (off unless explicitly true).
-    let _feats = {};
-    try { _feats = channel.features_enabled ? (typeof channel.features_enabled === 'string' ? JSON.parse(channel.features_enabled) : channel.features_enabled) : {}; } catch (e) {}
-    const commandsOn = _feats.commands === true;
-  %>
+  <nav class="kick-tabs" aria-label="Channel">
+    <a href="/kick">All channels</a>
+    <a href="/kick/channel/<%= cid %>">Settings</a>
+    <a href="/kick/channel/<%= cid %>/commands" aria-current="page">Commands</a>
+  </nav>
 
   <% if (!commandsOn) { %>
-    <div class="banner">
-      ⚠ Chat commands are <strong>OFF</strong> for this channel (protection-only mode, the default).
-      Everything you configure here stays silent until you turn on
-      <strong>“chat commands (master switch)”</strong> in
-      <a href="/kick/channel/<%= channel.channel_id %>">Channel settings</a>.
+    <div class="cf-notice is-warn">
+      <div class="cf-notice-body">
+        <strong>Chat commands are off for this channel.</strong> Everything here stays silent until you turn on
+        <a href="/kick/channel/<%= cid %>">Chat commands</a> in the channel's chat settings. Timers are not affected.
+      </div>
     </div>
   <% } %>
-
-  <!-- ── Overview stats ─────────────────────────────────────── -->
-  <div class="statgrid">
-    <div class="stat kick"><b><%= commands.length %></b><span>Built-in commands</span></div>
-    <div class="stat"><b><%= channelCommands.length %></b><span>Channel overrides</span></div>
-    <div class="stat"><b><%= customCommands.length %></b><span>Custom commands</span></div>
-  </div>
-
-  <!-- ── Built-in commands ──────────────────────────────────── -->
-  <div class="card">
-    <h2>Built-in commands</h2>
-    <% if (!commands.length) { %>
-      <div class="empty">No built-in commands available.</div>
-    <% } %>
-    <% commands.forEach(cmd => { const o = ov[cmd.command_key] || {}; const enabled = o.is_enabled === undefined ? true : o.is_enabled === 1; const hasOverride = ov[cmd.command_key] !== undefined; %>
-      <div class="cmd" data-key="<%= cmd.command_key %>" style="border-top:1px solid var(--line);padding:.7rem 0">
-        <div class="row">
-          <div>
-            <strong>!<%= cmd.command_key %></strong>
-            <span class="muted">— <%= cmd.description || cmd.category %></span>
-            <% if (hasOverride) { %><span class="pill warn" style="margin-left:.35rem">customized</span><% } %>
-          </div>
-          <label style="display:flex;gap:.4rem;align-items:center;font-size:.8rem;color:var(--muted)">
-            <input type="checkbox" class="cmd-enabled" data-key="<%= cmd.command_key %>" <%= enabled ? 'checked' : '' %>/> enabled
-          </label>
-        </div>
-        <details class="settings">
-          <summary>Customize</summary>
-          <div class="srow" style="margin-top:.7rem">
-            <label>Aliases (comma-sep)
-              <input class="cmd-aliases" data-key="<%= cmd.command_key %>" value="<%= o.custom_aliases ? JSON.parse(o.custom_aliases).join(', ') : '' %>" />
-            </label>
-            <label>Cooldown (s)
-              <input class="cmd-cd" data-key="<%= cmd.command_key %>" type="number" min="0" max="3600" value="<%= o.cooldown_override != null ? o.cooldown_override : '' %>" style="width:6rem" />
-            </label>
-            <label style="flex-direction:row;gap:.4rem;align-items:center">
-              <input type="checkbox" class="cmd-mod" data-key="<%= cmd.command_key %>" <%= o.mod_only === 1 ? 'checked' : '' %>/> mod-only
-            </label>
-          </div>
-          <textarea class="cmd-resp" data-key="<%= cmd.command_key %>" placeholder="Custom response (optional; supports {{username}}, {{lifetime_tokes}}, …)" style="width:100%;margin-top:.6rem"><%= o.custom_response || '' %></textarea>
-          <button class="cmd-save" data-key="<%= cmd.command_key %>" style="margin-top:.6rem">Save</button>
-        </details>
-      </div>
-    <% }) %>
-  </div>
-
-  <!-- ── Custom commands ────────────────────────────────────── -->
-  <div class="card">
-    <h2>Custom commands</h2>
-    <div class="srow">
-      <input id="new-name" placeholder="name (no !)" />
-      <input id="new-cd" type="number" min="0" max="3600" value="5" placeholder="cooldown" style="width:6rem" />
-      <label style="flex-direction:row;gap:.4rem;align-items:center"><input type="checkbox" id="new-mod"/> mod-only</label>
-      <button id="new-add">Add command</button>
-    </div>
-    <textarea id="new-resp" placeholder="Response (supports {{username}}, {{lifetime_tokes}}, {{level}}, …)" style="width:100%;margin-top:.6rem"></textarea>
-    <% if (!customCommands.length) { %>
-      <div class="empty" id="custom-empty">No custom commands yet.</div>
-    <% } %>
-    <ul id="custom-list" class="clean" style="margin-top:.75rem">
-      <% customCommands.forEach(cc => { %>
-        <li data-id="<%= cc.id %>">
-          <span>
-            <strong>!<%= cc.command_name %></strong>
-            <span class="muted"><%= (cc.response || '').slice(0,60) %></span>
-            <span class="muted">· used <%= cc.use_count || 0 %>×</span>
-            <% if (cc.mod_only === 1) { %><span class="pill warn">mod</span><% } %>
-          </span>
-          <button class="cc-del danger" data-id="<%= cc.id %>">Delete</button>
-        </li>
-      <% }) %>
-    </ul>
-  </div>
-
-  <!-- ── Auto-responders ────────────────────────────────────── -->
-  <div class="card">
-    <h2>Auto-responders</h2>
-    <div class="muted">When a chat message matches a trigger, the bot replies automatically. Supports {{username}} and {{channel_name}}.</div>
-    <div class="srow" style="margin-top:.75rem">
-      <input id="ar-trigger" placeholder="trigger (e.g. discord)" />
-      <select id="ar-match">
-        <option value="contains">Contains</option>
-        <option value="exact">Exact</option>
-        <option value="starts">Starts with</option>
-        <option value="word">Whole word</option>
-      </select>
-      <input id="ar-cd" type="number" min="0" max="3600" value="10" style="width:6rem" />
-      <button id="ar-add">Add</button>
-    </div>
-    <textarea id="ar-resp" placeholder="Response (supports {{username}})" style="width:100%;margin-top:.5rem"></textarea>
-    <ul class="clean" id="ar-list" style="margin-top:.75rem">Loading…</ul>
-  </div>
-
-  <!-- ── Timers (scheduled messages) ─────────────────────────── -->
-  <div class="card">
-    <h2>Timers (scheduled messages)</h2>
-    <div class="muted">The bot posts these to chat on a schedule while the channel is enrolled. Supports {{channel_name}}.</div>
-    <div class="srow" style="margin-top:.75rem">
-      <input id="tm-msg" placeholder="message to post" style="flex:1;min-width:16rem" />
-      <input id="tm-int" type="number" min="1" max="1440" value="30" style="width:7rem" />
-      <button id="tm-add">Add timer</button>
-    </div>
-    <ul class="clean" id="tm-list" style="margin-top:.75rem">Loading…</ul>
-  </div>
-
-<% var pageJs = `
-  <script>
-    const CHANNEL = ` + JSON.stringify(channel.channel_id) + `;
-
-    // Toggle a built-in command.
-    document.querySelectorAll('.cmd-enabled').forEach(cb => cb.addEventListener('change', async () => {
-      try { await KickDash.post('/kick/api/channel/' + CHANNEL + '/commands/' + cb.dataset.key + '/toggle', { enabled: cb.checked }); }
-      catch (e) { cb.checked = !cb.checked; alert(e.message || 'Toggle failed.'); }
-    }));
-
-    // Save a built-in override.
-    document.querySelectorAll('.cmd-save').forEach(btn => btn.addEventListener('click', async () => {
-      const k = btn.dataset.key;
-      const q = sel => document.querySelector(sel + '[data-key="' + k + '"]');
-      const aliases = q('.cmd-aliases').value.split(',').map(s => s.trim()).filter(Boolean);
-      btn.disabled = true;
-      try {
-        await KickDash.put('/kick/api/channel/' + CHANNEL + '/commands/' + k, {
-          custom_aliases: aliases,
-          custom_response: q('.cmd-resp').value,
-          cooldown_override: q('.cmd-cd').value || null,
-          mod_only: q('.cmd-mod').checked
-        });
-        btn.textContent = 'Saved ✓';
-      } catch (e) { alert(e.message || 'Save failed.'); }
-      finally { btn.disabled = false; setTimeout(() => { btn.textContent = 'Save'; }, 1500); }
-    }));
-
-    // Add a custom command.
-    document.getElementById('new-add').addEventListener('click', async (e) => {
-      const btn = e.currentTarget; btn.disabled = true;
-      try {
-        await KickDash.post('/kick/api/channel/' + CHANNEL + '/custom', {
-          command_name: document.getElementById('new-name').value,
-          response: document.getElementById('new-resp').value,
-          cooldown: document.getElementById('new-cd').value,
-          mod_only: document.getElementById('new-mod').checked
-        });
-        location.reload();
-      } catch (err) { alert(err.message || 'Add failed.'); }
-      finally { btn.disabled = false; }
-    });
-
-    // Delete a custom command.
-    document.querySelectorAll('.cc-del').forEach(btn => btn.addEventListener('click', async () => {
-      if (!confirm('Delete this command?')) return;
-      try { await KickDash.del('/kick/api/channel/' + CHANNEL + '/custom/' + btn.dataset.id, {}); location.reload(); }
-      catch (e) { alert(e.message || 'Delete failed.'); }
-    }));
-
-    // ── Auto-responders ──────────────────────────────────────
-    const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-
-    async function loadResponders() {
-      const list = document.getElementById('ar-list');
-      try {
-        const res = await fetch('/kick/api/channel/' + CHANNEL + '/responders', { headers: { 'Accept': 'application/json' } });
-        const data = await res.json();
-        const rows = (data && data.responders) || [];
-        if (!rows.length) { list.innerHTML = '<li class="muted">No auto-responders yet.</li>'; return; }
-        list.innerHTML = rows.map(r => {
-          const resp = (r.response || '');
-          const short = resp.length > 50 ? resp.slice(0, 50) + '…' : resp;
-          return '<li data-id="' + r.id + '">' +
-            '<span>' +
-              '<strong>' + esc(r.trigger_text) + '</strong> ' +
-              '<span class="pill">' + esc(r.match_type) + '</span> ' +
-              '<span class="muted">· used ' + (r.use_count || 0) + '×</span> ' +
-              '<span class="muted">' + esc(short) + '</span>' +
-            '</span>' +
-            '<button class="ar-del danger" data-id="' + r.id + '">Delete</button>' +
-          '</li>';
-        }).join('');
-        list.querySelectorAll('.ar-del').forEach(btn => btn.addEventListener('click', async () => {
-          if (!confirm('Delete this auto-responder?')) return;
-          try { await KickDash.del('/kick/api/channel/' + CHANNEL + '/responders/' + btn.dataset.id, {}); await loadResponders(); }
-          catch (e) { alert(e.message || 'Delete failed.'); }
-        }));
-      } catch (e) {
-        list.innerHTML = '<li class="muted">Failed to load auto-responders.</li>';
-      }
-    }
-
-    // Add an auto-responder.
-    document.getElementById('ar-add').addEventListener('click', async (e) => {
-      const btn = e.currentTarget; btn.disabled = true;
-      try {
-        await KickDash.post('/kick/api/channel/' + CHANNEL + '/responders', {
-          trigger_text: document.getElementById('ar-trigger').value,
-          match_type: document.getElementById('ar-match').value,
-          response: document.getElementById('ar-resp').value,
-          cooldown: document.getElementById('ar-cd').value
-        });
-        document.getElementById('ar-trigger').value = '';
-        document.getElementById('ar-resp').value = '';
-        document.getElementById('ar-cd').value = '10';
-        await loadResponders();
-      } catch (err) { alert(err.message || 'Add failed.'); }
-      finally { btn.disabled = false; }
-    });
-
-    try { loadResponders(); } catch (e) {}
-
-    // ── Timers (scheduled messages) ──────────────────────────
-    async function loadTimers() {
-      const el = document.getElementById('tm-list');
-      try {
-        const r = await fetch('/kick/api/channel/' + CHANNEL + '/timers', { headers: { Accept: 'application/json' } });
-        const j = await r.json();
-        if (!r.ok) { el.textContent = 'Failed to load.'; return; }
-        if (!j.timers.length) { el.textContent = 'No timers yet.'; return; }
-        el.innerHTML = j.timers.map(t =>
-          '<li><span><strong>' + esc((t.message || '').slice(0, 50)) + '</strong> ' +
-          '<span class="muted">every ' + t.interval_min + 'm · sent ' + t.send_count + '×</span></span>' +
-          '<span><span class="pill ' + (t.is_enabled ? 'ok' : 'off') + '">' + (t.is_enabled ? 'on' : 'off') + '</span> ' +
-          '<button class="danger tm-del" data-id="' + t.id + '">Delete</button></span></li>'
-        ).join('');
-        document.querySelectorAll('.tm-del').forEach(b => b.addEventListener('click', async () => {
-          if (!confirm('Delete this timer?')) return;
-          try { await KickDash.del('/kick/api/channel/' + CHANNEL + '/timers/' + b.dataset.id, {}); loadTimers(); }
-          catch (e) { alert(e.message || 'Delete failed.'); }
-        }));
-      } catch (e) {
-        el.textContent = 'Failed to load.';
-      }
-    }
-
-    // Add a timer.
-    document.getElementById('tm-add').addEventListener('click', async (e) => {
-      const btn = e.currentTarget;
-      const msg = document.getElementById('tm-msg').value.trim();
-      if (!msg) { alert('Message is required.'); return; }
-      btn.disabled = true;
-      try {
-        await KickDash.post('/kick/api/channel/' + CHANNEL + '/timers', {
-          message: msg,
-          interval_min: document.getElementById('tm-int').value
-        });
-        document.getElementById('tm-msg').value = '';
-        await loadTimers();
-      } catch (err) { alert(err.message || 'Add failed.'); }
-      finally { btn.disabled = false; }
-    });
-
-    try { loadTimers(); } catch (e) {}
-  </script>`; %>
-<%- include('_foot', { extraJs: pageJs }) %>
+  <%- include('../partials/channel-bot/commands-body', { apiBase: '/kick/api/channel/' + encodeURIComponent(String(cid)), showTimers: true }) %>
+<%- include('_foot') %>

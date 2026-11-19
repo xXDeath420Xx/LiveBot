@@ -180,6 +180,43 @@
     --ease-in: cubic-bezier(0.4, 0, 1, 1);
 }
 
+/* Light and Sand: the names above that cf-ui.css does not already re-point at the tokens.
+   Dark (and every dark-family theme) keeps the values above unchanged. */
+:root:is([data-theme="light"], [data-theme="sand"]) {
+    --color-dark-900: var(--cf-bg);
+    --color-dark-300: var(--cf-border-strong);
+    --color-primary-600: var(--cf-accent);
+    --color-primary-700: var(--cf-accent-hover);
+    --color-primary-300: var(--cf-accent-soft);
+    --color-accent-blue: var(--cf-info);
+    --color-accent-red: var(--cf-danger);
+    --color-accent-orange: var(--cf-warning);
+    --color-accent-yellow: var(--cf-warning);
+    --color-accent-cyan: var(--cf-info);
+    --color-accent-pink: var(--cf-text-2);
+    --color-success-dark: var(--cf-success);
+    --color-warning-dark: var(--cf-warning);
+    --color-danger-dark: var(--cf-danger);
+    --color-info: var(--cf-info);
+    --color-info-dark: var(--cf-info);
+    --color-text-tertiary: var(--cf-text-3);
+    --color-text-disabled: color-mix(in srgb, var(--cf-text) 40%, transparent);
+    --color-text-link: var(--cf-accent-fg);
+    --color-text-link-hover: var(--cf-accent-hover);
+    --color-border-hover: var(--cf-border-strong);
+    --color-border-accent: var(--cf-accent-line);
+    --color-card-bg: var(--cf-surface);
+    --color-card-hover: var(--cf-surface-2);
+    --gradient-dark: linear-gradient(135deg, var(--cf-surface-2) 0%, var(--cf-bg) 100%);
+    --gradient-card: linear-gradient(135deg, var(--cf-accent-soft) 0%, color-mix(in srgb, var(--cf-info) 8%, transparent) 100%);
+    --shadow-xs: var(--cf-shadow);
+    --shadow-sm: var(--cf-shadow);
+    --shadow-md: var(--cf-shadow);
+    --shadow-lg: var(--cf-shadow-pop);
+    --shadow-xl: var(--cf-shadow-pop);
+    --shadow-2xl: var(--cf-shadow-pop);
+}
+
 /* ═══════════════════════════════════════════════════════════════════
    2. RESET & BASE STYLES
    ═══════════════════════════════════════════════════════════════════ */
@@ -1121,23 +1158,23 @@ input:checked + .switch-input::after {
 }
 
 .badge-success {
-    background-color: rgba(67, 181, 129, 0.2);
-    color: var(--color-success);
+    background-color: color-mix(in srgb, var(--cf-success) 20%, transparent);
+    color: var(--cf-success-ink);
 }
 
 .badge-danger {
-    background-color: rgba(240, 71, 71, 0.2);
-    color: var(--color-danger);
+    background-color: color-mix(in srgb, var(--cf-danger) 20%, transparent);
+    color: var(--cf-danger-ink);
 }
 
 .badge-warning {
-    background-color: rgba(250, 166, 26, 0.2);
-    color: var(--color-warning);
+    background-color: color-mix(in srgb, var(--cf-warning) 20%, transparent);
+    color: var(--cf-warning-ink);
 }
 
 .badge-info {
-    background-color: rgba(0, 176, 244, 0.2);
-    color: var(--color-info);
+    background-color: color-mix(in srgb, var(--cf-info) 20%, transparent);
+    color: var(--cf-info-ink);
 }
 
 .badge-secondary {
@@ -1216,27 +1253,27 @@ input:checked + .switch-input::after {
 }
 
 .alert-success {
-    background-color: rgba(67, 181, 129, 0.1);
-    border-color: var(--color-success);
-    color: var(--color-success);
+    background-color: color-mix(in srgb, var(--cf-success) 10%, transparent);
+    border-color: var(--cf-success);
+    color: var(--cf-success-ink);
 }
 
 .alert-danger {
-    background-color: rgba(240, 71, 71, 0.1);
-    border-color: var(--color-danger);
-    color: var(--color-danger);
+    background-color: color-mix(in srgb, var(--cf-danger) 10%, transparent);
+    border-color: var(--cf-danger);
+    color: var(--cf-danger-ink);
 }
 
 .alert-warning {
-    background-color: rgba(250, 166, 26, 0.1);
-    border-color: var(--color-warning);
-    color: var(--color-warning);
+    background-color: color-mix(in srgb, var(--cf-warning) 10%, transparent);
+    border-color: var(--cf-warning);
+    color: var(--cf-warning-ink);
 }
 
 .alert-info {
-    background-color: rgba(0, 176, 244, 0.1);
-    border-color: var(--color-info);
-    color: var(--color-info);
+    background-color: color-mix(in srgb, var(--cf-info) 10%, transparent);
+    border-color: var(--cf-info);
+    color: var(--cf-info-ink);
 }
 
 /* Toast Notifications */

@@ -1,31 +1,15 @@
 import axios from 'axios';
 import logger from '../logger.js';
 
-let accessToken = null;
-let tokenExpiresAt = 0;
+import { getAccessToken as sharedAppToken } from './twitch.js';
 
 /**
- * Get or refresh Twitch API access token
+ * Twitch app access token. Shared with utils/platforms/twitch.js since 2026-11-18: both modules used to
+ * fetch and cache their own token. One token, one refresh.
  * @returns {Promise<string>} Access token
  */
 async function getAccessToken() {
-  if (accessToken && Date.now() < tokenExpiresAt) {
-    return accessToken;
-  }
-
-  try {
-    const response = await axios.post(
-      `https://id.twitch.tv/oauth2/token?client_id=${process.env.TWITCH_CLIENT_ID}&client_secret=${process.env.TWITCH_CLIENT_SECRET}&grant_type=client_credentials`
-    );
-    accessToken = response.data.access_token;
-    tokenExpiresAt = Date.now() + (response.data.expires_in * 1000) - (5 * 60 * 1000); // Refresh 5 mins before expiry
-    logger.info('Successfully refreshed Twitch API token.', { category: 'twitch' });
-    return accessToken;
-  } catch (error) {
-    const errorData = axios.isAxiosError(error) ? (error.response?.data || error.message) : 'Unknown error';
-    logger.error('Failed to get Twitch API token:', { error: errorData, category: 'twitch' });
-    throw new Error('Could not get Twitch API token.');
-  }
+  return sharedAppToken();
 }
 
 /**
@@ -136,6 +120,18 @@ async function getStreamSchedule(twitchUserId) {
     );
   } catch (error) {
     const errorData = axios.isAxiosError(error) ? (error.response?.data || error.message) : 'Unknown error';
+
+    // Twitch answers 404 "schedule was not found" / "segments were not found" for any broadcaster
+    // who simply has not set one up, which is most of them. That is a normal, permanent state for a
+    // healthy account — NOT a broken or deleted one — so logging it at error level every cycle just
+    // buries real failures. The account itself is fine; only the optional schedule is absent.
+    const status = axios.isAxiosError(error) ? error.response?.status : null;
+    const msg = String(errorData?.message || '');
+    if (status === 404 && /(schedule|segments) w(as|ere) not found/i.test(msg)) {
+      logger.debug(`No Twitch schedule configured for ${twitchUserId}`, { category: 'twitch' });
+      return null;
+    }
+
     logger.error(`Error getting stream schedule for ${twitchUserId}:`, { error: errorData, category: 'twitch' });
     return null;
   }
@@ -216,11 +212,16 @@ async function getTwitchTeamMembers(teamName) {
 }
 
 /**
- * Get multiple Twitch users by usernames
- * @param {string[]} usernames - Array of usernames
+ * Get multiple Twitch users by username, or by numeric id.
+ *
+ * Id lookups are what make rename detection possible: the id is stable, so resolving by it tells
+ * you the account's CURRENT login and therefore whether the name you stored has changed.
+ *
+ * @param {string[]} usernames - usernames, or numeric ids when paramType is 'id'
+ * @param {'login'|'id'} [paramType='login']
  * @returns {Promise<Array>} Array of user data
  */
-async function getTwitchUsers(usernames) {
+async function getTwitchUsers(usernames, paramType = 'login') {
   const token = await getAccessToken();
   if (!token || usernames.length === 0) return [];
 
@@ -233,7 +234,9 @@ async function getTwitchUsers(usernames) {
 
   const allUsers = [];
   for (const chunk of chunks) {
-    const loginParams = chunk.map(u => `login=${encodeURIComponent(u.toLowerCase())}`).join('&');
+    const loginParams = chunk
+      .map(u => `${paramType}=${encodeURIComponent(paramType === 'id' ? String(u) : String(u).toLowerCase())}`)
+      .join('&');
     try {
       const response = await axios.get(
         `https://api.twitch.tv/helix/users?${loginParams}`,

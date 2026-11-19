@@ -4,6 +4,15 @@ import pool from '../utils/db.js';
 import { logInviteCreate } from '../core/log-manager.js';
 import { shouldIgnoreGuild } from '../utils/custom-bot-check.js';
 
+/** "30 minutes", "1 hour", "7 days" — for the DMs, which state the server's actual limit. */
+function describeSeconds(sec) {
+    const s = Math.max(0, Number(sec) || 0);
+    const unit = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+    if (s >= 86400 && s % 86400 === 0) return unit(s / 86400, 'day');
+    if (s >= 3600 && s % 3600 === 0) return unit(s / 3600, 'hour');
+    return unit(Math.max(1, Math.round(s / 60)), 'minute');
+}
+
 export default {
     name: Events.InviteCreate,
     async execute(invite) {
@@ -116,8 +125,8 @@ export default {
                         try {
                             await inviter.send(
                                 `🔒 **Invite Creation Denied**\n\n` +
-                                `Your invite link for **${guild.name}** was deleted because you don't have permission to create invites.\n\n` +
-                                `Only verified members can create invite links in this server.`
+                                `Your invite link for **${guild.name}** was deleted because it didn't meet the server's invite policy.\n\n` +
+                                `Invites here must be single-use and expire within ${describeSeconds(policy.max_age_seconds || 604800)}.`
                             );
                         } catch (dmError) {
                             logger.debug(`[InviteCreate] Could not DM inviter: ${dmError.message}`);
@@ -174,10 +183,10 @@ export default {
                             `Your invite link \`${invite.code}\` for **${guild.name}** was replaced because it didn't meet the server's invite policy.\n\n` +
                             `**Server Policy:**\n` +
                             `• All invites must be single-use\n` +
-                            `• All invites must expire within 7 days\n\n` +
+                            `• All invites must expire within ${describeSeconds(maxAgeSeconds)}\n\n` +
                             `**Your new invite link:**\n` +
                             `https://discord.gg/${newInvite.code}\n\n` +
-                            `This invite is single-use and will expire in 7 days.`
+                            `This invite is single-use and will expire in ${describeSeconds(maxAgeSeconds)}.`
                         );
                     } catch (dmError) {
                         // User has DMs disabled, that's fine

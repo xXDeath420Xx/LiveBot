@@ -1,0 +1,27 @@
+<%#
+  Owner console navigation, the same on every super-admin page, shown right below the site header
+  (partials/site-header.ejs). Locals: ownerActive (key below).
+  Items with data-sa-section are sections of /super-admin itself; that page switches them in place.
+%>
+<%
+const _oa = locals.ownerActive || '';
+const _items = [
+    { key: 'overview', href: '/super-admin#guilds', label: 'Servers', icon: 'fa-server', section: 'guilds' },
+    { key: 'bots', href: '/bot-management?scope=all', label: 'Custom bots', icon: 'fa-robot' },
+    { key: 'globalbans', href: '/super-admin#globalbans', label: 'Global bans', icon: 'fa-ban', section: 'globalbans' },
+    { key: 'audit-bot', href: '/super-admin/audit-bot', label: 'Audit bot', icon: 'fa-user-shield' },
+    { key: 'adoption', href: '/super-admin/feature-adoption', label: 'Feature adoption', icon: 'fa-ranking-star' },
+    { key: 'command-usage', href: '/super-admin/command-usage', label: 'Command usage', icon: 'fa-terminal' },
+    { key: 'music-health', href: '/super-admin/music-health', label: 'Music health', icon: 'fa-wave-square' },
+    { key: 'music-activity', href: '/super-admin/music-activity', label: 'Music activity', icon: 'fa-headphones' },
+    { key: 'cah', href: '/admin/cah', label: 'CAH games', icon: 'fa-layer-group' },
+    { key: 'greenhouse', href: '/super-admin#greenhouse', label: 'Greenhouse game', icon: 'fa-seedling', section: 'greenhouse' },
+    { key: 'tools', href: '/super-admin#tools', label: 'Tools', icon: 'fa-screwdriver-wrench', section: 'tools' },
+];
+%>
+<nav class="cf-owner-nav" aria-label="Owner console">
+    <span class="cf-owner-nav-label">Owner console</span>
+    <div class="cf-owner-nav-items">
+        <% _items.forEach(function (it) { %><a href="<%= it.href %>" class="cf-owner-nav-item<%= _oa === it.key ? ' is-active' : '' %>"<% if (_oa === it.key) { %> aria-current="page"<% } %><% if (it.section) { %> data-sa-section="<%= it.section %>"<% } %>><i class="fas <%= it.icon %>" aria-hidden="true"></i><span><%= it.label %></span><% if (it.key === 'globalbans') { %><span class="cf-owner-nav-badge" id="gb-nav-badge" hidden></span><% } %></a><% }); %>
+    </div>
+</nav>

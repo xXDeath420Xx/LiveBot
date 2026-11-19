@@ -158,7 +158,7 @@ router.post('/upgrade', async (req, res) => {
 
         const newCapacity = VAULT_CAPACITY[nextLevel];
 
-        logger.info('[Vault] Upgraded', {
+        logger.debug('[Vault] Upgraded', {
             playerId: req.player.id,
             newLevel: nextLevel,
             cost: upgradeCost

@@ -1,4 +1,5 @@
 import { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits, MessageFlags } from 'discord.js';
+import { displayNameFor } from '../../utils/display-name.js';
 import {
   resolveZone, searchZones, formatIn,
   getUserSettings, setUserZone, setUserPrefs, clearUser,
@@ -143,11 +144,11 @@ async function handleTime(interaction) {
   if (target) {
     const s = await getUserSettings(target.id);
     if (!s?.time_zone) {
-      return interaction.reply({ content: `**${target.username}** hasn't set a time zone.`, ...EPHEMERAL });
+      return interaction.reply({ content: `**${displayNameFor(target, interaction.guild)}** hasn't set a time zone.`, ...EPHEMERAL });
     }
     const where = s.private_mode ? '' : ` (${s.time_zone})`;
     return interaction.reply({
-      content: `🕰️ It's **${formatIn(now, s.time_zone, fmt)}** for **${target.username}**${where}.`,
+      content: `🕰️ It's **${formatIn(now, s.time_zone, fmt)}** for **${displayNameFor(target, interaction.guild)}**${where}.`,
       ...EPHEMERAL,
     });
   }

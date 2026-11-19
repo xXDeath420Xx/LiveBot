@@ -1,319 +1,28 @@
+<%#
+  Sticky messages: one message per channel that the bot reposts at the bottom after new messages
+  (events/messageCreate.js). The list loads from GET /manage/:guildId/sticky; add and edit (POST, one
+  row per channel, so saving to a channel that has one replaces it) and delete (DELETE
+  …/sticky/:channelId) go through the same route (dashboard/routes/features/content-management.js).
+  Built on the settings-row kit (cf-settings.css); ids, field names and handlers are unchanged.
+  The preview is the shared Discord-style one (/js/cf-msgpreview.js).
+%>
+<%
+const stChannels = (typeof channels !== 'undefined' && channels ? channels : []).filter(c => c.type === 0 || c.type === 5);
+const stRoles = typeof roles !== 'undefined' && roles ? roles : [];
+// Names for the preview's <#channel> and <@&role> mentions; JSON with '<' escaped below.
+const stNames = {
+    channels: Object.fromEntries((typeof channels !== 'undefined' && channels ? channels : []).map(c => [c.id, c.name])),
+    roles: Object.fromEntries(stRoles.map(r => [r.id, { name: r.name, color: r.hexColor || (typeof r.color === 'number' && r.color ? '#' + r.color.toString(16).padStart(6, '0') : null) }])),
+};
+%>
 <style>
-/* Sticky Messages Page Styles */
-.sticky-section-card {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(167, 139, 250, 0.15);
-    border-radius: 16px;
-    overflow: hidden;
-    margin-bottom: 24px;
-}
-
-.sticky-section-header {
-    background: rgba(167, 139, 250, 0.08);
-    padding: 20px 24px;
-    border-bottom: 1px solid rgba(167, 139, 250, 0.15);
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
-
-.sticky-section-header i {
-    font-size: 1.25rem;
-    color: #a78bfa;
-}
-
-.sticky-section-header h3 {
-    font-size: 1.1rem;
-    font-weight: 700;
-    color: #ffffff;
-    margin: 0;
-}
-
-.sticky-section-body {
-    padding: 24px;
-}
-
-/* Form Styles */
-.sticky-form-group {
-    margin-bottom: 24px;
-}
-
-.sticky-form-label {
-    display: block;
-    font-size: 0.9rem;
-    font-weight: 600;
-    color: rgba(255, 255, 255, 0.9);
-    margin-bottom: 10px;
-}
-
-.sticky-form-label i {
-    color: #a78bfa;
-    margin-right: 8px;
-}
-
-.sticky-form-input,
-.sticky-form-select,
-.sticky-form-textarea {
-    width: 100%;
-    padding: 14px 18px;
-    background: rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 12px;
-    color: #ffffff;
-    font-size: 0.95rem;
-    transition: all 0.2s ease;
-}
-
-.sticky-form-textarea {
-    min-height: 120px;
-    resize: vertical;
-    font-family: inherit;
-}
-
-.sticky-form-input:focus,
-.sticky-form-select:focus,
-.sticky-form-textarea:focus {
-    outline: none;
-    border-color: rgba(167, 139, 250, 0.5);
-    box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.15);
-}
-
-.sticky-form-select option {
-    background: #1a1d21;
-    color: #ffffff;
-}
-
-.sticky-form-hint {
-    display: block;
-    margin-top: 8px;
-    font-size: 0.8rem;
-    color: rgba(255, 255, 255, 0.5);
-}
-
-/* Button Group */
-.sticky-button-group {
-    display: flex;
-    gap: 12px;
-}
-
-.sticky-save-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
-    padding: 14px 28px;
-    background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%);
-    border: none;
-    border-radius: 12px;
-    color: #ffffff;
-    font-size: 0.95rem;
-    font-weight: 700;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.sticky-save-btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 24px rgba(124, 58, 237, 0.4);
-}
-
-.sticky-cancel-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
-    padding: 14px 24px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 12px;
-    color: rgba(255, 255, 255, 0.7);
-    font-size: 0.95rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.sticky-cancel-btn:hover {
-    background: rgba(255, 255, 255, 0.1);
-    border-color: rgba(255, 255, 255, 0.25);
-    color: #ffffff;
-}
-
-/* Sticky Message Item */
-.sticky-item {
-    background: rgba(0, 0, 0, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-left: 4px solid #a78bfa;
-    border-radius: 12px;
-    padding: 20px;
-    margin-bottom: 16px;
-    transition: all 0.2s ease;
-}
-
-.sticky-item:hover {
-    background: rgba(0, 0, 0, 0.3);
-    border-color: rgba(167, 139, 250, 0.3);
-    border-left-color: #a78bfa;
-}
-
-.sticky-item:last-child {
-    margin-bottom: 0;
-}
-
-.sticky-item-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 16px;
-}
-
-.sticky-channel-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 14px;
-    background: rgba(167, 139, 250, 0.15);
-    border: 1px solid rgba(167, 139, 250, 0.3);
-    border-radius: 8px;
-    color: #a78bfa;
-    font-weight: 600;
-    font-size: 0.9rem;
-}
-
-.sticky-channel-badge i {
-    font-size: 0.85rem;
-}
-
-.sticky-delete-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 16px;
-    background: rgba(248, 113, 113, 0.1);
-    border: 1px solid rgba(248, 113, 113, 0.3);
-    border-radius: 10px;
-    color: #f87171;
-    font-size: 0.85rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.sticky-delete-btn:hover {
-    background: rgba(248, 113, 113, 0.2);
-    border-color: rgba(248, 113, 113, 0.5);
-}
-
-.sticky-content {
-    background: rgba(167, 139, 250, 0.08);
-    border: 1px solid rgba(167, 139, 250, 0.15);
-    border-radius: 10px;
-    padding: 16px;
-    color: rgba(255, 255, 255, 0.9);
-    line-height: 1.6;
-    white-space: pre-wrap;
-    margin-bottom: 16px;
-}
-
-.sticky-meta {
-    display: flex;
-    justify-content: space-between;
-    font-size: 0.8rem;
-    color: rgba(255, 255, 255, 0.5);
-}
-
-.sticky-meta i {
-    margin-right: 6px;
-}
-
-/* Empty State */
-.sticky-empty-state {
-    text-align: center;
-    padding: 60px 24px;
-}
-
-.sticky-empty-icon {
-    font-size: 3rem;
-    color: rgba(167, 139, 250, 0.3);
-    margin-bottom: 20px;
-}
-
-.sticky-empty-title {
-    font-size: 1.25rem;
-    font-weight: 700;
-    color: rgba(255, 255, 255, 0.9);
-    margin-bottom: 10px;
-}
-
-.sticky-empty-desc {
-    font-size: 0.95rem;
-    color: rgba(255, 255, 255, 0.5);
-    margin-bottom: 24px;
-}
-
-/* Loading State */
-.sticky-loading {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 48px 20px;
-    color: rgba(255, 255, 255, 0.6);
-}
-
-.sticky-loading i {
-    font-size: 2rem;
-    color: #a78bfa;
-    margin-bottom: 16px;
-    animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-}
-
-/* Add Button */
-.sticky-add-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
-    padding: 12px 24px;
-    background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%);
-    border: none;
-    border-radius: 12px;
-    color: #ffffff;
-    font-size: 0.9rem;
-    font-weight: 700;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.sticky-add-btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 24px rgba(124, 58, 237, 0.4);
-}
-
-@media (max-width: 768px) {
-    .sticky-button-group {
-        flex-direction: column;
+    /* The sticky text itself, quoted under its channel. */
+    #sticky-list .sticky-content {
+        margin: 0; padding: var(--cf-3) var(--cf-4); white-space: pre-wrap; overflow-wrap: anywhere;
+        font-size: var(--cf-text-sm); line-height: 1.55; color: var(--cf-text-2);
+        background: var(--cf-surface-2); border: 1px solid var(--cf-border); border-radius: var(--cf-radius);
     }
-
-    .sticky-save-btn,
-    .sticky-cancel-btn {
-        width: 100%;
-        justify-content: center;
-    }
-
-    .sticky-item-header {
-        flex-direction: column;
-        gap: 12px;
-        align-items: flex-start;
-    }
-
-    .sticky-meta {
-        flex-direction: column;
-        gap: 8px;
-    }
-}
+    .st-preview-row .cf-row-control { gap: var(--cf-2); }
 </style>
 
 <div class="page-section">
@@ -321,160 +30,212 @@
         <div>
             <div class="page-section-title">
                 <i class="fas fa-thumbtack"></i>
-                <span>Sticky Messages</span>
+                <span>Sticky messages</span>
             </div>
-            <div class="page-section-subtitle">
-                Messages that stay at the bottom of channels
-            </div>
+            <div class="page-section-subtitle">One per channel, plain text up to 2,000 characters.</div>
         </div>
-        <button class="sticky-add-btn" onclick="showAddStickyForm()">
-            <i class="fas fa-plus"></i>
-            Add Sticky Message
-        </button>
     </div>
 
-    <!-- Add Sticky Form (Hidden by default) -->
-    <div class="sticky-section-card" id="add-sticky-card" style="display: none;">
-        <div class="sticky-section-header">
-            <i class="fas fa-plus-circle"></i>
-            <h3>New Sticky Message</h3>
-        </div>
-        <div class="sticky-section-body">
+    <section class="cf-section" id="add-sticky-card" hidden aria-labelledby="add-sticky-card-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="add-sticky-card-title">New sticky message</h2>
+                <p class="cf-section-desc">The bot posts it after the next message in the channel, then keeps it at the bottom.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
             <form id="sticky-form" onsubmit="createStickyMessage(event)">
-                <div class="sticky-form-group">
-                    <label class="sticky-form-label">
-                        <i class="fas fa-hashtag"></i>Channel
-                    </label>
-                    <select id="sticky-channel" name="channel_id" class="sticky-form-select" required>
-                        <option value="">Select a channel...</option>
-                        <% if (channels) { %>
-                            <% channels.filter(c => c.type === 0).forEach(channel => { %>
-                                <option value="<%= channel.id %>">#<%= channel.name %></option>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="sticky-channel">Channel</label>
+                        <p class="cf-row-desc" id="sticky-channel-desc">A channel that already has a sticky message gets this one instead.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <select id="sticky-channel" name="channel_id" class="form-select" required aria-describedby="sticky-channel-desc">
+                            <option value="">Choose a channel</option>
+                            <% stChannels.forEach(channel => { %>
+                                <option value="<%= channel.id %>" data-kind="text">#<%= channel.name %></option>
                             <% }); %>
-                        <% } %>
-                    </select>
-                    <span class="sticky-form-hint">Channel where the sticky message will be posted</span>
+                        </select>
+                    </div>
                 </div>
-
-                <div class="sticky-form-group" style="margin-bottom: 0;">
-                    <label class="sticky-form-label">
-                        <i class="fas fa-comment-alt"></i>Message Content
-                    </label>
-                    <textarea
-                        id="sticky-content"
-                        name="message_content"
-                        class="sticky-form-textarea"
-                        placeholder="Enter the sticky message content..."
-                        required
-                    ></textarea>
-                    <span class="sticky-form-hint">This message will be reposted whenever someone sends a message in the channel</span>
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="sticky-content">Message</label>
+                        <p class="cf-row-desc" id="sticky-content-desc">Plain text with Discord formatting: **bold**, *italic*, links, and channel or role mentions such as &lt;#id&gt;. Mentions show as names but never ping anyone.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <textarea id="sticky-content" name="message_content" class="form-control" rows="5" maxlength="2000" placeholder="Read the pinned rules before posting." required aria-describedby="sticky-content-desc"></textarea>
+                    </div>
                 </div>
-
-                <div class="sticky-button-group" style="margin-top: 24px;">
-                    <button type="submit" class="sticky-save-btn">
-                        <i class="fas fa-save"></i>
-                        Create Sticky
-                    </button>
-                    <button type="button" class="sticky-cancel-btn" onclick="hideAddStickyForm()">
-                        <i class="fas fa-times"></i>
-                        Cancel
-                    </button>
+                <div class="cf-row cf-row--stack st-preview-row">
+                    <div class="cf-row-text">
+                        <span class="cf-row-label" id="cfk-st-preview-title">Preview</span>
+                    </div>
+                    <div class="cf-row-control">
+                        <div id="cfk-st-preview" aria-labelledby="cfk-st-preview-title" aria-live="polite"></div>
+                    </div>
+                </div>
+                <div class="cf-section-foot">
+                    <span class="cf-status-line" id="cfk-st-form-error" role="status" aria-live="polite"></span>
+                    <button type="button" class="btn btn-secondary" onclick="hideAddStickyForm()">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="cfk-st-submit">Create sticky message</button>
                 </div>
             </form>
         </div>
-    </div>
-
-    <!-- Sticky Messages List -->
-    <div class="sticky-section-card">
-        <div class="sticky-section-header">
-            <i class="fas fa-list"></i>
-            <h3>Active Sticky Messages</h3>
-        </div>
-        <div class="sticky-section-body" id="sticky-list">
-            <div class="sticky-loading">
-                <i class="fas fa-spinner"></i>
-                <span>Loading sticky messages...</span>
+    </section>
+    <section class="cf-section" aria-labelledby="sticky-list-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="sticky-list-title">Active sticky messages</h2>
+                <p class="cf-section-desc">Deleting one stops the reposting; the last copy stays in the channel until someone removes it.</p>
+            </div>
+            <div class="cf-section-actions">
+                <span class="cf-status-line" id="cfk-st-list-error" role="status" aria-live="polite"></span>
+                <button type="button" class="btn btn-primary btn-sm sticky-add-btn" onclick="showAddStickyForm()">Add sticky message</button>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div id="sticky-list">
+                <%- include('../kit/_state', { kind: 'loading', title: 'Loading sticky messages', text: null }) %>
             </div>
         </div>
-    </div>
+    </section>
+
 </div>
 
+<script src="/js/cf-msgpreview.js"></script>
+<script type="application/json" id="cfk-st-names"><%- JSON.stringify(stNames).replace(/</g, '\\u003c') %></script>
 <script>
-function showAddStickyForm() {
-    document.getElementById('add-sticky-card').style.display = 'block';
+// Channels that already have a sticky message, from the last list load (channel id -> row).
+var stickyByChannel = {};
+var stickyNames = {};
+try { stickyNames = JSON.parse(document.getElementById('cfk-st-names').textContent || '{}'); } catch (e) { stickyNames = {}; }
+
+function stickyStatus(id, text, tone) {
+    var box = document.getElementById(id);
+    if (!box) return;
+    box.textContent = text || '';
+    box.className = 'cf-status-line' + (text && tone ? ' is-' + tone : '');
+}
+
+function stickyPreview() {
+    var box = document.getElementById('cfk-st-preview');
+    if (!box || !window.cfDiscordPreview) return;
+    window.cfDiscordPreview.render(box, {
+        content: document.getElementById('sticky-content').value,
+        names: stickyNames,
+        emptyText: 'Type a message to see it here.'
+    });
+}
+
+function stickySyncForm() {
+    // Say when saving will replace a channel's current sticky message.
+    var select = document.getElementById('sticky-channel');
+    var editing = !!stickyByChannel[select.value];
+    document.getElementById('add-sticky-card-title').textContent = editing ? 'Edit sticky message' : 'New sticky message';
+    document.getElementById('cfk-st-submit').textContent = editing ? 'Save sticky message' : 'Create sticky message';
+}
+
+function showAddStickyForm(channelId) {
+    var form = document.getElementById('sticky-form');
+    form.reset();
+    stickyStatus('cfk-st-form-error', '');
+    if (typeof channelId === 'string' && stickyByChannel[channelId]) {
+        document.getElementById('sticky-channel').value = channelId;
+        document.getElementById('sticky-content').value = stickyByChannel[channelId].message_content || '';
+    }
+    document.getElementById('add-sticky-card').hidden = false;
+    stickySyncForm();
+    stickyPreview();
+    document.getElementById('sticky-content').dispatchEvent(new Event('input'));
+    document.getElementById('add-sticky-card').scrollIntoView({ behavior: 'smooth', block: 'start' });
     document.getElementById('sticky-content').focus();
 }
 
 function hideAddStickyForm() {
-    document.getElementById('add-sticky-card').style.display = 'none';
+    document.getElementById('add-sticky-card').hidden = true;
     document.getElementById('sticky-form').reset();
 }
 
+// Kit markup (cf-settings.css), built with createElement/textContent. Discord.channel() returns
+// escaped markup (public/js/discord-mentions.js), so it is parsed as a fragment, never as text.
+function stickyEl(tag, cls, text) {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text != null) n.textContent = text;
+    return n;
+}
+
+function stickyState(kind, title, text, button) {
+    const box = stickyEl('div', 'cf-state' + (kind === 'error' ? ' cf-state--error' : ''));
+    if (kind === 'error') box.setAttribute('role', 'alert');
+    box.append(stickyEl('p', 'cf-state-title', title), stickyEl('p', 'cf-state-text', text));
+    if (button) box.append(button);
+    return box;
+}
+
+function stickyItem(sticky) {
+    const createdDate = new Date(sticky.created_at);
+    const item = stickyEl('div', 'sticky-item cf-list-item cf-list-item--multi');
+    const main = stickyEl('div', 'cf-list-main');
+    const title = stickyEl('p', 'cf-list-title');
+    const name = stickyNames.channels && stickyNames.channels[sticky.channel_id];
+    if (name) title.textContent = '#' + name;
+    else if (window.Discord) title.append(document.createRange().createContextualFragment(Discord.channel(sticky.channel_id)));
+    else title.textContent = 'Channel ' + sticky.channel_id;
+    if (!name) title.append(stickyEl('span', 'cf-pill is-bad', 'Channel not found'));
+    const meta = stickyEl('p', 'cf-list-meta');
+    const by = stickyEl('span', null, 'Added by ');
+    if (sticky.created_by && /^\d{15,25}$/.test(sticky.created_by)) {
+        const who = stickyEl('span', null, sticky.created_by);
+        who.setAttribute('data-user-id', sticky.created_by);
+        by.append(who);
+    } else by.append(sticky.created_by || 'unknown');
+    meta.append(by,
+        stickyEl('span', null, isNaN(createdDate) ? '' : createdDate.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })),
+        stickyEl('span', null, (sticky.message_content || '').length + ' characters'));
+    main.append(title, stickyEl('div', 'sticky-content', sticky.message_content), meta);
+    const actions = stickyEl('div', 'cf-list-actions');
+    const edit = stickyEl('button', 'btn btn-sm btn-secondary', 'Edit');
+    edit.type = 'button';
+    edit.addEventListener('click', () => showAddStickyForm(sticky.channel_id));
+    const del = stickyEl('button', 'btn btn-sm btn-danger', 'Delete');
+    del.type = 'button';
+    del.addEventListener('click', () => deleteStickyMessage(sticky.channel_id));
+    actions.append(edit, del);
+    item.append(main, actions);
+    return item;
+}
+
 async function loadStickyMessages() {
+    const list = document.getElementById('sticky-list');
+    const heading = document.getElementById('sticky-list-title');
     try {
-        const response = await fetch('/manage/<%= guild.id %>/sticky');
+        const response = await fetch('/manage/<%= guild.id %>/sticky', { credentials: 'same-origin' });
+        if (!response.ok) throw new Error('HTTP ' + response.status);
         const data = await response.json();
-
-        if (!data.stickyMessages || data.stickyMessages.length === 0) {
-            document.getElementById('sticky-list').innerHTML = `
-                <div class="sticky-empty-state">
-                    <div class="sticky-empty-icon">
-                        <i class="fas fa-thumbtack"></i>
-                    </div>
-                    <div class="sticky-empty-title">No Sticky Messages</div>
-                    <div class="sticky-empty-desc">Create a sticky message to keep important information visible</div>
-                    <button class="sticky-add-btn" onclick="showAddStickyForm()">
-                        <i class="fas fa-plus"></i>
-                        Add First Sticky
-                    </button>
-                </div>
-            `;
-            return;
+        const stickies = Array.isArray(data.stickyMessages) ? data.stickyMessages : [];
+        stickyByChannel = {};
+        stickies.forEach(s => { stickyByChannel[s.channel_id] = s; });
+        heading.textContent = stickies.length ? 'Active sticky messages (' + stickies.length + ')' : 'Active sticky messages';
+        if (stickies.length) list.replaceChildren(...stickies.map(stickyItem));
+        else {
+            const add = stickyEl('button', 'btn btn-primary', 'Add sticky message');
+            add.type = 'button';
+            add.addEventListener('click', () => showAddStickyForm());
+            list.replaceChildren(stickyState('empty', 'No sticky messages yet', 'Keep rules or a how-to at the bottom of a busy channel.', add));
         }
-
-        const stickiesHtml = data.stickyMessages.map(sticky => {
-            const createdDate = new Date(sticky.created_at);
-
-            return `
-                <div class="sticky-item">
-                    <div class="sticky-item-header">
-                        <div class="sticky-channel-badge">
-                            <i class="fas fa-hashtag"></i>
-                            Channel ${sticky.channel_id.slice(-6)}
-                        </div>
-                        <button class="sticky-delete-btn" onclick="deleteStickyMessage('${sticky.channel_id}')">
-                            <i class="fas fa-trash"></i>
-                            Delete
-                        </button>
-                    </div>
-                    <div class="sticky-content">${sticky.message_content}</div>
-                    <div class="sticky-meta">
-                        <span>
-                            <i class="fas fa-user"></i>
-                            Created by ${sticky.created_by || 'Unknown'}
-                        </span>
-                        <span>
-                            <i class="fas fa-calendar"></i>
-                            ${createdDate.toLocaleDateString()} at ${createdDate.toLocaleTimeString()}
-                        </span>
-                    </div>
-                </div>
-            `;
-        }).join('');
-
-        document.getElementById('sticky-list').innerHTML = stickiesHtml;
-
+        // Mark channels that already have one in the picker.
+        Array.prototype.forEach.call(document.getElementById('sticky-channel').options, o => {
+            if (!o.value) return;
+            if (!o.dataset.name) o.dataset.name = o.textContent;
+            o.textContent = o.dataset.name + (stickyByChannel[o.value] ? ' (has one)' : '');
+        });
+        stickySyncForm();
     } catch (error) {
         console.error('Error loading sticky messages:', error);
-        document.getElementById('sticky-list').innerHTML = `
-            <div class="sticky-empty-state">
-                <div class="sticky-empty-icon">
-                    <i class="fas fa-exclamation-triangle"></i>
-                </div>
-                <div class="sticky-empty-title">Error Loading Data</div>
-                <div class="sticky-empty-desc">Please try refreshing the page</div>
-            </div>
-        `;
+        list.replaceChildren(stickyState('error', 'Could not load sticky messages', 'Refresh the page to try again.'));
     }
 }
 
@@ -486,49 +247,59 @@ async function createStickyMessage(event) {
         channel_id: formData.get('channel_id'),
         message_content: formData.get('message_content')
     };
-
+    if (!String(sticky.message_content || '').trim()) {
+        stickyStatus('cfk-st-form-error', 'Write the message first.', 'bad');
+        return;
+    }
+    const button = document.getElementById('cfk-st-submit');
+    button.disabled = true;
+    stickyStatus('cfk-st-form-error', 'Saving', 'busy');
     try {
         const response = await fetch('/manage/<%= guild.id %>/sticky', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
             body: JSON.stringify(sticky)
         });
-
+        const data = await response.json().catch(() => ({}));
         if (response.ok) {
-            alert('Sticky message created successfully!');
             hideAddStickyForm();
+            stickyStatus('cfk-st-list-error', 'Saved. It appears after the next message in the channel.', 'ok');
             loadStickyMessages();
         } else {
-            const error = await response.json();
-            alert('Failed to create sticky message: ' + (error.error || 'Unknown error'));
+            stickyStatus('cfk-st-form-error', data.error || 'Could not save the sticky message.', 'bad');
         }
     } catch (error) {
         console.error('Error creating sticky message:', error);
-        alert('Error creating sticky message');
+        stickyStatus('cfk-st-form-error', 'Could not reach the dashboard. Try again.', 'bad');
     }
+    button.disabled = false;
 }
 
 async function deleteStickyMessage(channelId) {
-    if (!confirm('Are you sure you want to delete this sticky message?')) {
+    if (!confirm('Delete this sticky message? The bot stops reposting it.')) {
         return;
     }
 
     try {
-        const response = await fetch(`/manage/<%= guild.id %>/sticky/${channelId}`, {
-            method: 'DELETE'
+        const response = await fetch(`/manage/<%= guild.id %>/sticky/${encodeURIComponent(channelId)}`, {
+            method: 'DELETE',
+            credentials: 'same-origin'
         });
 
         if (response.ok) {
-            alert('Sticky message deleted');
+            stickyStatus('cfk-st-list-error', 'Deleted.', 'ok');
             loadStickyMessages();
         } else {
-            alert('Failed to delete sticky message');
+            stickyStatus('cfk-st-list-error', 'Could not delete it. Try again.', 'bad');
         }
     } catch (error) {
         console.error('Error deleting sticky message:', error);
-        alert('Error deleting sticky message');
+        stickyStatus('cfk-st-list-error', 'Could not reach the dashboard. Try again.', 'bad');
     }
 }
 
+document.getElementById('sticky-content').addEventListener('input', stickyPreview);
+document.getElementById('sticky-channel').addEventListener('change', stickySyncForm);
 loadStickyMessages();
 </script>

@@ -1,0 +1,77 @@
+<%#
+  GET /stream/bot/commands and /stream/bot/commands/:channelId (dashboard/routes/stream-bot-channel.js): commands for
+  CertiFried's chat bot on your Twitch channel. Locals: channel (null on the list) { id, channel_id, channel_name,
+  features_enabled }, commands, channelCommands, customCommands, bots [{ channelId, name }] (the list).
+  The body is shared with the Kick page: views/partials/channel-bot/commands-body.ejs.
+%>
+<%- include('_head', { pageTitle: locals.pageTitle || 'Commands', active: 'commands' }) %>
+<%
+  var _ch = locals.channel && locals.channel.channel_id ? locals.channel : null;
+  var _feats = {};
+  try { _feats = _ch && _ch.features_enabled ? (typeof _ch.features_enabled === 'string' ? JSON.parse(_ch.features_enabled) : _ch.features_enabled) : {}; } catch (e) { _feats = {}; }
+  var _on = !!(_feats && _feats.commands === true);
+  var _imported = _ch ? (locals.customCommands || []).filter(function (c) { return /^Imported from /.test(String(c.created_by || '')); }) : [];
+%>
+<link rel="stylesheet" href="/css/channel-bot.css">
+<script src="/js/kick-dashboard.js"></script>
+<div class="cf-page-head">
+    <div>
+        <h1 class="cf-page-title"><%= _ch ? _ch.channel_name : 'Commands' %></h1>
+        <p class="cf-page-sub">Chat commands, your own commands and auto-responders for CertiFried's chat bot on your Twitch channel.</p>
+    </div>
+</div>
+<%- include('_tabs', { active: 'commands' }) %>
+
+<% if (!_ch) { %>
+<section class="cf-section" aria-labelledby="sbc-list-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbc-list-title">Your Twitch channels</h2>
+        <p class="cf-section-desc">Channels linked on Connections that CertiFried's chat bot serves.</p></div></header>
+    <div class="cf-rows">
+        <% if (!(locals.bots || []).length) { %>
+        <div class="cf-state cf-state--compact"><p class="cf-state-title">No Twitch channel of yours uses CertiFried's chat bot yet. Link your channel on <a href="/stream/bot/connections">Connections</a>.</p></div>
+        <% } else { %>
+        <div class="cf-list">
+            <% bots.forEach(function (b) { %>
+            <div class="cf-list-item"><div class="cf-list-main"><p class="cf-list-title"><%= b.name %></p></div>
+                <div class="cf-list-actions"><a class="btn btn-secondary btn-sm" href="/stream/bot/commands/<%= encodeURIComponent(b.channelId) %>">Open</a></div></div>
+            <% }) %>
+        </div>
+        <% } %>
+    </div>
+</section>
+<% } else { %>
+<section class="cf-section" aria-labelledby="sbc-switch-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sbc-switch-title">Chat commands</h2></div></header>
+    <div class="cf-rows">
+        <div class="cf-row cf-row--switch">
+            <div class="cf-row-text">
+                <label class="cf-row-label" for="sbc-master">Answer chat commands on this channel</label>
+                <p class="cf-row-desc">When this is off, the bot ignores every command below. Turning it on does not turn on commands that are off one by one: <% if (_imported.length) { %>the <%= _imported.length %> commands imported from Firebot or Streamer.bot stay off until you switch each of them on below.<% } else { %>each command also has its own switch.<% } %></p>
+                <p class="cf-row-desc kick-status" id="sbc-master-msg" role="status" aria-live="polite"></p>
+            </div>
+            <div class="cf-row-control">
+                <input type="checkbox" role="switch" class="cf-switch" id="sbc-master" data-channel="<%= _ch.channel_id %>"<%= _on ? ' checked' : '' %>>
+            </div>
+        </div>
+    </div>
+</section>
+<%- include('../partials/channel-bot/commands-body', { apiBase: '/stream/bot/api/twitch-channel/' + encodeURIComponent(String(_ch.channel_id)), showTimers: false, timersNote: 'Timed messages are sent on Kick only for now.' }) %>
+<script>
+(function () {
+  var sw = document.getElementById('sbc-master');
+  if (!sw || !window.KickDash) return;
+  var msg = document.getElementById('sbc-master-msg');
+  sw.addEventListener('change', async function () {
+    sw.disabled = true;
+    try {
+      await window.KickDash.post('/stream/bot/api/twitch-channel/' + encodeURIComponent(sw.getAttribute('data-channel')) + '/switch', { on: sw.checked });
+      window.KickDash.status(msg, sw.checked ? 'On. Commands that are switched on now answer in chat.' : 'Off. The bot ignores commands on this channel.', 'ok');
+    } catch (e) {
+      sw.checked = !sw.checked;
+      window.KickDash.status(msg, e.message || 'Could not change the switch.', 'bad');
+    } finally { sw.disabled = false; }
+  });
+})();
+</script>
+<% } %>
+<%- include('_foot') %>

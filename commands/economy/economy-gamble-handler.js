@@ -1,6 +1,7 @@
 import { EmbedBuilder } from 'discord.js';
 import gamblingManager from '../../core/gambling-manager.js';
 import economyManager from '../../core/economy-manager.js';
+import { displayNameFor } from '../../utils/display-name.js';
 
 async function trackGambleAchievements(interaction, result) {
     if (!interaction.client.achievementManager) return;
@@ -224,7 +225,7 @@ export async function handleStats(interaction) {
 
     const embed = new EmbedBuilder()
         .setColor('#0099FF')
-        .setTitle(`${interaction.user.username}'s Gambling Statistics`)
+        .setTitle(`${displayNameFor(interaction.user, interaction.guild)}'s Gambling Statistics`)
         .setThumbnail(interaction.user.displayAvatarURL());
 
     let totalGames = 0;

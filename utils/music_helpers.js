@@ -1,12 +1,11 @@
 import pool from './db.js';
 import { PermissionsBitField } from 'discord.js';
 import logger from './logger.js';
+import { EMPTY_IDLE_MS } from '../core/music-leave-policy.js';
 
 const configCache = new Map();
-const permissionsCache = new Map(); // Cache for role permissions per guild
 setInterval(() => {
     configCache.clear();
-    permissionsCache.clear();
 }, 5 * 60 * 1000);
 
 /**
@@ -92,73 +91,12 @@ async function getVoteSkipPercentage(guildId) {
     return config?.vote_skip_percentage || 50;
 }
 
-/**
- * Get all role permissions for a guild (batched query with caching)
- * Fixes N+1 query pattern by loading all permissions at once
- */
-async function getAllGuildPermissions(guildId) {
-    // Check cache first
-    if (permissionsCache.has(guildId)) {
-        return permissionsCache.get(guildId);
-    }
-
-    // Load all role permissions for this guild in one query
-    const [rows] = await pool.execute(
-        'SELECT * FROM music_permissions WHERE guild_id = ?',
-        [guildId]
-    );
-
-    // Convert to Map for O(1) lookup by role_id
-    const permsMap = new Map();
-    for (const row of rows) {
-        permsMap.set(row.role_id, row);
-    }
-
-    permissionsCache.set(guildId, permsMap);
-    return permsMap;
-}
 
 /**
- * Get granular permissions for a role
+ * The Music switch, the music channels and (unless `requireDJ: false`) the DJ role.
+ * `requireDJ: false` is for what every listener may do even when a DJ role is set: starting a vote to skip.
  */
-async function getRolePermissions(guildId, roleId) {
-    const allPerms = await getAllGuildPermissions(guildId);
-    return allPerms.get(roleId) || null;
-}
-
-/**
- * Check if user has specific music permission
- * Optimized: loads all guild permissions once, then checks in memory
- */
-async function hasPermission(member, permission) {
-    // Admins always have all permissions
-    if (member.permissions.has(PermissionsBitField.Flags.Administrator)) {
-        return true;
-    }
-
-    const guildId = member.guild.id;
-
-    // Load all permissions for this guild (single query, cached)
-    const allPerms = await getAllGuildPermissions(guildId);
-
-    // Check each role the user has (no more DB queries!)
-    for (const [roleId] of member.roles.cache) {
-        const perms = allPerms.get(roleId);
-        if (perms && perms[permission]) {
-            return true;
-        }
-    }
-
-    // Check @everyone permissions
-    const everyonePerms = allPerms.get(guildId);
-    if (everyonePerms && everyonePerms[permission]) {
-        return true;
-    }
-
-    return false;
-}
-
-async function checkMusicPermissions(interaction) {
+async function checkMusicPermissions(interaction, { requireDJ = true } = {}) {
     const guildId = interaction.guild.id;
 
     let config = configCache.get(guildId);
@@ -182,6 +120,9 @@ async function checkMusicPermissions(interaction) {
             message: `Music commands can only be used in the following channels: ${textChannels.map(id => `<#${id}>`).join(', ')}.`
         };
     }
+
+    // The DJ role limits who controls playback, not who may ask the room to skip (H-667).
+    if (!requireDJ) return { permitted: true };
 
     const member = interaction.member;
     const djRoleId = config.dj_role_id;
@@ -211,6 +152,25 @@ async function checkMusicPermissions(interaction) {
     }
 }
 
+/**
+ * The AI DJ switch. ai_dj_config.enabled is the only one: the Music page's AI DJ switch and the AI DJ
+ * page both write it (H-667; music_config.dj_enabled is no longer read).
+ */
+async function isAIDJEnabled(guildId) {
+    const [rows] = await pool.execute('SELECT enabled FROM ai_dj_config WHERE guild_id = ?', [guildId]);
+    return Number(rows[0]?.enabled) === 1;
+}
+
+/** Who may start an AI DJ session (/music dj, the panel's Start DJ form): the music checks, then the AI DJ switch. */
+async function checkAIDJAccess(interaction) {
+    const music = await checkMusicPermissions(interaction);
+    if (!music.permitted) return music;
+    if (!(await isAIDJEnabled(interaction.guild.id))) {
+        return { permitted: false, message: 'The AI DJ is not enabled on this server. An admin can switch it on in the dashboard.' };
+    }
+    return { permitted: true };
+}
+
 // Helper function to get the player instance for a specific client
 // Accepts either a client object or an interaction object
 function useMainPlayer(clientOrInteraction) {
@@ -234,51 +194,34 @@ function invalidateMusicConfigCache(guildId) {
     configCache.delete(guildId);
 }
 
-// Default leave-timer cooldown (ms) used when 24/7 is OFF.
-const LEAVE_COOLDOWN_MS = 300000; // 5 minutes
-
 /**
- * Build the leave-related nodeOptions for a guild based on its 24/7 setting.
+ * The leave-related nodeOptions for a new queue.
  *
- * When 24/7 is enabled, discord-player must NEVER arm its empty/end leave timers,
- * so the bot stays connected even when the channel is empty or the queue ends.
- * When disabled, fall back to the standard 5-minute auto-leave behavior.
+ * Leaving voice is decided by core/music-leave-policy.js (stay while music plays, with 24/7 on, or while a
+ * voice tool needs the connection; otherwise leave as soon as the queue ends), so discord-player's own
+ * leave timers are always off — they only dropped the connection and left a zombie queue behind, and
+ * could not see transcription, the chat reader or a recording. The policy's queueCreate / playerStart
+ * hooks apply the same values to every queue; these keep a freshly created one consistent from the start.
  *
- * Spread the result into a play call's `nodeOptions`, e.g.:
+ * Kept async with the guildId parameter: many callers spread it into nodeOptions, e.g.
  *   nodeOptions: { metadata, volume, ...(await getLeaveOptions(guildId)) }
  *
- * @param {string} guildId
- * @returns {Promise<{leaveOnEmpty:boolean, leaveOnEmptyCooldown:number, leaveOnEnd:boolean, leaveOnEndCooldown:number}>}
+ * @param {string} _guildId
+ * @returns {Promise<{leaveOnEmpty:false, leaveOnEnd:false, leaveOnStop:false, pauseOnEmpty:false, leaveOnEmptyCooldown:number}>}
  */
-async function getLeaveOptions(guildId) {
-    const is247 = await is247Enabled(guildId);
+async function getLeaveOptions(_guildId) {
     return {
-        leaveOnEmpty: !is247,
-        leaveOnEmptyCooldown: LEAVE_COOLDOWN_MS,
-        leaveOnEnd: !is247,
-        leaveOnEndCooldown: LEAVE_COOLDOWN_MS
+        leaveOnEmpty: false,
+        leaveOnEnd: false,
+        leaveOnStop: false,
+        pauseOnEmpty: false,
+        leaveOnEmptyCooldown: EMPTY_IDLE_MS
     };
 }
 
-/**
- * Apply the current 24/7 leave policy to an already-active queue.
- *
- * discord-player reads leaveOnEmpty/leaveOnEnd off the mutable `queue.options`
- * each time its internal timers fire, so mutating them here takes effect on the
- * live session without re-queueing. Returns false if there is no live queue.
- *
- * @param {import('discord-player').GuildQueue} queue
- * @param {boolean} is247
- * @returns {boolean} whether options were applied
- */
-function applyLeaveOptionsToQueue(queue, is247) {
-    if (!queue?.options) return false;
-    queue.options.leaveOnEmpty = !is247;
-    queue.options.leaveOnEnd = !is247;
-    return true;
-}
-
 export {
+    isAIDJEnabled,
+    checkAIDJAccess,
     checkMusicPermissions,
     useMainPlayer,
     getMusicConfig,
@@ -286,12 +229,9 @@ export {
     invalidateMusicConfigCache,
     is247Enabled,
     getLeaveOptions,
-    applyLeaveOptionsToQueue,
     isAutoplayEnabled,
     getAutoplaySource,
     getRequestChannel,
     isVoteSkipEnabled,
-    getVoteSkipPercentage,
-    getRolePermissions,
-    hasPermission
+    getVoteSkipPercentage
 };

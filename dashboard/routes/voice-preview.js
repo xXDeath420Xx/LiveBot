@@ -1,6 +1,6 @@
 import express from 'express';
 import rateLimit from 'express-rate-limit';
-import { synthesize } from '../../utils/piper-tts.js';
+import { synthesize, getVoiceInfo } from '../../utils/piper-tts.js';
 import fs from 'fs';
 import logger from '../../utils/logger.js';
 
@@ -42,8 +42,10 @@ router.post('/api/voice-preview', voicePreviewLimiter, async (req, res) => {
 
         logger.info(`[Voice Preview] Generating preview for voice: ${voice}`);
 
-        // Generate preview text with voice name capitalized
-        const voiceLabel = voice.charAt(0).toUpperCase() + voice.slice(1);
+        // Generate preview text with the voice's name: "Michael" for kokoro_am_michael (its display
+        // name up to the bracket), the capitalised id for a Piper voice.
+        const info = getVoiceInfo(voice);
+        const voiceLabel = info?.displayName ? info.displayName.replace(/\s*\(.*$/, '') : voice.charAt(0).toUpperCase() + voice.slice(1);
         const text = `Hello, I'm ${voiceLabel}. This is how I'd sound if I were your AI DJ. Select me to have your music experience enhanced by commentary with my voice.`;
 
         // Synthesize audio using Piper TTS

@@ -1,6 +1,13 @@
 import { EmbedBuilder } from 'discord.js';
 import pool from '../../utils/db.js';
-import { checkMusicPermissions, getLeaveOptions } from '../../utils/music_helpers.js';
+import { checkMusicPermissions, getLeaveOptions, getMusicConfig } from '../../utils/music_helpers.js';
+
+/** Per-server limits from the dashboard's Music page (music_config); null = no limit. */
+async function playlistLimits(guildId) {
+    const config = await getMusicConfig(guildId).catch(() => null);
+    const positive = (v) => (Number(v) > 0 ? Number(v) : null);
+    return { maxPlaylists: positive(config?.max_playlists_per_user), maxSongs: positive(config?.max_songs_per_playlist) };
+}
 
 /**
  * Handles creating a new playlist
@@ -11,8 +18,18 @@ export async function handleCreate(interaction) {
     const userId = interaction.user.id;
 
     try {
+        const { maxPlaylists } = await playlistLimits(guildId);
+        if (maxPlaylists) {
+            const [[{ count }]] = await pool.execute(
+                "SELECT COUNT(*) AS count FROM user_playlists WHERE guild_id = ? AND user_id = ?",
+                [guildId, userId]
+            );
+            if (Number(count) >= maxPlaylists) {
+                return interaction.reply({ content: `You can have at most **${maxPlaylists}** playlists on this server. Delete one first.`, ephemeral: true });
+            }
+        }
         await pool.execute(
-            "INSERT INTO music_playlists (guild_id, user_id, name, songs) VALUES (?,?,?,?)",
+            "INSERT INTO user_playlists (guild_id, user_id, name, songs) VALUES (?,?,?,?)",
             [guildId, userId, name, "[]"]
         );
         return interaction.reply({ content: `Playlist **${name}** created.`, ephemeral: true });
@@ -35,7 +52,7 @@ export async function handleDelete(interaction) {
 
     try {
         const [result] = await pool.execute(
-            "DELETE FROM music_playlists WHERE guild_id = ? AND user_id = ? AND name = ?",
+            "DELETE FROM user_playlists WHERE guild_id = ? AND user_id = ? AND name = ?",
             [guildId, userId, name]
         );
 
@@ -67,7 +84,7 @@ export async function handleAdd(interaction) {
 
     try {
         const [playlists] = await pool.execute(
-            "SELECT * FROM music_playlists WHERE guild_id = ? AND user_id = ? AND name = ?",
+            "SELECT * FROM user_playlists WHERE guild_id = ? AND user_id = ? AND name = ?",
             [guildId, userId, name]
         );
 
@@ -76,11 +93,15 @@ export async function handleAdd(interaction) {
         }
 
         const playlist = playlists[0];
-        const songs = JSON.parse(playlist.songs);
+        const songs = JSON.parse(playlist.songs || "[]");
+        const { maxSongs } = await playlistLimits(guildId);
+        if (maxSongs && songs.length >= maxSongs) {
+            return interaction.reply({ content: `**${name}** is full (${maxSongs} songs max on this server).`, ephemeral: true });
+        }
         songs.push({ title: currentTrack.title, url: currentTrack.url });
 
         await pool.execute(
-            "UPDATE music_playlists SET songs = ? WHERE playlist_id = ?",
+            "UPDATE user_playlists SET songs = ? WHERE playlist_id = ?",
             [JSON.stringify(songs), playlist.playlist_id]
         );
 
@@ -102,7 +123,7 @@ export async function handleRemove(interaction) {
 
     try {
         const [playlists] = await pool.execute(
-            "SELECT * FROM music_playlists WHERE guild_id = ? AND user_id = ? AND name = ?",
+            "SELECT * FROM user_playlists WHERE guild_id = ? AND user_id = ? AND name = ?",
             [guildId, userId, name]
         );
 
@@ -111,7 +132,7 @@ export async function handleRemove(interaction) {
         }
 
         const playlist = playlists[0];
-        const songs = JSON.parse(playlist.songs);
+        const songs = JSON.parse(playlist.songs || "[]");
         if (position < 0 || position >= songs.length) {
             return interaction.reply({ content: "Invalid song position.", ephemeral: true });
         }
@@ -119,7 +140,7 @@ export async function handleRemove(interaction) {
         const removedSong = songs.splice(position, 1)[0];
 
         await pool.execute(
-            "UPDATE music_playlists SET songs = ? WHERE playlist_id = ?",
+            "UPDATE user_playlists SET songs = ? WHERE playlist_id = ?",
             [JSON.stringify(songs), playlist.playlist_id]
         );
 
@@ -139,7 +160,7 @@ export async function handleList(interaction) {
 
     try {
         const [playlists] = await pool.execute(
-            "SELECT name FROM music_playlists WHERE guild_id = ? AND user_id = ?",
+            "SELECT name FROM user_playlists WHERE guild_id = ? AND user_id = ?",
             [guildId, userId]
         );
 
@@ -169,7 +190,7 @@ export async function handleShow(interaction) {
 
     try {
         const [playlists] = await pool.execute(
-            "SELECT * FROM music_playlists WHERE guild_id = ? AND user_id = ? AND name = ?",
+            "SELECT * FROM user_playlists WHERE guild_id = ? AND user_id = ? AND name = ?",
             [guildId, userId, name]
         );
 
@@ -178,7 +199,7 @@ export async function handleShow(interaction) {
         }
 
         const playlist = playlists[0];
-        const songs = JSON.parse(playlist.songs);
+        const songs = JSON.parse(playlist.songs || "[]");
         const embed = new EmbedBuilder()
             .setColor("#3498DB")
             .setAuthor({ name: `Playlist: ${name}` })
@@ -210,7 +231,7 @@ export async function handlePlay(interaction) {
 
     try {
         const [playlists] = await pool.execute(
-            "SELECT * FROM music_playlists WHERE guild_id = ? AND user_id = ? AND name = ?",
+            "SELECT * FROM user_playlists WHERE guild_id = ? AND user_id = ? AND name = ?",
             [guildId, userId, name]
         );
 
@@ -219,7 +240,7 @@ export async function handlePlay(interaction) {
         }
 
         const playlist = playlists[0];
-        const songs = JSON.parse(playlist.songs);
+        const songs = JSON.parse(playlist.songs || "[]");
         if (songs.length === 0) {
             return interaction.reply({ content: `The **${name}** playlist is empty.`, ephemeral: true });
         }
@@ -227,15 +248,29 @@ export async function handlePlay(interaction) {
         await interaction.deferReply();
 
         try {
-            await interaction.client.player.play(interaction.member.voice.channel, songs.map(s => s.url).join("\n"), {
+            // Resolve each saved song on its own — joining the URLs into one query string made a
+            // single nonsense search that queued (at most) one wrong track.
+            const player = interaction.client.player;
+            const tracks = [];
+            for (const song of songs) {
+                const result = await player.search(song.url, { requestedBy: interaction.user }).catch(() => null);
+                if (result?.tracks?.length) tracks.push(result.tracks[0]);
+            }
+            if (tracks.length === 0) {
+                return interaction.followUp({ content: `None of the songs in **${name}** could be found.` });
+            }
+
+            const { queue } = await player.play(interaction.member.voice.channel, tracks[0], {
                 requestedBy: interaction.user,
                 nodeOptions: {
                     metadata: { channelId: interaction.channel.id },
                     ...(await getLeaveOptions(interaction.guildId))
                 }
             });
+            if (tracks.length > 1) queue.addTrack(tracks.slice(1));
 
-            return interaction.followUp({ content: `Now playing the **${name}** playlist.` });
+            const skipped = songs.length - tracks.length;
+            return interaction.followUp({ content: `Now playing the **${name}** playlist (${tracks.length} song${tracks.length !== 1 ? 's' : ''}${skipped ? `, ${skipped} unavailable` : ''}).` });
         } catch (e) {
             console.error("[Playlist Play Error]", e.message);
             return interaction.followUp({ content: `An error occurred while trying to play the playlist: ${e.message}` });

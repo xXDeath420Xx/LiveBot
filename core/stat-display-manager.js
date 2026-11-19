@@ -1,5 +1,6 @@
 import logger from '../utils/logger.js';
 import pool from '../utils/db.js';
+import { logFeatureEvent } from './feature-log.js';
 import { getFollowerCount } from '../utils/platforms/twitch.js';
 import {
     getGuildTimezone,
@@ -7,6 +8,31 @@ import {
     parseLegacyOffset,
     getLocalDateParts
 } from '../utils/guild-timezone.js';
+
+// Stats computed from the member cache; only these justify a gateway member fetch (opcode 8).
+const MEMBER_CACHE_STATS = new Set(['humans', 'bots', 'online', 'role']);
+
+// Shared by every bot client's manager. Each client walks every stat guild it is in, so a guild
+// with both the main bot and a custom bot was updated twice per cycle: two member fetches (which
+// tripped Discord's opcode-8 rate limit) and racing renames against the 2-per-10-min budget.
+const guildLastUpdated = new Map();
+const GUILD_UPDATE_MIN_INTERVAL_MS = 4 * 60 * 1000;
+
+/**
+ * Make the member cache usable for member-derived stats. Returns false when it is incomplete and
+ * could not be filled — the caller then leaves those channels alone rather than writing a count
+ * taken from a partial cache.
+ */
+async function ensureMemberCache(guild) {
+    if (guild.members.cache.size >= guild.memberCount) return true;
+    try {
+        await guild.members.fetch();
+        return true;
+    } catch (err) {
+        logger.warn(`[StatDisplayManager] Member fetch deferred for ${guild.name} (${guild.id}): ${err.message}`);
+        return false;
+    }
+}
 
 /**
  * Stat Display Manager - Updates voice channel names with live server stats.
@@ -151,6 +177,31 @@ class StatDisplayManager {
     /**
      * Check if a stat value of 0/null is suspicious and warrants a recheck
      */
+    /**
+     * A stat channel that is not in the cache. Discord answering 10003 Unknown Channel means it was deleted,
+     * so its display row goes too; this used to warn on every cycle forever. Anything else (a cold cache,
+     * missing access, an outage) is left for the next cycle.
+     */
+    async _handleMissingChannel(guild, row) {
+        let fetchError = null;
+        const channel = await guild.channels.fetch(row.channel_id).catch(error => { fetchError = error; return null; });
+        if (channel) return; // only missing from the cache; fetched now, so the next cycle updates it
+        if (fetchError?.code !== 10003) {
+            logger.warn(`[StatDisplayManager] Channel ${row.channel_id} not found in ${guild.id}`, { code: fetchError?.code });
+            return;
+        }
+        await pool.execute('DELETE FROM stat_display_channels WHERE guild_id = ? AND channel_id = ?', [guild.id, row.channel_id]);
+        logger.info(`[StatDisplayManager] Removed the ${row.stat_type} display for deleted channel ${row.channel_id} in ${guild.id}`);
+        void logFeatureEvent(() => guild, 'system.featureDisabled', () => ({
+            title: '⛔ Feature Auto-Disabled',
+            fields: [
+                ['Feature', `Stat display (${row.stat_type})`], ['Template', row.template || '-'],
+                ['Why', `Its channel (${row.channel_id}) was deleted`],
+                ['Fix', 'Add it again from the server stats section of the dashboard if you still want it', false],
+            ],
+        }));
+    }
+
     _shouldRecheck(statType, value) {
         if (value === 0 && ['members', 'humans', 'channels', 'bots', 'online', 'roles'].includes(statType)) return true;
         if (value === null && statType === 'twitch_followers') return true;
@@ -180,7 +231,7 @@ class StatDisplayManager {
                 const channel = freshGuild.channels.cache.get(channelId);
                 if (!channel) return;
 
-                await freshGuild.members.fetch();
+                if (MEMBER_CACHE_STATS.has(row.stat_type) && !(await ensureMemberCache(freshGuild))) return;
                 const value = await this.getStatValue(freshGuild, row.stat_type, config);
 
                 if (value === 0 || value === null) {
@@ -216,17 +267,25 @@ class StatDisplayManager {
 
             if (!rows.length) return;
 
+            const last = guildLastUpdated.get(guild.id) || 0;
+            if (Date.now() - last < GUILD_UPDATE_MIN_INTERVAL_MS) return; // another client already did it this cycle
+            guildLastUpdated.set(guild.id, Date.now());
+
             logger.info(`[StatDisplayManager] Processing ${rows.length} stat channels for guild ${guild.name} (${guild.id})`);
 
-            // Fetch members to get accurate counts
-            await guild.members.fetch();
+            const needsMembers = rows.some(r => MEMBER_CACHE_STATS.has(r.stat_type));
+            const membersReady = needsMembers ? await ensureMemberCache(guild) : true;
 
             let updated = 0;
             for (const row of rows) {
                 try {
+                    // Time + date rows are owned by updateClocks() (every 5min). Skipping them
+                    // here prevents the overlap that trips Discord's 2-renames-per-10min cap.
+                    if (row.stat_type === 'time' || row.stat_type === 'date') continue;
+                    if (MEMBER_CACHE_STATS.has(row.stat_type) && !membersReady) continue; // retry next cycle
                     const channel = guild.channels.cache.get(row.channel_id);
                     if (!channel) {
-                        logger.warn(`[StatDisplayManager] Channel ${row.channel_id} not found in ${guild.id}`);
+                        await this._handleMissingChannel(guild, row);
                         continue;
                     }
 
@@ -292,9 +351,16 @@ class StatDisplayManager {
                     logger.debug(`[StatDisplayManager] Clock updated: "${newName}" in ${guild.name}`);
                 }
             } catch (err) {
-                // Silently handle rate limits — Discord will queue the next successful one
-                if (err.code !== 50013) { // Not "Missing Permissions"
-                    logger.debug(`[StatDisplayManager] Clock update failed for ${row.channel_id}: ${err.message}`);
+                // Rate-limit (429 / RateLimitedError) is normal under contention but should still
+                // be visible so operators can diagnose stalled clocks. Everything else except
+                // Missing Permissions is logged as warn.
+                if (err.code === 50013) {
+                    // Missing Permissions — the channel exists but the bot can't rename it.
+                    logger.warn(`[StatDisplayManager] Clock update needs Manage Channel for ${row.channel_id} in ${row.guild_id}`);
+                } else if (err.status === 429 || err.code === 429 || /rate ?limit/i.test(err.message || '')) {
+                    logger.warn(`[StatDisplayManager] Clock update rate-limited for ${row.channel_id} in ${row.guild_id} — will retry next cycle`);
+                } else {
+                    logger.warn(`[StatDisplayManager] Clock update failed for ${row.channel_id} in ${row.guild_id}: ${err.message}`);
                 }
             }
         }

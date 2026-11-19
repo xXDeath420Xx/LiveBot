@@ -193,7 +193,7 @@ const announceEmbeds = [
         "**XP resets on the 1st of each month.** Drop below L3 and your auto-shoutouts pause until you earn it again." },
     { title: "🎬 Auto-Shoutouts for streamers", color: COLOR, description:
         `Reach **level 3**, then paste your stream URL in **#stream-signup**. You'll be auto-added to the rotation and announced in <#${CH.whosLiveNow}> when you go live.\n\n` +
-        "**Supported:** Twitch, Kick, YouTube, TikTok, Trovo, Facebook.\n\n" +
+        "**Supported:** Twitch, Kick, YouTube, TikTok, Rumble, Facebook.\n\n" +
         "Below level 3? Your post is removed + you get a DM. Non-links in that channel are also removed." },
     { title: "🎂 Birthdays imported", color: COLOR, description:
         `57 birthdays were ported over from Birthday Bot's announcement history. Run **\`/birthday set\`** if yours is missing or wrong. Announcements still land in **#bearthday-channel**.` },

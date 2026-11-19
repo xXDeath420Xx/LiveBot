@@ -349,7 +349,7 @@ router.post('/buy-defense', async (req, res) => {
         // Award reputation for investing in defenses (fire-and-forget)
         awardReputation(req.player.id, 'enforcement_division', 20).catch(() => {});
 
-        logger.info('[Raid] Defense purchased', {
+        logger.debug('[Raid] Defense purchased', {
             playerId: req.player.id,
             defenseId,
             newLevel,
@@ -395,7 +395,7 @@ router.post('/use-defense', async (req, res) => {
 
         // For now, just acknowledge the defense use
         // In a real implementation, this would interact with an active raid system
-        logger.info('[Raid] Defense used', {
+        logger.debug('[Raid] Defense used', {
             playerId: req.player.id,
             defenseId,
             level: defense.current_level
@@ -463,7 +463,7 @@ router.post('/bribe', async (req, res) => {
             [immunityUntil, req.player.id]
         );
 
-        logger.info('[Raid] Bribe paid - immunity granted', {
+        logger.debug('[Raid] Bribe paid - immunity granted', {
             playerId: req.player.id,
             bribeCost,
             immunityUntil

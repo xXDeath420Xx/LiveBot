@@ -1,15 +1,15 @@
 import 'dotenv/config';
 import pool from '../utils/db.js';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 
-const BOT_ID = '1476040458680406214';
+// The acting bot comes from guild_bot_mapping — never pinned here.
 const CHANNEL_ID = '1476147991122284711';
 const GUILD_ID = '902393911958470717';
 
 try {
     // Get bot token and avatar
-    const [bots] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id = ?', [BOT_ID]);
-    const token = encryption.decrypt(JSON.parse(bots[0].bot_token));
+    const bot = await resolveBotForGuild(GUILD_ID, { db: pool });
+    const token = bot.token;
 
     // Get bot info
     const meRes = await fetch('https://discord.com/api/v10/users/@me', {

@@ -151,7 +151,7 @@ export default {
                     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
                     const status = await manager.getUserStatus(userId);
                     if (!status.linked) {
-                        return interaction.editReply('☕ You have not linked a Buy Me a Coffee account. Use `/buymeacoffee link`.');
+                        return interaction.editReply('☕ You have not linked a Buy Me a Coffee account. Use `/creator buymeacoffee link`.');
                     }
                     const masked = status.accountId
                         ? `\`${status.accountId}\``
@@ -160,7 +160,7 @@ export default {
                         ? status.targets.map(t =>
                             `• <#${t.channel_id}> in \`${t.guild_id}\` — ${Number(t.enabled) ? '🟢 on' : '🔴 off'}`
                         ).join('\n')
-                        : '_No announcement channels yet — use `/buymeacoffee announce`._';
+                        : '_No announcement channels yet — use `/creator buymeacoffee announce`._';
                     const embed = new EmbedBuilder()
                         .setColor(BMC_COLOR)
                         .setTitle('☕ Your Buy Me a Coffee')
@@ -175,7 +175,7 @@ export default {
                 case 'recent': {
                     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
                     const apiKey = await manager.getApiKeyForUser(userId);
-                    if (!apiKey) return interaction.editReply('☕ Link first with `/buymeacoffee link`.');
+                    if (!apiKey) return interaction.editReply('☕ Link first with `/creator buymeacoffee link`.');
                     const count = interaction.options.getInteger('count') || 10;
                     const items = await manager.getRecent(apiKey, count);
                     if (items.length === 0) return interaction.editReply('☕ No supporters yet.');
@@ -197,7 +197,7 @@ export default {
                 case 'top': {
                     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
                     const apiKey = await manager.getApiKeyForUser(userId);
-                    if (!apiKey) return interaction.editReply('☕ Link first with `/buymeacoffee link`.');
+                    if (!apiKey) return interaction.editReply('☕ Link first with `/creator buymeacoffee link`.');
                     const count = interaction.options.getInteger('count') || 10;
                     const top = await manager.getTop(apiKey, count);
                     if (top.length === 0) return interaction.editReply('☕ No supporters yet.');
@@ -218,7 +218,7 @@ export default {
                 case 'stats': {
                     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
                     const apiKey = await manager.getApiKeyForUser(userId);
-                    if (!apiKey) return interaction.editReply('☕ Link first with `/buymeacoffee link`.');
+                    if (!apiKey) return interaction.editReply('☕ Link first with `/creator buymeacoffee link`.');
                     const s = await manager.getStats(apiKey);
                     const embed = new EmbedBuilder()
                         .setColor(BMC_COLOR)
@@ -249,8 +249,8 @@ export default {
                             '1. Go to **developers.buymeacoffee.com**\n' +
                             '2. Open **Settings → API**\n' +
                             '3. Generate a **read-only** API key (it only reads supporters — it can\'t spend or change anything)\n' +
-                            '4. Run `/buymeacoffee link` — a **private form** opens where you paste the key (it\'s never shown or posted; stored encrypted). You can also link it securely on the **dashboard**.\n' +
-                            '5. Run `/buymeacoffee announce` in any server to post your supporters there'
+                            '4. Run `/creator buymeacoffee link` — a **private form** opens where you paste the key (it\'s never shown or posted; stored encrypted). You can also link it securely on the **dashboard**.\n' +
+                            '5. Run `/creator buymeacoffee announce` in any server to post your supporters there'
                         );
                     return interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
                 }

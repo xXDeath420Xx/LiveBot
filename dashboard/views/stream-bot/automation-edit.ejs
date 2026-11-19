@@ -1,0 +1,106 @@
+<%#
+  GET /stream/bot/automations/new and /stream/bot/automations/:id. Locals: automation (store row or null),
+  editorData { automation, catalog, automations [{ id, name }], guilds [{ id, name }], guildChannels { guildId: [{ id, name }] },
+  linkedPlatforms[], atLimit, max }. The form is built by /js/stream-bot.js (editor) from #sb-data; saving goes to
+  POST /stream/bot/api/automations or PUT /stream/bot/api/automations/:id, Test to .../:id/test.
+%>
+<%- include('_head', { pageTitle: automation ? automation.name : 'New automation', active: 'automations', sbPage: 'editor' }) %>
+<%
+  const _js = (v) => JSON.stringify(v ?? null).replace(/</g, '\\u003c');
+  const _vars = editorData.catalog.templateVars || [];
+%>
+<a class="cf-back" href="/stream/bot/automations">Back to automations</a>
+<div class="cf-page-head">
+    <div>
+        <h1 class="cf-page-title" id="sb-editor-title"><%= automation ? automation.name : 'New automation' %></h1>
+        <p class="cf-page-sub">Pick what starts it, any conditions that must pass, then the actions to run in order.</p>
+    </div>
+    <% if (automation) { %><div class="cf-page-actions"><a class="btn btn-secondary btn-sm" href="/stream/bot/runs?automation=<%= automation.id %>">Run history</a></div><% } %>
+</div>
+<%- include('_tabs', { active: 'automations' }) %>
+
+<% if (editorData.atLimit) { %>
+<div class="cf-notice is-warn"><div class="cf-notice-body">You have <%= editorData.max %> automations, the most a profile can have. Delete one before adding another.</div></div>
+<% } %>
+
+<form id="sb-editor" class="sb-editor" novalidate>
+    <div class="cf-notice is-bad" id="sb-errors" role="alert" tabindex="-1" hidden>
+        <div class="cf-notice-body"><span class="cf-notice-title">Not saved</span><ul class="sb-msg-list" id="sb-errors-list"></ul></div>
+    </div>
+
+    <section class="cf-section" aria-labelledby="sb-basic-title">
+        <header class="cf-section-head"><div><h2 class="cf-section-title" id="sb-basic-title">Basics</h2></div></header>
+        <div class="cf-rows">
+            <div class="cf-row">
+                <div class="cf-row-text"><label class="cf-row-label" for="sb-name">Name</label><p class="cf-row-desc">Shown in the list and in run history. Up to 100 characters.</p></div>
+                <div class="cf-row-control"><input type="text" id="sb-name" maxlength="100" required autocomplete="off"></div>
+            </div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text"><label class="cf-row-label" for="sb-enabled">On</label><p class="cf-row-desc" id="sb-enabled-desc">While off it never runs on events. Test still works.</p></div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="sb-enabled" aria-describedby="sb-enabled-desc" checked></div>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="sb-trigger-title">
+        <header class="cf-section-head"><div><h2 class="cf-section-title" id="sb-trigger-title">When</h2>
+            <p class="cf-section-desc">The event that starts this automation.</p></div></header>
+        <div class="cf-rows" id="sb-trigger"></div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="sb-cond-title">
+        <header class="cf-section-head"><div><h2 class="cf-section-title" id="sb-cond-title">Only if</h2>
+            <p class="cf-section-desc">Every condition must pass. None means it always runs. Up to 10.</p></div></header>
+        <div class="cf-rows" id="sb-conditions"></div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="sb-act-title">
+        <header class="cf-section-head"><div><h2 class="cf-section-title" id="sb-act-title">Then</h2>
+            <p class="cf-section-desc">Actions run from top to bottom. If one fails the rest still run. Up to 25, choices included.</p></div></header>
+        <div class="cf-rows" id="sb-actions"></div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="sb-vars-title">
+        <header class="cf-section-head"><div><h2 class="cf-section-title" id="sb-vars-title">Variables for messages</h2>
+            <p class="cf-section-desc">Type these into any message, title or value. They are filled in from the event when the action runs.</p></div></header>
+        <div class="cf-rows">
+            <details class="cf-expand">
+                <summary>Show the <%= _vars.length %> variables</summary>
+                <div class="cf-expand-body">
+                    <dl class="sb-vars">
+                        <% _vars.forEach((v) => { %><div><dt><code><%= v.token %></code></dt><dd><%= v.description %></dd></div><% }) %>
+                    </dl>
+                </div>
+            </details>
+        </div>
+    </section>
+
+    <div class="cf-notice is-warn" id="sb-warnings" role="status" hidden>
+        <div class="cf-notice-body"><span class="cf-notice-title">Saved, with warnings</span><ul class="sb-msg-list" id="sb-warnings-list"></ul></div>
+    </div>
+
+    <div class="cf-form-actions sb-save-bar">
+        <span class="cf-status-line" id="sb-save-status" role="status" aria-live="polite"></span>
+        <button type="button" class="btn btn-danger btn-sm" id="sb-delete"<% if (!automation) { %> hidden<% } %>>Delete</button>
+        <button type="submit" class="btn btn-primary btn-sm" id="sb-save"<% if (editorData.atLimit) { %> disabled<% } %>>Save</button>
+    </div>
+</form>
+
+<section class="cf-section" id="sb-test" aria-labelledby="sb-test-title"<% if (!automation) { %> hidden<% } %>>
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sb-test-title">Test</h2>
+        <p class="cf-section-desc">Runs the saved automation once with a made-up event for its trigger, marked as a test. Save first to test your latest changes. Cooldowns and rate limits are shown but do not stop a test.</p></div></header>
+    <div class="cf-rows">
+        <div class="cf-row cf-row--switch">
+            <div class="cf-row-text"><label class="cf-row-label" for="sb-dry">Dry run</label><p class="cf-row-desc" id="sb-dry-desc">Show what each action would do without sending anything.</p></div>
+            <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="sb-dry" aria-describedby="sb-dry-desc" checked></div>
+        </div>
+        <div class="cf-section-foot">
+            <span class="cf-status-line" id="sb-test-status" role="status" aria-live="polite"></span>
+            <button type="button" class="btn btn-secondary btn-sm" id="sb-test-run">Test</button>
+        </div>
+        <div class="sb-test-result" id="sb-test-result" aria-live="polite"></div>
+    </div>
+</section>
+
+<script type="application/json" id="sb-data"><%- _js(editorData) %></script>
+<%- include('_foot') %>

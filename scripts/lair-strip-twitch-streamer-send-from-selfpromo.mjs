@@ -10,15 +10,15 @@
 // REST-only — safe alongside live PM2.
 
 import pool from '../utils/db.js';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 
 const GUILD_ID = '1216126780767731722';
-const BOT_ID   = '1496406792417185802';
+// The acting bot comes from guild_bot_mapping — never pinned here.
 const CHANNEL  = '1457541374424387768'; // #🚀┃self-promo-and-special-events
 const TWITCH_STREAMER_ROLE = '1414792796912746576';
 
-const [tokenRow] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id=?', [BOT_ID]);
-const token = encryption.decrypt(JSON.parse(tokenRow[0].bot_token));
+const bot = await resolveBotForGuild(GUILD_ID, { db: pool });
+const token = bot.token;
 
 async function api(method, path, body) {
   const r = await fetch(`https://discord.com/api/v10${path}`, {

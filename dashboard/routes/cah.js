@@ -320,29 +320,37 @@ router.post(`/cah/:gameId(${GAME_ID_RE})/join`, authOrGuest, async (req, res) =>
 });
 
 // Your last N games (private — only you see)
+// The roster lives in cah_games.state_json.players (the engine persists it on every
+// state transition / join), so a game is "yours" if you hosted it or your user id is
+// one of those players' userId values.
 router.get('/cah/my-history', checkAuth, async (req, res) => {
-    const [rows] = await pool.execute(
-        `SELECT g.id, g.guild_id, g.ended_at, g.state, g.winner_user_ids,
-                (SELECT JSON_ARRAYAGG(JSON_OBJECT('userId', user_id, 'displayName', display_name, 'points', points))
-                 FROM cah_game_players WHERE game_id = g.id) AS players_json
-         FROM cah_games g
-         WHERE g.host_user_id = ?
-            OR EXISTS(SELECT 1 FROM cah_game_players p WHERE p.game_id = g.id AND p.user_id = ?)
-         ORDER BY COALESCE(g.ended_at, g.updated_at) DESC
-         LIMIT 20`,
-        [req.user.id, req.user.id]
-    );
-    const games = rows.map(r => {
-        const winners = typeof r.winner_user_ids === 'string' ? JSON.parse(r.winner_user_ids) : r.winner_user_ids;
-        const players = typeof r.players_json === 'string' ? JSON.parse(r.players_json) : (r.players_json || []);
-        const me = (players || []).find(p => p.userId === req.user.id);
-        return {
-            id: r.id, guildId: r.guild_id, endedAt: r.ended_at, state: r.state,
-            winnerUserIds: winners, players, myPoints: me?.points || 0,
-            iWon: winners?.includes(req.user.id) || false
-        };
-    });
-    res.render('cah-my-history', { user: req.user, games });
+    try {
+        const [rows] = await pool.execute(
+            `SELECT g.id, g.guild_id, g.ended_at, g.state, g.winner_user_ids,
+                    JSON_EXTRACT(g.state_json, '$.players') AS players_json
+             FROM cah_games g
+             WHERE g.host_user_id = ?
+                OR JSON_SEARCH(g.state_json, 'one', ?, NULL, '$.players[*].userId') IS NOT NULL
+             ORDER BY COALESCE(g.ended_at, g.updated_at) DESC
+             LIMIT 20`,
+            [req.user.id, req.user.id]
+        );
+        const games = rows.map(r => {
+            const winners = parseJsonColumn(r.winner_user_ids, `cah_games ${r.id} winner_user_ids`);
+            const winnerUserIds = Array.isArray(winners) ? winners.map(String) : [];
+            const players = playersFromRow(r);
+            const me = players.find(p => p.userId === req.user.id);
+            return {
+                id: r.id, guildId: r.guild_id, endedAt: r.ended_at, state: r.state,
+                winnerUserIds, players, myPoints: me?.points || 0,
+                iWon: winnerUserIds.includes(req.user.id)
+            };
+        });
+        res.render('cah-my-history', { user: req.user, games });
+    } catch (err) {
+        logger.error(`[cah] my-history for ${req.user?.id} failed: ${err.message}`);
+        res.status(500).render('error', { error: 'Could not load your game history right now.' });
+    }
 });
 
 // Bug-report relay: POST { text, page, ua } → forwarded to Discord webhook from env.
@@ -441,37 +449,52 @@ router.post('/admin/cah/:gameId/force-end', checkAuth, async (req, res) => {
     }
 });
 
+// Parse a JSON/LONGTEXT column that mysql2 may hand back as a string or as
+// already-decoded JSON. Corrupt values are logged and treated as absent.
+function parseJsonColumn(value, ctx) {
+    if (value == null) return null;
+    if (typeof value !== 'string') return value;
+    try {
+        return JSON.parse(value);
+    } catch (err) {
+        logger.warn(`[cah] unparseable JSON in ${ctx}: ${err.message}`);
+        return null;
+    }
+}
+
+// One game's players as [{ userId, displayName, points }].
+//
+// Source of truth is `cah_games.state_json.players[]` — the engine persists the
+// full roster (displayName, points, …) there on every state transition, join
+// and submission. Routes select just that slice as `players_json`
+// (JSON_EXTRACT(state_json, '$.players')) so the card piles in state_json aren't
+// shipped; a row carrying the raw `state_json` works too.
+function playersFromRow(row) {
+    const list = row.players_json !== undefined
+        ? parseJsonColumn(row.players_json, `cah_games ${row.id} players`)
+        : parseJsonColumn(row.state_json, `cah_games ${row.id} state_json`)?.players;
+    if (!Array.isArray(list)) return [];
+    return list
+        .filter(p => p && p.userId != null)
+        .map(p => ({
+            userId: String(p.userId),
+            displayName: p.displayName || null,
+            points: typeof p.points === 'number' ? p.points : (Number(p.points) || 0)
+        }));
+}
+
 // Build leaderboard "ranked" array + a "recent" array enriched with winner
 // names. Shared by the global + guild-scoped leaderboard routes so the data
-// shape stays in sync between them.
-//
-// Source of truth for player names is `state_json.players[]` (the engine
-// persists every player's displayName there on each state transition and
-// submission). The older subquery against `cah_game_players` is still kept as
-// a secondary source for historical rows that pre-date state_json — but the
-// table is unused in current code, so state_json is what actually has data.
+// shape stays in sync between them. Players come from playersFromRow().
 function buildLeaderboardFromRows(rows) {
     const stats = new Map();
     const recent = [];
     for (const row of rows) {
-        const winnerIds = typeof row.winner_user_ids === 'string' ? JSON.parse(row.winner_user_ids || 'null') : row.winner_user_ids;
-        const tablePlayers = typeof row.players_json === 'string' ? JSON.parse(row.players_json || 'null') : row.players_json;
-        const stateJson = typeof row.state_json === 'string' ? JSON.parse(row.state_json || 'null') : row.state_json;
-        // Prefer state_json (current source of truth) over the cah_game_players
-        // snapshot. Merge by userId so we don't lose entries either source has.
-        const byId = new Map();
-        for (const p of (tablePlayers || [])) byId.set(p.userId, { userId: p.userId, displayName: p.displayName, points: p.points || 0 });
-        for (const p of (stateJson?.players || [])) {
-            const existing = byId.get(p.userId);
-            byId.set(p.userId, {
-                userId: p.userId,
-                displayName: p.displayName || existing?.displayName,
-                points: typeof p.points === 'number' ? p.points : (existing?.points || 0)
-            });
-        }
-        const playerList = Array.from(byId.values());
+        const parsedWinners = parseJsonColumn(row.winner_user_ids, `cah_games ${row.id} winner_user_ids`);
+        const winnerIds = Array.isArray(parsedWinners) ? parsedWinners.map(String) : [];
+        const playerList = playersFromRow(row);
 
-        const winnersResolved = (winnerIds || []).map(uid => {
+        const winnersResolved = winnerIds.map(uid => {
             if (String(uid).startsWith('rando:')) return { userId: uid, displayName: 'Rando Cardrissian' };
             const match = playerList.find(p => p.userId === uid);
             return { userId: uid, displayName: match?.displayName || `Player ${String(uid).slice(-4)}` };
@@ -486,7 +509,7 @@ function buildLeaderboardFromRows(rows) {
             const s = stats.get(p.userId) || { userId: p.userId, displayName: p.displayName, wins: 0, games: 0, totalPoints: 0 };
             s.games += 1;
             s.totalPoints += p.points || 0;
-            if (winnerIds?.includes(p.userId)) s.wins += 1;
+            if (winnerIds.includes(p.userId)) s.wins += 1;
             s.displayName = p.displayName || s.displayName;
             stats.set(p.userId, s);
         }
@@ -500,33 +523,41 @@ function buildLeaderboardFromRows(rows) {
 
 router.get('/cah/leaderboard/:guildId([0-9]{17,20})', optionalAuth, async (req, res) => {
     const guildId = req.params.guildId;
-    const [rows] = await pool.execute(
-        `SELECT g.id, g.winner_user_ids, g.ended_at, g.guild_id, g.state_json,
-                (SELECT JSON_ARRAYAGG(JSON_OBJECT('userId', user_id, 'displayName', display_name, 'points', points))
-                 FROM cah_game_players WHERE game_id = g.id) AS players_json
-         FROM cah_games g
-         WHERE g.state = 'GAME_END' AND g.winner_user_ids IS NOT NULL AND g.guild_id = ?
-         ORDER BY g.ended_at DESC LIMIT 500`,
-        [guildId]
-    );
-    const { ranked, recent } = buildLeaderboardFromRows(rows);
-    res.render('cah-leaderboard', { user: req.user, ranked, recent, guildScope: guildId });
+    try {
+        const [rows] = await pool.execute(
+            `SELECT g.id, g.winner_user_ids, g.ended_at, g.guild_id,
+                    JSON_EXTRACT(g.state_json, '$.players') AS players_json
+             FROM cah_games g
+             WHERE g.state = 'GAME_END' AND g.winner_user_ids IS NOT NULL AND g.guild_id = ?
+             ORDER BY g.ended_at DESC LIMIT 500`,
+            [guildId]
+        );
+        const { ranked, recent } = buildLeaderboardFromRows(rows);
+        res.render('cah-leaderboard', { user: req.user, ranked, recent, guildScope: guildId });
+    } catch (err) {
+        logger.error(`[cah] guild leaderboard ${guildId} failed: ${err.message}`);
+        res.status(500).render('error', { error: 'Could not load the leaderboard right now.' });
+    }
 });
 
 router.get('/cah/leaderboard', optionalAuth, async (req, res) => {
-    // Wins = appearances in winner_user_ids JSON across completed games.
-    // We can't use JSON_TABLE on older MySQL, so we pull rows and aggregate in JS.
-    const [rows] = await pool.execute(
-        `SELECT g.id, g.winner_user_ids, g.ended_at, g.guild_id, g.state_json,
-                (SELECT JSON_ARRAYAGG(JSON_OBJECT('userId', user_id, 'displayName', display_name, 'points', points))
-                 FROM cah_game_players WHERE game_id = g.id) AS players_json
-         FROM cah_games g
-         WHERE g.state = 'GAME_END' AND g.winner_user_ids IS NOT NULL
-         ORDER BY g.ended_at DESC
-         LIMIT 500`
-    );
-    const { ranked, recent } = buildLeaderboardFromRows(rows);
-    res.render('cah-leaderboard', { user: req.user, ranked, recent });
+    // Wins = appearances in winner_user_ids JSON across completed games; players and
+    // points come from state_json.players. Aggregated in JS by buildLeaderboardFromRows.
+    try {
+        const [rows] = await pool.execute(
+            `SELECT g.id, g.winner_user_ids, g.ended_at, g.guild_id,
+                    JSON_EXTRACT(g.state_json, '$.players') AS players_json
+             FROM cah_games g
+             WHERE g.state = 'GAME_END' AND g.winner_user_ids IS NOT NULL
+             ORDER BY g.ended_at DESC
+             LIMIT 500`
+        );
+        const { ranked, recent } = buildLeaderboardFromRows(rows);
+        res.render('cah-leaderboard', { user: req.user, ranked, recent });
+    } catch (err) {
+        logger.error(`[cah] global leaderboard failed: ${err.message}`);
+        res.status(500).render('error', { error: 'Could not load the leaderboard right now.' });
+    }
 });
 
 router.get('/cah/packs', optionalAuth, async (req, res) => {
@@ -548,14 +579,23 @@ router.get('/cah/packs', optionalAuth, async (req, res) => {
     if (sort === 'name') packs.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     else if (sort === 'size') packs.sort((a, b) => (b.white_count + b.black_count) - (a.white_count + a.black_count));
     // 'recent' is already the default order from listDecks
+    // 200 per page; the page used to show only the first 200 with no way to reach the rest.
+    const pageSize = 200;
+    const pageCount = Math.max(1, Math.ceil(packs.length / pageSize));
+    const page = Math.min(pageCount, Math.max(1, parseInt(req.query.page, 10) || 1));
     res.render('cah-packs', {
-        user: req.user, packs: packs.slice(0, 200), total: packs.length,
-        search, sort, includeNsfw, includeNonEn
+        user: req.user, packs: packs.slice((page - 1) * pageSize, page * pageSize), total: packs.length,
+        search, sort, includeNsfw, includeNonEn, page, pageCount, pageSize
     });
 });
 
 router.get('/cah/packs/:deckId([0-9]+)/preview', optionalAuth, async (req, res) => {
     const deckId = parseInt(req.params.deckId, 10);
+    // Same visibility rule as listDecks(): someone else's private custom deck is not previewable.
+    const [[deck]] = await pool.execute(`SELECT source, is_public, owner_user_id FROM cah_decks WHERE id = ?`, [deckId]);
+    if (!deck || (deck.source === 'custom' && !deck.is_public && deck.owner_user_id !== req.user?.id)) {
+        return res.status(404).json({ ok: false, reason: 'not_found' });
+    }
     const [whites] = await pool.execute(`SELECT text FROM cah_white_cards WHERE deck_id = ? LIMIT 5`, [deckId]);
     const [blacks] = await pool.execute(`SELECT text, pick FROM cah_black_cards WHERE deck_id = ? LIMIT 3`, [deckId]);
     res.json({ ok: true, sampleWhite: whites.map(r => r.text), sampleBlack: blacks });
@@ -577,13 +617,17 @@ router.post('/manage/:guildId/cah-config', checkAuth, checkGuildAdmin, async (re
         nsfw_allowed: v => v === 'true' || v === true ? 1 : 0,
         blank_cards_allowed: v => v === 'true' || v === true ? 1 : 0,
         allow_public_imports: v => v === 'true' || v === true ? 1 : 0,
-        max_blank_cards: v => parseInt(v, 10),
-        default_points: v => parseInt(v, 10),
-        default_max_rounds: v => parseInt(v, 10),
-        default_timeout_secs: v => parseInt(v, 10)
+        max_blank_cards: v => clampInt(v, 0, 50),
+        default_points: v => clampInt(v, 3, 30),
+        default_max_rounds: v => clampInt(v, 3, 50),
+        default_timeout_secs: v => clampInt(v, 30, 600)
     };
+    // Numbers are clamped to the page's ranges; a non-number is skipped rather than saved as NaN.
+    function clampInt(v, min, max) { const n = parseInt(v, 10); return Number.isInteger(n) ? Math.min(max, Math.max(min, n)) : undefined; }
     for (const [k, parse] of Object.entries(map)) {
-        if (req.body[k] !== undefined) patch[k] = parse(req.body[k]);
+        if (req.body[k] === undefined) continue;
+        const val = parse(req.body[k]);
+        if (val !== undefined) patch[k] = val;
     }
     const r = await updateGuildConfig(req.params.guildId, patch);
     return res.json(r);

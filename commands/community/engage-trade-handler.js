@@ -5,8 +5,25 @@ import {
     ButtonStyle,
     PermissionFlagsBits
 } from 'discord.js';
+import { randomBytes } from 'node:crypto';
 import pool from '../../utils/db.js';
 import logger from '../../utils/logger.js';
+import { displayNameFor } from '../../utils/display-name.js';
+import { themeColor } from '../../core/guild-theme.js';
+import { resolveStaffAlertChannel } from './engage-report-handler.js';
+
+/*
+ * trade_escrow, as used here (the trade is created by the "seller", with the partner as "buyer"):
+ *   id                the trade number every subcommand takes (trade_id option)
+ *   trade_id          unique reference string the table requires; generated on create
+ *   item_description  what the creator offers   (you_offer)
+ *   agreed_price      what the partner offers   (they_offer — widened to varchar(1000) by migration 269)
+ *   notes             extra trade details        (description)
+ *   status            pending → completed | disputed | cancelled. Who has confirmed is held in
+ *                     seller_confirmed / buyer_confirmed, not in status (its ENUM has no such values).
+ *   dispute_reason, resolved_by, resolution_notes — added by migration 269 for dispute → staff resolve.
+ */
+const OPEN_STATUSES = ['pending', 'payment_received', 'shipped', 'delivered'];
 
 const STATUS_INFO = {
     pending: { emoji: '', name: 'Pending', color: '#FFA500' },
@@ -18,6 +35,22 @@ const STATUS_INFO = {
     disputed: { emoji: '', name: 'Disputed', color: '#FF0000' }
 };
 
+/** Display status: the stored status, refined by the confirmation flags while the trade is open. */
+function statusInfoFor(trade) {
+    let key = trade.status;
+    if (OPEN_STATUSES.includes(key)) {
+        if (trade.seller_confirmed && trade.buyer_confirmed) key = 'both_confirmed';
+        else if (trade.seller_confirmed) key = 'seller_confirmed';
+        else if (trade.buyer_confirmed) key = 'buyer_confirmed';
+    }
+    return STATUS_INFO[key] || { emoji: '', name: String(key || 'Unknown'), color: '#FFA500' };
+}
+
+function clip(text, max) {
+    if (!text) return '';
+    return text.length > max ? `${text.substring(0, max - 3)}...` : text;
+}
+
 // ── Internal helpers ──
 
 function createButtonCollector(interaction, tradeId) {
@@ -27,10 +60,16 @@ function createButtonCollector(interaction, tradeId) {
     });
 
     collector?.on('collect', async (i) => {
-        if (i.customId === `trade_confirm_${tradeId}`) {
-            await handleButtonConfirm(i, tradeId);
-        } else if (i.customId === `trade_cancel_${tradeId}`) {
-            await handleButtonCancel(i, tradeId);
+        try {
+            if (i.customId === `trade_confirm_${tradeId}`) {
+                await handleButtonConfirm(i, tradeId);
+            } else if (i.customId === `trade_cancel_${tradeId}`) {
+                await handleButtonCancel(i, tradeId);
+            }
+        } catch (error) {
+            logger.error('[Trade] Button action failed', { tradeId, action: i.customId, error: error.message });
+            const reply = { content: 'Something went wrong updating this trade. Please try again.', ephemeral: true };
+            await (i.replied || i.deferred ? i.followUp(reply) : i.reply(reply)).catch(() => {});
         }
     });
 }
@@ -63,26 +102,24 @@ async function handleButtonConfirm(interaction, tradeId) {
         return interaction.reply({ content: 'You have already confirmed this trade.', ephemeral: true });
     }
 
+    // Confirmation lives in the flag columns; status stays as it is until both sides have confirmed.
     if (isSeller) {
-        await pool.execute(
-            'UPDATE trade_escrow SET seller_confirmed = TRUE, status = ? WHERE id = ?',
-            [trade.buyer_confirmed ? 'both_confirmed' : 'seller_confirmed', tradeId]
-        );
+        await pool.execute('UPDATE trade_escrow SET seller_confirmed = 1 WHERE id = ?', [tradeId]);
     } else {
-        await pool.execute(
-            'UPDATE trade_escrow SET buyer_confirmed = TRUE, status = ? WHERE id = ?',
-            [trade.seller_confirmed ? 'both_confirmed' : 'buyer_confirmed', tradeId]
-        );
+        await pool.execute('UPDATE trade_escrow SET buyer_confirmed = 1 WHERE id = ?', [tradeId]);
     }
 
-    if ((isSeller && trade.buyer_confirmed) || (!isSeller && trade.seller_confirmed)) {
-        await pool.execute(
-            'UPDATE trade_escrow SET status = "completed", completed_at = NOW() WHERE id = ?',
-            [tradeId]
-        );
+    // Complete as soon as both flags are set — checked in SQL so two near-simultaneous
+    // confirmations can't both miss it.
+    const [completion] = await pool.execute(
+        `UPDATE trade_escrow SET status = 'completed', completed_at = NOW()
+          WHERE id = ? AND seller_confirmed = 1 AND buyer_confirmed = 1 AND status NOT IN ('completed', 'cancelled')`,
+        [tradeId]
+    );
 
+    if (completion.affectedRows > 0) {
         const completeEmbed = new EmbedBuilder()
-            .setColor('#00FF00')
+            .setColor(themeColor(interaction.guildId, 'success'))
             .setTitle(' Trade Completed!')
             .setDescription(`Trade #${tradeId} has been successfully completed!`)
             .addFields(
@@ -92,7 +129,12 @@ async function handleButtonConfirm(interaction, tradeId) {
             .setFooter({ text: 'Leave a review with /engage trade review' })
             .setTimestamp();
 
-        await interaction.update({ embeds: [completeEmbed], components: [] });
+        // From the trade's button: replace the trade card. From /engage trade confirm: post it.
+        if (interaction.isButton()) {
+            await interaction.update({ embeds: [completeEmbed], components: [] });
+        } else {
+            await interaction.reply({ embeds: [completeEmbed] });
+        }
     } else {
         await interaction.reply({
             content: ` You have confirmed trade #${tradeId}. Waiting for the other party to confirm.`,
@@ -152,36 +194,52 @@ export async function handleCreate(interaction) {
         return interaction.reply({ content: 'You cannot trade with bots.', ephemeral: true });
     }
 
+    // Each is shown in an embed field (1024 max); agreed_price holds up to 1000.
+    if (youOffer.length > 1000 || theyOffer.length > 1000 || description.length > 1000) {
+        return interaction.reply({ content: 'Offers and details must each be 1000 characters or fewer.', ephemeral: true });
+    }
+
     const [existingTrades] = await pool.execute(
         `SELECT id FROM trade_escrow
-         WHERE guild_id = ? AND status IN ('pending', 'seller_confirmed', 'buyer_confirmed')
+         WHERE guild_id = ? AND status IN ('pending', 'payment_received', 'shipped', 'delivered')
          AND ((seller_id = ? AND buyer_id = ?) OR (seller_id = ? AND buyer_id = ?))`,
         [interaction.guild.id, interaction.user.id, partner.id, partner.id, interaction.user.id]
     );
 
     if (existingTrades.length > 0) {
         return interaction.reply({
-            content: `You already have an active trade with ${partner.username}. Complete or cancel it first.`,
+            content: `You already have an active trade with ${displayNameFor(partner, interaction.guild)}. Complete or cancel it first.`,
             ephemeral: true
         });
     }
 
-    const [result] = await pool.execute(
-        `INSERT INTO trade_escrow
-        (guild_id, seller_id, buyer_id, trade_description, seller_offering, buyer_offering, status)
-        VALUES (?, ?, ?, ?, ?, ?, 'pending')`,
-        [interaction.guild.id, interaction.user.id, partner.id, description, youOffer, theyOffer]
-    );
+    // trade_id is a required unique reference; users work with the numeric id.
+    let result;
+    for (let attempt = 1; ; attempt++) {
+        try {
+            [result] = await pool.execute(
+                `INSERT INTO trade_escrow
+                (guild_id, trade_id, seller_id, buyer_id, item_description, agreed_price, notes, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')`,
+                [interaction.guild.id, randomBytes(5).toString('hex').toUpperCase(), interaction.user.id, partner.id,
+                 youOffer, theyOffer, description || null]
+            );
+            break;
+        } catch (error) {
+            if (error.code === 'ER_DUP_ENTRY' && attempt < 3) continue;
+            throw error;
+        }
+    }
 
     const tradeId = result.insertId;
 
     const embed = new EmbedBuilder()
-        .setColor('#FFA500')
+        .setColor(themeColor(interaction.guildId, 'warning'))
         .setTitle(' New Trade Created!')
         .setDescription(`Trade #${tradeId} between <@${interaction.user.id}> and <@${partner.id}>`)
         .addFields(
-            { name: `${interaction.user.username} Offers`, value: youOffer, inline: true },
-            { name: `${partner.username} Offers`, value: theyOffer, inline: true },
+            { name: `${displayNameFor(interaction.user, interaction.guild)} Offers`, value: youOffer, inline: true },
+            { name: `${displayNameFor(partner, interaction.guild)} Offers`, value: theyOffer, inline: true },
             { name: 'Status', value: ' Pending Confirmation', inline: false }
         )
         .setFooter({ text: 'Both parties must confirm with /engage trade confirm' })
@@ -196,20 +254,18 @@ export async function handleCreate(interaction) {
             new ButtonBuilder()
                 .setCustomId(`trade_confirm_${tradeId}`)
                 .setLabel('Confirm Trade')
-                .setStyle(ButtonStyle.Success)
-                .setEmoji(''),
+                .setStyle(ButtonStyle.Success),
             new ButtonBuilder()
                 .setCustomId(`trade_cancel_${tradeId}`)
                 .setLabel('Cancel')
                 .setStyle(ButtonStyle.Danger)
-                .setEmoji('')
         );
 
     await interaction.reply({ embeds: [embed], components: [row] });
 
     try {
         const dmEmbed = new EmbedBuilder()
-            .setColor('#FFA500')
+            .setColor(themeColor(interaction.guildId, 'warning'))
             .setTitle(' New Trade Request!')
             .setDescription(`${interaction.user.tag} wants to trade with you in **${interaction.guild.name}**`)
             .addFields(
@@ -312,13 +368,17 @@ export async function handleDispute(interaction) {
         return interaction.reply({ content: 'This trade has already been finalized.', ephemeral: true });
     }
 
+    if (reason.length > 1000) {
+        return interaction.reply({ content: 'Please keep the dispute reason to 1000 characters or fewer.', ephemeral: true });
+    }
+
     await pool.execute(
-        'UPDATE trade_escrow SET status = "disputed", dispute_reason = ? WHERE id = ?',
+        `UPDATE trade_escrow SET status = 'disputed', dispute_reason = ? WHERE id = ?`,
         [reason, tradeId]
     );
 
     const embed = new EmbedBuilder()
-        .setColor('#FF0000')
+        .setColor(themeColor(interaction.guildId, 'danger'))
         .setTitle(' Trade Disputed!')
         .setDescription(`Trade #${tradeId} has been disputed by <@${interaction.user.id}>`)
         .addFields(
@@ -331,22 +391,18 @@ export async function handleDispute(interaction) {
 
     await interaction.reply({ embeds: [embed] });
 
+    // Same staff destination as scam reports (staff reports channel → moderation log).
     try {
-        const [logConfig] = await pool.execute(
-            `SELECT channel_id FROM logging_config WHERE guild_id = ? AND event_type = 'moderation' AND enabled = 1`,
-            [interaction.guild.id]
-        );
-
-        if (logConfig.length > 0) {
-            const channel = await interaction.guild.channels.fetch(logConfig[0].channel_id).catch(() => null);
-            if (channel) {
-                await channel.send({
-                    content: '@here Trade dispute requires attention!',
-                    embeds: [embed]
-                });
-            }
+        const channel = await resolveStaffAlertChannel(interaction.guild);
+        if (channel) {
+            await channel.send({
+                content: '@here Trade dispute requires attention!',
+                embeds: [embed.setFooter({ text: `Resolve with /engage trade resolve trade_id:${tradeId}` })]
+            });
         }
-    } catch (e) {}
+    } catch (error) {
+        logger.error('[Trade] Failed to alert staff about dispute', { tradeId, guildId: interaction.guild.id, error: error.message });
+    }
 
     logger.info('[Trade] Trade disputed', {
         tradeId,
@@ -359,8 +415,8 @@ export async function handleView(interaction) {
     const tradeId = interaction.options.getInteger('trade_id');
 
     const [trades] = await pool.execute(
-        'SELECT * FROM trade_escrow WHERE id = ?',
-        [tradeId]
+        'SELECT * FROM trade_escrow WHERE id = ? AND guild_id = ?',
+        [tradeId, interaction.guild.id]
     );
 
     if (trades.length === 0) {
@@ -368,30 +424,31 @@ export async function handleView(interaction) {
     }
 
     const trade = trades[0];
-    const statusInfo = STATUS_INFO[trade.status];
+    const statusInfo = statusInfoFor(trade);
 
     const embed = new EmbedBuilder()
         .setColor(statusInfo.color)
         .setTitle(`${statusInfo.emoji} Trade #${trade.id}`)
         .addFields(
-            { name: 'Seller', value: `<@${trade.seller_id}> ${trade.seller_confirmed ? '' : ''}`, inline: true },
-            { name: 'Buyer', value: `<@${trade.buyer_id}> ${trade.buyer_confirmed ? '' : ''}`, inline: true },
+            { name: 'Seller', value: `<@${trade.seller_id}> ${trade.seller_confirmed ? '(confirmed)' : ''}`, inline: true },
+            { name: 'Buyer', value: `<@${trade.buyer_id}> ${trade.buyer_confirmed ? '(confirmed)' : ''}`, inline: true },
             { name: 'Status', value: statusInfo.name, inline: true },
-            { name: 'Seller Offers', value: trade.seller_offering, inline: false },
-            { name: 'Buyer Offers', value: trade.buyer_offering, inline: false }
+            { name: 'Seller Offers', value: clip(trade.item_description, 1024) || 'Not recorded', inline: false },
+            { name: 'Buyer Offers', value: clip(trade.agreed_price, 1024) || 'Not recorded', inline: false }
         )
         .setTimestamp(new Date(trade.created_at));
 
-    if (trade.trade_description) {
-        embed.addFields({ name: 'Details', value: trade.trade_description, inline: false });
+    if (trade.notes) {
+        embed.addFields({ name: 'Details', value: clip(trade.notes, 1024), inline: false });
     }
 
     if (trade.dispute_reason) {
-        embed.addFields({ name: 'Dispute Reason', value: trade.dispute_reason, inline: false });
+        embed.addFields({ name: 'Dispute Reason', value: clip(trade.dispute_reason, 1024), inline: false });
     }
 
     if (trade.resolution_notes) {
-        embed.addFields({ name: 'Resolution', value: trade.resolution_notes, inline: false });
+        const by = trade.resolved_by ? ` (by <@${trade.resolved_by}>)` : '';
+        embed.addFields({ name: 'Resolution', value: clip(`${trade.resolution_notes}${by}`, 1024), inline: false });
     }
 
     await interaction.reply({ embeds: [embed], ephemeral: true });
@@ -414,17 +471,18 @@ export async function handleListTrades(interaction) {
     }
 
     const embed = new EmbedBuilder()
-        .setColor('#3498DB')
+        .setColor(themeColor(interaction.guildId, 'primary'))
         .setTitle(' Your Active Trades')
         .setTimestamp();
 
     let description = '';
     for (const trade of trades) {
-        const statusInfo = STATUS_INFO[trade.status];
-        const partner = trade.seller_id === interaction.user.id ? trade.buyer_id : trade.seller_id;
-        description += `**#${trade.id}** ${statusInfo.emoji} with <@${partner}>\n`;
-        description += `You: ${trade.seller_id === interaction.user.id ? trade.seller_offering : trade.buyer_offering}\n`;
-        description += `They: ${trade.seller_id === interaction.user.id ? trade.buyer_offering : trade.seller_offering}\n\n`;
+        const statusInfo = statusInfoFor(trade);
+        const isSeller = trade.seller_id === interaction.user.id;
+        const partner = isSeller ? trade.buyer_id : trade.seller_id;
+        description += `**#${trade.id}** ${statusInfo.emoji} ${statusInfo.name} with <@${partner}>\n`;
+        description += `You: ${clip(isSeller ? trade.item_description : trade.agreed_price, 150)}\n`;
+        description += `They: ${clip(isSeller ? trade.agreed_price : trade.item_description, 150)}\n\n`;
     }
 
     embed.setDescription(description);
@@ -456,8 +514,8 @@ export async function handleHistory(interaction) {
     );
 
     const embed = new EmbedBuilder()
-        .setColor('#27AE60')
-        .setTitle(` ${targetUser.username}'s Trade History`)
+        .setColor(themeColor(interaction.guildId, 'success'))
+        .setTitle(` ${displayNameFor(targetUser, interaction.guild)}'s Trade History`)
         .setThumbnail(targetUser.displayAvatarURL())
         .addFields(
             { name: 'Total Trades', value: `${stats[0].total}`, inline: true },
@@ -469,7 +527,7 @@ export async function handleHistory(interaction) {
     if (trades.length > 0) {
         let recent = '';
         for (const trade of trades.slice(0, 5)) {
-            const statusInfo = STATUS_INFO[trade.status];
+            const statusInfo = statusInfoFor(trade);
             const partner = trade.seller_id === targetUser.id ? trade.buyer_id : trade.seller_id;
             recent += `${statusInfo.emoji} #${trade.id} with <@${partner}>\n`;
         }
@@ -524,8 +582,10 @@ export async function handleReview(interaction) {
             rating
         });
     } catch (error) {
+        // A repeat review updates the earlier one (UNIQUE trade_id + reviewer_id), so this is a real failure.
+        logger.error('[Trade] Failed to save review', { tradeId, reviewerId: interaction.user.id, error: error.message });
         await interaction.reply({
-            content: 'You have already reviewed this trade.',
+            content: 'Your review could not be saved. Please try again.',
             ephemeral: true
         });
     }
@@ -540,9 +600,14 @@ export async function handleResolve(interaction) {
     const resolution = interaction.options.getString('resolution');
     const notes = interaction.options.getString('notes');
 
+    if (notes.length > 1000) {
+        return interaction.reply({ content: 'Please keep resolution notes to 1000 characters or fewer.', ephemeral: true });
+    }
+
+    // Scoped to this server: staff can only resolve their own server's trades.
     const [trades] = await pool.execute(
-        'SELECT * FROM trade_escrow WHERE id = ?',
-        [tradeId]
+        'SELECT * FROM trade_escrow WHERE id = ? AND guild_id = ?',
+        [tradeId, interaction.guild.id]
     );
 
     if (trades.length === 0) {
@@ -551,20 +616,30 @@ export async function handleResolve(interaction) {
 
     const trade = trades[0];
 
+    if (trade.status !== 'disputed') {
+        return interaction.reply({
+            content: `Trade #${tradeId} is not disputed (status: ${statusInfoFor(trade).name}). Only disputed trades can be resolved.`,
+            ephemeral: true
+        });
+    }
+
     let newStatus = 'completed';
     if (resolution === 'cancel') {
         newStatus = 'cancelled';
     }
 
-    await pool.execute(
+    const [resolved] = await pool.execute(
         `UPDATE trade_escrow
          SET status = ?, resolved_by = ?, resolution_notes = ?, completed_at = NOW()
-         WHERE id = ?`,
-        [newStatus, interaction.user.id, notes, tradeId]
+         WHERE id = ? AND status = 'disputed'`,
+        [newStatus, interaction.user.id, `${resolution.replace('_', ' ')}: ${notes}`, tradeId]
     );
+    if (resolved.affectedRows === 0) {
+        return interaction.reply({ content: `Trade #${tradeId} was already resolved.`, ephemeral: true });
+    }
 
     const embed = new EmbedBuilder()
-        .setColor('#27AE60')
+        .setColor(themeColor(interaction.guildId, 'success'))
         .setTitle(' Trade Resolved')
         .setDescription(`Trade #${tradeId} has been resolved by staff.`)
         .addFields(
@@ -580,7 +655,7 @@ export async function handleResolve(interaction) {
         const buyer = await interaction.client.users.fetch(trade.buyer_id).catch(() => null);
 
         const dmEmbed = new EmbedBuilder()
-            .setColor('#27AE60')
+            .setColor(themeColor(interaction.guildId, 'success'))
             .setTitle(' Trade Dispute Resolved')
             .setDescription(`Your disputed trade #${tradeId} has been resolved.`)
             .addFields(
@@ -621,7 +696,7 @@ export async function handleReputation(interaction) {
     );
 
     const [watchlist] = await pool.execute(
-        `SELECT * FROM scammer_watchlist WHERE discord_id = ? AND entry_type = 'user'`,
+        `SELECT * FROM scammer_watchlist WHERE user_id = ? AND entity_type = 'user' ORDER BY created_at DESC`,
         [user.id]
     );
 
@@ -647,7 +722,7 @@ export async function handleReputation(interaction) {
     const embed = new EmbedBuilder()
         .setColor(isScammer ? '#FF0000' : '#27AE60')
         .setTitle(`${trustLevel}`)
-        .setDescription(`**${user.username}**'s Trade Reputation`)
+        .setDescription(`**${displayNameFor(user, interaction.guild)}**'s Trade Reputation`)
         .setThumbnail(user.displayAvatarURL())
         .addFields(
             { name: 'Completed Trades', value: `${stats[0].completed}`, inline: true },
@@ -661,7 +736,7 @@ export async function handleReputation(interaction) {
     if (isScammer) {
         embed.addFields({
             name: ' WARNING',
-            value: `This user is on the scammer watchlist!\n**Reason:** ${watchlist[0].reason}`,
+            value: clip(`This user is on the scammer watchlist!\n**Reason:** ${watchlist[0].reason || 'No reason recorded'}`, 1024),
             inline: false
         });
     }
@@ -709,17 +784,17 @@ export async function handleVouch(interaction) {
         [interaction.guild.id, trader.id]
     );
 
-    const starsStr = ''.repeat(rating);
+    const starsStr = `${rating}/5`;
     const typeEmoji = type === 'purchase' ? '' : type === 'sale' ? '' : '';
 
     const embed = new EmbedBuilder()
-        .setColor('#2ECC71')
+        .setColor(themeColor(interaction.guildId, 'success'))
         .setTitle(' Vouch Recorded!')
         .setDescription(`${interaction.user} vouched for ${trader}`)
         .addFields(
             { name: 'Transaction', value: `${typeEmoji} ${type.charAt(0).toUpperCase() + type.slice(1)}`, inline: true },
             { name: 'Rating', value: starsStr, inline: true },
-            { name: `${trader.username}'s Stats`, value: `**${repCount[0].count}** vouches | **${parseFloat(repCount[0].avg_rating).toFixed(1)}** avg`, inline: true }
+            { name: `${displayNameFor(trader, interaction.guild)}'s Stats`, value: `**${repCount[0].count}** vouches | **${parseFloat(repCount[0].avg_rating).toFixed(1)}** avg`, inline: true }
         )
         .setTimestamp();
 
@@ -739,8 +814,9 @@ export async function handleVouch(interaction) {
 export async function handleLeaderboard(interaction) {
     await interaction.deferReply();
 
+    // Vouches and completed escrow trades are summed per user (the rating comes from vouches only).
     const [leaders] = await pool.execute(
-        `SELECT user_id, total_trades, avg_rating FROM (
+        `SELECT user_id, SUM(total_trades) AS total_trades, MAX(avg_rating) AS avg_rating FROM (
             SELECT user_id, COUNT(*) as total_trades, AVG(rating) as avg_rating
             FROM trader_reputation WHERE guild_id = ?
             GROUP BY user_id
@@ -772,7 +848,7 @@ export async function handleLeaderboard(interaction) {
     }
 
     const embed = new EmbedBuilder()
-        .setColor('#F1C40F')
+        .setColor(themeColor(interaction.guildId, 'warning'))
         .setTitle(' Top Traders')
         .setDescription(leaderboardText)
         .setFooter({ text: 'Use /engage trade vouch or /engage trade create to build reputation' })

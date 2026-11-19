@@ -15,7 +15,7 @@ router.get('/', async (req, res) => {
     const g = req.params.guildId;
     try {
         const [catChannels, [[tree]], [[tz]], [[settings]]] = await Promise.all([
-            pool.execute('SELECT channel_id, enabled, spawn_min, spawn_max FROM catbot_channels WHERE guild_id = ?', [g])
+            pool.execute('SELECT channel_id, enabled, spawn_min, spawn_max, appear_msg, caught_msg FROM catbot_channels WHERE guild_id = ?', [g])
                 .then(([rows]) => rows),
             pool.execute('SELECT guild_id, size, name FROM gat_trees WHERE guild_id = ?', [g]),
             pool.execute('SELECT * FROM tz_guild_config WHERE guild_id = ?', [g]),
@@ -77,6 +77,43 @@ router.put('/catbot/timings', async (req, res) => {
     } catch (err) {
         logger.error(`[API minigames] timings failed: ${err.message}`);
         res.status(500).json({ error: 'Failed to save timings' });
+    }
+});
+
+/** Server-wide Cat Bot options (the ones /cat settings toggles). Read on every catch by core/catbot/spawn-manager.js. */
+const CAT_OPTIONS = ['do_reactions', 'do_rain', 'auto_delete_catches', 'anti_double_catch', 'legacy_catching', 'mute_achievements'];
+router.put('/catbot/settings', async (req, res) => {
+    const body = req.body || {};
+    const keys = CAT_OPTIONS.filter(k => Object.prototype.hasOwnProperty.call(body, k));
+    if (!keys.length) return res.status(400).json({ error: 'Nothing to change.' });
+    try {
+        // Column names come from CAT_OPTIONS, never from the request.
+        await pool.execute(
+            `INSERT INTO catbot_settings (guild_id, ${keys.join(', ')}) VALUES (?, ${keys.map(() => '?').join(', ')})
+             ON DUPLICATE KEY UPDATE ${keys.map(k => `${k} = VALUES(${k})`).join(', ')}`,
+            [req.params.guildId, ...keys.map(k => (body[k] ? 1 : 0))]);
+        res.json({ success: true });
+    } catch (err) {
+        logger.error(`[API minigames] catbot settings failed: ${err.message}`);
+        res.status(500).json({ error: 'Failed to save Cat Bot options' });
+    }
+});
+
+/** A spawn channel's own "a cat appeared" and "caught" messages. Empty = the standard wording. */
+router.put('/catbot/messages', async (req, res) => {
+    const { channel_id } = req.body || {};
+    if (!SNOWFLAKE.test(String(channel_id || ''))) return res.status(400).json({ error: 'Pick a channel.' });
+    // 1000 characters each keeps the post under Discord's 2000 once names and extras are added.
+    const clean = (v) => { const t = String(v ?? '').trim(); return t ? t.slice(0, 1000) : null; };
+    try {
+        const [r] = await pool.execute(
+            'UPDATE catbot_channels SET appear_msg = ?, caught_msg = ? WHERE guild_id = ? AND channel_id = ?',
+            [clean(req.body.appear_msg), clean(req.body.caught_msg), req.params.guildId, channel_id]);
+        if (!r.affectedRows) return res.status(404).json({ error: 'Cats do not spawn in that channel.' });
+        res.json({ success: true });
+    } catch (err) {
+        logger.error(`[API minigames] catbot messages failed: ${err.message}`);
+        res.status(500).json({ error: 'Failed to save the messages' });
     }
 });
 

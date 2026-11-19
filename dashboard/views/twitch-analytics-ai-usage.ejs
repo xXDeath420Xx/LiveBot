@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>" lang="en">
+<head>
+<%- include('partials/site-head', { title: 'AI usage — Twitch analytics | CertiFried', noindex: true }) %>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="/css/cf-settings.css">
+    <link rel="stylesheet" href="/css/cf-analytics.css">
+</head>
+<%
+    const n = (v) => Number(v || 0).toLocaleString('en-US');
+    const ms = (v) => v === null || v === undefined ? '—' : n(Math.round(Number(v))) + ' ms';
+    const calls = Number(totals.calls || 0);
+    const failures = Number(totals.failures || 0);
+    const successPct = calls ? (((calls - failures) / calls) * 100).toFixed(1) + '%' : '—';
+%>
+<body class="cf-an-body">
+<%- include('partials/site-header') %>
+<main id="main-content" class="cf-an-page" tabindex="-1">
+    <a href="/admin/twitch-analytics/compare" class="cf-an-crumb"><i class="fas fa-arrow-left" aria-hidden="true"></i> Back to all channels</a>
+    <header class="cf-an-head">
+        <span class="cf-an-head-icon" aria-hidden="true"><i class="fas fa-microchip"></i></span>
+        <div class="cf-an-head-text">
+            <h1 class="cf-an-title">AI usage</h1>
+            <p class="cf-an-sub">Calls the Twitch analytics AI features made in the last 30 days, across every channel.</p>
+        </div>
+    </header>
+<%- include('partials/analytics/twitch-nav', { active: 'ai-usage', guildId: null }) %>
+
+    <dl class="cf-kpis">
+        <div class="cf-kpi"><dt>Calls (30 days)</dt><dd><%= n(calls) %></dd></div>
+        <div class="cf-kpi"><dt>Succeeded</dt><dd><%= successPct %></dd></div>
+        <div class="cf-kpi"><dt>Average time</dt><dd><%= calls ? ms(totals.avg_duration_ms) : '—' %></dd></div>
+        <div class="cf-kpi"><dt>95th percentile time</dt><dd><%= calls ? ms(totals.p95_duration_ms) : '—' %></dd></div>
+    </dl>
+
+    <% if (!calls) { %>
+    <div class="cf-rows"><div class="cf-state">
+        <p class="cf-state-title">No AI calls in the last 30 days</p>
+        <p class="cf-state-text">Recaps, title suggestions, the AI chat moderator and the other AI tools log every call here.</p>
+    </div></div>
+    <% } else { %>
+    <h2 class="cf-an-section-title">By provider and model</h2>
+    <div class="cf-rows"><div class="cf-table-wrap">
+        <table class="cf-table cf-table--stack">
+            <thead><tr><th scope="col">Provider</th><th scope="col">Model</th><th scope="col" class="cf-cell-end">Calls</th><th scope="col" class="cf-cell-end">Failed</th><th scope="col" class="cf-cell-end">Average</th><th scope="col" class="cf-cell-end">Slowest</th></tr></thead>
+            <tbody>
+            <% byProvider.forEach(r => { %>
+            <tr><td data-label="Provider"><%= r.provider %></td><td data-label="Model"><%= r.model || '—' %></td><td data-label="Calls" class="cf-cell-end"><%= n(r.n) %></td>
+                <td data-label="Failed" class="cf-cell-end<%= Number(r.failures) > 0 ? ' cf-an-bad' : '' %>"><%= n(r.failures) %></td><td data-label="Average" class="cf-cell-end"><%= ms(r.avg_ms) %></td><td data-label="Slowest" class="cf-cell-end"><%= ms(r.p95_ms) %></td></tr>
+            <% }) %>
+            </tbody>
+        </table>
+    </div></div>
+
+    <h2 class="cf-an-section-title">By feature</h2>
+    <div class="cf-rows"><div class="cf-table-wrap">
+        <table class="cf-table cf-table--stack">
+            <thead><tr><th scope="col">Feature</th><th scope="col" class="cf-cell-end">Calls</th><th scope="col" class="cf-cell-end">Failed</th><th scope="col" class="cf-cell-end">Average</th><th scope="col" class="cf-cell-end">Prompt size</th><th scope="col" class="cf-cell-end">Reply size</th></tr></thead>
+            <tbody>
+            <% byFeature.forEach(r => { %>
+            <tr><td data-label="Feature"><code><%= r.feature %></code></td><td data-label="Calls" class="cf-cell-end"><%= n(r.n) %></td>
+                <td data-label="Failed" class="cf-cell-end<%= Number(r.failures) > 0 ? ' cf-an-bad' : '' %>"><%= n(r.failures) %></td><td data-label="Average" class="cf-cell-end"><%= ms(r.avg_ms) %></td>
+                <td data-label="Prompt size" class="cf-cell-end"><%= n(Math.round(Number(r.avg_prompt) || 0)) %> chars</td><td data-label="Reply size" class="cf-cell-end"><%= n(Math.round(Number(r.avg_resp) || 0)) %> chars</td></tr>
+            <% }) %>
+            </tbody>
+        </table>
+    </div></div>
+    <% } %>
+
+    <h2 class="cf-an-section-title">By channel</h2>
+    <% if (!byBroadcaster.length) { %>
+    <div class="cf-rows"><div class="cf-state cf-state--compact"><p class="cf-state-text">No channel made an AI call in the last 30 days.</p></div></div>
+    <% } else { %>
+    <div class="cf-rows"><div class="cf-table-wrap">
+        <table class="cf-table cf-table--stack">
+            <thead><tr><th scope="col">Channel</th><th scope="col" class="cf-cell-end">Calls (30 days)</th><th scope="col" class="cf-cell-end">Today</th><th scope="col" class="cf-cell-end">Daily cap</th><th scope="col" class="cf-cell-end">Cap used</th><th scope="col">Cap alert today</th></tr></thead>
+            <tbody>
+            <% byBroadcaster.forEach(r => { const pct = r.cap_at_time ? Math.round((Number(r.today || 0) / Number(r.cap_at_time)) * 100) : null; %>
+            <tr>
+                <td data-label="Channel"><%= r.login || r.broadcaster_id %></td>
+                <td data-label="Calls (30 days)" class="cf-cell-end"><%= n(r.n) %></td>
+                <td data-label="Today" class="cf-cell-end"><%= n(r.today) %></td>
+                <td data-label="Daily cap" class="cf-cell-end"><%= r.cap_at_time ? n(r.cap_at_time) : '—' %></td>
+                <td data-label="Cap used" class="cf-cell-end"><% if (pct === null) { %>—<% } else { %><span class="cf-status <%= pct >= 80 ? 'is-bad' : pct >= 50 ? 'is-warn' : 'is-ok' %>"><%= pct %>%</span><% } %></td>
+                <td data-label="Cap alert today"><% if (Number(r.alerted_today)) { %><span class="cf-status is-bad">Sent</span><% } else { %><span class="cf-an-muted">No</span><% } %></td>
+            </tr>
+            <% }) %>
+            </tbody>
+        </table>
+    </div></div>
+    <% } %>
+
+    <h2 class="cf-an-section-title">Recent failures <span class="cf-an-count">last 7 days</span></h2>
+    <% if (!recentFailures.length) { %>
+    <div class="cf-rows"><div class="cf-state cf-state--compact"><p class="cf-state-text">No failed calls in the last 7 days.</p></div></div>
+    <% } else { %>
+    <div class="cf-rows"><div class="cf-table-wrap">
+        <table class="cf-table cf-table--stack">
+            <thead><tr><th scope="col">Time (UTC)</th><th scope="col">Channel ID</th><th scope="col">Feature</th><th scope="col">Provider</th><th scope="col">Error</th></tr></thead>
+            <tbody>
+            <% recentFailures.forEach(r => { %>
+            <tr>
+                <td data-label="Time" class="cf-an-mono"><%= new Date(r.created_at).toISOString().slice(0, 16).replace('T', ' ') %></td>
+                <td data-label="Channel ID" class="cf-an-mono"><%= r.broadcaster_id || '—' %></td>
+                <td data-label="Feature"><code><%= r.feature %></code></td>
+                <td data-label="Provider"><%= r.provider %></td>
+                <td data-label="Error" class="cf-an-bad"><%= String(r.error_message || '').slice(0, 160) %></td>
+            </tr>
+            <% }) %>
+            </tbody>
+        </table>
+    </div></div>
+    <% } %>
+</main>
+<%- include('partials/site-footer') %>
+</body>
+</html>

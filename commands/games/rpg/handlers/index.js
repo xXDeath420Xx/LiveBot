@@ -7,18 +7,20 @@ export { handleRoll } from './roll.js';
 export { handleGuide, handleGuideButton, handleGuideSelectMenu } from './guide.js';
 export { handleRest } from './rest.js';
 export { handleStatroll } from './statroll.js';
+export { handleJournal } from './journal.js';
 
 // Handlers that will be loaded from the legacy file
 // These are exported as pass-through functions that call the original handlers
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import logger from '../../../../utils/logger.js';
 import pool from '../../../../utils/db.js';
+import { displayNameFor } from '../../../../utils/display-name.js';
 import RPGDiceEngine, { SKILLS, ABILITIES } from '../../../../core/rpg-dice-engine.js';
 import RPGAiDungeonMaster, { DM_PERSONALITIES, CAMPAIGN_SETTINGS } from '../../../../core/rpg-ai-dm.js';
 import RPGCampaignManager from '../../../../core/rpg-campaign-manager.js';
-import RPGEnhancedCombat from '../../../../core/rpg-enhanced-combat.js';
 import RPGConditionManager from '../../../../core/rpg-condition-manager.js';
 import RPGSpellManager from '../../../../core/rpg-spell-manager.js';
+import { recoverOnRest } from '../../../../core/rpg-character-manager.js';
 import RPGClassResourceManager from '../../../../core/rpg-class-resource-manager.js';
 import RPGPartyManager from '../../../../core/rpg-party-manager.js';
 import RPGDungeonManager from '../../../../core/rpg-dungeon-manager.js';
@@ -27,6 +29,7 @@ import { buildPvpBoardEmbed, buildPvpActionRow } from './pvpBoard.js';
 import RPGLeaderboardManager from '../../../../core/rpg-leaderboard-manager.js';
 import { registerRPGMessage, setRPGChannel, getRPGChannel } from '../../../../core/rpg-reply-handler.js';
 import { createProgressBar } from '../utils.js';
+import { themeColor } from '../../../../core/guild-theme.js';
 
 /**
  * Handle campaign subcommands
@@ -79,7 +82,7 @@ export async function handleCampaign(interaction, subcommand, characterManager) 
         }
 
         const embed = new EmbedBuilder()
-            .setColor('#9B59B6')
+            .setColor(themeColor(interaction.guildId, 'accent'))
             .setTitle(`Campaign Created: ${campaign.campaign_name}`)
             .setDescription(`Your AI Dungeon Master awaits!`)
             .addFields(
@@ -112,7 +115,7 @@ export async function handleCampaign(interaction, subcommand, characterManager) 
         }
 
         const embed = new EmbedBuilder()
-            .setColor('#3498DB')
+            .setColor(themeColor(interaction.guildId, 'primary'))
             .setTitle('Active Campaigns')
             .setDescription(`${campaigns.length} campaign(s) available`);
 
@@ -160,7 +163,7 @@ export async function handleCampaign(interaction, subcommand, characterManager) 
         }
 
         const embed = new EmbedBuilder()
-            .setColor('#00FF00')
+            .setColor(themeColor(interaction.guildId, 'success'))
             .setTitle('Joined Campaign!')
             .setDescription(`**${result.character}** has joined **${result.campaign}**!`)
             .setFooter({ text: 'Use /rpg session start when ready to play' });
@@ -203,7 +206,7 @@ export async function handleCampaign(interaction, subcommand, characterManager) 
         const fullCampaign = await RPGCampaignManager.getCampaign(campaign.campaign_id);
 
         const embed = new EmbedBuilder()
-            .setColor('#9B59B6')
+            .setColor(themeColor(interaction.guildId, 'accent'))
             .setTitle(fullCampaign.campaign_name)
             .addFields(
                 { name: 'Type', value: fullCampaign.campaign_type, inline: true },
@@ -230,7 +233,7 @@ export async function handleCampaign(interaction, subcommand, characterManager) 
         const modules = await RPGCampaignManager.getModules();
 
         const embed = new EmbedBuilder()
-            .setColor('#FFD700')
+            .setColor(themeColor(interaction.guildId, 'warning'))
             .setTitle('Official D&D Campaign Modules')
             .setDescription('Pre-built adventures for your AI DM campaign');
 
@@ -327,7 +330,7 @@ export async function handleSession(interaction, subcommand, characterManager) {
         await setRPGChannel(interaction.guild.id, interaction.channel.id);
 
         const embed = new EmbedBuilder()
-            .setColor('#9B59B6')
+            .setColor(themeColor(interaction.guildId, 'accent'))
             .setTitle(`Session ${session.session_number}: ${campaign.campaign_name}`)
             .setDescription(session.opening || '*The adventure continues...*')
             .setFooter({ text: 'Use /rpg play action to interact | reply or @mention to continue' });
@@ -364,7 +367,7 @@ export async function handleSession(interaction, subcommand, characterManager) {
         }
 
         const embed = new EmbedBuilder()
-            .setColor('#E74C3C')
+            .setColor(themeColor(interaction.guildId, 'danger'))
             .setTitle(`Session ${session.session_number} Ended`)
             .setDescription(session.summary || 'The session has ended.')
             .addFields(
@@ -400,7 +403,7 @@ export async function handleSession(interaction, subcommand, characterManager) {
         const recap = rows[0]?.summary || rows[0]?.current_scene || null;
 
         const embed = new EmbedBuilder()
-            .setColor('#3498DB')
+            .setColor(themeColor(interaction.guildId, 'primary'))
             .setTitle(`The Story So Far: ${campaign.campaign_name}`)
             .setDescription(recap || 'Your adventure is just beginning...');
 
@@ -435,7 +438,7 @@ export async function handleSettings(interaction, subcommand) {
         const channelText = channelId ? `<#${channelId}>` : 'Any channel (no restriction)';
 
         const embed = new EmbedBuilder()
-            .setColor('#3498DB')
+            .setColor(themeColor(interaction.guildId, 'primary'))
             .setTitle('RPG Settings')
             .addFields(
                 { name: 'Designated Channel', value: channelText, inline: false }
@@ -470,13 +473,13 @@ export async function handleSpell(interaction, subcommand, characterManager) {
             result = await RPGSpellManager.castSpell(character.character_id, spellName, level);
         } catch (err) {
             await interaction.editReply({
-                embeds: [new EmbedBuilder().setColor('#E74C3C').setTitle('Casting Failed').setDescription(err.message)]
+                embeds: [new EmbedBuilder().setColor(themeColor(interaction.guildId, 'danger')).setTitle('Casting Failed').setDescription(err.message)]
             });
             return;
         }
 
         const embed = new EmbedBuilder()
-            .setColor('#9B59B6')
+            .setColor(themeColor(interaction.guildId, 'accent'))
             .setTitle(`${character.character_name} casts ${result.spell}!`)
             .setDescription(result.description || `A level ${result.level} ${result.school || ''} spell.`);
 
@@ -505,7 +508,7 @@ export async function handleSpell(interaction, subcommand, characterManager) {
         const slots = await RPGSpellManager.getSpellSlots(character.character_id);
 
         const embed = new EmbedBuilder()
-            .setColor('#9B59B6')
+            .setColor(themeColor(interaction.guildId, 'accent'))
             .setTitle(`${character.character_name}'s Spell Slots`);
 
         let slotsText = '';
@@ -527,7 +530,7 @@ export async function handleSpell(interaction, subcommand, characterManager) {
         const spells = await RPGSpellManager.getKnownSpells(character.character_id);
 
         const embed = new EmbedBuilder()
-            .setColor('#9B59B6')
+            .setColor(themeColor(interaction.guildId, 'accent'))
             .setTitle(`${character.character_name}'s Known Spells`);
 
         if (spells.length === 0) {
@@ -600,7 +603,7 @@ export async function handleResource(interaction, subcommand, characterManager) 
         const resources = await RPGClassResourceManager.getResources(character.character_id);
 
         const embed = new EmbedBuilder()
-            .setColor('#E67E22')
+            .setColor(themeColor(interaction.guildId, 'warning'))
             .setTitle(`${character.character_name}'s Class Resources`);
 
         if (resources.length === 0) {
@@ -634,8 +637,9 @@ export async function handleResource(interaction, subcommand, characterManager) 
             const remainingText = result.remaining === 'unlimited'
                 ? 'unlimited'
                 : `${result.remaining}/${result.max}`;
+            const conditionText = result.condition ? ` You are now **${result.condition}**.` : '';
             await interaction.editReply({
-                content: `Used ${amount} ${result.resourceName}. Remaining: ${remainingText}`
+                content: `Used ${amount} ${result.resourceName}. Remaining: ${remainingText}.${conditionText}`
             });
         } catch (err) {
             await interaction.editReply({ content: err.message });
@@ -645,13 +649,19 @@ export async function handleResource(interaction, subcommand, characterManager) 
     else if (subcommand === 'rest') {
         await interaction.deferReply();
 
-        const restType = interaction.options.getString('type', true);
-        const restored = await RPGClassResourceManager.restoreOnRest(character.character_id, restType);
+        const restType = interaction.options.getString('type', true) === 'long' ? 'long' : 'short';
+        // Class resources + spell slots (long rest / Warlock short rest) + timed conditions
+        const recovery = await recoverOnRest(character.character_id, restType, character.class);
+        const restored = recovery.resources;
 
         const embed = new EmbedBuilder()
-            .setColor('#27AE60')
+            .setColor(themeColor(interaction.guildId, 'success'))
             .setTitle(`${restType === 'long' ? 'Long' : 'Short'} Rest Complete`)
             .setDescription(`${character.character_name} takes a ${restType} rest.`);
+
+        if (recovery.slotsRestored) {
+            embed.addFields({ name: 'Spell Slots', value: 'Restored', inline: true });
+        }
 
         if (restored && restored.length > 0) {
             embed.addFields({
@@ -681,7 +691,7 @@ export async function handleCondition(interaction, subcommand, characterManager)
         const conditions = await RPGConditionManager.getAllConditions();
 
         const embed = new EmbedBuilder()
-            .setColor('#E74C3C')
+            .setColor(themeColor(interaction.guildId, 'danger'))
             .setTitle('D&D 5e Conditions')
             .setDescription('Status conditions that can affect creatures');
 
@@ -709,7 +719,7 @@ export async function handleCondition(interaction, subcommand, characterManager)
         }
 
         const embed = new EmbedBuilder()
-            .setColor('#E74C3C')
+            .setColor(themeColor(interaction.guildId, 'danger'))
             .setTitle(`${condition.icon_emoji || ''} ${condition.condition_name}`.trim())
             .setDescription(condition.description || 'No description available.');
 
@@ -742,7 +752,7 @@ export async function handleCondition(interaction, subcommand, characterManager)
         const conditions = await RPGConditionManager.getCharacterConditions(character.character_id);
 
         const embed = new EmbedBuilder()
-            .setColor('#E74C3C')
+            .setColor(themeColor(interaction.guildId, 'danger'))
             .setTitle(`${character.character_name}'s Active Conditions`);
 
         if (conditions.length === 0) {
@@ -786,11 +796,11 @@ export async function handleCondition(interaction, subcommand, characterManager)
             .setDescription(`**${character.character_name}** is fighting for their life!`);
 
         if (result.criticalSuccess) {
-            embed.setColor('#FFD700')
+            embed.setColor(themeColor(interaction.guildId, 'warning'))
                 .addFields({ name: '🎲 Roll', value: `**NAT 20!**`, inline: true })
                 .addFields({ name: '✨ Result', value: 'You regain 1 HP and are conscious!', inline: false });
         } else if (result.criticalFailure) {
-            embed.setColor('#FF0000')
+            embed.setColor(themeColor(interaction.guildId, 'danger'))
                 .addFields({ name: '🎲 Roll', value: `**NAT 1!** (2 failures)`, inline: true });
         } else {
             embed.setColor(result.success ? '#4CAF50' : '#F44336')
@@ -880,7 +890,7 @@ export async function handleCondition(interaction, subcommand, characterManager)
 
             const embed = new EmbedBuilder()
                 .setTitle('😌 Exhaustion Reduced')
-                .setColor('#4CAF50')
+                .setColor(themeColor(interaction.guildId, 'success'))
                 .setDescription(result.message)
                 .addFields({
                     name: 'Level',
@@ -931,7 +941,7 @@ export async function handleCondition(interaction, subcommand, characterManager)
 
             const embed = new EmbedBuilder()
                 .setTitle('✨ Inspiration Used!')
-                .setColor('#FFD700')
+                .setColor(themeColor(interaction.guildId, 'warning'))
                 .setDescription(`**${character.character_name}** uses their inspiration!`)
                 .addFields({
                     name: 'Effect',
@@ -946,7 +956,7 @@ export async function handleCondition(interaction, subcommand, characterManager)
 
             const embed = new EmbedBuilder()
                 .setTitle('✨ Inspiration Granted!')
-                .setColor('#FFD700')
+                .setColor(themeColor(interaction.guildId, 'warning'))
                 .setDescription(`**${character.character_name}** has been granted inspiration!`)
                 .addFields({
                     name: 'How to Use',
@@ -980,7 +990,7 @@ export async function handleStats(interaction, subcommand, characterManager) {
         };
 
         const embed = new EmbedBuilder()
-            .setColor('#FFD700')
+            .setColor(themeColor(interaction.guildId, 'warning'))
             .setTitle(`RPG Leaderboard: ${typeNames[type] || type}`);
 
         if (leaderboard.length === 0) {
@@ -1010,7 +1020,7 @@ export async function handleStats(interaction, subcommand, characterManager) {
         const achievements = await RPGLeaderboardManager.getCharacterAchievements(character.character_id);
 
         const embed = new EmbedBuilder()
-            .setColor('#9B59B6')
+            .setColor(themeColor(interaction.guildId, 'accent'))
             .setTitle(`${character.character_name}'s Achievements`);
 
         if (achievements.length === 0) {
@@ -1040,7 +1050,7 @@ export async function handleStats(interaction, subcommand, characterManager) {
         const progress = await RPGLeaderboardManager.getAchievementProgress(character.character_id);
 
         const embed = new EmbedBuilder()
-            .setColor('#3498DB')
+            .setColor(themeColor(interaction.guildId, 'primary'))
             .setTitle('Achievement Progress');
 
         if (progress.length === 0) {
@@ -1067,7 +1077,7 @@ export async function handleStats(interaction, subcommand, characterManager) {
         const p = stats.pvp || {};
 
         const embed = new EmbedBuilder()
-            .setColor('#3498DB')
+            .setColor(themeColor(interaction.guildId, 'primary'))
             .setTitle('Server RPG Statistics')
             .addFields(
                 { name: 'Total Characters', value: (c.total_characters ?? 0).toString(), inline: true },
@@ -1328,7 +1338,7 @@ export async function handlePlay(interaction, subcommand, characterManager) {
             const result = RPGDiceEngine.skillCheck(character, ability, advantageType);
 
             const embed = new EmbedBuilder()
-                .setColor('#5865F2')
+                .setColor(themeColor(interaction.guildId, 'primary'))
                 .setTitle(`${result.skillName} Check`)
                 .setDescription(`**${character.character_name}** rolls ${result.skillName}`)
                 .addFields(
@@ -1372,6 +1382,13 @@ export async function handleCombat(interaction, subcommand, characterManager, co
     }
 
     const cid = character.character_id;
+
+    // Append condition/concentration notes from the combat manager to a round log
+    // (kept under the 1024-char embed field limit).
+    const withNotes = (text, notes) => {
+        const full = Array.isArray(notes) && notes.length ? `${text}\n${notes.join('\n')}` : text;
+        return full.length > 1024 ? `${full.slice(0, 1021)}...` : full;
+    };
 
     // Render the current battle state as an embed
     const battleEmbed = (battle, extra = {}) => {
@@ -1433,7 +1450,7 @@ export async function handleCombat(interaction, subcommand, characterManager, co
             if (result.status === 'victory' || result.status === 'won') {
                 const r = result.rewards || {};
                 const embed = new EmbedBuilder()
-                    .setColor('#2ECC71')
+                    .setColor(themeColor(interaction.guildId, 'success'))
                     .setTitle('🏆 Victory!')
                     .setDescription(`${character.character_name} is victorious!`)
                     .addFields(
@@ -1450,7 +1467,7 @@ export async function handleCombat(interaction, subcommand, characterManager, co
                 const battle = await combatManager.getActiveBattle(cid);
                 await interaction.editReply({
                     embeds: [battleEmbed(battle, {
-                        log: `You hit for **${result.playerDamage}**. Enemy hit back for **${result.enemyDamage}**.`
+                        log: withNotes(`You hit for **${result.playerDamage}**. Enemy hit back for **${result.enemyDamage}**.`, result.notes)
                     })]
                 });
             }
@@ -1466,7 +1483,7 @@ export async function handleCombat(interaction, subcommand, characterManager, co
             const result = await combatManager.flee(cid);
             if (result.status === 'fled') {
                 await interaction.editReply({
-                    embeds: [new EmbedBuilder().setColor('#F39C12').setTitle('🏃 Escaped!').setDescription(`${character.character_name} fled from battle.`)]
+                    embeds: [new EmbedBuilder().setColor(themeColor(interaction.guildId, 'warning')).setTitle('🏃 Escaped!').setDescription(`${character.character_name} fled from battle.`)]
                 });
             } else if (result.status === 'defeat' || result.status === 'lost') {
                 await interaction.editReply({
@@ -1475,7 +1492,7 @@ export async function handleCombat(interaction, subcommand, characterManager, co
             } else {
                 const battle = await combatManager.getActiveBattle(cid);
                 await interaction.editReply({
-                    embeds: [battleEmbed(battle, { title: '🏃 Failed to Flee!', log: `The enemy struck you for **${result.enemyDamage}** as you tried to run.` })]
+                    embeds: [battleEmbed(battle, { title: '🏃 Failed to Flee!', log: withNotes(`The enemy struck you for **${result.enemyDamage}** as you tried to run.`, result.notes) })]
                 });
             }
         } catch (err) {
@@ -1503,7 +1520,7 @@ export async function handleCombat(interaction, subcommand, characterManager, co
                 embeds: [battleEmbed(battle, {
                     color: '#27AE60',
                     title: `Used ${result.itemName}`,
-                    log: `${effects.join(', ') || 'No effect.'} Enemy hit for **${result.enemyDamage}**.`
+                    log: withNotes(`${effects.join(', ') || 'No effect.'} Enemy hit for **${result.enemyDamage}**.`, result.notes)
                 })]
             });
         } catch (err) {
@@ -1537,17 +1554,30 @@ export async function handleShop(interaction, subcommand, characterManager, shop
         return;
     }
 
-    const zone = character.current_zone || 'town';
+    // Shops are keyed by zone id (dnd_shops.zone), but the AI DM writes free-text place names into
+    // current_zone ("Crypt", "Oakhaven"…). Like the combat enemy list, fall back to a zone that has a
+    // shop — the town — instead of showing an empty "Sold Out" shop.
+    const location = character.current_zone || 'town';
+    const resolveShopZone = async () => {
+        const shopZones = await shopManager.getShopZones();
+        const match = shopZones.find(z => String(z).toLowerCase() === String(location).toLowerCase());
+        if (match) return match;
+        return shopZones.includes('town') ? 'town' : (shopZones[0] || 'town');
+    };
 
     if (subcommand === 'browse') {
         await interaction.deferReply();
 
+        const zone = await resolveShopZone();
         const items = await shopManager.getShopItems(zone);
 
+        const fallbackNote = zone.toLowerCase() !== String(location).toLowerCase()
+            ? `\nThere's no shop at **${location}** — showing the ${zone} shop.`
+            : '';
         const embed = new EmbedBuilder()
-            .setColor('#F1C40F')
+            .setColor(themeColor(interaction.guildId, 'warning'))
             .setTitle(`Shop — ${zone.charAt(0).toUpperCase() + zone.slice(1)}`)
-            .setDescription(`Your gold: 💰 ${character.gold}`);
+            .setDescription(`Your gold: 💰 ${character.gold}${fallbackNote}`);
 
         if (items.length === 0) {
             embed.addFields({ name: 'Sold Out', value: 'No items available in this zone right now.' });
@@ -1580,9 +1610,10 @@ export async function handleShop(interaction, subcommand, characterManager, shop
         const quantity = interaction.options.getInteger('quantity') || 1;
 
         try {
+            const zone = await resolveShopZone();
             const result = await shopManager.buyItem(character.character_id, itemId, quantity, zone);
             const embed = new EmbedBuilder()
-                .setColor('#27AE60')
+                .setColor(themeColor(interaction.guildId, 'success'))
                 .setTitle('Purchase Complete')
                 .setDescription(`Bought **${result.quantity}x ${result.itemName}** for 💰 ${result.totalCost}`)
                 .addFields({ name: 'Remaining Gold', value: `💰 ${result.remainingGold}`, inline: true });
@@ -1601,7 +1632,7 @@ export async function handleShop(interaction, subcommand, characterManager, shop
         try {
             const result = await shopManager.sellItem(character.character_id, itemId, quantity);
             const embed = new EmbedBuilder()
-                .setColor('#27AE60')
+                .setColor(themeColor(interaction.guildId, 'success'))
                 .setTitle('Item Sold')
                 .setDescription(`Sold **${result.quantity}x ${result.itemName}** for 💰 ${result.totalGold}`)
                 .addFields({ name: 'Per Item', value: `💰 ${result.sellPrice}`, inline: true });
@@ -1636,7 +1667,7 @@ export async function handleParty(interaction, subcommand, characterManager) {
         try {
             const party = await RPGPartyManager.createParty(interaction.guild.id, interaction.user.id, name, cid);
             await interaction.editReply({
-                embeds: [new EmbedBuilder().setColor('#27AE60').setTitle('Party Formed!')
+                embeds: [new EmbedBuilder().setColor(themeColor(interaction.guildId, 'success')).setTitle('Party Formed!')
                     .setDescription(`**${party.party_name}** (ID: ${party.party_id})`)
                     .setFooter({ text: 'Invite members with /rpg party invite' })]
             });
@@ -1698,7 +1729,7 @@ export async function handleParty(interaction, subcommand, characterManager) {
         }
 
         const embed = new EmbedBuilder()
-            .setColor('#9B59B6')
+            .setColor(themeColor(interaction.guildId, 'accent'))
             .setTitle(`Party: ${party.party_name}`)
             .addFields(
                 { name: 'Status', value: party.status, inline: true },
@@ -1722,7 +1753,7 @@ export async function handleParty(interaction, subcommand, characterManager) {
 
         const parties = await RPGPartyManager.listParties(interaction.guild.id);
         const embed = new EmbedBuilder()
-            .setColor('#3498DB')
+            .setColor(themeColor(interaction.guildId, 'primary'))
             .setTitle('Parties in this Server');
 
         if (parties.length === 0) {
@@ -1768,7 +1799,7 @@ export async function handlePvP(interaction, subcommand, characterManager) {
 
         const defender = await characterManager.getCharacter(target.id, guildId);
         if (!defender) {
-            await interaction.editReply({ content: `${target.username} does not have a character in this server.` });
+            await interaction.editReply({ content: `${displayNameFor(target, interaction.guild)} does not have a character in this server.` });
             return;
         }
         if (wager > 0 && character.gold < wager) {
@@ -1785,13 +1816,13 @@ export async function handlePvP(interaction, subcommand, characterManager) {
                 wager
             );
             await interaction.editReply({
-                embeds: [new EmbedBuilder().setColor('#E67E22').setTitle('⚔️ Challenge Issued!')
+                embeds: [new EmbedBuilder().setColor(themeColor(interaction.guildId, 'warning')).setTitle('⚔️ Challenge Issued!')
                     .setDescription(`**${character.character_name}** challenges **${defender.character_name}** to a ${matchType}!`)
                     .addFields(
                         { name: 'Match ID', value: `#${match.match_id}`, inline: true },
                         { name: 'Wager', value: `💰 ${match.wager_gold}`, inline: true }
                     )
-                    .setFooter({ text: `${target.username}: accept with /rpg pvp accept match_id:${match.match_id}` })]
+                    .setFooter({ text: `${displayNameFor(target, interaction.guild)}: accept with /rpg pvp accept match_id:${match.match_id}` })]
             });
         } catch (err) {
             await interaction.editReply({ content: err.message });
@@ -1943,7 +1974,7 @@ export async function handlePvP(interaction, subcommand, characterManager) {
 
         const stats = await RPGPvPManager.getPlayerStats(cid, guildId);
         const embed = new EmbedBuilder()
-            .setColor('#9B59B6')
+            .setColor(themeColor(interaction.guildId, 'accent'))
             .setTitle(`${character.character_name}'s PvP Stats`)
             .addFields(
                 { name: 'Rank', value: stats.rank, inline: true },
@@ -1961,7 +1992,7 @@ export async function handlePvP(interaction, subcommand, characterManager) {
 
         const board = await RPGPvPManager.getLeaderboard(guildId);
         const embed = new EmbedBuilder()
-            .setColor('#FFD700')
+            .setColor(themeColor(interaction.guildId, 'warning'))
             .setTitle('PvP Leaderboard');
 
         if (board.length === 0) {
@@ -2023,7 +2054,7 @@ export async function handleQuest(interaction, subcommand, characterManager, que
         try {
             const quest = await questManager.startQuest(cid, questId);
             await interaction.editReply({
-                embeds: [new EmbedBuilder().setColor('#27AE60').setTitle('Quest Accepted')
+                embeds: [new EmbedBuilder().setColor(themeColor(interaction.guildId, 'success')).setTitle('Quest Accepted')
                     .setDescription(`**${quest.quest_name}**\n${quest.description || ''}`)
                     .setFooter({ text: 'Track it with /rpg quest active' })]
             });
@@ -2038,7 +2069,7 @@ export async function handleQuest(interaction, subcommand, characterManager, que
         const quests = await questManager.getActiveQuests(cid);
 
         const embed = new EmbedBuilder()
-            .setColor('#3498DB')
+            .setColor(themeColor(interaction.guildId, 'primary'))
             .setTitle(`${character.character_name}'s Active Quests`);
 
         if (quests.length === 0) {
@@ -2065,7 +2096,7 @@ export async function handleQuest(interaction, subcommand, characterManager, que
             const result = await questManager.completeQuest(cid, questId);
             const r = result.rewards;
             const embed = new EmbedBuilder()
-                .setColor('#F1C40F')
+                .setColor(themeColor(interaction.guildId, 'warning'))
                 .setTitle('Quest Complete!')
                 .setDescription(`**${result.quest.quest_name}** completed!`)
                 .addFields(
@@ -2114,7 +2145,7 @@ export async function handleDungeon(interaction, subcommand, characterManager) {
     const roomEmbed = (state, title) => {
         const room = state.room;
         const embed = new EmbedBuilder()
-            .setColor('#8E44AD')
+            .setColor(themeColor(interaction.guildId, 'accent'))
             .setTitle(title || `${state.roomType.icon} ${room.room_name}`)
             .setDescription(room.description || state.roomType.description)
             .addFields(
@@ -2131,7 +2162,7 @@ export async function handleDungeon(interaction, subcommand, characterManager) {
         const dungeons = await RPGDungeonManager.getAvailableDungeons(guildId, character.level);
 
         const embed = new EmbedBuilder()
-            .setColor('#9B59B6')
+            .setColor(themeColor(interaction.guildId, 'accent'))
             .setTitle('Available Dungeons')
             .setDescription(dungeons.length ? `Dungeons for level ${character.level}` : 'No dungeons available at your level.');
 
@@ -2234,7 +2265,7 @@ export async function handleDungeon(interaction, subcommand, characterManager) {
             await characterManager.addExperience(cid, next.total_xp);
             await characterManager.addGold(cid, next.total_gold);
             await interaction.editReply({
-                embeds: [new EmbedBuilder().setColor('#F1C40F').setTitle('🏆 Dungeon Cleared!')
+                embeds: [new EmbedBuilder().setColor(themeColor(interaction.guildId, 'warning')).setTitle('🏆 Dungeon Cleared!')
                     .setDescription(`**${next.dungeon_name}** conquered on ${next.difficulty}!`)
                     .addFields(
                         { name: 'Total XP', value: `✨ ${next.total_xp}`, inline: true },

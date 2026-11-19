@@ -1,0 +1,99 @@
+<%#
+  The site header for every standalone page (everything outside /manage except OBS overlays and
+  embedded views). Pair with partials/site-head.ejs (inside <head>) and partials/site-footer.ejs.
+  Sub-navigation goes right below it: partials/section-tabs.ejs (cards, CAH) or
+  partials/site/_owner-nav.ejs (owner console pages).
+
+  Locals, all optional:
+    active | navActive  'home' | 'docs' | 'commands' | 'status' | 'cards' | 'cah' | 'donate' | 'dashboard'
+                        ('servers' is read as 'dashboard'). Non-string values are ignored.
+    user                the Discord user (req.user). Anything without a Discord id (for example the
+                        Twitch session user the schedule pages pass as `user`) is ignored, and the
+                        signed-in user server.js puts in res.locals.siteUser is used instead.
+    isSuperAdmin        shows the Owner console link (user.isSuperAdmin works too).
+    hideUser            true on public share views: no account menu and no log-in button.
+    returnTo            path to come back to after logging in (defaults to the current page).
+  Styles: /css/cf-site.css (.cfs-header). Behaviour: /js/cf-site.js (phone menu, account menu, toasts).
+%>
+<%
+  const _isDiscordUser = (u) => !!(u && typeof u === 'object' && /^\d{15,22}$/.test(String(u.id || '')));
+  const _hideUser = !!locals.hideUser;
+  const _user = _hideUser ? null : ([locals.user, locals.discordUser, locals.siteUser].find(_isDiscordUser) || null);
+  const _sa = !!(_user && (_user.isSuperAdmin === true || locals.isSuperAdmin === true));
+  const _creator = !!(_user && (_user.canCreateBots === true || _sa));
+  let _active = typeof locals.navActive === 'string' ? locals.navActive : (typeof locals.active === 'string' ? locals.active : '');
+  if (_active === 'servers') _active = 'dashboard';
+  const _links = [
+      { key: 'home', href: '/', label: 'Home' },
+      { key: 'docs', href: '/docs', label: 'Docs' },
+      { key: 'commands', href: '/commands', label: 'Commands' },
+      { key: 'status', href: '/status', label: 'Status' },
+      { key: 'cards', href: '/cards', label: 'Cards' },
+      { key: 'cah', href: '/cah', label: 'CAH', title: 'Cards Against Humanity' },
+      { key: 'donate', href: '/donate', label: 'Donate' }
+  ];
+  const _cur = _links.find(l => l.key === _active);
+  const _safePath = (p) => (typeof p === 'string' && /^\/(?![/\\])/.test(p) && p.length < 512) ? p : null;
+  const _back = _safePath(locals.returnTo) || _safePath(locals.sitePath) || (_cur ? _cur.href : '/dashboard');
+  const _login = '/auth/discord?returnTo=' + encodeURIComponent(_back);
+  const _avatar = _user && _user.avatar
+      ? 'https://cdn.discordapp.com/avatars/' + _user.id + '/' + _user.avatar + '.png?size=64'
+      : 'https://cdn.discordapp.com/embed/avatars/0.png';
+  const _cid = (locals.clientId && /^\d{15,22}$/.test(String(locals.clientId))) ? String(locals.clientId) : (((locals.discoveryUrl || '').match(/(\d{15,22})$/) || [])[1] || null);
+  const _invite = _cid ? 'https://discord.com/oauth2/authorize?client_id=' + _cid + '&permissions=1643797540086&scope=bot+applications.commands' : '/invite';
+  const _name = _user ? (_user.global_name || _user.username || 'Account') : '';
+  const _dash = _active === 'dashboard' ? ' aria-current="page"' : '';
+%>
+<a class="skip-to-content" href="#main-content">Skip to main content</a>
+<header class="cfs-header">
+    <div class="cfs-header-inner">
+        <a class="cfs-brand" href="/"><img src="/images/CertiFried.png" alt="" width="28" height="28"><span>CertiFried</span></a>
+        <nav class="cfs-nav" aria-label="Site">
+            <% _links.forEach(l => { %><a href="<%= l.href %>"<% if (l.title) { %> title="<%= l.title %>"<% } %><% if (l.key === _active) { %> aria-current="page"<% } %>><%= l.label %></a><% }) %>
+        </nav>
+        <div class="cfs-actions">
+            <% if (_user) { %>
+                <a class="btn btn-primary btn-sm cfs-hide-sm" href="/dashboard"<%- _dash %>>Dashboard</a>
+                <details class="cfs-account">
+                    <summary aria-label="Account menu"><img src="<%= _avatar %>" alt="" width="26" height="26" data-cf-fallback="https://cdn.discordapp.com/embed/avatars/0.png"><span><%= _name %></span></summary>
+                    <div class="cfs-account-menu">
+                        <p class="cfs-account-who">Signed in as <strong><%= _user.username || _name %></strong></p>
+                        <a href="/profile">Profile</a>
+                        <a href="/settings">Settings</a>
+                        <a href="/stream/bot">Stream bot</a>
+                        <% if (_user.isVaultMember) { %><a href="/vault">Vault</a><% } %>
+                        <% if (_creator) { %><a href="/bot-management">Custom bots</a><% } %>
+                        <% if (_sa) { %><a href="/super-admin">Owner console</a><% } %>
+                        <hr>
+                        <a class="cfs-signout" href="/logout">Log out</a>
+                    </div>
+                </details>
+            <% } else if (!_hideUser) { %>
+                <a class="btn btn-secondary btn-sm cfs-hide-sm" href="<%= _invite %>">Add to Discord</a>
+                <a class="btn btn-primary btn-sm" href="<%= _login %>">Log in</a>
+            <% } %>
+            <button type="button" class="cfs-menu-btn" id="cfs-menu-btn" aria-controls="cfs-drawer" aria-expanded="false" aria-label="Menu">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+            </button>
+        </div>
+    </div>
+    <nav class="cfs-drawer" id="cfs-drawer" aria-label="Site" hidden>
+        <% _links.forEach(l => { %><a href="<%= l.href %>"<% if (l.key === _active) { %> aria-current="page"<% } %>><%= l.title || l.label %></a><% }) %>
+        <% if (_user) { %>
+            <hr>
+            <a href="/dashboard"<%- _dash %>>Dashboard</a>
+            <a href="/profile">Profile</a>
+            <a href="/settings">Settings</a>
+            <a href="/stream/bot">Stream bot</a>
+            <% if (_user.isVaultMember) { %><a href="/vault">Vault</a><% } %>
+            <% if (_creator) { %><a href="/bot-management">Custom bots</a><% } %>
+            <% if (_sa) { %><a href="/super-admin">Owner console</a><% } %>
+            <a class="cfs-signout" href="/logout">Log out</a>
+        <% } else if (!_hideUser) { %>
+            <hr>
+            <a href="<%= _invite %>">Add to Discord</a>
+            <a href="<%= _login %>">Log in with Discord</a>
+        <% } %>
+    </nav>
+</header>
+<script src="/js/cf-site.js"></script>

@@ -1,5 +1,8 @@
 // OAuth connect flow + connection management for the multicast Add-Platform feature.
 //   GET    /stream/connect/:platform            -> redirect to provider OAuth (Discord-authed)
+//                                                  ?for=bot: the stream bot's Connections page links the channel
+//                                                  to the user's stream bot profile instead of adding a multicast
+//                                                  destination, and comes back to /stream/bot/connections
 //   GET    /stream/connect/:platform/callback   -> exchange code, save account, create destination
 //   GET    /stream/api/connections              -> list current user's connections
 //   DELETE /stream/api/connections/:platform    -> disconnect
@@ -16,19 +19,21 @@ const ENABLE_GATED = process.env.STREAM_ENABLE_GATED_PLATFORMS === '1';
 
 function ensureDiscordAuthed(req, res, next) {
   if (req.isAuthenticated && req.isAuthenticated() && req.user?.id) return next();
-  res.redirect('/auth/discord?returnTo=' + encodeURIComponent('/stream'));
+  res.redirect('/auth/discord?returnTo=' + encodeURIComponent(req.query.for === 'bot' ? '/stream/bot/connections' : '/stream'));
 }
 
 router.get('/stream/connect/:platform', ensureDiscordAuthed, (req, res) => {
   const meta = PLATFORM_META[req.params.platform];
-  if (!meta) return res.redirect('/stream?error=unknown_platform');
-  if (meta.reviewGated && !ENABLE_GATED) return res.redirect('/stream?error=platform_coming_soon');
+  const back = req.query.for === 'bot' ? '/stream/bot/connections' : '/stream';
+  if (!meta) return res.redirect(back + '?error=unknown_platform');
+  if (meta.reviewGated && !ENABLE_GATED) return res.redirect(back + '?error=platform_coming_soon');
   const state = crypto.randomBytes(16).toString('hex');
   const codeVerifier = crypto.randomBytes(32).toString('base64url');
   const codeChallenge = crypto.createHash('sha256').update(codeVerifier).digest('base64url');
   req.session.streamOAuthState = state;
   req.session.streamOAuthPlatform = meta.platform;
   req.session.streamOAuthVerifier = codeVerifier;
+  if (req.query.for === 'bot') req.session.streamOAuthFor = 'bot'; else delete req.session.streamOAuthFor;
   const authUrl = getAdapter(meta.platform).getAuthUrl(state, { codeChallenge });
   // Log only non-secret context (no state/code_challenge/full URL).
   logger.info(`[stream-connect] initiate ${meta.platform} oauth (user ${req.user.id})`);
@@ -38,17 +43,19 @@ router.get('/stream/connect/:platform', ensureDiscordAuthed, (req, res) => {
 router.get('/stream/connect/:platform/callback', ensureDiscordAuthed, async (req, res) => {
   const platform = req.params.platform;
   const meta = PLATFORM_META[platform];
-  if (!meta) return res.redirect('/stream?error=unknown_platform');
+  const forBot = req.session.streamOAuthFor === 'bot';
+  const back = forBot ? '/stream/bot/connections' : '/stream';
+  if (!meta) return res.redirect(back + '?error=unknown_platform');
   if (req.query.error) {
     logger.warn(`[stream-connect] ${platform} provider returned error: ${req.query.error} — ${req.query.error_description || 'no description'}`);
-    return res.redirect('/stream?error=oauth_denied');
+    return res.redirect(back + '?error=oauth_denied');
   }
   if (!req.query.code || req.query.state !== req.session.streamOAuthState || platform !== req.session.streamOAuthPlatform) {
     logger.warn(`[stream-connect] ${platform} state check failed (hasCode=${!!req.query.code}, stateMatch=${req.query.state === req.session.streamOAuthState}, platformMatch=${platform === req.session.streamOAuthPlatform})`);
-    return res.redirect('/stream?error=oauth_state');
+    return res.redirect(back + '?error=oauth_state');
   }
   const codeVerifier = req.session.streamOAuthVerifier;
-  delete req.session.streamOAuthState; delete req.session.streamOAuthPlatform; delete req.session.streamOAuthVerifier;
+  delete req.session.streamOAuthState; delete req.session.streamOAuthPlatform; delete req.session.streamOAuthVerifier; delete req.session.streamOAuthFor;
   try {
     const adapter = getAdapter(platform);
     const result = await adapter.handleCallback(req.query.code, { codeVerifier });
@@ -59,6 +66,29 @@ router.get('/stream/connect/:platform/callback', ensureDiscordAuthed, async (req
       expiresAt: result.tokens.expires_at || null, scopes: result.tokens.scope || null,
     });
     const account = await accountStore.getAccount(req.user.id, platform);
+
+    if (forBot) {
+      // Stream bot: link the channel this sign-in proved, no multicast destination (core/stream-bot).
+      if (!['twitch', 'kick'].includes(platform) || !account?.platformUserId) return res.redirect(back + '?error=no_channel_id');
+      const { getStreamBot } = await import('../../core/stream-bot/index.js');
+      const sb = await getStreamBot();
+      const profile = await sb.store.ensureProfile(req.user.id, req.user.global_name || req.user.username || null);
+      const linked = await sb.store.linkChannel(profile.id, {
+        platform, platformUserId: account.platformUserId, login: String(account.platformUsername || '').toLowerCase() || null,
+        displayName: account.platformUsername || null, verifiedVia: 'stream_platform_accounts',
+      });
+      if (!linked.ok) return res.redirect(back + '?error=channel_taken');
+      sb.ingest.invalidate(profile.id);
+      sb.io.invalidate(profile.id);
+      if (platform === 'kick') {
+        const { ensureSubscribed } = await import('../../services/certifried-bot/kick-event-subscriptions.js');
+        ensureSubscribed(account.platformUserId).catch(err => logger.warn(`[stream-connect] kick webhook subscribe failed: ${err.message}`));
+      } else {
+        import('../../core/twitch-eventsub-manager.js').then(m => m.subscribeBroadcaster(account.platformUserId, account.platformUsername))
+          .catch(err => logger.warn(`[stream-connect] eventsub subscribe failed: ${err.message}`));
+      }
+      return res.redirect(back + '?ok=linked_' + platform);
+    }
 
     // Find/create the user's stream_keys row id
     const keyRows = await db.query('SELECT id FROM stream_keys WHERE owner_type = "discord" AND owner_id = ? LIMIT 1', [req.user.id]);
@@ -76,7 +106,7 @@ router.get('/stream/connect/:platform/callback', ensureDiscordAuthed, async (req
     res.redirect('/stream?ok=' + flag + '&platform=' + platform);
   } catch (err) {
     logger.error(`[stream-connect] ${platform} callback failed: ${err.message}`);
-    res.redirect('/stream?error=connect_failed');
+    res.redirect(back + '?error=connect_failed');
   }
 });
 

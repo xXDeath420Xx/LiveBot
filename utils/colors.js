@@ -31,7 +31,6 @@ const Colors = {
     YOUTUBE: 0xFF0000,
     KICK: 0x52E252,
     TIKTOK: 0x00F2EA,
-    TROVO: 0x21D464,
 
     // Cannabis/Grow colors
     GROW: 0x228B22,         // Forest Green
@@ -73,7 +72,6 @@ const ColorsHex = {
     YOUTUBE: '#FF0000',
     KICK: '#52E252',
     TIKTOK: '#00F2EA',
-    TROVO: '#21D464',
     GROW: '#228B22',
     HARVEST: '#32CD32',
     THRONE: '#7C3AED',

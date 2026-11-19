@@ -8,12 +8,12 @@
             </div>
             <form action="/manage/<%= guild.id %>/update-team" method="POST">
                 <div class="modal-body">
-                    <input type="hidden" name="teamSubscriptionId" id="edit-team-subscription-id">
+                    <input type="hidden" name="teamId" id="edit-team-subscription-id">
                     
                     <div class="row g-3">
                         <div class="col-md-6">
                             <label for="edit-team-channel-id" class="form-label">Announcement Channel</label>
-                            <select class="form-select" id="edit-team-channel-id" name="channelId">
+                            <select class="form-select" id="edit-team-channel-id" name="announcementChannelId">
                                 <option value="">Use Server Default</option>
                                 <% channels.forEach(channel => { %>
                                     <option value="<%= channel.id %>"><%= channel.name %></option>
@@ -29,6 +29,17 @@
                                     <option value="<%= role.id %>"><%= role.name %></option>
                                 <% }); %>
                             </select>
+                        </div>
+
+                        <div class="col-md-12">
+                            <label for="edit-team-live-board-channel-id" class="form-label">Live board channel</label>
+                            <select class="form-select" id="edit-team-live-board-channel-id" name="liveBoardChannelId">
+                                <option value="">No live board</option>
+                                <% channels.forEach(channel => { %>
+                                    <option value="<%= channel.id %>"><%= channel.name %></option>
+                                <% }); %>
+                            </select>
+                            <div class="form-text">One message here lists which team members are live right now, updated every minute. Changing the channel posts a new board there.</div>
                         </div>
 
                         <hr class="my-3">

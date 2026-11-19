@@ -1,0 +1,132 @@
+/* cf-msgpreview.css — the Discord message preview (.cf-dc), drawn by /js/cf-msgpreview.js or written
+   as markup by a page (the game pages, through partials/manage/_game-kit.ejs and _gk-author.ejs).
+   Discord's own dark-theme colours in the dark dashboard themes, and Discord's light-theme colours in Light and
+   Sand (the block at the end), so the preview reads as Discord in the reader's own light or dark.
+
+   Markup: div.cf-dc > [div.cf-dc-used] + .cf-dc-av + div.cf-dc-head (.cf-dc-name .cf-dc-tag .cf-dc-time)
+           + div.cf-dc-text / div.cf-dc-embed / div.cf-dc-buttons / div.cf-dc-reacts … */
+
+.cf-dc {
+    display: grid; grid-template-columns: 40px minmax(0, 1fr); column-gap: 14px; align-content: start;
+    padding: 12px 16px 14px; border-radius: var(--cf-radius, 8px); background: #313338; color: #dbdee1;
+    font-family: "gg sans", "Noto Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 15px; line-height: 1.375; min-width: 0; overflow-wrap: anywhere; text-align: left;
+}
+.cf-dc + .cf-dc { margin-top: 2px; }
+.cf-dc > :not(.cf-dc-av):not(.cf-dc-used) { grid-column: 2; min-width: 0; }
+.cf-dc-used { grid-column: 1 / -1; display: flex; align-items: center; gap: 6px; margin: 0 0 4px 54px; font-size: 13px; color: #949ba4; min-width: 0; }
+.cf-dc-used b { color: #c4c9ce; font-weight: 500; }
+.cf-dc-used code { color: #c9cdfb; font-size: 13px; background: none; border: 0; padding: 0; }
+.cf-dc-av { grid-column: 1; grid-row: span 30; width: 40px; height: 40px; border-radius: 50%; object-fit: cover; background: #5865f2; }
+.cf-dc-av.is-blank { display: inline-flex; align-items: center; justify-content: center; color: #fff; font-weight: 600; font-size: 16px; }
+.cf-dc-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0 6px; }
+.cf-dc-name { color: #f2f3f5; font-weight: 500; }
+.cf-dc-tag { align-self: center; padding: 0 4px; border-radius: 3px; background: #5865f2; color: #fff; font-size: 10px; font-weight: 600; line-height: 15px; text-transform: uppercase; }
+.cf-dc-time { color: #949ba4; font-size: 12px; }
+.cf-dc-text { white-space: pre-wrap; }
+.cf-dc-text:empty { display: none; }
+.cf-dc-text + .cf-dc-text { margin-top: 2px; }
+.cf-dc-muted { color: #949ba4; font-size: 13px; }
+.cf-dc-gone { color: #949ba4; font-style: italic; font-size: 13px; }
+.cf-dc-empty { color: #949ba4; font-style: italic; font-size: 14px; }
+.cf-dc-note { margin: 8px 0 0; font-size: 12px; color: #949ba4; }
+
+/* Text. Also used by pages that put drawn markdown in their own frame (Announce). */
+.cf-dc strong { color: #f2f3f5; font-weight: 700; }
+.cf-dc code, .cf-dc-code { padding: 0 3px; border-radius: 4px; background: #1e1f22; border: 0; color: #dbdee1; font-size: 0.85em; font-family: Consolas, "Andale Mono WT", monospace; }
+.cf-dc pre { margin: 4px 0 0; padding: 6px 8px; border-radius: 4px; background: #1e1f22; border: 1px solid #1e1f22; color: #dbdee1; font-size: 13px; line-height: 1.2; white-space: pre; overflow-x: auto; }
+.cf-dc a, .cf-dc-link { color: #00a8fc; text-decoration: none; }
+.cf-dc-mention { padding: 0 2px; border-radius: 3px; background: rgba(88, 101, 242, 0.3); color: #c9cdfb; font-weight: 500; }
+.cf-dc-spoiler { background: #1e1f22; color: transparent; border-radius: 3px; cursor: pointer; }
+.cf-dc-spoiler.is-shown { color: inherit; background: rgba(255, 255, 255, 0.1); }
+.cf-dc-md { overflow-wrap: anywhere; }
+.cf-dc-h { font-weight: 700; color: #f2f3f5; margin: 4px 0 2px; line-height: 1.25; }
+.cf-dc-h1 { font-size: 1.5em; } .cf-dc-h2 { font-size: 1.25em; } .cf-dc-h3 { font-size: 1em; }
+.cf-dc-sub { font-size: 12px; color: #949ba4; }
+.cf-dc-quote { border-left: 4px solid #4e5058; padding-left: 10px; }
+
+/* Embeds */
+.cf-dc-embed {
+    --cf-dc-bar: #5865f2;
+    display: grid; gap: 6px; max-width: 520px; margin-top: 4px; padding: 8px 16px 14px 12px; min-width: 0;
+    border-radius: 4px; border-left: 4px solid var(--cf-dc-bar); background: #2b2d31;
+}
+.cf-dc-embed.has-thumb { grid-template-columns: minmax(0, 1fr) 80px; column-gap: 16px; }
+.cf-dc-embed.has-thumb > :not(.cf-dc-thumb) { grid-column: 1; }
+.cf-dc-thumb { grid-column: 2; grid-row: 1 / span 4; width: 80px; height: 80px; border-radius: 4px; object-fit: cover; background: #1e1f22; }
+.cf-dc-author { display: flex; align-items: center; gap: 8px; color: #f2f3f5; font-size: 14px; font-weight: 600; }
+.cf-dc-author img { width: 24px; height: 24px; border-radius: 50%; }
+.cf-dc-title { color: #f2f3f5; font-size: 16px; font-weight: 600; }
+.cf-dc-title.is-link { color: #00a8fc; }
+.cf-dc-desc { font-size: 14px; white-space: pre-wrap; }
+.cf-dc-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px 12px; }
+.cf-dc-field { min-width: 0; font-size: 14px; }
+.cf-dc-field.is-wide { grid-column: 1 / -1; }
+.cf-dc-fname { color: #f2f3f5; font-weight: 600; margin-bottom: 2px; }
+.cf-dc-image { display: block; max-width: 100%; border-radius: 4px; background: #1e1f22; aspect-ratio: 16 / 7; object-fit: cover; }
+.cf-dc-image.is-blank { display: flex; align-items: center; justify-content: center; color: #949ba4; font-size: 12px; }
+.cf-dc-footer { color: #b5bac1; font-size: 12px; }
+.cf-dc-ph { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; padding: 8px; background: linear-gradient(135deg, #3f4147, #232428); color: #949ba4; font-size: 12px; text-align: center; white-space: pre-line; }
+.cf-dc-ph strong { font-size: 14px; color: #dbdee1; }
+.cf-dc-thumb.cf-dc-ph { padding: 0; }
+.cf-dc-attachment { margin-top: 4px; width: 124px; height: 220px; border-radius: 8px; }
+
+/* Components and reactions */
+.cf-dc-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.cf-dc-btn { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 2px 14px; border-radius: 4px; background: #4e5058; color: #fff; font-size: 14px; font-weight: 500; }
+.cf-dc-btn i { font-size: 11px; opacity: 0.8; }
+.cf-dc-btn.is-primary { background: #5865f2; }
+.cf-dc-btn.is-success { background: #248046; }
+.cf-dc-btn.is-danger { background: #da373c; }
+.cf-dc-reacts { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+.cf-dc-react { display: inline-flex; align-items: center; gap: 6px; padding: 1px 8px; border-radius: 8px; background: #2b2d31; border: 1px solid #3f4147; font-size: 13px; color: #dbdee1; }
+.cf-dc-react img { width: 16px; height: 16px; object-fit: contain; }
+.cf-dc-react.is-mine { background: rgba(88, 101, 242, 0.15); border-color: #5865f2; }
+
+/* A box a page puts a drawn preview in. (.cf-mp-frame is the older name, still used by the streaming pages.) */
+.cf-dc-frame, .cf-mp-frame { min-width: 0; border-radius: var(--cf-radius, 8px); overflow: hidden; }
+.cf-dc-frame:empty, .cf-mp-frame:empty { min-height: 64px; background: #313338; }
+
+/* Plain text inside a message takes the message's colour. Page rules that colour every descendant of their
+   content area (the manage page's `.page-content *`) would otherwise paint it in the page's ink, not Discord's. */
+.cf-dc.cf-dc :where(.cf-dc-text, .cf-dc-md, .cf-dc-desc, .cf-dc-field, .cf-dc-fields, .cf-dc-quote, .cf-dc-embed, .cf-dc-head,
+    p, li, ul, ol, em, u, s, blockquote, span:not([class]), div:not([class])) { color: inherit; }
+
+/* Light and Sand: Discord's light theme. */
+:root:is([data-theme="light"], [data-theme="sand"]) {
+    --cf-dc-bar-none: #e3e5e8;
+}
+:root:is([data-theme="light"], [data-theme="sand"]) .cf-dc { background: #ffffff; color: #313338; box-shadow: inset 0 0 0 1px #e3e5e8; }
+:root:is([data-theme="light"], [data-theme="sand"]) :is(.cf-dc-name, .cf-dc strong, .cf-dc-h, .cf-dc-author, .cf-dc-title, .cf-dc-fname) { color: #060607; }
+:root:is([data-theme="light"], [data-theme="sand"]) :is(.cf-dc-used, .cf-dc-time, .cf-dc-muted, .cf-dc-gone, .cf-dc-empty, .cf-dc-note, .cf-dc-sub, .cf-dc-footer) { color: #5c5e66; }
+:root:is([data-theme="light"], [data-theme="sand"]) .cf-dc-used b { color: #313338; }
+:root:is([data-theme="light"], [data-theme="sand"]) :is(.cf-dc-used code, .cf-dc-mention) { color: #4752c4; }
+:root:is([data-theme="light"], [data-theme="sand"]) .cf-dc-mention { background: rgba(88, 101, 242, 0.15); }
+:root:is([data-theme="light"], [data-theme="sand"]) :is(.cf-dc code, .cf-dc-code) { background: #ebedef; color: #313338; }
+:root:is([data-theme="light"], [data-theme="sand"]) .cf-dc pre { background: #f2f3f5; border-color: #e3e5e8; color: #313338; }
+:root:is([data-theme="light"], [data-theme="sand"]) :is(.cf-dc a, .cf-dc-link, .cf-dc-title.is-link) { color: #0062cc; }
+:root:is([data-theme="light"], [data-theme="sand"]) .cf-dc-spoiler { background: #e3e5e8; }
+:root:is([data-theme="light"], [data-theme="sand"]) .cf-dc-spoiler.is-shown { background: rgba(0, 0, 0, 0.06); }
+:root:is([data-theme="light"], [data-theme="sand"]) .cf-dc-quote { border-left-color: #c4c9ce; }
+:root:is([data-theme="light"], [data-theme="sand"]) .cf-dc-embed { background: #f2f3f5; }
+:root:is([data-theme="light"], [data-theme="sand"]) :is(.cf-dc-thumb, .cf-dc-image) { background: #e3e5e8; }
+:root:is([data-theme="light"], [data-theme="sand"]) .cf-dc-image.is-blank { color: #5c5e66; }
+:root:is([data-theme="light"], [data-theme="sand"]) .cf-dc-ph { background: linear-gradient(135deg, #e3e5e8, #f2f3f5); color: #5c5e66; }
+:root:is([data-theme="light"], [data-theme="sand"]) .cf-dc-ph strong { color: #313338; }
+:root:is([data-theme="light"], [data-theme="sand"]) .cf-dc-btn { background: #6d6f78; color: #ffffff; }
+:root:is([data-theme="light"], [data-theme="sand"]) .cf-dc-btn.is-primary { background: #5865f2; }
+:root:is([data-theme="light"], [data-theme="sand"]) .cf-dc-btn.is-success { background: #248046; }
+:root:is([data-theme="light"], [data-theme="sand"]) .cf-dc-btn.is-danger { background: #d83c3e; }
+:root:is([data-theme="light"], [data-theme="sand"]) .cf-dc-react { background: #f2f3f5; border-color: #e3e5e8; color: #4e5058; }
+:root:is([data-theme="light"], [data-theme="sand"]) .cf-dc-react.is-mine { background: rgba(88, 101, 242, 0.12); border-color: #5865f2; }
+:root:is([data-theme="light"], [data-theme="sand"]) :is(.cf-dc-frame, .cf-mp-frame):empty { background: #ffffff; box-shadow: inset 0 0 0 1px #e3e5e8; }
+
+@media (max-width: 640px) {
+    .cf-dc { padding: 10px 12px 12px; column-gap: 10px; grid-template-columns: 34px minmax(0, 1fr); font-size: 14px; }
+    .cf-dc-av { width: 34px; height: 34px; }
+    .cf-dc-used { margin-left: 44px; }
+    .cf-dc-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .cf-dc-embed { padding: 8px 10px 12px 10px; }
+    .cf-dc-embed.has-thumb { grid-template-columns: minmax(0, 1fr) 56px; }
+    .cf-dc-thumb { width: 56px; height: 56px; }
+}

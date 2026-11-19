@@ -1,0 +1,460 @@
+<%#
+  Digimon: settings, wild spawn rarity, the strongest partners, quiz results, the market and resets.
+  API-driven (/api/guilds/:id/digimon for data, /api/guilds/:id/feature-config/digimon for settings);
+  needs `guild`, `channels`. Built on the settings-row kit (cf-settings.css). Rows are built with
+  createElement and textContent: member names are member-controlled, so no HTML strings.
+  The master switch (dgEnabled, in the page header) saves as soon as it changes.
+%>
+<%
+    const dgChannels = (locals.channels || [])
+        .filter(c => c.type === 0 || c.type === 5)
+        .map(c => ({ id: c.id, name: c.name }))
+        .sort((a, b) => a.name.localeCompare(b.name));
+%>
+<%- include('_game-kit') %>
+<div class="page-section" id="digimonPage" data-guild-id="<%= guild.id %>">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-dragon"></i>
+                <span>Digimon</span>
+            </div>
+            <div class="page-section-subtitle">Played with <code>/digimon</code>. No AI is used anywhere in it.</div>
+        </div>
+    </div>
+
+    <%- include('_digimon-nav', { dgNav: 'digimon' }) %>
+
+    <div id="dgError" class="cf-notice is-bad" role="alert" hidden></div>
+    <div id="dgNoData" class="cf-notice is-warn" hidden>The Digimon list has not been imported, so eggs and wild spawns have nothing to pick from.</div>
+
+    <dl class="cf-kpis" aria-label="Digimon at a glance">
+        <div class="cf-kpi"><dt>Tamers</dt><dd class="cf-kpi-value" id="dgStatPlayers">–</dd></div>
+        <div class="cf-kpi"><dt>Digimon owned</dt><dd class="cf-kpi-value" id="dgStatOwned">–</dd></div>
+        <div class="cf-kpi"><dt>Quiz takers today</dt><dd class="cf-kpi-value" id="dgStatQuiz">–</dd></div>
+        <div class="cf-kpi"><dt>For sale</dt><dd class="cf-kpi-value" id="dgStatListings">–</dd></div>
+    </dl>
+
+    <section class="cf-section" aria-labelledby="dg-settings-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="dg-settings-title">Settings</h2>
+                <p class="cf-section-desc">While Digimon is off, <code>/digimon</code> tells members it is turned off here.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="dgEnabled">Digimon</label>
+                    <p class="cf-row-desc">Turns on <code>/digimon</code>, including the daily quiz.</p>
+                </div>
+                <div class="cf-row-control"><input id="dgEnabled" type="checkbox" class="cf-switch" role="switch" data-feature-switch></div>
+            </div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="dgSpawns">Wild Digimon appear in chat</label>
+                    <p class="cf-row-desc">The first member to name one with <code>/digimon tame</code> keeps it.</p>
+                </div>
+                <div class="cf-row-control"><input id="dgSpawns" type="checkbox" class="cf-switch" role="switch"></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="dgSpawnChannel">Spawn channel</label>
+                    <p class="cf-row-desc">Leave empty to spawn in whichever channel people are talking in.</p>
+                </div>
+                <div class="cf-row-control">
+                    <select id="dgSpawnChannel" class="form-select">
+                        <option value="">Wherever people are talking</option>
+                        <% dgChannels.forEach(function (c) { %><option value="<%= c.id %>" data-kind="text">#<%= c.name %></option><% }) %>
+                    </select>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="dgSpawnChance">Chance per message</label>
+                    <p class="cf-row-desc">From 1 to 50. At most one spawn per channel every 2 minutes.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-unit">
+                        <input id="dgSpawnChance" type="number" min="1" max="50" class="form-control">
+                        <span class="cf-unit">%</span>
+                    </div>
+                </div>
+            </div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="dgTrades">Members can trade</label>
+                    <p class="cf-row-desc"><code>/digimon trade</code> posts an offer the other member accepts or declines. Partners on a team, and DNA-fused ones, cannot be traded.</p>
+                </div>
+                <div class="cf-row-control"><input id="dgTrades" type="checkbox" class="cf-switch" role="switch"></div>
+            </div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="dgMarket">Market</label>
+                    <p class="cf-row-desc">Members sell Digimon for bits with <code>/digimon market sell</code>. Bits are the game's own currency; nobody pays real money.</p>
+                </div>
+                <div class="cf-row-control"><input id="dgMarket" type="checkbox" class="cf-switch" role="switch"></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="dgFee">Market fee</label>
+                    <p class="cf-row-desc">Taken from the seller's bits on each sale, from 0 to 50. Keeps bits from piling up.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-unit">
+                        <input id="dgFee" type="number" min="0" max="50" class="form-control">
+                        <span class="cf-unit">%</span>
+                    </div>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="dgLifespan">Lifespan</label>
+                    <p class="cf-row-desc">Days a partner spends on its team before it returns to a Digi-Egg as the next generation, a little stronger. Each care mistake takes a day off, down to a third of the lifespan; partners in the DigiBank don't age. 0 turns it off.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-unit">
+                        <input id="dgLifespan" type="number" min="0" max="365" class="form-control">
+                        <span class="cf-unit">days</span>
+                    </div>
+                </div>
+            </div>
+            <div class="cf-section-foot">
+                <span id="dgSaved" class="cf-status-line" role="status" aria-live="polite"></span>
+                <button id="dgSave" class="btn btn-primary" type="button">Save settings</button>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="dg-preview-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="dg-preview-title">In Discord</h2>
+                <p class="cf-section-desc">A wild Digimon as it appears in chat, with its picture. The colour follows its rarity tier.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="gk-preview">
+                <div class="cf-dc" aria-label="Preview: a wild Digimon">
+                    <%- include('_gk-author') %>
+                    <div class="cf-dc-embed" style="--cf-dc-bar: #2f855a">
+                        <div class="cf-dc-title">An uncommon wild Digimon appeared!</div>
+                        <div class="cf-dc-desc"><strong>Uncommon</strong> · It's an <strong>Adult</strong> with the <strong>Vaccine</strong> attribute.
+Name it with <code>/digimon tame</code> to make it yours.</div>
+                        <div class="cf-dc-image is-blank">Digimon picture</div>
+                        <div class="cf-dc-footer">It stays until someone tames it or another appears</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="dg-rarity-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="dg-rarity-title">Wild spawn rarity</h2>
+                <p class="cf-section-desc">Each spawn picks a tier first, then any Digimon of that stage, so every Digimon in a tier is equally likely. Members see this with <code>/digimon rarity</code>. Baby, Armor, Hybrid and Unknown Digimon never spawn.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-table-wrap">
+                <table class="cf-table cf-table--stack dg-table">
+                    <thead><tr><th>Tier</th><th>Stage</th><th class="dg-num">Share of spawns</th><th class="dg-num">Digimon</th><th class="dg-num">Each one</th><th class="dg-num">Tamed at</th></tr></thead>
+                    <tbody id="dgRarity"><tr><td colspan="6" class="dg-empty">Loading…</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="dg-top-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="dg-top-title">Strongest partners</h2>
+                <p class="cf-section-desc">Each member's team leader, ranked by stage, then level, then wins. Reset clears that member's Digimon, field guide, bits, meat and quiz results in this server.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-table-wrap">
+                <table class="cf-table cf-table--stack dg-table">
+                    <thead><tr><th class="dg-num">#</th><th>Member</th><th>Partner</th><th>Stage</th><th class="dg-num">Level</th><th class="dg-num">Wins</th><th class="dg-num">Owned</th><th class="dg-num">Met</th><th aria-label="Actions"></th></tr></thead>
+                    <tbody id="dgTop"><tr><td colspan="9" class="dg-empty">Loading…</td></tr></tbody>
+                </table>
+            </div>
+            <div class="cf-section-foot"><span class="cf-foot-note" id="dgStageNote"></span></div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="dg-quiz-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="dg-quiz-title">Quiz results</h2>
+                <p class="cf-section-desc">Who got which Digimon in "Which Digital Monster are you today?". Everyone gets the same five questions each day; the day changes at midnight UTC.</p>
+            </div>
+            <div class="cf-section-actions"><input id="dgQuizDay" type="date" class="form-control" aria-label="Quiz day" data-no-savebar></div>
+        </header>
+        <div class="cf-rows">
+            <div id="dgQuizNote" class="cf-state cf-state--compact" hidden></div>
+            <div class="cf-table-wrap">
+                <table class="cf-table cf-table--stack dg-table">
+                    <thead><tr><th>Digimon</th><th>Stage</th><th class="dg-num">Members</th><th>Who</th></tr></thead>
+                    <tbody id="dgQuiz"><tr><td colspan="4" class="dg-empty">Loading…</td></tr></tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="dg-market-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="dg-market-title">Market</h2>
+                <p class="cf-section-desc">Digimon for sale here. Remove takes a listing down and gives the Digimon back to its seller.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-table-wrap">
+                <table class="cf-table cf-table--stack dg-table">
+                    <thead><tr><th class="dg-num">Listing</th><th>Digimon</th><th class="dg-num">Level</th><th class="dg-num">Price</th><th>Seller</th><th>Listed</th><th aria-label="Actions"></th></tr></thead>
+                    <tbody id="dgOpen"><tr><td colspan="7" class="dg-empty">Loading…</td></tr></tbody>
+                </table>
+            </div>
+            <div class="cf-rows-head">Recent sales</div>
+            <div class="cf-table-wrap">
+                <table class="cf-table cf-table--stack dg-table">
+                    <thead><tr><th>Digimon</th><th class="dg-num">Price</th><th class="dg-num">Fee</th><th>Seller</th><th>Buyer</th><th>Sold</th></tr></thead>
+                    <tbody id="dgSold"><tr><td colspan="6" class="dg-empty">Loading…</td></tr></tbody>
+                </table>
+            </div>
+            <div class="cf-section-foot"><span class="cf-foot-note" id="dgMarketNote"></span></div>
+        </div>
+    </section>
+
+    <%- include('_game-commands', { gkCommands: [{ cmd: 'digimon' }] }) %>
+
+    <section class="cf-section cf-section--danger" aria-labelledby="dg-reset-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="dg-reset-title">Start over</h2>
+                <p class="cf-section-desc">Deletes every member's Digimon, field guide, bits, meat and quiz results in this server, and any wild Digimon waiting in chat. Settings stay. This cannot be undone.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="dgResetConfirm">Type RESET to confirm</label>
+                </div>
+                <div class="cf-row-control"><input id="dgResetConfirm" class="form-control" autocomplete="off" data-no-savebar></div>
+            </div>
+            <div class="cf-section-foot">
+                <button id="dgResetAll" class="btn btn-danger" type="button">Reset everyone</button>
+            </div>
+        </div>
+    </section>
+</div>
+<style>
+    .dg-num { text-align: right !important; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .dg-empty { padding: var(--cf-6) var(--cf-4) !important; text-align: center; color: var(--cf-text-3) !important; }
+    .dg-muted { color: var(--cf-text-3); font-size: var(--cf-text-sm); }
+    .dg-member { display: flex; align-items: center; gap: 8px; }
+    .dg-av { width: 22px; height: 22px; border-radius: 50%; }
+    #dgQuizDay { width: auto; }
+    #dgQuizNote { justify-content: flex-start; }
+</style>
+<script>
+(function () {
+    const root = document.getElementById('digimonPage');
+    if (!root) return;
+    const guildId = root.dataset.guildId;
+    const base = `/api/guilds/${guildId}/digimon`;
+    const $ = id => document.getElementById(id);
+    const num = v => Number(v ?? 0).toLocaleString();
+    const showErr = m => { $('dgError').textContent = m || ''; $('dgError').hidden = !m; };
+    const truthy = v => v === true || v === 1 || v === '1';
+    const fmtAgo = iso => {
+        if (!iso) return '';
+        const m = Math.round((Date.now() - new Date(iso)) / 60000);
+        if (m < 1) return 'just now';
+        if (m < 60) return m + 'm ago';
+        if (m < 1440) return Math.round(m / 60) + 'h ago';
+        return Math.round(m / 1440) + 'd ago';
+    };
+
+    // el('td', { className, text, data: { reset: id } }, ...children): text always goes in as text.
+    function el(tag, props, ...kids) {
+        const node = document.createElement(tag);
+        const p = props || {};
+        if (p.className) node.className = p.className;
+        if (p.text !== undefined) node.textContent = String(p.text);
+        if (p.label) node.dataset.label = p.label;
+        for (const [k, v] of Object.entries(p.data || {})) node.dataset[k] = v;
+        for (const [k, v] of Object.entries(p.attrs || {})) node.setAttribute(k, v);
+        for (const kid of kids) if (kid !== null && kid !== undefined) node.append(kid);
+        return node;
+    }
+    const cell = (label, content, className) => el('td', { label, className },
+        ...(content instanceof Node ? [content] : [el('span', { text: content ?? '' })]));
+    const memberCell = (label, m) => {
+        const wrap = el('span', { className: 'dg-member' });
+        if (m && m.avatar) wrap.append(el('img', { className: 'dg-av', attrs: { src: m.avatar, alt: '' } }));
+        wrap.append(el('span', { text: (m && m.name) || 'Not in the server' }));
+        return cell(label, wrap);
+    };
+    const muted = text => el('span', { className: 'dg-muted', text });
+    const pair = (a, b) => { const s = el('span'); s.append(el('span', { text: a }), ' ', muted(b)); return s; };
+    function fill(tbody, rows, cols, emptyText) {
+        tbody.replaceChildren(...(rows.length ? rows
+            : [el('tr', null, el('td', { className: 'dg-empty', text: emptyText, attrs: { colspan: String(cols) } }))]));
+    }
+
+    async function api(url, opts) {
+        const res = await fetch(url, { headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', ...opts });
+        const json = await res.json().catch(() => ({ success: false, error: `HTTP ${res.status}` }));
+        if (!res.ok || json.success === false) throw new Error(json.error || `HTTP ${res.status}`);
+        return json;
+    }
+
+    function renderConfig(c) {
+        $('dgEnabled').checked = truthy(c.enabled);
+        $('dgEnabled').dispatchEvent(new Event('change'));
+        $('dgSpawns').checked = truthy(c.spawns_enabled);
+        $('dgSpawnChannel').value = c.spawn_channel_id || '';
+        $('dgSpawnChance').value = c.spawn_chance ?? 4;
+        $('dgTrades').checked = truthy(c.trades_enabled ?? 1);
+        $('dgMarket').checked = truthy(c.market_enabled ?? 1);
+        $('dgFee').value = c.market_fee_percent ?? 5;
+        $('dgLifespan').value = c.lifespan_days ?? 30;
+    }
+
+    async function loadOverview() {
+        const r = await api(base + '/');
+        renderConfig(r.config);
+        $('dgStatPlayers').textContent = num(r.stats.players);
+        $('dgStatOwned').textContent = num(r.stats.owned);
+        $('dgStatQuiz').textContent = num(r.stats.quizToday);
+        $('dgStatListings').textContent = num(r.stats.listings);
+        $('dgNoData').hidden = r.stats.species > 0;
+        const order = ['Baby I', 'Baby II', 'Child', 'Adult', 'Perfect', 'Ultimate'];
+        const parts = order.filter(s => r.stats.byStage[s]).map(s => `${s}: ${r.stats.byStage[s]}`);
+        $('dgStageNote').textContent = parts.length ? 'Partners by stage. ' + parts.join(', ') : '';
+        $('dgMarketNote').textContent = `${num(r.stats.sales7d)} sold and ${num(r.stats.trades7d)} traded in the last 7 days.`;
+        fill($('dgRarity'), (r.rarity || []).map(t => el('tr', null,
+            cell('Tier', t.name),
+            cell('Stage', t.stage),
+            cell('Share of spawns', t.chance + '%', 'dg-num'),
+            cell('Digimon', num(t.species), 'dg-num'),
+            cell('Each one', t.species ? '1 in ' + num(Math.round(100 / t.chance * t.species)) : '–', 'dg-num'),
+            cell('Tamed at', `Lv ${t.tame[0]}-${t.tame[1]}`, 'dg-num'))), 6, 'No tiers.');
+        if (!$('dgQuizDay').value) $('dgQuizDay').value = r.day;
+    }
+
+    async function loadTop() {
+        try {
+            const r = await api(base + '/leaderboard');
+            fill($('dgTop'), r.tamers.map((t, i) => {
+                const reset = el('button', { className: 'btn btn-secondary btn-sm', text: 'Reset',
+                    attrs: { type: 'button' }, data: { reset: t.member.id, name: t.member.name || 'this member' } });
+                return el('tr', null,
+                    cell('#', String(i + 1), 'dg-num'), memberCell('Member', t.member), cell('Partner', t.partner),
+                    cell('Stage', t.stage), cell('Level', num(t.level), 'dg-num'),
+                    cell('Wins', pair(num(t.wins), 'of ' + num(t.battles)), 'dg-num'),
+                    cell('Owned', num(t.owned), 'dg-num'), cell('Met', num(t.met), 'dg-num'),
+                    el('td', { className: 'cf-cell-end' }, reset));
+            }), 9, 'Nobody has a partner yet. Members start with /digimon start.');
+        } catch (e) { showErr(e.message); }
+    }
+
+    async function loadQuiz() {
+        try {
+            const day = $('dgQuizDay').value;
+            const r = await api(base + '/quiz' + (day ? '?day=' + encodeURIComponent(day) : ''));
+            const attrs = Object.entries(r.attributes).sort((a, b) => b[1] - a[1]).map(([a, n]) => `${a} ${n}`).join(', ');
+            $('dgQuizNote').hidden = !r.takers;
+            const cap = w => w.charAt(0).toUpperCase() + w.slice(1);
+            const crests = Object.entries(r.crests || {}).sort((a, b) => b[1] - a[1]).map(([c, n]) => `${cap(c)} ${n}`).join(', ');
+            $('dgQuizNote').textContent = r.takers ? `${num(r.takers)} took the quiz on ${r.day}. By attribute: ${attrs}.${crests ? ` By Crest: ${crests}.` : ''}` : '';
+            fill($('dgQuiz'), r.results.map(d => {
+                const chips = el('div', { className: 'cf-chips' },
+                    ...d.members.map(m => el('span', { className: 'cf-chip', text: m.name || 'Left the server' })));
+                return el('tr', null, cell('Digimon', d.name), cell('Stage', d.stage),
+                    cell('Members', num(d.members.length), 'dg-num'), cell('Who', chips));
+            }), 4, `Nobody took the quiz on ${r.day}.`);
+        } catch (e) { showErr(e.message); }
+    }
+
+    async function loadMarket() {
+        try {
+            const r = await api(base + '/market');
+            fill($('dgOpen'), r.open.map(l => {
+                const remove = el('button', { className: 'btn btn-secondary btn-sm', text: 'Remove', attrs: { type: 'button' }, data: { unlist: String(l.id) } });
+                return el('tr', null, cell('Listing', String(l.id), 'dg-num'), cell('Digimon', pair(l.name, l.stage)),
+                    cell('Level', num(l.level), 'dg-num'), cell('Price', num(l.price) + ' bits', 'dg-num'),
+                    memberCell('Seller', l.seller), cell('Listed', fmtAgo(l.listedAt), 'dg-muted'),
+                    el('td', { className: 'cf-cell-end' }, remove));
+            }), 7, 'Nothing for sale.');
+            fill($('dgSold'), r.sold.map(s => el('tr', null,
+                cell('Digimon', pair(s.name, 'Lv ' + num(s.level))), cell('Price', num(s.price), 'dg-num'),
+                cell('Fee', num(s.fee), 'dg-num'), memberCell('Seller', s.seller), memberCell('Buyer', s.buyer),
+                cell('Sold', fmtAgo(s.soldAt), 'dg-muted'))), 6, 'No sales yet.');
+        } catch (e) { showErr(e.message); }
+    }
+
+    async function busy(btn, fn) {
+        btn.disabled = true; showErr('');
+        try { await fn(); } catch (e) { showErr(e.message); } finally { btn.disabled = false; }
+    }
+    const reloadAll = () => Promise.all([loadOverview(), loadTop(), loadQuiz(), loadMarket()]);
+
+    function flashSaved(text, ok) {
+        const s = $('dgSaved');
+        s.textContent = text; s.className = 'cf-status-line ' + (ok ? 'is-ok' : 'is-bad');
+        clearTimeout(s._t); s._t = setTimeout(() => { s.textContent = ''; s.className = 'cf-status-line'; }, 2500);
+    }
+    async function saveSettings(fields, rerender = true) {
+        const r = await api(`/api/guilds/${guildId}/feature-config/digimon`, { method: 'PUT', body: JSON.stringify(fields) });
+        if (rerender) renderConfig(r.config);
+        flashSaved('Saved.', true);
+    }
+    $('dgSave').addEventListener('click', e => busy(e.currentTarget, () => saveSettings({
+        enabled: $('dgEnabled').checked, spawns_enabled: $('dgSpawns').checked,
+        spawn_channel_id: $('dgSpawnChannel').value, spawn_chance: $('dgSpawnChance').value,
+        trades_enabled: $('dgTrades').checked, market_enabled: $('dgMarket').checked, market_fee_percent: $('dgFee').value,
+        lifespan_days: $('dgLifespan').value,
+    })));
+    // The header On/Off switch (cf-pagehead.js fires `input` on the real box) saves on its own.
+    // renderConfig only fires `change`, which repaints the header without saving again.
+    let lastSaved = null;
+    $('dgEnabled').addEventListener('input', () => {
+        const want = $('dgEnabled').checked;
+        if (lastSaved === want) return;
+        saveSettings({ enabled: want }, false).then(() => { lastSaved = want; }).catch(err => {
+            $('dgEnabled').checked = !want;
+            $('dgEnabled').dispatchEvent(new Event('change'));
+            flashSaved(err.message, false);
+        });
+    });
+    $('dgQuizDay').addEventListener('change', loadQuiz);
+    $('dgResetAll').addEventListener('click', e => busy(e.currentTarget, async () => {
+        if ($('dgResetConfirm').value.trim() !== 'RESET') throw new Error('Type RESET in the box first.');
+        if (!confirm('Delete every member\'s Digimon, bits and quiz results in this server? This cannot be undone.')) return;
+        await api(base + '/reset', { method: 'POST', body: JSON.stringify({ all: true, confirm: 'RESET' }) });
+        $('dgResetConfirm').value = '';
+        await reloadAll();
+    }));
+    root.addEventListener('click', e => {
+        const rs = e.target.closest('[data-reset]');
+        if (rs) {
+            if (!confirm(`Reset ${rs.dataset.name}? Their Digimon, field guide, bits, meat and quiz results in this server are deleted.`)) return;
+            busy(rs, async () => { await api(base + '/reset', { method: 'POST', body: JSON.stringify({ userId: rs.dataset.reset }) }); await reloadAll(); });
+            return;
+        }
+        const un = e.target.closest('[data-unlist]');
+        if (un) {
+            if (!confirm(`Take down listing ${un.dataset.unlist}? The Digimon goes back to its seller.`)) return;
+            busy(un, async () => { await api(`${base}/market/${un.dataset.unlist}`, { method: 'DELETE' }); await Promise.all([loadMarket(), loadOverview()]); });
+        }
+    });
+
+    loadOverview().then(() => { lastSaved = $('dgEnabled').checked; }).then(loadQuiz).catch(e => showErr(e.message));
+    loadTop();
+    loadMarket();
+})();
+</script>

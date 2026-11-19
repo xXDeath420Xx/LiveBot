@@ -1,0 +1,501 @@
+<%#
+  Game news: watchers that post patch notes and announcements from a catalogue of games or a custom
+  feed (RSS/Atom, Steam news, an X account). API-driven: this partial receives { guild, channels, roles }
+  and loads watchers and the preset catalogue from /api/guilds/:id/game-news. Watchers can be edited in
+  place (PATCH), tested (fetch without posting, shown as the post would look) and removed. Built on the
+  settings-row kit; ids and field names of the add form are unchanged. Script-built rows use
+  createElement/textContent.
+%>
+<%
+const gnChannels = (typeof channels !== 'undefined' ? channels : []).filter(c => c.type === 0 || c.type === 5);
+const gnRoles = typeof roles !== 'undefined' ? roles : [];
+const gnIntervals = [[15, '15 minutes'], [30, '30 minutes'], [60, '1 hour'], [180, '3 hours'], [720, '12 hours'], [1440, '24 hours']];
+%>
+<%- include('_game-kit') %>
+<style>
+    #gnPage .gn-error { font-size: var(--cf-text-xs); color: var(--cf-danger); overflow-wrap: anywhere; }
+    #gnPage .gn-test { display: grid; gap: var(--cf-2); margin-top: var(--cf-2); }
+    #gnPage .gn-edit { margin-top: var(--cf-3); padding: var(--cf-3); border: 1px solid var(--cf-border); border-radius: var(--cf-radius); background: var(--cf-surface-2); }
+    #gnPage .gn-edit .cf-fields { margin-bottom: var(--cf-3); }
+    #gnPage .gn-add-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    #gnPage .gn-add-grid > .gk-preview-wrap { border-left: 1px solid var(--cf-border); }
+    #gnPage .gn-add-grid .cf-row { grid-template-columns: minmax(0, 1fr); }
+    @media (max-width: 960px) { #gnPage .gn-add-grid { grid-template-columns: minmax(0, 1fr); } #gnPage .gn-add-grid > .gk-preview-wrap { border-left: 0; border-top: 1px solid var(--cf-border); } }
+</style>
+
+<div class="page-section" id="gnPage">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-newspaper"></i>
+                <span>Game news</span>
+            </div>
+            <div class="page-section-subtitle">Each watcher checks one source on a schedule and posts what is new.</div>
+        </div>
+    </div>
+
+    <section class="cf-section" aria-labelledby="gn-add-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="gn-add-title">Add a watcher</h2>
+                <p class="cf-section-desc">A new watcher first notes what the source already has, so it starts posting with the next new item.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="gn-add-grid">
+            <form id="gn-add-form">
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="gn-preset">Game or source</label>
+                        <p class="cf-row-desc" id="gn-preset-note">Pick a title from the catalogue, or choose "Custom source" to point at any feed.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <select class="form-select" id="gn-preset" name="preset_key" aria-describedby="gn-preset-note">
+                            <option value="">Loading the catalogue…</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Custom source fields, shown only when "Custom source" is picked -->
+                <div id="gn-custom" hidden>
+                    <div class="cf-row cf-row--sub">
+                        <div class="cf-row-text">
+                            <label class="cf-row-label" for="gn-provider">Source type</label>
+                        </div>
+                        <div class="cf-row-control">
+                            <select class="form-select" id="gn-provider" name="provider">
+                                <option value="rss">RSS or Atom feed</option>
+                                <option value="steam-news">Steam news (by app ID)</option>
+                                <option value="twitter-rss">X (Twitter) account</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="cf-row cf-row--sub">
+                        <div class="cf-row-text">
+                            <label class="cf-row-label" for="gn-label">Display name</label>
+                            <p class="cf-row-desc">How the game is named in posts.</p>
+                        </div>
+                        <div class="cf-row-control">
+                            <input class="form-control" id="gn-label" name="game_label" placeholder="Deep Rock Galactic" maxlength="80">
+                        </div>
+                    </div>
+                    <div class="cf-row cf-row--sub" id="gn-f-rss">
+                        <div class="cf-row-text">
+                            <label class="cf-row-label" for="gn-url">Feed URL</label>
+                            <p class="cf-row-desc">Any RSS 2.0 or Atom feed. Most publishers have one at /rss, /feed or /news/rss.</p>
+                        </div>
+                        <div class="cf-row-control">
+                            <input class="form-control" id="gn-url" name="url" type="url" placeholder="https://example.com/news/rss">
+                        </div>
+                    </div>
+                    <div class="cf-row cf-row--sub" id="gn-f-steam" hidden>
+                        <div class="cf-row-text">
+                            <label class="cf-row-label" for="gn-appid">Steam app ID</label>
+                            <p class="cf-row-desc">The number in the store address: store.steampowered.com/app/<b>548430</b>/. Only developer posts are used.</p>
+                        </div>
+                        <div class="cf-row-control">
+                            <input class="form-control" id="gn-appid" name="appid" type="number" placeholder="548430">
+                        </div>
+                    </div>
+                    <div class="cf-row cf-row--sub" id="gn-f-twitter" hidden>
+                        <div class="cf-row-text">
+                            <label class="cf-row-label" for="gn-username">Account name</label>
+                            <p class="cf-row-desc">Without the @. Use this when a publisher has no feed of any kind.</p>
+                        </div>
+                        <div class="cf-row-control">
+                            <input class="form-control" id="gn-username" name="username" placeholder="RocketLeague">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="gn-channel">Channel</label>
+                        <p class="cf-row-desc">Where new items are posted.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <select class="form-select" id="gn-channel" name="channel_id" required>
+                            <option value="">Choose a channel</option>
+                            <% gnChannels.forEach(function(c) { %>
+                            <option value="<%= c.id %>" data-kind="text">#<%= c.name %></option>
+                            <% }); %>
+                        </select>
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="gn-role">Role to ping</label>
+                        <p class="cf-row-desc">Optional.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <select class="form-select" id="gn-role" name="role_ping_id">
+                            <option value="">No ping</option>
+                            <% gnRoles.forEach(function(r) { %>
+                            <option value="<%= r.id %>" data-kind="role">@<%= r.name %></option>
+                            <% }); %>
+                        </select>
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="gn-interval">Check every</label>
+                    </div>
+                    <div class="cf-row-control">
+                        <select class="form-select" id="gn-interval" name="check_interval_minutes">
+                            <% gnIntervals.forEach(function(i) { %><option value="<%= i[0] %>"<%= i[0] === 15 ? ' selected' : '' %>><%= i[1] %></option><% }); %>
+                        </select>
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="gn-include">Only post if it mentions</label>
+                        <p class="cf-row-desc">Optional, separated by commas. Leave empty to post everything the source publishes.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input class="form-control" id="gn-include" name="include" placeholder="patch, update, hotfix">
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="gn-exclude">Never post if it mentions</label>
+                        <p class="cf-row-desc">Optional, separated by commas. Useful for splitting one busy feed across channels.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input class="form-control" id="gn-exclude" name="exclude" placeholder="mobile, merch">
+                    </div>
+                </div>
+                <div class="cf-section-foot">
+                    <div class="cf-status-line cf-foot-note" id="gn-status" role="status" aria-live="polite"></div>
+                    <button type="submit" class="btn btn-primary">Add watcher</button>
+                </div>
+            </form>
+            <div class="gk-preview-wrap">
+                <div class="gk-preview">
+                    <p class="gk-preview-label">Preview</p>
+                    <div class="cf-dc" id="gn-preview" aria-label="Preview of a news post"></div>
+                </div>
+            </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="gn-list-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="gn-list-title">Watchers <span class="gk-cmd-count" id="gn-count"></span></h2>
+                <p class="cf-section-desc">Test fetches the source now and shows its newest item as it would be posted, without posting it.</p>
+            </div>
+            <div class="cf-section-actions" id="gn-search-box" hidden>
+                <label class="cf-search"><i class="fas fa-search" aria-hidden="true"></i><input type="search" class="form-control" id="gn-search" placeholder="Search watchers" aria-label="Search watchers" data-no-savebar autocomplete="off"></label>
+            </div>
+        </header>
+        <div class="cf-rows" id="gn-list">
+            <%- include('../kit/_state', { kind: 'loading', title: 'Loading watchers', text: null, id: null, boxed: false, compact: true }) %>
+        </div>
+    </section>
+
+    <%- include('_game-commands', { gkCommands: [{ cmd: 'alerts', groups: ['gamenews'] }] }) %>
+</div>
+
+<template id="gn-author"><%- include('_gk-author') %></template>
+<template id="gn-channel-options"><% gnChannels.forEach(function(c) { %><option value="<%= c.id %>">#<%= c.name %></option><% }); %></template>
+<template id="gn-role-options"><option value="">No ping</option><% gnRoles.forEach(function(r) { %><option value="<%= r.id %>">@<%= r.name %></option><% }); %></template>
+<template id="gn-interval-options"><% gnIntervals.forEach(function(i) { %><option value="<%= i[0] %>"><%= i[1] %></option><% }); %></template>
+
+<script>
+(function() {
+    var gnGuildId = '<%= guild.id %>';
+    var gnApi = '/api/guilds/' + gnGuildId + '/game-news';
+    var gnPresets = [];
+    var gnWatchers = [];
+    var $ = function (id) { return document.getElementById(id); };
+    var PROVIDER_COLOURS = { 'cod-blog': '#C72C41', 'fortnite-news': '#751F1F', 'steam-news': '#1B2838', 'twitter-rss': '#1DA1F2', 'rss': '#EE802F' };
+    var PROVIDER_NAMES = { 'rss': 'RSS', 'steam-news': 'Steam news', 'twitter-rss': 'X account', 'cod-blog': 'Call of Duty blog', 'fortnite-news': 'Fortnite news' };
+
+    function h(tag, props) {
+        var n = document.createElement(tag);
+        var p = props || {};
+        if (p.className) n.className = p.className;
+        if (p.text !== undefined) n.textContent = String(p.text);
+        Object.keys(p.attrs || {}).forEach(function (k) { if (p.attrs[k] !== false && p.attrs[k] != null) n.setAttribute(k, p.attrs[k] === true ? '' : p.attrs[k]); });
+        Object.keys(p.data || {}).forEach(function (k) { n.dataset[k] = p.data[k]; });
+        for (var i = 2; i < arguments.length; i++) if (arguments[i] != null) n.append(arguments[i]);
+        return n;
+    }
+    function gnStatus(msg, type) {
+        var el = $('gn-status');
+        el.textContent = msg;
+        el.className = 'cf-status-line cf-foot-note ' + (type === 'error' ? 'is-bad' : 'is-ok');
+        if (type === 'success') setTimeout(function() { el.className = 'cf-status-line cf-foot-note'; el.textContent = ''; }, 5000);
+    }
+    function ago(ts) {
+        if (!ts) return 'never';
+        var s = Math.floor((Date.now() - new Date(ts).getTime()) / 1000);
+        if (s < 60) return s + 's ago';
+        if (s < 3600) return Math.floor(s / 60) + 'm ago';
+        if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+        return Math.floor(s / 86400) + 'd ago';
+    }
+    function every(min) { min = Number(min) || 0; return min % 60 === 0 ? (min / 60) + 'h' : min + 'm'; }
+    function csvToList(v) { return String(v || '').split(',').map(function(s) { return s.trim(); }).filter(Boolean); }
+    function colourFor(w) {
+        if (w && w.embed_color) return /^#/.test(w.embed_color) ? w.embed_color : '#' + String(w.embed_color).replace(/^0x/i, '');
+        var p = w && gnPresets.find(function (x) { return x.key === w.preset_key; });
+        if (p && p.color != null) return typeof p.color === 'number' ? '#' + p.color.toString(16).padStart(6, '0') : String(p.color);
+        return (w && PROVIDER_COLOURS[w.provider]) || '#5865F2';
+    }
+    function channelName(id) { return '#' + ((window.GK_DATA && GK_DATA.channels[id]) || 'unknown-channel'); }
+    function roleName(id) { var r = window.GK_DATA && GK_DATA.roles[id]; return '@' + (r ? r.name : 'unknown-role'); }
+
+    // ── Preview: the post core/game-patch-watcher-manager.js sends (role ping, then an embed).
+    function drawPost(box, opts) {
+        box.replaceChildren($('gn-author').content.cloneNode(true));
+        if (opts.role) { var t = h('div', { className: 'cf-dc-text' }); GK.fill(t, '<@&' + opts.role + '>'); box.append(t); }
+        var embed = h('div', { className: 'cf-dc-embed' },
+            h('div', { className: 'cf-dc-author', text: opts.label || 'Game name' }),
+            h('div', { className: 'cf-dc-title is-link', text: opts.title || 'Patch notes for the latest update' }),
+            h('div', { className: 'cf-dc-desc', text: opts.desc || 'The first part of the article, up to about 1,900 characters, so members can read the changes without leaving Discord.' }),
+            h('div', { className: 'cf-dc-footer', text: opts.when || 'Today at 18:00' }));
+        embed.style.setProperty('--cf-dc-bar', opts.colour || '#5865F2');
+        box.append(embed);
+    }
+    function drawAddPreview() {
+        var key = $('gn-preset').value;
+        var custom = key === '__custom__';
+        var p = gnPresets.find(function (x) { return x.key === key; });
+        drawPost($('gn-preview'), {
+            role: $('gn-role').value,
+            label: custom ? ($('gn-label').value.trim() || 'Game name') : (p ? p.label : 'Game name'),
+            colour: custom ? PROVIDER_COLOURS[$('gn-provider').value] : (p ? colourFor({ preset_key: p.key, provider: p.provider }) : '#5865F2'),
+        });
+    }
+
+    // ── Catalogue
+    function renderPresetPicker() {
+        var sel = $('gn-preset');
+        var byPlatform = {};
+        gnPresets.forEach(function(p) { (byPlatform[p.platform] = byPlatform[p.platform] || []).push(p); });
+        var opts = [h('option', { attrs: { value: '' }, text: 'Choose a game or source' })];
+        Object.keys(byPlatform).sort().forEach(function(plat) {
+            opts.push(h('optgroup', { attrs: { label: plat } }, ...byPlatform[plat].map(function (p) { return h('option', { attrs: { value: p.key }, text: p.label }); })));
+        });
+        opts.push(h('optgroup', { attrs: { label: 'Advanced' } }, h('option', { attrs: { value: '__custom__' }, text: 'Custom source…' })));
+        sel.replaceChildren(...opts);
+    }
+    $('gn-preset').addEventListener('change', function() {
+        var custom = this.value === '__custom__';
+        $('gn-custom').hidden = !custom;
+        var note = $('gn-preset-note');
+        var key = this.value;
+        var p = gnPresets.find(function(x) { return x.key === key; });
+        note.textContent = custom ? 'Point at any RSS or Atom feed, a Steam app ID, or an X account.'
+            : p ? (p.note || 'Source: ' + (PROVIDER_NAMES[p.provider] || p.provider) + '. Nothing else to set up.')
+            : 'Pick a title from the catalogue, or choose "Custom source" to point at any feed.';
+    });
+    $('gn-provider').addEventListener('change', function() {
+        $('gn-f-rss').hidden = this.value !== 'rss';
+        $('gn-f-steam').hidden = this.value !== 'steam-news';
+        $('gn-f-twitter').hidden = this.value !== 'twitter-rss';
+    });
+    $('gn-add-form').addEventListener('input', drawAddPreview);
+    $('gn-add-form').addEventListener('change', drawAddPreview);
+
+    // ── Watchers
+    function editPanel(w) {
+        var cfg = w.provider_config || {};
+        var ch = h('select', { className: 'form-select', attrs: { 'aria-label': 'Channel', 'data-no-savebar': '' } }); ch.append($('gn-channel-options').content.cloneNode(true)); ch.value = w.channel_id;
+        var role = h('select', { className: 'form-select', attrs: { 'aria-label': 'Role to ping', 'data-no-savebar': '' } }); role.append($('gn-role-options').content.cloneNode(true)); role.value = w.role_ping_id || '';
+        var iv = h('select', { className: 'form-select', attrs: { 'aria-label': 'Check every', 'data-no-savebar': '' } }); iv.append($('gn-interval-options').content.cloneNode(true));
+        if (!Array.from(iv.options).some(function (o) { return Number(o.value) === Number(w.check_interval_minutes); })) iv.append(h('option', { attrs: { value: w.check_interval_minutes }, text: 'Every ' + every(w.check_interval_minutes) }));
+        iv.value = String(w.check_interval_minutes);
+        var inc = h('input', { className: 'form-control', attrs: { placeholder: 'patch, update', 'aria-label': 'Only post if it mentions', 'data-no-savebar': '' } }); inc.value = (cfg.include || []).join(', ');
+        var exc = h('input', { className: 'form-control', attrs: { placeholder: 'mobile, merch', 'aria-label': 'Never post if it mentions', 'data-no-savebar': '' } }); exc.value = (cfg.exclude || []).join(', ');
+        var field = function (label, ctl) { return h('div', { className: 'cf-field' }, h('label', { text: label }), ctl); };
+        var save = h('button', { className: 'btn btn-sm btn-primary', text: 'Save', attrs: { type: 'button' } });
+        var cancel = h('button', { className: 'btn btn-sm btn-secondary', text: 'Cancel', attrs: { type: 'button' } });
+        var line = h('span', { className: 'cf-status-line', attrs: { role: 'status' } });
+        var panel = h('div', { className: 'gn-edit' },
+            h('div', { className: 'cf-fields' }, field('Channel', ch), field('Role to ping', role), field('Check every', iv), field('Only post if it mentions', inc), field('Never post if it mentions', exc)),
+            h('div', { className: 'cf-inline' }, save, cancel, line));
+        cancel.addEventListener('click', function () { panel.remove(); });
+        save.addEventListener('click', async function () {
+            var body = { channel_id: ch.value, role_ping_id: role.value || null, check_interval_minutes: iv.value };
+            var newInc = csvToList(inc.value), newExc = csvToList(exc.value);
+            if (newInc.join('|') !== (cfg.include || []).join('|')) body.include = newInc;
+            if (newExc.join('|') !== (cfg.exclude || []).join('|')) body.exclude = newExc;
+            save.disabled = true;
+            try {
+                var r = await fetch(gnApi + '/' + w.id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+                var d = await r.json();
+                if (!d.success) throw new Error(d.error || 'Could not save');
+                load();
+            } catch (err) { line.className = 'cf-status-line is-bad'; line.textContent = err.message; save.disabled = false; }
+        });
+        return panel;
+    }
+
+    function watcherRow(w) {
+        var title = h('p', { className: 'cf-list-title' }, w.game_label,
+            h('span', { className: 'cf-pill ' + (w.is_enabled ? 'is-ok' : ''), text: w.is_enabled ? 'Active' : 'Paused' }),
+            h('span', { className: 'cf-pill is-info', text: PROVIDER_NAMES[w.provider] || w.provider }),
+            w.last_error ? h('span', { className: 'cf-pill is-bad', text: 'Error' }) : null,
+            // Not primed yet: it has posted nothing and will not until its first check records the current items.
+            !w.primed ? h('span', { className: 'cf-pill is-warn', text: 'Starting' }) : null);
+        var cfg = w.provider_config || {};
+        var meta = h('p', { className: 'cf-list-meta' },
+            h('span', { text: channelName(w.channel_id) }),
+            w.role_ping_id ? h('span', { text: 'Pings ' + roleName(w.role_ping_id) }) : null,
+            h('span', { text: 'Every ' + every(w.check_interval_minutes) }),
+            h('span', { text: 'Checked ' + ago(w.last_checked_at) }),
+            h('span', { text: 'Posted ' + ago(w.last_posted_at) }),
+            (cfg.include && cfg.include.length) ? h('span', { text: 'Only: ' + cfg.include.join(', ') }) : null,
+            (cfg.exclude && cfg.exclude.length) ? h('span', { text: 'Never: ' + cfg.exclude.join(', ') }) : null);
+        var main = h('div', { className: 'cf-list-main' }, title, meta,
+            w.last_error ? h('div', { className: 'gn-error', text: 'Last error: ' + w.last_error }) : null,
+            h('div', { className: 'gn-test', attrs: { hidden: true } }));
+        return h('div', { className: 'cf-list-item cf-list-item--multi gn-row', data: { id: String(w.id), text: (w.game_label + ' ' + w.provider + ' ' + channelName(w.channel_id)).toLowerCase() } },
+            main,
+            h('div', { className: 'cf-list-actions' },
+                h('button', { className: 'btn btn-sm btn-secondary', text: 'Test', attrs: { type: 'button' }, data: { act: 'test' } }),
+                h('button', { className: 'btn btn-sm btn-secondary', text: 'Edit', attrs: { type: 'button' }, data: { act: 'edit' } }),
+                h('button', { className: 'btn btn-sm btn-secondary', text: w.is_enabled ? 'Pause' : 'Resume', attrs: { type: 'button' }, data: { act: 'toggle', on: w.is_enabled ? '1' : '0' } }),
+                h('button', { className: 'btn btn-sm btn-danger', text: 'Remove', attrs: { type: 'button' }, data: { act: 'delete' } })));
+    }
+
+    function renderWatchers() {
+        var list = $('gn-list');
+        $('gn-count').textContent = gnWatchers.length ? String(gnWatchers.length) : '';
+        $('gn-search-box').hidden = gnWatchers.length <= 15;
+        if (!gnWatchers.length) {
+            list.replaceChildren(h('div', { className: 'cf-state cf-state--empty' },
+                h('p', { className: 'cf-state-title', text: 'No watchers yet' }),
+                h('p', { className: 'cf-state-text', text: 'Add one above to start posting patch notes.' })));
+            return;
+        }
+        list.replaceChildren(h('div', { className: 'cf-list', attrs: { id: 'gn-rows' } }, ...gnWatchers.map(watcherRow)),
+            h('div', { className: 'cf-state cf-state--compact', attrs: { id: 'gn-none', hidden: true } }, h('p', { className: 'cf-state-text', text: 'No watchers match.' })));
+    }
+
+    async function load() {
+        try {
+            var res = await fetch(gnApi);
+            var data = await res.json();
+            if (!data.success) throw new Error(data.error || 'Could not load');
+            var firstLoad = !gnPresets.length;
+            gnPresets = data.presets || [];
+            gnWatchers = data.watchers || [];
+            if (firstLoad) renderPresetPicker();
+            renderWatchers();
+            drawAddPreview();
+        } catch (err) {
+            $('gn-list').replaceChildren(h('div', { className: 'cf-state cf-state--error cf-state--compact', attrs: { role: 'alert' }, text: 'Could not load watchers: ' + err.message }));
+        }
+    }
+
+    $('gn-search').addEventListener('input', function () {
+        var q = this.value.trim().toLowerCase(), shown = 0;
+        document.querySelectorAll('#gn-rows > .gn-row').forEach(function (row) {
+            var hit = !q || row.dataset.text.indexOf(q) !== -1;
+            row.hidden = !hit;
+            if (hit) shown++;
+        });
+        var none = $('gn-none'); if (none) none.hidden = shown > 0;
+    });
+
+    // ── Row actions
+    $('gn-list').addEventListener('click', async function(e) {
+        var btn = e.target.closest('button[data-act]');
+        if (!btn) return;
+        var row = btn.closest('.gn-row');
+        var id = row.dataset.id;
+        var w = gnWatchers.find(function (x) { return String(x.id) === id; });
+        var act = btn.dataset.act;
+
+        if (act === 'delete') {
+            if (!confirm('Remove this watcher? It stops posting at once.')) return;
+            var d = await fetch(gnApi + '/' + id, { method: 'DELETE' }).then(function (r) { return r.json(); }).catch(function () { return {}; });
+            if (d.success) load(); else alert(d.error || 'Could not remove it.');
+            return;
+        }
+        if (act === 'toggle') {
+            var d2 = await fetch(gnApi + '/' + id, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ is_enabled: btn.dataset.on !== '1' }) })
+                .then(function (r) { return r.json(); }).catch(function () { return {}; });
+            if (d2.success) load(); else alert(d2.error || 'Could not update it.');
+            return;
+        }
+        if (act === 'edit') {
+            var open = row.querySelector('.gn-edit');
+            if (open) { open.remove(); return; }
+            row.querySelector('.cf-list-main').append(editPanel(w));
+            return;
+        }
+        if (act === 'test') {
+            var box = row.querySelector('.gn-test');
+            btn.disabled = true;
+            btn.textContent = 'Testing…';
+            box.hidden = false;
+            box.replaceChildren(h('span', { className: 'cf-status-line is-busy', text: 'Fetching the source now…' }));
+            try {
+                var d3 = await fetch(gnApi + '/' + id + '/test', { method: 'POST' }).then(function (r) { return r.json(); });
+                if (!d3.success) throw new Error(d3.error || 'The test failed.');
+                var first = (d3.items || [])[0];
+                var summary = h('span', { className: 'cf-status-line is-ok', text: d3.count + ' item(s) found in ' + d3.elapsed_ms + 'ms.' + (first ? ' The newest would post like this:' : ' The source answered but has nothing published.') });
+                box.replaceChildren(summary);
+                if (first) {
+                    var post = h('div', { className: 'cf-dc' });
+                    drawPost(post, { role: w.role_ping_id, label: w.game_label, title: first.title, desc: first.description || '', colour: colourFor(w),
+                        when: first.posted_at ? new Date(first.posted_at).toLocaleString() : '' });
+                    box.append(post);
+                }
+            } catch (err) {
+                box.replaceChildren(h('span', { className: 'gn-error', text: err.message }));
+            }
+            btn.disabled = false;
+            btn.textContent = 'Test';
+        }
+    });
+
+    // ── Add
+    $('gn-add-form').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        var presetKey = $('gn-preset').value;
+        var channelId = $('gn-channel').value;
+        if (!presetKey) { gnStatus('Choose a game or source first.', 'error'); return; }
+        if (!channelId) { gnStatus('Choose a channel to post in.', 'error'); return; }
+        var body = {
+            channel_id: channelId,
+            role_ping_id: $('gn-role').value || null,
+            check_interval_minutes: $('gn-interval').value,
+            include: csvToList($('gn-include').value),
+            exclude: csvToList($('gn-exclude').value)
+        };
+        if (presetKey === '__custom__') {
+            body.provider = $('gn-provider').value;
+            body.game_label = $('gn-label').value;
+            body.url = $('gn-url').value;
+            body.appid = $('gn-appid').value;
+            body.username = $('gn-username').value;
+            if (!body.game_label) { gnStatus('Give the watcher a display name.', 'error'); return; }
+        } else {
+            body.preset_key = presetKey;
+        }
+        try {
+            var res = await fetch(gnApi, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+            var data = await res.json();
+            if (data.success) {
+                gnStatus(data.message + '. It posts from the next new item.', 'success');
+                this.reset();
+                $('gn-custom').hidden = true;
+                load();
+            } else {
+                gnStatus(data.error || 'Could not add the watcher.', 'error');
+            }
+        } catch (err) {
+            gnStatus('Network error: ' + err.message, 'error');
+        }
+    });
+
+    drawAddPreview();
+    load();
+})();
+</script>

@@ -15,10 +15,10 @@
 
 import 'dotenv/config';
 import pool from '../utils/db.js';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 
 const GUILD_ID = '1414753158999179286';
-const BOT_ID   = '1507873568095076425';
+// The acting bot comes from guild_bot_mapping — never pinned here.
 const VERIFIED_ROLE = '1455255019627479071'; // PACK MEMBERS
 
 // Permission bits
@@ -42,8 +42,9 @@ const STAFF_NAME_BLOCKLIST = /^(bots?|bot manager|new role)$/i;
 const VIEW_PAIR = VIEW_CHANNEL | READ_MESSAGE_HISTORY;
 const STAFF_TEXT_ALLOW = VIEW_PAIR | SEND_MESSAGES | EMBED_LINKS | ATTACH_FILES | USE_EXTERNAL_EMOJIS | ADD_REACTIONS | MANAGE_MESSAGES;
 
-const [botRows] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id = ?', [BOT_ID]);
-const TOKEN = encryption.decrypt(JSON.parse(botRows[0].bot_token));
+const bot = await resolveBotForGuild(GUILD_ID, { db: pool });
+const BOT_ID = bot.botId;
+const TOKEN = bot.token;
 
 async function api(method, path, body) {
     await new Promise(r => setTimeout(r, 150));

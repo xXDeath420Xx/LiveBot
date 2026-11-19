@@ -1,0 +1,48 @@
+/*
+ * The Overlays tab (/stream/bot/overlays, views/stream-bot/overlays.ejs and overlay-edit.ejs): the few pieces the site kit
+ * does not have. --cf-* tokens only, so Dark, Light and Sand all work. (The overlays themselves, as OBS shows them, are styled
+ * by stream-bot-overlay.css with a fixed look.)
+ */
+.sbo-back { margin: 0 0 var(--cf-2); font-size: var(--cf-text-sm); }
+.sbo-back a { color: var(--cf-accent-fg); text-decoration: none; }
+.sbo-back a:hover { text-decoration: underline; }
+
+/* Kind picker */
+.sbo-types { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); gap: var(--cf-2); width: 100%; }
+.sbo-type { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px; border: 1px solid var(--cf-border); border-radius: var(--cf-radius); cursor: pointer; background: var(--cf-surface); }
+.sbo-type:hover { border-color: color-mix(in srgb, var(--cf-accent) 45%, var(--cf-border)); }
+.sbo-type:has(input:checked) { border-color: var(--cf-accent); box-shadow: inset 0 0 0 1px var(--cf-accent); }
+.sbo-type > input { margin: 3px 0 0; accent-color: var(--cf-accent); }
+.sbo-type-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sbo-type-name { font-size: var(--cf-text-sm); font-weight: 600; color: var(--cf-text); }
+.sbo-type-desc { font-size: var(--cf-text-xs); color: var(--cf-text-3); line-height: 1.4; }
+
+/* Live preview: 1920×1080 scaled to the column, over a checkerboard where OBS shows the scene */
+.sbo-preview {
+    position: relative; overflow: hidden; margin: var(--cf-4) var(--cf-5); border-radius: var(--cf-radius); border: 1px solid var(--cf-border);
+    aspect-ratio: 16 / 9;
+    background-color: color-mix(in srgb, var(--cf-text) 14%, var(--cf-surface));
+    background-image:
+        linear-gradient(45deg, color-mix(in srgb, var(--cf-text) 24%, var(--cf-surface)) 25%, transparent 25%),
+        linear-gradient(-45deg, color-mix(in srgb, var(--cf-text) 24%, var(--cf-surface)) 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, color-mix(in srgb, var(--cf-text) 24%, var(--cf-surface)) 75%),
+        linear-gradient(-45deg, transparent 75%, color-mix(in srgb, var(--cf-text) 24%, var(--cf-surface)) 75%);
+    background-size: 24px 24px; background-position: 0 0, 0 12px, 12px -12px, -12px 0;
+}
+.sbo-preview > iframe { position: absolute; top: 0; left: 0; width: 1920px; height: 1080px; border: 0; transform-origin: 0 0; background: transparent; pointer-events: none; }
+
+/* Test buttons and variations */
+.sbo-tests { display: flex; flex-wrap: wrap; gap: var(--cf-2); padding: var(--cf-4) var(--cf-5); }
+.sbo-alert-set > summary { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--cf-2) var(--cf-3); }
+.sbo-alert-state { font-size: var(--cf-text-xs); font-weight: 500; color: var(--cf-text-3); }
+.sbo-vars { display: grid; gap: var(--cf-3); padding: 0 var(--cf-5) var(--cf-4); }
+.sbo-vars:empty { display: none; }
+.sbo-var { margin: 0; padding: var(--cf-3) var(--cf-4); border: 1px solid var(--cf-border); border-radius: var(--cf-radius); background: color-mix(in srgb, var(--cf-surface-2) 35%, var(--cf-surface)); min-width: 0; }
+.sbo-var-title { padding: 0 4px; font-size: var(--cf-text-sm); font-weight: 600; color: var(--cf-text); }
+.sbo-var-tools { display: flex; justify-content: flex-end; margin-top: var(--cf-3); }
+.sbo-save { position: sticky; bottom: 0; z-index: 2; margin: 0 0 var(--cf-8); padding: var(--cf-3) var(--cf-5); border: 1px solid var(--cf-border); border-radius: var(--cf-radius); background: var(--cf-surface); }
+
+@media (max-width: 640px) {
+    .sbo-preview { margin-left: var(--cf-4); margin-right: var(--cf-4); }
+    .sbo-tests, .sbo-vars { padding-left: var(--cf-4); padding-right: var(--cf-4); }
+}

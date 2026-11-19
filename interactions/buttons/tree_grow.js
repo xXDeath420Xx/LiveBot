@@ -11,6 +11,7 @@ import { buildTreeMessage } from '../../core/growtree/display.js';
 import { formatDuration } from '../../core/growtree/formulas.js';
 import { maybeSpawn, setEncounterMessage } from '../../core/growtree/critters.js';
 import { encounterMessage } from './tree_catch.js';
+import { displayNameFor } from '../../utils/display-name.js';
 import logger from '../../utils/logger.js';
 
 const EPHEMERAL = { flags: MessageFlags.Ephemeral };
@@ -45,8 +46,11 @@ export async function handleTreeGrow(interaction) {
 
     const player = await getPlayer(interaction.user.id);
     if (result.levelsGained > 0) {
+      // Private, like the XP line below it. A level-up is a nice moment, but a permanent one in the
+      // channel is one more thing sitting on top of the tree — and the tree is the point.
       await interaction.followUp({
-        content: `🌳 **${interaction.user.username}** reached **level ${result.level}**!`,
+        content: `🌳 **${displayNameFor(interaction.user, interaction.guild)}** reached **level ${result.level}**!`,
+        ...EPHEMERAL,
       }).catch(() => {});
     } else if (player.notifyXp) {
       await interaction.followUp({ content: `+${result.gainedXp} XP`, ...EPHEMERAL }).catch(() => {});

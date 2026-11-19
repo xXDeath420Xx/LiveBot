@@ -1,0 +1,391 @@
+<%# Join applications: a searchable history of Apply-to-Join decisions and who made them. API-driven
+    (GET/POST /api/guilds/:id/join-requests); needs `guild`. Built on the settings-row kit
+    (dashboard/public/css/cf-settings.css). %>
+<div class="page-section" id="joinRequestsPage" data-guild-id="<%= guild.id %>">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-user-check"></i>
+                <span>Join applications</span>
+            </div>
+            <div class="page-section-subtitle">Read from Discord every few minutes, since Discord's audit log does not record these decisions.</div>
+        </div>
+    </div>
+
+    <div id="jrError" class="cf-notice is-bad" role="alert" hidden></div>
+    <div id="jrNotice" class="cf-notice is-warn" role="status" hidden></div>
+
+    <dl id="jrStats" class="cf-kpis" aria-label="Applications at a glance" hidden></dl>
+
+    <section class="cf-section" aria-labelledby="jr-list-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="jr-list-title">Decisions</h2>
+                <p class="cf-section-desc">Newest first. Select a row to see the applicant's answers.</p>
+            </div>
+            <div class="cf-section-actions">
+                <a id="jrCsv" class="btn btn-secondary btn-sm" href="#">Export CSV</a>
+                <button id="jrSync" class="btn btn-primary btn-sm" type="button">Sync now</button>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--stack">
+                <div class="cf-fields jr-filters">
+                    <div class="cf-field jr-grow">
+                        <label for="jrSearch">Search</label>
+                        <input id="jrSearch" type="search" class="form-control" placeholder="Username, user ID, or anything they answered" autocomplete="off">
+                    </div>
+                    <div class="cf-field">
+                        <label for="jrStatus">Decision</label>
+                        <select id="jrStatus" class="form-select">
+                            <option value="">All</option>
+                            <option value="APPROVED">Approved</option>
+                            <option value="REJECTED">Rejected</option>
+                        </select>
+                    </div>
+                    <div class="cf-field">
+                        <label for="jrFrom">From</label>
+                        <input id="jrFrom" type="date" class="form-control">
+                    </div>
+                    <div class="cf-field">
+                        <label for="jrTo">To</label>
+                        <input id="jrTo" type="date" class="form-control">
+                    </div>
+                    <div class="cf-field jr-clear">
+                        <button id="jrClear" class="btn btn-secondary" type="button">Clear filters</button>
+                    </div>
+                </div>
+            </div>
+            <div class="cf-row cf-row--stack" id="jrApproverWrap" hidden>
+                <div class="cf-row-text">
+                    <span class="cf-row-label" id="jr-approvers-label">Decided by</span>
+                    <p class="cf-row-desc">Select a staff member to show only their decisions.</p>
+                </div>
+                <div id="jrApprovers" class="cf-chips-row" role="group" aria-labelledby="jr-approvers-label"></div>
+            </div>
+            <div class="cf-row cf-row--stack jr-resultline">
+                <div class="cf-inline">
+                    <span id="jrShown" class="cf-row-meta"></span>
+                    <span id="jrSyncInfo" class="cf-row-meta"></span>
+                </div>
+            </div>
+            <div class="cf-table-wrap">
+                <table class="cf-table cf-table--stack jr-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Decided</th>
+                            <th scope="col">Applicant</th>
+                            <th scope="col">Decision</th>
+                            <th scope="col">Decided by</th>
+                            <th scope="col" class="jr-num">Waited</th>
+                            <th scope="col"><span class="visually-hidden">Details</span></th>
+                        </tr>
+                    </thead>
+                    <tbody id="jrRows">
+                        <tr><td colspan="6"><div class="cf-state cf-state--loading" role="status" aria-live="polite"><span class="cf-spinner" aria-hidden="true"></span><p class="cf-state-title">Loading applications</p></div></td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="cf-section-foot jr-pager">
+                <button id="jrPrev" class="btn btn-secondary btn-sm" type="button" disabled>Newer</button>
+                <span id="jrPageInfo" class="cf-row-meta"></span>
+                <button id="jrNext" class="btn btn-secondary btn-sm" type="button" disabled>Older</button>
+            </div>
+        </div>
+        <p class="jr-method">
+            Names are the Discord usernames at the moment of the decision. Banned and Left
+            reflect the server right now. Discord only keeps join requests for a limited time, so the
+            oldest decisions here are the oldest Discord still had when this server was first synced.
+        </p>
+    </section>
+</div>
+
+<style>
+    .jr-filters { grid-template-columns: minmax(0, 2fr) repeat(3, minmax(0, 1fr)) auto !important; align-items: end !important; }
+    .jr-chip { display: inline-flex; align-items: center; gap: var(--cf-2); min-height: 32px; padding: 0 12px; cursor: pointer;
+        border: 1px solid var(--cf-border-strong); border-radius: 999px; background: transparent; color: var(--cf-text); font-size: var(--cf-text-sm); }
+    .jr-chip:hover { border-color: var(--cf-text-3); }
+    .jr-chip:focus-visible { outline: 2px solid var(--cf-accent); outline-offset: 2px; }
+    .jr-chip .n { font-size: var(--cf-text-xs); color: var(--cf-text-3); font-variant-numeric: tabular-nums; }
+    .jr-chip[aria-pressed="true"] { background: var(--cf-accent); border-color: var(--cf-accent); color: var(--cf-on-accent); }
+    .jr-chip[aria-pressed="true"] .n { color: var(--cf-on-accent); }
+    .jr-resultline .cf-inline { justify-content: space-between; }
+    .cf-rows .jr-resultline:has(#jrShown:empty):has(#jrSyncInfo:empty) { display: none; }
+    .cf-rows .jr-resultline { min-height: 0 !important; padding-top: var(--cf-3); padding-bottom: var(--cf-3); }
+    .jr-table tbody tr.jr-row { cursor: pointer; }
+    .jr-table tbody tr.jr-row:hover, .jr-table tbody tr.jr-row[aria-expanded="true"] { background: var(--cf-surface-2); }
+    .jr-table tbody tr.jr-row:focus-visible { outline: 2px solid var(--cf-accent); outline-offset: -2px; }
+    .jr-num { text-align: right !important; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .jr-when { white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .jr-name { font-weight: 600; color: var(--cf-text); overflow-wrap: anywhere; }
+    .jr-id { display: block; font-size: var(--cf-text-xs); color: var(--cf-text-3); font-family: var(--cf-mono); overflow-wrap: anywhere; }
+    .jr-copy { cursor: copy; }
+    .jr-muted { color: var(--cf-text-3); font-size: var(--cf-text-sm); }
+    .jr-name + .cf-pill { margin-left: 6px; }
+    .jr-chev { color: var(--cf-text-3); font-size: var(--cf-text-xs); transition: transform var(--cf-fast) var(--cf-ease); display: inline-block; }
+    tr[aria-expanded="true"] .jr-chev { transform: rotate(90deg); }
+    .jr-table tr.jr-detail td { background: var(--cf-surface-2); }
+    .jr-answers { display: grid; grid-template-columns: minmax(10rem, max-content) minmax(0, 1fr); gap: 6px var(--cf-4); margin: 0; }
+    .jr-answers dt { font-size: var(--cf-text-xs); font-weight: 500; color: var(--cf-text-3); }
+    .jr-answers dd { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--cf-text); }
+    .jr-detail-meta { margin-top: var(--cf-3); font-size: var(--cf-text-xs); color: var(--cf-text-3); display: flex; flex-wrap: wrap; gap: var(--cf-2) var(--cf-4); }
+    .jr-pager { justify-content: center !important; }
+    .jr-method { margin: var(--cf-3) 0 0; font-size: var(--cf-text-sm); color: var(--cf-text-3); line-height: 1.6; max-width: 80ch; }
+    @media (max-width: 900px) {
+        .jr-filters { grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr)) !important; }
+    }
+    @media (max-width: 640px) {
+        .jr-answers { grid-template-columns: minmax(0, 1fr); }
+        .jr-num { text-align: left !important; }
+        .jr-pager .btn { flex: 1 1 0; }
+        .jr-pager #jrPageInfo { flex-basis: 100%; text-align: center; order: -1; }
+    }
+</style>
+
+<script>
+(function () {
+    const root = document.getElementById('joinRequestsPage');
+    if (!root) return;
+    const guildId = root.dataset.guildId;
+    const base = `/api/guilds/${guildId}/join-requests`;
+    const $ = (id) => document.getElementById(id);
+    const el = {
+        err: $('jrError'), notice: $('jrNotice'), stats: $('jrStats'),
+        approverWrap: $('jrApproverWrap'), approvers: $('jrApprovers'),
+        search: $('jrSearch'), status: $('jrStatus'), from: $('jrFrom'), to: $('jrTo'),
+        clear: $('jrClear'), csv: $('jrCsv'), sync: $('jrSync'),
+        shown: $('jrShown'), syncInfo: $('jrSyncInfo'), rows: $('jrRows'),
+        prev: $('jrPrev'), next: $('jrNext'), pageInfo: $('jrPageInfo'),
+    };
+    const state = { page: 1, approver: '', total: 0, pageSize: 50 };
+
+    const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const num = (v) => Number(v ?? 0).toLocaleString();
+    const showErr = (m) => { el.err.textContent = m || ''; el.err.hidden = !m; };
+    const showNotice = (m) => { el.notice.textContent = m || ''; el.notice.hidden = !m; };
+    const fmtWhen = (iso) => iso ? new Date(iso).toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—';
+    const fmtDay = (iso) => iso ? new Date(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '—';
+    const fmtAgo = (iso) => {
+        if (!iso) return 'never';
+        const m = Math.round((Date.now() - new Date(iso)) / 60000);
+        if (m < 1) return 'just now';
+        if (m < 60) return m + 'm ago';
+        if (m < 1440) return Math.round(m / 60) + 'h ago';
+        return Math.round(m / 1440) + 'd ago';
+    };
+    const fmtWait = (a, b) => {
+        if (!a || !b) return '—';
+        const m = Math.round((new Date(b) - new Date(a)) / 60000);
+        if (m < 60) return m + 'm';
+        if (m < 1440) return Math.floor(m / 60) + 'h ' + (m % 60) + 'm';
+        return Math.floor(m / 1440) + 'd ' + Math.floor((m % 1440) / 60) + 'h';
+    };
+
+    async function api(path, opts) {
+        const res = await fetch(base + path, { headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', ...opts });
+        const json = await res.json().catch(() => ({ success: false, error: `HTTP ${res.status}` }));
+        if (!res.ok || json.success === false) throw new Error(json.error || `HTTP ${res.status}`);
+        return json;
+    }
+
+    function params(extra) {
+        const p = new URLSearchParams();
+        const q = el.search.value.trim();
+        if (q) p.set('q', q);
+        if (el.status.value) p.set('status', el.status.value);
+        if (el.from.value) p.set('from', el.from.value);
+        if (el.to.value) p.set('to', el.to.value);
+        if (state.approver) p.set('approver', state.approver);
+        for (const [k, v] of Object.entries(extra || {})) p.set(k, v);
+        return p;
+    }
+
+    function renderStats(t) {
+        if (!t.total) { el.stats.hidden = true; return; }
+        el.stats.innerHTML = `
+            <div class="cf-kpi"><dt>Decisions on record</dt><dd class="cf-kpi-value">${num(t.total)}</dd></div>
+            <div class="cf-kpi"><dt>Approved</dt><dd class="cf-kpi-value">${num(t.approved)}</dd></div>
+            <div class="cf-kpi"><dt>Rejected</dt><dd class="cf-kpi-value">${num(t.rejected)}</dd></div>
+            <div class="cf-kpi"><dt>History starts</dt><dd class="cf-kpi-value is-small">${esc(fmtDay(t.oldest))}</dd></div>`;
+        el.stats.hidden = false;
+    }
+
+    function renderApprovers(list) {
+        el.approverWrap.hidden = !list.length;
+        el.approvers.innerHTML = list.map(a => `
+            <button type="button" class="jr-chip" data-id="${esc(a.id)}" aria-pressed="${state.approver === a.id}" title="${esc(a.id)}">
+                ${esc(a.name || a.id)}
+                <span class="n">${num(a.approved)} approved, ${num(a.rejected)} rejected</span>
+            </button>`).join('');
+    }
+
+    function tagsFor(r) {
+        let t = '';
+        if (r.banned) t += `<span class="cf-pill is-bad" title="${esc(r.banReason || 'Banned')}">Banned</span>`;
+        else if (r.inServer === false && r.status === 'APPROVED') t += `<span class="cf-pill">Left</span>`;
+        return t;
+    }
+
+    function renderRows(rows) {
+        if (!rows.length) {
+            el.rows.innerHTML = `<tr><td colspan="6"><div class="cf-state cf-state--empty"><p class="cf-state-title">No applications match</p><p class="cf-state-text">Try a wider date range, or clear the filters.</p></div></td></tr>`;
+            return;
+        }
+        el.rows.innerHTML = rows.map((r, i) => {
+            const ok = r.status === 'APPROVED';
+            const answers = (r.answers || []).map(a => `<dt>${esc(a.label)}</dt><dd>${esc(a.response || '—')}</dd>`).join('');
+            return `
+            <tr class="jr-row" data-i="${i}" aria-expanded="false" tabindex="0">
+                <td class="jr-when" data-label="Decided">${esc(fmtWhen(r.reviewedAt))}</td>
+                <td data-label="Applicant">
+                    <span class="jr-name">${esc(r.username || 'unknown')}</span>${tagsFor(r)}
+                    <span class="jr-id jr-copy" data-copy="${esc(r.userId)}" title="Click to copy">${esc(r.userId)}</span>
+                </td>
+                <td data-label="Decision"><span class="cf-pill ${ok ? 'is-ok' : 'is-bad'}">${ok ? 'Approved' : 'Rejected'}</span></td>
+                <td data-label="Decided by">
+                    ${r.approverId ? `<span class="jr-name">${esc(r.approverName || 'unknown')}</span>
+                    <span class="jr-id jr-copy" data-copy="${esc(r.approverId)}" title="Click to copy">${esc(r.approverId)}</span>` : '<span class="jr-muted">Not recorded</span>'}
+                </td>
+                <td class="jr-num" data-label="Waited">${esc(fmtWait(r.appliedAt, r.reviewedAt))}</td>
+                <td class="cf-cell-end"><i class="fas fa-chevron-right jr-chev" aria-hidden="true"></i><span class="visually-hidden">Show details</span></td>
+            </tr>
+            <tr class="jr-detail" hidden>
+                <td colspan="6">
+                    ${answers ? `<dl class="jr-answers">${answers}</dl>` : '<span class="jr-muted">No application answers recorded.</span>'}
+                    <div class="jr-detail-meta">
+                        <span>Applied ${esc(fmtWhen(r.appliedAt))}</span>
+                        <span>Decided ${esc(fmtWhen(r.reviewedAt))}</span>
+                        ${r.rejectionReason ? `<span>Rejection reason: ${esc(r.rejectionReason)}</span>` : ''}
+                        ${r.banned ? `<span>Ban reason: ${esc(r.banReason || 'none given')}</span>` : ''}
+                        <span>Request ${esc(r.requestId)}</span>
+                    </div>
+                </td>
+            </tr>`;
+        }).join('');
+    }
+
+    function renderPager() {
+        const pages = Math.max(1, Math.ceil(state.total / state.pageSize));
+        el.prev.disabled = state.page <= 1;
+        el.next.disabled = state.page >= pages;
+        el.pageInfo.textContent = `Page ${state.page} of ${pages}`;
+        const start = state.total ? (state.page - 1) * state.pageSize + 1 : 0;
+        const end = Math.min(state.total, state.page * state.pageSize);
+        el.shown.textContent = state.total ? `Showing ${num(start)}–${num(end)} of ${num(state.total)}` : '';
+    }
+
+    let seq = 0;
+    async function load() {
+        const mine = ++seq;
+        showErr('');
+        try {
+            const data = await api('?' + params({ page: state.page }).toString());
+            if (mine !== seq) return;
+            state.total = data.total;
+            state.pageSize = data.pageSize;
+            renderStats(data.totals);
+            renderApprovers(data.approvers);
+            renderRows(data.rows);
+            renderPager();
+            el.csv.href = base + '/export.csv?' + params().toString();
+            const s = data.sync;
+            el.syncInfo.textContent = s?.last_poll_at ? `Last synced with Discord ${fmtAgo(s.last_poll_at)}` : '';
+            if (!data.requiresApplication && !data.totals.total) {
+                showNotice('This server does not use Apply to Join (Server Settings → Access), so there are no applications to track.');
+            } else if (s?.last_error) {
+                showNotice(`Last sync failed: ${s.last_error}`);
+            } else if (!s?.backfilled_at) {
+                showNotice('History has not been pulled from Discord yet. Press "Sync now" to load it; nothing gets posted to your log channels.');
+            } else {
+                showNotice('');
+            }
+        } catch (e) {
+            if (mine === seq) {
+                showErr('Could not load applications: ' + e.message);
+                // Replace the loading row with a kit error state (cf-settings.css .cf-state).
+                const td = document.createElement('td');
+                td.colSpan = 6;
+                const box = document.createElement('div');
+                box.className = 'cf-state cf-state--error';
+                const t = document.createElement('p');
+                t.className = 'cf-state-title';
+                t.textContent = 'Applications could not be loaded';
+                const x = document.createElement('p');
+                x.className = 'cf-state-text';
+                x.textContent = 'Refresh the page to try again.';
+                box.append(t, x);
+                td.append(box);
+                const tr = document.createElement('tr');
+                tr.append(td);
+                el.rows.replaceChildren(tr);
+            }
+        }
+    }
+
+    const reload = () => { state.page = 1; load(); };
+    let debounce;
+    el.search.addEventListener('input', () => { clearTimeout(debounce); debounce = setTimeout(reload, 300); });
+    el.status.addEventListener('change', reload);
+    el.from.addEventListener('change', reload);
+    el.to.addEventListener('change', reload);
+    el.clear.addEventListener('click', () => {
+        el.search.value = ''; el.status.value = ''; el.from.value = ''; el.to.value = ''; state.approver = '';
+        reload();
+    });
+    el.prev.addEventListener('click', () => { if (state.page > 1) { state.page--; load(); } });
+    el.next.addEventListener('click', () => { state.page++; load(); });
+
+    el.approvers.addEventListener('click', (e) => {
+        const chip = e.target.closest('.jr-chip');
+        if (!chip) return;
+        state.approver = state.approver === chip.dataset.id ? '' : chip.dataset.id;
+        reload();
+    });
+
+    el.sync.addEventListener('click', async () => {
+        el.sync.disabled = true;
+        const label = el.sync.innerHTML;
+        el.sync.innerHTML = '<i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Syncing';
+        try {
+            const r = await api('/sync', { method: 'POST' });
+            showNotice(r.added ? `Pulled ${num(r.added)} new decision(s) from Discord.` : 'Already up to date.');
+            await load();
+        } catch (e) {
+            showErr(e.message);
+        } finally {
+            el.sync.disabled = false;
+            el.sync.innerHTML = label;
+        }
+    });
+
+    function toggle(row) {
+        const detail = row.nextElementSibling;
+        const open = row.getAttribute('aria-expanded') === 'true';
+        row.setAttribute('aria-expanded', String(!open));
+        detail.hidden = open;
+    }
+    el.rows.addEventListener('click', (e) => {
+        const copy = e.target.closest('.jr-copy');
+        if (copy) {
+            e.stopPropagation();
+            navigator.clipboard?.writeText(copy.dataset.copy).then(() => {
+                const old = copy.textContent;
+                copy.textContent = 'Copied';
+                setTimeout(() => { copy.textContent = old; }, 900);
+            }).catch(() => {});
+            return;
+        }
+        const row = e.target.closest('tr.jr-row');
+        if (row) toggle(row);
+    });
+    el.rows.addEventListener('keydown', (e) => {
+        const row = e.target.closest('tr.jr-row');
+        if (row && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); toggle(row); }
+    });
+
+    // ?q= deep link, e.g. from a log embed or a teammate's message.
+    const deep = new URLSearchParams(location.search).get('q');
+    if (deep) el.search.value = deep;
+    load();
+})();
+</script>

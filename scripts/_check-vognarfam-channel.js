@@ -3,7 +3,7 @@ import pool from '../utils/db.js';
 import encryption from '../utils/encryption.js';
 
 try {
-    const [bots] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id = ?', ['1476040458680406214']);
+    const [bots] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id = ?', ['1476040458680406214']);  // bot-id-ok: no guild in scope — the script reads a channel id directly, so there is nothing to resolve from
     const token = encryption.decrypt(JSON.parse(bots[0].bot_token));
 
     // Fetch recent messages from the channel

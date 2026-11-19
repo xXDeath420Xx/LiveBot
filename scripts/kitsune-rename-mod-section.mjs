@@ -3,9 +3,10 @@
 // pairs visually with #𝐿𝑒𝒶𝒹𝑒𝓇𝓈 (1469932427647516856). Idempotent.
 import 'dotenv/config';
 import mysql from 'mysql2/promise';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 
-const BOT_ID     = '1498486251576229958';
+// The acting bot comes from guild_bot_mapping — never pinned here.
+const GUILD_ID   = '1469931133981687873';  // Kitsune (owns the channel below)
 const CHANNEL_ID = '1491130798030585917';
 const NEW_NAME   = '𝑀𝑜𝒹𝑒𝓇𝒶𝓉𝒾𝑜𝓃';
 
@@ -13,9 +14,9 @@ const conn = await mysql.createConnection({
   host: process.env.DB_HOST, user: process.env.DB_USER,
   password: process.env.DB_PASSWORD, database: process.env.DB_NAME,
 });
-const [rows] = await conn.execute('SELECT bot_token FROM custom_bots WHERE bot_id = ?', [BOT_ID]);
+const bot = await resolveBotForGuild(GUILD_ID, { db: conn });
 await conn.end();
-const token = encryption.decrypt(JSON.parse(rows[0].bot_token));
+const token = bot.token;
 
 async function api(method, path, body) {
   const init = {

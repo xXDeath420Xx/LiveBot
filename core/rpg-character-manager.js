@@ -1,5 +1,61 @@
 import pool from '../utils/db.js';
 import logger from '../utils/logger.js';
+import RPGSpellManager, { normalizeClassName } from './rpg-spell-manager.js';
+import RPGClassResourceManager from './rpg-class-resource-manager.js';
+import RPGConditionManager from './rpg-condition-manager.js';
+import RPGLeaderboardManager from './rpg-leaderboard-manager.js';
+
+/** Table key for a background name: lower case, with spaces, underscores and hyphens as single spaces. */
+export function backgroundKey(name) {
+    return String(name ?? '').toLowerCase().replace(/[\s_-]+/g, ' ').trim();
+}
+
+/**
+ * (Re)build a character's spell slots + class resources from their current
+ * class/level/stats. Called on creation and level-up. Never throws: a failure
+ * here must not break character creation or levelling.
+ * @param {number} characterId
+ */
+export async function syncCharacterProgression(characterId) {
+    await RPGSpellManager.syncSpellSlotsForCharacter(characterId);
+    await RPGClassResourceManager.syncResourcesForCharacter(characterId);
+}
+
+/**
+ * Rest-time recovery of spell slots, class resources and short-lived
+ * conditions. Never throws.
+ * @param {number} characterId
+ * @param {'short'|'long'} restType
+ * @param {string} className - stored class (for Warlock pact-slot short-rest recovery)
+ * @returns {Promise<{resources: Array, slotsRestored: boolean, conditionsCleared: string[]}>}
+ */
+export async function recoverOnRest(characterId, restType, className) {
+    const out = { resources: [], slotsRestored: false, conditionsCleared: [] };
+    try {
+        // Long rest restores all slots; Warlock pact slots also come back on a short rest.
+        if (restType === 'long' || normalizeClassName(className) === 'Warlock') {
+            await RPGSpellManager.getSpellSlots(characterId); // lazy-create for pre-existing characters
+            await RPGSpellManager.restoreAllSlots(characterId);
+            out.slotsRestored = true;
+        }
+    } catch (err) {
+        logger.error('[RPG] Rest: spell slot recovery failed', { characterId, restType, error: err.message });
+    }
+    try {
+        out.resources = await RPGClassResourceManager.restoreOnRest(characterId, restType);
+    } catch (err) {
+        logger.error('[RPG] Rest: class resource recovery failed', { characterId, restType, error: err.message });
+    }
+    try {
+        // Rounds only tick in combat; a 1h/8h rest outlasts every round-based or
+        // combat-bound condition and every concentration spell in dnd_spells (max 1 hour).
+        await RPGSpellManager.breakConcentration(characterId);
+        out.conditionsCleared = await RPGConditionManager.clearTimedConditions(characterId);
+    } catch (err) {
+        logger.error('[RPG] Rest: condition cleanup failed', { characterId, restType, error: err.message });
+    }
+    return out;
+}
 
 /**
  * RPG Character Manager - Handles D&D 5e character management
@@ -59,7 +115,9 @@ class RPGCharacterManager {
             'sailor': { skills: ['athletics', 'perception'], tools: ['navigator\'s tools', 'vehicles (water)'], feature: 'Ship\'s Passage' },
             'soldier': { skills: ['athletics', 'intimidation'], tools: ['gaming set', 'vehicles (land)'], feature: 'Military Rank' },
             'urchin': { skills: ['sleight of hand', 'stealth'], tools: ['disguise kit', 'thieves\' tools'], feature: 'City Secrets' },
-            'haunted one': { skills: ['choice', 'choice'], languages: 2, feature: 'Heart of Darkness' },
+            // The book lets a Haunted One pick two of Arcana, Investigation, Religion and Survival. There is
+            // no prompt for that choice at creation, so it gets a fixed pair from that list.
+            'haunted one': { skills: ['investigation', 'survival'], skillChoices: ['arcana', 'investigation', 'religion', 'survival'], languages: 2, feature: 'Heart of Darkness' },
             'far traveler': { skills: ['insight', 'perception'], tools: ['musical instrument or gaming set'], languages: 1, feature: 'All Eyes on You' }
         };
 
@@ -322,6 +380,7 @@ class RPGCharacterManager {
                 'UPDATE dnd_characters SET health = 0, death_save_successes = 0, death_save_failures = 0 WHERE character_id = ?',
                 [characterId]
             );
+            RPGLeaderboardManager.trackStat(characterId, 'deaths', 1);
         } else {
             await pool.execute(
                 'UPDATE dnd_characters SET death_save_successes = ?, death_save_failures = ? WHERE character_id = ?',
@@ -393,13 +452,16 @@ class RPGCharacterManager {
             [newHealth, `${newHitDice}${hitDie}`, characterId]
         );
 
-        // Recover resources (Warlock spell slots, Fighter action surge, etc.)
-        // This would be class-specific in a full implementation
+        // Recover short-rest resources (Warlock pact slots, Action Surge, Ki, etc.)
+        const recovery = await recoverOnRest(characterId, 'short', char.class);
 
         logger.info(`[RPG] Short rest: ${char.character_name} spent ${diceToSpend} hit dice, healed ${healingTotal} HP`);
 
         return {
             type: 'short',
+            restoredResources: recovery.resources,
+            slotsRestored: recovery.slotsRestored,
+            conditionsCleared: recovery.conditionsCleared,
             hitDiceSpent: diceToSpend,
             hitDiceRemaining: newHitDice,
             healingRolls,
@@ -452,10 +514,16 @@ class RPGCharacterManager {
             [`${newHitDice}${hitDie}`, newExhaustion, characterId]
         );
 
+        // Spell slots + all class resources come back on a long rest
+        const recovery = await recoverOnRest(characterId, 'long', char.class);
+
         logger.info(`[RPG] Long rest: ${char.character_name} fully healed, recovered ${hitDiceRecovered} hit dice`);
 
         return {
             type: 'long',
+            restoredResources: recovery.resources,
+            slotsRestored: recovery.slotsRestored,
+            conditionsCleared: recovery.conditionsCleared,
             previousHP: char.health,
             newHP: char.max_health,
             hitDiceRecovered,
@@ -500,6 +568,7 @@ class RPGCharacterManager {
                 'UPDATE dnd_characters SET health = 0 WHERE character_id = ?',
                 [characterId]
             );
+            if (currentLevel < 6) RPGLeaderboardManager.trackStat(characterId, 'deaths', 1);
         }
 
         return {
@@ -638,6 +707,14 @@ class RPGCharacterManager {
     }
 
     /**
+     * A background by name. The table is keyed with spaces ('far traveler'); players type
+     * "Far Traveler", "far_traveler" or "far-traveler", so all of those resolve to it. Null when unknown.
+     */
+    getBackground(name) {
+        return this.backgrounds[backgroundKey(name)] || null;
+    }
+
+    /**
      * Create a new character (D&D Beyond style)
      */
     async createCharacter(userId, guildId, characterName, className, options = {}) {
@@ -670,10 +747,7 @@ class RPGCharacterManager {
             // Get background proficiencies if provided
             let backgroundProfs = [];
             if (options.background) {
-                const bgLower = options.background.toLowerCase().replace(/\s+/g, '_');
-                if (this.backgrounds[bgLower]) {
-                    backgroundProfs = this.backgrounds[bgLower].skills || [];
-                }
+                backgroundProfs = this.getBackground(options.background)?.skills || [];
             }
 
             // Calculate starting HP: Hit die max + CON modifier + racial HP bonus
@@ -714,6 +788,10 @@ class RPGCharacterManager {
             );
 
             logger.info(`[RPGCharacterManager] Created character ${characterName} (${className}/${options.species || 'Human'}) for user ${userId} in guild ${guildId}`);
+
+            // Spell slots + class resources for the new character
+            await syncCharacterProgression(result.insertId);
+
             return {
                 characterId: result.insertId,
                 health: startingHP,
@@ -847,6 +925,11 @@ class RPGCharacterManager {
             );
 
             logger.info(`[RPGCharacterManager] Imported full D&D Beyond character ${characterData.character_name} (${characterData.class}${characterData.subclass ? ' - ' + characterData.subclass : ''} L${characterData.level}) for user ${userId} in guild ${guildId}`);
+
+            // Spell slots + class resources for the imported character
+            await syncCharacterProgression(result.insertId);
+            RPGLeaderboardManager.trackAchievements(result.insertId);
+
             return { characterId: result.insertId, ...characterData };
 
         } catch (error) {
@@ -926,15 +1009,23 @@ class RPGCharacterManager {
             const healthIncrease = 10 + Math.floor(character.constitution / 3);
             const manaIncrease = 5 + Math.floor(character.intelligence / 3);
 
+            // MariaDB evaluates SET left-to-right with already-updated values, so
+            // health/mana read the NEW max here (full heal on level-up). The previous
+            // `health = max_health + ?` added the increase twice, overshooting max.
             await pool.execute(
                 `UPDATE dnd_characters
                  SET level = ?, max_health = max_health + ?, max_mana = max_mana + ?,
-                     health = max_health + ?, mana = max_mana + ?
+                     health = max_health, mana = max_mana
                  WHERE character_id = ?`,
-                [newLevel, healthIncrease, manaIncrease, healthIncrease, manaIncrease, characterId]
+                [newLevel, healthIncrease, manaIncrease, characterId]
             );
 
             logger.info(`[RPGCharacterManager] Character ${characterId} leveled up to level ${newLevel}`);
+
+            // New level -> new spell slots / resource pools; level achievements
+            await syncCharacterProgression(characterId);
+            RPGLeaderboardManager.trackAchievements(characterId);
+
             return { newLevel, healthIncrease, manaIncrease };
 
         } catch (error) {
@@ -1028,6 +1119,11 @@ class RPGCharacterManager {
                 'UPDATE dnd_characters SET gold = gold + ? WHERE character_id = ?',
                 [amount, characterId]
             );
+            // Wealth achievements + lifetime gold earned (fire-and-forget)
+            if (amount > 0) {
+                RPGLeaderboardManager.trackAchievements(characterId);
+                RPGLeaderboardManager.trackStat(characterId, 'gold_earned', amount);
+            }
             return true;
         } catch (error) {
             logger.error(`[RPGCharacterManager] Error adding gold: ${error.message}`);
@@ -1084,6 +1180,8 @@ class RPGCharacterManager {
             }
 
             logger.info(`[RPGCharacterManager] Added ${quantity}x item ${itemId} to character ${characterId}`);
+            // Hoarder (distinct items owned)
+            RPGLeaderboardManager.trackAchievements(characterId);
             return true;
 
         } catch (error) {

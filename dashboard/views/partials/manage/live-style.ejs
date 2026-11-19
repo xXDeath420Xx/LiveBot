@@ -1,0 +1,183 @@
+<%# Live announcement style: platform preview or custom card, per server, live channel and streamer
+    (GET/POST /api/guilds/:id/live-style). Rows are drawn by the script below. %>
+<section class="cf-section" id="liveStyleCard" data-guild-id="<%= guild.id %>" aria-labelledby="ls-title">
+    <header class="cf-section-head">
+        <div>
+            <h2 class="cf-section-title" id="ls-title">Live announcement style</h2>
+            <p class="cf-section-desc">How a "now live" post is drawn. Platform preview, the default, shows the stream's own live thumbnail with the streamer's avatar. Custom card posts an image the bot draws: the same layout on every platform and never a missing thumbnail. Components V2 uses Discord's newer message layout, with the preview in a gallery and a Watch button. Set it for the server, a live channel or one streamer; the most specific setting wins.</p>
+        </div>
+    </header>
+
+    <div id="lsError" class="cf-notice is-bad" role="alert" hidden></div>
+
+    <div class="cf-rows">
+        <div class="cf-row">
+            <div class="cf-row-text">
+                <label class="cf-row-label" for="lsGuildStyle">Server default</label>
+                <p class="cf-row-desc ls-hint" id="lsGuildHint"></p>
+            </div>
+            <div class="cf-row-control">
+                <select id="lsGuildStyle" class="form-select ls-select"></select>
+            </div>
+        </div>
+
+        <div class="cf-rows-head" id="ls-channels-head">Per live channel <span class="ls-count" id="lsChannelCount"></span></div>
+        <div class="cf-row cf-row--stack">
+            <p class="cf-row-desc">Only channels that receive announcements are listed.</p>
+            <div id="lsChannels" class="ls-rows"><div class="cf-state cf-state--compact cf-state--loading" role="status"><span class="cf-spinner" aria-hidden="true"></span><p class="cf-state-text">Loading</p></div></div>
+        </div>
+
+        <div class="cf-rows-head" id="ls-streamers-head">Per streamer <span class="ls-count" id="lsStreamerCount"></span></div>
+        <div class="cf-row cf-row--stack">
+            <p class="cf-row-desc">A streamer's setting follows them into every channel of this server. Anyone left on Inherit follows their channel.</p>
+            <input type="search" id="lsStreamerFilter" class="form-control ls-filter" placeholder="Filter streamers" aria-label="Filter streamers">
+            <div id="lsStreamers" class="ls-rows ls-scroll"><div class="cf-state cf-state--compact cf-state--loading" role="status"><span class="cf-spinner" aria-hidden="true"></span><p class="cf-state-text">Loading</p></div></div>
+        </div>
+    </div>
+</section>
+
+<style>
+  /* Rows the script draws: a name and meta line beside a style picker. */
+  #liveStyleCard .ls-count { color: var(--cf-text-3); font-weight: 400; }
+  #liveStyleCard .ls-rows { display: flex; flex-direction: column; gap: 6px; }
+  #liveStyleCard .ls-scroll { max-height: 22rem; overflow-y: auto; }
+  #liveStyleCard .ls-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(10rem, 15rem); gap: 10px; align-items: center;
+      background: var(--cf-surface-2); border: 1px solid var(--cf-border); border-radius: var(--cf-radius); padding: 8px 12px; }
+  @media (max-width: 640px) { #liveStyleCard .ls-row { grid-template-columns: minmax(0, 1fr); } }
+  #liveStyleCard .ls-row-name { color: var(--cf-text); font-size: var(--cf-text-sm); overflow-wrap: anywhere; }
+  #liveStyleCard .ls-row-meta { color: var(--cf-text-3); font-size: var(--cf-text-xs); }
+  #liveStyleCard .ls-row.ls-overridden { border-color: var(--cf-accent); }
+  #liveStyleCard .ls-filter { max-width: 22rem; }
+  #liveStyleCard .ls-saved { margin-left: 8px; }
+  #liveStyleCard .ls-rows > .cf-state { padding-left: 0; padding-right: 0; }
+</style>
+
+<script>
+(function () {
+  const root = document.getElementById('liveStyleCard');
+  if (!root) return;
+  const guildId = root.dataset.guildId;
+  const api = `/api/guilds/${guildId}/live-style`;
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+
+  let data = null;
+
+  async function req(url, options) {
+    const res = await fetch(url, { credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, ...options });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
+    return body;
+  }
+  const showError = (m) => { const el = $('lsError'); if (!m) { el.hidden = true; return; } el.textContent = m; el.hidden = false; };
+
+  // `selected` null means "no override here" — rendered as Inherit for channel/streamer rows.
+  function styleOptions(selected, { inheritLabel } = {}) {
+    const opts = data.styles.map(s =>
+      `<option value="${s.value}" ${selected === s.value ? 'selected' : ''}>${esc(s.label)}</option>`);
+    if (inheritLabel) {
+      opts.unshift(`<option value="inherit" ${selected ? '' : 'selected'}>${esc(inheritLabel)}</option>`);
+    }
+    return opts.join('');
+  }
+
+  function row({ scopeType, scopeId, name, meta, style }) {
+    return `<div class="ls-row ${style ? 'ls-overridden' : ''}" data-scope="${scopeType}" data-id="${esc(scopeId)}">
+      <div>
+        <div class="ls-row-name">${name}<span class="cf-status-line is-ok ls-saved" data-saved hidden>Saved</span></div>
+        <div class="ls-row-meta">${esc(meta)}</div>
+      </div>
+      <select class="form-select ls-select" data-style-for="${esc(scopeId)}">${styleOptions(style, { inheritLabel: 'Inherit' })}</select>
+    </div>`;
+  }
+
+  function renderStreamers() {
+    const term = ($('lsStreamerFilter').value || '').toLowerCase();
+    const list = data.streamers.filter(s => !term || s.username.toLowerCase().includes(term));
+    $('lsStreamers').innerHTML = list.length
+      ? list.map(s => row({
+          scopeType: 'streamer', scopeId: s.streamer_id,
+          name: `<strong>${esc(s.username)}</strong>`,
+          meta: `${s.platform} · ${s.subscription_count} subscription${s.subscription_count === 1 ? '' : 's'}`,
+          style: s.style,
+        })).join('')
+      : `<div class="cf-state cf-state--compact"><p class="cf-state-text">${data.streamers.length ? 'No streamer matches that filter.' : 'No streamers tracked in this server yet.'}</p></div>`;
+  }
+
+  async function load() {
+    showError('');
+    try {
+      data = await req(api);
+
+      const guildSel = $('lsGuildStyle');
+      // 'inherit' here means "no explicit server row", which falls back to the built-in default.
+      guildSel.innerHTML = styleOptions(data.current.guild, { inheritLabel: 'Use the built-in default (platform preview)' });
+      $('lsGuildHint').textContent = data.current.guild
+        ? 'Explicitly set for this server.'
+        : 'Not set — using the built-in default.';
+
+      $('lsChannelCount').textContent = `(${data.channels.length})`;
+      $('lsStreamerCount').textContent = `(${data.streamers.length})`;
+
+      $('lsChannels').innerHTML = data.channels.length
+        ? data.channels.map(c => row({
+            scopeType: 'channel', scopeId: c.channel_id,
+            // Fall back to the guild's channel list rather than printing a raw snowflake.
+            name: c.name ? `#${esc(c.name)}` : (window.Discord ? Discord.channel(c.channel_id) : `<code>${esc(c.channel_id)}</code>`),
+            meta: `${c.streamer_count} streamer${c.streamer_count === 1 ? '' : 's'} announced here`,
+            style: c.style,
+          })).join('')
+        : '<div class="cf-state cf-state--compact"><p class="cf-state-text">No channels receive announcements yet.</p></div>';
+
+      renderStreamers();
+    } catch (err) {
+      showError(err.message);
+    }
+  }
+
+  async function save(scopeType, scopeId, style, selectEl) {
+    showError('');
+    selectEl.disabled = true;
+    try {
+      await req(api, { method: 'POST', body: JSON.stringify({ scopeType, scopeId, style }) });
+
+      // Keep the local copy in step so re-filtering doesn't show stale selections.
+      if (scopeType === 'guild') data.current.guild = style === 'inherit' ? null : style;
+      if (scopeType === 'channel') {
+        const c = data.channels.find(x => x.channel_id === scopeId);
+        if (c) c.style = style === 'inherit' ? null : style;
+      }
+      if (scopeType === 'streamer') {
+        const s = data.streamers.find(x => x.streamer_id === scopeId);
+        if (s) s.style = style === 'inherit' ? null : style;
+      }
+
+      const rowEl = selectEl.closest('.ls-row');
+      if (rowEl) rowEl.classList.toggle('ls-overridden', style !== 'inherit');
+      const flag = rowEl?.querySelector('[data-saved]') || null;
+      if (flag) { flag.hidden = false; setTimeout(() => { flag.hidden = true; }, 2000); }
+      if (scopeType === 'guild') {
+        $('lsGuildHint').textContent = style === 'inherit'
+          ? 'Not set — using the built-in default.'
+          : 'Explicitly set for this server.';
+      }
+    } catch (err) {
+      showError(err.message);
+      await load();   // resync the controls with whatever the server actually has
+    } finally {
+      selectEl.disabled = false;
+    }
+  }
+
+  root.addEventListener('change', (e) => {
+    const sel = e.target.closest('select.ls-select');
+    if (!sel) return;
+    if (sel.id === 'lsGuildStyle') return save('guild', '', sel.value, sel);
+    const rowEl = sel.closest('.ls-row');
+    if (rowEl) save(rowEl.dataset.scope, rowEl.dataset.id, sel.value, sel);
+  });
+  $('lsStreamerFilter').addEventListener('input', renderStreamers);
+
+  load();
+})();
+</script>

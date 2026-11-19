@@ -1,0 +1,135 @@
+<%#
+  GET /stream/bot/timers (dashboard/routes/stream-bot-timers.js). Locals: own, kick (timer views from core/stream-bot/timers.js
+  timerView, plus automationName), linked [{ platform, login }], schemaReady (false until migration 456 is applied), pageData
+  (#sb-data for /js/stream-bot-timers.js: own, kick, automations, limits, linkedPlatforms).
+%>
+<%- include('_head', { pageTitle: 'Timers', active: 'timers', sbPage: 'timers' }) %>
+<%
+  const _when = (iso) => iso ? new Date(iso).toISOString().slice(0, 16).replace('T', ' ') + ' UTC' : '';
+  const _js = (v) => JSON.stringify(v ?? null).replace(/</g, '\\u003c');
+  const _where = { all: 'Twitch and Kick', twitch: 'Twitch', kick: 'Kick' };
+  const _every = (n) => n % 60 === 0 && n >= 60 ? (n === 60 ? 'every hour' : 'every ' + (n / 60) + ' hours') : (n === 1 ? 'every minute' : 'every ' + n + ' minutes');
+  const _chips = (t) => {
+      const out = [];
+      if (t.automationId) out.push('Runs ' + (t.automationName || 'an automation'));
+      else if (t.messages.length > 1) out.push(t.messages.length + ' messages, ' + (t.rotation === 'random' ? 'random order' : 'taking turns'));
+      if (t.onlyLive) out.push('Only while live');
+      if (t.minChatLines) out.push('After ' + t.minChatLines + ' chat line' + (t.minChatLines === 1 ? '' : 's'));
+      return out;
+  };
+  const _row = (t, kickPage) => { %>
+            <div class="cf-list-item cf-list-item--multi">
+                <div class="cf-list-main">
+                    <p class="cf-list-title"><%= t.name || (t.automationId ? (t.automationName || 'Automation timer') : (t.messages[0] || 'Timer')) %></p>
+                    <% if (t.name && !t.automationId && t.messages[0]) { %><p class="cf-list-body"><%= t.messages[0] %></p><% } %>
+                    <p class="cf-list-meta">
+                        <span><%= kickPage ? 'Kick, ' + (t.channelName || 'your channel') : _where[t.platforms] || 'Twitch and Kick' %></span>
+                        <span><%= _every(t.intervalMin) %></span>
+                        <span><% if (t.lastSentAt) { %>Last posted <time datetime="<%= t.lastSentAt %>"><%= _when(t.lastSentAt) %></time><% } else { %>Not posted yet<% } %></span>
+                    </p>
+                    <% const ch = _chips(t); if (ch.length) { %><ul class="cf-chips" aria-label="Options"><% ch.forEach((c) => { %><li class="cf-chip"><span><%= c %></span></li><% }) %></ul><% } %>
+                </div>
+                <div class="cf-list-actions">
+                    <label class="sr-only" for="sb-timer-on-<%= t.id %>">On: <%= t.name || t.messages[0] || 'timer' %></label>
+                    <input type="checkbox" class="cf-switch" role="switch" id="sb-timer-on-<%= t.id %>" data-toggle-timer="<%= t.id %>"<% if (t.enabled) { %> checked<% } %>>
+                    <button type="button" class="btn btn-secondary btn-sm" data-edit-timer="<%= t.id %>">Edit</button>
+                    <button type="button" class="btn btn-secondary btn-sm" data-delete-timer="<%= t.id %>" data-name="<%= t.name || t.messages[0] || 'this timer' %>">Delete</button>
+                </div>
+            </div>
+<% }; %>
+<div class="cf-page-head">
+    <div>
+        <h1 class="cf-page-title">Timers</h1>
+        <p class="cf-page-sub">Messages the bot posts in your chat on a schedule. On Twitch they come from the CertiFried bot account, on Kick through Kick Defender. A timer can also run one of your automations instead.</p>
+    </div>
+    <div class="cf-page-actions"><button type="button" class="btn btn-primary btn-sm" id="sb-timer-new">Add a timer</button></div>
+</div>
+<%- include('_tabs', { active: 'timers' }) %>
+
+<% if (!schemaReady) { %>
+<div class="cf-notice is-warn"><div class="cf-notice-body">Timers on this page are not switched on yet (the database update for them has not run). Your Kick channel page timers keep posting as before.</div></div>
+<% } %>
+<% if (!linked.length) { %>
+<div class="cf-notice is-warn"><div class="cf-notice-body">Link a Twitch or Kick channel on the <a href="/stream/bot/connections">Connections</a> page first.</div></div>
+<% } %>
+<div class="cf-notice" id="sb-timer-msg" role="status" aria-live="polite" hidden><div class="cf-notice-body" id="sb-timer-msg-text"></div></div>
+
+<section class="cf-section" aria-labelledby="sb-timers-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sb-timers-title">Your timers</h2>
+        <p class="cf-section-desc">A timer posts when its time is up and all of its options are met. If an option holds it back, it is checked again each minute.</p></div>
+        <div class="cf-section-actions"><span class="cf-status-line" id="sb-timers-status" role="status" aria-live="polite"></span></div></header>
+    <div class="cf-rows">
+        <% if (!own.length) { %>
+        <div class="cf-state cf-state--compact"><p class="cf-state-title">No timers yet.</p></div>
+        <% } else { %>
+        <div class="cf-list"><% own.forEach((t) => _row(t, false)) %></div>
+        <% } %>
+    </div>
+</section>
+
+<% if (kick.length) { %>
+<section class="cf-section" aria-labelledby="sb-kick-timers-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sb-kick-timers-title">Kick channel page timers</h2>
+        <p class="cf-section-desc">Made on the Kick channel page for your linked Kick channel. It is the same timer: a change here shows there too. These post on Kick only and cannot run an automation.</p></div></header>
+    <div class="cf-rows"><div class="cf-list"><% kick.forEach((t) => _row(t, true)) %></div></div>
+</section>
+<% } %>
+
+<section class="cf-section" id="sb-timer-editor" aria-labelledby="sb-timer-form-title" hidden>
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sb-timer-form-title" tabindex="-1">Add a timer</h2>
+        <p class="cf-section-desc" id="sb-timer-form-desc">Messages can use {channel.name}, {stream.title}, {stream.category}, {stream.uptime}, {stream.viewers}, {random:1-100}, {choice:a|b|c} and stored values such as {sdb:get:deaths}.</p></div></header>
+    <form id="sb-timer-form" novalidate>
+        <div class="cf-notice is-bad" id="sb-timer-errors" role="alert" tabindex="-1" hidden>
+            <div class="cf-notice-body"><span class="cf-notice-title">Not saved</span><ul class="sb-msg-list" id="sb-timer-errors-list"></ul></div>
+        </div>
+        <div class="cf-rows">
+            <div class="cf-row">
+                <div class="cf-row-text"><label class="cf-row-label" for="sb-t-name">Name</label><p class="cf-row-desc">Optional. Only you see it.</p></div>
+                <div class="cf-row-control"><input type="text" id="sb-t-name" maxlength="100" autocomplete="off"></div>
+            </div>
+            <div class="cf-row" id="sb-t-where-row">
+                <div class="cf-row-text"><label class="cf-row-label" for="sb-t-where">Post in</label></div>
+                <div class="cf-row-control"><select id="sb-t-where">
+                    <option value="all">Twitch and Kick</option><option value="twitch">Twitch</option><option value="kick">Kick</option>
+                </select></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text"><label class="cf-row-label" for="sb-t-messages">Messages</label><p class="cf-row-desc" id="sb-t-messages-desc">One per line, up to 10. With more than one, each post uses the next.</p></div>
+                <div class="cf-row-control"><textarea id="sb-t-messages" rows="4" maxlength="5100" aria-describedby="sb-t-messages-desc"></textarea></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text"><label class="cf-row-label" for="sb-t-rotation">Order</label></div>
+                <div class="cf-row-control"><select id="sb-t-rotation"><option value="rotate">Take turns</option><option value="random">Random</option></select></div>
+            </div>
+            <div class="cf-row" id="sb-t-auto-row">
+                <div class="cf-row-text"><label class="cf-row-label" for="sb-t-automation">Run an automation instead</label><p class="cf-row-desc">Optional. When set, the timer runs this automation and posts no message. Its trigger and conditions are skipped.</p></div>
+                <div class="cf-row-control"><select id="sb-t-automation"><option value="">No, post the messages</option></select></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text"><label class="cf-row-label" for="sb-t-interval">Every (minutes)</label></div>
+                <div class="cf-row-control"><input type="number" id="sb-t-interval" min="1" max="1440" step="1" inputmode="numeric" value="30"></div>
+            </div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text"><label class="cf-row-label" for="sb-t-live">Only while live</label><p class="cf-row-desc" id="sb-t-live-desc">Checked with Twitch or Kick, at most a minute old.</p></div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="sb-t-live" aria-describedby="sb-t-live-desc"></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text"><label class="cf-row-label" for="sb-t-lines">Only after this many chat lines</label><p class="cf-row-desc" id="sb-t-lines-desc">Lines from viewers since this timer last posted in that chat. 0 means no minimum. Counts start again after a CertiFried restart.</p></div>
+                <div class="cf-row-control"><input type="number" id="sb-t-lines" min="0" max="1000" step="1" inputmode="numeric" value="0" aria-describedby="sb-t-lines-desc"></div>
+            </div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text"><label class="cf-row-label" for="sb-t-on">On</label></div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="sb-t-on" checked></div>
+            </div>
+            <div class="cf-section-foot">
+                <span class="cf-status-line" id="sb-t-status" role="status" aria-live="polite"></span>
+                <button type="button" class="btn btn-secondary btn-sm" id="sb-t-cancel">Cancel</button>
+                <button type="submit" class="btn btn-primary btn-sm" id="sb-t-save">Save</button>
+            </div>
+        </div>
+    </form>
+</section>
+
+<script type="application/json" id="sb-data"><%- _js(pageData) %></script>
+<script src="/js/stream-bot-timers.js" defer></script>
+<%- include('_foot') %>

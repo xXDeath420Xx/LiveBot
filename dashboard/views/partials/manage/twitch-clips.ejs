@@ -1,0 +1,396 @@
+<%#
+  Twitch clip feeds: the dashboard side of `/alerts clips`. Receives { guild, channels }; feeds
+  load from /api/guilds/:id/twitch-clips on mount. The list comes first (one row per feed with its
+  edit fields folded under it), then the add form with a preview of how a clip is posted
+  (jobs/twitch-clip-checker.js clipEmbed). Rows are built with createElement; ids are unchanged.
+%>
+<%
+const tcChannels = (typeof channels !== 'undefined' ? channels : [])
+    .filter(function(c) { return c.type === 0 || c.type === 5; })
+    .map(function(c) { return { id: c.id, name: c.name }; });
+let tcBotName = 'Bot', tcBotAvatar = '';
+try { tcBotName = guild.members.me.displayName || tcBotName; tcBotAvatar = guild.members.me.displayAvatarURL({ size: 64 }) || ''; } catch (e) { /* bot member not cached */ }
+%>
+
+<style>
+    #tc-status { margin-right: auto; }
+    .tc-row .cf-list-title a { color: var(--cf-text); text-decoration: none; }
+    .tc-row .cf-list-title a:hover { text-decoration: underline; }
+    .tc-row .cf-list-title i { color: #9146ff; margin-right: 6px; }
+    .tc-edit, .tc-preview { margin-top: var(--cf-2); padding-top: var(--cf-3); border-top: 1px dashed var(--cf-border); }
+    .tc-edit-foot { display: flex; align-items: center; gap: var(--cf-3); margin-top: var(--cf-3); flex-wrap: wrap; }
+    .tc-preview { font-size: var(--cf-text-sm); color: var(--cf-text-2); }
+    .tc-preview ul { margin: 6px 0 8px; padding-left: 18px; }
+    .tc-hint { font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+</style>
+
+<div class="page-section">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fab fa-twitch"></i>
+                <span>Twitch clips</span>
+            </div>
+            <div class="page-section-subtitle">Checked every 10 minutes</div>
+        </div>
+        <a class="btn btn-primary" href="#tc-add-title">Add clip feed</a>
+    </div>
+
+    <section class="cf-section" aria-labelledby="tc-list-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="tc-list-title">Clip feeds <span class="cf-tab-count" id="tc-count"></span></h2>
+                <p class="cf-section-desc">Each feed posts new clips from one Twitch channel.</p>
+            </div>
+            <div class="cf-section-actions">
+                <div class="cf-search" data-tc-search-wrap hidden><i class="fas fa-magnifying-glass" aria-hidden="true"></i><input type="search" data-tc-search class="form-control" placeholder="Search feeds" aria-label="Search clip feeds"></div>
+            </div>
+        </header>
+        <div class="cf-rows" id="tc-list">
+            <%- include('../kit/_state', { kind: 'loading', title: 'Loading clip feeds', text: null, id: null, boxed: false, compact: true }) %>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="tc-add-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="tc-add-title">Add a clip feed</h2>
+                <p class="cf-section-desc">Only clips made after you add the feed are posted, so it is safe to add one right after a batch of uploads.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <form id="tc-add-form">
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="tc-streamer">Twitch streamer</label>
+                        <p class="cf-row-desc">A name or a twitch.tv link.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input class="form-control" id="tc-streamer" placeholder="pixelpal" maxlength="100" required>
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="tc-channel">Channel</label>
+                        <p class="cf-row-desc">Where clips are posted.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <select class="form-select" id="tc-channel" required>
+                            <option value="">Choose a channel</option>
+                            <% tcChannels.forEach(function(c) { %><option value="<%= c.id %>">#<%= c.name %></option><% }); %>
+                        </select>
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="tc-who">Whose clips</label>
+                        <p class="cf-row-desc">Viewers make most clips. Choose the streamer's own to leave viewers' clips out.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <select class="form-select" id="tc-who">
+                            <option value="anyone">Anyone's clips</option>
+                            <option value="broadcaster_only">Only the streamer's own</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="tc-views">Minimum views</label>
+                        <p class="cf-row-desc">0 posts every clip. A clip below this posts later, once it reaches the number.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="cf-input-unit">
+                            <input class="form-control" id="tc-views" type="number" min="0" max="1000000" value="0">
+                            <span class="cf-unit">views</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-row-text">
+                        <span class="cf-row-label">How a clip is posted</span>
+                        <p class="cf-row-desc">With made-up clip details. At most five clips are posted per check, the rest at the next one.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="cf-mp-frame" data-tc-preview></div>
+                    </div>
+                </div>
+                <div class="cf-section-foot">
+                    <div class="cf-status-line" id="tc-status" role="status" aria-live="polite"></div>
+                    <button type="submit" class="btn btn-primary">Add feed</button>
+                </div>
+            </form>
+        </div>
+    </section>
+</div>
+
+<script src="/js/cf-msgpreview.js"></script>
+<script>
+(function() {
+    var tcApi = '/api/guilds/<%= guild.id %>/twitch-clips';
+    var tcChannels = <%- JSON.stringify(tcChannels).replace(/</g, '\\u003c') %>;
+    var tcBot = <%- JSON.stringify({ name: tcBotName, avatar: tcBotAvatar }).replace(/</g, '\\u003c') %>;
+    var feedsCache = [];
+
+    function el(tag, cls, text) {
+        var e = document.createElement(tag);
+        if (cls) e.className = cls;
+        if (text != null) e.textContent = text;
+        return e;
+    }
+    function ago(ts) {
+        if (!ts) return 'never';
+        var s = Math.floor((Date.now() - new Date(ts).getTime()) / 1000);
+        if (s < 60) return 'just now';
+        if (s < 3600) return Math.floor(s / 60) + ' min ago';
+        if (s < 86400) return Math.floor(s / 3600) + ' h ago';
+        return Math.floor(s / 86400) + ' days ago';
+    }
+    function channelSelect(selected, field) {
+        var s = el('select', 'form-select');
+        s.setAttribute('data-f', field);
+        tcChannels.forEach(function(c) {
+            var o = el('option', null, '#' + c.name);
+            o.value = c.id;
+            if (c.id === selected) o.selected = true;
+            s.appendChild(o);
+        });
+        return s;
+    }
+    function channelName(id) {
+        var c = tcChannels.find(function(x) { return x.id === id; });
+        return c ? '#' + c.name : 'a deleted channel';
+    }
+    function status(msg, type) {
+        var node = document.getElementById('tc-status');
+        node.textContent = msg;
+        node.className = 'cf-status-line ' + (type === 'error' ? 'is-bad' : 'is-ok');
+        if (type === 'success') setTimeout(function() { node.className = 'cf-status-line'; node.textContent = ''; }, 5000);
+    }
+    async function call(method, url, body) {
+        var res = await fetch(url, {
+            method: method,
+            headers: body ? { 'Content-Type': 'application/json' } : {},
+            body: body ? JSON.stringify(body) : undefined
+        });
+        var data = await res.json().catch(function() { return {}; });
+        if (!res.ok || !data.success) throw new Error(data.error || ('Request failed (' + res.status + ')'));
+        return data;
+    }
+    function field(labelText, control) {
+        var f = el('div', 'cf-field');
+        var id = 'tc-f-' + Math.random().toString(36).slice(2, 9);
+        control.id = id;
+        var l = el('label', null, labelText);
+        l.htmlFor = id;
+        f.append(l, control);
+        return f;
+    }
+
+    function feedRow(f) {
+        var row = el('div', 'cf-list-item cf-list-item--multi tc-row');
+        row.setAttribute('data-id', f.id);
+        row.setAttribute('data-name', String(f.username || '').toLowerCase());
+        var main = el('div', 'cf-list-main');
+        var title = el('div', 'cf-list-title');
+        var a = el('a');
+        a.href = 'https://twitch.tv/' + encodeURIComponent(f.username);
+        a.target = '_blank';
+        a.rel = 'noopener';
+        var ic = el('i', 'fab fa-twitch');
+        ic.setAttribute('aria-hidden', 'true');
+        a.append(ic, document.createTextNode(f.username));
+        title.append(a, document.createTextNode(' '), el('span', 'cf-pill' + (f.enabled ? ' is-ok' : ''), f.enabled ? 'On' : 'Paused'));
+        var meta = el('div', 'cf-list-meta');
+        var who = f.creators_filter === 'broadcaster_only' ? "Streamer's own clips" : "Anyone's clips";
+        [channelName(f.channel_id),
+         who + (f.min_views ? ', ' + f.min_views + '+ views' : ''),
+         f.posted_count + ' posted, last ' + ago(f.last_posted),
+         'Checked ' + ago(f.last_checked)].forEach(function(t) { meta.appendChild(el('span', null, t)); });
+        var from = el('span', null, 'Counting from ' + new Date(f.posted_from).toLocaleString());
+        from.title = 'Clips made before this are never posted';
+        meta.appendChild(from);
+        main.append(title, meta);
+
+        var edit = el('div', 'tc-edit');
+        edit.hidden = true;
+        var fields = el('div', 'cf-fields');
+        var nameIn = el('input', 'form-control');
+        nameIn.setAttribute('data-f', 'streamer');
+        nameIn.maxLength = 100;
+        nameIn.value = f.username;
+        var who2 = el('select', 'form-select');
+        who2.setAttribute('data-f', 'creators_filter');
+        [['anyone', "Anyone's clips"], ['broadcaster_only', "Only the streamer's own"]].forEach(function(o) {
+            var op = el('option', null, o[1]); op.value = o[0]; if (f.creators_filter === o[0]) op.selected = true; who2.appendChild(op);
+        });
+        var views = el('input', 'form-control');
+        views.type = 'number'; views.min = '0'; views.max = '1000000';
+        views.setAttribute('data-f', 'min_views');
+        views.value = f.min_views || 0;
+        fields.append(field('Streamer', nameIn), field('Channel', channelSelect(f.channel_id, 'channel_id')), field('Whose clips', who2), field('Minimum views', views));
+        var foot = el('div', 'tc-edit-foot');
+        var save = el('button', 'btn btn-sm btn-primary', 'Save');
+        save.type = 'button';
+        save.setAttribute('data-act', 'save');
+        var msg = el('span', 'tc-hint');
+        msg.setAttribute('data-msg', '');
+        foot.append(save, msg);
+        edit.append(fields, foot);
+        var preview = el('div', 'tc-preview');
+        preview.hidden = true;
+        main.append(edit, preview);
+
+        var actions = el('div', 'cf-list-actions');
+        [['preview', 'Pending clips', 'btn-secondary'], ['edit', 'Edit', 'btn-secondary'],
+         ['toggle', f.enabled ? 'Pause' : 'Resume', 'btn-secondary'], ['delete', 'Remove', 'btn-danger']].forEach(function(b) {
+            var bt = el('button', 'btn btn-sm ' + b[2], b[1]);
+            bt.type = 'button';
+            bt.setAttribute('data-act', b[0]);
+            if (b[0] === 'toggle') bt.setAttribute('data-enabled', f.enabled ? '1' : '0');
+            actions.appendChild(bt);
+        });
+        row.append(main, actions);
+        return row;
+    }
+
+    function render(feeds) {
+        feedsCache = feeds;
+        var list = document.getElementById('tc-list');
+        document.getElementById('tc-count').textContent = feeds.length ? String(feeds.length) : '';
+        document.querySelector('[data-tc-search-wrap]').hidden = feeds.length <= 15;
+        if (!feeds.length) {
+            var st = el('div', 'cf-state cf-state--empty');
+            st.append(el('p', 'cf-state-title', 'No clip feeds yet'), el('p', 'cf-state-text', 'Add one below to start posting clips.'));
+            list.replaceChildren(st);
+            return;
+        }
+        var wrap = el('div', 'cf-list');
+        feeds.forEach(function(f) { wrap.appendChild(feedRow(f)); });
+        list.replaceChildren(wrap);
+        filter();
+    }
+    function filter() {
+        var term = (document.querySelector('[data-tc-search]').value || '').trim().toLowerCase();
+        document.querySelectorAll('#tc-list .tc-row').forEach(function(r) {
+            r.hidden = !!term && r.getAttribute('data-name').indexOf(term) === -1;
+        });
+    }
+    document.querySelector('[data-tc-search]').addEventListener('input', filter);
+
+    async function load() {
+        try {
+            render((await call('GET', tcApi)).feeds || []);
+        } catch (err) {
+            var st = el('div', 'cf-state cf-state--error cf-state--compact', 'Could not load feeds: ' + err.message);
+            st.setAttribute('role', 'alert');
+            document.getElementById('tc-list').replaceChildren(st);
+        }
+    }
+
+    function clipList(clips) {
+        var ul = el('ul');
+        clips.forEach(function(c) {
+            var li = el('li');
+            var a = el('a', null, c.title || 'Untitled');
+            if (/^https:\/\//.test(c.url || '')) { a.href = c.url; a.target = '_blank'; a.rel = 'noopener'; }
+            li.append(a, document.createTextNode(' · ' + (c.views || 0) + ' views · by ' + (c.creator || 'unknown')));
+            ul.appendChild(li);
+        });
+        return ul;
+    }
+
+    document.getElementById('tc-list').addEventListener('click', async function(e) {
+        var btn = e.target.closest('button[data-act]');
+        if (!btn) return;
+        var row = btn.closest('.tc-row');
+        var id = row.getAttribute('data-id');
+        var act = btn.getAttribute('data-act');
+
+        try {
+            if (act === 'edit') {
+                var ed = row.querySelector('.tc-edit');
+                ed.hidden = !ed.hidden;
+            } else if (act === 'delete') {
+                if (!confirm('Remove this clip feed? It stops posting right away.')) return;
+                await call('DELETE', tcApi + '/' + id);
+                load();
+            } else if (act === 'toggle') {
+                var resume = btn.getAttribute('data-enabled') === '0';
+                if (resume && !confirm('Resume this feed? Clips made while it was paused will not be posted. It counts from now.')) return;
+                btn.disabled = true;
+                await call('PATCH', tcApi + '/' + id, { enabled: resume });
+                load();
+            } else if (act === 'save') {
+                var body = {};
+                row.querySelectorAll('[data-f]').forEach(function(f) { body[f.getAttribute('data-f')] = f.value; });
+                btn.disabled = true;
+                var d = await call('PATCH', tcApi + '/' + id, body);
+                row.querySelector('[data-msg]').textContent = d.message;
+                setTimeout(load, 1200);
+            } else if (act === 'preview') {
+                var box = row.querySelector('.tc-preview');
+                box.hidden = false;
+                box.replaceChildren(document.createTextNode('Checking Twitch'));
+                btn.disabled = true;
+                var p = await call('POST', tcApi + '/' + id + '/preview');
+                var parts = [];
+                var head = el('p');
+                head.append(el('strong', null, p.total + ' clip' + (p.total === 1 ? '' : 's')), document.createTextNode(' made since ' + new Date(p.since).toLocaleString() + '.' + (p.filtered_out ? ' ' + p.filtered_out + ' skipped by your filters.' : '')));
+                parts.push(head);
+                if (p.waiting.length) parts.push(el('div', 'tc-hint', 'Waiting for the next check (' + p.waiting.length + '):'), clipList(p.waiting.slice(0, 8)));
+                if (p.posted.length) parts.push(el('div', 'tc-hint', 'Already posted (' + p.posted.length + '):'), clipList(p.posted.slice(-5)));
+                parts.push(el('div', 'tc-hint', 'Nothing was posted by this check.'));
+                box.replaceChildren.apply(box, parts);
+                btn.disabled = false;
+            }
+        } catch (err) {
+            btn.disabled = false;
+            alert(err.message);
+        }
+    });
+
+    document.getElementById('tc-add-form').addEventListener('submit', async function(e) {
+        e.preventDefault();
+        var form = this;
+        var body = {
+            streamer: document.getElementById('tc-streamer').value.trim(),
+            channel_id: document.getElementById('tc-channel').value,
+            creators_filter: document.getElementById('tc-who').value,
+            min_views: document.getElementById('tc-views').value
+        };
+        if (!body.streamer) return status('Enter a Twitch name.', 'error');
+        if (!body.channel_id) return status('Choose a channel to post in.', 'error');
+        try {
+            var d = await call('POST', tcApi, body);
+            status(d.message + '. Clips made from now on will post.', 'success');
+            form.reset();
+            drawPost();
+            load();
+        } catch (err) {
+            status(err.message, 'error');
+        }
+    });
+
+    // How a clip is posted (jobs/twitch-clip-checker.js): a purple embed with the clip title as a
+    // link, its thumbnail, game, length and views, and who clipped it.
+    function drawPost() {
+        if (!window.CFMsgPreview) return;
+        var who = document.getElementById('tc-who').value;
+        var name = document.getElementById('tc-streamer').value.trim().replace(/^https?:\/\/(www\.)?twitch\.tv\//i, '') || 'pixelpal';
+        CFMsgPreview.render(document.querySelector('[data-tc-preview]'), {
+            username: tcBot.name, avatarUrl: tcBot.avatar,
+            embeds: [{
+                color: '#9146FF', title: 'Sample clip title', url: 'https://clips.twitch.tv/',
+                fields: [{ name: 'Playing', value: 'Just Chatting', inline: true }, { name: 'Length', value: '28s', inline: true }, { name: 'Views', value: '42', inline: true }],
+                image: { placeholder: 'Clip thumbnail' },
+                footer: { text: 'Clipped by ' + (who === 'broadcaster_only' ? name : 'a viewer') },
+                timestamp: true
+            }]
+        }, { channels: tcChannels });
+    }
+    ['tc-who', 'tc-streamer'].forEach(function(id) { document.getElementById(id).addEventListener('input', drawPost); document.getElementById(id).addEventListener('change', drawPost); });
+    drawPost();
+
+    load();
+})();
+</script>

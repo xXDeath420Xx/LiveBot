@@ -1,0 +1,71 @@
+# Paths kept out of the public GitHub repo, on top of .gitignore.
+# Read by scripts/publish-github.sh (gitignore syntax). See docs/publishing.md.
+# Add to this file rather than allowlisting a scanner finding.
+
+# Scratch space, agent and tool state, local worktrees
+/scratchpad/
+/.claude/
+/.claude-*/
+/.superpowers/
+/.firecrawl/
+/.ralph/
+/dashboard/scratch_*/
+__pycache__/
+*.pyc
+
+# Backups and editor leftovers
+*.bak
+*.bak.*
+*.bak-*
+*.orig
+*.rej
+*.swp
+*~
+
+# Env-style config files (only *.example templates are published)
+*.env
+!*.env.example
+
+# Runtime data written by the bot, the dashboard and cron jobs
+/data/*.heartbeat
+/data/audits/
+/data/evidence-cache/
+/data/pak-scan.json
+/dashboard/data/
+/dashboard/public/api/guild-ids.json
+
+# One-off audit outputs and per-community setup state (IDs, transfer maps, message dumps)
+/rules-*.json
+/scripts/*-audit-result.json
+/scripts/.*-setup-ids.json
+/scripts/lair/*.json
+/scripts/lair/*.jsonl
+/scripts/lair/*.log
+/scripts/pac/*-state.json
+/scripts/migration-data/
+# One-off fix scripts aimed at named members and streamers
+/scripts/oneoff-*
+
+# Private pages served to one community
+/dashboard/private/
+
+# Internal notes, screenshots and full third-party source trees kept for reference.
+# Public documentation is re-included explicitly.
+/docs/*
+!/docs/publishing.md
+
+# Build artifacts and archives (downloads are served by the site, not from git)
+*.zip
+*.7z
+*.rar
+*.tar
+*.tgz
+*.gz
+*.asar
+*.exe
+*.dll
+*.msi
+
+# Assets CertiFried has no right to redistribute (see THIRD_PARTY_NOTICES.md)
+/data/digimon-images/
+/dashboard/public/sprites/img/

@@ -10,6 +10,41 @@ const __dirname = path.dirname(__filename);
 const SOUNDS_DIR = path.join(__dirname, '..', 'sounds');
 
 /**
+ * Stored volume as a percentage, 1-100. The VC sound drops page and /admin vcsounds volume save a
+ * percentage; rows written before that hold a 0-1 fraction (0.5 = 50%), so values under 1 are read
+ * as a fraction.
+ */
+export function volumePercent(v) {
+    const n = Number(v);
+    if (!Number.isFinite(n) || n <= 0) return 50;
+    return Math.min(100, Math.max(1, Math.round(n < 1 ? n * 100 : n)));
+}
+
+/**
+ * Drop times as "HH:MM" strings. /admin vcsounds schedule stores a JSON array; the dashboard's
+ * Times box stores what was typed ("14:00, 20:30"). Anything that is not a time is left out, so a
+ * bad value can never stop the other servers' drops.
+ */
+export function parseDropTimes(v) {
+    let list = v;
+    if (typeof v === 'string') {
+        try { list = JSON.parse(v); } catch { list = v.split(/[\s,]+/); }
+    }
+    if (!Array.isArray(list)) return [];
+    return [...new Set(list.map(t => String(t).trim()).filter(t => /^([01]?\d|2[0-3]):[0-5]\d$/.test(t))
+        .map(t => t.padStart(5, '0')))];
+}
+
+/** Channel lists: a JSON array, or comma-separated ids from an older value. */
+export function parseIdList(v) {
+    let list = v;
+    if (typeof v === 'string') {
+        try { list = JSON.parse(v); } catch { list = v.split(/[\s,]+/); }
+    }
+    return Array.isArray(list) ? list.map(String).filter(id => /^\d{5,25}$/.test(id)) : [];
+}
+
+/**
  * VC Sound Manager
  * Handles joining voice channels and playing sound drops.
  * Replaces Mr. Skeltal (random drops) and CheersBot V2 (scheduled drops).
@@ -37,9 +72,9 @@ class VCSoundManager {
 
             const config = rows[0];
             // Parse JSON fields
-            config.schedule_times = config.schedule_times ? JSON.parse(config.schedule_times) : [];
-            config.blacklisted_channels = config.blacklisted_channels ? JSON.parse(config.blacklisted_channels) : [];
-            config.whitelisted_channels = config.whitelisted_channels ? JSON.parse(config.whitelisted_channels) : [];
+            config.schedule_times = parseDropTimes(config.schedule_times);
+            config.blacklisted_channels = parseIdList(config.blacklisted_channels);
+            config.whitelisted_channels = parseIdList(config.whitelisted_channels);
             return config;
         } catch (error) {
             logger.error(`[VCSoundManager] Error getting config for guild ${guildId}:`, error);
@@ -277,7 +312,7 @@ class VCSoundManager {
                     leaveOnEnd: true,
                     leaveOnEmpty: true,
                     leaveOnEndCooldown: (config.leave_after_seconds || 5) * 1000,
-                    volume: Math.round((config.volume || 0.5) * 100)
+                    volume: volumePercent(config.volume)
                 }
             });
 
@@ -328,9 +363,9 @@ class VCSoundManager {
                 'SELECT * FROM vc_sound_config WHERE enabled = TRUE'
             );
             return rows.map(row => {
-                row.schedule_times = row.schedule_times ? JSON.parse(row.schedule_times) : [];
-                row.blacklisted_channels = row.blacklisted_channels ? JSON.parse(row.blacklisted_channels) : [];
-                row.whitelisted_channels = row.whitelisted_channels ? JSON.parse(row.whitelisted_channels) : [];
+                row.schedule_times = parseDropTimes(row.schedule_times);
+                row.blacklisted_channels = parseIdList(row.blacklisted_channels);
+                row.whitelisted_channels = parseIdList(row.whitelisted_channels);
                 return row;
             });
         } catch (error) {

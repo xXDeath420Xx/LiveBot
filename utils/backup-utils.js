@@ -6,12 +6,15 @@
 import pool from './db.js';
 import logger from './logger.js';
 
+// anti_raid_config and raid_protection_config are not here: nothing ever enforced either, and the raid
+// settings are raid_detection_config (migrations/330_nsfw_cleanup.js). Restoring an older snapshot skips
+// their rows (dashboard/routes/features/backups.js only restores the tables listed here).
 export const BACKUP_CONFIG_TABLES = [
-    'guild_config', 'guild_settings', 'logging_config', 'log_config', 'log_event_config',
+    'guild_config', 'guild_settings', 'logging_config', 'log_event_config', 'log_action_colors',
     'welcome_settings', 'moderation_config', 'escalation_rules', 'automod_rules',
     'automod_spam_config', 'automod_heat_config', 'adaptive_spam_config',
-    'anti_raid_config', 'anti_nuke_config', 'anti_nuke_whitelist', 'join_gate_config',
-    'quarantine_config', 'raid_detection_config', 'raid_protection_config',
+    'anti_nuke_config', 'anti_nuke_whitelist', 'protection_allowlist', 'join_gate_config',
+    'quarantine_config', 'raid_detection_config',
     'selfbot_detection_config', 'phishing_config',
     'global_ban_config', 'starboard_config', 'suggestion_config',
     'economy_config', 'currency_config', 'gambling_config', 'music_config',
@@ -20,21 +23,24 @@ export const BACKUP_CONFIG_TABLES = [
     'self_promo_config', 'community_support_config',
     'prefix_command_config', 'prefix_command_aliases',
     'guild_command_restrictions', 'orientation_config', 'imagine_config',
-    'stat_display_channels', 'scheduled_purges', 'custom_embeds',
+    'stat_display_channels', 'scheduled_purges', 'channel_purge_rules', 'custom_embeds',
     'custom_commands', 'autoresponders', 'tags',
     'reaction_role_panels', 'autoroles_config',
     'temp_channel_config', 'auto_publisher_config', 'auto_meme_config',
     'auto_delete_channels', 'sticky_messages',
     'confession_config', 'weather_config', 'tts_config',
-    'vc_sound_config', 'scheduled_events_config',
+    'vc_sound_config',
     'twitch_schedule_sync_config', 'free_games_subscriptions',
     'guild_streamer_auto_track', 'subscriptions',
-    'tiktok_subscriptions', 'reddit_feeds', 'twitter_feeds', 'youtube_feeds',
+    'reddit_feeds', 'twitter_feeds', 'youtube_feeds',
     'steam_watchers', 'steam_guild_settings',
     'forum_config', 'modmail_config', 'qotd_channels',
     'channel_settings', 'log_channel_routing',
-    'invite_policy', 'verification_config',
-    'user_birthdays', 'reminders'
+    'invite_policy', 'verify_config',
+    'user_birthdays', 'reminders', 'ai_config', 'chatgpt_persona', 'modmail_blocked_users',
+    'statrole_configs', 'suggestion_tags',
+    'ai_dj_config', 'ai_dj_blacklist', 'ai_dj_favorites', 'ai_dj_playlists', 'record_config',
+    'automod_patterns', 'log_retention_policy'
 ];
 
 /**
@@ -44,7 +50,8 @@ export const BACKUP_CONFIG_TABLES = [
  */
 export async function createSnapshot(guild) {
     function serializeOverwrites(channel) {
-        return channel.permissionOverwrites.cache.map(ow => ({
+        // Only guild channels carry overwrites; anything else contributes none rather than throwing.
+        return (channel.permissionOverwrites?.cache ?? []).map(ow => ({
             id: ow.id, type: ow.type,
             allow: ow.allow.bitfield.toString(),
             deny: ow.deny.bitfield.toString()
@@ -81,7 +88,8 @@ export async function createSnapshot(guild) {
         })),
         categories: guild.channels.cache.filter(c => c.type === 4).sort((a, b) => a.position - b.position)
             .map(c => ({ id: c.id, name: c.name, position: c.position, permissionOverwrites: serializeOverwrites(c) })),
-        channels: guild.channels.cache.filter(c => c.type !== 4).sort((a, b) => a.position - b.position)
+        // Active threads also sit in guild.channels.cache; they are conversations, not structure.
+        channels: guild.channels.cache.filter(c => c.type !== 4 && !c.isThread?.()).sort((a, b) => a.position - b.position)
             .map(c => {
                 const ch = {
                     id: c.id, name: c.name, type: c.type, parentId: c.parentId,
@@ -135,7 +143,13 @@ export async function createSnapshot(guild) {
 
     const botConfig = {};
     for (const table of BACKUP_CONFIG_TABLES) {
-        try { const [rows] = await pool.execute(`SELECT * FROM \`${table}\` WHERE guild_id = ?`, [guild.id]); if (rows.length > 0) botConfig[table] = rows; } catch {}
+        try {
+            const [rows] = await pool.execute(`SELECT * FROM \`${table}\` WHERE guild_id = ?`, [guild.id]);
+            if (rows.length > 0) botConfig[table] = rows;
+        } catch (error) {
+            // A table missing from the snapshot is a hole in the backup; say which one.
+            logger.warn('[Backup] Could not read config table for snapshot', { guildId: guild.id, table, code: error.code, error: error.message });
+        }
     }
 
     return {

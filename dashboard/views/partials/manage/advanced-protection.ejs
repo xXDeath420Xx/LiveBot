@@ -1,189 +1,194 @@
-<div class="page-section">
+<%#
+  Advanced protection: raid detection (POST advanced-protection/raid) and its incidents, raid lockdown
+  (raid-lockdown-panel.ejs, API-driven), self-bot detection (POST advanced-protection/selfbot) and its
+  detections, adaptive spam (POST advanced-protection/adaptive-spam), and the Discord invite filter
+  (POST invite-filter/config, invite-filter/whitelist/add|remove). Built on the settings-row kit
+  (cf-settings.css); field names and ids are unchanged.
+%>
+<%
+  // A section this server never saved arrives as {} (no row). Treat it as unsaved, so the fields show
+  // the defaults the bot uses (the table's column defaults) instead of empty boxes.
+  const apSaved = (c) => (c && Object.keys(c).length) ? c : null;
+  raidConfig = apSaved(raidConfig);
+  selfbotConfig = apSaved(selfbotConfig);
+  adaptiveSpamConfig = apSaved(adaptiveSpamConfig);
+  // Unsaved means 'alert' (the column default). The raid detector treats the older 'lockdown' and
+  // 'timeout' as 'mute' (H-660, H-676); any other value is acted on by none of the three detectors,
+  // which then only alert.
+  const apAction = (c) => {
+      const a = c ? String(c.action || '') : 'alert';
+      if (a === 'lockdown' || a === 'timeout') return 'mute';
+      return ['mute', 'kick', 'ban', 'alert'].includes(a) ? a : 'alert';
+  };
+  // Adaptive spam alone also has 'delete+warn' (core/adaptive-spam-manager.js deleteAndWarn, H-716).
+  const apSpamAction = (c) => (c && String(c.action || '') === 'delete+warn') ? 'delete+warn' : apAction(c);
+  const apRaidOn = !!(raidConfig && raidConfig.enabled);
+  const apSelfOn = !!(selfbotConfig && selfbotConfig.enabled);
+  const apSpamOn = !!(adaptiveSpamConfig && adaptiveSpamConfig.enabled);
+  const apText = channels.filter(c => c.type === 0 || c.type === 5);
+  const apInvite = locals.inviteFilterConfig || null;
+  const apInviteEntries = locals.inviteFilterEntries || { users: [], roles: [], channels: [] };
+  const apInviteOn = (apInvite && apInvite.enabled != null) ? !!apInvite.enabled : true;
+  const apCap = (s) => { const v = String(s || '').replace(/_/g, ' '); return v ? v.charAt(0).toUpperCase() + v.slice(1) : 'Unknown'; };
+  const apRoleColor = (r) => (r.hexColor && r.hexColor !== '#000000') ? r.hexColor : '';
+%>
+<div class="page-section ap-page">
     <div class="page-section-header">
         <div>
             <div class="page-section-title">
                 <i class="fas fa-shield-virus"></i>
-                <span>Advanced Protection</span>
+                <span>Advanced protection</span>
             </div>
-            <div class="page-section-subtitle">
-                AI-powered protection against raids, self-bots, and evolving spam patterns
-            </div>
+            <div class="page-section-subtitle">Raids and lockdown, self-bots, adaptive spam and Discord invite links.</div>
         </div>
     </div>
 
-    <!-- Protection Status Overview -->
-    <div class="grid grid-cols-4" style="margin-bottom: var(--spacing-6);">
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Raid Protection</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: <%= raidConfig && raidConfig.enabled ? 'var(--color-success)' : 'var(--color-text-muted)' %>;">
-                <%= raidConfig && raidConfig.enabled ? 'Active' : 'Disabled' %>
-            </div>
-        </div>
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Self-Bot Detection</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: <%= selfbotConfig && selfbotConfig.enabled ? 'var(--color-success)' : 'var(--color-text-muted)' %>;">
-                <%= selfbotConfig && selfbotConfig.enabled ? 'Active' : 'Disabled' %>
-            </div>
-        </div>
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Adaptive Spam</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: <%= adaptiveSpamConfig && adaptiveSpamConfig.enabled ? 'var(--color-success)' : 'var(--color-text-muted)' %>;">
-                <%= adaptiveSpamConfig && adaptiveSpamConfig.enabled ? 'Active' : 'Disabled' %>
-            </div>
-        </div>
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.05em;">Recent Incidents</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-primary-400);">
-                <%= (raidIncidents ? raidIncidents.length : 0) + (selfbotDetections ? selfbotDetections.length : 0) %>
-            </div>
-        </div>
-    </div>
+    <dl class="cf-kpis" aria-label="Advanced protection at a glance">
+        <div class="cf-kpi"><dt>Raid protection</dt><dd class="cf-kpi-value is-small"><span class="cf-pill <%= apRaidOn ? 'is-ok' : '' %>"><%= apRaidOn ? 'On' : 'Off' %></span></dd></div>
+        <div class="cf-kpi"><dt>Self-bot detection</dt><dd class="cf-kpi-value is-small"><span class="cf-pill <%= apSelfOn ? 'is-ok' : '' %>"><%= apSelfOn ? 'On' : 'Off' %></span></dd></div>
+        <div class="cf-kpi"><dt>Adaptive spam</dt><dd class="cf-kpi-value is-small"><span class="cf-pill <%= apSpamOn ? 'is-ok' : '' %>"><%= apSpamOn ? 'On' : 'Off' %></span></dd></div>
+        <div class="cf-kpi"><dt>Invite filter</dt><dd class="cf-kpi-value is-small"><span class="cf-pill <%= apInviteOn ? 'is-ok' : '' %>"><%= apInviteOn ? 'On' : 'Off' %></span></dd></div>
+        <div class="cf-kpi"><dt>Recent incidents</dt><dd class="cf-kpi-value"><%= (raidIncidents ? raidIncidents.length : 0) + (selfbotDetections ? selfbotDetections.length : 0) %></dd></div>
+    </dl>
 
-    <!-- Raid Protection Configuration -->
-    <div style="margin-bottom: var(--spacing-6);">
-        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
-            <i class="fas fa-people-robbery" style="color: var(--color-danger); margin-right: var(--spacing-2);"></i>
-            Raid Protection
-        </h3>
-        <form action="/manage/<%= guild.id %>/advanced-protection/raid" method="POST" style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6);">
-            <div style="margin-bottom: var(--spacing-4);">
-                <div class="form-check form-switch" style="display: flex; align-items: center; gap: var(--spacing-3); padding: var(--spacing-4); background: var(--color-dark-700); border-radius: var(--radius-md);">
-                    <input class="form-check-input" type="checkbox" role="switch" id="raidEnabled" name="enabled" <%= raidConfig && raidConfig.enabled ? 'checked' : '' %> style="width: 48px; height: 24px; cursor: pointer;">
-                    <label class="form-check-label" for="raidEnabled" style="cursor: pointer; flex: 1;">
-                        <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-1);">Enable Raid Protection</div>
-                        <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">Detect coordinated mass-join attacks and automatically mute/purge raiders</div>
-                    </label>
+    <section class="cf-section" aria-labelledby="ap-raid-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="ap-raid-title">Raid protection</h2>
+                <p class="cf-section-desc">
+                    Acts when <%= raidConfig ? raidConfig.join_threshold : '10' %> people join within <%= raidConfig ? raidConfig.join_timeframe_seconds : '30' %> seconds
+                    and at least <%= raidConfig ? Math.round(raidConfig.new_account_ratio * 100) : '70' %>% of the accounts are under <%= raidConfig ? raidConfig.new_account_age_hours : '24' %> hours old.
+                    To block every join for a while, use <a href="#raid-lockdown">raid lockdown</a> below.
+                    Members on the <a href="/manage/<%= guild.id %>?page=protection-settings">Protection settings</a> allowlist are skipped, and the pause there stops every action.
+                </p>
+            </div>
+            <div class="cf-section-actions"><span class="cf-pill<%= apRaidOn ? ' is-ok' : '' %>"><%= apRaidOn ? 'On' : 'Off' %></span></div>
+        </header>
+        <form class="cf-rows" action="/manage/<%= guild.id %>/advanced-protection/raid" method="POST">
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="raidEnabled">Raid protection</label>
+                    <p class="cf-row-desc" id="raidEnabled-desc">Detect coordinated mass-join attacks and act on the raiders.</p>
+                </div>
+                <div class="cf-row-control">
+                    <input class="cf-switch" type="checkbox" role="switch" id="raidEnabled" name="enabled" aria-describedby="raidEnabled-desc" <%= raidConfig && raidConfig.enabled ? 'checked' : '' %>>
                 </div>
             </div>
-
-            <div class="grid grid-cols-3" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
-                <div>
-                    <label class="form-label">
-                        <i class="fas fa-users" style="margin-right: var(--spacing-1); color: var(--color-danger);"></i>
-                        Join Threshold
-                    </label>
-                    <input type="number" class="form-control" name="join_threshold" value="<%= raidConfig ? raidConfig.join_threshold : '10' %>" min="3" max="50" required>
-                    <div class="form-help">Joins within timeframe to trigger</div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="f-advanced-protection-join_threshold">Join threshold</label>
+                    <p class="cf-row-desc">Joins within the timeframe that start a raid check. From 3 to 50.</p>
                 </div>
-                <div>
-                    <label class="form-label">
-                        <i class="fas fa-stopwatch" style="margin-right: var(--spacing-1); color: var(--color-accent-orange);"></i>
-                        Timeframe (seconds)
-                    </label>
-                    <input type="number" class="form-control" name="join_timeframe_seconds" value="<%= raidConfig ? raidConfig.join_timeframe_seconds : '30' %>" min="10" max="300" required>
-                    <div class="form-help">Window to count joins</div>
-                </div>
-                <div>
-                    <label class="form-label">
-                        <i class="fas fa-baby" style="margin-right: var(--spacing-1); color: var(--color-warning);"></i>
-                        New Account Age (hours)
-                    </label>
-                    <input type="number" class="form-control" name="new_account_age_hours" value="<%= raidConfig ? raidConfig.new_account_age_hours : '24' %>" min="1" max="720" required>
-                    <div class="form-help">Flag accounts younger than this</div>
+                <div class="cf-row-control">
+                    <div class="cf-input-unit"><input id="f-advanced-protection-join_threshold" type="number" class="form-control" name="join_threshold" value="<%= raidConfig ? raidConfig.join_threshold : '10' %>" min="3" max="50" required><span class="cf-unit">joins</span></div>
                 </div>
             </div>
-
-            <div class="grid grid-cols-3" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
-                <div>
-                    <label class="form-label">
-                        <i class="fas fa-percent" style="margin-right: var(--spacing-1); color: var(--color-primary-400);"></i>
-                        New Account Ratio
-                    </label>
-                    <input type="number" class="form-control" name="new_account_ratio" value="<%= raidConfig ? (raidConfig.new_account_ratio * 100) : '70' %>" min="30" max="100" step="5" required>
-                    <div class="form-help">% of new accounts to trigger (e.g., 70)</div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="f-advanced-protection-join_timeframe_seconds">Timeframe</label>
+                    <p class="cf-row-desc">The window joins are counted in. From 10 to 300.</p>
                 </div>
-                <div>
-                    <label class="form-label">
-                        <i class="fas fa-hammer" style="margin-right: var(--spacing-1); color: var(--color-accent-purple);"></i>
-                        Action
-                    </label>
-                    <select class="form-select" name="action" required>
-                        <option value="mute" <%= raidConfig && raidConfig.action === 'mute' ? 'selected' : '' %>>Mute Raiders</option>
-                        <option value="kick" <%= raidConfig && raidConfig.action === 'kick' ? 'selected' : '' %>>Kick Raiders</option>
-                        <option value="ban" <%= raidConfig && raidConfig.action === 'ban' ? 'selected' : '' %>>Ban Raiders</option>
-                        <option value="alert" <%= raidConfig && raidConfig.action === 'alert' ? 'selected' : '' %>>Alert Only</option>
+                <div class="cf-row-control">
+                    <div class="cf-input-unit"><input id="f-advanced-protection-join_timeframe_seconds" type="number" class="form-control" name="join_timeframe_seconds" value="<%= raidConfig ? raidConfig.join_timeframe_seconds : '30' %>" min="10" max="300" required><span class="cf-unit">seconds</span></div>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="f-advanced-protection-new_account_age_hours">New account age</label>
+                    <p class="cf-row-desc">Accounts younger than this count as new. From 1 to 720.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-unit"><input id="f-advanced-protection-new_account_age_hours" type="number" class="form-control" name="new_account_age_hours" value="<%= raidConfig ? raidConfig.new_account_age_hours : '24' %>" min="1" max="720" required><span class="cf-unit">hours</span></div>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="f-advanced-protection-new_account_ratio">New account ratio</label>
+                    <p class="cf-row-desc">Share of the joins that must be new accounts. From 30 to 100.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-unit"><input id="f-advanced-protection-new_account_ratio" type="number" class="form-control" name="new_account_ratio" value="<%= raidConfig ? Math.round(raidConfig.new_account_ratio * 100) : '70' %>" min="30" max="100" step="1" required><span class="cf-unit">%</span></div>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="f-advanced-protection-action">Raid action</label>
+                    <p class="cf-row-desc">Used on detected raiders, and on every further join while the raid is still going. To block every new join during a raid, use Raid lockdown below; its auto-trigger can start one on a join spike.</p>
+                </div>
+                <div class="cf-row-control">
+                    <select id="f-advanced-protection-action" class="form-select" name="action" required>
+                        <option value="mute" <%= apAction(raidConfig) === 'mute' ? 'selected' : '' %>>Time out raiders</option>
+                        <option value="kick" <%= apAction(raidConfig) === 'kick' ? 'selected' : '' %>>Kick raiders</option>
+                        <option value="ban" <%= apAction(raidConfig) === 'ban' ? 'selected' : '' %>>Ban raiders</option>
+                        <option value="alert" <%= apAction(raidConfig) === 'alert' ? 'selected' : '' %>>Alert only (default)</option>
                     </select>
-                    <div class="form-help">Action on detected raiders</div>
                 </div>
-                <div>
-                    <label class="form-label">
-                        <i class="fas fa-bell" style="margin-right: var(--spacing-1); color: var(--color-success);"></i>
-                        Alert Channel
-                    </label>
-                    <select class="form-select" name="alert_channel_id">
+            </div>
+            <div class="cf-row cf-row--sub">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="f-advanced-protection-mute_duration_minutes">Timeout length</label>
+                    <p class="cf-row-desc">How long raiders stay timed out. From 1 to 10080.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-unit"><input id="f-advanced-protection-mute_duration_minutes" type="number" class="form-control" name="mute_duration_minutes" value="<%= raidConfig ? raidConfig.mute_duration_minutes : '60' %>" min="1" max="10080"><span class="cf-unit">minutes</span></div>
+                </div>
+            </div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="raidPurge">Purge messages</label>
+                    <p class="cf-row-desc" id="raidPurge-desc">Delete recent messages from raiders. Off unless you switch it on.</p>
+                </div>
+                <div class="cf-row-control">
+                    <input class="cf-switch" type="checkbox" role="switch" id="raidPurge" name="purge_messages" aria-describedby="raidPurge-desc" <%= raidConfig && raidConfig.purge_messages ? 'checked' : '' %>>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="f-advanced-protection-alert_channel_id">Raid alert channel</label>
+                    <p class="cf-row-desc">Where raid alerts are posted.</p>
+                </div>
+                <div class="cf-row-control">
+                    <select id="f-advanced-protection-alert_channel_id" class="form-select" name="alert_channel_id">
                         <option value="">Select alert channel</option>
-                        <% channels.filter(c => c.type === 0).forEach(channel => { %>
-                            <option value="<%= channel.id %>" <%= raidConfig && raidConfig.alert_channel_id === channel.id ? 'selected' : '' %>>
-                                #<%= channel.name %>
-                            </option>
+                        <% apText.forEach(channel => { %>
+                        <option value="<%= channel.id %>" data-kind="text" <%= raidConfig && raidConfig.alert_channel_id === channel.id ? 'selected' : '' %>>#<%= channel.name %></option>
                         <% }) %>
                     </select>
-                    <div class="form-help">Channel for raid alerts</div>
                 </div>
             </div>
-
-            <div class="grid grid-cols-2" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
-                <div>
-                    <label class="form-label">
-                        <i class="fas fa-clock" style="margin-right: var(--spacing-1); color: var(--color-warning);"></i>
-                        Mute Duration (minutes)
-                    </label>
-                    <input type="number" class="form-control" name="mute_duration_minutes" value="<%= raidConfig ? raidConfig.mute_duration_minutes : '60' %>" min="1" max="10080">
-                    <div class="form-help">How long to mute raiders</div>
-                </div>
-                <div style="display: flex; align-items: center; padding-top: var(--spacing-6);">
-                    <div class="form-check form-switch" style="display: flex; align-items: center; gap: var(--spacing-3);">
-                        <input class="form-check-input" type="checkbox" role="switch" id="raidPurge" name="purge_messages" <%= raidConfig && raidConfig.purge_messages ? 'checked' : '' %> style="width: 48px; height: 24px; cursor: pointer;">
-                        <label class="form-check-label" for="raidPurge" style="cursor: pointer;">
-                            <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary);">Purge Messages</div>
-                            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">Delete recent messages from raiders</div>
-                        </label>
-                    </div>
-                </div>
+            <div class="cf-section-foot">
+                <button type="submit" class="btn btn-primary">Save</button>
             </div>
-
-            <div style="background: var(--color-dark-700); border-left: 4px solid var(--color-danger); padding: var(--spacing-4); border-radius: var(--radius-sm); margin-bottom: var(--spacing-4);">
-                <div style="font-size: var(--font-size-sm); color: var(--color-text-secondary);">
-                    <i class="fas fa-info-circle" style="color: var(--color-danger); margin-right: var(--spacing-2);"></i>
-                    <strong>How it works:</strong> Triggers when <%= raidConfig ? raidConfig.join_threshold : '10' %> users join within <%= raidConfig ? raidConfig.join_timeframe_seconds : '30' %> seconds AND at least <%= raidConfig ? Math.round(raidConfig.new_account_ratio * 100) : '70' %>% have accounts younger than <%= raidConfig ? raidConfig.new_account_age_hours : '24' %> hours.
-                </div>
-            </div>
-
-            <button type="submit" class="btn btn-primary">
-                <i class="fas fa-save"></i>
-                <span>Save Raid Protection Settings</span>
-            </button>
         </form>
+    </section>
 
-        <% if (raidIncidents && raidIncidents.length > 0) { %>
-        <div style="margin-top: var(--spacing-4); background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-4);">
-            <h4 style="font-size: var(--font-size-md); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-3);">
-                <i class="fas fa-history" style="margin-right: var(--spacing-2);"></i>
-                Recent Raid Incidents
-            </h4>
-            <div style="overflow-x: auto;">
-                <table class="data-table" style="width: 100%;">
+    <% if (raidIncidents && raidIncidents.length > 0) { %>
+    <section class="cf-section" aria-labelledby="ap-incidents-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="ap-incidents-title">Recent raid incidents</h2>
+                <p class="cf-section-desc">Raids the detector caught, and whether each one has ended.</p>
+            </div>
+            <div class="cf-section-actions"><span class="cf-pill"><%= raidIncidents.length %></span></div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-table-wrap">
+                <table class="cf-table cf-table--stack">
                     <thead>
-                        <tr>
-                            <th>Date</th>
-                            <th>Joins</th>
-                            <th>New Accounts</th>
-                            <th>Action</th>
-                            <th>Status</th>
-                        </tr>
+                        <tr><th scope="col">Date</th><th scope="col">Joins</th><th scope="col">New accounts</th><th scope="col">Action</th><th scope="col">Status</th></tr>
                     </thead>
                     <tbody>
                         <% raidIncidents.forEach(incident => { %>
                         <tr>
-                            <td><%= new Date(incident.detected_at).toLocaleString() %></td>
-                            <td><%= incident.join_count %></td>
-                            <td><%= incident.new_account_count %></td>
-                            <td><span class="badge" style="background: var(--color-warning);"><%= incident.action_taken %></span></td>
-                            <td>
+                            <td data-label="Date"><span class="ap-date"><%= new Date(incident.detected_at).toLocaleString() %></span></td>
+                            <td data-label="Joins" class="ap-num"><%= incident.join_count %></td>
+                            <td data-label="New accounts" class="ap-num"><%= incident.new_account_count %></td>
+                            <td data-label="Action"><span class="cf-pill is-warn"><%= apCap(incident.action_taken) %></span></td>
+                            <td data-label="Status">
                                 <% if (incident.resolved_at) { %>
-                                    <span class="badge" style="background: var(--color-success);">Resolved</span>
+                                <span class="cf-pill is-ok">Resolved</span>
                                 <% } else { %>
-                                    <span class="badge" style="background: var(--color-danger);">Active</span>
+                                <span class="cf-pill is-bad">Active</span>
                                 <% } %>
                             </td>
                         </tr>
@@ -192,561 +197,454 @@
                 </table>
             </div>
         </div>
-        <% } %>
-    </div>
+    </section>
+    <% } %>
 
-    <!-- Self-Bot Detection Configuration -->
-    <div style="margin-bottom: var(--spacing-6);">
-        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
-            <i class="fas fa-robot" style="color: var(--color-accent-orange); margin-right: var(--spacing-2);"></i>
-            Self-Bot Detection
-        </h3>
-        <form action="/manage/<%= guild.id %>/advanced-protection/selfbot" method="POST" style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6);">
-            <div style="margin-bottom: var(--spacing-4);">
-                <div class="form-check form-switch" style="display: flex; align-items: center; gap: var(--spacing-3); padding: var(--spacing-4); background: var(--color-dark-700); border-radius: var(--radius-md);">
-                    <input class="form-check-input" type="checkbox" role="switch" id="selfbotEnabled" name="enabled" <%= selfbotConfig && selfbotConfig.enabled ? 'checked' : '' %> style="width: 48px; height: 24px; cursor: pointer;">
-                    <label class="form-check-label" for="selfbotEnabled" style="cursor: pointer; flex: 1;">
-                        <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-1);">Enable Self-Bot Detection</div>
-                        <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">Detect users running unauthorized automation (self-bots violate Discord ToS)</div>
-                    </label>
+    <%# Raid lockdown: join lockdown, auto-trigger, same-name floods, Discord invite/DM pause (API-driven). %>
+    <%- include('raid-lockdown-panel', { guild }) %>
+
+    <section class="cf-section" aria-labelledby="ap-selfbot-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="ap-selfbot-title">Self-bot detection</h2>
+                <p class="cf-section-desc">Finds members running automation on their own account, which breaks Discord's terms.</p>
+            </div>
+            <div class="cf-section-actions"><span class="cf-pill<%= apSelfOn ? ' is-ok' : '' %>"><%= apSelfOn ? 'On' : 'Off' %></span></div>
+        </header>
+        <form class="cf-rows" action="/manage/<%= guild.id %>/advanced-protection/selfbot" method="POST">
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="selfbotEnabled">Self-bot detection</label>
+                    <p class="cf-row-desc" id="selfbotEnabled-desc">Watch message timing and patterns for signs of automation.</p>
+                </div>
+                <div class="cf-row-control">
+                    <input class="cf-switch" type="checkbox" role="switch" id="selfbotEnabled" name="enabled" aria-describedby="selfbotEnabled-desc" <%= selfbotConfig && selfbotConfig.enabled ? 'checked' : '' %>>
                 </div>
             </div>
-
-            <div class="grid grid-cols-3" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
-                <div>
-                    <label class="form-label">
-                        <i class="fas fa-bolt" style="margin-right: var(--spacing-1); color: var(--color-warning);"></i>
-                        Min Response Time (ms)
-                    </label>
-                    <input type="number" class="form-control" name="min_response_time_ms" value="<%= selfbotConfig ? selfbotConfig.min_response_time_ms : '50' %>" min="10" max="500" required>
-                    <div class="form-help">Flag responses faster than this</div>
-                </div>
-                <div>
-                    <label class="form-label">
-                        <i class="fas fa-comment-dots" style="margin-right: var(--spacing-1); color: var(--color-primary-400);"></i>
-                        Burst Threshold
-                    </label>
-                    <input type="number" class="form-control" name="message_burst_threshold" value="<%= selfbotConfig ? selfbotConfig.message_burst_threshold : '20' %>" min="5" max="100" required>
-                    <div class="form-help">Messages in burst window to flag</div>
-                </div>
-                <div>
-                    <label class="form-label">
-                        <i class="fas fa-stopwatch" style="margin-right: var(--spacing-1); color: var(--color-accent-orange);"></i>
-                        Burst Window (ms)
-                    </label>
-                    <input type="number" class="form-control" name="message_burst_window_ms" value="<%= selfbotConfig ? selfbotConfig.message_burst_window_ms : '1000' %>" min="100" max="5000" required>
-                    <div class="form-help">Window to count burst messages</div>
+            <div class="cf-row cf-row--stack">
+                <div class="cf-row-text">
+                    <span class="cf-row-label">What it looks for</span>
+                    <ul class="ap-points">
+                        <li>Inhuman response times: replies faster than the minimum response time below</li>
+                        <li>Message bursts: the burst threshold reached within the burst window below</li>
+                        <li>Pattern regularity: messages at exact intervals</li>
+                        <li>API-like behaviour: identical formatting with no variation</li>
+                    </ul>
                 </div>
             </div>
-
-            <div class="grid grid-cols-3" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
-                <div>
-                    <label class="form-label">
-                        <i class="fas fa-exclamation-triangle" style="margin-right: var(--spacing-1); color: var(--color-danger);"></i>
-                        Strikes Before Action
-                    </label>
-                    <input type="number" class="form-control" name="pattern_threshold" value="<%= selfbotConfig ? selfbotConfig.pattern_threshold : '3' %>" min="1" max="10" required>
-                    <div class="form-help">How many suspicious behaviors a user can trigger before the bot takes action. Lower = stricter (may catch false positives), higher = more lenient. Default: 3</div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="f-advanced-protection-min_response_time_ms">Minimum response time</label>
+                    <p class="cf-row-desc">Replies faster than this are flagged. From 10 to 500.</p>
                 </div>
-                <div>
-                    <label class="form-label">
-                        <i class="fas fa-hammer" style="margin-right: var(--spacing-1); color: var(--color-accent-purple);"></i>
-                        Action
-                    </label>
-                    <select class="form-select" name="action" required>
-                        <option value="mute" <%= selfbotConfig && selfbotConfig.action === 'mute' ? 'selected' : '' %>>Mute User</option>
-                        <option value="kick" <%= selfbotConfig && selfbotConfig.action === 'kick' ? 'selected' : '' %>>Kick User</option>
-                        <option value="ban" <%= selfbotConfig && selfbotConfig.action === 'ban' ? 'selected' : '' %>>Ban User</option>
-                        <option value="alert" <%= selfbotConfig && selfbotConfig.action === 'alert' ? 'selected' : '' %>>Alert Only</option>
+                <div class="cf-row-control">
+                    <div class="cf-input-unit"><input id="f-advanced-protection-min_response_time_ms" type="number" class="form-control" name="min_response_time_ms" value="<%= selfbotConfig ? selfbotConfig.min_response_time_ms : '50' %>" min="10" max="500" required><span class="cf-unit">ms</span></div>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="f-advanced-protection-message_burst_threshold">Burst threshold</label>
+                    <p class="cf-row-desc">Messages within the burst window that are flagged. From 5 to 100.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-unit"><input id="f-advanced-protection-message_burst_threshold" type="number" class="form-control" name="message_burst_threshold" value="<%= selfbotConfig ? selfbotConfig.message_burst_threshold : '20' %>" min="5" max="100" required><span class="cf-unit">messages</span></div>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="f-advanced-protection-message_burst_window_ms">Burst window</label>
+                    <p class="cf-row-desc">The window burst messages are counted in. From 100 to 5000.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-unit"><input id="f-advanced-protection-message_burst_window_ms" type="number" class="form-control" name="message_burst_window_ms" value="<%= selfbotConfig ? selfbotConfig.message_burst_window_ms : '1000' %>" min="100" max="5000" required><span class="cf-unit">ms</span></div>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="f-advanced-protection-pattern_threshold">Strikes before action</label>
+                    <p class="cf-row-desc">Suspicious behaviours before the bot acts. Lower is stricter and may catch real people. Default 3.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-unit"><input id="f-advanced-protection-pattern_threshold" type="number" class="form-control" name="pattern_threshold" value="<%= selfbotConfig ? selfbotConfig.pattern_threshold : '3' %>" min="1" max="10" required><span class="cf-unit">strikes</span></div>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="f-advanced-protection-action-2">Self-bot action</label>
+                    <p class="cf-row-desc">Used on detected self-bots.</p>
+                </div>
+                <div class="cf-row-control">
+                    <select id="f-advanced-protection-action-2" class="form-select" name="action" required>
+                        <option value="mute" <%= apAction(selfbotConfig) === 'mute' ? 'selected' : '' %>>Time out the member</option>
+                        <option value="kick" <%= apAction(selfbotConfig) === 'kick' ? 'selected' : '' %>>Kick the member</option>
+                        <option value="ban" <%= apAction(selfbotConfig) === 'ban' ? 'selected' : '' %>>Ban the member</option>
+                        <option value="alert" <%= apAction(selfbotConfig) === 'alert' ? 'selected' : '' %>>Alert only (default)</option>
                     </select>
-                    <div class="form-help">Action on detected self-bots</div>
                 </div>
-                <div>
-                    <label class="form-label">
-                        <i class="fas fa-bell" style="margin-right: var(--spacing-1); color: var(--color-success);"></i>
-                        Alert Channel
-                    </label>
-                    <select class="form-select" name="alert_channel_id">
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="f-advanced-protection-alert_channel_id-2">Self-bot alert channel</label>
+                    <p class="cf-row-desc">Where detection alerts are posted.</p>
+                </div>
+                <div class="cf-row-control">
+                    <select id="f-advanced-protection-alert_channel_id-2" class="form-select" name="alert_channel_id">
                         <option value="">Select alert channel</option>
-                        <% channels.filter(c => c.type === 0).forEach(channel => { %>
-                            <option value="<%= channel.id %>" <%= selfbotConfig && selfbotConfig.alert_channel_id === channel.id ? 'selected' : '' %>>
-                                #<%= channel.name %>
-                            </option>
+                        <% apText.forEach(channel => { %>
+                        <option value="<%= channel.id %>" data-kind="text" <%= selfbotConfig && selfbotConfig.alert_channel_id === channel.id ? 'selected' : '' %>>#<%= channel.name %></option>
                         <% }) %>
                     </select>
-                    <div class="form-help">Channel for detection alerts</div>
                 </div>
             </div>
-
-            <div style="background: var(--color-dark-700); border-left: 4px solid var(--color-accent-orange); padding: var(--spacing-4); border-radius: var(--radius-sm); margin-bottom: var(--spacing-4);">
-                <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-2);">
-                    <i class="fas fa-search" style="margin-right: var(--spacing-2);"></i>
-                    Detection Signals:
-                </div>
-                <ul style="margin: 0; padding-left: var(--spacing-6); color: var(--color-text-secondary); font-size: var(--font-size-sm);">
-                    <li style="margin-bottom: var(--spacing-1);"><strong>Inhuman response times</strong> - Consistent replies under 50ms</li>
-                    <li style="margin-bottom: var(--spacing-1);"><strong>Message bursts</strong> - 20+ messages in under 1 second</li>
-                    <li style="margin-bottom: var(--spacing-1);"><strong>Pattern regularity</strong> - Messages at exact intervals</li>
-                    <li style="margin-bottom: var(--spacing-1);"><strong>API-like behavior</strong> - Identical formatting, no variation</li>
-                </ul>
+            <div class="cf-section-foot">
+                <button type="submit" class="btn btn-primary">Save</button>
             </div>
-
-            <button type="submit" class="btn btn-primary">
-                <i class="fas fa-save"></i>
-                <span>Save Self-Bot Detection Settings</span>
-            </button>
         </form>
+    </section>
 
-        <% if (selfbotDetections && selfbotDetections.length > 0) { %>
-        <div style="margin-top: var(--spacing-4); background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-4);">
-            <h4 style="font-size: var(--font-size-md); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-3);">
-                <i class="fas fa-history" style="margin-right: var(--spacing-2);"></i>
-                Recent Detections
-            </h4>
-            <div style="overflow-x: auto;">
-                <table class="data-table" style="width: 100%;">
+    <% if (selfbotDetections && selfbotDetections.length > 0) { %>
+    <section class="cf-section" aria-labelledby="ap-detections-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="ap-detections-title">Recent self-bot detections</h2>
+                <p class="cf-section-desc">Members the detector flagged, and what it did.</p>
+            </div>
+            <div class="cf-section-actions"><span class="cf-pill"><%= selfbotDetections.length %></span></div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-table-wrap">
+                <table class="cf-table cf-table--stack">
                     <thead>
-                        <tr>
-                            <th>Date</th>
-                            <th>User</th>
-                            <th>Type</th>
-                            <th>Confidence</th>
-                            <th>Action</th>
-                        </tr>
+                        <tr><th scope="col">Date</th><th scope="col">User</th><th scope="col">Type</th><th scope="col">Confidence</th><th scope="col">Action</th></tr>
                     </thead>
                     <tbody>
                         <% selfbotDetections.forEach(detection => { %>
                         <tr>
-                            <td><%= new Date(detection.detected_at).toLocaleString() %></td>
-                            <td><%= detection.user_id %></td>
-                            <td><span class="badge" style="background: var(--color-accent-orange);"><%= detection.detection_type %></span></td>
-                            <td><%= detection.confidence_score %>%</td>
-                            <td><span class="badge" style="background: var(--color-warning);"><%= detection.action_taken %></span></td>
+                            <td data-label="Date"><span class="ap-date"><%= new Date(detection.detected_at).toLocaleString() %></span></td>
+                            <td data-label="User"><%- include('_user-cell', { cfUser: null, cfUserId: detection.user_id, cfUserName: null }) %></td>
+                            <td data-label="Type"><span class="cf-pill is-info"><%= apCap(detection.detection_type) %></span></td>
+                            <td data-label="Confidence" class="ap-num"><%= detection.confidence_score %>%</td>
+                            <td data-label="Action"><span class="cf-pill is-warn"><%= apCap(detection.action_taken) %></span></td>
                         </tr>
                         <% }) %>
                     </tbody>
                 </table>
             </div>
         </div>
-        <% } %>
-    </div>
+    </section>
+    <% } %>
 
-    <!-- Adaptive Spam Configuration -->
-    <div>
-        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
-            <i class="fas fa-brain" style="color: var(--color-primary-400); margin-right: var(--spacing-2);"></i>
-            Adaptive Spam Detection
-        </h3>
-        <form action="/manage/<%= guild.id %>/advanced-protection/adaptive-spam" method="POST" style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6);">
-            <div style="margin-bottom: var(--spacing-4);">
-                <div class="form-check form-switch" style="display: flex; align-items: center; gap: var(--spacing-3); padding: var(--spacing-4); background: var(--color-dark-700); border-radius: var(--radius-md);">
-                    <input class="form-check-input" type="checkbox" role="switch" id="adaptiveSpamEnabled" name="enabled" <%= adaptiveSpamConfig && adaptiveSpamConfig.enabled ? 'checked' : '' %> style="width: 48px; height: 24px; cursor: pointer;">
-                    <label class="form-check-label" for="adaptiveSpamEnabled" style="cursor: pointer; flex: 1;">
-                        <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-1);">Enable Adaptive Spam Detection</div>
-                        <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">Learn user behavior patterns and detect spam that evades traditional filters</div>
-                    </label>
-                </div>
-            </div>
-
-            <div class="grid grid-cols-3" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
-                <div>
-                    <label class="form-label">
-                        <i class="fas fa-layer-group" style="margin-right: var(--spacing-1); color: var(--color-danger);"></i>
-                        Cross-Channel Threshold
-                    </label>
-                    <input type="number" class="form-control" name="cross_channel_threshold" value="<%= adaptiveSpamConfig ? adaptiveSpamConfig.cross_channel_threshold : '3' %>" min="2" max="10" required>
-                    <div class="form-help">Channels with same message to flag</div>
-                </div>
-                <div>
-                    <label class="form-label">
-                        <i class="fas fa-clock" style="margin-right: var(--spacing-1); color: var(--color-accent-orange);"></i>
-                        Cross-Channel Timeframe (min)
-                    </label>
-                    <input type="number" class="form-control" name="cross_channel_timeframe_minutes" value="<%= adaptiveSpamConfig ? adaptiveSpamConfig.cross_channel_timeframe_minutes : '5' %>" min="1" max="30" required>
-                    <div class="form-help">Window for cross-channel detection</div>
-                </div>
-                <div>
-                    <label class="form-label">
-                        <i class="fas fa-chart-line" style="margin-right: var(--spacing-1); color: var(--color-primary-400);"></i>
-                        Deviation Multiplier
-                    </label>
-                    <input type="number" class="form-control" name="deviation_multiplier" value="<%= adaptiveSpamConfig ? adaptiveSpamConfig.deviation_multiplier : '2.0' %>" min="1.5" max="5.0" step="0.1" required>
-                    <div class="form-help">Flag when rate exceeds baseline by X</div>
-                </div>
-            </div>
-
-            <div class="grid grid-cols-3" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
-                <div>
-                    <label class="form-label">
-                        <i class="fas fa-baby" style="margin-right: var(--spacing-1); color: var(--color-warning);"></i>
-                        New Account Multiplier (7d)
-                    </label>
-                    <input type="number" class="form-control" name="new_account_multiplier_7d" value="<%= adaptiveSpamConfig ? adaptiveSpamConfig.new_account_multiplier_7d : '1.5' %>" min="1.0" max="3.0" step="0.1" required>
-                    <div class="form-help">Score boost for accounts &lt;7 days</div>
-                </div>
-                <div>
-                    <label class="form-label">
-                        <i class="fas fa-user-clock" style="margin-right: var(--spacing-1); color: var(--color-danger);"></i>
-                        New Account Multiplier (24h)
-                    </label>
-                    <input type="number" class="form-control" name="new_account_multiplier_24h" value="<%= adaptiveSpamConfig ? adaptiveSpamConfig.new_account_multiplier_24h : '2.0' %>" min="1.0" max="5.0" step="0.1" required>
-                    <div class="form-help">Score boost for accounts &lt;24 hours</div>
-                </div>
-                <div>
-                    <label class="form-label">
-                        <i class="fas fa-hammer" style="margin-right: var(--spacing-1); color: var(--color-accent-purple);"></i>
-                        Action
-                    </label>
-                    <select class="form-select" name="action" required>
-                        <option value="mute" <%= adaptiveSpamConfig && adaptiveSpamConfig.action === 'mute' ? 'selected' : '' %>>Mute User</option>
-                        <option value="kick" <%= adaptiveSpamConfig && adaptiveSpamConfig.action === 'kick' ? 'selected' : '' %>>Kick User</option>
-                        <option value="ban" <%= adaptiveSpamConfig && adaptiveSpamConfig.action === 'ban' ? 'selected' : '' %>>Ban User</option>
-                        <option value="alert" <%= adaptiveSpamConfig && adaptiveSpamConfig.action === 'alert' ? 'selected' : '' %>>Alert Only</option>
-                    </select>
-                    <div class="form-help">Action on detected spam</div>
-                </div>
-            </div>
-
+    <section class="cf-section" aria-labelledby="ap-spam-title">
+        <header class="cf-section-head">
             <div>
-                <label class="form-label">
-                    <i class="fas fa-bell" style="margin-right: var(--spacing-1); color: var(--color-success);"></i>
-                    Alert Channel
-                </label>
-                <select class="form-select" name="alert_channel_id" style="max-width: 300px;">
-                    <option value="">Select alert channel</option>
-                    <% channels.filter(c => c.type === 0).forEach(channel => { %>
-                        <option value="<%= channel.id %>" <%= adaptiveSpamConfig && adaptiveSpamConfig.alert_channel_id === channel.id ? 'selected' : '' %>>
-                            #<%= channel.name %>
-                        </option>
-                    <% }) %>
-                </select>
-                <div class="form-help">Channel for spam detection alerts</div>
+                <h2 class="cf-section-title" id="ap-spam-title">Adaptive spam detection</h2>
+                <p class="cf-section-desc">Learns each member's normal message rate and catches spam that slips past fixed filters.</p>
             </div>
-
-            <div style="margin-top: var(--spacing-4);">
-                <label class="form-label">
-                    <i class="fas fa-eye-slash" style="margin-right: var(--spacing-1); color: var(--color-text-muted);"></i>
-                    Exempt Channels
-                </label>
-                <select class="form-select" name="exempt_channels" multiple size="5" style="max-width: 400px;">
-                    <%
-                        let currentExempt = [];
-                        if (adaptiveSpamConfig && adaptiveSpamConfig.exempt_channels) {
-                            try { currentExempt = typeof adaptiveSpamConfig.exempt_channels === 'string' ? JSON.parse(adaptiveSpamConfig.exempt_channels) : adaptiveSpamConfig.exempt_channels; } catch(e) {}
-                        }
-                    %>
-                    <% channels.filter(c => c.type === 0).forEach(channel => { %>
-                        <option value="<%= channel.id %>" <%= currentExempt.includes(channel.id) ? 'selected' : '' %>>
-                            #<%= channel.name %>
-                        </option>
-                    <% }) %>
-                </select>
-                <div class="form-help">Channels exempt from ALL automod (spam, live promotion, phishing). Hold Ctrl/Cmd to select multiple.</div>
-            </div>
-
-            <div style="background: var(--color-dark-700); border-left: 4px solid var(--color-primary-400); padding: var(--spacing-4); border-radius: var(--radius-sm); margin: var(--spacing-4) 0;">
-                <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-2);">
-                    <i class="fas fa-brain" style="margin-right: var(--spacing-2);"></i>
-                    Adaptive Features:
+            <div class="cf-section-actions"><span class="cf-pill<%= apSpamOn ? ' is-ok' : '' %>"><%= apSpamOn ? 'On' : 'Off' %></span></div>
+        </header>
+        <form class="cf-rows" action="/manage/<%= guild.id %>/advanced-protection/adaptive-spam" method="POST">
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="adaptiveSpamEnabled">Adaptive spam detection</label>
+                    <p class="cf-row-desc" id="adaptiveSpamEnabled-desc">Per-member baselines, the same message across channels, and stricter checks for new accounts.</p>
                 </div>
-                <ul style="margin: 0; padding-left: var(--spacing-6); color: var(--color-text-secondary); font-size: var(--font-size-sm);">
-                    <li style="margin-bottom: var(--spacing-1);"><strong>User Baselines</strong> - Learns normal message rates per user</li>
-                    <li style="margin-bottom: var(--spacing-1);"><strong>Cross-Channel Detection</strong> - Flags same message in multiple channels</li>
-                    <li style="margin-bottom: var(--spacing-1);"><strong>Pattern Effectiveness</strong> - Tracks which rules catch real spam</li>
-                    <li style="margin-bottom: var(--spacing-1);"><strong>New Account Weighting</strong> - Stricter detection for new accounts</li>
-                </ul>
+                <div class="cf-row-control">
+                    <input class="cf-switch" type="checkbox" role="switch" id="adaptiveSpamEnabled" name="enabled" aria-describedby="adaptiveSpamEnabled-desc" <%= adaptiveSpamConfig && adaptiveSpamConfig.enabled ? 'checked' : '' %>>
+                </div>
             </div>
-
-            <button type="submit" class="btn btn-primary">
-                <i class="fas fa-save"></i>
-                <span>Save Adaptive Spam Settings</span>
-            </button>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="f-advanced-protection-cross_channel_threshold">Cross-channel threshold</label>
+                    <p class="cf-row-desc">Channels the same message must appear in to be flagged. From 2 to 10.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-unit"><input id="f-advanced-protection-cross_channel_threshold" type="number" class="form-control" name="cross_channel_threshold" value="<%= adaptiveSpamConfig ? adaptiveSpamConfig.cross_channel_threshold : '3' %>" min="2" max="10" required><span class="cf-unit">channels</span></div>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="f-advanced-protection-cross_channel_timeframe_minutes">Cross-channel timeframe</label>
+                    <p class="cf-row-desc">The window for cross-channel detection. From 1 to 30.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-unit"><input id="f-advanced-protection-cross_channel_timeframe_minutes" type="number" class="form-control" name="cross_channel_timeframe_minutes" value="<%= adaptiveSpamConfig ? adaptiveSpamConfig.cross_channel_timeframe_minutes : '5' %>" min="1" max="30" required><span class="cf-unit">minutes</span></div>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="f-advanced-protection-deviation_multiplier">Deviation multiplier</label>
+                    <p class="cf-row-desc">Flag when a member's rate exceeds their baseline by this factor. From 1.5 to 5.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-unit"><input id="f-advanced-protection-deviation_multiplier" type="number" class="form-control" name="deviation_multiplier" value="<%= adaptiveSpamConfig ? adaptiveSpamConfig.deviation_multiplier : '2.0' %>" min="1.5" max="5.0" step="0.1" required><span class="cf-unit">times</span></div>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="f-advanced-protection-new_account_multiplier_7d">New account multiplier (7 days)</label>
+                    <p class="cf-row-desc">Score boost for accounts under 7 days old. From 1 to 3.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-unit"><input id="f-advanced-protection-new_account_multiplier_7d" type="number" class="form-control" name="new_account_multiplier_7d" value="<%= adaptiveSpamConfig ? adaptiveSpamConfig.new_account_multiplier_7d : '1.5' %>" min="1.0" max="3.0" step="0.1" required><span class="cf-unit">times</span></div>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="f-advanced-protection-new_account_multiplier_24h">New account multiplier (24 hours)</label>
+                    <p class="cf-row-desc">Score boost for accounts under 24 hours old. From 1 to 5.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-unit"><input id="f-advanced-protection-new_account_multiplier_24h" type="number" class="form-control" name="new_account_multiplier_24h" value="<%= adaptiveSpamConfig ? adaptiveSpamConfig.new_account_multiplier_24h : '2.0' %>" min="1.0" max="5.0" step="0.1" required><span class="cf-unit">times</span></div>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="f-advanced-protection-action-3">Spam action</label>
+                    <p class="cf-row-desc">Used on detected spam. Each detection is alerted and recorded as an infraction (unless the member is allowlisted or protections are paused). Only Delete and warn removes the spam message itself; it then sends the member the warning message from the Moderation page.</p>
+                </div>
+                <div class="cf-row-control">
+                    <select id="f-advanced-protection-action-3" class="form-select" name="action" required>
+                        <option value="mute" <%= apSpamAction(adaptiveSpamConfig) === 'mute' ? 'selected' : '' %>>Time out for an hour</option>
+                        <option value="kick" <%= apSpamAction(adaptiveSpamConfig) === 'kick' ? 'selected' : '' %>>Kick the member</option>
+                        <option value="ban" <%= apSpamAction(adaptiveSpamConfig) === 'ban' ? 'selected' : '' %>>Ban the member</option>
+                        <option value="delete+warn" <%= apSpamAction(adaptiveSpamConfig) === 'delete+warn' ? 'selected' : '' %>>Delete the message and warn the member</option>
+                        <option value="alert" <%= apSpamAction(adaptiveSpamConfig) === 'alert' ? 'selected' : '' %>>Alert only (default)</option>
+                    </select>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="f-advanced-protection-alert_channel_id-3">Spam alert channel</label>
+                    <p class="cf-row-desc">Where spam detection alerts are posted.</p>
+                </div>
+                <div class="cf-row-control">
+                    <select id="f-advanced-protection-alert_channel_id-3" class="form-select" name="alert_channel_id">
+                        <option value="">Select alert channel</option>
+                        <% apText.forEach(channel => { %>
+                        <option value="<%= channel.id %>" data-kind="text" <%= adaptiveSpamConfig && adaptiveSpamConfig.alert_channel_id === channel.id ? 'selected' : '' %>>#<%= channel.name %></option>
+                        <% }) %>
+                    </select>
+                </div>
+            </div>
+            <%
+                let currentExempt = [];
+                if (adaptiveSpamConfig && adaptiveSpamConfig.exempt_channels) {
+                    try { currentExempt = typeof adaptiveSpamConfig.exempt_channels === 'string' ? JSON.parse(adaptiveSpamConfig.exempt_channels) : adaptiveSpamConfig.exempt_channels; } catch(e) {}
+                }
+            %>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="f-advanced-protection-exempt_channels">Exempt channels</label>
+                    <p class="cf-row-desc">Messages in these channels skip every message filter: filtered words, AutoMod, adaptive spam, self-bot detection, phishing links, the link and commission filters, and live-promotion deletion.</p>
+                </div>
+                <div class="cf-row-control">
+                    <input type="hidden" name="exempt_channels_sent" value="1">
+                    <select id="f-advanced-protection-exempt_channels" class="form-select" name="exempt_channels" multiple size="5">
+                        <% apText.forEach(channel => { %>
+                        <option value="<%= channel.id %>" data-kind="text" <%= currentExempt.includes(channel.id) ? 'selected' : '' %>>#<%= channel.name %></option>
+                        <% }) %>
+                    </select>
+                </div>
+            </div>
+            <div class="cf-section-foot">
+                <button type="submit" class="btn btn-primary">Save</button>
+            </div>
         </form>
-    </div>
+    </section>
 
-    <!-- Invite Link Filter -->
-    <div style="margin-bottom: var(--spacing-6);">
-        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
-            <i class="fas fa-link-slash" style="color: var(--color-warning); margin-right: var(--spacing-2);"></i>
-            Discord Invite Link Filter
-        </h3>
-        <form action="/manage/<%= guild.id %>/invite-filter/config" method="POST" style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6);">
-            <div style="margin-bottom: var(--spacing-4);">
-                <div class="form-check form-switch" style="display: flex; align-items: center; gap: var(--spacing-3); padding: var(--spacing-4); background: var(--color-dark-700); border-radius: var(--radius-md);">
-                    <input type="checkbox" name="enabled" class="form-check-input" style="width: 48px; height: 24px;" <%= (inviteFilterConfig?.enabled ?? 1) ? 'checked' : '' %>>
-                    <label class="form-check-label" style="flex: 1; cursor: pointer;">
-                        <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary);">Block Discord Invite Links</div>
-                        <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-top: var(--spacing-1);">
-                            Automatically filter discord.gg / discord.com/invite / invite.gg / discord.me links
-                        </div>
-                    </label>
+    <section class="cf-section" aria-labelledby="ap-invite-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="ap-invite-title">Discord invite filter</h2>
+                <p class="cf-section-desc">Acts on discord.gg, discord.com/invite, discordapp.com/invite, invite.gg and discord.me links. Members with Manage Server or Manage Messages always bypass it, as do channels the message protections ignore (set on <a href="/manage/<%= guild.id %>?page=message-threats">Message threats</a>).</p>
+            </div>
+            <div class="cf-section-actions"><span class="cf-pill<%= apInviteOn ? ' is-ok' : '' %>"><%= apInviteOn ? 'On' : 'Off' %></span></div>
+        </header>
+        <form class="cf-rows" action="/manage/<%= guild.id %>/invite-filter/config" method="POST">
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="cfk-ap-invite-enabled">Block Discord invite links</label>
+                    <p class="cf-row-desc" id="cfk-ap-invite-enabled-desc">Act on every invite link posted, as set below.</p>
+                </div>
+                <div class="cf-row-control">
+                    <input type="checkbox" id="cfk-ap-invite-enabled" name="enabled" class="cf-switch" role="switch" aria-describedby="cfk-ap-invite-enabled-desc" <%= apInviteOn ? 'checked' : '' %>>
                 </div>
             </div>
-
-            <div style="margin-bottom: var(--spacing-4);">
-                <div class="form-check form-switch" style="display: flex; align-items: center; gap: var(--spacing-3); padding: var(--spacing-4); background: var(--color-dark-700); border-radius: var(--radius-md);">
-                    <input type="checkbox" name="use_whitelist" class="form-check-input" style="width: 48px; height: 24px;" <%= inviteFilterConfig?.use_whitelist ? 'checked' : '' %>>
-                    <label class="form-check-label" style="flex: 1; cursor: pointer;">
-                        <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary);">Allow whitelisted users / roles / channels</div>
-                        <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-top: var(--spacing-1);">
-                            When enabled, specific users, roles, or channels you add below bypass the filter and can post invite links.
-                        </div>
-                    </label>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="cfk-ap-invite-whitelist">Let the allowlist below post invites</label>
+                    <p class="cf-row-desc" id="cfk-ap-invite-whitelist-desc">The users, roles and channels in the next section bypass the filter while this is on.</p>
+                </div>
+                <div class="cf-row-control">
+                    <input type="checkbox" id="cfk-ap-invite-whitelist" name="use_whitelist" class="cf-switch" role="switch" aria-describedby="cfk-ap-invite-whitelist-desc" <%= (apInvite && apInvite.use_whitelist) ? 'checked' : '' %>>
                 </div>
             </div>
-
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
-                <div>
-                    <label class="form-label">Action on detection</label>
-                    <select name="action" class="form-select">
-                        <% const currentAction = inviteFilterConfig?.action || 'delete_warn'; %>
-                        <option value="delete_warn" <%= currentAction === 'delete_warn' ? 'selected' : '' %>>Delete + Warn user</option>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="f-advanced-protection-action-4">Action on detection</label>
+                    <p class="cf-row-desc">What happens to a message with an invite link.</p>
+                </div>
+                <div class="cf-row-control">
+                    <% const currentAction = (apInvite && apInvite.action) || 'delete_warn'; %>
+                    <select id="f-advanced-protection-action-4" name="action" class="form-select">
+                        <option value="delete_warn" <%= currentAction === 'delete_warn' ? 'selected' : '' %>>Delete and warn the user</option>
                         <option value="delete" <%= currentAction === 'delete' ? 'selected' : '' %>>Delete silently</option>
-                        <option value="log_only" <%= currentAction === 'log_only' ? 'selected' : '' %>>Log only (don't delete)</option>
+                        <option value="log_only" <%= currentAction === 'log_only' ? 'selected' : '' %>>Log only (keep the message)</option>
                     </select>
-                </div>
-                <div>
-                    <label class="form-label">Log channel</label>
-                    <select name="log_channel_id" class="form-select">
-                        <option value="">— None —</option>
-                        <% channels.forEach(ch => { %>
-                            <% if (ch.type === 0) { %>
-                                <option value="<%= ch.id %>" <%= inviteFilterConfig?.log_channel_id === ch.id ? 'selected' : '' %>>#<%= ch.name %></option>
-                            <% } %>
-                        <% }); %>
-                    </select>
-                    <div class="form-help">Where to post a log embed when an invite is blocked.</div>
                 </div>
             </div>
-
-            <button type="submit" class="btn btn-primary">
-                <i class="fas fa-save"></i>
-                <span>Save Invite Filter Settings</span>
-            </button>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="f-advanced-protection-log_channel_id">Log channel</label>
+                    <p class="cf-row-desc">Where to post a log when an invite is blocked.</p>
+                </div>
+                <div class="cf-row-control">
+                    <select id="f-advanced-protection-log_channel_id" name="log_channel_id" class="form-select">
+                        <option value="">None</option>
+                        <% apText.forEach(ch => { %>
+                        <option value="<%= ch.id %>" data-kind="text" <%= (apInvite && apInvite.log_channel_id === ch.id) ? 'selected' : '' %>>#<%= ch.name %></option>
+                        <% }); %>
+                    </select>
+                </div>
+            </div>
+            <div class="cf-section-foot">
+                <button type="submit" class="btn btn-primary">Save</button>
+            </div>
         </form>
+    </section>
 
-        <!-- Whitelist Entries -->
-        <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6); margin-top: var(--spacing-4);">
-            <h4 style="color: var(--color-text-primary); margin: 0 0 var(--spacing-3);">
-                <i class="fas fa-list-check" style="margin-right: var(--spacing-2);"></i>
-                Whitelist Entries
-            </h4>
-            <p style="color: var(--color-text-muted); font-size: var(--font-size-sm); margin-bottom: var(--spacing-4);">
-                Users, roles, and channels listed here can post invite links when the toggle above is enabled. Admins/Mods (ManageGuild/ManageMessages) always bypass regardless of this list.
-            </p>
-
-            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
-                <!-- Users -->
-                <div>
-                    <label class="form-label"><i class="fas fa-user"></i> Whitelisted Users</label>
-                    <form action="/manage/<%= guild.id %>/invite-filter/whitelist/add" method="POST" style="display: flex; gap: var(--spacing-2); margin-bottom: var(--spacing-2);">
-                        <input type="hidden" name="target_type" value="user">
-                        <input type="text" name="target_id" class="form-control" placeholder="User ID" required>
-                        <button type="submit" class="btn btn-primary" style="padding: var(--spacing-2) var(--spacing-3);"><i class="fas fa-plus"></i></button>
-                    </form>
-                    <div style="max-height: 200px; overflow-y: auto;">
-                        <% (inviteFilterEntries?.users || []).forEach(e => { %>
-                            <div style="display: flex; align-items: center; justify-content: space-between; padding: var(--spacing-2); background: var(--color-dark-700); border-radius: var(--radius-sm); margin-bottom: var(--spacing-1); font-size: var(--font-size-xs);">
-                                <span style="color: var(--color-text-secondary); font-family: monospace;"><%= e.target_id %></span>
-                                <form action="/manage/<%= guild.id %>/invite-filter/whitelist/remove" method="POST" style="display: inline;">
-                                    <input type="hidden" name="target_type" value="user">
-                                    <input type="hidden" name="target_id" value="<%= e.target_id %>">
-                                    <button type="submit" style="background: none; border: none; color: var(--color-danger); cursor: pointer;"><i class="fas fa-times"></i></button>
-                                </form>
-                            </div>
-                        <% }); %>
-                        <% if (!(inviteFilterEntries?.users || []).length) { %>
-                            <div style="color: var(--color-text-muted); font-size: var(--font-size-xs); text-align: center; padding: var(--spacing-2);">No users whitelisted</div>
-                        <% } %>
-                    </div>
-                </div>
-
-                <!-- Roles -->
-                <div>
-                    <label class="form-label"><i class="fas fa-users"></i> Whitelisted Roles</label>
-                    <form action="/manage/<%= guild.id %>/invite-filter/whitelist/add" method="POST" style="display: flex; gap: var(--spacing-2); margin-bottom: var(--spacing-2);">
-                        <input type="hidden" name="target_type" value="role">
-                        <select name="target_id" class="form-select" required>
-                            <option value="">Select role...</option>
-                            <% roles.forEach(r => { %>
-                                <option value="<%= r.id %>"><%= r.name %></option>
-                            <% }) %>
-                        </select>
-                        <button type="submit" class="btn btn-primary" style="padding: var(--spacing-2) var(--spacing-3);"><i class="fas fa-plus"></i></button>
-                    </form>
-                    <div style="max-height: 200px; overflow-y: auto;">
-                        <% (inviteFilterEntries?.roles || []).forEach(e => { %>
-                            <% const role = roles.find(r => r.id === e.target_id); %>
-                            <div style="display: flex; align-items: center; justify-content: space-between; padding: var(--spacing-2); background: var(--color-dark-700); border-radius: var(--radius-sm); margin-bottom: var(--spacing-1); font-size: var(--font-size-xs);">
-                                <span style="color: var(--color-text-secondary);">@<%= role ? role.name : e.target_id %></span>
-                                <form action="/manage/<%= guild.id %>/invite-filter/whitelist/remove" method="POST" style="display: inline;">
-                                    <input type="hidden" name="target_type" value="role">
-                                    <input type="hidden" name="target_id" value="<%= e.target_id %>">
-                                    <button type="submit" style="background: none; border: none; color: var(--color-danger); cursor: pointer;"><i class="fas fa-times"></i></button>
-                                </form>
-                            </div>
-                        <% }); %>
-                        <% if (!(inviteFilterEntries?.roles || []).length) { %>
-                            <div style="color: var(--color-text-muted); font-size: var(--font-size-xs); text-align: center; padding: var(--spacing-2);">No roles whitelisted</div>
-                        <% } %>
-                    </div>
-                </div>
-
-                <!-- Channels -->
-                <div>
-                    <label class="form-label"><i class="fas fa-hashtag"></i> Whitelisted Channels</label>
-                    <form action="/manage/<%= guild.id %>/invite-filter/whitelist/add" method="POST" style="display: flex; gap: var(--spacing-2); margin-bottom: var(--spacing-2);">
-                        <input type="hidden" name="target_type" value="channel">
-                        <select name="target_id" class="form-select" required>
-                            <option value="">Select channel...</option>
-                            <% channels.forEach(ch => { if (ch.type === 0) { %>
-                                <option value="<%= ch.id %>">#<%= ch.name %></option>
-                            <% } }) %>
-                        </select>
-                        <button type="submit" class="btn btn-primary" style="padding: var(--spacing-2) var(--spacing-3);"><i class="fas fa-plus"></i></button>
-                    </form>
-                    <div style="max-height: 200px; overflow-y: auto;">
-                        <% (inviteFilterEntries?.channels || []).forEach(e => { %>
-                            <% const ch = channels.find(c => c.id === e.target_id); %>
-                            <div style="display: flex; align-items: center; justify-content: space-between; padding: var(--spacing-2); background: var(--color-dark-700); border-radius: var(--radius-sm); margin-bottom: var(--spacing-1); font-size: var(--font-size-xs);">
-                                <span style="color: var(--color-text-secondary);">#<%= ch ? ch.name : e.target_id %></span>
-                                <form action="/manage/<%= guild.id %>/invite-filter/whitelist/remove" method="POST" style="display: inline;">
-                                    <input type="hidden" name="target_type" value="channel">
-                                    <input type="hidden" name="target_id" value="<%= e.target_id %>">
-                                    <button type="submit" style="background: none; border: none; color: var(--color-danger); cursor: pointer;"><i class="fas fa-times"></i></button>
-                                </form>
-                            </div>
-                        <% }); %>
-                        <% if (!(inviteFilterEntries?.channels || []).length) { %>
-                            <div style="color: var(--color-text-muted); font-size: var(--font-size-xs); text-align: center; padding: var(--spacing-2);">No channels whitelisted</div>
-                        <% } %>
-                    </div>
-                </div>
+    <section class="cf-section" aria-labelledby="ap-allow-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="ap-allow-title">Invite filter allowlist</h2>
+                <p class="cf-section-desc">Who may post invite links while "Let the allowlist below post invites" is on.</p>
             </div>
+            <div class="cf-section-actions"><span class="cf-pill"><%= (apInviteEntries.users || []).length + (apInviteEntries.roles || []).length + (apInviteEntries.channels || []).length %></span></div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-rows-head" id="ap-allow-users-head">Users</div>
+            <form action="/manage/<%= guild.id %>/invite-filter/whitelist/add" method="POST">
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <span class="cf-row-label">Add a user</span>
+                        <p class="cf-row-desc">By user ID.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="cf-input-group">
+                            <input type="hidden" name="target_type" value="user">
+                            <input type="text" name="target_id" class="form-control" placeholder="User ID" aria-label="User ID to allow" inputmode="numeric" autocomplete="off" required>
+                            <button type="submit" class="btn btn-secondary">Add</button>
+                        </div>
+                    </div>
+                </div>
+            </form>
+            <% if ((apInviteEntries.users || []).length) { %>
+            <div class="cf-list ap-list">
+                <% (apInviteEntries.users || []).forEach(e => { %>
+                <div class="cf-list-item">
+                    <div class="cf-list-main"><%- include('_user-cell', { cfUser: null, cfUserId: e.target_id, cfUserName: null, cfUserSize: 'sm' }) %></div>
+                    <form class="cf-list-actions" action="/manage/<%= guild.id %>/invite-filter/whitelist/remove" method="POST">
+                        <input type="hidden" name="target_type" value="user">
+                        <input type="hidden" name="target_id" value="<%= e.target_id %>">
+                        <button type="submit" class="btn btn-sm btn-secondary">Remove</button>
+                    </form>
+                </div>
+                <% }); %>
+            </div>
+            <% } else { %>
+            <%- include('../kit/_state', { kind: 'empty', title: 'No users on the list', compact: true }) %>
+            <% } %>
+
+            <div class="cf-rows-head" id="ap-allow-roles-head">Roles</div>
+            <form action="/manage/<%= guild.id %>/invite-filter/whitelist/add" method="POST">
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <span class="cf-row-label">Add a role</span>
+                        <p class="cf-row-desc">Everyone with the role can post invites.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="cf-input-group">
+                            <input type="hidden" name="target_type" value="role">
+                            <select name="target_id" class="form-select" aria-label="Role to allow" required>
+                                <option value="">Select role...</option>
+                                <% roles.forEach(r => { %>
+                                <option value="<%= r.id %>"<% if (apRoleColor(r)) { %> data-color="<%= apRoleColor(r) %>"<% } %>><%= r.name %></option>
+                                <% }) %>
+                            </select>
+                            <button type="submit" class="btn btn-secondary">Add</button>
+                        </div>
+                    </div>
+                </div>
+            </form>
+            <% if ((apInviteEntries.roles || []).length) { %>
+            <div class="cf-list ap-list">
+                <% (apInviteEntries.roles || []).forEach(e => { %>
+                <% const role = roles.find(r => r.id === e.target_id); %>
+                <div class="cf-list-item">
+                    <div class="cf-list-main">@<%= role ? role.name : e.target_id %></div>
+                    <form class="cf-list-actions" action="/manage/<%= guild.id %>/invite-filter/whitelist/remove" method="POST">
+                        <input type="hidden" name="target_type" value="role">
+                        <input type="hidden" name="target_id" value="<%= e.target_id %>">
+                        <button type="submit" class="btn btn-sm btn-secondary">Remove</button>
+                    </form>
+                </div>
+                <% }); %>
+            </div>
+            <% } else { %>
+            <%- include('../kit/_state', { kind: 'empty', title: 'No roles on the list', compact: true }) %>
+            <% } %>
+
+            <div class="cf-rows-head" id="ap-allow-channels-head">Channels</div>
+            <form action="/manage/<%= guild.id %>/invite-filter/whitelist/add" method="POST">
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <span class="cf-row-label">Add a channel</span>
+                        <p class="cf-row-desc">Anyone can post invites in it.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="cf-input-group">
+                            <input type="hidden" name="target_type" value="channel">
+                            <select name="target_id" class="form-select" aria-label="Channel to allow" required>
+                                <option value="">Select channel...</option>
+                                <% apText.forEach(ch => { %>
+                                <option value="<%= ch.id %>" data-kind="text">#<%= ch.name %></option>
+                                <% }) %>
+                            </select>
+                            <button type="submit" class="btn btn-secondary">Add</button>
+                        </div>
+                    </div>
+                </div>
+            </form>
+            <% if ((apInviteEntries.channels || []).length) { %>
+            <div class="cf-list ap-list">
+                <% (apInviteEntries.channels || []).forEach(e => { %>
+                <% const ch = channels.find(c => c.id === e.target_id); %>
+                <div class="cf-list-item">
+                    <div class="cf-list-main">#<%= ch ? ch.name : e.target_id %></div>
+                    <form class="cf-list-actions" action="/manage/<%= guild.id %>/invite-filter/whitelist/remove" method="POST">
+                        <input type="hidden" name="target_type" value="channel">
+                        <input type="hidden" name="target_id" value="<%= e.target_id %>">
+                        <button type="submit" class="btn btn-sm btn-secondary">Remove</button>
+                    </form>
+                </div>
+                <% }); %>
+            </div>
+            <% } else { %>
+            <%- include('../kit/_state', { kind: 'empty', title: 'No channels on the list', compact: true }) %>
+            <% } %>
         </div>
-    </div>
+    </section>
 </div>
 
 <style>
-.form-label {
-    display: block;
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-primary);
-    margin-bottom: var(--spacing-2);
-}
-
-.form-control, .form-select {
-    width: 100%;
-    padding: var(--spacing-3);
-    background: var(--color-dark-700);
-    border: 1px solid var(--color-dark-400);
-    border-radius: var(--radius-md);
-    color: var(--color-text-primary);
-    font-size: var(--font-size-sm);
-    transition: all var(--transition-base);
-}
-
-.form-control:focus, .form-select:focus {
-    outline: none;
-    border-color: var(--color-primary-500);
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
-}
-
-.form-help {
-    font-size: var(--font-size-xs);
-    color: var(--color-text-muted);
-    margin-top: var(--spacing-2);
-}
-
-.form-check-input {
-    appearance: none;
-    background-color: var(--color-dark-500);
-    border: 2px solid var(--color-dark-400);
-    border-radius: 12px;
-    position: relative;
-    transition: all 0.3s ease;
-}
-
-.form-check-input:checked {
-    background-color: var(--color-success);
-    border-color: var(--color-success);
-}
-
-.form-check-input::before {
-    content: '';
-    position: absolute;
-    width: 18px;
-    height: 18px;
-    background: white;
-    border-radius: 50%;
-    top: 1px;
-    left: 1px;
-    transition: transform 0.3s ease;
-}
-
-.form-check-input:checked::before {
-    transform: translateX(24px);
-}
-
-.form-check-label {
-    margin: 0;
-}
-
-.data-table {
-    border-collapse: collapse;
-}
-
-.data-table th, .data-table td {
-    padding: var(--spacing-3);
-    text-align: left;
-    border-bottom: 1px solid var(--color-dark-400);
-}
-
-.data-table th {
-    font-size: var(--font-size-xs);
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-muted);
-    text-transform: uppercase;
-}
-
-.data-table td {
-    font-size: var(--font-size-sm);
-    color: var(--color-text-secondary);
-}
-
-.badge {
-    display: inline-block;
-    padding: var(--spacing-1) var(--spacing-2);
-    font-size: var(--font-size-xs);
-    font-weight: var(--font-weight-semibold);
-    border-radius: var(--radius-sm);
-    color: white;
-}
+  .ap-page .ap-points { margin: var(--cf-2) 0 0; padding-left: 1.2rem; display: grid; gap: 2px; font-size: var(--cf-text-sm); color: var(--cf-text-2); line-height: 1.5; }
+  .ap-page .ap-date { font-size: var(--cf-text-xs); color: var(--cf-text-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .ap-page .ap-num { font-variant-numeric: tabular-nums; }
+  .ap-page .cf-pill:empty { display: none; }
+  .ap-page .ap-list { max-height: 16rem; overflow-y: auto; }
+  .ap-page .ap-list .cf-list-main { overflow-wrap: anywhere; }
+  .ap-page .cf-row-control > select[multiple] { min-height: 8.5rem; }
+  @media (max-width: 640px) {
+    .ap-page .ap-list .cf-list-item { flex-direction: row; align-items: center; }
+  }
 </style>
-
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-    // Add interactive feedback for switches
-    const switches = document.querySelectorAll('.form-check-input[type="checkbox"][role="switch"]');
-
-    switches.forEach(switchEl => {
-        switchEl.addEventListener('change', function() {
-            const label = this.closest('.form-check, .form-check-switch')?.querySelector('.form-check-label > div:first-child');
-            if (label) {
-                if (this.checked) {
-                    label.style.color = 'var(--color-success)';
-                } else {
-                    label.style.color = 'var(--color-text-primary)';
-                }
-            }
-        });
-
-        // Initialize state
-        const label = switchEl.closest('.form-check, .form-check-switch')?.querySelector('.form-check-label > div:first-child');
-        if (label && switchEl.checked) {
-            label.style.color = 'var(--color-success)';
-        }
-    });
-});
-</script>

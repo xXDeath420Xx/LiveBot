@@ -111,7 +111,7 @@ router.post('/', async (req, res) => {
                 [req.player.id, strainId, maxOrder.next_order]
             );
 
-            logger.info('[Favorites] Added', {
+            logger.debug('[Favorites] Added', {
                 playerId: req.player.id,
                 strainId,
                 strainName: strain.name
@@ -159,7 +159,7 @@ router.delete('/:strainId', async (req, res) => {
             return res.status(404).json({ error: 'Favorite not found', code: 'NOT_FOUND' });
         }
 
-        logger.info('[Favorites] Removed', {
+        logger.debug('[Favorites] Removed', {
             playerId: req.player.id,
             strainId
         });

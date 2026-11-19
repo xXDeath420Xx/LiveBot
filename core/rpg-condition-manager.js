@@ -221,6 +221,31 @@ class RPGConditionManager {
             [characterId, combatId]
         );
     }
+
+    /**
+     * Clear short-lived conditions on a rest: anything with a round-based
+     * duration (rounds only tick in combat, so out-of-combat ones would
+     * otherwise never expire) or bound to a combat. Open-ended conditions
+     * (no duration, no combat) are left for explicit removal.
+     * @param {number} characterId - Character ID
+     * @returns {array} Names of the cleared conditions
+     */
+    static async clearTimedConditions(characterId) {
+        const [rows] = await pool.execute(
+            `SELECT ac.id, c.condition_name FROM dnd_active_conditions ac
+             JOIN dnd_conditions c ON ac.condition_id = c.condition_id
+             WHERE ac.character_id = ? AND (ac.duration_rounds IS NOT NULL OR ac.combat_id IS NOT NULL)`,
+            [characterId]
+        );
+        if (rows.length > 0) {
+            await pool.execute(
+                `DELETE FROM dnd_active_conditions
+                 WHERE character_id = ? AND (duration_rounds IS NOT NULL OR combat_id IS NOT NULL)`,
+                [characterId]
+            );
+        }
+        return rows.map(r => r.condition_name);
+    }
 }
 
 export default RPGConditionManager;

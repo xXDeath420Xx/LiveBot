@@ -12,10 +12,10 @@ import {
     EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle,
 } from 'discord.js';
 import pool from '../utils/db.js';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 
 const GUILD_ID = '1500965606659194982';
-const BOT_ID = '1502798840124670133';
+// The acting bot comes from guild_bot_mapping — never pinned here.
 const VERIFIED_ROLE = '1502814371502624858';
 
 // Existing notification roles we'll keep on the panel
@@ -24,8 +24,8 @@ const GIVEAWAYS_ROLE    = '1502814375386284104'; // 🎉 Giveaways
 const STREAM_PINGS_ROLE = '1502814376367882323'; // 🔔 Stream Pings
 
 async function main() {
-    const [bots] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id = ?', [BOT_ID]);
-    const token = encryption.decrypt(JSON.parse(bots[0].bot_token));
+    const bot = await resolveBotForGuild(GUILD_ID, { db: pool });
+    const token = bot.token;
     const client = new Client({
         intents: [
             GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers,

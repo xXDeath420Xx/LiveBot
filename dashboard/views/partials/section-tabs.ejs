@@ -1,0 +1,30 @@
+<%#
+  Section navigation shown under the site header (partials/site-header.ejs) on pages that
+  belong to one product area with several pages: greeting cards, Cards Against Humanity, Windrose.
+  Locals: tabs ([[key, href, label], ...]), active (key), label (aria-label for the nav),
+  tabNote (optional short text shown at the end of the row).
+%>
+<%
+  const _tabs = (typeof tabs !== 'undefined' && Array.isArray(tabs)) ? tabs : [];
+  const _tabActive = (typeof active !== 'undefined') ? active : '';
+  const _tabLabel = (typeof label !== 'undefined' && label) ? label : 'Section';
+  const _tabNote = (typeof tabNote !== 'undefined' && tabNote) ? String(tabNote) : '';
+%>
+<style>
+    .cf-section-tabs { border-bottom: 1px solid var(--cf-border); background: var(--cf-bg); }
+    .cf-section-tabs-inner { max-width: 1200px; margin: 0 auto; padding: 0 20px; display: flex; align-items: center; gap: 2px; overflow-x: auto; scrollbar-width: none; }
+    .cf-section-tabs-inner::-webkit-scrollbar { display: none; }
+    .cf-section-tabs .cf-section-tabs-name { font-size: var(--cf-text-sm); font-weight: 600; color: var(--cf-text); margin-right: 10px; white-space: nowrap; }
+    .cf-section-tabs a { display: inline-flex; align-items: center; height: 42px; padding: 0 10px; font-size: var(--cf-text-sm); font-weight: 500; color: var(--cf-text-2); text-decoration: none; white-space: nowrap; box-shadow: inset 0 -2px 0 transparent; }
+    .cf-section-tabs a:hover { color: var(--cf-text); }
+    .cf-section-tabs a[aria-current="page"] { color: var(--cf-text); box-shadow: inset 0 -2px 0 var(--cf-accent); }
+    .cf-section-tabs .cf-section-tabs-note { margin-left: auto; padding-left: 12px; font-size: var(--cf-text-xs); color: var(--cf-text-3); white-space: nowrap; }
+    @media (max-width: 600px) { .cf-section-tabs-inner { padding: 0 12px; } .cf-section-tabs .cf-section-tabs-name { display: none; } }
+</style>
+<nav class="cf-section-tabs" aria-label="<%= _tabLabel %>">
+    <div class="cf-section-tabs-inner">
+        <span class="cf-section-tabs-name"><%= _tabLabel %></span>
+        <% _tabs.forEach(([k, href, text]) => { %><a href="<%= href %>"<% if (k === _tabActive) { %> aria-current="page"<% } %>><%= text %></a><% }); %>
+        <% if (_tabNote) { %><span class="cf-section-tabs-note"><%= _tabNote %></span><% } %>
+    </div>
+</nav>

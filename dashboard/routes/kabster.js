@@ -16,7 +16,7 @@
  *   • Writes are whitelisted by core/takeover-questions.js. A key we did not author, or a value
  *     that is not one of the options we offered, is rejected. The only free text is `note`, which
  *     is length-capped and stored as text — never interpreted, never executed, escaped on render.
- *   • Nothing here applies anything. These are her stated intentions; a human still runs each step.
+ *   • Nothing here applies anything. These are the owner's stated intentions; a human still runs each step.
  */
 import express from 'express';
 import crypto from 'crypto';
@@ -24,7 +24,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import pool from '../../utils/db.js';
 import logger from '../../utils/logger.js';
-import { QUESTIONS, CATALOGUE, validateAnswer, MAX_NOTE } from '../../core/takeover-questions.js';
+import { validateAnswerFor, MAX_NOTE } from '../../core/takeover-questions.js';
+import { getQuestionnaire } from '../../core/takeover-questionnaire.js';
 
 const router = express.Router();
 const PRIVATE_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'private');
@@ -60,7 +61,17 @@ router.get('/:token', async (req, res) => {
   res.sendFile(path.join(PRIVATE_DIR, 'kabster.html'));
 });
 
-/** Everything she has answered so far, so a reopened tab is never a blank form. */
+/** Everything answered so far, so a reopened tab is never a blank form. */
+/**
+ * The questions THIS server's owner is actually asked.
+ *
+ * Generated from that server's own scan — the bots it really runs, the roles it really has spare,
+ * its live security posture. This route used to serve the static list instead, which is the set
+ * hand-written for the first server this tool ever touched: it asked every owner on earth about
+ * Ko-fi, about a tree, and about "your 30,491 XP", and never once mentioned the bots actually
+ * sitting in their server. The admin side of the dashboard has always rendered the generated set, so
+ * the two halves of the same feature disagreed about what had even been asked.
+ */
 router.get('/:token/answers', async (req, res) => {
   const guildId = await resolveToken(req.params.token);
   if (!guildId) return res.status(404).json({ error: 'not found' });
@@ -70,7 +81,17 @@ router.get('/:token/answers', async (req, res) => {
 
   const answers = {};
   for (const r of rows) answers[r.item_key] = { value: r.value, note: r.note, updatedAt: r.updated_at };
-  res.json({ questions: QUESTIONS, catalogue: CATALOGUE, answers, maxNote: MAX_NOTE });
+
+  const set = await getQuestionnaire(guildId);
+  res.json({
+    questions: set.decisions,
+    catalogue: set.catalogue,
+    // A server nobody has scanned has nothing to be asked ABOUT. Saying so beats presenting a
+    // generic form and calling it their audit.
+    scanned: set.scanned !== false,
+    answers,
+    maxNote: MAX_NOTE,
+  });
 });
 
 /** Autosave. One question at a time — a half-finished form is a first-class state, not an error. */
@@ -81,7 +102,10 @@ router.post('/:token/save', async (req, res) => {
 
   const { key, value = null, note = null } = req.body ?? {};
 
-  const problem = validateAnswer(key, value, note);
+  // Validate against the SAME set the page was served. Anything else either rejects the questions
+  // this owner was actually asked, or accepts keys they were never shown.
+  const set = await getQuestionnaire(guildId);
+  const problem = validateAnswerFor(set, key, value, note);
   if (problem) {
     logger.warn(`[kabster] rejected a write to "${key}" on guild ${guildId}: ${problem}`);
     return res.status(400).json({ error: problem });

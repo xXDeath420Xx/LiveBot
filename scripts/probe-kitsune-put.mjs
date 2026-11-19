@@ -2,15 +2,15 @@
  * Tests the bulk PUT with progressively realistic payloads to find what
  * Discord is choking on. Does NOT print the token.
  */
-import enc from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 import pool from '../utils/db.js';
 
-const BOT_ID = '1498486251576229958';
+// The acting bot comes from guild_bot_mapping — never pinned here.
 const GUILD_ID = '1469931133981687873';
 
-const [[row]] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id=?', [BOT_ID]);
-const token = enc.decrypt(JSON.parse(row.bot_token));
-const url = `https://discord.com/api/v10/applications/${BOT_ID}/guilds/${GUILD_ID}/commands`;
+const bot = await resolveBotForGuild(GUILD_ID, { db: pool });
+const token = bot.token;
+const url = `https://discord.com/api/v10/applications/${bot.botId}/guilds/${GUILD_ID}/commands`;
 
 async function probe(label, body) {
   const start = Date.now();

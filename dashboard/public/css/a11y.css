@@ -1,0 +1,181 @@
+/*
+ * Network-wide accessibility baseline.
+ *
+ * The dashboard's 50 views each carry their own <head> and their own inline
+ * <style> block rather than sharing a stylesheet, so there was nowhere for
+ * cross-cutting rules to live. The measured consequences: 137 @keyframes
+ * animations and 763 transitions guarded by exactly 2 prefers-reduced-motion
+ * queries, 2 :focus-visible rules across the whole surface, and no skip links
+ * at all.
+ *
+ * This file is linked last in every view's <head>. Because the per-view rules
+ * live in inline <style> blocks, which win on document order, the overrides
+ * here that must beat them are marked !important. That is load-bearing, not
+ * laziness — without it a reduced-motion preference loses to every inline
+ * animation on the page.
+ */
+
+/* ---------------------------------------------------------------------------
+ * Skip link
+ *
+ * First focusable element on the page. Visually hidden until focused, then
+ * pinned to the top-left so a keyboard user can jump past the sidebar and
+ * topbar instead of tabbing through every nav item on every page load.
+ * ------------------------------------------------------------------------- */
+.skip-to-content {
+    position: absolute;
+    top: -100%;
+    left: 0.5rem;
+    z-index: 10000;
+    padding: 0.75rem 1.25rem;
+    border-radius: 0 0 8px 8px;
+    background: #5865f2;
+    color: #fff;
+    font-weight: 600;
+    text-decoration: none;
+    transition: top 0.15s ease-in-out;
+}
+
+.skip-to-content:focus,
+.skip-to-content:focus-visible {
+    top: 0;
+    outline: 3px solid #fff;
+    outline-offset: 2px;
+}
+
+/* The skip target takes focus programmatically, so suppress the focus ring it
+   would otherwise draw around the entire content region. */
+[id='main-content']:focus {
+    outline: none;
+}
+
+/* ---------------------------------------------------------------------------
+ * Visible focus
+ *
+ * :focus-visible only paints for keyboard/AT navigation, so this restores a
+ * clear focus indicator without putting a ring around every mouse click.
+ * Several views set `outline: none` on interactive elements; the !important is
+ * there to win that.
+ * ------------------------------------------------------------------------- */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+summary:focus-visible,
+[tabindex]:not([tabindex='-1']):focus-visible,
+[role='button']:focus-visible,
+[role='tab']:focus-visible,
+[role='menuitem']:focus-visible {
+    outline: 3px solid #5865f2 !important;
+    outline-offset: 2px !important;
+    border-radius: 3px;
+}
+
+/* On dark backgrounds a blurple ring can disappear into the panel; the dark site
+   themes get a lighter one. Keyed to the site's theme, not the OS: a dark-mode OS
+   with the Light or Sand theme used to get the pale ring on a white page. */
+:root:not([data-theme="light"]):not([data-theme="sand"]) :is(a, button, input, select, textarea, [tabindex]:not([tabindex='-1'])):focus-visible {
+    outline-color: #a5b4fc !important;
+}
+
+/* ---------------------------------------------------------------------------
+ * Reduced motion
+ *
+ * For users who have asked their OS for less motion — a preference commonly set
+ * because motion triggers nausea or migraine, not as a cosmetic choice. Animation
+ * is reduced to a near-instant step rather than removed outright, because some
+ * of this dashboard's UI (toasts, accordions, tab panels) relies on a transition
+ * completing to fire its end-state; setting the duration to 0 can strand those
+ * mid-state, whereas 0.01ms still completes and still fires transitionend.
+ * ------------------------------------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+    }
+
+    /* Purely decorative loops (spinners, pulses, shimmer) have no end state to
+       preserve, so stop them completely rather than running them 10,000x fast. */
+    .spinner,
+    .loading-spinner,
+    .pulse,
+    .shimmer,
+    [class*='animate-'],
+    [class*='-pulse'],
+    [class*='-spin'] {
+        animation: none !important;
+    }
+
+    html {
+        scroll-behavior: auto !important;
+    }
+}
+
+/* ---------------------------------------------------------------------------
+ * Screen-reader-only text
+ *
+ * For labelling controls whose meaning is currently carried only by an icon.
+ * Clip-based rather than display:none so the text is still announced.
+ * ------------------------------------------------------------------------- */
+.sr-only,
+.visually-hidden {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    padding: 0 !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    clip: rect(0, 0, 0, 0) !important;
+    white-space: nowrap !important;
+    border: 0 !important;
+}
+
+/* Visible again when focused — for "skip"-style links that use .sr-only. */
+.sr-only-focusable:focus,
+.sr-only-focusable:focus-visible {
+    position: static !important;
+    width: auto !important;
+    height: auto !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    clip: auto !important;
+    white-space: normal !important;
+}
+
+/* ---------------------------------------------------------------------------
+ * Target size
+ *
+ * WCAG 2.2 asks for a 24x24 CSS-pixel minimum on pointer targets. Icon-only
+ * buttons in the tables and toolbars are frequently smaller than that.
+ * ------------------------------------------------------------------------- */
+button,
+[role='button'],
+a.btn,
+.btn {
+    min-height: 24px;
+    min-width: 24px;
+}
+
+/* ---------------------------------------------------------------------------
+ * Forced colors (Windows High Contrast)
+ *
+ * Keep focus indicators when the OS replaces the palette wholesale.
+ * ------------------------------------------------------------------------- */
+@media (forced-colors: active) {
+    a:focus-visible,
+    button:focus-visible,
+    input:focus-visible,
+    select:focus-visible,
+    textarea:focus-visible {
+        outline: 3px solid Highlight !important;
+    }
+
+    .skip-to-content {
+        border: 2px solid ButtonText;
+    }
+}

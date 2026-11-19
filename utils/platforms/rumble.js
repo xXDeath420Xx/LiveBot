@@ -18,7 +18,7 @@
  * required.
  *
  * The key-based path (callApi/validateKey against the official Live Stream API) is
- * retained: `/rumble add` still accepts an optional key, and a stored key is used
+ * retained: `/socials rumble add` still accepts an optional key, and a stored key is used
  * as a fallback if the scrape ever fails.
  */
 import logger from '../logger.js';

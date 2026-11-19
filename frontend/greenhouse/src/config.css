@@ -1,0 +1,7 @@
+/* The extension's configuration page: nothing to configure. Its own small stylesheet (the panel's CSS
+   sizes the page for the 318 x 496 panel, which would clip this page). */
+:root { color-scheme: dark; }
+html, body { margin: 0; background: #0e0f11; color: #ececef; font: 15px/1.5 ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif; }
+main { max-width: 560px; padding: 24px 20px; }
+h1 { font-size: 21px; font-weight: 600; margin: 0 0 12px; }
+p { margin: 0 0 10px; color: #a7a9b1; }

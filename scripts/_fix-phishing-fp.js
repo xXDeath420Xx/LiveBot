@@ -1,14 +1,15 @@
 import 'dotenv/config';
 import pool from '../utils/db.js';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 
-const BOT_ID = '1439236669088727111';
+// The acting bot comes from guild_bot_mapping — never pinned here.
+const GUILD_ID = '1404239197987930114';
 const CHANNEL_ID = '1439252445078225037';
 const MSG_IDS = ['1481933176036130816', '1481933177000820746'];
 
 try {
-    const [bots] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id = ?', [BOT_ID]);
-    const token = encryption.decrypt(JSON.parse(bots[0].bot_token));
+    const bot = await resolveBotForGuild(GUILD_ID, { db: pool });
+    const token = bot.token;
 
     // Check if the messages still exist or were deleted
     for (const msgId of MSG_IDS) {
@@ -26,7 +27,7 @@ try {
 
     // Check detection records
     const [detections] = await pool.execute(
-        "SELECT * FROM phishing_detections WHERE guild_id = '1404239197987930114' ORDER BY id DESC LIMIT 5"
+        'SELECT * FROM phishing_detections WHERE guild_id = ? ORDER BY id DESC LIMIT 5', [GUILD_ID]
     );
     console.log('\n=== Detections ===');
     for (const d of detections) {

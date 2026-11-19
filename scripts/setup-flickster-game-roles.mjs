@@ -5,10 +5,9 @@
 // REST-only — does NOT open a gateway, safe to run while PM2 is up.
 
 import pool from '../utils/db.js';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 
 const GUILD_ID    = '1500965606659194982';
-const BOT_ID      = '1502798840124670133';
 const GAMING_CAT  = '1502814382520926320';
 const ROLES_CH    = '1502814398715138148';
 const GAMES_MSG   = '1502814747580698755';
@@ -31,8 +30,10 @@ const SEND_MESSAGES = 1n << 11n;
 const EMBED_LINKS   = 1n << 14n;
 const READ_HISTORY  = 1n << 16n;
 
-const [rows] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id=?', [BOT_ID]);
-const token  = encryption.decrypt(JSON.parse(rows[0].bot_token));
+// The acting bot comes from guild_bot_mapping — never pinned here.
+const bot    = await resolveBotForGuild(GUILD_ID, { db: pool });
+const BOT_ID = bot.botId;
+const token  = bot.token;
 
 async function api(method, path, body) {
   const r = await fetch(`https://discord.com/api/v10${path}`, {

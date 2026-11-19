@@ -1,71 +1,95 @@
 <!DOCTYPE html>
-<html lang="en">
+<html data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>" lang="en">
 <head>
-<title>CAH — Game <%= game.id.slice(0, 8) %> — CertiFried MultiTool</title>
 <%- include('components/cah-shell-head') %>
 <style>
-    .game-header { display: flex; justify-content: space-between; align-items: center; padding: 1.5rem 0 0.75rem; gap: 1rem; flex-wrap: wrap; }
-    .game-header h2 { font-size: 1.4rem; font-weight: 700; }
-    .game-header .game-id { color: var(--text-muted); font-family: ui-monospace, monospace; font-size: 0.85rem; margin-left: 0.5rem; }
+    .game-header { display: flex; justify-content: space-between; align-items: center; padding: 20px 0 8px; gap: 12px; flex-wrap: wrap; }
+    .game-header h1 { font-size: var(--cf-text-xl); font-weight: 600; letter-spacing: -0.01em; }
+    .game-header .game-id { color: var(--cf-text-3); font-family: var(--cf-mono); font-size: var(--cf-text-sm); font-weight: 400; margin-left: 8px; }
 
-    #status { display: inline-flex; align-items: center; padding: 0.5rem 0.85rem; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 8px; font-size: 0.85rem; color: var(--text-secondary); }
+    #status { display: inline-flex; align-items: center; gap: 8px; padding: 6px 12px; background: var(--cf-surface); border: 1px solid var(--cf-border); border-radius: 999px; font-size: var(--cf-text-sm); color: var(--cf-text-2); max-width: 100%; }
+    #status::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--cf-text-3); flex: none; }
+    #status.is-live::before { background: var(--cf-success); }
+    #status.is-warn::before { background: var(--cf-warning); }
 
-    .meta-row { display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0.75rem 0 1.25rem; }
+    .meta-row { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0 16px; }
 
-    .czar-banner { background: linear-gradient(135deg, rgba(251, 191, 36, 0.2), rgba(167, 139, 250, 0.2)); border: 1px solid rgba(251, 191, 36, 0.4); color: var(--accent-amber); padding: 0.85rem 1.25rem; border-radius: 10px; font-weight: 600; text-align: center; margin-bottom: 1rem; }
-    .spectator-banner { background: rgba(96, 165, 250, 0.1); border: 1px solid rgba(96, 165, 250, 0.3); color: var(--accent-blue); padding: 0.75rem 1.25rem; border-radius: 10px; text-align: center; margin-bottom: 1rem; font-size: 0.9rem; }
-    .countdown-banner { background: rgba(239, 68, 68, 0.15); border: 1px solid rgba(239, 68, 68, 0.4); color: var(--accent-red); padding: 0.65rem 1rem; border-radius: 8px; text-align: center; font-weight: 600; margin-bottom: 1rem; display: none; }
+    .banner { padding: 10px 14px; border-radius: var(--cf-radius-lg); margin-bottom: 12px; font-size: var(--cf-text-sm); border: 1px solid var(--cf-border); background: var(--cf-surface); }
+    .czar-banner { border-color: color-mix(in srgb, var(--cf-warning) 45%, transparent); background: color-mix(in srgb, var(--cf-warning) 10%, var(--cf-surface)); font-weight: 500; text-align: center; }
+    .spectator-banner { border-color: color-mix(in srgb, var(--cf-info) 40%, transparent); background: color-mix(in srgb, var(--cf-info) 8%, var(--cf-surface)); }
+    .guest-banner { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+    .guest-banner .acts { display: flex; gap: 8px; flex-wrap: wrap; }
+    .countdown-banner { border-color: color-mix(in srgb, var(--cf-danger) 45%, transparent); background: color-mix(in srgb, var(--cf-danger) 10%, var(--cf-surface)); text-align: center; font-weight: 600; display: none; }
 
-    .layout { display: grid; grid-template-columns: 1fr 320px; gap: 1.5rem; padding-bottom: 3rem; }
-    @media (max-width: 980px) { .layout { grid-template-columns: 1fr; } }
+    /* Turn timer: hidden until a round with a time limit starts */
+    .timer-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 8px; }
+    .turn-timer { display: none; align-items: center; gap: 8px; padding: 4px 4px 4px 10px; background: var(--cf-surface); border: 1px solid var(--cf-border); border-radius: 999px; font-size: var(--cf-text-sm); }
+    .turn-timer.show { display: inline-flex; }
+    .turn-timer .phase-pill { color: var(--cf-text-2); }
+    .turn-timer .time-left { font-family: var(--cf-mono); font-variant-numeric: tabular-nums; padding: 2px 8px; border-radius: 999px; background: var(--cf-surface-2); }
+    .turn-timer.warning .time-left { background: color-mix(in srgb, var(--cf-warning) 18%, transparent); color: var(--cf-warning); }
+    .turn-timer.danger .time-left { background: color-mix(in srgb, var(--cf-danger) 18%, transparent); color: var(--cf-danger); }
+
+    .layout { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 20px; padding-bottom: 72px; }
+    @media (max-width: 980px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+
+    .panel-title { font-size: var(--cf-text-sm); font-weight: 600; color: var(--cf-text-2); margin-bottom: 8px; }
 
     /* Scoreboard */
-    .scoreboard { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 1rem 1.25rem; margin-bottom: 1rem; }
-    .scoreboard h3 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 0.5rem; }
+    .scoreboard { background: var(--cf-surface); border: 1px solid var(--cf-border); border-radius: var(--cf-radius-lg); padding: 14px 16px; margin-bottom: 16px; }
     .scoreboard ul { list-style: none; }
-    .scoreboard li { display: flex; align-items: center; gap: 0.6rem; padding: 0.4rem 0; border-bottom: 1px solid var(--border-color); font-size: 0.9rem; }
+    .scoreboard li { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--cf-border); font-size: var(--cf-text-md); min-width: 0; }
     .scoreboard li:last-child { border-bottom: none; }
-    .scoreboard .crown { color: var(--accent-amber); }
-    .scoreboard .points { margin-left: auto; color: var(--accent-purple); font-weight: 600; font-variant-numeric: tabular-nums; }
-    .scoreboard .check { color: var(--accent-green); }
-    #lobby-controls { display: flex; gap: 0.5rem; margin-top: 0.75rem; }
+    .scoreboard li strong { font-weight: 500; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .scoreboard .tag { font-size: var(--cf-text-xs); padding: 1px 6px; border-radius: var(--cf-radius-sm); background: var(--cf-surface-2); color: var(--cf-text-2); border: 1px solid var(--cf-border); flex: none; }
+    .scoreboard .tag.czar { color: var(--cf-warning); border-color: color-mix(in srgb, var(--cf-warning) 40%, transparent); }
+    .scoreboard .tag.done { color: var(--cf-success); border-color: color-mix(in srgb, var(--cf-success) 40%, transparent); }
+    .scoreboard .points { margin-left: auto; font-weight: 600; font-variant-numeric: tabular-nums; flex: none; }
+    .scoreboard .kick-btn { flex: none; background: none; border: 1px solid transparent; color: var(--cf-text-3); cursor: pointer; padding: 2px 6px; border-radius: var(--cf-radius-sm); font: inherit; font-size: var(--cf-text-xs); }
+    .scoreboard .kick-btn:hover { color: var(--cf-danger); border-color: color-mix(in srgb, var(--cf-danger) 40%, transparent); }
+    #lobby-controls { display: flex; gap: 8px; margin-top: 12px; align-items: center; flex-wrap: wrap; }
+    #start-hint { color: var(--cf-text-3); font-size: var(--cf-text-sm); }
+    .host-controls { display: flex; gap: 8px; align-items: center; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--cf-border); }
+    .host-pill { font-size: var(--cf-text-xs); color: var(--cf-text-3); margin-right: auto; }
 
-    /* Black card */
-    .black-card-wrap { padding: 0.5rem 0 1rem; }
+    /* Black card (the game's own card art: stays black on every theme) */
+    .black-card-wrap { padding: 4px 0 16px; }
     .black-card {
-        background: #000; color: #fff; padding: 2rem 1.5rem;
-        border-radius: 16px; font-size: 1.5rem; line-height: 1.4; font-weight: 700;
-        min-height: 160px; border: 1px solid #222;
+        /* theme: fixed (CAH card face: black by design) */ 
+        background: #000; color: #fff; padding: 28px 22px 40px;
+        border-radius: 14px; font-size: 1.4rem; line-height: 1.4; font-weight: 700;
+        min-height: 160px; border: 1px solid #2a2a2a;
         display: flex; align-items: center; justify-content: center; text-align: center;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-        position: relative;
+        position: relative; overflow-wrap: anywhere;
     }
-    .black-card::before { content: '🃏'; position: absolute; top: 0.75rem; left: 1rem; font-size: 0.85rem; opacity: 0.5; }
-    .black-card .pick-badge { position: absolute; bottom: 0.75rem; right: 1rem; background: #fff; color: #000; font-size: 0.7rem; font-weight: 700; padding: 0.2rem 0.6rem; border-radius: 999px; text-transform: uppercase; letter-spacing: 0.05em; }
+    .black-card .pick-badge { position: absolute; bottom: 12px; right: 14px; background: #fff; color: #000; font-size: 0.72rem; font-weight: 700; padding: 2px 10px; border-radius: 999px; }
+    @media (max-width: 600px) { .black-card { font-size: 1.15rem; padding: 22px 16px 36px; min-height: 130px; } }
 
     /* Hand grid */
-    .hand-section h3 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin: 1rem 0 0.75rem; }
-    .hand { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 0.6rem; }
+    .hand-section .panel-title, .judging-section .panel-title { margin: 8px 0 10px; }
+    .hand { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }
+    @media (max-width: 420px) { .hand { grid-template-columns: 1fr 1fr; } }
     .white-card {
-        background: #f5f5f0; color: #111; padding: 0.85rem;
+        background: #f5f5f0; color: #111; padding: 12px;
         border-radius: 10px; cursor: pointer; user-select: none;
-        min-height: 80px; font-size: 0.9rem; font-weight: 500;
-        border: 2px solid transparent;
-        transition: transform 0.1s, box-shadow 0.15s, border-color 0.15s;
+        min-height: 80px; font-size: 0.92rem; font-weight: 500; line-height: 1.35;
+        border: 2px solid transparent; overflow-wrap: anywhere;
+        transition: border-color 0.15s, box-shadow 0.15s;
         position: relative;
-        display: flex; align-items: flex-start;
+        display: flex; flex-direction: column; align-items: flex-start;
     }
-    .white-card:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0, 0, 0, 0.3); }
-    .white-card.selected { border-color: var(--accent-purple); box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.3); }
-    .white-card.blank { background: linear-gradient(135deg, #e6dcff, #f5f5f0); font-style: italic; color: #6d28d9; }
-    .white-card .order-badge { position: absolute; top: 6px; right: 8px; background: var(--accent-purple); color: #fff; border-radius: 50%; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; }
+    .white-card:hover { box-shadow: 0 4px 14px rgb(0 0 0 / 0.3); }
+    .white-card:focus-visible { outline: 2px solid var(--cf-accent); outline-offset: 2px; }
+    .white-card.selected { border-color: var(--cf-accent); box-shadow: 0 0 0 3px var(--cf-accent-soft); }
+    .white-card.blank { background: #ecebe4; font-style: italic; color: #444; border-style: dashed; border-color: #b8b6aa; }
+    .white-card.blank.selected { border-style: solid; border-color: var(--cf-accent); }
+    .white-card .order-badge { position: absolute; top: 6px; right: 8px; background: var(--cf-accent); color: var(--cf-on-accent); border-radius: 50%; width: 22px; height: 22px; display: flex; align-items: center; justify-content: center; font-size: 0.75rem; font-weight: 700; font-style: normal; }
 
-    #btn-submit { margin-top: 1rem; }
-    #btn-burn-hand { margin-top: 0.5rem; background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.3); color: var(--accent-red); padding: 0.5rem 0.85rem; border-radius: 6px; font-size: 0.78rem; cursor: pointer; font-family: inherit; display: none; }
-    #btn-burn-hand:hover { background: rgba(239, 68, 68, 0.2); }
+    .hand-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+    #btn-burn-hand { display: none; }
 
-    /* Card-flip animation on submission reveal */
-    .submissions .white-card { animation: cardFlip 0.4s ease-out backwards; }
+    /* Submissions reveal */
+    .submissions .white-card { animation: cardFlip 0.35s ease-out backwards; cursor: default; }
     @keyframes cardFlip { from { transform: rotateY(90deg); opacity: 0; } to { transform: rotateY(0); opacity: 1; } }
     .submissions .white-card:nth-child(2) { animation-delay: 0.08s; }
     .submissions .white-card:nth-child(3) { animation-delay: 0.16s; }
@@ -77,148 +101,160 @@
     #confetti-canvas { position: fixed; inset: 0; pointer-events: none; z-index: 9999; display: none; }
     #confetti-canvas.firing { display: block; }
 
-    /* Judging submissions */
-    .judging-section { margin-top: 1rem; }
-    .judging-section h3 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 0.75rem; }
-    .submissions { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 0.6rem; }
-    .submissions .white-card { font-size: 0.92rem; padding: 1rem; }
-    .submissions .sub-num { display: inline-block; background: var(--accent-purple); color: #fff; font-size: 0.7rem; font-weight: 700; padding: 0.15rem 0.5rem; border-radius: 999px; margin-right: 0.4rem; }
+    .judging-section { margin-top: 16px; }
+    .judging-hint { color: var(--cf-text-3); font-size: var(--cf-text-sm); margin: -4px 0 10px; }
+    .submissions { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; }
+    .submissions .white-card { font-size: 0.94rem; padding: 14px; gap: 10px; }
+    .submissions .sub-text { flex: 1; }
+    .submissions:not(.spectate) .sub-text { cursor: pointer; }
+    .submissions .sub-num { /* theme: fixed (number chip on the white CAH card) */ display: inline-block; background: #111; color: #fff; font-size: 0.7rem; font-weight: 700; padding: 1px 7px; border-radius: 999px; margin-right: 6px; font-style: normal; }
+    .sub-reactions { display: flex; gap: 4px; flex-wrap: wrap; }
+    .react-btn { display: inline-flex; align-items: center; gap: 3px; padding: 2px 6px; border-radius: 999px; border: 1px solid #d6d4ca; background: #fff; cursor: pointer; font-size: 0.85rem; line-height: 1.4; color: #333; }
+    .react-btn:hover { border-color: #999; }
+    .react-btn.mine { border-color: #111; background: #e9e8e1; }
+    .react-btn .count { font-size: 0.72rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .react-btn .count:empty { display: none; }
 
     /* Chat panel */
-    .chat-panel { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 1rem; display: flex; flex-direction: column; height: fit-content; max-height: 600px; min-height: 420px; }
-    .chat-panel h3 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-muted); margin-bottom: 0.5rem; }
-    .chat-messages { flex: 1; overflow-y: auto; min-height: 200px; max-height: 420px; padding: 0.4rem; background: var(--bg-secondary); border-radius: 8px; font-size: 0.85rem; border: 1px solid var(--border-color); }
-    .chat-msg { padding: 0.4rem 0.2rem; border-bottom: 1px solid var(--border-color); }
+    .chat-panel { background: var(--cf-surface); border: 1px solid var(--cf-border); border-radius: var(--cf-radius-lg); padding: 14px; display: flex; flex-direction: column; height: fit-content; max-height: 600px; min-height: 360px; }
+    .chat-messages { flex: 1; overflow-y: auto; min-height: 200px; max-height: 420px; padding: 6px 8px; background: var(--cf-inset); border-radius: var(--cf-radius); font-size: var(--cf-text-sm); border: 1px solid var(--cf-border); }
+    .chat-msg { padding: 6px 2px; border-bottom: 1px solid var(--cf-border); }
     .chat-msg:last-child { border-bottom: none; }
-    .chat-msg .from { font-weight: 600; color: var(--accent-blue); }
-    .chat-msg.spectator .from { color: var(--text-muted); font-style: italic; }
-    .chat-msg .time { color: var(--text-muted); font-size: 0.7rem; margin-left: 0.5rem; }
-    .chat-msg .body { color: var(--text-primary); margin-top: 0.15rem; word-wrap: break-word; line-height: 1.4; }
-    .chat-input { display: flex; gap: 0.4rem; margin-top: 0.5rem; }
-    .chat-input input { flex: 1; padding: 0.55rem; background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 6px; font-size: 0.85rem; font-family: inherit; }
-    .chat-input input:focus { outline: none; border-color: var(--accent-purple); }
-    .chat-empty { color: var(--text-muted); text-align: center; padding: 1rem 0; font-style: italic; font-size: 0.85rem; }
+    .chat-msg .from { font-weight: 600; color: var(--cf-text); }
+    .chat-msg.spectator .from { color: var(--cf-text-3); font-weight: 500; }
+    .chat-msg .time { color: var(--cf-text-3); font-size: var(--cf-text-xs); margin-left: 6px; }
+    .chat-msg .body { color: var(--cf-text); margin-top: 2px; overflow-wrap: anywhere; line-height: 1.4; }
+    .chat-input { display: flex; gap: 6px; margin-top: 8px; }
+    .chat-input input { flex: 1; min-width: 0; }
+    .chat-empty { color: var(--cf-text-3); text-align: center; padding: 16px 0; font-size: var(--cf-text-sm); }
 
-    /* Blank-card modal */
-    .modal-bg { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.75); backdrop-filter: blur(4px); display: none; align-items: center; justify-content: center; z-index: 1000; }
-    .modal { background: var(--bg-secondary); padding: 1.75rem; border-radius: 14px; max-width: 500px; width: 90%; border: 1px solid var(--border-color); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5); }
-    .modal h3 { font-size: 1.1rem; margin-bottom: 0.4rem; }
-    .modal p { color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 0.75rem; }
-    .modal textarea { width: 100%; padding: 0.7rem; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border-color); border-radius: 8px; min-height: 80px; font-family: inherit; font-size: 0.95rem; resize: vertical; }
-    .modal textarea:focus { outline: none; border-color: var(--accent-purple); }
-    .modal-actions { margin-top: 1rem; display: flex; gap: 0.5rem; justify-content: flex-end; }
+    /* Dialogs (blank card, guest name) */
+    .modal-bg { position: fixed; inset: 0; background: rgb(0 0 0 / 0.6); display: none; align-items: center; justify-content: center; z-index: 1100; padding: 16px; }
+    .modal { background: var(--cf-surface); padding: 20px; border-radius: var(--cf-radius-lg); max-width: 480px; width: 100%; border: 1px solid var(--cf-border-strong); box-shadow: var(--cf-shadow-pop, 0 16px 48px rgb(0 0 0 / .45)); }
+    .modal h3 { font-size: var(--cf-text-lg); font-weight: 600; margin-bottom: 4px; }
+    .modal p { color: var(--cf-text-2); font-size: var(--cf-text-sm); margin-bottom: 12px; }
+    .modal input[type=text], .modal textarea { width: 100%; }
+    .modal textarea { min-height: 80px; }
+    .modal .form-error { color: var(--cf-danger); font-size: var(--cf-text-sm); margin-top: 8px; display: none; }
+    .modal-actions { margin-top: 16px; display: flex; gap: 8px; justify-content: flex-end; }
 </style>
+    <link rel="stylesheet" href="/css/dropdowns.css">
+<%- include('partials/site-head', { title: 'CAH — Game ' + (game.id.slice(0, 8)) + ' — CertiFried MultiTool', description: 'Cards Against Humanity on CertiFried MultiTool: play in the browser or in Discord, with community card packs and your own decks.' }) %>
 </head>
 <body>
 <%- include('components/cah-shell-nav', { user, page: 'game' }) %>
-<%- include('components/cah-breadcrumbs', { crumbs: [{ href: '/cah', label: 'CAH' }, { href: '/cah', label: 'Lobbies' }, { label: 'Game ' + game.id.slice(0, 8) }] }) %>
+<%- include('components/cah-breadcrumbs', { crumbs: [{ href: '/cah', label: 'Lobbies' }, { label: 'Game ' + game.id.slice(0, 8) }] }) %>
 
-<div class="container">
+<main class="container" id="main-content">
     <div class="game-header">
-        <div>
-            <h2>🃏 CAH<span class="game-id"><%= game.id.slice(0, 8) %></span></h2>
-        </div>
-        <div id="status">Connecting…</div>
+        <h1>Cards Against Humanity<span class="game-id"><%= game.id.slice(0, 8) %></span></h1>
+        <div id="status" role="status" aria-live="polite">Connecting…</div>
     </div>
 
     <% if (typeof user === 'undefined' || !user) { %>
-        <div class="spectator-banner" id="guest-banner" style="display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap;">
-            <span id="guest-banner-text">👀 Watching as a guest — pick a name to join the game.</span>
-            <div style="display:flex;gap:0.5rem;">
-                <button class="btn btn-primary btn-sm" onclick="guestPickName()">Pick a name</button>
-                <a href="/auth/discord" class="btn btn-outline btn-sm">Or sign in</a>
+        <div class="banner spectator-banner guest-banner" id="guest-banner">
+            <span id="guest-banner-text">You are watching. Pick a name to join the game.</span>
+            <div class="acts">
+                <button type="button" class="btn btn-primary btn-sm" onclick="guestPickName()">Pick a name</button>
+                <a href="/auth/discord?returnTo=/cah/<%= game.id %>" class="btn btn-outline btn-sm">Log in with Discord</a>
             </div>
         </div>
     <% } %>
 
     <!-- Guest username prompt (also on the game page so anonymous users can join from here) -->
-    <div class="modal-bg" id="guest-modal" style="display:none;align-items:center;justify-content:center;">
-        <div class="modal">
-            <h3 style="margin-top:0;">👋 Pick a name to play</h3>
-            <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1rem;">Other players will see this in the game.</p>
-            <input id="guest-username" type="text" maxlength="24" minlength="2" placeholder="e.g. Bean Goblin" style="width:100%;padding:0.7rem;background:var(--bg-primary);color:var(--text-primary);border:1px solid var(--border-color);border-radius:8px;font-family:inherit;" autocomplete="off">
-            <div id="guest-error" style="display:none;color:var(--accent-red);font-size:0.85rem;margin-top:0.5rem;"></div>
-            <div style="margin-top:1rem;display:flex;gap:0.5rem;justify-content:flex-end;">
-                <button class="btn btn-ghost" onclick="document.getElementById('guest-modal').style.display='none'">Cancel</button>
-                <button class="btn btn-primary" onclick="submitGuestName()">Join Game →</button>
+    <div class="modal-bg" id="guest-modal">
+        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="guest-modal-title">
+            <h3 id="guest-modal-title">Pick a name to play</h3>
+            <p>Other players see this name in the game.</p>
+            <label class="form-label" for="guest-username">Your name</label>
+            <input id="guest-username" class="form-input" type="text" maxlength="24" minlength="2" placeholder="e.g. Bean Goblin" autocomplete="off" onkeydown="if(event.key==='Enter')submitGuestName()">
+            <div id="guest-error" class="form-error" role="alert"></div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-ghost" onclick="document.getElementById('guest-modal').style.display='none'">Cancel</button>
+                <button type="button" class="btn btn-primary" onclick="submitGuestName()">Join game</button>
             </div>
         </div>
     </div>
-    <div id="spectator-banner" class="spectator-banner" style="display:none;">👀 You're spectating. The game host can let you join when a slot opens.</div>
-    <div style="display:flex; gap:0.5rem; align-items:center; flex-wrap:wrap; margin-bottom: 0.5rem;">
-        <div class="turn-timer" id="turn-timer">
+    <div id="spectator-banner" class="banner spectator-banner" style="display:none;">You are watching this game. You can join the next one from the lobby list.</div>
+    <div class="timer-row">
+        <div class="turn-timer" id="turn-timer" aria-live="off">
             <span class="phase-pill" id="phase-pill">Round</span>
             <span class="time-left" id="time-left">--:--</span>
         </div>
     </div>
-    <div id="countdown-banner" class="countdown-banner">⏰ <span id="countdown-text">10 seconds left to act!</span></div>
+    <div id="countdown-banner" class="banner countdown-banner" role="alert"><span id="countdown-text">10 seconds left to act.</span></div>
 
+    <% const czarLabels = { rotate: 'Czar rotates', random: 'Random czar', previous_winner: 'Last winner is czar' }; %>
     <div class="meta-row">
-        <span class="pill pill-purple"><%= game.settings.pointsToWin %> pts to win</span>
-        <span class="pill"><%= game.settings.maxRounds %> rounds max</span>
-        <span class="pill"><%= game.settings.czarRotation %> czar</span>
-        <% if (game.settings.timeoutEnabled) { %><span class="pill">⏱️ <%= game.settings.timeoutSeconds %>s</span><% } %>
-        <% if (game.settings.blankCardCount > 0) { %><span class="pill pill-amber">✍️ <%= game.settings.blankCardCount %> blanks</span><% } %>
-        <% if (game.settings.randoCount > 0) { %><span class="pill">🤖 <%= game.settings.randoCount %> Rando</span><% } %>
-        <% if (game.settings.nsfw) { %><span class="pill pill-red">🔞 NSFW</span><% } %>
+        <span class="pill pill-purple"><%= game.settings.pointsToWin %> points to win</span>
+        <span class="pill">Up to <%= game.settings.maxRounds %> rounds</span>
+        <span class="pill"><%= czarLabels[game.settings.czarRotation] || game.settings.czarRotation %></span>
+        <% if (game.settings.timeoutEnabled) { %><span class="pill"><%= game.settings.timeoutSeconds %>s per turn</span><% } %>
+        <% if (game.settings.blankCardCount > 0) { %><span class="pill pill-amber"><%= game.settings.blankCardCount %> blank cards</span><% } %>
+        <% if (game.settings.randoCount > 0) { %><span class="pill"><%= game.settings.randoCount %> AI player<%= game.settings.randoCount === 1 ? '' : 's' %></span><% } %>
+        <% if (game.settings.nsfw) { %><span class="pill pill-red">NSFW</span><% } %>
     </div>
 
     <div class="layout">
         <div>
-            <div class="scoreboard">
-                <h3>Players</h3>
+            <section class="scoreboard" aria-labelledby="players-title">
+                <h2 class="panel-title" id="players-title">Players</h2>
                 <ul id="player-list"></ul>
-                <div id="lobby-controls" style="display:none; align-items: center; gap: 0.5rem; flex-wrap: wrap;">
-                    <button class="btn btn-primary btn-sm" id="btn-join">Join Game</button>
-                    <button class="btn btn-primary btn-sm" id="btn-start" style="display:none;">Start Game</button>
-                    <span id="start-hint" style="display:none; color: var(--text-muted); font-size: 0.8rem;"></span>
+                <div id="lobby-controls" style="display:none;">
+                    <button type="button" class="btn btn-primary btn-sm" id="btn-join">Join game</button>
+                    <button type="button" class="btn btn-primary btn-sm" id="btn-start" style="display:none;">Start game</button>
+                    <span id="start-hint" style="display:none;"></span>
+                    <button type="button" class="btn btn-ghost btn-sm" id="btn-copy-link">Copy invite link</button>
                 </div>
                 <div class="host-controls" id="host-controls" style="display:none;">
-                    <span class="host-pill">👑 Host</span>
-                    <button class="btn btn-outline btn-sm" id="btn-end" onclick="confirmEnd()">End Game</button>
+                    <span class="host-pill">You are the host</span>
+                    <button type="button" class="btn btn-danger btn-sm" id="btn-end" onclick="confirmEnd()">End game</button>
                 </div>
-            </div>
+            </section>
 
-            <div id="czar-banner" class="czar-banner" style="display:none;">👑 You're the Card Czar this round — wait for everyone to submit.</div>
+            <div id="czar-banner" class="banner czar-banner" style="display:none;">You are the Card Czar this round. Wait for everyone to submit, then pick the funniest answer.</div>
 
             <div class="black-card-wrap">
-                <div class="black-card" id="black-card">Waiting for game to start…</div>
+                <div class="black-card cf-keep-dark" id="black-card">Waiting for game to start…</div>
             </div>
 
-            <div class="hand-section" id="hand-section">
-                <h3>Your Hand</h3>
+            <section class="hand-section" id="hand-section" aria-labelledby="hand-title">
+                <h2 class="panel-title" id="hand-title">Your hand</h2>
                 <div id="hand" class="hand"></div>
-                <button class="btn btn-primary" id="btn-submit" style="display:none;">Submit selected card(s)</button>
-                <button type="button" id="btn-burn-hand" onclick="confirmBurnHand()" title="Sacrifice 1 point to get a fresh hand">🔥 Burn hand (-1 pt)</button>
-            </div>
+                <div class="hand-actions">
+                    <button type="button" class="btn btn-primary" id="btn-submit" style="display:none;">Submit selected cards</button>
+                    <button type="button" class="btn btn-ghost btn-sm" id="btn-burn-hand" onclick="confirmBurnHand()" title="Costs 1 point">New hand (costs 1 point)</button>
+                </div>
+            </section>
 
-            <div class="judging-section" id="judging-section" style="display:none;">
-                <h3>Submissions</h3>
+            <section class="judging-section" id="judging-section" style="display:none;" aria-labelledby="subs-title">
+                <h2 class="panel-title" id="subs-title">Submissions</h2>
+                <p class="judging-hint" id="judging-hint"></p>
                 <div id="submissions" class="submissions"></div>
-            </div>
+            </section>
         </div>
 
-        <aside class="chat-panel">
-            <h3>💬 Game Chat</h3>
-            <div id="chat-messages" class="chat-messages">
+        <aside class="chat-panel" aria-labelledby="chat-title">
+            <h2 class="panel-title" id="chat-title">Game chat</h2>
+            <div id="chat-messages" class="chat-messages" aria-live="polite">
                 <div class="chat-empty">No messages yet.</div>
             </div>
             <div class="chat-input">
-                <input id="chat-input" type="text" maxlength="500" placeholder="Type a message…">
-                <button class="btn btn-primary btn-sm" id="chat-send">Send</button>
+                <input id="chat-input" class="form-input" type="text" maxlength="500" placeholder="Message" aria-label="Chat message">
+                <button type="button" class="btn btn-primary btn-sm" id="chat-send">Send</button>
             </div>
         </aside>
     </div>
-</div>
+</main>
 
 <div class="modal-bg" id="blank-modal">
-    <div class="modal">
-        <h3>✍️ Fill in your blank card</h3>
-        <p>Write whatever answer you want — up to 200 characters.</p>
-        <textarea id="blank-text" maxlength="200" placeholder="Type your answer..."></textarea>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="blank-modal-title">
+        <h3 id="blank-modal-title">Write your blank card</h3>
+        <p>Any answer you like, up to 200 characters.</p>
+        <textarea id="blank-text" class="form-textarea" maxlength="200" placeholder="Your answer" aria-label="Your answer"></textarea>
         <div class="modal-actions">
-            <button class="btn btn-ghost" onclick="cancelBlank()">Cancel</button>
-            <button class="btn btn-primary" id="blank-confirm">Use this answer</button>
+            <button type="button" class="btn btn-ghost" onclick="cancelBlank()">Cancel</button>
+            <button type="button" class="btn btn-primary" id="blank-confirm">Use this answer</button>
         </div>
     </div>
 </div>
@@ -232,6 +268,7 @@
     // Anonymous users can become guests on this page too — if they pick a name,
     // reload picks up the session and they're now a player.
     function guestPickName() {
+        document.getElementById('guest-error').style.display = 'none';
         document.getElementById('guest-modal').style.display = 'flex';
         setTimeout(() => document.getElementById('guest-username')?.focus(), 50);
     }
@@ -263,7 +300,17 @@
     const PENDING_RANDOS = Math.min(3, INITIAL.settings.randoCount || 0);
 
     const $ = (id) => document.getElementById(id);
-    const setStatus = (s) => $('status').textContent = s;
+    const setStatus = (s, tone) => {
+        const st = $('status');
+        st.textContent = s;
+        st.classList.toggle('is-live', tone === 'live');
+        st.classList.toggle('is-warn', tone === 'warn');
+    };
+    const STATE_LABELS = { LOBBY: 'Waiting in the lobby', SUBMITTING: 'Players are picking cards', JUDGING: 'The czar is judging', ROUND_END: 'Round over', GAME_END: 'Game over', ABANDONED: 'Game cancelled' };
+    // Latest known names, so events that only carry user ids can show a name.
+    const NAMES = {};
+    function rememberNames(players) { (players || []).forEach(p => { if (p && p.userId) NAMES[p.userId] = p.displayName; }); }
+    const nameOf = (id) => id === ME ? 'You' : (NAMES[id] || 'A player');
 
     function el(tag, props = {}, ...children) {
         const e = document.createElement(tag);
@@ -282,21 +329,25 @@
     }
 
     function renderPlayers(players) {
+        rememberNames(players);
         const ul = $('player-list');
         ul.replaceChildren(...players.map(p => {
             const children = [
-                p.isCzar ? el('span', { class: 'crown' }, '👑') : el('span', {}, '•'),
-                el('strong', {}, p.displayName),
-                p.hasSubmitted ? el('span', { class: 'check' }, '✅') : null,
+                el('strong', {}, p.displayName + (p.userId === ME ? ' (you)' : '')),
+                p.isCzar ? el('span', { class: 'tag czar' }, 'Czar') : null,
+                p.platform === 'rando' ? el('span', { class: 'tag' }, 'AI') : null,
+                p.hasSubmitted ? el('span', { class: 'tag done' }, 'Played') : null,
                 el('span', { class: 'points' }, `${p.points} pt${p.points === 1 ? '' : 's'}`)
             ];
             // Host gets a kick button per non-self, non-rando player (randos can't be kicked usefully — game would re-add them)
             if (isHost && p.userId !== ME && p.platform !== 'rando') {
                 children.push(el('button', {
                     class: 'kick-btn',
-                    title: 'Kick ' + p.displayName,
+                    type: 'button',
+                    title: 'Remove ' + p.displayName + ' from the game',
+                    'aria-label': 'Remove ' + p.displayName,
                     on: { onclick: (ev) => { ev.preventDefault(); ev.stopPropagation(); kickPlayer(p.userId, p.displayName); } }
-                }, '✕'));
+                }, 'Remove'));
             }
             return el('li', {}, ...children);
         }));
@@ -307,23 +358,23 @@
         $('btn-join').style.display = (inLobby && !haveMe) ? 'inline-flex' : 'none';
         const canStart = inLobby && isHost && humanCount >= 1 && effectiveTotal >= 3;
         $('btn-start').style.display = canStart ? 'inline-flex' : 'none';
-        $('btn-start').textContent = `Start Game (${humanCount} human${humanCount === 1 ? '' : 's'}${PENDING_RANDOS ? ' + ' + PENDING_RANDOS + ' rando' + (PENDING_RANDOS === 1 ? '' : 's') : ''})`;
+        $('btn-start').textContent = `Start game (${humanCount} player${humanCount === 1 ? '' : 's'}${PENDING_RANDOS ? ' + ' + PENDING_RANDOS + ' AI' : ''})`;
         const hint = $('start-hint');
         if (hint) {
             if (inLobby && isHost && !canStart) {
                 const need = 3 - effectiveTotal;
-                hint.textContent = `Need ${need} more player${need === 1 ? '' : 's'} to start (or invite a Rando)`;
+                hint.textContent = `${need} more player${need === 1 ? '' : 's'} needed to start. Share the invite link, or host a new game with AI players.`;
                 hint.style.display = 'inline-block';
             } else {
                 hint.style.display = 'none';
             }
         }
-        $('spectator-banner').style.display = (!inLobby && !haveMe) ? 'block' : 'none';
+        $('spectator-banner').style.display = (!inLobby && !haveMe && !$('guest-banner')) ? 'block' : 'none';
         // Host controls visible to the host at every stage — they need the
         // cancel/end button in the lobby too, not just mid-game.
         $('host-controls').style.display = isHost ? 'flex' : 'none';
         const endBtn = $('btn-end');
-        if (endBtn) endBtn.textContent = inLobby ? 'Cancel Lobby' : 'End Game';
+        if (endBtn) endBtn.textContent = inLobby ? 'Cancel lobby' : 'End game';
     }
 
     function renderBlack(bc) {
@@ -341,11 +392,14 @@
         wrap.replaceChildren(...myHand.map(c => {
             const sel = selectedIds.includes(c.id);
             const order = selectedIds.indexOf(c.id);
-            const text = c.isBlank ? '✍️ [BLANK — click to write]' : c.text;
+            const text = c.isBlank ? (sel && blankTexts[c.id] ? blankTexts[c.id] : 'Blank card: tap to write your own') : c.text;
             const node = el('div', {
                 class: `white-card${sel ? ' selected' : ''}${c.isBlank ? ' blank' : ''}`,
+                role: 'button',
+                tabindex: '0',
+                'aria-pressed': sel ? 'true' : 'false',
                 dataset: { id: String(c.id) },
-                on: { onclick: () => toggleCard(c.id) }
+                on: { onclick: () => toggleCard(c.id), onkeydown: (ev) => { if (ev.key === 'Enter' || ev.key === ' ') { ev.preventDefault(); toggleCard(c.id); } } }
             }, text);
             if (sel && pick > 1) node.appendChild(el('span', { class: 'order-badge' }, String(order + 1)));
             return node;
@@ -356,7 +410,7 @@
         btn.style.display = 'inline-flex';
         // Show "Burn hand" only when actively in SUBMITTING and we have a hand and ace rule is on
         const burnBtn = $('btn-burn-hand');
-        if (burnBtn) burnBtn.style.display = (myHand.length > 0) ? 'inline-block' : 'none';
+        if (burnBtn) burnBtn.style.display = (myHand.length > 0) ? 'inline-flex' : 'none';
     }
     function confirmBurnHand() {
         if (!confirm('Discard your current hand for a fresh 10 cards? Costs 1 point.')) return;
@@ -400,6 +454,7 @@
     }
     $('btn-start').onclick = () => socket.emit('cah:start', { gameId: GAME_ID });
 
+    // Reaction emoji are game content (players vote with them), not decoration.
     const REACTIONS = ['👍', '😂', '🤢', '🔥', '💀'];
     let myReactions = {};   // submissionId -> emoji
     let allTallies = {};    // submissionId -> { emoji: count }
@@ -419,6 +474,7 @@
             REACTIONS.forEach(emoji => {
                 const btn = el('button', {
                     class: 'react-btn',
+                    type: 'button',
                     dataset: { emoji },
                     on: { onclick: (ev) => { ev.stopPropagation(); sendReaction(s.submissionId, emoji); } }
                 }, emoji, el('span', { class: 'count' }, ''));
@@ -432,6 +488,7 @@
             }
             return node;
         }));
+        $('judging-hint').textContent = isCzar ? 'Tap the funniest answer to award the point.' : 'React to the answers while the czar decides.';
         $('judging-section').style.display = 'block';
     }
 
@@ -461,7 +518,7 @@
     socket.on('cah:reactionUpdated', (p) => applyTallies(p.tallies));
 
     socket.on('connect', () => {
-        setStatus('Connected · joining room…');
+        setStatus('Connected, joining the game…', 'live');
         socket.emit('cah:joinGame', { gameId: GAME_ID });
     });
 
@@ -472,8 +529,9 @@
         renderBlack(s.blackCard);
         renderHand();   // re-check isCzar — fixes "czar sees their hand" when joining mid-round
         $('czar-banner').style.display = isCzar && s.state === 'SUBMITTING' ? 'block' : 'none';
-        setStatus(`${s.state}${s.round ? ' · Round ' + s.round : ''}`);
+        setStatus(`${STATE_LABELS[s.state] || s.state}${s.round ? ' · Round ' + s.round : ''}`, 'live');
     });
+    socket.on('disconnect', () => setStatus('Connection lost, reconnecting…', 'warn'));
     socket.on('cah:playerJoined', (p) => renderPlayers(p.players));
     socket.on('cah:playerLeft',   (p) => renderPlayers(p.players));
     socket.on('cah:gameStarted',  () => { inLobby = false; selectedIds = []; blankTexts = {}; $('judging-section').style.display = 'none'; });
@@ -483,34 +541,48 @@
         renderBlack(p.blackCard); renderPlayers(p.players); renderHand();
         $('czar-banner').style.display = isCzar ? 'block' : 'none';
         $('judging-section').style.display = 'none';
-        setStatus(`Round ${p.round} · ${isCzar ? 'You judge' : 'Pick ' + p.blackCard.pick}`);
-        startTurnTimer(p.timeoutSeconds || <%= game.settings.timeoutSeconds || 90 %>, 'SUBMIT');
+        setStatus(`Round ${p.round} · ${isCzar ? 'You are the czar' : 'Pick ' + p.blackCard.pick}`, 'live');
+        // 0 means the host turned the turn time limit off.
+        startTurnTimer(p.timeoutSeconds || 0, 'SUBMIT');
     });
     socket.on('cah:hand', (p) => { myHand = p.hand; renderHand(); });
     socket.on('cah:cardsSubmitted', (p) => {
-        setStatus(`${p.submittedCount}/${p.expectedCount} submitted`);
+        setStatus(`${p.submittedCount} of ${p.expectedCount} played`, 'live');
         if (p.players) renderPlayers(p.players);
     });
-    socket.on('cah:judgingStarted', (p) => { selectedIds = []; renderJudging(p.submissions); setStatus(isCzar ? 'Pick the winner →' : 'Czar is judging…'); });
+    socket.on('cah:judgingStarted', (p) => {
+        selectedIds = []; renderJudging(p.submissions);
+        setStatus(isCzar ? 'Pick the winner' : 'The czar is judging…', 'live');
+        startTurnTimer(p.timeoutSeconds || 0, 'JUDGE');
+    });
     socket.on('cah:roundWon', (p) => {
-        setStatus(`🏆 ${p.winnerUserId === ME ? 'You' : 'A player'} won round ${p.round}`);
         if (p.scores) renderPlayers(p.scores);
+        const who = nameOf(p.winnerUserId);
+        const cards = (p.winningCards || []).map(c => c.text).join(' / ');
+        setStatus(`${who} won round ${p.round}${cards ? ': ' + cards : ''}`, 'live');
+        stopTurnTimer();
     });
     socket.on('cah:gameEnded', (p) => {
+        stopTurnTimer();
+        if (p.finalScores) renderPlayers(p.finalScores);
         if (p.cancelled) {
-            setStatus('🛑 Lobby cancelled by host.');
+            setStatus('The host cancelled this game.', 'warn');
             // Pull the host controls + lobby buttons since the game is over
             inLobby = false; isHost = false;
             $('lobby-controls').style.display = 'none';
             $('host-controls').style.display = 'none';
             return;
         }
-        setStatus(`🎉 Game over! Winner${p.winnerUserIds.length > 1 ? 's' : ''}: ${p.winnerUserIds.join(', ')}`);
+        const winners = (p.winnerUserIds || []).map(nameOf);
+        setStatus(winners.length ? `Game over. Winner${winners.length > 1 ? 's' : ''}: ${winners.join(', ')}` : 'Game over.', 'live');
+        if ((p.winnerUserIds || []).includes(ME)) fireConfetti();
+        inLobby = false;
+        $('lobby-controls').style.display = 'none';
     });
     socket.on('cah:submitAck', () => { selectedIds = []; renderHand(); });
     socket.on('cah:error', (e) => {
         if (e.needsPassword || e.reason === 'wrong_password') {
-            const pw = window.prompt('🔒 This lobby is password-protected. Enter the password to join:');
+            const pw = window.prompt(e.reason === 'wrong_password' ? 'Wrong password. Try again:' : 'This lobby has a password. Enter it to join:');
             if (pw) doJoin(pw);
             return;
         }
@@ -522,6 +594,14 @@
             insufficient_cards: 'Not enough cards for the selected packs + players. Pick more decks.',
             already_joined: "You're already in this game.",
             no_such_game: 'This game no longer exists.',
+            auth_required: 'Pick a name or log in to join.',
+            cant_kick_self: 'You cannot remove yourself. Use End game instead.',
+            game_full: 'This game is full.',
+            game_in_progress: 'This game has already started.',
+            not_in_game: 'You are not playing in this game.',
+            not_czar: 'Only the czar picks the winner.',
+            blank_needs_text: 'Write something on the blank card first.',
+            duplicate_cards: 'You picked the same card twice.',
             start_threw: `Start failed: ${e.message || 'unknown error'}`,
             czar_cannot_submit: "You're the Card Czar this round — you'll pick the winner after others submit.",
             not_submitting: 'Not in submission phase right now.',
@@ -529,13 +609,13 @@
             wrong_pick_count: 'Wrong number of cards selected.',
             card_not_in_hand: 'Card not in your hand.'
         };
-        setStatus('⚠️ ' + (reasons[e.reason] || e.reason));
+        setStatus(reasons[e.reason] || ('Something went wrong (' + e.reason + ')'), 'warn');
     });
-    socket.on('cah:hostTransferred', (p) => { isHost = p.newHostUserId === ME; setStatus(`👑 Host transferred${p.newHostUserId === ME ? ' to YOU' : ''}`); });
+    socket.on('cah:hostTransferred', (p) => { isHost = p.newHostUserId === ME; setStatus(p.newHostUserId === ME ? 'You are now the host.' : `${nameOf(p.newHostUserId)} is now the host.`, 'live'); });
 
     // ─── Always-visible turn timer ──────────────────────────────────
     // Ticks every second. Server gave us `timeoutSeconds` at round/judging
-    // start — we just count down. Color shifts to amber at 30s, red at 10s.
+    // start (0 = no limit, timer stays hidden). Amber at 30s, red at 10s.
     let turnTimerInterval = null;
     function startTurnTimer(totalSeconds, phase) {
         stopTurnTimer();
@@ -546,7 +626,7 @@
         let remaining = totalSeconds;
         wrap.classList.remove('warning', 'danger');
         wrap.classList.add('show');
-        phaseEl.textContent = phase === 'JUDGE' ? 'Judging' : 'Submitting';
+        phaseEl.textContent = phase === 'JUDGE' ? 'Judging' : 'Picking cards';
         const render = () => {
             const m = Math.floor(remaining / 60);
             const s = Math.max(0, remaining % 60);
@@ -589,11 +669,11 @@
         if (cdTimer) clearInterval(cdTimer);
         cdBanner.style.display = 'block';
         let n = secs;
-        cdText.textContent = n + ' seconds left to act!';
+        cdText.textContent = n + ' seconds left to play.';
         cdTimer = setInterval(() => {
             n--;
             if (n <= 0) { clearInterval(cdTimer); cdBanner.style.display = 'none'; }
-            else cdText.textContent = n + ' seconds left to act!';
+            else cdText.textContent = n + ' seconds left to play.';
         }, 1000);
     }
     ['cah:roundStarted', 'cah:judgingStarted', 'cah:gameEnded'].forEach(ev =>
@@ -627,13 +707,21 @@
     renderPlayers(INITIAL.players);
     renderBlack(blackCard);
 
+    // Invite link: copies this game's address.
+    $('btn-copy-link').onclick = async () => {
+        const btn = $('btn-copy-link');
+        try { await navigator.clipboard.writeText(location.origin + '/cah/' + GAME_ID); btn.textContent = 'Link copied'; }
+        catch (_) { window.prompt('Copy this link:', location.origin + '/cah/' + GAME_ID); }
+        setTimeout(() => { btn.textContent = 'Copy invite link'; }, 2000);
+    };
+
     // ─── Confetti (tiny pure-canvas implementation) ──────────────────
     function fireConfetti() {
         const canvas = document.getElementById('confetti-canvas');
         canvas.width = window.innerWidth; canvas.height = window.innerHeight;
         canvas.classList.add('firing');
         const ctx = canvas.getContext('2d');
-        const colors = ['#a78bfa', '#23f56b', '#fbbf24', '#ec4899', '#60a5fa', '#ef4444'];
+        const colors = ['#ffffff', '#23f56b', '#fbbf24', '#ec4899', '#60a5fa', '#ef4444'];
         const pieces = Array.from({ length: 120 }, () => ({
             x: window.innerWidth / 2, y: window.innerHeight / 3,
             vx: (Math.random() - 0.5) * 12, vy: (Math.random() - 1) * 14 - 6,
@@ -660,5 +748,6 @@
     }
 </script>
 <canvas id="confetti-canvas"></canvas>
+<%- include('partials/site-footer') %>
 </body>
 </html>

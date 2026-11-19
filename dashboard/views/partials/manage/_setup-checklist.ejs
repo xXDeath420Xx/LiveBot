@@ -1,0 +1,132 @@
+<%#
+  Setup checklist on the server overview: "N of M recommended setup steps done" with a link to the
+  exact setting for each missing step (core/setup-checklist.js via GET /api/guilds/:id/insight/checklist).
+  Hidden once everything is done, and per user per server with "Hide" (POST /api/me/preferences
+  { hideChecklist }); Settings > Appearance brings hidden checklists back. Self-contained (markup,
+  style, script) so both manage templates include it. Locals: guild, csrfToken.
+%>
+<section class="cf-checklist" id="cfChecklist" data-guild="<%= guild.id %>" aria-labelledby="cfChecklistTitle" hidden>
+    <header class="cf-checklist-head">
+        <div class="cf-checklist-heading">
+            <h2 class="cf-checklist-title" id="cfChecklistTitle">Setup checklist</h2>
+            <p class="cf-checklist-sub" id="cfChecklistSub"></p>
+        </div>
+        <div class="cf-checklist-progress" aria-hidden="true"><span id="cfChecklistBar"></span></div>
+        <button type="button" class="cf-checklist-hide" id="cfChecklistHide" title="Hide the checklist on this server">Hide</button>
+    </header>
+    <ol class="cf-checklist-list" id="cfChecklistTodo"></ol>
+    <details class="cf-checklist-done" id="cfChecklistDoneWrap" hidden>
+        <summary id="cfChecklistDoneLabel">Done</summary>
+        <ol class="cf-checklist-list" id="cfChecklistDone"></ol>
+    </details>
+</section>
+<style>
+    .cf-checklist {
+        margin: 0 0 var(--cf-6, 24px); padding: var(--cf-5, 20px); background: var(--cf-surface);
+        border: 1px solid var(--cf-border); border-radius: var(--cf-radius-lg, 12px);
+    }
+    .cf-checklist[hidden] { display: none; }
+    .cf-checklist-head { display: flex; align-items: center; gap: var(--cf-4, 16px); flex-wrap: wrap; margin-bottom: var(--cf-3, 12px); }
+    .cf-checklist-heading { flex: 1; min-width: 200px; }
+    .cf-checklist-title { margin: 0; font-size: var(--cf-text-lg, 17px); font-weight: 600; color: var(--cf-text); }
+    .cf-checklist-sub { margin: 2px 0 0; font-size: var(--cf-text-sm, 14px); color: var(--cf-text-3); font-variant-numeric: tabular-nums; }
+    .cf-checklist-progress { flex: 0 1 220px; height: 6px; border-radius: 999px; background: var(--cf-surface-3); overflow: hidden; }
+    .cf-checklist-progress span { display: block; height: 100%; width: 0; background: var(--cf-accent); border-radius: inherit; transition: width var(--cf-base, 180ms) ease; }
+    .cf-checklist-hide {
+        padding: 4px 10px; min-height: 28px; font: inherit; font-size: var(--cf-text-xs, 13px); font-weight: 500;
+        color: var(--cf-text-2); background: transparent; border: 1px solid var(--cf-border-strong); border-radius: var(--cf-radius, 8px); cursor: pointer;
+    }
+    .cf-checklist-hide:hover { color: var(--cf-text); background: var(--cf-surface-2); }
+    .cf-checklist-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: var(--cf-2, 8px); }
+    .cf-checklist-item {
+        display: flex; align-items: flex-start; gap: var(--cf-3, 12px); padding: var(--cf-3, 12px);
+        border: 1px solid var(--cf-border); border-radius: var(--cf-radius, 8px); background: var(--cf-bg);
+        color: inherit; text-decoration: none; transition: border-color var(--cf-fast, 120ms) ease, background-color var(--cf-fast, 120ms) ease;
+    }
+    a.cf-checklist-item:hover { border-color: var(--cf-accent-line); background: var(--cf-surface-2); }
+    .cf-checklist-mark {
+        flex: none; width: 20px; height: 20px; margin-top: 1px; border-radius: 50%;
+        border: 1.5px solid var(--cf-border-strong); display: inline-flex; align-items: center; justify-content: center; font-size: 10px;
+    }
+    .cf-checklist-item.is-done .cf-checklist-mark { border-color: var(--cf-success); background: color-mix(in srgb, var(--cf-success) 16%, transparent); color: var(--cf-success); }
+    .cf-checklist-text { flex: 1; min-width: 0; }
+    .cf-checklist-label { display: block; font-size: var(--cf-text-sm, 14px); font-weight: 600; color: var(--cf-text); }
+    .cf-checklist-why { display: block; margin-top: 2px; font-size: var(--cf-text-xs, 13px); color: var(--cf-text-3); line-height: 1.45; }
+    .cf-checklist-go { flex: none; align-self: center; font-size: var(--cf-text-xs, 13px); font-weight: 500; color: var(--cf-accent-fg); white-space: nowrap; }
+    .cf-checklist-done { margin-top: var(--cf-3, 12px); }
+    .cf-checklist-done > summary { cursor: pointer; font-size: var(--cf-text-sm, 14px); color: var(--cf-text-2); margin-bottom: var(--cf-2, 8px); }
+    .cf-checklist-done .cf-checklist-item { background: transparent; }
+    .cf-checklist-done .cf-checklist-label { font-weight: 500; color: var(--cf-text-2); }
+    @media (max-width: 600px) { .cf-checklist { padding: var(--cf-4, 16px); } .cf-checklist-progress { flex-basis: 100%; order: 3; } }
+</style>
+<script>
+(function () {
+    var box = document.getElementById('cfChecklist');
+    if (!box || box.dataset.ready) return;
+    box.dataset.ready = '1';
+    var gid = box.getAttribute('data-guild');
+    var csrf = (document.querySelector('meta[name="csrf-token"]') || {}).content || '<%= typeof csrfToken !== "undefined" ? csrfToken : "" %>';
+
+    function el(tag, cls, text) {
+        var n = document.createElement(tag);
+        if (cls) n.className = cls;
+        if (text != null) n.textContent = text;
+        return n;
+    }
+    function row(item) {
+        var href = '/manage/' + gid + '?page=' + encodeURIComponent(item.page) + (item.field ? '&field=' + encodeURIComponent(item.field) : '');
+        var node = el(item.done ? 'div' : 'a', 'cf-checklist-item' + (item.done ? ' is-done' : ''));
+        if (!item.done) node.href = href;
+        var mark = el('span', 'cf-checklist-mark');
+        mark.setAttribute('aria-hidden', 'true');
+        if (item.done) { var i = el('i', 'fas fa-check'); mark.appendChild(i); }
+        var text = el('span', 'cf-checklist-text');
+        text.appendChild(el('span', 'cf-checklist-label', item.label));
+        text.appendChild(el('span', 'cf-checklist-why', item.why));
+        node.appendChild(mark);
+        node.appendChild(text);
+        if (!item.done) node.appendChild(el('span', 'cf-checklist-go', 'Set up'));
+        var li = el('li');
+        li.appendChild(node);
+        return li;
+    }
+    function paint(data) {
+        if (!data || !data.total || data.complete || data.hidden) { box.hidden = true; return; }
+        var todo = data.items.filter(function (i) { return !i.done; });
+        var done = data.items.filter(function (i) { return i.done; });
+        document.getElementById('cfChecklistSub').textContent = data.done + ' of ' + data.total + ' recommended setup steps done';
+        document.getElementById('cfChecklistBar').style.width = Math.round((data.done / data.total) * 100) + '%';
+        var t = document.getElementById('cfChecklistTodo');
+        t.textContent = '';
+        todo.forEach(function (i) { t.appendChild(row(i)); });
+        var wrap = document.getElementById('cfChecklistDoneWrap');
+        var d = document.getElementById('cfChecklistDone');
+        d.textContent = '';
+        done.forEach(function (i) { d.appendChild(row(i)); });
+        wrap.hidden = !done.length;
+        document.getElementById('cfChecklistDoneLabel').textContent = done.length + ' done';
+        box.hidden = false;
+    }
+    fetch('/api/guilds/' + gid + '/insight/checklist', { credentials: 'same-origin', headers: { Accept: 'application/json' } })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(paint)
+        .catch(function () { box.hidden = true; });
+
+    document.getElementById('cfChecklistHide').addEventListener('click', function () {
+        var b = this;
+        b.disabled = true;
+        fetch('/api/me/preferences', {
+            method: 'POST', credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', Accept: 'application/json', 'X-CSRF-Token': csrf },
+            body: JSON.stringify({ hideChecklist: gid }),
+        }).then(function (r) {
+            if (!r.ok) return r.json().catch(function () { return {}; }).then(function (d) { throw new Error(d.error || ('Request failed (' + r.status + ')')); });
+            box.hidden = true;
+            if (window.showToast) window.showToast('Checklist hidden on this server. Settings > Appearance brings it back.', 'success');
+        }).catch(function (err) {
+            b.disabled = false;
+            if (window.showToast) window.showToast('Could not hide the checklist: ' + err.message, 'error');
+        });
+    });
+})();
+</script>

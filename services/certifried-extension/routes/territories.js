@@ -213,7 +213,7 @@ router.post('/:id/attack', async (req, res) => {
 
         await conn.commit();
 
-        logger.info('[Territories] War started', {
+        logger.debug('[Territories] War started', {
             warId: warResult.insertId,
             territoryId,
             attacker: membership.cartel_name,
@@ -516,7 +516,7 @@ export async function resolveEndedWars() {
                     [war.territory_id, winnerId]
                 );
 
-                logger.info('[Territories] Territory control changed', {
+                logger.debug('[Territories] Territory control changed', {
                     territoryId: war.territory_id,
                     newController: winnerId
                 });

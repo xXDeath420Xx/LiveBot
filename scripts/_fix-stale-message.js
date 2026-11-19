@@ -2,7 +2,7 @@ import 'dotenv/config';
 import pool from '../utils/db.js';
 import encryption from '../utils/encryption.js';
 
-const BOT_ID = '1438889625388060723';
+const BOT_ID = '1438889625388060723';  // bot-id-ok: no guild in scope — the script reads a channel id directly, so there is nothing to resolve from
 const CHANNEL_ID = '1474951572914966618';
 const MESSAGE_ID = '1481597646362906654';
 

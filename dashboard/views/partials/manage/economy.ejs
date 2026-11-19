@@ -1,517 +1,683 @@
-<div class="page-section">
+<%#
+  Economy: currency, earning and rules (one form, POST economy/config), a preview of /economy replies,
+  the shop (POST economy/shop/add|edit|delete, from the two modals below) and the richest members.
+  Built on the settings-row kit (cf-settings.css). Existing field names and ids are unchanged; the
+  fields added on 2026-11-18 are read by core/economy-manager.js (getEconomyConfig) and saved only
+  when the form sends them (has_full_form), so an older form posting here cannot reset them.
+%>
+<%
+const ec = economyConfig || {};
+// One set of defaults (core/economy-manager.js ECONOMY_DEFAULTS, H-668); the literals are only for a render without them.
+const ecD = (typeof economyDefaults !== 'undefined' && economyDefaults) || { currency_name: 'coins', currency_emoji: '💰', starting_balance: 1000, daily_amount: 500, weekly_amount: 3500, work_min_amount: 100, work_max_amount: 500, work_cooldown: 3600, crime_min_amount: 200, crime_max_amount: 1000, crime_success_rate: 0.6, crime_fine_multiplier: 0.5, rob_min_amount: 500, rob_max_amount: 5000, rob_success_rate: 0.4, rob_fine_amount: 1000 };
+// Never saved: /economy works on the defaults, so the switch shows on (saving it off really turns it off).
+const ecConfigured = (typeof economyConfigured !== 'undefined') ? !!economyConfigured : ec.enabled !== undefined;
+const ecCurrency = ec.currency_name || ecD.currency_name;
+const ecEmoji = ec.currency_emoji || ecD.currency_emoji;
+const ecPct = (v, d) => Math.round(((v === null || v === undefined || v === '') ? d : Number(v)) * 100);
+const ecVal = (v, d) => (v === null || v === undefined || v === '') ? d : v;
+const ecOn = (v, d) => (v === null || v === undefined) ? d : !!Number(v);
+const ecItems = shopItems || [];
+const ecTypeName = { role: 'Role', consumable: 'Consumable', collectible: 'Collectible', tool: 'Tool', decoration: 'Decoration' };
+const ecBotTop = (() => { try { return guild.members.me.roles.highest.position; } catch (e) { return Infinity; } })();
+const ecRoles = (roles || []).slice().sort((a, b) => (b.position || 0) - (a.position || 0));
+const ecRoleName = (id) => { const r = ecRoles.find(x => x.id === id); return r ? r.name : null; };
+%>
+<%- include('_game-kit') %>
+<style>
+    .ec-item-emoji { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: var(--cf-radius); background: var(--cf-surface-2); font-size: var(--cf-text-lg); line-height: 1; }
+    .ec-price { font-weight: 600; color: var(--cf-text); font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .ec-actions form { margin: 0; }
+    .ec-money { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 999px; background: var(--cf-surface-2); border: 1px solid var(--cf-border); font-weight: 600; color: var(--cf-text); font-variant-numeric: tabular-nums; }
+    .ec-money-row { display: flex; align-items: center; gap: var(--cf-3); flex-wrap: wrap; }
+    .ec-emoji-input { max-width: 7rem; }
+    .ec-num { font-weight: 600; color: var(--cf-text); font-variant-numeric: tabular-nums; }
+    #sellValueDiv[hidden] { display: none; }
+</style>
+
+<div class="page-section" id="economyPage">
     <div class="page-section-header">
         <div>
             <div class="page-section-title">
                 <i class="fas fa-coins"></i>
-                <span>Economy System</span>
+                <span>Economy</span>
             </div>
-            <div class="page-section-subtitle">
-                Manage your server's economy, currency, shop items, and leaderboards
-            </div>
+            <div class="page-section-subtitle">Members play with <code>/economy</code>; other games pay into the same wallet.</div>
         </div>
     </div>
 
-    <!-- Stats Overview -->
-    <div class="grid grid-cols-4" style="margin-bottom: var(--spacing-6);">
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Total Users</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary);"><%= economyStats?.total_users || 0 %></div>
-        </div>
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Total Currency</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-success);"><%= economyStats?.total_currency?.toLocaleString() || 0 %></div>
-        </div>
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Total Transactions</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-primary-400);"><%= economyStats?.total_transactions || 0 %></div>
-        </div>
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Shop Items</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-warning);"><%= shopItems?.length || 0 %></div>
-        </div>
-    </div>
+    <dl class="cf-kpis" aria-label="Economy at a glance">
+        <div class="cf-kpi"><dt>Members with a balance</dt><dd class="cf-kpi-value"><%= Number(economyStats?.total_users || 0).toLocaleString() %></dd></div>
+        <div class="cf-kpi"><dt>In circulation</dt><dd class="cf-kpi-value"><%= Number(economyStats?.total_currency || 0).toLocaleString() %></dd></div>
+        <div class="cf-kpi"><dt>Transactions</dt><dd class="cf-kpi-value"><%= Number(economyStats?.total_transactions || 0).toLocaleString() %></dd></div>
+        <div class="cf-kpi"><dt>Shop items</dt><dd class="cf-kpi-value"><%= ecItems.length %></dd></div>
+    </dl>
 
-    <!-- Economy Configuration -->
-    <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6); margin-bottom: var(--spacing-6);">
-        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
-            <i class="fas fa-cog"></i> Economy Configuration
-        </h3>
-        <form action="/manage/<%= guild.id %>/economy/config" method="POST">
-            <div class="grid grid-cols-2" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
+    <form action="/manage/<%= guild.id %>/economy/config" method="POST" id="ec-config-form">
+        <input type="hidden" name="has_full_form" value="1">
+
+        <section class="cf-section" aria-labelledby="ec-currency-title">
+            <header class="cf-section-head">
                 <div>
-                    <div style="display: flex; align-items: center; gap: var(--spacing-2); margin-bottom: var(--spacing-4);">
-                        <input type="checkbox" id="economyEnabled" name="enabled" class="form-check-input" style="width: 20px; height: 20px;" <%= economyConfig && economyConfig.enabled ? 'checked' : '' %>>
-                        <label for="economyEnabled" class="form-label" style="margin: 0; cursor: pointer;">Enable Economy System</label>
+                    <h2 class="cf-section-title" id="ec-currency-title">Currency</h2>
+                    <p class="cf-section-desc">Shown after every amount the bot posts.</p>
+                </div>
+            </header>
+            <div class="cf-rows">
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="economyEnabled">Economy</label>
+                        <p class="cf-row-desc" id="economyEnabled-desc">Members earn, spend and trade the server currency.<% if (!ecConfigured) { %> Not saved yet: the economy is on with the values shown here.<% } %></p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="checkbox" class="cf-switch" role="switch" id="economyEnabled" name="enabled" aria-describedby="economyEnabled-desc" data-feature-switch <%= (ecConfigured ? !!Number(ec.enabled) : true) ? 'checked' : '' %>>
                     </div>
                 </div>
-                <div>
-                    <label class="form-label">Currency Name</label>
-                    <input type="text" class="form-control" name="currency_name" value="<%= economyConfig?.currency_name || 'coins' %>" placeholder="coins">
-                    <div class="form-help">The name of your server currency</div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-economy-currency_name">Currency name</label>
+                        <p class="cf-row-desc">Plural, as in "250 coins". Up to 50 characters.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input id="f-economy-currency_name" type="text" class="form-control" name="currency_name" value="<%= ecCurrency %>" placeholder="coins" maxlength="50">
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-economy-currency_emoji">Currency icon</label>
+                        <p class="cf-row-desc">An emoji, or a custom one pasted as <code>&lt;:name:id&gt;</code>.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="ec-money-row">
+                            <input id="f-economy-currency_emoji" type="text" class="form-control ec-emoji-input" name="currency_emoji" value="<%= ecEmoji %>" placeholder="💰" maxlength="100">
+                            <span class="ec-money" aria-label="How an amount looks"><span id="ec-pv-money"><%= ecEmoji %> 1,250 <%= ecCurrency %></span></span>
+                        </div>
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-economy-starting_balance">Starting balance</label>
+                        <p class="cf-row-desc">What a member has the first time they use the economy.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input id="f-economy-starting_balance" type="number" class="form-control" name="starting_balance" value="<%= ecVal(ec.starting_balance, ecD.starting_balance) %>" min="0" max="1000000000">
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-economy-max_bank_capacity">Bank limit</label>
+                        <p class="cf-row-desc">The most a new member can keep in the bank. Leave empty for 10 times the starting balance, or 10,000 if that is 0.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input id="f-economy-max_bank_capacity" type="number" class="form-control" name="max_bank_capacity" value="<%= ec.max_bank_capacity ?? '' %>" min="0" placeholder="<%= Number(ecVal(ec.starting_balance, ecD.starting_balance)) * 10 || 10000 %>">
+                    </div>
                 </div>
             </div>
-            <div class="grid grid-cols-3" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
-                <div>
-                    <label class="form-label">Daily Reward Amount</label>
-                    <input type="number" class="form-control" name="daily_amount" value="<%= economyConfig?.daily_amount || 100 %>" min="0">
-                    <div class="form-help">Currency earned from /daily</div>
-                </div>
-                <div>
-                    <label class="form-label">Work Min Amount</label>
-                    <input type="number" class="form-control" name="work_min_amount" value="<%= economyConfig?.work_min_amount || 50 %>" min="0">
-                    <div class="form-help">Minimum work reward</div>
-                </div>
-                <div>
-                    <label class="form-label">Work Max Amount</label>
-                    <input type="number" class="form-control" name="work_max_amount" value="<%= economyConfig?.work_max_amount || 150 %>" min="0">
-                    <div class="form-help">Maximum work reward</div>
-                </div>
-            </div>
-            <div class="grid grid-cols-2" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
-                <div>
-                    <label class="form-label">Starting Balance</label>
-                    <input type="number" class="form-control" name="starting_balance" value="<%= economyConfig?.starting_balance || 1000 %>" min="0">
-                    <div class="form-help">Initial balance for new users</div>
-                </div>
-                <div>
-                    <label class="form-label">Default Bank Capacity</label>
-                    <input type="number" class="form-control" name="max_bank_capacity" value="<%= economyConfig?.max_bank_capacity || 10000 %>" min="0">
-                    <div class="form-help">Maximum bank storage capacity</div>
-                </div>
-            </div>
-            <button type="submit" class="btn btn-primary">
-                <i class="fas fa-save"></i>
-                <span>Save Configuration</span>
-            </button>
-        </form>
-    </div>
+        </section>
 
-    <!-- Shop Items Management -->
-    <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6); margin-bottom: var(--spacing-6);">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-4);">
-            <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin: 0;">
-                <i class="fas fa-store"></i> Shop Items
-            </h3>
-            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addShopItemModal">
-                <i class="fas fa-plus"></i>
-                <span>Add Item</span>
-            </button>
+        <section class="cf-section" aria-labelledby="ec-earn-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="ec-earn-title">Earning</h2>
+                    <p class="cf-section-desc">Rewards members claim with <code>/economy earn</code>.</p>
+                </div>
+            </header>
+            <div class="cf-rows">
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-economy-daily_amount">Daily reward</label>
+                        <p class="cf-row-desc"><code>/economy earn daily</code>, once a day, plus a bonus for a streak of days.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input id="f-economy-daily_amount" type="number" class="form-control" name="daily_amount" value="<%= ecVal(ec.daily_amount, ecD.daily_amount) %>" min="0" max="1000000000">
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-economy-weekly_amount">Weekly reward</label>
+                        <p class="cf-row-desc"><code>/economy earn weekly</code>, once every 7 days.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input id="f-economy-weekly_amount" type="number" class="form-control" name="weekly_amount" value="<%= ecVal(ec.weekly_amount, ecD.weekly_amount) %>" min="0" max="1000000000">
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-economy-work_min_amount">Work pays</label>
+                        <p class="cf-row-desc"><code>/economy earn work</code> pays a random amount between these two, plus 10 for every earlier shift (at most 500 more).</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="cf-inline">
+                            <input id="f-economy-work_min_amount" type="number" class="form-control" name="work_min_amount" value="<%= ecVal(ec.work_min_amount, ecD.work_min_amount) %>" min="0" aria-label="Work pays at least">
+                            <span class="cf-cell-muted">to</span>
+                            <input id="f-economy-work_max_amount" aria-label="Work pays at most" type="number" class="form-control" name="work_max_amount" value="<%= ecVal(ec.work_max_amount, ecD.work_max_amount) %>" min="0">
+                        </div>
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-economy-work_cooldown_minutes">Rest between work</label>
+                        <p class="cf-row-desc">How long a member waits before working again.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="cf-input-unit">
+                            <input id="f-economy-work_cooldown_minutes" type="number" class="form-control" name="work_cooldown_minutes" value="<%= Math.round(Number(ecVal(ec.work_cooldown, ecD.work_cooldown)) / 60) %>" min="0" max="10080">
+                            <span class="cf-unit">minutes</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="cf-section" aria-labelledby="ec-risk-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="ec-risk-title">Crime and robbing</h2>
+                    <p class="cf-section-desc">Risky ways to earn: <code>/economy earn crime</code> and <code>/economy social rob</code>. A failure costs a fine, never more than the wallet holds.</p>
+                </div>
+            </header>
+            <div class="cf-rows">
+                <div class="cf-rows-head">Crime</div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-economy-crime_min_amount">Crime pays</label>
+                        <p class="cf-row-desc">A random amount between these two when it works.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="cf-inline">
+                            <input id="f-economy-crime_min_amount" type="number" class="form-control" name="crime_min_amount" value="<%= ecVal(ec.crime_min_amount, ecD.crime_min_amount) %>" min="0" aria-label="Crime pays at least">
+                            <span class="cf-cell-muted">to</span>
+                            <input id="f-economy-crime_max_amount" aria-label="Crime pays at most" type="number" class="form-control" name="crime_max_amount" value="<%= ecVal(ec.crime_max_amount, ecD.crime_max_amount) %>" min="0">
+                        </div>
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-economy-crime_success_percent">Chance it works</label>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="cf-input-unit">
+                            <input id="f-economy-crime_success_percent" type="number" class="form-control" name="crime_success_percent" value="<%= ecPct(ec.crime_success_rate, ecD.crime_success_rate) %>" min="0" max="100">
+                            <span class="cf-unit">%</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-economy-crime_fine_multiplier">Fine when caught</label>
+                        <p class="cf-row-desc">Times the amount they tried to take. 0.5 is half of it.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="cf-input-unit">
+                            <input id="f-economy-crime_fine_multiplier" type="number" class="form-control" name="crime_fine_multiplier" value="<%= Number(ecVal(ec.crime_fine_multiplier, ecD.crime_fine_multiplier)) %>" min="0" max="9.99" step="0.05">
+                            <span class="cf-unit">times</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="cf-rows-head">Robbing another member</div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-economy-rob_min_amount">Steals</label>
+                        <p class="cf-row-desc">Between these two, capped by what the target has in their wallet.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="cf-inline">
+                            <input id="f-economy-rob_min_amount" type="number" class="form-control" name="rob_min_amount" value="<%= ecVal(ec.rob_min_amount, ecD.rob_min_amount) %>" min="0" aria-label="Steals at least">
+                            <span class="cf-cell-muted">to</span>
+                            <input id="f-economy-rob_max_amount" aria-label="Steals at most" type="number" class="form-control" name="rob_max_amount" value="<%= ecVal(ec.rob_max_amount, ecD.rob_max_amount) %>" min="0">
+                        </div>
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-economy-rob_success_percent">Chance it works</label>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="cf-input-unit">
+                            <input id="f-economy-rob_success_percent" type="number" class="form-control" name="rob_success_percent" value="<%= ecPct(ec.rob_success_rate, ecD.rob_success_rate) %>" min="0" max="100">
+                            <span class="cf-unit">%</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-economy-rob_fine_amount">Fine when caught</label>
+                    </div>
+                    <div class="cf-row-control">
+                        <input id="f-economy-rob_fine_amount" type="number" class="form-control" name="rob_fine_amount" value="<%= ecVal(ec.rob_fine_amount, ecD.rob_fine_amount) %>" min="0">
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="cf-section" aria-labelledby="ec-rules-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="ec-rules-title">Between members</h2>
+                </div>
+            </header>
+            <div class="cf-rows">
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-economy-allow_gifting">Members can send currency</label>
+                        <p class="cf-row-desc"><code>/economy bank transfer</code> to another member.</p>
+                    </div>
+                    <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="f-economy-allow_gifting" name="allow_gifting" <%= ecOn(ec.allow_gifting, true) ? 'checked' : '' %>></div>
+                </div>
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-economy-allow_trading">Members can trade currency</label>
+                        <p class="cf-row-desc">Currency in <code>/economy trade offer</code>. Item-only trades still work when this is off.</p>
+                    </div>
+                    <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="f-economy-allow_trading" name="allow_trading" <%= ecOn(ec.allow_trading, true) ? 'checked' : '' %>></div>
+                </div>
+            </div>
+        </section>
+
+        <div class="cf-form-actions">
+            <span class="cf-foot-note">Saves currency, earning, crime and member settings together.</span>
+            <button type="submit" class="btn btn-primary">Save</button>
         </div>
+    </form>
 
-        <% if (shopItems && shopItems.length > 0) { %>
-            <div class="table-container">
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>Item</th>
-                            <th class="mobile-hide">Type</th>
-                            <th>Price</th>
-                            <th class="mobile-hide">Stock</th>
-                            <th class="mobile-hide">Properties</th>
-                            <th class="text-end">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <% shopItems.forEach(item => { %>
-                            <tr>
-                                <td>
-                                    <div style="display: flex; align-items: center; gap: var(--spacing-3);">
-                                        <span style="font-size: var(--font-size-xl);"><%= item.item_emoji || '📦' %></span>
-                                        <div>
-                                            <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary);"><%= item.item_name %></div>
-                                            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);"><%= item.item_description || 'No description' %></div>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td class="mobile-hide">
-                                    <span class="badge badge-secondary" style="text-transform: capitalize;"><%= item.item_type %></span>
-                                </td>
-                                <td>
-                                    <strong style="color: var(--color-warning);"><%= item.price.toLocaleString() %></strong>
-                                    <span style="font-size: var(--font-size-xs); color: var(--color-text-muted);"><%= economyConfig?.currency_name || 'coins' %></span>
-                                </td>
-                                <td class="mobile-hide">
-                                    <% if (item.stock === null) { %>
-                                        <span class="badge badge-success">Unlimited</span>
-                                    <% } else { %>
-                                        <span class="badge badge-primary"><%= item.stock %></span>
-                                    <% } %>
-                                </td>
-                                <td class="mobile-hide">
-                                    <div style="display: flex; gap: var(--spacing-2); flex-wrap: wrap;">
-                                        <% if (item.tradeable) { %><span class="badge" style="background: var(--color-primary-500);">Tradeable</span><% } %>
-                                        <% if (item.sellable) { %><span class="badge" style="background: var(--color-warning);">Sellable</span><% } %>
-                                        <% if (item.usable) { %><span class="badge" style="background: var(--color-accent-purple);">Usable</span><% } %>
-                                    </div>
-                                </td>
-                                <td class="text-end">
-                                    <button class="btn btn-sm btn-secondary" onclick="editShopItem(<%= item.item_id %>, '<%= item.item_name.replace(/'/g, "\\'") %>', '<%= (item.item_description || '').replace(/'/g, "\\'") %>', '<%= item.item_emoji || '' %>', '<%= item.item_type %>', <%= item.price %>, <%= item.stock %>, <%= item.tradeable %>, <%= item.sellable %>, <%= item.sell_value || 0 %>, <%= item.usable %>)">
-                                        <i class="fas fa-pencil-alt"></i>
-                                        <span>Edit</span>
-                                    </button>
-                                    <form action="/manage/<%= guild.id %>/economy/shop/delete" method="POST" style="display: inline;">
-                                        <input type="hidden" name="item_id" value="<%= item.item_id %>">
-                                        <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Delete this item?')">
-                                            <i class="fas fa-trash"></i>
-                                        </button>
-                                    </form>
-                                </td>
-                            </tr>
-                        <% }); %>
-                    </tbody>
-                </table>
+    <section class="cf-section" aria-labelledby="ec-preview-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="ec-preview-title">In Discord</h2>
+                <p class="cf-section-desc">Follows the currency and daily reward above as you type.</p>
             </div>
+        </header>
+        <div class="cf-rows">
+            <div class="gk-preview gk-preview-grid">
+                <div class="cf-dc" aria-label="Preview: daily reward">
+                    <%- include('_gk-author', { gkUsed: '/economy earn daily' }) %>
+                    <div class="cf-dc-embed" style="--cf-dc-bar: #23a55a">
+                        <div class="cf-dc-title">💵 Daily Reward Claimed!</div>
+                        <div class="cf-dc-desc">You received <span data-ec-money="daily"></span>!</div>
+                        <div class="cf-dc-fields">
+                            <div class="cf-dc-field"><div class="cf-dc-fname">Base Amount</div><span data-ec-money="daily"></span></div>
+                            <div class="cf-dc-field"><div class="cf-dc-fname">Streak Bonus</div><span data-ec-money="0"></span></div>
+                            <div class="cf-dc-field"><div class="cf-dc-fname">🔥 Current Streak</div>1 days</div>
+                        </div>
+                        <div class="cf-dc-footer">Come back in 24 hours for your next reward!</div>
+                    </div>
+                </div>
+                <div class="cf-dc" aria-label="Preview: the shop">
+                    <%- include('_gk-author', { gkUsed: '/economy shop browse' }) %>
+                    <div class="cf-dc-embed" style="--cf-dc-bar: #00d9ff">
+                        <div class="cf-dc-title">🛒 Shop - All Items</div>
+                        <div class="cf-dc-desc">Browse available items and purchase with <span data-ec-currency></span>!</div>
+                        <% if (ecItems.length) { %>
+                        <div class="cf-dc-fields">
+                            <div class="cf-dc-field is-wide">
+                                <% ecItems.slice(0, 3).forEach(item => { %>
+                                <div><strong>ID: <%= item.item_id %></strong> <%= item.item_emoji || '📦' %> <strong><%= item.item_name %></strong></div>
+                                <div><%= item.item_description || 'No description' %></div>
+                                <div>Price: <span data-ec-money="<%= Number(item.price) || 0 %>"></span> | Stock: <%= Number(item.stock) === -1 || item.stock == null ? 'Unlimited' : item.stock + ' left' %><%= Number(item.max_per_user) > 0 ? ' [Max: ' + item.max_per_user + ']' : '' %></div>
+                                <br>
+                                <% }) %>
+                            </div>
+                        </div>
+                        <% } else { %>
+                        <div class="cf-dc-desc cf-dc-muted">The shop is empty.</div>
+                        <% } %>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="ec-shop-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="ec-shop-title">Shop <span class="gk-cmd-count"><%= ecItems.length %></span></h2>
+                <p class="cf-section-desc">Items members buy with <code>/economy shop buy</code>. A role item gives its role on purchase.</p>
+            </div>
+            <div class="cf-section-actions">
+                <% if (ecItems.length > 15) { %>
+                <label class="cf-search"><i class="fas fa-search" aria-hidden="true"></i><input type="search" class="form-control" placeholder="Search items" aria-label="Search shop items" id="ec-shop-search" data-no-savebar autocomplete="off"></label>
+                <% } %>
+                <button class="btn btn-primary btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#addShopItemModal">Add item</button>
+            </div>
+        </header>
+        <div class="cf-rows">
+        <% if (ecItems.length > 0) { %>
+            <div class="cf-list" id="ec-shop-list">
+            <% ecItems.forEach(item => {
+                const unlimited = item.stock === null || item.stock === undefined || Number(item.stock) === -1;
+                const roleName = item.role_id ? (ecRoleName(item.role_id) || 'a deleted role') : null;
+            %>
+                <div class="cf-list-item cf-list-item--multi" data-ec-text="<%= (String(item.item_name) + ' ' + (item.item_description || '') + ' ' + (item.item_type || '')).toLowerCase() %>">
+                    <span class="cf-list-lead"><span class="ec-item-emoji" aria-hidden="true"><%= item.item_emoji || '📦' %></span></span>
+                    <div class="cf-list-main">
+                        <p class="cf-list-title"><%= item.item_name %>
+                            <span class="cf-pill"><%= ecTypeName[item.item_type] || 'Item' %></span>
+                            <% if (item.is_active === 0) { %><span class="cf-pill is-warn">Hidden</span><% } %>
+                        </p>
+                        <% if (item.item_description) { %><p class="cf-list-body"><%= item.item_description %></p><% } %>
+                        <p class="cf-list-meta">
+                            <span class="ec-price"><%= ecEmoji %> <%= Number(item.price || 0).toLocaleString() %> <%= ecCurrency %></span>
+                            <span><%= unlimited ? 'Unlimited stock' : Number(item.stock).toLocaleString() + ' in stock' %></span>
+                            <span><%= Number(item.max_per_user) > 0 ? 'Up to ' + item.max_per_user + ' per member' : 'No limit per member' %></span>
+                            <% if (roleName) { %><span>Gives @<%= roleName %></span><% } %>
+                            <span><%= [item.tradeable ? 'tradeable' : null, item.sellable ? 'sells back for ' + Number(item.sell_value || 0).toLocaleString() : null, item.usable ? 'usable' : null].filter(Boolean).join(', ') || 'kept only' %></span>
+                        </p>
+                    </div>
+                    <div class="cf-list-actions ec-actions">
+                        <button type="button" class="btn btn-sm btn-secondary" data-item="<%= JSON.stringify(item) %>" onclick="editShopItem(this)">Edit</button>
+                        <form action="/manage/<%= guild.id %>/economy/shop/delete" method="POST">
+                            <input type="hidden" name="item_id" value="<%= item.item_id %>">
+                            <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Delete this item? Members who own it keep it.')">Delete</button>
+                        </form>
+                    </div>
+                </div>
+            <% }); %>
+            </div>
+            <div class="cf-state cf-state--compact" id="ec-shop-none" hidden><p class="cf-state-text">No items match.</p></div>
         <% } else { %>
-            <div class="empty-state">
-                <div class="empty-state-icon">
-                    <i class="fas fa-store"></i>
-                </div>
-                <div class="empty-state-title">No Shop Items</div>
-                <div class="empty-state-description">
-                    Create your first shop item to start your economy
-                </div>
-                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addShopItemModal">
-                    <i class="fas fa-plus"></i>
-                    <span>Add First Item</span>
-                </button>
+            <div class="cf-state cf-state--empty">
+                <p class="cf-state-title">The shop is empty</p>
+                <p class="cf-state-text">Add an item, such as a role members can buy.</p>
+                <button class="btn btn-secondary btn-sm" type="button" data-bs-toggle="modal" data-bs-target="#addShopItemModal">Add item</button>
             </div>
         <% } %>
-    </div>
+        </div>
+    </section>
 
-    <!-- Richest Users Leaderboard -->
-    <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6);">
-        <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
-            <i class="fas fa-crown"></i> Richest Users (Top 10)
-        </h3>
-
+    <section class="cf-section" aria-labelledby="ec-top-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="ec-top-title">Richest members</h2>
+                <p class="cf-section-desc">The top 10 by wallet and bank combined.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
         <% if (topUsers && topUsers.length > 0) { %>
-            <div class="table-container">
-                <table class="data-table">
+            <div class="cf-table-wrap">
+                <table class="cf-table cf-table--stack">
                     <thead>
                         <tr>
-                            <th style="width: 60px;">Rank</th>
-                            <th>User</th>
-                            <th class="text-end economy-detail-col">Wallet</th>
-                            <th class="text-end economy-detail-col">Bank</th>
-                            <th class="text-end">Total</th>
+                            <th scope="col">Rank</th>
+                            <th scope="col">Member</th>
+                            <th scope="col" class="cf-cell-end">Wallet</th>
+                            <th scope="col" class="cf-cell-end">Bank</th>
+                            <th scope="col" class="cf-cell-end">Total</th>
                         </tr>
                     </thead>
                     <tbody>
                         <% topUsers.forEach((user, index) => {
-                            const total = user.wallet + user.bank;
+                            const total = (Number(user.wallet) || 0) + (Number(user.bank) || 0);
                         %>
                             <tr>
-                                <td>
-                                    <div style="font-size: var(--font-size-lg);">
-                                        <% if (index === 0) { %>🥇
-                                        <% } else if (index === 1) { %>🥈
-                                        <% } else if (index === 2) { %>🥉
-                                        <% } else { %>
-                                            <span style="font-weight: var(--font-weight-semibold); color: var(--color-text-muted);">#<%= index + 1 %></span>
-                                        <% } %>
-                                    </div>
-                                </td>
-                                <td>
-                                    <code style="font-size: var(--font-size-sm); color: var(--color-text-secondary);"><%= user.user_id %></code>
-                                </td>
-                                <td class="text-end economy-detail-col">
-                                    <span style="color: var(--color-success);"><%= user.wallet.toLocaleString() %></span>
-                                </td>
-                                <td class="text-end economy-detail-col">
-                                    <span style="color: var(--color-primary-400);"><%= user.bank.toLocaleString() %></span>
-                                </td>
-                                <td class="text-end">
-                                    <strong style="color: var(--color-warning); font-size: var(--font-size-base);"><%= total.toLocaleString() %></strong>
-                                </td>
+                                <td data-label="Rank"><span class="ec-num"><%= index + 1 %></span></td>
+                                <td data-label="Member"><%- include('_user-cell', { cfUser: null, cfUserId: user.user_id, cfUserName: user.username || null }) %></td>
+                                <td data-label="Wallet" class="cf-cell-end"><%= Number(user.wallet || 0).toLocaleString() %></td>
+                                <td data-label="Bank" class="cf-cell-end"><%= Number(user.bank || 0).toLocaleString() %></td>
+                                <td data-label="Total" class="cf-cell-end"><span class="ec-num"><%= total.toLocaleString() %></span></td>
                             </tr>
                         <% }); %>
                     </tbody>
                 </table>
             </div>
         <% } else { %>
-            <div style="background: var(--color-dark-700); border: 1px solid var(--color-dark-400); border-radius: var(--radius-md); padding: var(--spacing-8); text-align: center;">
-                <div style="font-size: var(--font-size-base); color: var(--color-text-muted);">
-                    No economy data yet
-                </div>
-            </div>
+            <%- include('../kit/_state', { kind: 'empty', title: 'No balances yet', text: 'Members appear here once they start earning.', id: null, boxed: false, compact: false }) %>
         <% } %>
-    </div>
+        </div>
+    </section>
+
+    <%- include('_game-commands', { gkCommands: [{ cmd: 'economy', groups: ['earn', 'bank', 'social', 'shop', 'pet', 'heist'] }], gkCmdNote: 'Gambling and trades have their own pages. Commands marked Staff need a moderator or admin.' }) %>
 </div>
 
-<!-- Add Shop Item Modal -->
-<div class="modal fade" id="addShopItemModal" tabindex="-1">
+<%# Role options shared by both shop dialogs: roles the bot cannot give are shown but cannot be picked. %>
+<% const ecRoleOptions = (selected) => ecRoles.map(r => {
+    const above = (r.position || 0) >= ecBotTop;
+    return `<option value="${r.id}"${above ? ' disabled' : ''}${selected === r.id ? ' selected' : ''}>${String(r.name).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))}${above ? ' (above the bot)' : ''}</option>`;
+}).join(''); %>
+
+<!-- Add shop item -->
+<div class="modal fade" id="addShopItemModal" tabindex="-1" aria-labelledby="ec-add-title">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Add Shop Item</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <h5 class="modal-title" id="ec-add-title">Add a shop item</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <form action="/manage/<%= guild.id %>/economy/shop/add" method="POST">
                 <div class="modal-body">
-                    <div style="margin-bottom: var(--spacing-4);">
-                        <label class="form-label">Item Name *</label>
-                        <input type="text" class="form-control" name="item_name" required placeholder="Legendary Sword">
+                    <div class="mb-3">
+                        <label class="form-label" for="f-economy-item_name">Name</label>
+                        <input id="f-economy-item_name" type="text" class="form-control" name="item_name" required maxlength="100" placeholder="Golden ticket">
                     </div>
-                    <div style="margin-bottom: var(--spacing-4);">
-                        <label class="form-label">Description</label>
-                        <textarea class="form-control" name="item_description" rows="2" placeholder="A powerful weapon..."></textarea>
+                    <div class="mb-3">
+                        <label class="form-label" for="f-economy-item_description">Description</label>
+                        <textarea id="f-economy-item_description" class="form-control" name="item_description" rows="2" maxlength="500" placeholder="What it does or why to buy it"></textarea>
                     </div>
-                    <div class="grid grid-cols-2" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
-                        <div>
-                            <label class="form-label">Emoji</label>
-                            <input type="text" class="form-control" name="item_emoji" placeholder="🗡️">
+                    <div class="row g-3 mb-3">
+                        <div class="col-sm-6">
+                            <label class="form-label" for="f-economy-item_emoji">Emoji</label>
+                            <input id="f-economy-item_emoji" type="text" class="form-control" name="item_emoji" maxlength="100" placeholder="Optional">
                         </div>
-                        <div>
-                            <label class="form-label">Type *</label>
-                            <select class="form-select" name="item_type" required>
+                        <div class="col-sm-6">
+                            <label class="form-label" for="f-economy-item_type">Type</label>
+                            <select id="f-economy-item_type" class="form-select" name="item_type" required data-ec-type="add">
                                 <option value="consumable">Consumable</option>
                                 <option value="collectible">Collectible</option>
                                 <option value="tool">Tool</option>
                                 <option value="role">Role</option>
-                                <option value="other">Other</option>
+                                <option value="decoration">Decoration / other</option>
                             </select>
                         </div>
                     </div>
-                    <div class="grid grid-cols-2" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
-                        <div>
-                            <label class="form-label">Price *</label>
-                            <input type="number" class="form-control" name="price" min="0" required placeholder="1000">
+                    <div class="mb-3" data-ec-role-field="add" hidden>
+                        <label class="form-label" for="f-economy-role_id">Role given</label>
+                        <select id="f-economy-role_id" class="form-select" name="role_id">
+                            <option value="">Choose a role</option>
+                            <%- ecRoleOptions(null) %>
+                        </select>
+                        <div class="form-text">The bot gives this role when the item is bought.</div>
+                    </div>
+                    <div class="row g-3 mb-3">
+                        <div class="col-sm-4">
+                            <label class="form-label" for="f-economy-price">Price</label>
+                            <input id="f-economy-price" type="number" class="form-control" name="price" min="0" required placeholder="1000">
                         </div>
-                        <div>
-                            <label class="form-label">Stock (blank = unlimited)</label>
-                            <input type="number" class="form-control" name="stock" min="0" placeholder="Leave empty">
+                        <div class="col-sm-4">
+                            <label class="form-label" for="f-economy-stock">Stock</label>
+                            <input id="f-economy-stock" type="number" class="form-control" name="stock" min="0" placeholder="Unlimited">
+                        </div>
+                        <div class="col-sm-4">
+                            <label class="form-label" for="f-economy-max_per_user">Per member</label>
+                            <input id="f-economy-max_per_user" type="number" class="form-control" name="max_per_user" min="1" placeholder="No limit">
                         </div>
                     </div>
-                    <div style="margin-bottom: var(--spacing-4);">
-                        <div style="display: flex; align-items: center; gap: var(--spacing-2); margin-bottom: var(--spacing-2);">
-                            <input type="checkbox" id="itemTradeable" name="tradeable" class="form-check-input" style="width: 18px; height: 18px;" checked>
-                            <label for="itemTradeable" style="margin: 0; cursor: pointer; color: var(--color-text-primary);">Tradeable</label>
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input type="checkbox" id="itemTradeable" name="tradeable" class="form-check-input" checked>
+                            <label for="itemTradeable" class="form-check-label">Can be traded between members</label>
                         </div>
-                        <div style="display: flex; align-items: center; gap: var(--spacing-2); margin-bottom: var(--spacing-2);">
-                            <input type="checkbox" id="itemSellable" name="sellable" class="form-check-input" style="width: 18px; height: 18px;">
-                            <label for="itemSellable" style="margin: 0; cursor: pointer; color: var(--color-text-primary);">Sellable</label>
+                        <div class="form-check">
+                            <input type="checkbox" id="itemSellable" name="sellable" class="form-check-input">
+                            <label for="itemSellable" class="form-check-label">Can be sold back to the shop</label>
                         </div>
-                        <div style="display: flex; align-items: center; gap: var(--spacing-2);">
-                            <input type="checkbox" id="itemUsable" name="usable" class="form-check-input" style="width: 18px; height: 18px;">
-                            <label for="itemUsable" style="margin: 0; cursor: pointer; color: var(--color-text-primary);">Usable</label>
+                        <div class="form-check">
+                            <input type="checkbox" id="itemUsable" name="usable" class="form-check-input">
+                            <label for="itemUsable" class="form-check-label">Can be used with <code>/economy shop use</code></label>
                         </div>
                     </div>
-                    <div id="sellValueDiv" style="display: none;">
-                        <label class="form-label">Sell Value</label>
+                    <div id="sellValueDiv" hidden>
+                        <label class="form-label" for="sellValue">Sells back for</label>
                         <input type="number" class="form-control" id="sellValue" name="sell_value" min="0" value="0">
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Add Item</button>
+                    <button type="submit" class="btn btn-primary">Add item</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
 
-<!-- Edit Shop Item Modal -->
-<div class="modal fade" id="editShopItemModal" tabindex="-1">
+<!-- Edit shop item -->
+<div class="modal fade" id="editShopItemModal" tabindex="-1" aria-labelledby="ec-edit-title">
     <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Edit Shop Item</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <h5 class="modal-title" id="ec-edit-title">Edit shop item</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <form action="/manage/<%= guild.id %>/economy/shop/edit" method="POST">
                 <input type="hidden" id="editItemId" name="item_id">
                 <div class="modal-body">
-                    <div style="margin-bottom: var(--spacing-4);">
-                        <label class="form-label">Item Name *</label>
-                        <input type="text" class="form-control" id="editItemName" name="item_name" required>
+                    <div class="mb-3">
+                        <label class="form-label" for="editItemName">Name</label>
+                        <input type="text" class="form-control" id="editItemName" name="item_name" required maxlength="100">
                     </div>
-                    <div style="margin-bottom: var(--spacing-4);">
-                        <label class="form-label">Description</label>
-                        <textarea class="form-control" id="editItemDescription" name="item_description" rows="2"></textarea>
+                    <div class="mb-3">
+                        <label class="form-label" for="editItemDescription">Description</label>
+                        <textarea class="form-control" id="editItemDescription" name="item_description" rows="2" maxlength="500"></textarea>
                     </div>
-                    <div class="grid grid-cols-2" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
-                        <div>
-                            <label class="form-label">Emoji</label>
-                            <input type="text" class="form-control" id="editItemEmoji" name="item_emoji">
+                    <div class="row g-3 mb-3">
+                        <div class="col-sm-6">
+                            <label class="form-label" for="editItemEmoji">Emoji</label>
+                            <input type="text" class="form-control" id="editItemEmoji" name="item_emoji" maxlength="100">
                         </div>
-                        <div>
-                            <label class="form-label">Type *</label>
-                            <select class="form-select" id="editItemType" name="item_type" required>
+                        <div class="col-sm-6">
+                            <label class="form-label" for="editItemType">Type</label>
+                            <select class="form-select" id="editItemType" name="item_type" required data-ec-type="edit">
                                 <option value="consumable">Consumable</option>
                                 <option value="collectible">Collectible</option>
                                 <option value="tool">Tool</option>
                                 <option value="role">Role</option>
-                                <option value="other">Other</option>
+                                <option value="decoration">Decoration / other</option>
                             </select>
                         </div>
                     </div>
-                    <div class="grid grid-cols-2" style="gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
-                        <div>
-                            <label class="form-label">Price *</label>
+                    <div class="mb-3" data-ec-role-field="edit" hidden>
+                        <label class="form-label" for="editItemRole">Role given</label>
+                        <select class="form-select" id="editItemRole" name="role_id">
+                            <option value="">Choose a role</option>
+                            <%- ecRoleOptions(null) %>
+                        </select>
+                    </div>
+                    <div class="row g-3 mb-3">
+                        <div class="col-sm-4">
+                            <label class="form-label" for="editItemPrice">Price</label>
                             <input type="number" class="form-control" id="editItemPrice" name="price" min="0" required>
                         </div>
-                        <div>
-                            <label class="form-label">Stock (blank = unlimited)</label>
-                            <input type="number" class="form-control" id="editItemStock" name="stock" min="0">
+                        <div class="col-sm-4">
+                            <label class="form-label" for="editItemStock">Stock</label>
+                            <input type="number" class="form-control" id="editItemStock" name="stock" min="0" placeholder="Unlimited">
+                        </div>
+                        <div class="col-sm-4">
+                            <label class="form-label" for="editItemMaxPerUser">Per member</label>
+                            <input type="number" class="form-control" id="editItemMaxPerUser" name="max_per_user" min="1" placeholder="No limit">
                         </div>
                     </div>
-                    <div style="margin-bottom: var(--spacing-4);">
-                        <div style="display: flex; align-items: center; gap: var(--spacing-2); margin-bottom: var(--spacing-2);">
-                            <input type="checkbox" id="editItemTradeable" name="tradeable" class="form-check-input" style="width: 18px; height: 18px;">
-                            <label for="editItemTradeable" style="margin: 0; cursor: pointer; color: var(--color-text-primary);">Tradeable</label>
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input type="checkbox" id="editItemTradeable" name="tradeable" class="form-check-input">
+                            <label for="editItemTradeable" class="form-check-label">Can be traded between members</label>
                         </div>
-                        <div style="display: flex; align-items: center; gap: var(--spacing-2); margin-bottom: var(--spacing-2);">
-                            <input type="checkbox" id="editItemSellable" name="sellable" class="form-check-input" style="width: 18px; height: 18px;">
-                            <label for="editItemSellable" style="margin: 0; cursor: pointer; color: var(--color-text-primary);">Sellable</label>
+                        <div class="form-check">
+                            <input type="checkbox" id="editItemSellable" name="sellable" class="form-check-input">
+                            <label for="editItemSellable" class="form-check-label">Can be sold back to the shop</label>
                         </div>
-                        <div style="display: flex; align-items: center; gap: var(--spacing-2);">
-                            <input type="checkbox" id="editItemUsable" name="usable" class="form-check-input" style="width: 18px; height: 18px;">
-                            <label for="editItemUsable" style="margin: 0; cursor: pointer; color: var(--color-text-primary);">Usable</label>
+                        <div class="form-check">
+                            <input type="checkbox" id="editItemUsable" name="usable" class="form-check-input">
+                            <label for="editItemUsable" class="form-check-label">Can be used with <code>/economy shop use</code></label>
                         </div>
+                        <div class="form-check">
+                            <input type="checkbox" id="editItemActive" name="is_active" class="form-check-input">
+                            <label for="editItemActive" class="form-check-label">For sale (untick to hide it from the shop)</label>
+                        </div>
+                        <input type="hidden" name="has_active" value="1">
                     </div>
-                    <div>
-                        <label class="form-label">Sell Value</label>
+                    <div data-ec-sell-edit>
+                        <label class="form-label" for="editSellValue">Sells back for</label>
                         <input type="number" class="form-control" id="editSellValue" name="sell_value" min="0" value="0">
                     </div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Save Changes</button>
+                    <button type="submit" class="btn btn-primary">Save changes</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
 
-<style>
-.table-container {
-    overflow-x: auto;
-    border: 1px solid var(--color-dark-400);
-    border-radius: var(--radius-lg);
-}
-
-.data-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-.data-table thead {
-    background: var(--color-dark-600);
-    border-bottom: 2px solid var(--color-dark-400);
-}
-
-.data-table th {
-    padding: var(--spacing-4);
-    text-align: left;
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-
-.data-table td {
-    padding: var(--spacing-4);
-    border-bottom: 1px solid var(--color-dark-400);
-    color: var(--color-text-secondary);
-}
-
-.data-table tbody tr {
-    transition: background var(--transition-base);
-}
-
-.data-table tbody tr:hover {
-    background: var(--color-dark-700);
-}
-
-.data-table tbody tr:last-child td {
-    border-bottom: none;
-}
-
-.empty-state {
-    text-align: center;
-    padding: var(--spacing-12) var(--spacing-8);
-}
-
-.empty-state-icon {
-    font-size: 4rem;
-    color: var(--color-text-muted);
-    margin-bottom: var(--spacing-4);
-}
-
-.empty-state-title {
-    font-size: var(--font-size-xl);
-    font-weight: var(--font-weight-bold);
-    color: var(--color-text-primary);
-    margin-bottom: var(--spacing-2);
-}
-
-.empty-state-description {
-    font-size: var(--font-size-base);
-    color: var(--color-text-secondary);
-    margin-bottom: var(--spacing-6);
-}
-
-.text-end {
-    text-align: right;
-}
-
-/* Mobile Responsiveness */
-@media (max-width: 768px) {
-    /* Hide low-priority columns on mobile */
-    .mobile-hide { display: none !important; }
-
-    /* Touch-friendly inputs */
-    select, input, button { min-height: 44px; }
-
-    /* Table readability */
-    .data-table { font-size: 0.875rem; }
-    .data-table th,
-    .data-table td { padding: var(--spacing-2) var(--spacing-3) !important; }
-
-    /* Stack form grids */
-    .grid.grid-cols-2,
-    .grid.grid-cols-3 {
-        grid-template-columns: 1fr !important;
-    }
-
-    /* Full-width buttons */
-    .btn-primary { width: 100%; justify-content: center; }
-
-    /* Leaderboard: hide wallet/bank, keep rank + user + total */
-    .economy-detail-col { display: none !important; }
-
-    /* Shop table: stack actions */
-    .data-table .text-end .btn { margin-bottom: var(--spacing-1); }
-}
-</style>
-
 <script>
-document.addEventListener('DOMContentLoaded', () => {
-    // Toggle sell value field visibility
-    const sellableCheckbox = document.getElementById('itemSellable');
-    const sellValueDiv = document.getElementById('sellValueDiv');
+(function () {
+    var $ = function (id) { return document.getElementById(id); };
 
-    if (sellableCheckbox && sellValueDiv) {
-        sellableCheckbox.addEventListener('change', function() {
-            sellValueDiv.style.display = this.checked ? 'block' : 'none';
+    // Amounts in the previews follow the currency fields as they are typed.
+    function money(n) {
+        var emoji = $('f-economy-currency_emoji').value.trim() || '💰';
+        var name = $('f-economy-currency_name').value.trim() || 'coins';
+        return emoji + ' ' + Number(n || 0).toLocaleString() + ' ' + name;
+    }
+    function drawMoney() {
+        $('ec-pv-money').textContent = money(1250);
+        var daily = Number($('f-economy-daily_amount').value) || 0;
+        document.querySelectorAll('[data-ec-money]').forEach(function (n) {
+            var v = n.getAttribute('data-ec-money');
+            n.textContent = money(v === 'daily' ? daily : Number(v));
+        });
+        document.querySelectorAll('[data-ec-currency]').forEach(function (n) {
+            n.textContent = ($('f-economy-currency_emoji').value.trim() || '💰') + ' ' + ($('f-economy-currency_name').value.trim() || 'coins');
         });
     }
-});
+    ['f-economy-currency_emoji', 'f-economy-currency_name', 'f-economy-daily_amount'].forEach(function (id) { $(id).addEventListener('input', drawMoney); });
+    drawMoney();
 
-// Edit shop item function
-function editShopItem(id, name, desc, emoji, type, price, stock, tradeable, sellable, sellValue, usable) {
-    document.getElementById('editItemId').value = id;
-    document.getElementById('editItemName').value = name;
-    document.getElementById('editItemDescription').value = desc;
-    document.getElementById('editItemEmoji').value = emoji;
-    document.getElementById('editItemType').value = type;
-    document.getElementById('editItemPrice').value = price;
-    document.getElementById('editItemStock').value = stock || '';
-    document.getElementById('editItemTradeable').checked = tradeable;
-    document.getElementById('editItemSellable').checked = sellable;
-    document.getElementById('editItemUsable').checked = usable;
-    document.getElementById('editSellValue').value = sellValue || 0;
-    new bootstrap.Modal(document.getElementById('editShopItemModal')).show();
-}
+    // The role picker only matters for role items; the sell price only for items that sell back.
+    function syncType(kind) {
+        var type = document.querySelector('[data-ec-type="' + kind + '"]');
+        var field = document.querySelector('[data-ec-role-field="' + kind + '"]');
+        var isRole = type.value === 'role';
+        field.hidden = !isRole;
+        field.querySelector('select').required = isRole;
+    }
+    document.querySelectorAll('[data-ec-type]').forEach(function (s) {
+        s.addEventListener('change', function () { syncType(s.getAttribute('data-ec-type')); });
+        syncType(s.getAttribute('data-ec-type'));
+    });
+    $('itemSellable').addEventListener('change', function () { $('sellValueDiv').hidden = !this.checked; });
+    $('editItemSellable').addEventListener('change', function () { document.querySelector('[data-ec-sell-edit]').hidden = !this.checked; });
+
+    // Shop search (long shops only).
+    var search = $('ec-shop-search');
+    if (search) search.addEventListener('input', function () {
+        var q = search.value.trim().toLowerCase(), shown = 0;
+        document.querySelectorAll('#ec-shop-list > .cf-list-item').forEach(function (row) {
+            var hit = !q || row.getAttribute('data-ec-text').indexOf(q) !== -1;
+            row.hidden = !hit;
+            if (hit) shown++;
+        });
+        $('ec-shop-none').hidden = shown > 0;
+    });
+
+    // Edit: the row's button carries the item as JSON (HTML-escaped by EJS), so names and
+    // descriptions with quotes or line breaks can't break the handler.
+    window.editShopItem = function (button) {
+        var item = JSON.parse(button.dataset.item);
+        $('editItemId').value = item.item_id;
+        $('editItemName').value = item.item_name || '';
+        $('editItemDescription').value = item.item_description || '';
+        $('editItemEmoji').value = item.item_emoji || '';
+        $('editItemType').value = item.item_type || 'consumable';
+        $('editItemRole').value = item.role_id || '';
+        $('editItemPrice').value = item.price;
+        $('editItemStock').value = Number(item.stock) >= 0 ? item.stock : '';
+        $('editItemMaxPerUser').value = Number(item.max_per_user) > 0 ? item.max_per_user : '';
+        $('editItemTradeable').checked = !!item.tradeable;
+        $('editItemSellable').checked = !!item.sellable;
+        $('editItemUsable').checked = !!item.usable;
+        $('editItemActive').checked = item.is_active === undefined || item.is_active === null ? true : !!Number(item.is_active);
+        $('editSellValue').value = item.sell_value || 0;
+        document.querySelector('[data-ec-sell-edit]').hidden = !item.sellable;
+        syncType('edit');
+        new bootstrap.Modal($('editShopItemModal')).show();
+    };
+})();
 </script>

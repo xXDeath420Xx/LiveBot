@@ -1,6 +1,8 @@
 import { EmbedBuilder } from 'discord.js';
 import pool from '../../../utils/db.js';
 import logger from '../../../utils/logger.js';
+import { themeColor } from '../../../core/guild-theme.js';
+import { invalidateRaidConfig, getActive as getActiveLockdown } from '../../../core/raid-lockdown.js';
 
 export async function execute(interaction) {
     const subcommand = interaction.options.getSubcommand();
@@ -45,9 +47,21 @@ async function handleEnable(interaction, guildId) {
          ON DUPLICATE KEY UPDATE enabled = TRUE`,
         [guildId]
     );
+    invalidateRaidConfig(guildId);
 
+    // The settings it now runs with, read back rather than hard-coded (the old text promised a mute and a
+    // purge that the column defaults, alert only and no purge, never gave; H-660).
+    const [[c]] = await pool.execute('SELECT * FROM raid_detection_config WHERE guild_id = ?', [guildId]);
+    const timeout = `time out raiders for ${c?.mute_duration_minutes ?? 60} minutes`;
+    const actionText = { mute: timeout, lockdown: timeout, kick: 'kick raiders', ban: 'ban raiders', alert: 'alert only, nobody is actioned' }[c?.action] || String(c?.action || 'alert');
     await interaction.reply({
-        content: '🚨 **Raid Protection Enabled**\n\nThe server is now protected against coordinated mass-join raids.\n\n**Default Settings:**\n• Threshold: 10 joins in 30 seconds\n• New account age: 24 hours\n• Action: Mute + Purge messages\n\nUse `/protection raid config` to customize settings.\nUse `/protection raid status` to view current configuration.',
+        content: '🚨 **Raid Protection Enabled**\n\nThe server is now protected against coordinated mass-join raids.\n\n**Current settings:**\n'
+            + `• Threshold: ${c?.join_threshold ?? 10} joins in ${c?.join_timeframe_seconds ?? 30} seconds\n`
+            + `• New account age: ${c?.new_account_age_hours ?? 24} hours\n`
+            + `• Action: ${actionText}\n`
+            + `• Purge messages: ${c?.purge_messages ? 'on' : 'off'}\n\n`
+            + 'Use `/protection raid config` to change them, or the Advanced protection page on the dashboard.\n'
+            + 'To block every new join during a raid, use `/lockdown` (it can start automatically on a join spike).',
         ephemeral: true
     });
 
@@ -59,6 +73,7 @@ async function handleDisable(interaction, guildId) {
         `UPDATE raid_detection_config SET enabled = FALSE WHERE guild_id = ?`,
         [guildId]
     );
+    invalidateRaidConfig(guildId);
 
     await interaction.reply({
         content: '⚠️ **Raid Protection Disabled**\n\nThe server is no longer protected against raids. Use `/protection raid enable` to re-enable.',
@@ -134,9 +149,10 @@ async function handleConfig(interaction, guildId) {
         `UPDATE raid_detection_config SET ${updates.join(', ')} WHERE guild_id = ?`,
         values
     );
+    invalidateRaidConfig(guildId);
 
     const embed = new EmbedBuilder()
-        .setColor(0x2ecc71)
+        .setColor(themeColor(interaction.guildId, 'success'))
         .setTitle('✅ Raid Protection Configuration Updated')
         .setDescription('The following settings have been updated:');
 
@@ -162,7 +178,8 @@ async function handleStatus(interaction, guildId) {
 
     if (rows.length === 0 || !rows[0].enabled) {
         return await interaction.reply({
-            content: '⚠️ Raid Protection is currently **disabled**.\n\nUse `/protection raid enable` to enable protection.',
+            content: '⚠️ Raid Protection is currently **disabled**.\n\nUse `/protection raid enable` to enable protection.'
+                + ((await getActiveLockdown(guildId)) ? '\n\n🚨 **A join lockdown is running** — see `/lockdown status`.' : '\nThe join lockdown, its auto-trigger and same-name floods are under `/lockdown`.'),
             ephemeral: true
         });
     }
@@ -196,6 +213,15 @@ async function handleStatus(interaction, guildId) {
         .setFooter({ text: 'Use /protection raid config to modify settings' })
         .setTimestamp();
 
+    const lockdown = await getActiveLockdown(guildId);
+    embed.addFields({
+        name: 'Join Lockdown',
+        value: lockdown
+            ? `🚨 Running until <t:${Math.floor(new Date(lockdown.ends_at).getTime() / 1000)}:R> (${lockdown.action}) — \`/lockdown status\``
+            : 'Off — `/lockdown start`, the auto-trigger and same-name floods are under `/lockdown`',
+        inline: false
+    });
+
     if (activeRaid) {
         embed.addFields({
             name: 'Active Raid Info',
@@ -227,7 +253,7 @@ async function handleHistory(interaction, guildId) {
     }).join('\n\n');
 
     const embed = new EmbedBuilder()
-        .setColor(0x3498db)
+        .setColor(themeColor(interaction.guildId, 'primary'))
         .setTitle('📋 Raid Incident History')
         .setDescription(incidents)
         .setFooter({ text: `Showing last ${rows.length} incidents` });

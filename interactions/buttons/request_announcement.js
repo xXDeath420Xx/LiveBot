@@ -20,7 +20,7 @@ export async function handleRequestAnnouncementButton(interaction) {
         const platformInput = new TextInputBuilder()
             .setCustomId('stream_platform')
             .setLabel('Streaming Platform')
-            .setPlaceholder('e.g., Twitch, Kick, YouTube, Facebook Gaming')
+            .setPlaceholder('e.g., Twitch, Kick, YouTube, TikTok')
             .setStyle(TextInputStyle.Short)
             .setRequired(true)
             .setMaxLength(50);

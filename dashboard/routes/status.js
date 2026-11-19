@@ -8,6 +8,8 @@ import { promisify } from 'util';
 import https from 'https';
 import http from 'http';
 import { apiCheckSuperAdmin } from '../middleware/auth.js';
+import { isSuperAdmin } from '../../utils/constants.js';
+import { loadIncidents } from '../services/status-incidents.js';
 import {
     getPM2Processes,
     getPM2Logs,
@@ -261,7 +263,7 @@ router.get('/server-stats', apiCheckSuperAdmin, async (req, res) => {
     }
 
     // Check API health (basic check - could be enhanced)
-    stats.api.healthy = 4; // Assuming Twitch, YouTube, Kick, Trovo
+    stats.api.healthy = 3; // Assuming Twitch, YouTube, Kick
 
     res.json(stats);
   } catch (error) {
@@ -309,8 +311,7 @@ router.get('/api-health', async (req, res) => {
       { name: 'Twitch', url: 'https://id.twitch.tv/oauth2/validate', icon: 'fab fa-twitch', color: '#9146FF' },
       { name: 'Kick', url: 'https://kick.com/', icon: 'kick', color: '#53FC18' },
       { name: 'YouTube', url: 'https://www.youtube.com/favicon.ico', icon: 'fab fa-youtube', color: '#FF0000' },
-      { name: 'TikTok', url: 'https://www.tiktok.com/favicon.ico', icon: 'fab fa-tiktok', color: '#000000' },
-      { name: 'Trovo', url: 'https://trovo.live/', icon: 'trovo', color: '#19D760' }
+      { name: 'TikTok', url: 'https://www.tiktok.com/favicon.ico', icon: 'fab fa-tiktok', color: '#000000' }
     ];
 
     const results = await Promise.all(
@@ -661,32 +662,21 @@ router.get('/rate-limits', apiCheckSuperAdmin, async (req, res) => {
 });
 
 // GET /api/status/incidents - Get incident history (super admin only)
+//   ?days=1-90 (default 30)  ?limit=1-100 (default 20)
+// Derived from uptime_events (crashes, planned stops, unclean restarts / restart loops — downtime
+// measured against the music monitor's 60s heartbeat) and music_health_events (down..up pairs).
+// See dashboard/services/status-incidents.js.
 router.get('/incidents', apiCheckSuperAdmin, async (req, res) => {
   try {
-    // Check if incidents table exists
-    const [tables] = await pool.execute("SHOW TABLES LIKE 'incidents'");
-
-    if (tables.length === 0) {
-      // Return empty if no incidents table
-      return res.json({
-        success: true,
-        incidents: [],
-        note: 'Incident tracking not configured'
-      });
-    }
-
-    const [incidents] = await pool.execute(
-      `SELECT * FROM incidents ORDER BY created_at DESC LIMIT 20`
-    );
-
-    res.json({ success: true, incidents });
-  } catch (error) {
-    logger.debug('[Status] Incidents error', { error: error.message });
-    res.json({
-      success: true,
-      incidents: [],
-      note: 'Incident tracking not available'
+    const result = await loadIncidents(pool, {
+      days: parseInt(req.query.days, 10) || 30,
+      limit: parseInt(req.query.limit, 10) || 20,
+      logger,
     });
+    res.json({ success: true, ...result });
+  } catch (error) {
+    logger.error('[Status] Incidents error', { error: error.message, stack: error.stack });
+    res.status(500).json({ success: false, error: 'Failed to load incident history', incidents: [] });
   }
 });
 

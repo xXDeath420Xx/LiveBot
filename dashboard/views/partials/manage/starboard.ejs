@@ -1,220 +1,50 @@
+<%#
+  Starboard: up to 10 boards per server (starboard_config, one row per board). The list links each
+  board to the editor below (?page=starboard&board=<id>, or board=new); the editor posts to
+  POST starboard/config (board_id empty = a new board; the page script sends it and shows the
+  result), and Delete posts to POST starboard/delete. Runtime: core/starboard-manager.js.
+  Locals: starboardConfig (the board being edited, {} for a new one), starboardBoards,
+  starboardNew, starboardEmojis (this server's custom emoji), channels, categories.
+  Built on the settings-row kit (cf-settings.css); the original field names and ids are unchanged.
+%>
+<%
+const sb = (typeof starboardConfig !== 'undefined' && starboardConfig) ? starboardConfig : {};
+const sbBoards = Array.isArray(locals.starboardBoards) ? locals.starboardBoards : ((sb.id || sb.channel_id) ? [sb] : []);
+const sbIsNew = locals.starboardNew === true || !(sb.id || sb.channel_id);
+const sbMax = 10;
+const sbChannels = (typeof channels !== 'undefined' && Array.isArray(channels)) ? channels : [];
+const sbPostable = sbChannels.filter(c => c.type === undefined || c.type === 0 || c.type === 5);
+const sbCategories = (Array.isArray(locals.categories) ? locals.categories : []).map(c => ({ id: c.id, name: c.name, type: 4 }));
+const sbWatchable = sbChannels.filter(c => c.type === undefined || c.type === 0 || c.type === 5 || c.type === 15 || c.type === 16).concat(sbCategories);
+const sbList = (raw) => { if (Array.isArray(raw)) return raw.map(String); if (!raw) return []; try { const v = JSON.parse(raw); return Array.isArray(v) ? v.map(String) : []; } catch (e) { return []; } };
+const sbEmojiOf = (b) => { const raw = b && b.emoji; if (!raw) return ['⭐']; if (typeof raw === 'string' && raw.trim().startsWith('[')) { const l = sbList(raw); if (l.length) return l; } return [String(raw)]; };
+let sbOverrides = {};
+try { sbOverrides = sb.channel_thresholds ? (typeof sb.channel_thresholds === 'string' ? JSON.parse(sb.channel_thresholds) : sb.channel_thresholds) : {}; } catch (e) { sbOverrides = {}; }
+const sbOverrideRows = Object.entries(sbOverrides || {});
+const sbFlag = (v, dflt) => (v === undefined || v === null) ? dflt : !!Number(v);
+const sbEnabled = sbIsNew ? true : sbFlag(sb.enabled, true);
+const sbMinAge = Number(sb.min_age_minutes) || 0;
+const sbMaxAge = Number(sb.max_age_minutes) || 0;
+const sbMinChoices = [[0, 'No minimum'], [1, '1 minute'], [5, '5 minutes'], [10, '10 minutes'], [30, '30 minutes'], [60, '1 hour']];
+const sbMaxChoices = [[0, 'No limit'], [60, '1 hour'], [360, '6 hours'], [720, '12 hours'], [1440, '1 day'], [4320, '3 days'], [10080, '7 days'], [20160, '14 days'], [43200, '30 days']];
+const sbChannelName = (id) => { const c = sbChannels.find(x => x.id === id); return c ? '#' + c.name : null; };
+const sbEmojis = Array.isArray(locals.starboardEmojis) ? locals.starboardEmojis : [];
+const sbHref = (b) => `/manage/${guild.id}?page=starboard&board=${b}`;
+%>
 <style>
-/* Compact Starboard Page Styles */
-.starboard-section-card {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(251, 191, 36, 0.15);
-    border-radius: 12px;
-    overflow: hidden;
-    margin-bottom: 16px;
-}
-
-.starboard-section-header {
-    background: rgba(251, 191, 36, 0.08);
-    padding: 14px 18px;
-    border-bottom: 1px solid rgba(251, 191, 36, 0.15);
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.starboard-section-header i { font-size: 1rem; color: #fbbf24; }
-.starboard-section-header h3 { font-size: 0.95rem; font-weight: 600; color: #ffffff; margin: 0; }
-.starboard-section-header p { font-size: 0.75rem; color: rgba(255, 255, 255, 0.5); margin: 2px 0 0 0; }
-
-.starboard-section-body { padding: 18px; }
-
-/* Toggle Switch */
-.starboard-toggle-wrapper {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 12px 16px;
-    background: rgba(0, 0, 0, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 10px;
-    cursor: pointer;
-    transition: all 0.2s;
-    margin-bottom: 16px;
-}
-
-.starboard-toggle-wrapper:hover {
-    background: rgba(0, 0, 0, 0.3);
-    border-color: rgba(251, 191, 36, 0.3);
-}
-
-.starboard-toggle {
-    position: relative;
-    width: 44px;
-    height: 24px;
-    flex-shrink: 0;
-}
-
-.starboard-toggle input { opacity: 0; width: 0; height: 0; }
-
-.starboard-toggle-slider {
-    position: absolute;
-    cursor: pointer;
-    inset: 0;
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    transition: 0.2s;
-    border-radius: 24px;
-}
-
-.starboard-toggle-slider:before {
-    position: absolute;
-    content: "";
-    height: 18px;
-    width: 18px;
-    left: 2px;
-    bottom: 2px;
-    background-color: white;
-    transition: 0.2s;
-    border-radius: 50%;
-}
-
-.starboard-toggle input:checked + .starboard-toggle-slider {
-    background: linear-gradient(135deg, #f59e0b, #fbbf24);
-    border-color: #fbbf24;
-}
-
-.starboard-toggle input:checked + .starboard-toggle-slider:before {
-    transform: translateX(20px);
-}
-
-.starboard-toggle-label { font-weight: 600; color: #ffffff; font-size: 0.85rem; }
-.starboard-toggle-desc { font-size: 0.7rem; color: rgba(255, 255, 255, 0.5); margin-top: 2px; }
-
-/* Form Styles */
-.starboard-form-group { margin-bottom: 16px; }
-
-.starboard-form-label {
-    display: block;
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: rgba(255, 255, 255, 0.9);
-    margin-bottom: 6px;
-}
-
-.starboard-form-label i { color: #fbbf24; margin-right: 6px; }
-
-.starboard-form-input,
-.starboard-form-select {
-    width: 100%;
-    padding: 10px 14px;
-    background: rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 8px;
-    color: #ffffff;
-    font-size: 0.85rem;
-    transition: all 0.2s;
-}
-
-.starboard-form-input:focus,
-.starboard-form-select:focus {
-    outline: none;
-    border-color: rgba(251, 191, 36, 0.5);
-    box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.1);
-}
-
-.starboard-form-select option { background: #1a1d21; color: #ffffff; }
-
-.starboard-form-hint {
-    display: block;
-    margin-top: 4px;
-    font-size: 0.7rem;
-    color: rgba(255, 255, 255, 0.45);
-}
-
-.starboard-form-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 14px;
-}
-
-/* Info Box */
-.starboard-info-box {
-    display: flex;
-    gap: 12px;
-    padding: 14px;
-    background: rgba(251, 191, 36, 0.06);
-    border: 1px solid rgba(251, 191, 36, 0.15);
-    border-radius: 10px;
-    margin-bottom: 16px;
-}
-
-.starboard-info-icon {
-    width: 32px;
-    height: 32px;
-    background: rgba(251, 191, 36, 0.15);
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-}
-
-.starboard-info-icon i { color: #fbbf24; font-size: 0.85rem; }
-
-.starboard-info-title { font-weight: 600; color: #ffffff; font-size: 0.8rem; margin-bottom: 6px; }
-
-.starboard-info-list { list-style: none; padding: 0; margin: 0; }
-
-.starboard-info-list li {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 0.75rem;
-    color: rgba(255, 255, 255, 0.6);
-    padding: 3px 0;
-}
-
-.starboard-info-list li i { color: #fbbf24; font-size: 0.5rem; }
-
-/* Button Group */
-.starboard-button-group { display: flex; gap: 10px; }
-
-.starboard-save-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 20px;
-    background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
-    border: none;
-    border-radius: 8px;
-    color: #000000;
-    font-size: 0.85rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.starboard-save-btn:hover { box-shadow: 0 4px 16px rgba(251, 191, 36, 0.4); }
-
-.starboard-reset-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 16px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    border-radius: 8px;
-    color: rgba(255, 255, 255, 0.7);
-    font-size: 0.85rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.starboard-reset-btn:hover { background: rgba(255, 255, 255, 0.1); color: #ffffff; }
-
-@media (max-width: 768px) {
-    .starboard-form-grid { grid-template-columns: 1fr; }
-    .starboard-button-group { flex-direction: column; }
-    .starboard-save-btn, .starboard-reset-btn { width: 100%; justify-content: center; }
-}
+    .sb-emoji-list { display: inline-flex; flex-wrap: wrap; gap: 4px; }
+    .sb-emoji-list img { width: 20px; height: 20px; object-fit: contain; vertical-align: middle; }
+    .sb-actions { display: flex; flex-wrap: wrap; gap: var(--cf-2); justify-content: flex-end; align-items: center; }
+    .sb-actions form { display: inline; margin: 0; }
+    .sb-board-name { font-weight: 600; color: var(--cf-text); }
+    .sb-editing { margin-left: var(--cf-2); }
+    .sb-multi { min-height: 8rem; }
+    .sb-threshold-row { display: flex; flex-wrap: wrap; gap: var(--cf-2); align-items: center; margin-bottom: var(--cf-2); }
+    .sb-threshold-row .form-select { flex: 1 1 12rem; min-width: 0; }
+    .sb-threshold-row .form-control { width: 6rem; flex: none; }
+    .sb-emoji-pick { margin-top: var(--cf-2); }
+    #sb-threshold-add { align-self: flex-start; }
 </style>
-
 <div class="page-section">
     <div class="page-section-header">
         <div>
@@ -222,86 +52,380 @@
                 <i class="fas fa-star"></i>
                 <span>Starboard</span>
             </div>
-            <div class="page-section-subtitle">
-                Highlight the best messages in your server by adding them to a special channel
-            </div>
+            <div class="page-section-subtitle">A highlights channel for the messages members react to most. Up to <%= sbMax %> boards.</div>
         </div>
     </div>
 
-    <div class="starboard-section-card">
-        <div class="starboard-section-header">
-            <i class="fas fa-star"></i>
+    <section class="cf-section" aria-labelledby="sb-boards-title">
+        <header class="cf-section-head">
             <div>
-                <h3>Starboard Configuration</h3>
-                <p>Set up your server's hall of fame</p>
+                <h2 class="cf-section-title" id="sb-boards-title">Starboards</h2>
+                <p class="cf-section-desc">For example a main board for star reactions and a second board for one channel with its own emoji. Deleting a board keeps the posts it already made.</p>
             </div>
+            <div class="cf-section-actions">
+                <% if (sbBoards.length < sbMax) { %>
+                <a class="btn btn-primary" href="<%= sbHref('new') %>">Add a starboard</a>
+                <% } else { %>
+                <span class="cf-pill is-warn">Limit of <%= sbMax %> reached</span>
+                <% } %>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <% if (sbBoards.length) { %>
+            <div class="cf-table-wrap">
+                <table class="cf-table cf-table--stack">
+                    <thead>
+                        <tr>
+                            <th scope="col">Starboard</th>
+                            <th scope="col">Reactions</th>
+                            <th scope="col">Needed</th>
+                            <th scope="col">Status</th>
+                            <th scope="col"><span class="visually-hidden">Actions</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% sbBoards.forEach(b => { const isCurrent = !sbIsNew && (b === sb || (b.id && String(b.id) === String(sb.id))); const chName = sbChannelName(b.channel_id); %>
+                        <tr>
+                            <td data-label="Starboard">
+                                <span class="sb-board-name"><%= b.name || chName || 'Starboard' %></span>
+                                <% if (isCurrent) { %><span class="cf-pill is-accent sb-editing">Editing</span><% } %>
+                                <div class="cf-list-meta"><% if (chName) { %>Posts to <%= chName %><% } else { %><span class="cf-pill is-bad">Channel deleted</span><% } %></div>
+                            </td>
+                            <td data-label="Reactions"><span class="sb-emoji-list" data-emoji="<%= JSON.stringify(sbEmojiOf(b)) %>"></span></td>
+                            <td data-label="Needed"><%= b.star_threshold %></td>
+                            <td data-label="Status"><% if (Number(b.enabled)) { %><span class="cf-pill is-ok">On</span><% } else { %><span class="cf-pill">Off</span><% } %></td>
+                            <td class="cf-cell-end">
+                                <div class="sb-actions">
+                                    <% if (b.id) { %>
+                                    <a class="btn btn-sm btn-secondary" href="<%= sbHref(b.id) %>">Edit</a>
+                                    <form action="/manage/<%= guild.id %>/starboard/delete" method="POST" onsubmit="return confirm('Delete this starboard? Posts it already made stay in the channel.')">
+                                        <input type="hidden" name="board_id" value="<%= b.id %>">
+                                        <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                                    </form>
+                                    <% } %>
+                                </div>
+                            </td>
+                        </tr>
+                        <% }); %>
+                    </tbody>
+                </table>
+            </div>
+            <% } else { %>
+            <%- include('../kit/_state', { kind: 'empty', title: 'No starboard yet', text: 'Fill in the form below to create the first one.', id: null, boxed: false, compact: true }) %>
+            <% } %>
         </div>
-        <div class="starboard-section-body">
-            <form action="/manage/<%= guild.id %>/starboard/config" method="POST">
-                <!-- Enable Toggle -->
-                <label class="starboard-toggle-wrapper">
-                    <div class="starboard-toggle">
-                        <input type="checkbox" id="starboardEnabled" name="enabled" <%= starboardConfig && starboardConfig.enabled ? 'checked' : '' %>>
-                        <span class="starboard-toggle-slider"></span>
-                    </div>
-                    <div>
-                        <div class="starboard-toggle-label">Enable Starboard System</div>
-                        <div class="starboard-toggle-desc">Automatically post starred messages to a special channel</div>
-                    </div>
-                </label>
+    </section>
 
-                <!-- Settings Grid -->
-                <div class="starboard-form-grid">
-                    <div class="starboard-form-group" style="margin-bottom: 0;">
-                        <label class="starboard-form-label">
-                            <i class="fas fa-hashtag"></i>Starboard Channel
-                        </label>
-                        <select class="starboard-form-select" name="channelId">
-                            <option value="">Select a channel...</option>
-                            <% channels.forEach(channel => { %>
-                                <option value="<%= channel.id %>" <%= starboardConfig && starboardConfig.channel_id === channel.id ? 'selected' : '' %>>#<%= channel.name %></option>
-                            <% }) %>
+    <form action="/manage/<%= guild.id %>/starboard/config" method="POST" id="sb-form">
+        <input type="hidden" name="board_id" value="<%= sbIsNew ? '' : (sb.id || '') %>">
+        <div id="sb-form-error" class="cf-notice is-bad" role="alert" hidden></div>
+        <section class="cf-section" aria-labelledby="sb-settings-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="sb-settings-title"><%= sbIsNew ? 'New starboard' : 'Settings' %></h2>
+                    <p class="cf-section-desc">Members react with one of the chosen emoji; when a message reaches the threshold it is copied to the starboard channel with a link back to the original, and its count keeps updating.</p>
+                </div>
+            </header>
+            <div class="cf-rows">
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="starboardEnabled">Starboard</label>
+                        <p class="cf-row-desc" id="starboardEnabled-desc">Post starred messages to this board's channel.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="checkbox" class="cf-switch" role="switch" id="starboardEnabled" name="enabled" aria-describedby="starboardEnabled-desc" <%= sbEnabled ? 'checked' : '' %>>
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-starboard-name">Name</label>
+                        <p class="cf-row-desc" id="f-starboard-name-desc">Optional. Tells your boards apart here and in the server log.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input id="f-starboard-name" type="text" class="form-control" name="name" maxlength="100" value="<%= sb.name || '' %>" placeholder="Hall of fame" aria-describedby="f-starboard-name-desc">
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-starboard-channelid">Starboard channel</label>
+                        <p class="cf-row-desc" id="f-starboard-channelid-desc">Where starred messages are posted.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <select id="f-starboard-channelid" class="form-select" name="channelId" aria-describedby="f-starboard-channelid-desc">
+                            <%- include('../kit/_pick-options', { items: sbPostable, selected: sb.channel_id || null, kind: 'channel', only: 'text', empty: 'Choose a channel' }) %>
                         </select>
-                        <span class="starboard-form-hint">Channel where starred messages will be posted</span>
-                    </div>
-
-                    <div class="starboard-form-group" style="margin-bottom: 0;">
-                        <label class="starboard-form-label">
-                            <i class="fas fa-star"></i>Star Threshold
-                        </label>
-                        <input type="number" class="starboard-form-input" name="threshold" value="<%= starboardConfig ? starboardConfig.threshold : '5' %>" min="1" max="50">
-                        <span class="starboard-form-hint">Number of star reactions needed to post</span>
                     </div>
                 </div>
-
-                <!-- Info Box -->
-                <div class="starboard-info-box" style="margin-top: 24px;">
-                    <div class="starboard-info-icon">
-                        <i class="fas fa-info-circle"></i>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-starboard-emoji">Reaction emoji</label>
+                        <p class="cf-row-desc" id="f-starboard-emoji-desc">One or more emoji, separated by spaces. Reactions with any of them add up. Empty means a star.</p>
                     </div>
-                    <div>
-                        <div class="starboard-info-title">How Starboard Works</div>
-                        <ul class="starboard-info-list">
-                            <li><i class="fas fa-circle"></i> Users react with star emoji to messages they like</li>
-                            <li><i class="fas fa-circle"></i> When threshold is reached, message is posted to starboard channel</li>
-                            <li><i class="fas fa-circle"></i> Original message link and author are preserved</li>
-                            <li><i class="fas fa-circle"></i> Star count updates automatically in starboard</li>
-                        </ul>
+                    <div class="cf-row-control">
+                        <input id="f-starboard-emoji" type="text" class="form-control" name="emoji" maxlength="1000" value="<%= sbIsNew ? '⭐' : sbEmojiOf(sb).join(' ') %>" aria-describedby="f-starboard-emoji-desc">
+                        <% if (sbEmojis.length) { %>
+                        <select id="f-starboard-emoji-add" class="form-select sb-emoji-pick" aria-label="Add a server emoji">
+                            <option value="">Add a server emoji</option>
+                            <% sbEmojis.forEach(e => { %><option value="<%= e.animated ? '<a:' : '<:' %><%= e.name %>:<%= e.id %>>">:<%= e.name %>:</option>
+                            <% }); %>
+                        </select>
+                        <% } %>
                     </div>
                 </div>
-
-                <!-- Button Group -->
-                <div class="starboard-button-group">
-                    <button type="submit" class="starboard-save-btn">
-                        <i class="fas fa-save"></i>
-                        Save Starboard Settings
-                    </button>
-                    <button type="button" class="starboard-reset-btn" onclick="location.reload()">
-                        <i class="fas fa-undo"></i>
-                        Reset
-                    </button>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-starboard-threshold">Reactions needed</label>
+                        <p class="cf-row-desc" id="f-starboard-threshold-desc">Reactions a message needs before it is posted, from 1 to 100.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="cf-input-unit">
+                            <input id="f-starboard-threshold" type="number" class="form-control" name="threshold" value="<%= sb.threshold != null ? sb.threshold : (sb.star_threshold != null ? sb.star_threshold : 3) %>" min="1" max="100" aria-describedby="f-starboard-threshold-desc">
+                            <span class="cf-unit">reactions</span>
+                        </div>
+                    </div>
                 </div>
-            </form>
-        </div>
-    </div>
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-row-text">
+                        <span class="cf-row-label" id="sb-pv-title">Preview</span>
+                        <p class="cf-row-desc" id="sb-pv-desc">How a starred message looks on this board. The count keeps updating as reactions come in.</p>
+                    </div>
+                    <div class="cf-dc-frame" data-sb-preview aria-live="polite" aria-labelledby="sb-pv-title"></div>
+                </div>
+            </div>
+        </section>
+
+        <section class="cf-section" aria-labelledby="sb-channels-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="sb-channels-title">Channels</h2>
+                    <p class="cf-section-desc">Which messages this board counts. Picking a category covers every channel in it, and a channel covers its threads. Messages in a starboard channel are never counted.</p>
+                </div>
+            </header>
+            <div class="cf-rows">
+                <div class="cf-row cf-row--wide">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-starboard-watch">Only count messages in</label>
+                        <p class="cf-row-desc" id="f-starboard-watch-desc">Leave empty to count every channel.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <select id="f-starboard-watch" class="form-select sb-multi" name="watch_channels" multiple aria-describedby="f-starboard-watch-desc">
+                            <%- include('../kit/_pick-options', { items: sbWatchable, selected: sbList(sb.watch_channels), kind: 'channel', empty: null }) %>
+                        </select>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--wide">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-starboard-ignore">Ignored channels</label>
+                        <p class="cf-row-desc" id="f-starboard-ignore-desc">Messages here are never posted to this board.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <select id="f-starboard-ignore" class="form-select sb-multi" name="ignore_channels" multiple aria-describedby="f-starboard-ignore-desc">
+                            <%- include('../kit/_pick-options', { items: sbWatchable, selected: sbList(sb.ignore_channels), kind: 'channel', empty: null }) %>
+                        </select>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-row-text">
+                        <span class="cf-row-label" id="f-starboard-overrides-label">Reactions needed per channel</span>
+                        <p class="cf-row-desc" id="f-starboard-overrides-desc">Optional. A different threshold for a busy or a quiet channel; other channels use the number above.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <div id="sb-threshold-rows" role="group" aria-labelledby="f-starboard-overrides-label">
+                            <% sbOverrideRows.forEach(([cid, n]) => { %>
+                            <div class="sb-threshold-row">
+                                <select class="form-select" name="threshold_channel" aria-label="Channel">
+                                    <%- include('../kit/_pick-options', { items: sbWatchable, selected: cid, kind: 'channel', empty: 'Choose a channel' }) %>
+                                </select>
+                                <input type="number" class="form-control" name="threshold_value" min="1" max="100" value="<%= n %>" aria-label="Reactions needed">
+                                <button type="button" class="btn btn-sm btn-secondary sb-threshold-remove">Remove</button>
+                            </div>
+                            <% }); %>
+                        </div>
+                        <template id="sb-threshold-template">
+                            <div class="sb-threshold-row">
+                                <select class="form-select" name="threshold_channel" aria-label="Channel">
+                                    <%- include('../kit/_pick-options', { items: sbWatchable, selected: null, kind: 'channel', empty: 'Choose a channel' }) %>
+                                </select>
+                                <input type="number" class="form-control" name="threshold_value" min="1" max="100" value="3" aria-label="Reactions needed">
+                                <button type="button" class="btn btn-sm btn-secondary sb-threshold-remove">Remove</button>
+                            </div>
+                        </template>
+                        <button type="button" class="btn btn-sm btn-secondary" id="sb-threshold-add">Add a channel</button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="cf-section" aria-labelledby="sb-rules-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="sb-rules-title">Rules</h2>
+                    <p class="cf-section-desc">Messages from an age-restricted (NSFW) channel are only ever posted to a starboard channel that is age-restricted too.</p>
+                </div>
+            </header>
+            <div class="cf-rows">
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-starboard-selfstar">Count self-reactions</label>
+                        <p class="cf-row-desc" id="f-starboard-selfstar-desc">Off: when someone reacts to their own message, the bot removes that reaction.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="checkbox" class="cf-switch" role="switch" id="f-starboard-selfstar" name="self_star" aria-describedby="f-starboard-selfstar-desc" <%= sbFlag(sb.self_star, false) ? 'checked' : '' %>>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-starboard-ignorebots">Ignore bot messages</label>
+                        <p class="cf-row-desc" id="f-starboard-ignorebots-desc">Messages posted by bots and webhooks are never starred. Reactions from bots never count either way.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="checkbox" class="cf-switch" role="switch" id="f-starboard-ignorebots" name="ignore_bots" aria-describedby="f-starboard-ignorebots-desc" <%= sbFlag(sb.ignore_bots, false) ? 'checked' : '' %>>
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-starboard-minage">Minimum message age</label>
+                        <p class="cf-row-desc" id="f-starboard-minage-desc">A newer message is posted on the first reaction after it reaches this age.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <select id="f-starboard-minage" class="form-select" name="min_age_minutes" aria-describedby="f-starboard-minage-desc">
+                            <% sbMinChoices.forEach(([v, label]) => { %><option value="<%= v %>"<%= v === sbMinAge ? ' selected' : '' %>><%= label %></option>
+                            <% }); %>
+                        </select>
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-starboard-maxage">Maximum message age</label>
+                        <p class="cf-row-desc" id="f-starboard-maxage-desc">Older messages are not posted, so reactions on old posts do not flood the board.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <select id="f-starboard-maxage" class="form-select" name="max_age_minutes" aria-describedby="f-starboard-maxage-desc">
+                            <% sbMaxChoices.forEach(([v, label]) => { %><option value="<%= v %>"<%= v === sbMaxAge ? ' selected' : '' %>><%= label %></option>
+                            <% }); %>
+                        </select>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-starboard-removebelow">Remove when reactions drop</label>
+                        <p class="cf-row-desc" id="f-starboard-removebelow-desc">Take the post down when the count falls below the threshold. Off: it stays and shows the lower count.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="checkbox" class="cf-switch" role="switch" id="f-starboard-removebelow" name="remove_below_threshold" aria-describedby="f-starboard-removebelow-desc" <%= sbFlag(sb.remove_below_threshold, true) ? 'checked' : '' %>>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-starboard-removedeleted">Remove when the original is deleted</label>
+                        <p class="cf-row-desc" id="f-starboard-removedeleted-desc">Take the post down when the starred message is deleted.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="checkbox" class="cf-switch" role="switch" id="f-starboard-removedeleted" name="remove_on_delete" aria-describedby="f-starboard-removedeleted-desc" <%= sbFlag(sb.remove_on_delete, true) ? 'checked' : '' %>>
+                    </div>
+                </div>
+                <div class="cf-section-foot">
+                    <button type="button" class="btn btn-secondary" onclick="location.reload()">Discard changes</button>
+                    <button type="submit" class="btn btn-primary"><%= sbIsNew ? 'Create starboard' : 'Save' %></button>
+                </div>
+            </div>
+        </section>
+    </form>
 </div>
+<script src="/js/cf-msgpreview.js"></script>
+<script>
+(function () {
+    var CUSTOM = /^<(a?):(\w+):(\d+)>$/;
+    // Reaction lists: custom emoji as their image, unicode emoji as text (built here, not in the markup).
+    Array.prototype.forEach.call(document.querySelectorAll('.sb-emoji-list[data-emoji]'), function (box) {
+        var list = [];
+        try { list = JSON.parse(box.getAttribute('data-emoji')) || []; } catch (e) { list = []; }
+        list.forEach(function (e) {
+            var m = String(e).match(CUSTOM);
+            if (m) {
+                var img = document.createElement('img');
+                img.src = 'https://cdn.discordapp.com/emojis/' + m[3] + '.' + (m[1] ? 'gif' : 'png') + '?size=40';
+                img.alt = ':' + m[2] + ':';
+                img.title = ':' + m[2] + ':';
+                box.appendChild(img);
+            } else {
+                box.appendChild(document.createTextNode(String(e)));
+            }
+        });
+    });
+
+    var form = document.getElementById('sb-form');
+    if (!form) return;
+    var rows = document.getElementById('sb-threshold-rows');
+    var tpl = document.getElementById('sb-threshold-template');
+    document.getElementById('sb-threshold-add').addEventListener('click', function () {
+        rows.appendChild(tpl.content.cloneNode(true));
+        var sel = rows.lastElementChild && rows.lastElementChild.querySelector('select');
+        if (sel) sel.focus();
+    });
+    rows.addEventListener('click', function (e) {
+        var btn = e.target.closest('.sb-threshold-remove');
+        if (btn) btn.closest('.sb-threshold-row').remove();
+    });
+
+    var pick = document.getElementById('f-starboard-emoji-add');
+    if (pick) pick.addEventListener('change', function () {
+        var input = document.getElementById('f-starboard-emoji');
+        if (pick.value && input.value.split(/\s+/).indexOf(pick.value) === -1) input.value = (input.value.trim() + ' ' + pick.value).trim();
+        pick.value = '';
+    });
+
+    // Preview of a starboard post (core/starboard-manager.js): the first emoji, the count, the
+    // source channel, and the original message as an embed.
+    var pv = document.querySelector('[data-sb-preview]');
+    function renderPreview() {
+        if (!pv || !window.CFPreview) return;
+        var first = (document.getElementById('f-starboard-emoji').value.trim().split(/\s+/)[0]) || '⭐';
+        var m = first.match(CUSTOM);
+        var shown = m ? ':' + m[2] + ':' : first;
+        var n = Math.max(1, Math.min(100, parseInt(document.getElementById('f-starboard-threshold').value, 10) || 5));
+        var ch = document.getElementById('f-starboard-channelid');
+        CFPreview.render(pv, {
+            content: shown + ' **' + n + '** ' + CFPreview.mention('#general'),
+            embed: { colour: '#FFD700', author: 'pixelpal', text: 'The message members reacted to, with its picture if it had one.', fields: [{ name: 'Source', value: 'Jump to message in ' + CFPreview.mention('#general'), wide: true }] },
+            note: ch && ch.value ? 'Posted in ' + ch.options[ch.selectedIndex].textContent.trim() + ' once a message has ' + n + ' reactions.' : 'Choose a starboard channel to post to.',
+        });
+    }
+    ['f-starboard-emoji', 'f-starboard-threshold', 'f-starboard-channelid'].forEach(function (id) {
+        var n = document.getElementById(id);
+        if (n) { n.addEventListener('input', renderPreview); n.addEventListener('change', renderPreview); }
+    });
+    if (pick) pick.addEventListener('change', renderPreview);
+    renderPreview();
+
+    var errorBox = document.getElementById('sb-form-error');
+    form.addEventListener('submit', async function (e) {
+        e.preventDefault();
+        errorBox.hidden = true;
+        var btn = form.querySelector('button[type="submit"]');
+        btn.disabled = true;
+        try {
+            var res = await fetch(form.getAttribute('action'), {
+                method: 'POST',
+                body: new URLSearchParams(new FormData(form)),
+                credentials: 'same-origin',
+                headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }
+            });
+            var data = {};
+            try { data = await res.json(); } catch (err) { /* not JSON */ }
+            if (!res.ok || !data.success) throw new Error(data.error || 'Could not save the starboard.');
+            if (window.showToast) window.showToast(data.message || 'Saved', 'success');
+            // Open the saved board again so the list above shows the change (and a new board gets its id).
+            if (data.boardId) {
+                setTimeout(function () { window.location.href = window.location.pathname + '?page=starboard&board=' + encodeURIComponent(data.boardId); }, 600);
+                return;
+            }
+        } catch (err) {
+            errorBox.textContent = err.message;
+            errorBox.hidden = false;
+            errorBox.scrollIntoView({ block: 'nearest' });
+        }
+        btn.disabled = false;
+    });
+})();
+</script>

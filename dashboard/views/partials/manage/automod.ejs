@@ -1,3 +1,56 @@
+<%#
+  AutoMod: add a rule (POST add-automod-rule), the active rules with edit (POST update-automod-rule,
+  in a dialog) and remove (POST remove-automod-rule), and the AutoMod allowlist (JSON API
+  /api/guilds/:id/automod/whitelist, the same list as the protection allowlist). Built on the
+  settings-row kit (cf-settings.css); field names and ids are unchanged.
+%>
+<%
+// The filtered-words row has its own section below and its own save route.
+const amRules = (automodRules || []).filter(r => r.filter_type !== 'word_filter');
+const wfRow = (automodRules || []).find(r => r.filter_type === 'word_filter');
+const wf = wfRow?.config || {};
+const wfRoles = new Set(wf.ping_role_ids || []);
+const amTypeLabel = { bannedWords: 'Banned words', banned_words: 'Banned words', massMention: 'Mass mentions', mass_mention: 'Mass mentions', mass_mentions: 'Mass mentions', allCaps: 'All caps', all_caps: 'All caps', antiSpam: 'Message spam', anti_spam: 'Message spam', spam: 'Message spam', discord_invites: 'Invite links', discordInvites: 'Invite links', invite: 'Invite links', invites: 'Invite links' };
+// Older spellings core/automod.js also reads ('spam' from setup scripts, 'invite' from the takeover catalogue).
+const amIsSpam = (t) => t === 'antiSpam' || t === 'anti_spam' || t === 'spam';
+const amIsInvite = (t) => t === 'discord_invites' || t === 'discordInvites' || t === 'invite' || t === 'invites';
+const amActionLabel = { delete: 'Delete message', warn: 'Warn', mute: 'Mute', kick: 'Kick', ban: 'Ban', ladder: 'Time out, longer each time' };
+const amActionTone = { delete: 'is-bad', warn: 'is-warn', mute: 'is-warn', kick: 'is-bad', ban: 'is-bad', ladder: 'is-warn' };
+// Per-rule ignored roles and channels (automod_rules.ignored_roles / ignored_channels, read by core/automod.js).
+const amIds = (raw) => { try { const v = typeof raw === 'string' ? JSON.parse(raw) : raw; return Array.isArray(v) ? v.map(String) : []; } catch (e) { return []; } };
+const amRoleName = new Map((locals.roles || []).map(r => [String(r.id), r.name]));
+const amChannelName = new Map([...(locals.channels || []), ...(locals.categories || [])].map(c => [String(c.id), c.name]));
+const amHeatOn = !!(locals.heatConfig && Number(locals.heatConfig.is_enabled));
+// Picker options: discord.js counts voice channels as text-based, so split them out; roles carry their
+// colour for the chip picker (public/js/cf-picker.js).
+const amIsVoice = (c) => !!(c && typeof c.isVoiceBased === 'function' && c.isVoiceBased());
+const amTextChannels = (locals.channels || []).filter(c => !amIsVoice(c));
+const amRoleColor = (r) => (r && r.hexColor && r.hexColor !== '#000000') ? r.hexColor : '';
+%>
+<style>
+    .am-settings { color: var(--cf-text-2); overflow-wrap: anywhere; }
+    .am-settings code { font-size: var(--cf-text-xs); }
+    .automod-actions { display: flex; gap: var(--cf-2); justify-content: flex-end; flex-wrap: nowrap; }
+    .automod-actions form { margin: 0; }
+
+    /* Edit dialog (opened by openEditModal below): the kit's dialog shell, hidden until opened. */
+    .automod-modal { display: none; }
+    .automod-modal-content { --cf-modal-w: 30rem; }
+    .automod-modal-content > form { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; margin: 0; }
+    .automod-modal-field { display: flex; flex-direction: column; gap: 6px; }
+    .automod-modal-field > label { margin: 0; font-size: var(--cf-text-sm); font-weight: 500; color: var(--cf-text); }
+    .automod-spam-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr)); gap: var(--cf-3); }
+    .am-ignores { margin-top: 2px; font-size: var(--cf-text-xs); color: var(--cf-text-3); overflow-wrap: anywhere; }
+    .am-modal-hint { font-size: var(--cf-text-xs); color: var(--cf-text-3); margin: 0; }
+    .am-fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
+    .am-fieldset > legend { margin: 0 0 2px; padding: 0; font-size: var(--cf-text-sm); font-weight: 500; color: var(--cf-text); float: none; width: auto; }
+    .automod-modal-field > label.am-check, .am-check { display: flex; align-items: flex-start; gap: 8px; font-weight: 400; color: var(--cf-text-2); }
+    .am-check > input { margin-top: 3px; flex: none; }
+    .am-timeout { max-width: 12rem; }
+    #dam-modal .cf-modal-body { display: flex; flex-direction: column; gap: var(--cf-4); }
+    .automod-modal-field textarea + label, .automod-modal-field .am-modal-hint + label { margin-top: 6px; }
+</style>
+
 <div class="page-section">
     <div class="page-section-header">
         <div>
@@ -5,531 +58,420 @@
                 <i class="fas fa-robot"></i>
                 <span>AutoMod</span>
             </div>
-            <div class="page-section-subtitle">
-                Automatically moderate content with customizable rules and filters
-            </div>
+            <div class="page-section-subtitle">The bot's own message rules, the rules Discord enforces itself, and who they skip.</div>
         </div>
     </div>
 
-    <!-- Stats Overview -->
-    <div class="automod-stats-grid">
-        <div class="automod-stat-card">
-            <div class="automod-stat-label">Active Rules</div>
-            <div class="automod-stat-value purple"><%= automodRules ? automodRules.length : 0 %></div>
-        </div>
-        <div class="automod-stat-card">
-            <div class="automod-stat-label">Filter Types</div>
-            <div class="automod-stat-value accent"><%= automodRules ? new Set(automodRules.map(r => r.filter_type)).size : 0 %></div>
-        </div>
-        <div class="automod-stat-card">
-            <div class="automod-stat-label">Protection Level</div>
-            <div class="automod-stat-value green"><%= automodRules && automodRules.length >= 3 ? 'High' : automodRules && automodRules.length >= 1 ? 'Medium' : 'Low' %></div>
-        </div>
-        <div class="automod-stat-card">
-            <div class="automod-stat-label">Actions Set</div>
-            <div class="automod-stat-value orange"><%= automodRules ? new Set(automodRules.map(r => r.action)).size : 0 %></div>
-        </div>
-    </div>
+    <%- include('../kit/_kpis', { label: 'AutoMod at a glance', items: [
+        { label: 'Active rules', value: amRules.filter(r => Number(r.is_enabled)).length },
+        { label: 'Filter types in use', value: new Set(amRules.map(r => amTypeLabel[r.filter_type] || r.filter_type)).size },
+        { label: 'Actions in use', value: new Set(amRules.map(r => r.action)).size },
+    ] }) %>
 
-    <!-- Add New Rule -->
-    <div class="automod-section">
-        <h3 class="automod-section-title">
-            <i class="fas fa-plus-circle"></i>
-            Add New AutoMod Rule
-        </h3>
-        <form action="/manage/<%= guild.id %>/add-automod-rule" method="POST" class="automod-form-card">
-            <div class="automod-form-grid">
-                <div>
-                    <label class="form-label">
-                        <i class="fas fa-filter"></i>
-                        Filter Type
-                    </label>
-                    <select name="filter_type" id="filter-type-select" class="form-select" required>
-                        <option value="bannedWords">Banned Words</option>
-                        <option value="massMention">Mass Mention</option>
-                        <option value="allCaps">All Caps</option>
-                        <option value="antiSpam">Anti-Spam</option>
-                    </select>
-                    <div class="form-help">Type of content to filter</div>
+    <section class="cf-section" aria-labelledby="am-wf-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="am-wf-title">Filtered words</h2>
+                <p class="cf-section-desc">Matching messages are deleted and flagged for your moderators with buttons to warn, mute, kick or ban. Nobody is punished automatically.</p>
+            </div>
+        </header>
+        <form class="cf-rows" action="/manage/<%= guild.id %>/word-filter" method="POST">
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="am-wf-enabled">Filter messages</label>
+                    <p class="cf-row-desc" id="am-wf-enabled-desc">Also creates a Discord AutoMod rule, which blocks these words before anyone sees them. Members with Administrator are exempt.</p>
                 </div>
-                <div>
-                    <label class="form-label">
-                        <i class="fas fa-gavel"></i>
-                        Action
-                    </label>
-                    <select name="action" id="action-select" class="form-select" required>
-                        <option value="delete">Delete Message</option>
-                        <option value="warn">Warn Member</option>
-                        <option value="mute">Mute Member</option>
-                    </select>
-                    <div class="form-help">What to do when triggered</div>
-                </div>
-                <div id="mute-duration-container" style="display: none;">
-                    <label class="form-label">
-                        <i class="fas fa-clock"></i>
-                        Mute Duration (minutes)
-                    </label>
-                    <input type="number" name="action_duration_minutes" class="form-control" min="1" placeholder="10">
-                    <div class="form-help">How long to mute the user</div>
+                <div class="cf-row-control">
+                    <input class="cf-switch" type="checkbox" role="switch" id="am-wf-enabled" name="enabled" aria-describedby="am-wf-enabled-desc" <%= wfRow?.is_enabled ? 'checked' : '' %>>
                 </div>
             </div>
-
-            <!-- Filter-specific configurations -->
-            <div id="config-container" class="automod-config-section">
-                <!-- Banned Words Config -->
-                <div id="bannedWords-config" style="display: block;">
-                    <label class="form-label">
-                        <i class="fas fa-ban"></i>
-                        Banned Words (comma-separated)
-                    </label>
-                    <textarea name="config_banned_words" class="form-control" rows="3" placeholder="word1, word2, phrase3"></textarea>
-                    <div class="form-help">Enter words or phrases to block, separated by commas</div>
+            <div class="cf-row cf-row--stack">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="am-wf-words">Words</label>
+                    <p class="cf-row-desc" id="am-wf-words-desc">One per line. <code>word</code> matches that word only, <code>word*</code> anything starting with it, <code>*word*</code> anywhere. Respellings, lookalike letters and spaced-out letters are caught automatically.</p>
                 </div>
-
-                <!-- Mass Mention Config -->
-                <div id="massMention-config" style="display: none;">
-                    <label class="form-label">
-                        <i class="fas fa-at"></i>
-                        Mention Limit
-                    </label>
-                    <input type="number" name="config_massMention_limit" class="form-control" value="5" min="1" placeholder="5">
-                    <div class="form-help">Maximum number of mentions allowed in a single message</div>
+                <textarea id="am-wf-words" name="words" class="form-control" rows="8" aria-describedby="am-wf-words-desc"><%= (wf.words || []).join('\n') %></textarea>
+            </div>
+            <div class="cf-row cf-row--stack">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="am-wf-exceptions">Exceptions</label>
+                    <p class="cf-row-desc" id="am-wf-exceptions-desc">Innocent words or phrases that contain a filtered word. One per line.</p>
                 </div>
-
-                <!-- All Caps Config -->
-                <div id="allCaps-config" style="display: none;">
-                    <label class="form-label">
-                        <i class="fas fa-text-height"></i>
-                        Capitalization Percentage Limit (%)
-                    </label>
-                    <input type="number" name="config_allCaps_limit" class="form-control" value="70" min="1" max="100" placeholder="70">
-                    <div class="form-help">Maximum percentage of capital letters allowed in a message</div>
+                <textarea id="am-wf-exceptions" name="exceptions" class="form-control" rows="3" aria-describedby="am-wf-exceptions-desc"><%= (wf.allow || []).join('\n') %></textarea>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="am-wf-channel">Moderator channel</label>
+                    <p class="cf-row-desc" id="am-wf-channel-desc">Where flagged messages are posted; needed to switch the filter on. Messages in this channel are not filtered.</p>
                 </div>
+                <div class="cf-row-control">
+                    <select id="am-wf-channel" class="form-select" name="flag_channel_id" aria-describedby="am-wf-channel-desc">
+                        <%- include('../kit/_options', { items: amTextChannels, selected: wf.flag_channel_id || null, prefix: '#', empty: 'Choose a channel' }) %>
+                    </select>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="am-wf-roles">Roles to ping</label>
+                    <p class="cf-row-desc" id="am-wf-roles-desc">Pinged once per incident. They need to be able to see the moderator channel.</p>
+                </div>
+                <div class="cf-row-control">
+                    <select id="am-wf-roles" class="form-select" name="ping_role_ids" multiple size="5" aria-describedby="am-wf-roles-desc">
+                        <% (locals.roles || []).forEach(r => { %>
+                        <option value="<%= r.id %>" data-kind="role" data-color="<%= amRoleColor(r) %>" <%= wfRoles.has(r.id) ? 'selected' : '' %>><%= r.name %></option>
+                        <% }) %>
+                    </select>
+                </div>
+            </div>
+            <div class="cf-section-foot">
+                <button type="submit" class="btn btn-primary">Save</button>
+            </div>
+        </form>
+    </section>
 
-                <!-- Anti-Spam Config -->
-                <div id="antiSpam-config" style="display: none;">
-                    <div class="automod-spam-grid">
-                        <div>
-                            <label class="form-label">
-                                <i class="fas fa-comment-slash"></i>
-                                Message Limit
-                            </label>
-                            <input type="number" name="config_antiSpam_message_limit" class="form-control" value="5" min="2" placeholder="5">
-                            <div class="form-help">Number of messages before triggering</div>
-                        </div>
-                        <div>
-                            <label class="form-label">
-                                <i class="fas fa-hourglass-half"></i>
-                                Time Period (seconds)
-                            </label>
-                            <input type="number" name="config_antiSpam_time_period" class="form-control" value="10" min="1" placeholder="10">
-                            <div class="form-help">Time window to count messages</div>
+    <section class="cf-section" aria-labelledby="am-add-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="am-add-title">Add a rule</h2>
+                <p class="cf-section-desc">Choose what to look for and what to do when a message matches.</p>
+            </div>
+        </header>
+        <form class="cf-rows" action="/manage/<%= guild.id %>/add-automod-rule" method="POST">
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="filter-type-select">Filter type</label>
+                    <p class="cf-row-desc" id="filter-type-select-desc">The kind of message this rule catches.</p>
+                </div>
+                <div class="cf-row-control">
+                    <select name="filter_type" id="filter-type-select" class="form-select" required aria-describedby="filter-type-select-desc">
+                        <option value="bannedWords">Banned words</option>
+                        <option value="massMention">Mass mentions</option>
+                        <option value="allCaps">All caps</option>
+                        <option value="antiSpam">Message spam</option>
+                    </select>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="action-select">Action</label>
+                    <p class="cf-row-desc" id="action-select-desc">What happens to a message, and its sender, when the rule matches.<% if (amHeatOn) { %> Heat scoring is on, so Delete, Warn and Mute rules (other than Message spam) add heat and the heat thresholds decide; Kick and Ban always act.<% } %> Message spam deletes the repeated messages, and keeps deleting the sender's messages until they stop for a minute, then applies this action. Its extra choice, time out for longer each time, gives 1 minute, then 5, 15 and 30 minutes and so on up to a day for repeat spam within 24 hours.</p>
+                </div>
+                <div class="cf-row-control">
+                    <select name="action" id="action-select" class="form-select" required aria-describedby="action-select-desc">
+                        <option value="ladder" hidden disabled>Delete and time out, longer each time</option>
+                        <option value="delete">Delete message</option>
+                        <option value="warn">Delete and warn member</option>
+                        <option value="mute">Delete and mute member</option>
+                        <option value="kick">Delete and kick member</option>
+                        <option value="ban">Delete and ban member</option>
+                    </select>
+                </div>
+            </div>
+            <div id="mute-duration-container" style="display: none;">
+                <div class="cf-row cf-row--sub">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-automod-action_duration_minutes">Mute length</label>
+                        <p class="cf-row-desc">How long the sender stays muted, at most 40320 minutes (28 days). Left empty, 10 minutes.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="cf-input-unit">
+                            <input id="f-automod-action_duration_minutes" type="number" name="action_duration_minutes" class="form-control" min="1" max="40320" placeholder="10">
+                            <span class="cf-unit">minutes</span>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <button type="submit" class="btn btn-primary">
-                <i class="fas fa-plus"></i>
-                <span>Add AutoMod Rule</span>
-            </button>
+            <div id="config-container">
+                <div id="bannedWords-config" style="display: block;">
+                    <div class="cf-row cf-row--stack">
+                        <div class="cf-row-text">
+                            <label class="cf-row-label" for="f-automod-config_banned_words">Banned words</label>
+                            <p class="cf-row-desc">Words or phrases to block, separated by commas.</p>
+                        </div>
+                        <div class="cf-row-control">
+                            <textarea id="f-automod-config_banned_words" name="config_banned_words" class="form-control" rows="3" placeholder="word one, word two, a phrase"></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div id="massMention-config" style="display: none;">
+                    <div class="cf-row">
+                        <div class="cf-row-text">
+                            <label class="cf-row-label" for="f-automod-config_massmention_limit">Mention limit</label>
+                            <p class="cf-row-desc">A message that mentions this many members or more is caught. Role mentions are not counted.</p>
+                        </div>
+                        <div class="cf-row-control">
+                            <div class="cf-input-unit">
+                                <input id="f-automod-config_massmention_limit" type="number" name="config_massMention_limit" class="form-control" value="5" min="1" placeholder="5">
+                                <span class="cf-unit">mentions</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div id="allCaps-config" style="display: none;">
+                    <div class="cf-row">
+                        <div class="cf-row-text">
+                            <label class="cf-row-label" for="f-automod-config_allcaps_limit">Capital letters limit</label>
+                            <p class="cf-row-desc">A message of 15 letters or more is caught when this share of its letters or more are capitals.</p>
+                        </div>
+                        <div class="cf-row-control">
+                            <div class="cf-input-unit">
+                                <input id="f-automod-config_allcaps_limit" type="number" name="config_allCaps_limit" class="form-control" value="70" min="1" max="100" placeholder="70">
+                                <span class="cf-unit">%</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div id="antiSpam-config" style="display: none;">
+                    <div class="cf-row">
+                        <div class="cf-row-text">
+                            <label class="cf-row-label" for="f-automod-config_antispam_message_limit">Message limit</label>
+                            <p class="cf-row-desc">The rule fires when one member sends this many copies of the same, or nearly the same, message within the time window. Different messages sent quickly do not count.</p>
+                        </div>
+                        <div class="cf-row-control">
+                            <div class="cf-input-unit">
+                                <input id="f-automod-config_antispam_message_limit" type="number" name="config_antiSpam_message_limit" class="form-control" value="5" min="2" placeholder="5">
+                                <span class="cf-unit">messages</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="cf-row">
+                        <div class="cf-row-text">
+                            <label class="cf-row-label" for="f-automod-config_antispam_time_period">Time window</label>
+                            <p class="cf-row-desc">The period those messages are counted over.</p>
+                        </div>
+                        <div class="cf-row-control">
+                            <div class="cf-input-unit">
+                                <input id="f-automod-config_antispam_time_period" type="number" name="config_antiSpam_time_period" class="form-control" value="10" min="1" placeholder="10">
+                                <span class="cf-unit">seconds</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="f-automod-ignored_roles">Ignored roles</label>
+                    <p class="cf-row-desc" id="f-automod-ignored_roles-desc">This rule skips members with any of these roles.</p>
+                </div>
+                <div class="cf-row-control">
+                    <select id="f-automod-ignored_roles" class="form-select" name="ignored_roles" multiple size="5" aria-describedby="f-automod-ignored_roles-desc">
+                        <% (locals.roles || []).forEach(r => { %><option value="<%= r.id %>" data-kind="role" data-color="<%= amRoleColor(r) %>"><%= r.name %></option>
+                        <% }) %>
+                    </select>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="f-automod-ignored_channels">Ignored channels</label>
+                    <p class="cf-row-desc" id="f-automod-ignored_channels-desc">This rule does not run in these channels. A category covers every channel in it.</p>
+                </div>
+                <div class="cf-row-control">
+                    <select id="f-automod-ignored_channels" class="form-select" name="ignored_channels" multiple size="5" aria-describedby="f-automod-ignored_channels-desc">
+                        <% if ((locals.categories || []).length) { %><optgroup label="Categories"><% locals.categories.forEach(c => { %><option value="<%= c.id %>" data-kind="category"><%= c.name %></option><% }) %></optgroup><% } %>
+                        <optgroup label="Channels"><% (locals.channels || []).forEach(c => { const v = amIsVoice(c); %><option value="<%= c.id %>" data-kind="<%= v ? 'voice' : 'text' %>"><%= v ? '' : '#' %><%= c.name %></option><% }) %></optgroup>
+                    </select>
+                </div>
+            </div>
+
+            <div class="cf-section-foot">
+                <button type="submit" class="btn btn-primary">Add rule</button>
+            </div>
         </form>
-    </div>
+    </section>
 
-    <!-- Existing Rules -->
-    <div class="automod-section">
-        <h3 class="automod-section-title green">
-            <i class="fas fa-list-check"></i>
-            Active AutoMod Rules
-        </h3>
-
-        <% if (automodRules && automodRules.length > 0) { %>
-            <div class="table-container">
-                <table class="data-table">
+    <section class="cf-section" aria-labelledby="am-rules-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="am-rules-title">Active rules</h2>
+                <p class="cf-section-desc">Every rule runs on every message, except in the channels and for the roles it skips, in ticket channels, and from administrators, the server owner and members on the allowlist below. Only the first rule a message breaks acts.</p>
+            </div>
+            <div class="cf-section-actions"><span class="cf-pill<%= amRules.length ? ' is-ok' : '' %>"><%= amRules.length %> <%= amRules.length === 1 ? 'rule' : 'rules' %></span></div>
+        </header>
+        <div class="cf-rows">
+            <% if (amRules.length > 0) { %>
+            <div class="cf-table-wrap">
+                <table class="cf-table cf-table--stack">
                     <thead>
-                        <tr>
-                            <th>Filter Type</th>
-                            <th>Configuration</th>
-                            <th>Punishment</th>
-                            <th style="width: 90px;">Manage</th>
-                        </tr>
+                        <tr><th scope="col">Filter</th><th scope="col">Settings</th><th scope="col">Action</th><th scope="col"><span class="visually-hidden">Manage</span></th></tr>
                     </thead>
                     <tbody>
-                        <% automodRules.forEach(rule => {
-                            const typeIcons = {
-                                bannedWords: 'fa-ban',
-                                banned_words: 'fa-ban',
-                                massMention: 'fa-at',
-                                mass_mention: 'fa-at',
-                                allCaps: 'fa-text-height',
-                                all_caps: 'fa-text-height',
-                                antiSpam: 'fa-comment-slash',
-                                anti_spam: 'fa-comment-slash'
-                            };
-                            const typeClasses = {
-                                bannedWords: 'danger', banned_words: 'danger',
-                                massMention: 'purple', mass_mention: 'purple',
-                                allCaps: 'warning', all_caps: 'warning',
-                                antiSpam: 'orange', anti_spam: 'orange'
-                            };
-                            const actionClasses = {
-                                delete: 'danger', warn: 'warning', mute: 'orange'
-                            };
-                            const config = typeof rule.config === 'string' ? JSON.parse(rule.config) : rule.config;
+                        <% amRules.forEach(rule => {
+                            const config = typeof rule.config === 'string' ? JSON.parse(rule.config) : (rule.config || {});
+                            const t = rule.filter_type;
                         %>
-                            <tr>
-                                <td>
-                                    <div class="automod-type-cell">
-                                        <i class="fas <%= typeIcons[rule.filter_type] %>"></i>
-                                        <span class="automod-badge <%= typeClasses[rule.filter_type] %>">
-                                            <%= rule.filter_type.replace(/_/g, ' ').replace(/([A-Z])/g, ' $1').trim() %>
-                                        </span>
-                                    </div>
-                                </td>
-                                <td>
-                                    <div class="automod-config-cell">
-                                        <% if ((rule.filter_type === 'bannedWords' || rule.filter_type === 'banned_words') && config.words) { %>
-                                            Words: <span class="highlight"><%= config.words.slice(0, 5).join(', ') %><%= config.words.length > 5 ? '...' : '' %></span>
-                                        <% } else if ((rule.filter_type === 'massMention' || rule.filter_type === 'mass_mention') && (config.limit || config.mention_limit)) { %>
-                                            Limit: <span class="highlight purple"><%= config.limit || config.mention_limit %></span> mentions
-                                        <% } else if ((rule.filter_type === 'allCaps' || rule.filter_type === 'all_caps') && (config.limit || config.caps_limit)) { %>
-                                            Max: <span class="highlight warning"><%= config.limit || config.caps_limit %>%</span> caps
-                                        <% } else if (rule.filter_type === 'antiSpam' || rule.filter_type === 'anti_spam') { %>
-                                            <span class="highlight purple"><%= config.messageLimit || config.message_limit || 5 %></span> msgs /
-                                            <span class="highlight orange"><%= config.timePeriod || config.time_period || 10 %>s</span>
-                                        <% } else { %>
-                                            <pre style="margin: 0;"><%= JSON.stringify(config, null, 2) %></pre>
-                                        <% } %>
-                                    </div>
-                                </td>
-                                <td>
-                                    <span class="automod-badge <%= actionClasses[rule.action] %>">
-                                        <i class="fas <%= rule.action === 'delete' ? 'fa-trash' : rule.action === 'warn' ? 'fa-exclamation-triangle' : 'fa-volume-mute' %>"></i>
-                                        <%= rule.action %>
-                                    </span>
-                                </td>
-                                <td>
-                                    <div class="automod-actions">
-                                        <button type="button" class="btn btn-sm btn-primary" title="Edit rule" onclick="openEditModal(<%= JSON.stringify(rule).replace(/"/g, '&quot;') %>)">
-                                            <i class="fas fa-edit"></i>
-                                        </button>
-                                        <form action="/manage/<%= guild.id %>/remove-automod-rule" method="POST" class="d-inline">
-                                            <input type="hidden" name="ruleId" value="<%= rule.id %>">
-                                            <button type="submit" class="btn btn-sm btn-danger" title="Delete rule">
-                                                <i class="fas fa-trash"></i>
-                                            </button>
-                                        </form>
-                                    </div>
-                                </td>
-                            </tr>
+                        <tr>
+                            <td data-label="Filter"><span class="cf-pill"><%= amTypeLabel[t] || String(t).replace(/_/g, ' ') %></span><% if (!Number(rule.is_enabled)) { %> <span class="cf-pill is-warn">Off</span><% } %></td>
+                            <td data-label="Settings">
+                                <div class="am-settings">
+                                    <% const amWords = Array.isArray(config.words) ? config.words : (Array.isArray(config.banned_words) ? config.banned_words : null); %>
+                                    <% if ((t === 'bannedWords' || t === 'banned_words') && amWords) { %>
+                                        <%= amWords.slice(0, 5).join(', ') %><%= amWords.length > 5 ? ` and ${amWords.length - 5} more` : '' %>
+                                    <% } else if ((t === 'massMention' || t === 'mass_mention' || t === 'mass_mentions') && (config.max_mentions || config.limit || config.mention_limit)) { %>
+                                        <span class="cf-em"><%= config.max_mentions || config.limit || config.mention_limit %></span> or more member mentions<% if (config.max_role_mentions) { %>, or <span class="cf-em"><%= config.max_role_mentions %></span> or more role mentions<% } %>
+                                    <% } else if ((t === 'allCaps' || t === 'all_caps') && (config.caps_percentage || config.limit || config.caps_limit)) { %>
+                                        <span class="cf-em"><%= config.caps_percentage || config.limit || config.caps_limit %>%</span> capitals or more, in messages of <%= config.min_length || 15 %> letters or more
+                                    <% } else if (amIsSpam(t)) { %>
+                                        <%# The same keys and defaults core/automod.js reads (3 repeats in 30 seconds when unset). %>
+                                        <span class="cf-em"><%= config.message_limit || config.duplicate_threshold || config.messageLimit || 3 %></span> repeats in
+                                        <span class="cf-em"><%= config.time_period || config.time_window_seconds || config.timePeriod || 30 %></span> seconds
+                                    <% } else if (amIsInvite(t)) { %>
+                                        Discord invite links
+                                    <% } else { %>
+                                        <code><%= JSON.stringify(config) %></code>
+                                    <% } %>
+                                </div>
+                                <% const igR = amIds(rule.ignored_roles), igC = amIds(rule.ignored_channels); if (igR.length || igC.length) { %>
+                                <div class="am-ignores">Skips <%= [igR.length ? igR.map(id => '@' + (amRoleName.get(id) || id)).join(', ') : null, igC.length ? igC.map(id => '#' + (amChannelName.get(id) || id)).join(', ') : null].filter(Boolean).join('; ') %></div>
+                                <% } %>
+                            </td>
+                            <td data-label="Action">
+                                <span class="cf-pill <%= amActionTone[rule.action] || '' %>"><%= amActionLabel[rule.action] || rule.action %></span><% if (rule.action === 'mute' && rule.action_duration_minutes) { %> <span class="cf-cell-muted"><%= rule.action_duration_minutes %> min</span><% } %>
+                            </td>
+                            <td class="cf-cell-end">
+                                <div class="automod-actions">
+                                    <button type="button" class="btn btn-sm btn-secondary" onclick="openEditModal(<%= JSON.stringify(rule) %>)">Edit</button>
+                                    <form action="/manage/<%= guild.id %>/remove-automod-rule" method="POST">
+                                        <input type="hidden" name="ruleId" value="<%= rule.id %>">
+                                        <button type="submit" class="btn btn-sm btn-danger">Remove</button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
                         <% }) %>
                     </tbody>
                 </table>
             </div>
-        <% } else { %>
-            <div class="empty-state">
-                <div class="empty-state-icon"><i class="fas fa-robot"></i></div>
-                <div class="empty-state-title">No AutoMod Rules</div>
-                <div class="empty-state-description">
-                    Create your first AutoMod rule to start automatically moderating content
-                </div>
+            <% } else { %>
+            <%- include('../kit/_state', { kind: 'empty', title: 'No AutoMod rules yet', text: 'Add a rule above to start acting on spam, mass mentions, capitals or banned words.', id: null, boxed: false, compact: false }) %>
+            <% } %>
+        </div>
+    </section>
+
+    <section class="cf-section" id="discordAutomodCard" data-guild-id="<%= guild.id %>" aria-labelledby="dam-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="dam-title">Discord AutoMod rules</h2>
+                <p class="cf-section-desc">Rules Discord runs itself, so blocked messages never appear. The same rules as Server Settings, AutoMod. Changes save at once.</p>
             </div>
-        <% } %>
-    </div>
+            <div class="cf-section-actions">
+                <span class="cf-pill" id="cfk-dam-count" hidden></span>
+                <button type="button" class="btn btn-sm btn-primary" id="dam-add-btn">New rule</button>
+            </div>
+        </header>
+        <div id="dam-list" class="cf-rows" aria-live="polite"></div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="am-allow-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="am-allow-title">Allowlist</h2>
+                <p class="cf-section-desc">Members here skip every AutoMod filter and every other automatic protection. It is the same list as on
+                    <a href="/manage/<%= guild.id %>?page=protection-settings">Protection settings</a>, where you can also allowlist roles and pause protections.</p>
+            </div>
+            <div class="cf-section-actions"><span class="cf-pill" id="cfk-am-allow-count" hidden></span></div>
+        </header>
+        <div class="cf-rows">
+            <form id="whitelist-add-form" data-no-ajax="true">
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-fields">
+                        <div class="cf-field">
+                            <label for="f-automod-userid">User ID</label>
+                            <input id="f-automod-userid" type="text" class="form-control" name="userId" placeholder="123456789012345678" required pattern="[0-9]{17,20}" inputmode="numeric" autocomplete="off">
+                            <span class="cf-field-hint">The member's Discord user ID: 17 to 20 digits.</span>
+                        </div>
+                        <div class="cf-field">
+                            <label for="f-automod-reason">Reason (optional)</label>
+                            <input id="f-automod-reason" type="text" class="form-control" name="reason" placeholder="Technical owner" maxlength="255">
+                        </div>
+                    </div>
+                </div>
+                <div class="cf-section-foot">
+                    <button type="submit" class="btn btn-primary">Add to allowlist</button>
+                </div>
+            </form>
+            <div id="whitelist-list">
+                <%- include('../kit/_state', { kind: 'loading', title: 'Loading the allowlist', text: null, id: null, boxed: false, compact: true }) %>
+            </div>
+        </div>
+    </section>
 </div>
 
-<style>
-/* Compact AutoMod Styles */
-.automod-stats-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 12px;
-    margin-bottom: 18px;
-}
-
-.automod-stat-card {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(167, 139, 250, 0.15);
-    border-radius: 10px;
-    padding: 14px 16px;
-}
-
-.automod-stat-label {
-    font-size: 0.7rem;
-    color: rgba(255, 255, 255, 0.5);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin-bottom: 4px;
-}
-
-.automod-stat-value {
-    font-size: 1.5rem;
-    font-weight: 700;
-    color: #ffffff;
-}
-
-.automod-stat-value.purple { color: #a78bfa; }
-.automod-stat-value.accent { color: #c084fc; }
-.automod-stat-value.green { color: #22c55e; }
-.automod-stat-value.orange { color: #f97316; }
-
-/* Sections */
-.automod-section { margin-bottom: 18px; }
-
-.automod-section-title {
-    font-size: 0.95rem;
-    font-weight: 600;
-    color: #ffffff;
-    margin-bottom: 12px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.automod-section-title i { color: #a78bfa; }
-.automod-section-title.green i { color: #22c55e; }
-
-/* Form Card */
-.automod-form-card {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(167, 139, 250, 0.15);
-    border-radius: 12px;
-    padding: 18px;
-}
-
-.automod-form-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 14px;
-    margin-bottom: 14px;
-}
-
-.automod-config-section { margin-bottom: 14px; }
-
-.automod-spam-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 14px;
-}
-
-/* Table */
-.table-container {
-    overflow-x: auto;
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 10px;
-}
-
-.data-table {
-    width: 100%;
-    border-collapse: collapse;
-    background: rgba(0, 0, 0, 0.2);
-}
-
-.data-table thead {
-    background: rgba(0, 0, 0, 0.2);
-    border-bottom: 2px solid rgba(255, 255, 255, 0.08);
-}
-
-.data-table th {
-    padding: 10px 12px;
-    text-align: left;
-    font-size: 0.7rem;
-    font-weight: 600;
-    color: rgba(255, 255, 255, 0.6);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-
-.data-table td {
-    padding: 12px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-    color: #ffffff;
-    font-size: 0.85rem;
-}
-
-.data-table tbody tr { transition: background 0.2s; }
-.data-table tbody tr:hover { background: rgba(0, 0, 0, 0.2); }
-.data-table tbody tr:last-child td { border-bottom: none; }
-
-/* Table Cells */
-.automod-type-cell {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.automod-config-cell {
-    font-family: monospace;
-    font-size: 0.8rem;
-    background: rgba(0, 0, 0, 0.2);
-    padding: 8px;
-    border-radius: 6px;
-    max-width: 350px;
-    overflow-x: auto;
-    color: rgba(255, 255, 255, 0.6);
-}
-
-.automod-config-cell .highlight { color: #ffffff; font-weight: 600; }
-.automod-config-cell .highlight.purple { color: #a78bfa; }
-.automod-config-cell .highlight.warning { color: #fbbf24; }
-.automod-config-cell .highlight.orange { color: #f97316; }
-
-.automod-actions { display: flex; gap: 6px; }
-
-/* Badge */
-.automod-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    padding: 4px 10px;
-    border-radius: 4px;
-    font-size: 0.7rem;
-    font-weight: 600;
-    text-transform: capitalize;
-}
-
-.automod-badge.danger { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
-.automod-badge.purple { background: rgba(167, 139, 250, 0.2); color: #a78bfa; }
-.automod-badge.warning { background: rgba(251, 191, 36, 0.2); color: #fbbf24; }
-.automod-badge.orange { background: rgba(249, 115, 22, 0.2); color: #f97316; }
-
-/* Form Styles */
-.form-label {
-    display: block;
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: #ffffff;
-    margin-bottom: 6px;
-}
-
-.form-label i { color: #a78bfa; margin-right: 6px; }
-
-.form-control, .form-select {
-    width: 100%;
-    padding: 10px 14px;
-    background: rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 8px;
-    color: #ffffff;
-    font-size: 0.85rem;
-    transition: all 0.2s;
-}
-
-.form-control:focus, .form-select:focus {
-    outline: none;
-    border-color: rgba(167, 139, 250, 0.5);
-    box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.1);
-}
-
-.form-help {
-    font-size: 0.7rem;
-    color: rgba(255, 255, 255, 0.45);
-    margin-top: 4px;
-}
-
-/* Empty State */
-.empty-state {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(167, 139, 250, 0.15);
-    border-radius: 12px;
-    padding: 48px 24px;
-    text-align: center;
-}
-
-.empty-state-icon {
-    font-size: 2.5rem;
-    color: rgba(255, 255, 255, 0.3);
-    margin-bottom: 14px;
-}
-
-.empty-state-title {
-    font-size: 1.1rem;
-    font-weight: 600;
-    color: #ffffff;
-    margin-bottom: 8px;
-}
-
-.empty-state-description {
-    font-size: 0.85rem;
-    color: rgba(255, 255, 255, 0.5);
-    max-width: 350px;
-    margin: 0 auto;
-}
-
-@media (max-width: 1024px) {
-    .automod-stats-grid { grid-template-columns: repeat(2, 1fr); }
-    .automod-form-grid { grid-template-columns: 1fr; }
-}
-
-@media (max-width: 768px) {
-    .automod-stats-grid { grid-template-columns: 1fr; }
-    .automod-spam-grid { grid-template-columns: 1fr; }
-}
-
-/* Modal */
-.automod-modal {
-    display: none;
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.7);
-    z-index: 1000;
-    align-items: center;
-    justify-content: center;
-}
-
-.automod-modal-content {
-    background: rgba(26, 29, 33, 0.98);
-    border: 1px solid rgba(167, 139, 250, 0.2);
-    border-radius: 12px;
-    padding: 18px;
-    max-width: 450px;
-    width: 90%;
-    max-height: 90vh;
-    overflow-y: auto;
-}
-
-.automod-modal-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 16px;
-}
-
-.automod-modal-title {
-    font-size: 1rem;
-    font-weight: 600;
-    color: #ffffff;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin: 0;
-}
-
-.automod-modal-title i { color: #a78bfa; }
-
-.automod-modal-close {
-    background: none;
-    border: none;
-    color: rgba(255, 255, 255, 0.5);
-    cursor: pointer;
-    font-size: 1.1rem;
-    padding: 4px;
-}
-
-.automod-modal-close:hover { color: #ffffff; }
-
-.automod-modal-field { margin-bottom: 14px; }
-
-.automod-modal-footer {
-    display: flex;
-    gap: 10px;
-    justify-content: flex-end;
-    margin-top: 18px;
-}
-</style>
+<!-- Edit rule dialog -->
+<div id="edit-modal" class="automod-modal cf-modal" role="dialog" aria-modal="true" aria-labelledby="edit-modal-title">
+    <div class="automod-modal-content cf-modal-dialog">
+        <div class="automod-modal-header cf-modal-head">
+            <h3 class="automod-modal-title cf-modal-title" id="edit-modal-title">Edit rule</h3>
+            <button type="button" onclick="closeEditModal()" class="automod-modal-close cf-modal-close" aria-label="Close"><i class="fas fa-times" aria-hidden="true"></i></button>
+        </div>
+        <form action="/manage/<%= guild.id %>/update-automod-rule" method="POST">
+            <input type="hidden" id="edit-rule-id" name="ruleId">
+            <input type="hidden" id="edit-filter-type" name="filter_type">
+            <div class="automod-modal-body cf-modal-body">
+                <div class="automod-modal-field">
+                    <label for="edit-action">Action</label>
+                    <select id="edit-action" name="action" class="form-select" required>
+                        <option value="ladder" hidden disabled>Delete and time out, longer each time</option>
+                        <option value="delete">Delete message</option>
+                        <option value="warn">Delete and warn member</option>
+                        <option value="mute">Delete and mute member</option>
+                        <option value="kick">Delete and kick member</option>
+                        <option value="ban">Delete and ban member</option>
+                    </select>
+                </div>
+                <div id="edit-mute-duration-container" class="automod-modal-field" style="display: none;">
+                    <label for="edit-action-duration">Mute length (minutes)</label>
+                    <input type="number" id="edit-action-duration" name="action_duration_minutes" class="form-control" min="1" max="40320" placeholder="10">
+                </div>
+                <div id="edit-bannedWords-config" class="edit-config-section automod-modal-field" style="display: none;">
+                    <label for="edit-banned-words">Banned words (separated by commas)</label>
+                    <textarea id="edit-banned-words" name="config_banned_words" class="form-control" rows="3"></textarea>
+                </div>
+                <div id="edit-massMention-config" class="edit-config-section automod-modal-field" style="display: none;">
+                    <label for="edit-mention-limit">Mention limit</label>
+                    <input type="number" id="edit-mention-limit" name="config_massMention_limit" class="form-control" min="1">
+                </div>
+                <div id="edit-allCaps-config" class="edit-config-section automod-modal-field" style="display: none;">
+                    <label for="edit-caps-limit">Capital letters limit (%)</label>
+                    <input type="number" id="edit-caps-limit" name="config_allCaps_limit" class="form-control" min="1" max="100">
+                </div>
+                <div class="automod-modal-field">
+                    <label for="edit-ignored-roles">Ignored roles</label>
+                    <select id="edit-ignored-roles" name="ignored_roles" class="form-select" multiple size="4" aria-describedby="edit-ignored-roles-hint">
+                        <% (locals.roles || []).forEach(r => { %><option value="<%= r.id %>" data-kind="role" data-color="<%= amRoleColor(r) %>"><%= r.name %></option>
+                        <% }) %>
+                    </select>
+                    <p class="am-modal-hint" id="edit-ignored-roles-hint">This rule skips members with any of these roles.</p>
+                </div>
+                <div class="automod-modal-field">
+                    <label for="edit-ignored-channels">Ignored channels</label>
+                    <select id="edit-ignored-channels" name="ignored_channels" class="form-select" multiple size="4" aria-describedby="edit-ignored-channels-hint">
+                        <% if ((locals.categories || []).length) { %><optgroup label="Categories"><% locals.categories.forEach(c => { %><option value="<%= c.id %>" data-kind="category"><%= c.name %></option><% }) %></optgroup><% } %>
+                        <optgroup label="Channels"><% (locals.channels || []).forEach(c => { const v = amIsVoice(c); %><option value="<%= c.id %>" data-kind="<%= v ? 'voice' : 'text' %>"><%= v ? '' : '#' %><%= c.name %></option><% }) %></optgroup>
+                    </select>
+                    <p class="am-modal-hint" id="edit-ignored-channels-hint">This rule does not run in these channels.</p>
+                </div>
+                <div id="edit-antiSpam-config" class="edit-config-section automod-modal-field" style="display: none;">
+                    <div class="automod-spam-grid">
+                        <div class="automod-modal-field">
+                            <label for="edit-message-limit">Message limit</label>
+                            <input type="number" id="edit-message-limit" name="config_antiSpam_message_limit" class="form-control" min="2">
+                        </div>
+                        <div class="automod-modal-field">
+                            <label for="edit-time-period">Time window (seconds)</label>
+                            <input type="number" id="edit-time-period" name="config_antiSpam_time_period" class="form-control" min="1">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="automod-modal-footer cf-modal-foot">
+                <button type="button" onclick="closeEditModal()" class="btn btn-secondary">Cancel</button>
+                <button type="submit" class="btn btn-primary">Save changes</button>
+            </div>
+        </form>
+    </div>
+</div>
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
@@ -552,6 +494,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (configContainers[selectedType]) {
             configContainers[selectedType].style.display = 'block';
         }
+        amSpamActionChoice(actionSelect, selectedType === 'antiSpam', true);
+        toggleMuteDuration();
     }
 
     function toggleMuteDuration() {
@@ -566,13 +510,25 @@ document.addEventListener('DOMContentLoaded', () => {
     toggleMuteDuration();
 });
 
+// "Time out, longer each time" is a Message spam action only (core/automod.js spamRuleAction).
+// For a new spam rule it is the suggested choice, as it is what spam rules did before they had a choice.
+function amSpamActionChoice(select, isSpam, suggest) {
+    const opt = select.querySelector('option[value="ladder"]');
+    opt.hidden = !isSpam;
+    opt.disabled = !isSpam;
+    if (!isSpam && select.value === 'ladder') select.value = 'delete';
+    else if (isSpam && suggest && select.value === 'delete') select.value = 'ladder';
+}
+
 // Edit modal functionality
 function openEditModal(rule) {
     const modal = document.getElementById('edit-modal');
-    const config = typeof rule.config === 'string' ? JSON.parse(rule.config) : rule.config;
+    let config = {};
+    try { config = (typeof rule.config === 'string' ? JSON.parse(rule.config) : rule.config) || {}; } catch (e) { config = {}; }
 
     document.getElementById('edit-rule-id').value = rule.id;
     document.getElementById('edit-filter-type').value = rule.filter_type;
+    amSpamActionChoice(document.getElementById('edit-action'), ['antiSpam', 'anti_spam', 'spam'].includes(rule.filter_type), false);
     document.getElementById('edit-action').value = rule.action;
     document.getElementById('edit-action-duration').value = rule.action_duration_minutes || '';
 
@@ -586,19 +542,29 @@ function openEditModal(rule) {
     // Hide all config sections
     document.querySelectorAll('.edit-config-section').forEach(el => el.style.display = 'none');
 
+    // Per-rule ignored roles and channels (stored as JSON arrays).
+    const idsOf = (raw) => { try { const v = typeof raw === 'string' ? JSON.parse(raw) : raw; return Array.isArray(v) ? v.map(String) : []; } catch (e) { return []; } };
+    const pick = (id, ids) => { const want = new Set(ids); for (const o of document.getElementById(id).options) o.selected = want.has(o.value); };
+    pick('edit-ignored-roles', idsOf(rule.ignored_roles));
+    pick('edit-ignored-channels', idsOf(rule.ignored_channels));
+
+    // The key spellings core/automod.js reads first (setup scripts wrote some rules with other names).
+    const cfg = config || {};
     if (filterType === 'bannedWords' || filterType === 'banned_words') {
         document.getElementById('edit-bannedWords-config').style.display = 'block';
-        document.getElementById('edit-banned-words').value = config.words ? config.words.join(', ') : '';
-    } else if (filterType === 'massMention' || filterType === 'mass_mention') {
+        const words = Array.isArray(cfg.words) ? cfg.words : (Array.isArray(cfg.banned_words) ? cfg.banned_words : []);
+        document.getElementById('edit-banned-words').value = words.join(', ');
+    } else if (filterType === 'massMention' || filterType === 'mass_mention' || filterType === 'mass_mentions') {
         document.getElementById('edit-massMention-config').style.display = 'block';
-        document.getElementById('edit-mention-limit').value = config.limit || config.mention_limit || 5;
+        document.getElementById('edit-mention-limit').value = cfg.max_mentions || cfg.limit || cfg.mention_limit || 5;
     } else if (filterType === 'allCaps' || filterType === 'all_caps') {
         document.getElementById('edit-allCaps-config').style.display = 'block';
-        document.getElementById('edit-caps-limit').value = config.limit || config.caps_limit || 70;
-    } else if (filterType === 'antiSpam' || filterType === 'anti_spam') {
+        document.getElementById('edit-caps-limit').value = cfg.caps_percentage || cfg.limit || cfg.caps_limit || 70;
+    } else if (filterType === 'antiSpam' || filterType === 'anti_spam' || filterType === 'spam') {
+        // Unset values show what core/automod.js uses (3 repeats in 30 seconds), so saving changes nothing by accident.
         document.getElementById('edit-antiSpam-config').style.display = 'block';
-        document.getElementById('edit-message-limit').value = config.messageLimit || config.message_limit || 5;
-        document.getElementById('edit-time-period').value = config.timePeriod || config.time_period || 10;
+        document.getElementById('edit-message-limit').value = cfg.message_limit || cfg.duplicate_threshold || cfg.messageLimit || 3;
+        document.getElementById('edit-time-period').value = cfg.time_period || cfg.time_window_seconds || cfg.timePeriod || 30;
     }
 
     modal.style.display = 'flex';
@@ -616,6 +582,12 @@ document.addEventListener('click', (e) => {
     }
 });
 
+// Close modal with Escape
+document.addEventListener('keydown', (e) => {
+    const modal = document.getElementById('edit-modal');
+    if (e.key === 'Escape' && modal && modal.style.display === 'flex') closeEditModal();
+});
+
 // Toggle mute duration in edit modal
 document.getElementById('edit-action')?.addEventListener('change', (e) => {
     document.getElementById('edit-mute-duration-container').style.display =
@@ -623,180 +595,43 @@ document.getElementById('edit-action')?.addEventListener('change', (e) => {
 });
 </script>
 
-<!-- Edit Modal -->
-<div id="edit-modal" class="automod-modal">
-    <div class="automod-modal-content">
-        <div class="automod-modal-header">
-            <h3 class="automod-modal-title">
-                <i class="fas fa-edit"></i>
-                Edit AutoMod Rule
-            </h3>
-            <button type="button" onclick="closeEditModal()" class="automod-modal-close">
-                <i class="fas fa-times"></i>
-            </button>
-        </div>
-
-        <form action="/manage/<%= guild.id %>/update-automod-rule" method="POST">
-            <input type="hidden" id="edit-rule-id" name="ruleId">
-            <input type="hidden" id="edit-filter-type" name="filter_type">
-
-            <div class="automod-modal-field">
-                <label class="form-label">
-                    <i class="fas fa-gavel"></i>
-                    Punishment
-                </label>
-                <select id="edit-action" name="action" class="form-select" required>
-                    <option value="delete">Delete Message</option>
-                    <option value="warn">Warn Member</option>
-                    <option value="mute">Mute Member</option>
-                </select>
-            </div>
-
-            <div id="edit-mute-duration-container" class="automod-modal-field" style="display: none;">
-                <label class="form-label">
-                    <i class="fas fa-clock"></i>
-                    Mute Duration (minutes)
-                </label>
-                <input type="number" id="edit-action-duration" name="action_duration_minutes" class="form-control" min="1" placeholder="10">
-            </div>
-
-            <!-- Banned Words Config -->
-            <div id="edit-bannedWords-config" class="edit-config-section automod-modal-field" style="display: none;">
-                <label class="form-label">
-                    <i class="fas fa-ban"></i>
-                    Banned Words (comma-separated)
-                </label>
-                <textarea id="edit-banned-words" name="config_banned_words" class="form-control" rows="3"></textarea>
-            </div>
-
-            <!-- Mass Mention Config -->
-            <div id="edit-massMention-config" class="edit-config-section automod-modal-field" style="display: none;">
-                <label class="form-label">
-                    <i class="fas fa-at"></i>
-                    Mention Limit
-                </label>
-                <input type="number" id="edit-mention-limit" name="config_massMention_limit" class="form-control" min="1">
-            </div>
-
-            <!-- All Caps Config -->
-            <div id="edit-allCaps-config" class="edit-config-section automod-modal-field" style="display: none;">
-                <label class="form-label">
-                    <i class="fas fa-text-height"></i>
-                    Capitalization Percentage Limit (%)
-                </label>
-                <input type="number" id="edit-caps-limit" name="config_allCaps_limit" class="form-control" min="1" max="100">
-            </div>
-
-            <!-- Anti-Spam Config -->
-            <div id="edit-antiSpam-config" class="edit-config-section automod-modal-field" style="display: none;">
-                <div class="automod-spam-grid">
-                    <div>
-                        <label class="form-label">
-                            <i class="fas fa-comment-slash"></i>
-                            Message Limit
-                        </label>
-                        <input type="number" id="edit-message-limit" name="config_antiSpam_message_limit" class="form-control" min="2">
-                    </div>
-                    <div>
-                        <label class="form-label">
-                            <i class="fas fa-hourglass-half"></i>
-                            Time Period (seconds)
-                        </label>
-                        <input type="number" id="edit-time-period" name="config_antiSpam_time_period" class="form-control" min="1">
-                    </div>
-                </div>
-            </div>
-
-            <div class="automod-modal-footer">
-                <button type="button" onclick="closeEditModal()" class="btn btn-secondary">Cancel</button>
-                <button type="submit" class="btn btn-primary">
-                    <i class="fas fa-save"></i>
-                    Save Changes
-                </button>
-            </div>
-        </form>
-    </div>
-</div>
-
-<!-- Automod User Whitelist Section -->
-<div class="page-section" style="margin-top: var(--spacing-6, 24px);">
-    <div class="page-section-header">
-        <div>
-            <div class="page-section-title">
-                <i class="fas fa-shield-alt"></i>
-                <span>Automod Whitelist</span>
-            </div>
-            <div class="page-section-subtitle">
-                Users on this list bypass ALL automod filters (spam, phishing, live promotion, self-promo)
-            </div>
-        </div>
-    </div>
-
-    <div style="background: var(--color-dark-600, #2a2d35); padding: 24px; border-radius: 12px; border: 1px solid var(--color-dark-400, #3a3d45);">
-        <!-- Add User Form -->
-        <form id="whitelist-add-form" data-no-ajax="true" style="margin-bottom: 20px;">
-            <div style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 12px; align-items: end;">
-                <div>
-                    <label class="form-label">User ID</label>
-                    <input type="text" class="form-input" name="userId" placeholder="e.g. 123456789012345678" required pattern="[0-9]{17,20}">
-                    <div class="form-help">Discord user ID to whitelist</div>
-                </div>
-                <div>
-                    <label class="form-label">Reason (optional)</label>
-                    <input type="text" class="form-input" name="reason" placeholder="e.g. Technical owner" maxlength="255">
-                </div>
-                <div>
-                    <button type="submit" class="btn btn-primary" style="padding: 10px 20px;">
-                        <i class="fas fa-plus"></i> Add
-                    </button>
-                </div>
-            </div>
-        </form>
-
-        <!-- Whitelist Table -->
-        <div id="whitelist-list" style="min-height: 60px;">
-            <div style="text-align: center; color: var(--color-text-muted, #888); padding: 20px;">
-                <i class="fas fa-spinner fa-spin"></i> Loading whitelist...
-            </div>
-        </div>
-    </div>
-</div>
-
 <script>
 (function() {
     const guildId = '<%= guild.id %>';
     const whitelistContainer = document.getElementById('whitelist-list');
     const addForm = document.getElementById('whitelist-add-form');
 
-    function escapeHtml(str) {
-        const div = document.createElement('div');
-        div.textContent = str;
-        return div.textContent;
+    function node(tag, className, text) {
+        const n = document.createElement(tag);
+        if (className) n.className = className;
+        if (text != null) n.textContent = text;
+        return n;
+    }
+    function state(kind, title) {
+        const box = node('div', 'cf-state cf-state--' + kind + ' cf-state--compact');
+        if (kind === 'error') box.setAttribute('role', 'alert');
+        box.appendChild(node('p', 'cf-state-title', title));
+        return box;
     }
 
     function buildWhitelistTable(whitelist) {
-        // Clear container safely
         whitelistContainer.textContent = '';
+        const count = document.getElementById('cfk-am-allow-count');
+        if (count) { count.hidden = false; count.textContent = whitelist.length + (whitelist.length === 1 ? ' member' : ' members'); }
 
         if (!whitelist.length) {
-            const empty = document.createElement('div');
-            empty.style.cssText = 'text-align: center; color: var(--color-text-muted, #888); padding: 20px;';
-            empty.textContent = 'No whitelisted users';
-            whitelistContainer.appendChild(empty);
+            whitelistContainer.appendChild(state('empty', 'Nobody is on the allowlist. Add a member by their user ID above.'));
             return;
         }
 
-        const table = document.createElement('table');
-        table.style.cssText = 'width: 100%; border-collapse: collapse;';
-
+        const wrap = node('div', 'cf-table-wrap');
+        const table = node('table', 'cf-table cf-table--stack');
         const thead = document.createElement('thead');
         const headerRow = document.createElement('tr');
-        headerRow.style.borderBottom = '2px solid var(--color-dark-400, #3a3d45)';
-        ['User', 'Reason', 'Added', ''].forEach(text => {
-            const th = document.createElement('th');
-            th.style.cssText = 'text-align: left; padding: 10px; color: var(--color-text-muted, #888); font-size: 0.85rem; text-transform: uppercase;';
-            if (text === '') th.style.textAlign = 'right';
-            th.textContent = text;
+        ['Member', 'Reason', 'Added', ''].forEach(text => {
+            const th = node('th', text === '' ? 'cf-cell-end' : null, text);
+            th.scope = 'col';
+            if (text === '') th.appendChild(node('span', 'visually-hidden', 'Remove'));
             headerRow.appendChild(th);
         });
         thead.appendChild(headerRow);
@@ -805,28 +640,24 @@ document.getElementById('edit-action')?.addEventListener('change', (e) => {
         const tbody = document.createElement('tbody');
         whitelist.forEach(entry => {
             const tr = document.createElement('tr');
-            tr.style.borderBottom = '1px solid var(--color-dark-400, #3a3d45)';
 
-            const tdUser = document.createElement('td');
-            tdUser.style.cssText = 'padding: 12px 10px; font-weight: 600; color: var(--color-text-primary, #fff);';
-            tdUser.textContent = entry.user_id;
+            const tdUser = node('td');
+            tdUser.dataset.label = 'Member';
+            if (window.CFUser) tdUser.appendChild(CFUser.cell(entry.user_id, { storedName: entry.username || null }));
+            else tdUser.textContent = entry.user_id;
             tr.appendChild(tdUser);
 
-            const tdReason = document.createElement('td');
-            tdReason.style.cssText = 'padding: 12px 10px; color: var(--color-text-secondary, #aaa);';
-            tdReason.textContent = entry.reason || 'No reason';
+            const tdReason = node('td', null, entry.reason || 'No reason given');
+            tdReason.dataset.label = 'Reason';
             tr.appendChild(tdReason);
 
-            const tdDate = document.createElement('td');
-            tdDate.style.cssText = 'padding: 12px 10px; color: var(--color-text-muted, #888); font-size: 0.9rem;';
-            tdDate.textContent = new Date(entry.created_at).toLocaleDateString();
+            const tdDate = node('td', 'cf-cell-muted', new Date(entry.created_at).toLocaleDateString());
+            tdDate.dataset.label = 'Added';
             tr.appendChild(tdDate);
 
-            const tdAction = document.createElement('td');
-            tdAction.style.cssText = 'padding: 12px 10px; text-align: right;';
-            const removeBtn = document.createElement('button');
-            removeBtn.className = 'btn btn-sm btn-danger';
-            removeBtn.textContent = 'Remove';
+            const tdAction = node('td', 'cf-cell-end');
+            const removeBtn = node('button', 'btn btn-sm btn-danger', 'Remove');
+            removeBtn.type = 'button';
             removeBtn.addEventListener('click', function() { removeWhitelistUser(entry.user_id); });
             tdAction.appendChild(removeBtn);
             tr.appendChild(tdAction);
@@ -834,7 +665,8 @@ document.getElementById('edit-action')?.addEventListener('change', (e) => {
             tbody.appendChild(tr);
         });
         table.appendChild(tbody);
-        whitelistContainer.appendChild(table);
+        wrap.appendChild(table);
+        whitelistContainer.appendChild(wrap);
     }
 
     async function loadWhitelist() {
@@ -844,15 +676,12 @@ document.getElementById('edit-action')?.addEventListener('change', (e) => {
             buildWhitelistTable(data.success ? data.whitelist : []);
         } catch (err) {
             whitelistContainer.textContent = '';
-            const errDiv = document.createElement('div');
-            errDiv.style.cssText = 'color: #e74c3c; padding: 10px;';
-            errDiv.textContent = 'Failed to load whitelist';
-            whitelistContainer.appendChild(errDiv);
+            whitelistContainer.appendChild(state('error', 'Could not load the allowlist.'));
         }
     }
 
     async function removeWhitelistUser(userId) {
-        if (!confirm('Remove this user from the automod whitelist?')) return;
+        if (!confirm('Remove this member from the allowlist? AutoMod and the other protections will apply to them again.')) return;
         try {
             const res = await fetch('/api/guilds/' + guildId + '/automod/whitelist/' + userId, {
                 method: 'DELETE',
@@ -860,10 +689,10 @@ document.getElementById('edit-action')?.addEventListener('change', (e) => {
             });
             const data = await res.json();
             if (data.success) {
-                if (typeof showToast === 'function') showToast('User removed from whitelist', 'success');
+                if (typeof showToast === 'function') showToast('Removed from the allowlist', 'success');
                 loadWhitelist();
             } else {
-                if (typeof showToast === 'function') showToast(data.error || 'Failed to remove', 'error');
+                if (typeof showToast === 'function') showToast(data.error || 'Could not remove them', 'error');
             }
         } catch (err) {
             if (typeof showToast === 'function') showToast('Network error', 'error');
@@ -885,11 +714,11 @@ document.getElementById('edit-action')?.addEventListener('change', (e) => {
             });
             var data = await res.json();
             if (data.success) {
-                if (typeof showToast === 'function') showToast('User added to whitelist', 'success');
+                if (typeof showToast === 'function') showToast('Added to the allowlist', 'success');
                 this.reset();
                 loadWhitelist();
             } else {
-                if (typeof showToast === 'function') showToast(data.error || 'Failed to add', 'error');
+                if (typeof showToast === 'function') showToast(data.error || 'Could not add them', 'error');
             }
         } catch (err) {
             if (typeof showToast === 'function') showToast('Network error', 'error');
@@ -897,5 +726,295 @@ document.getElementById('edit-action')?.addEventListener('change', (e) => {
     });
 
     loadWhitelist();
+})();
+</script>
+
+<%# ──────────────────────────────────────────────────────────────────────── %>
+<%# Discord-native AutoMod rules (what Discord's own Server Settings → AutoMod %>
+<%# edits). Thin shell on top of the Discord API, served by                   %>
+<%# dashboard/routes/api/features/automod.js. Lives in its own section so the %>
+<%# CertiFried-side filters above stay untouched.                             %>
+<%# ──────────────────────────────────────────────────────────────────────── %>
+
+
+<%# ── New / Edit rule modal ─────────────────────────────────────────────── %>
+<div id="dam-modal" class="cf-modal automod-modal" role="dialog" aria-modal="true" aria-labelledby="dam-modal-title">
+    <div class="cf-modal-dialog automod-modal-content">
+        <div class="cf-modal-head">
+            <h3 class="cf-modal-title" id="dam-modal-title">New rule</h3>
+            <button type="button" class="cf-modal-close" id="dam-modal-close" aria-label="Close"><i class="fas fa-times"></i></button>
+        </div>
+        <form id="dam-form" class="cf-modal-body">
+            <input type="hidden" id="dam-id" value="">
+
+            <div class="automod-modal-field">
+                <label for="dam-name">Rule name</label>
+                <input type="text" id="dam-name" class="form-control" maxlength="100" required placeholder="e.g. Block scam links">
+            </div>
+
+            <div class="automod-modal-field">
+                <label for="dam-trigger">Trigger</label>
+                <select id="dam-trigger" class="form-select" required>
+                    <option value="1">Keywords: words, wildcards or regex</option>
+                    <option value="3">Spam: Discord's own spam detection</option>
+                    <option value="4">Word lists: Discord's curated lists</option>
+                    <option value="5">Mention spam: too many mentions</option>
+                    <option value="6">Member names: words in a name</option>
+                </select>
+                <p class="am-modal-hint">The trigger cannot be changed after the rule is created.</p>
+            </div>
+
+            <%# ── trigger-type-specific metadata editors ──────────────── %>
+            <div id="dam-meta-keyword" class="automod-modal-field" style="display:none">
+                <label for="dam-keyword-filter">Keywords, one per line</label>
+                <textarea id="dam-keyword-filter" class="form-control" rows="4" placeholder="scam-site.example&#10;*nitro*gift*" aria-describedby="cfk-dam-keyword-hint"></textarea>
+                <p class="am-modal-hint" id="cfk-dam-keyword-hint"><code>*word</code>, <code>word*</code> and <code>*word*</code> match parts of words.</p>
+                <label for="dam-regex-patterns">Regex patterns, one per line</label>
+                <textarea id="dam-regex-patterns" class="form-control" rows="3" placeholder="^.{2000,}$" aria-describedby="cfk-dam-regex-hint"></textarea>
+                <p class="am-modal-hint" id="cfk-dam-regex-hint">Rust regex syntax, which is what Discord uses.</p>
+                <label for="dam-allow-list">Allowed phrases, one per line</label>
+                <textarea id="dam-allow-list" class="form-control" rows="2" aria-describedby="cfk-dam-allow-hint"></textarea>
+                <p class="am-modal-hint" id="cfk-dam-allow-hint">Phrases that would match but are fine.</p>
+            </div>
+
+            <fieldset id="dam-meta-preset" class="automod-modal-field am-fieldset" style="display:none">
+                <legend>Word lists</legend>
+                <label class="am-check"><input type="checkbox" class="dam-preset" value="1"> Profanity</label>
+                <label class="am-check"><input type="checkbox" class="dam-preset" value="2"> Sexual content</label>
+                <label class="am-check"><input type="checkbox" class="dam-preset" value="3"> Slurs</label>
+            </fieldset>
+
+            <div id="dam-meta-mention" class="automod-modal-field" style="display:none">
+                <label for="dam-mention-total">Most mentions allowed in one message (up to 50)</label>
+                <input type="number" id="dam-mention-total" class="form-control" min="1" max="50" value="5">
+                <label class="am-check"><input type="checkbox" id="dam-mention-raid"> Also catch mention raids across messages</label>
+            </div>
+
+            <div id="dam-meta-profile" class="automod-modal-field" style="display:none">
+                <label for="dam-profile-keyword">Words to catch in a member's name, one per line</label>
+                <textarea id="dam-profile-keyword" class="form-control" rows="3"></textarea>
+            </div>
+
+            <fieldset class="automod-modal-field am-fieldset">
+                <legend>When the rule matches</legend>
+                <label class="am-check"><input type="checkbox" id="dam-act-block" checked> Block the message</label>
+                <label class="am-check"><input type="checkbox" id="dam-act-alert"> Post an alert in a channel</label>
+                <select id="dam-alert-channel" class="form-select" aria-label="Alert channel" style="display:none">
+                    <option value="">Choose a channel</option>
+                    <% amTextChannels.forEach(c => { %><option value="<%= c.id %>">#<%= c.name %></option>
+                    <% }) %>
+                </select>
+                <label class="am-check"><input type="checkbox" id="dam-act-timeout"> Time the member out</label>
+                <div class="cf-input-unit am-timeout">
+                    <input type="number" id="dam-timeout-seconds" class="form-control" value="300" min="60" max="2419200" aria-label="Timeout length in seconds">
+                    <span class="cf-unit">seconds</span>
+                </div>
+                <label class="am-check"><input type="checkbox" id="dam-act-blockint"> Stop them interacting until they change their name (member names only)</label>
+            </fieldset>
+
+            <div class="automod-modal-field">
+                <label class="am-check"><input type="checkbox" id="dam-enabled" checked> Rule is on</label>
+            </div>
+        </form>
+        <div class="cf-modal-foot">
+            <button type="button" class="btn btn-secondary" id="dam-modal-cancel">Cancel</button>
+            <button type="button" class="btn btn-primary" id="dam-modal-save">Save</button>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    const card = document.getElementById('discordAutomodCard');
+    if (!card) return;
+    const guildId = card.dataset.guildId;
+    const list = document.getElementById('dam-list');
+    const modal = document.getElementById('dam-modal');
+    const modalTitle = document.getElementById('dam-modal-title');
+
+    const TRIGGER_LABEL = { 1: 'Keyword', 3: 'Spam', 4: 'Preset', 5: 'Mention spam', 6: 'Member profile' };
+    const PRESET_LABEL = { 1: 'Profanity', 2: 'Sexual content', 3: 'Slurs' };
+    const EVENT_LABEL = { 1: 'Message send', 2: 'Member update' };
+
+    function node(tag, cls, text) { const el = document.createElement(tag); if (cls) el.className = cls; if (text != null) el.textContent = text; return el; }
+
+    function openModal(rule) {
+        document.getElementById('dam-id').value = rule?.id ?? '';
+        modalTitle.textContent = rule ? 'Edit rule' : 'New rule';
+        document.getElementById('dam-name').value = rule?.name ?? '';
+        document.getElementById('dam-trigger').value = String(rule?.triggerType ?? 1);
+        document.getElementById('dam-trigger').disabled = !!rule;  // Discord won't let you change trigger_type after create
+        const meta = rule?.triggerMetadata || {};
+        document.getElementById('dam-keyword-filter').value = (meta.keyword_filter || meta.keywordFilter || []).join('\n');
+        document.getElementById('dam-regex-patterns').value = (meta.regex_patterns || meta.regexPatterns || []).join('\n');
+        document.getElementById('dam-allow-list').value = (meta.allow_list || meta.allowList || []).join('\n');
+        document.querySelectorAll('.dam-preset').forEach(cb => cb.checked = (meta.presets || []).map(String).includes(cb.value));
+        document.getElementById('dam-mention-total').value = meta.mention_total_limit ?? meta.mentionTotalLimit ?? 5;
+        document.getElementById('dam-mention-raid').checked = !!(meta.mention_raid_protection_enabled ?? meta.mentionRaidProtectionEnabled);
+        document.getElementById('dam-profile-keyword').value = (meta.keyword_filter || []).join('\n');
+
+        // Hydrate actions from the rule object (Discord returns `actions: [{type, metadata}]`)
+        const acts = rule?.actions || [];
+        const findAct = (t) => acts.find(a => a.type === t);
+        const block = findAct(1); // BlockMessage
+        const alert = findAct(2); // SendAlertMessage
+        const timeout = findAct(3); // Timeout
+        const blockInt = findAct(4); // BlockMemberInteraction
+        document.getElementById('dam-act-block').checked = !!block || !rule;
+        document.getElementById('dam-act-alert').checked = !!alert;
+        document.getElementById('dam-alert-channel').value = alert?.metadata?.channel_id || '';
+        document.getElementById('dam-alert-channel').style.display = alert ? 'block' : 'none';
+        document.getElementById('dam-act-timeout').checked = !!timeout;
+        document.getElementById('dam-timeout-seconds').value = timeout?.metadata?.duration_seconds ?? 300;
+        document.getElementById('dam-act-blockint').checked = !!blockInt;
+
+        document.getElementById('dam-enabled').checked = rule?.enabled !== false;
+
+        toggleMeta();
+        modal.style.display = 'flex';
+    }
+
+    function closeModal() { modal.style.display = 'none'; }
+
+    function toggleMeta() {
+        const t = Number(document.getElementById('dam-trigger').value);
+        document.getElementById('dam-meta-keyword').style.display = (t === 1) ? 'flex' : 'none';
+        document.getElementById('dam-meta-preset').style.display  = (t === 4) ? 'flex' : 'none';
+        document.getElementById('dam-meta-mention').style.display = (t === 5) ? 'flex' : 'none';
+        document.getElementById('dam-meta-profile').style.display = (t === 6) ? 'flex' : 'none';
+    }
+
+    document.getElementById('dam-trigger').addEventListener('change', toggleMeta);
+    document.getElementById('dam-act-alert').addEventListener('change', (e) => {
+        document.getElementById('dam-alert-channel').style.display = e.target.checked ? 'block' : 'none';
+    });
+    document.getElementById('dam-add-btn').addEventListener('click', () => openModal(null));
+    document.getElementById('dam-modal-close').addEventListener('click', closeModal);
+    document.getElementById('dam-modal-cancel').addEventListener('click', closeModal);
+    modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+
+    function buildBody() {
+        const trigger = Number(document.getElementById('dam-trigger').value);
+        const meta = {};
+        if (trigger === 1) {
+            meta.keyword_filter = document.getElementById('dam-keyword-filter').value.split('\n').map(s => s.trim()).filter(Boolean);
+            meta.regex_patterns = document.getElementById('dam-regex-patterns').value.split('\n').map(s => s.trim()).filter(Boolean);
+            meta.allow_list = document.getElementById('dam-allow-list').value.split('\n').map(s => s.trim()).filter(Boolean);
+        } else if (trigger === 4) {
+            meta.presets = Array.from(document.querySelectorAll('.dam-preset:checked')).map(cb => Number(cb.value));
+            meta.allow_list = document.getElementById('dam-allow-list').value.split('\n').map(s => s.trim()).filter(Boolean);
+        } else if (trigger === 5) {
+            meta.mention_total_limit = Number(document.getElementById('dam-mention-total').value);
+            meta.mention_raid_protection_enabled = document.getElementById('dam-mention-raid').checked;
+        } else if (trigger === 6) {
+            meta.keyword_filter = document.getElementById('dam-profile-keyword').value.split('\n').map(s => s.trim()).filter(Boolean);
+        }
+        const actions = [];
+        if (document.getElementById('dam-act-block').checked) actions.push({ type: 1 });
+        if (document.getElementById('dam-act-alert').checked) {
+            const chId = document.getElementById('dam-alert-channel').value;
+            if (chId) actions.push({ type: 2, metadata: { channel_id: chId } });
+        }
+        if (document.getElementById('dam-act-timeout').checked) {
+            actions.push({ type: 3, metadata: { duration_seconds: Math.max(60, Math.min(2419200, Number(document.getElementById('dam-timeout-seconds').value))) } });
+        }
+        if (document.getElementById('dam-act-blockint').checked) actions.push({ type: 4 });
+
+        return {
+            name: document.getElementById('dam-name').value.trim(),
+            eventType: trigger === 6 ? 2 : 1, // MEMBER_PROFILE uses MEMBER_UPDATE; everything else uses MESSAGE_SEND
+            triggerType: trigger,
+            triggerMetadata: meta,
+            actions,
+            enabled: document.getElementById('dam-enabled').checked,
+        };
+    }
+
+    document.getElementById('dam-modal-save').addEventListener('click', async () => {
+        const id = document.getElementById('dam-id').value;
+        const body = buildBody();
+        if (!body.name) { showToast?.('Give it a name first.', 'error'); return; }
+        try {
+            const res = await fetch('/api/guilds/' + guildId + '/automod/rules' + (id ? '/' + id : ''), {
+                method: id ? 'PATCH' : 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify(body),
+            });
+            const data = await res.json();
+            if (res.ok && data.success) { showToast?.(id ? 'Rule saved' : 'Rule created', 'success'); closeModal(); load(); }
+            else { showToast?.(data.error || 'Save failed', 'error'); }
+        } catch (err) { showToast?.('Network error', 'error'); }
+    });
+
+    async function del(id, name) {
+        if (!confirm('Delete the rule "' + name + '"? Discord will stop enforcing it immediately.')) return;
+        try {
+            const res = await fetch('/api/guilds/' + guildId + '/automod/rules/' + id, { method: 'DELETE', credentials: 'include' });
+            const data = await res.json();
+            if (res.ok && data.success) { showToast?.('Rule deleted', 'success'); load(); }
+            else { showToast?.(data.error || 'Delete failed', 'error'); }
+        } catch (err) { showToast?.('Network error', 'error'); }
+    }
+
+    function emptyState(title, text, kind) {
+        const box = node('div', 'cf-state cf-state--' + (kind || 'empty') + ' cf-state--compact');
+        if (kind === 'error') box.setAttribute('role', 'alert');
+        box.appendChild(node('p', 'cf-state-title', title));
+        if (text) box.appendChild(node('p', 'cf-state-text', text));
+        return box;
+    }
+    function render(rules) {
+        list.textContent = '';
+        const count = document.getElementById('cfk-dam-count');
+        count.hidden = false;
+        count.textContent = rules.length + (rules.length === 1 ? ' rule' : ' rules');
+        count.className = 'cf-pill' + (rules.some(r => r.enabled) ? ' is-ok' : '');
+        if (!rules.length) {
+            list.appendChild(emptyState('No Discord AutoMod rules', 'Press New rule to block keywords, spam or mention raids before anyone sees them.'));
+            return;
+        }
+        rules.forEach(rule => {
+            const row = node('div', 'cf-row');
+            const text = node('div', 'cf-row-text');
+            const title = node('div', 'cf-row-label');
+            title.appendChild(node('span', null, rule.name));
+            if (!rule.enabled) { title.appendChild(document.createTextNode(' ')); title.appendChild(node('span', 'cf-pill is-warn', 'Off')); }
+            text.appendChild(title);
+            const sub = node('p', 'cf-row-desc');
+            const parts = [];
+            parts.push(TRIGGER_LABEL[rule.triggerType] || ('Trigger ' + rule.triggerType));
+            parts.push(EVENT_LABEL[rule.eventType] || ('Event ' + rule.eventType));
+            const ACTION_LABEL = { 1: 'Block message', 2: 'Alert', 3: 'Timeout', 4: 'Block interaction' };
+            if (rule.actions?.length) parts.push(rule.actions.map(a => ACTION_LABEL[a.type] || a.typeName || ('Action ' + a.type)).join(', '));
+            sub.textContent = parts.join(' · ');
+            text.appendChild(sub);
+            row.appendChild(text);
+            const ctl = node('div', 'automod-actions');
+            const editBtn = node('button', 'btn btn-sm btn-secondary', 'Edit');
+            editBtn.type = 'button'; editBtn.addEventListener('click', () => openModal(rule));
+            const delBtn = node('button', 'btn btn-sm btn-danger', 'Delete');
+            delBtn.type = 'button'; delBtn.addEventListener('click', () => del(rule.id, rule.name));
+            ctl.appendChild(editBtn); ctl.appendChild(delBtn);
+            row.appendChild(ctl);
+            list.appendChild(row);
+        });
+    }
+
+    async function load() {
+        list.textContent = '';
+        list.appendChild(emptyState('Loading rules...', null, 'loading'));
+        try {
+            const res = await fetch('/api/guilds/' + guildId + '/automod/rules', { credentials: 'include' });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const data = await res.json();
+            render(data.rules || []);
+        } catch (err) {
+            list.textContent = '';
+            list.appendChild(emptyState('Could not load the Discord AutoMod rules', err.message, 'error'));
+        }
+    }
+
+    load();
 })();
 </script>

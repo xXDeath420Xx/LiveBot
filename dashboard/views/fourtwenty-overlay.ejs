@@ -11,7 +11,9 @@
     *{box-sizing:border-box;margin:0;padding:0}
     /* Transparent by default so OBS composites it over your scene.
        Add ?bg=dark for a solid panel, or ?bg=<hex> for a custom color. */
-    html,body{background:transparent;width:100%;height:100%;overflow:hidden}
+    /* No site theme CSS on this page: a theme that paints <body> would put an
+       opaque box over the streamer's scene. */
+    html,body{background:transparent!important;width:100%;height:100%;overflow:hidden}
     body{font-family:'Inter',system-ui,sans-serif;color:var(--ink,#f1f0f6);display:flex;align-items:center;justify-content:center}
     .ftt{
       --accent:#7dfc4f;--accent2:#7c84ff;--ink:#f1f0f6;--muted:#b9b4d0;
@@ -34,6 +36,34 @@
     .ftt-ticker .chip{font-size:.72rem;color:var(--muted);background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.12);border-radius:999px;padding:.25rem .65rem;white-space:nowrap}
     .ftt-ticker .chip b{color:#dfe1ff;font-weight:600}
     body.noticker .ftt-ticker{display:none}
+    /* ---- Layouts (?layout=). "default" is the rules above; the rest adjust them. ---- */
+    .ftt-list,.ftt-meta,.ftt-bar-lead{display:none}
+    /* minimal: just the digits; the status line appears only while a zone is lit */
+    body.l-minimal .ftt-head,body.l-minimal .ftt-sub,body.l-minimal .ftt-ticker{display:none}
+    body.l-minimal .ftt{padding:.6rem 1rem}
+    body.l-minimal .ftt-now{display:none;font-size:.9rem;margin-bottom:.4rem;min-height:0}
+    body.l-minimal .ftt.islit .ftt-now{display:block}
+    /* compact: countdown + next zone */
+    body.l-compact .ftt-head,body.l-compact .ftt-now,body.l-compact .ftt-ticker{display:none}
+    body.l-compact .ftt{padding:.9rem 1.2rem}
+    /* extended: default + full upcoming table + last/your-local 4:20 */
+    body.l-extended .ftt{max-width:720px}
+    body.l-extended .ftt-ticker{display:none}
+    body.l-extended .ftt-list{display:grid;grid-template-columns:auto 1fr auto auto;gap:.3rem .9rem;margin-top:1.1rem;text-align:left;font-size:.86rem;align-items:center}
+    .ftt-list .c-place{font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .ftt-list .c-local,.ftt-list .c-flag{color:var(--muted)}
+    .ftt-list .c-cd{font-family:'Space Grotesk',sans-serif;font-weight:700;color:var(--accent);text-align:right;font-variant-numeric:tabular-nums}
+    body.l-extended .ftt-meta{display:flex;justify-content:center;flex-wrap:wrap;gap:.35rem 1.2rem;margin-top:1rem;padding-top:.8rem;border-top:1px solid rgba(255,255,255,.12);font-size:.78rem;color:var(--muted)}
+    .ftt-meta b{color:#dfe1ff;font-weight:600}
+    /* bar: one-line lower third */
+    body.l-bar .ftt{display:flex;align-items:center;gap:1rem;max-width:none;margin:.5rem;padding:.55rem 1.3rem;border-radius:999px;text-align:left;white-space:nowrap;overflow:hidden}
+    body.l-bar .ftt-head,body.l-bar .ftt-now{display:none}
+    body.l-bar .ftt-bar-lead{display:flex;align-items:center;gap:.45rem;font-size:.75rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+    body.l-bar .ftt-bar-lead b{color:var(--accent)}
+    body.l-bar .ftt-clock{font-size:2rem}
+    body.l-bar .ftt-sub{margin:0}
+    body.l-bar .ftt-ticker{flex-wrap:nowrap;justify-content:flex-start;margin:0;overflow:hidden;flex:1 1 auto;min-width:0;mask-image:linear-gradient(90deg,#000 85%,transparent);-webkit-mask-image:linear-gradient(90deg,#000 85%,transparent)}
+    body.l-bar.lit-bar .ftt-sub{color:#bfffb2}
     @keyframes fttpulse{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
     .ftt.islit .ftt-clock{animation:fttpulse 1.5s ease-in-out infinite}
   </style>
@@ -41,10 +71,13 @@
 <body>
   <div class="ftt" id="ftt">
     <div class="ftt-head"><span class="ftt-leaf">🍃</span> Where in the world is it <b>4:20</b>?</div>
+    <div class="ftt-bar-lead"><span class="ftt-leaf">🍃</span> Next <b>4:20</b></div>
     <div class="ftt-now" id="ftt-now">Syncing the globe…</div>
     <div class="ftt-clock" id="ftt-clock">--:--:--</div>
     <div class="ftt-sub" id="ftt-sub">until the next 4:20</div>
     <div class="ftt-ticker" id="ftt-ticker"></div>
+    <div class="ftt-list" id="ftt-list"></div>
+    <div class="ftt-meta" id="ftt-meta"></div>
   </div>
 
   <script>
@@ -54,6 +87,11 @@
     //   ?bg=112233          custom hex panel background
     //   ?accent=ff8800      main gradient/leaf color
     //   ?ticker=0           hide the upcoming-zones row
+    //   ?layout=minimal     digits only (status line shows while a zone is lit)
+    //   ?layout=compact     countdown + next zone      (?compact=1 is the old spelling)
+    //   ?layout=default     header, status, countdown, upcoming chips
+    //   ?layout=extended    default + next-8 table, last 4:20, your local 4:20
+    //   ?layout=bar         single-line lower third
     //   ?scale=1.4          zoom the whole widget (default 1)
     var q = new URLSearchParams(location.search);
     var root = document.getElementById('ftt');
@@ -67,50 +105,19 @@
     if (q.get('accent')) root.style.setProperty('--accent', '#' + q.get('accent').replace(/[^0-9a-f]/gi, ''));
     if (q.get('accent2')) root.style.setProperty('--accent2', '#' + q.get('accent2').replace(/[^0-9a-f]/gi, ''));
     if (q.get('ticker') === '0' || q.get('ticker') === 'false') document.body.classList.add('noticker');
+    var LAYOUTS = ['minimal', 'compact', 'default', 'extended', 'bar'];
+    var layout = (q.get('layout') || '').toLowerCase();
+    if (LAYOUTS.indexOf(layout) === -1) {
+      layout = (q.get('compact') === '1' || q.get('compact') === 'true') ? 'compact' : 'default';
+    }
+    document.body.classList.add('l-' + layout);
     var scale = parseFloat(q.get('scale'));
-    if (scale && scale > 0) root.style.transform = 'scale(' + scale + ')';
+    // zoom, not transform: it reflows, so full-width layouts (bar) still fit the frame.
+    if (scale && scale > 0) root.style.zoom = scale;
 
     // ---- Zones spanning (almost) every UTC offset. IANA names => Intl
     //      handles DST for us; we just read each zone's real clock per second.
-    var ZONES = [
-      { tz: 'Pacific/Kiritimati',   label: 'Kiritimati, Kiribati',     flag: '🇰🇮' },
-      { tz: 'Pacific/Auckland',     label: 'Auckland, New Zealand',    flag: '🇳🇿' },
-      { tz: 'Pacific/Chatham',      label: 'Chatham Islands',          flag: '🇳🇿' },
-      { tz: 'Australia/Sydney',     label: 'Sydney, Australia',        flag: '🇦🇺' },
-      { tz: 'Australia/Adelaide',   label: 'Adelaide, Australia',      flag: '🇦🇺' },
-      { tz: 'Asia/Tokyo',           label: 'Tokyo, Japan',             flag: '🇯🇵' },
-      { tz: 'Asia/Seoul',           label: 'Seoul, South Korea',       flag: '🇰🇷' },
-      { tz: 'Australia/Eucla',      label: 'Eucla, Australia',         flag: '🇦🇺' },
-      { tz: 'Asia/Shanghai',        label: 'Shanghai, China',          flag: '🇨🇳' },
-      { tz: 'Asia/Singapore',       label: 'Singapore',                flag: '🇸🇬' },
-      { tz: 'Asia/Bangkok',         label: 'Bangkok, Thailand',        flag: '🇹🇭' },
-      { tz: 'Asia/Yangon',          label: 'Yangon, Myanmar',          flag: '🇲🇲' },
-      { tz: 'Asia/Dhaka',           label: 'Dhaka, Bangladesh',        flag: '🇧🇩' },
-      { tz: 'Asia/Kathmandu',       label: 'Kathmandu, Nepal',         flag: '🇳🇵' },
-      { tz: 'Asia/Kolkata',         label: 'Mumbai, India',            flag: '🇮🇳' },
-      { tz: 'Asia/Karachi',         label: 'Karachi, Pakistan',        flag: '🇵🇰' },
-      { tz: 'Asia/Kabul',           label: 'Kabul, Afghanistan',       flag: '🇦🇫' },
-      { tz: 'Asia/Dubai',           label: 'Dubai, UAE',               flag: '🇦🇪' },
-      { tz: 'Asia/Tehran',          label: 'Tehran, Iran',             flag: '🇮🇷' },
-      { tz: 'Europe/Moscow',        label: 'Moscow, Russia',           flag: '🇷🇺' },
-      { tz: 'Africa/Nairobi',       label: 'Nairobi, Kenya',           flag: '🇰🇪' },
-      { tz: 'Europe/Athens',        label: 'Athens, Greece',           flag: '🇬🇷' },
-      { tz: 'Europe/Paris',         label: 'Paris, France',            flag: '🇫🇷' },
-      { tz: 'Europe/London',        label: 'London, UK',               flag: '🇬🇧' },
-      { tz: 'Atlantic/Cape_Verde',  label: 'Cape Verde',               flag: '🇨🇻' },
-      { tz: 'America/Noronha',      label: 'Fernando de Noronha',      flag: '🇧🇷' },
-      { tz: 'America/Sao_Paulo',    label: 'São Paulo, Brazil',        flag: '🇧🇷' },
-      { tz: 'America/St_Johns',     label: "St. John's, Canada",       flag: '🇨🇦' },
-      { tz: 'America/New_York',     label: 'New York, USA',            flag: '🇺🇸' },
-      { tz: 'America/Chicago',      label: 'Chicago, USA',             flag: '🇺🇸' },
-      { tz: 'America/Denver',       label: 'Denver, USA',              flag: '🇺🇸' },
-      { tz: 'America/Los_Angeles',  label: 'Los Angeles, USA',         flag: '🇺🇸' },
-      { tz: 'America/Anchorage',    label: 'Anchorage, USA',           flag: '🇺🇸' },
-      { tz: 'Pacific/Marquesas',    label: 'Marquesas Islands',        flag: '🇵🇫' },
-      { tz: 'Pacific/Honolulu',     label: 'Honolulu, Hawaii',         flag: '🇺🇸' },
-      { tz: 'Pacific/Pago_Pago',    label: 'Pago Pago, Samoa',         flag: '🇦🇸' },
-      { tz: 'Pacific/Niue',         label: 'Niue',                     flag: '🇳🇺' }
-    ];
+    var ZONES = <%- JSON.stringify(zones).replace(/</g, '\\u003c') %>;  // utils/fourtwenty.js — shared with the Discord panel
 
     var AM = 4 * 3600 + 20 * 60;   // 04:20:00
     var PM = 16 * 3600 + 20 * 60;  // 16:20:00
@@ -159,6 +166,18 @@
     var elClock = document.getElementById('ftt-clock');
     var elSub = document.getElementById('ftt-sub');
     var elTicker = document.getElementById('ftt-ticker');
+    var elList = document.getElementById('ftt-list');
+    var elMeta = document.getElementById('ftt-meta');
+    var myTz = null;
+    try { myTz = Intl.DateTimeFormat().resolvedOptions().timeZone; } catch (e) { /* old engine */ }
+    // Seconds since this zone last ENTERED a 4:20 (AM or PM, whichever was more recent).
+    function sinceEntry(sod) { return Math.min((sod - AM + DAY) % DAY, (sod - PM + DAY) % DAY); }
+    function ago(t) {
+      if (t < 60) return 'just now';
+      if (t < 3600) return Math.floor(t / 60) + ' min ago';
+      var h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60);
+      return h + 'h ' + m + 'm ago';
+    }
 
     function tick() {
       var now = new Date(), lit = [], upcoming = [];
@@ -168,7 +187,7 @@
         var l = litNow(sod);
         if (l) lit.push({ z: z, ap: l });
         var ne = nextEntry(sod);
-        upcoming.push({ z: z, secs: ne.secs, ap: ne.ap });
+        upcoming.push({ z: z, secs: ne.secs, ap: ne.ap, since: sinceEntry(sod) });
       }
       upcoming.sort(function (a, b) { return a.secs - b.secs; });
       var target = null;
@@ -182,7 +201,9 @@
           return '<span class="place">' + x.z.flag + ' ' + x.z.label + '</span> (4:20 ' + x.ap + ')';
         });
         var lead = lit.length === 1 ? "🔥 It's <b>4:20</b> right now in " : '🔥 <b>4:20</b> right now in ';
-        elNow.innerHTML = lead + names.join(' · ');
+        elNow.innerHTML = layout === 'minimal'
+          ? '🔥 <b>4:20</b> in ' + lit.map(function (x) { return x.z.flag + ' ' + x.z.label.split(',')[0]; }).join(', ')
+          : lead + names.join(' · ');
       } else {
         root.classList.remove('islit');
         elNow.classList.remove('lit');
@@ -192,8 +213,39 @@
       elClock.textContent = hhmmss(target.secs);
       elSub.innerHTML = 'until 4:20 ' + target.ap + ' in <b>' + target.z.flag + ' ' + target.z.label + '</b>';
 
+      document.body.classList.toggle('lit-bar', lit.length > 0);
+      if (layout === 'bar' && lit.length) {
+        elSub.innerHTML = '🔥 4:20 right now in <b>' + lit.map(function (x) { return x.z.flag + ' ' + x.z.label.split(',')[0]; }).join(', ') + '</b>';
+      }
+
+      if (layout === 'extended') {
+        var rows = '';
+        for (var r = 0; r < upcoming.length && r < 8; r++) {
+          var e = upcoming[r];
+          rows += '<span class="c-flag">' + e.z.flag + '</span><span class="c-place">' + e.z.label +
+            '</span><span class="c-local">' + localClock(e.z.tz, now) + '</span><span class="c-cd">' + hhmmss(e.secs) + '</span>';
+        }
+        elList.innerHTML = rows;
+
+        var last = null;
+        for (var m = 0; m < upcoming.length; m++) {
+          if (!last || upcoming[m].since < last.since) last = upcoming[m];
+        }
+        var meta = [];
+        if (last) meta.push('Last 4:20: <b>' + last.z.flag + ' ' + last.z.label.split(',')[0] + '</b> ' + ago(last.since));
+        if (myTz) {
+          try {
+            var mine = nextEntry(secondsOfDay(myTz, now));
+            meta.push('Your next 4:20 ' + mine.ap + ': <b>' + hhmmss(mine.secs) + '</b>');
+          } catch (e2) { /* unknown zone */ }
+        }
+        meta.push('<b>' + ZONES.length + '</b> cities tracked');
+        elMeta.innerHTML = meta.map(function (x) { return '<span>' + x + '</span>'; }).join('');
+      }
+
       var chips = '';
-      for (var k = 0; k < upcoming.length && k < 6; k++) {
+      var nChips = layout === 'bar' ? 10 : 6;
+      for (var k = 0; k < upcoming.length && k < nChips; k++) {
         var u = upcoming[k];
         chips += '<span class="chip">' + u.z.flag + ' <b>' + u.z.label.split(',')[0] + '</b> ' + hhmmss(u.secs) + '</span>';
       }

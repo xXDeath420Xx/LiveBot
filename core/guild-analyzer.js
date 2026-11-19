@@ -102,7 +102,7 @@ export function templateOf(msg) {
     // Components V2 (containers/sections/text displays). A CV2 message carries its entire text in
     // `components[].content` with EMPTY `content` and EMPTY `embeds` — so a walk that only reads
     // button labels sees a blank message and the bot looks silent. That is not hypothetical: it
-    // hid every one of FreeStuff's posts and OwO's guild boss from the first scan of this guild.
+    // hid an entire feed bot's output — 95 posts — from the first scan that met one.
     const { text: uiText, labels } = walkComponents(msg.components ?? []);
     if (uiText.length) parts.push(uiText.join('\n'));
     if (labels.length) parts.push(`ui:${labels.join('|')}`);
@@ -117,13 +117,28 @@ export function templateOf(msg) {
 export const hash16 = (s) => createHash('sha1').update(s).digest('hex').slice(0, 16);
 
 /**
- * A human message is only interesting as a trigger if it looks like a command: a prefix, a
- * mention, or a single short token. Long prose that happens to precede a bot post is noise.
+ * Word prefixes. Not every bot uses punctuation.
+ *
+ * Dank Memer is `pls meme`, OwO is `owo hunt`, Tatsu is `t!rank`. The old pattern required the
+ * message to START with punctuation or to be a single bare word, so every one of these was thrown
+ * away — which is why a Dank Memer meme reached the retirement gate with no idea what produced it.
+ * Anchored to a known list rather than "any two words", because "hey there" is not a command.
+ */
+const WORD_PREFIXES = /^(pls|please|owo|uwo|tatsu|t!|m!|d!|p!|k!|s!|w!|r!|rpg|mudae)\b/i;
+
+/**
+ * A human message is only interesting as a trigger if it looks like a command: a punctuation
+ * prefix, a known word prefix, a mention, or a single short token. Long prose that happens to
+ * precede a bot post is noise.
+ *
+ * Two tokens are kept for word-prefixed commands (`pls meme`, not `pls`) because the prefix alone
+ * names the bot, not the behaviour — and the behaviour is the whole point of recording this.
  */
 export function triggerOf(content) {
     const t = String(content || '').trim();
     if (!t || t.length > 60) return null;
     if (/^[!?$.\-+>~%&*]\S/.test(t)) return t.split(/\s+/)[0].slice(0, 32);
+    if (WORD_PREFIXES.test(t)) return t.split(/\s+/).slice(0, 2).join(' ').slice(0, 32).toLowerCase();
     if (/^<@!?\d+>/.test(t)) return '{mention}';
     if (/^\d{1,15}$/.test(t)) return '{number}';
     if (/^\w{1,20}$/.test(t)) return t.toLowerCase();
@@ -317,8 +332,18 @@ async function walkChannel(scanId, guild, channel, row, limits, since, handle) {
             const shape = templateOf(msg);
             if (!shape) continue;
             const key = `${id}:${hash16(shape)}`;
-            const t = templates.get(key) ?? { botId: id, hash: hash16(shape), sample: shape, count: 0, triggers: new Set() };
+            const t = templates.get(key)
+                ?? { botId: id, hash: hash16(shape), sample: shape, count: 0, triggers: new Set(), channels: new Map() };
             t.count++;
+
+            // WHERE each shape was posted, per shape — not per bot.
+            //
+            // The column has always existed and was never written, which quietly capped what the
+            // audit could work out. A server that splits its logs across six channels — voice in
+            // one, roles in another, deletions in a third — is doing something we can reproduce
+            // exactly, but only if we know which of its messages went where. Bot-level channel lists
+            // cannot answer that: they say "Dyno posted in all six".
+            t.channels.set(channel.id, (t.channels.get(channel.id) ?? 0) + 1);
 
             // Slash commands name their own trigger. Otherwise, look forward (= earlier in time).
             if (msg.interaction?.commandName) {
@@ -393,12 +418,19 @@ async function flush(scanId, bots, templates) {
             continue;
         }
         await pool.execute(
-            `INSERT INTO guild_scan_templates (scan_id, bot_id, template_hash, sample, occurrences, triggers)
-             VALUES (?, ?, ?, ?, ?, ?)
+            `INSERT INTO guild_scan_templates
+               (scan_id, bot_id, template_hash, sample, occurrences, triggers, channels)
+             VALUES (?, ?, ?, ?, ?, ?, ?)
              ON DUPLICATE KEY UPDATE
                occurrences = occurrences + VALUES(occurrences),
-               triggers = JSON_MERGE_PRESERVE(COALESCE(triggers, JSON_ARRAY()), VALUES(triggers))`,
-            [scanId, t.botId, t.hash, t.sample, t.count, JSON.stringify([...t.triggers])]);
+               triggers = JSON_MERGE_PRESERVE(COALESCE(triggers, JSON_ARRAY()), VALUES(triggers)),
+               channels = JSON_MERGE_PATCH(COALESCE(channels, JSON_OBJECT()), VALUES(channels))`,
+            [scanId, t.botId, t.hash, t.sample, t.count,
+                JSON.stringify([...t.triggers]),
+                // {channelId: postCount} — a count, not a list, so the busiest channel for a shape
+                // is knowable. A shape seen once in #general and 300 times in #log-voice belongs to
+                // #log-voice, and a plain list cannot say that.
+                JSON.stringify(Object.fromEntries(t.channels))]);
     }
 }
 

@@ -2,11 +2,12 @@ import 'dotenv/config';
 import { REST } from '@discordjs/rest';
 import { Routes, ButtonStyle } from 'discord-api-types/v10';
 import pool from '../utils/db.js';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 import { getTwitchUsers } from '../utils/platforms/twitch-api.js';
 
 const GUILD_ID = '1469931133981687873';
-const KITSUNE_BOT_ID = '1498486251576229958';
+// The acting bot comes from guild_bot_mapping — never pinned here; filled in by loadKitsuneRest().
+let KITSUNE_BOT_ID = null;
 // Default bot is not in this guild — token gets swapped to Kitsune's during
 // loadKitsuneRest() at the top of main(). Same REST instance is used
 // throughout; `kitsuneRest` aliases it for clarity at panel-post sites.
@@ -552,12 +553,9 @@ async function configureFreeGames() {
 // default bot in this custom-bot guild.
 // ============================================================================
 async function loadKitsuneRest() {
-  const [rows] = await pool.execute(
-    'SELECT bot_token FROM custom_bots WHERE bot_id = ?', [KITSUNE_BOT_ID]
-  );
-  const row = rows[0];
-  if (!row?.bot_token) throw new Error(`Kitsune token row missing for bot_id ${KITSUNE_BOT_ID}`);
-  const token = encryption.decrypt(JSON.parse(row.bot_token));
+  const bot = await resolveBotForGuild(GUILD_ID, { db: pool });
+  KITSUNE_BOT_ID = bot.botId;
+  const token = bot.token;
   rest.setToken(token);
   kitsuneRest = rest; // alias; both names point at the same authenticated client
   const me = await kitsuneRest.get(Routes.user('@me'));

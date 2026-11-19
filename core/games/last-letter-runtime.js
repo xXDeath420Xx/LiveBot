@@ -8,6 +8,7 @@
 import { validateMove } from './last-letter.js';
 import * as wordBank from '../word-bank.js';
 import { registerEngine, saveState, bumpStats } from '../word-game-manager.js';
+import '../word-game-results.js'; // leader role follows the stats (Word Games page)
 import logger from '../../utils/logger.js';
 
 const HINTS = {
@@ -40,7 +41,10 @@ async function handle(message, session) {
     // already passed the dictionary check, so they're safe to consume.
     return res.reason !== 'not_a_word';
   }
-  session.state = res.nextState;
+  // Words per member in this chain, for the result post when the chain is ended.
+  const byUser = { ...(session.state.byUser || {}) };
+  byUser[message.author.id] = (byUser[message.author.id] || 0) + 1;
+  session.state = { ...res.nextState, byUser };
   await saveState(session);
   await react(message, '✅');
   await bumpStats(session.guildId, message.author.id, 'last_letter',

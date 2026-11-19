@@ -5,6 +5,79 @@ import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'disc
 
 const router = express.Router();
 
+// ── Input checks for create / update ────────────────────────────────────────────
+// Lengths follow Discord (embed title 256, description 4096, button label 80) and the columns.
+const TEXT_LIMITS = {
+    panel_name: [100, 'Panel name'],
+    embed_title: [256, 'Title'],
+    embed_description: [4096, 'Description'],
+    button_text: [80, 'Button text'],
+    button_emoji: [100, 'Button emoji'],
+    ticket_name_format: [100, 'Ticket channel name'],
+};
+const TEXT_KINDS = new Set([0, 5]);   // text and announcement channels
+const CATEGORY = 4;
+
+function guildFor(guildId) {
+    return global.botManager?.getClientForGuild?.(guildId)?.guilds.cache.get(guildId) || null;
+}
+function flag(value) {
+    return value === false || value === 0 || value === '0' || value === 'false' ? 0 : 1;
+}
+
+/**
+ * Check and tidy a panel body. With `partial` (PATCH) only the fields sent are checked; a required
+ * field may not be cleared. Channels must be text channels of this server, the category a category
+ * and the role one of its roles. Returns { data } or { error }.
+ */
+export function cleanPanel(guildId, body, partial) {
+    const data = {};
+    const sent = (k) => body[k] !== undefined;
+    for (const [key, [max, label]] of Object.entries(TEXT_LIMITS)) {
+        if (!sent(key)) continue;
+        const value = body[key] == null ? '' : String(body[key]).trim();
+        if (value.length > max) return { error: `${label} must be ${max} characters or fewer.` };
+        data[key] = value || null;
+    }
+    if (sent('embed_color')) {
+        const colour = String(body.embed_color || '').trim();
+        if (colour && !/^#[0-9a-f]{6}$/i.test(colour)) return { error: 'Colour must be a hex value such as #5865F2.' };
+        data.embed_color = colour || null;
+    }
+    if (sent('save_transcripts')) data.save_transcripts = flag(body.save_transcripts);
+    if (sent('is_active')) data.is_active = flag(body.is_active);
+
+    const guild = guildFor(guildId);
+    const ids = [
+        ['panel_channel_id', 'Panel channel', (c) => TEXT_KINDS.has(c.type)],
+        ['log_channel_id', 'Log channel', (c) => TEXT_KINDS.has(c.type)],
+        ['alert_channel_id', 'Alert channel', (c) => TEXT_KINDS.has(c.type)],
+        ['ticket_category_id', 'Ticket category', (c) => c.type === CATEGORY],
+    ];
+    for (const [key, label, ok] of ids) {
+        if (!sent(key)) continue;
+        const id = body[key] == null ? '' : String(body[key]).trim();
+        if (!id) { data[key] = null; continue; }
+        if (!/^\d{17,20}$/.test(id)) return { error: `${label} is not valid.` };
+        if (guild) {
+            const channel = guild.channels.cache.get(id);
+            if (!channel || !ok(channel)) return { error: `${label} is not a ${key === 'ticket_category_id' ? 'category' : 'text channel'} in this server.` };
+        }
+        data[key] = id;
+    }
+    if (sent('support_role_id')) {
+        const id = body.support_role_id == null ? '' : String(body.support_role_id).trim();
+        if (id && !/^\d{17,20}$/.test(id)) return { error: 'Support role is not valid.' };
+        if (id && guild && (!guild.roles.cache.has(id) || id === guildId)) return { error: 'Support role is not a role in this server.' };
+        data.support_role_id = id || null;
+    }
+
+    for (const [key, label] of [['panel_name', 'Panel name'], ['ticket_category_id', 'Ticket category'], ['support_role_id', 'Support role']]) {
+        if ((partial ? sent(key) : true) && !data[key]) return { error: `${label} is required.` };
+    }
+    return { data };
+}
+
 /**
  * GET /manage/:guildId/ticket-panels - Get all ticket panels for a guild
  */
@@ -92,6 +165,9 @@ router.post('/:guildId/ticket-panels', async (req, res) => {
                 error: 'Panel name, ticket category, and support role are required'
             });
         }
+        const checked = cleanPanel(guildId, req.body, false);
+        if (checked.error) return res.status(400).json({ success: false, error: checked.error });
+        const d = checked.data;
 
         // Insert panel
         const [result] = await pool.execute(
@@ -100,22 +176,23 @@ router.post('/:guildId/ticket-panels', async (req, res) => {
                 embed_title, embed_description, embed_color,
                 button_text, button_emoji,
                 ticket_category_id, support_role_id, ticket_name_format,
-                save_transcripts, log_channel_id, is_active
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
+                save_transcripts, log_channel_id, alert_channel_id, is_active
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)`,
             [
                 guildId,
-                panel_name,
-                panel_channel_id || null,
-                embed_title || 'Support Ticket',
-                embed_description || 'Click the button below to create a support ticket. Our team will assist you shortly!',
-                embed_color || '#a78bfa',
-                button_text || 'Create Ticket',
-                button_emoji || null,
-                ticket_category_id,
-                support_role_id,
-                ticket_name_format || 'ticket-{username}',
-                save_transcripts !== false ? 1 : 0,
-                log_channel_id || null
+                d.panel_name,
+                d.panel_channel_id || null,
+                d.embed_title || 'Support Ticket',
+                d.embed_description || 'Click the button below to create a support ticket. Our team will assist you shortly!',
+                d.embed_color || '#a78bfa',
+                d.button_text || 'Create Ticket',
+                d.button_emoji || null,
+                d.ticket_category_id,
+                d.support_role_id,
+                d.ticket_name_format || 'ticket-{username}',
+                save_transcripts !== undefined ? d.save_transcripts : 1,
+                d.log_channel_id || null,
+                d.alert_channel_id || null
             ]
         );
 
@@ -154,14 +231,16 @@ router.post('/:guildId/ticket-panels', async (req, res) => {
 router.patch('/:guildId/ticket-panels/:panelId', async (req, res) => {
     try {
         const { guildId, panelId } = req.params;
-        const updateData = req.body;
+        const checked = cleanPanel(guildId, req.body || {}, true);
+        if (checked.error) return res.status(400).json({ success: false, error: checked.error });
+        const updateData = checked.data;
 
         // Build dynamic UPDATE query
         const allowedFields = [
             'panel_name', 'panel_channel_id', 'embed_title', 'embed_description',
             'embed_color', 'button_text', 'button_emoji', 'ticket_category_id',
             'support_role_id', 'ticket_name_format', 'save_transcripts',
-            'log_channel_id', 'is_active'
+            'log_channel_id', 'alert_channel_id', 'is_active'
         ];
 
         const updates = [];

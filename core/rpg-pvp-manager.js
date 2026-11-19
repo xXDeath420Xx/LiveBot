@@ -7,6 +7,7 @@ import { pool } from '../utils/db.js';
 import logger from '../utils/logger.js';
 import { RPGDiceEngine } from './rpg-dice-engine.js';
 import { resolveDuel as autoResolveDuel, resolveAttack } from './rpg-auto-combat.js';
+import RPGLeaderboardManager from './rpg-leaderboard-manager.js';
 
 // ELO constants
 const ELO_K_FACTOR = 32; // Standard K-factor
@@ -211,6 +212,7 @@ class RPGPvPManager {
         // Handle wager transfer
         if (match.wager_gold && match.wager_gold > 0) {
             await pool.execute('UPDATE dnd_characters SET gold = gold + ? WHERE character_id = ?', [match.wager_gold, winnerCharacterId]);
+            RPGLeaderboardManager.trackStat(winnerCharacterId, 'gold_earned', match.wager_gold);
             await pool.execute('UPDATE dnd_characters SET gold = GREATEST(0, gold - ?) WHERE character_id = ?', [match.wager_gold, loserCharacterId]);
         }
 
@@ -223,6 +225,9 @@ class RPGPvPManager {
         );
 
         logger.info('[PvP] Match ended', { matchId, winner: winnerCharacterId, method });
+
+        // PvP-win achievements (wins live in dnd_pvp_stats; fire-and-forget)
+        RPGLeaderboardManager.trackAchievements(winnerCharacterId);
 
         return {
             match_id: matchId,
@@ -301,6 +306,23 @@ class RPGPvPManager {
 
         // side 'a' = challenger, side 'b' = defender
         const duel = autoResolveDuel(challenger, defender, { maxRounds: 30 });
+
+        // Damage / crit stats for both duellists (fire-and-forget)
+        try {
+            const sideStats = { a: { damage: 0, crits: 0 }, b: { damage: 0, crits: 0 } };
+            for (const r of duel.rounds || []) {
+                const s = sideStats[r.attackerKey];
+                if (!s) continue;
+                s.damage += Number(r.damage) || 0;
+                if (r.crit) s.crits++;
+            }
+            for (const [key, cid] of [['a', match.challenger_id], ['b', match.defender_id]]) {
+                RPGLeaderboardManager.trackStat(cid, 'total_damage_dealt', sideStats[key].damage);
+                RPGLeaderboardManager.trackStat(cid, 'crits_rolled', sideStats[key].crits);
+            }
+        } catch (err) {
+            logger.error('[PvP] Stat tracking failed', { matchId, error: err.message });
+        }
 
         // Decide winner. On a true draw (round-limit + equal HP) the challenger
         // (initiator) loses the toss to keep results decisive for ELO/wager.
@@ -718,6 +740,10 @@ class RPGPvPManager {
             const swing = resolveAttack(actorSnap, defendedOpponent);
             let dmg = swing.damage;
             if (opponentDefended && dmg > 0) dmg = Math.max(1, Math.floor(dmg / 2));
+
+            // Damage / crit stats for the attacker (fire-and-forget)
+            RPGLeaderboardManager.trackStat(actorCharacterId, 'total_damage_dealt', Math.min(dmg, opponentHp));
+            if (swing.hit && swing.crit) RPGLeaderboardManager.trackStat(actorCharacterId, 'crits_rolled', 1);
 
             opponentHp = Math.max(0, opponentHp - dmg);
 

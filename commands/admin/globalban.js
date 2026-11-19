@@ -1,6 +1,11 @@
 import { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder } from 'discord.js';
 import logger from '../../utils/logger.js';
 import { isProtectedFromBanCommands } from '../../utils/owner-protection.js';
+import { themeColor } from '../../core/guild-theme.js';
+import configCache from '../../utils/configCache.js';
+import pool from '../../utils/db.js';
+import { normaliseMode, normaliseThreshold, DEFAULT_THRESHOLD } from '../../core/global-ban-confidence.js';
+import { logFeatureEvent, userLabel } from '../../core/feature-log.js';
 
 export default {
     category: 'admin',
@@ -69,7 +74,26 @@ export default {
         // stats — requires ModerateMembers
         .addSubcommand(sub =>
             sub.setName('stats')
-                .setDescription('View global ban database statistics')),
+                .setDescription('Network size, recent additions and what it did in this server'))
+
+        // check — requires ModerateMembers; privacy-safe (no reporting servers or moderators)
+        .addSubcommand(sub =>
+            sub.setName('check')
+                .setDescription('Network confidence (0-100) for a user and what this server would do')
+                .addUserOption(opt => opt.setName('user').setDescription('User to check').setRequired(true)))
+
+        // mode — requires Manage Server
+        .addSubcommand(sub =>
+            sub.setName('mode')
+                .setDescription('Protect (act above a confidence), Alert only, or Feed only (never act)')
+                .addStringOption(opt => opt.setName('mode').setDescription('What this server does with network hits').setRequired(true)
+                    .addChoices(
+                        { name: 'Protect: act at or above the threshold, alert below', value: 'protect' },
+                        { name: 'Alert only: never act, always alert', value: 'alert' },
+                        { name: 'Feed only: contribute bans, never act or alert', value: 'feed' }
+                    ))
+                .addIntegerOption(opt => opt.setName('threshold').setDescription(`Confidence needed to act in Protect mode (default ${DEFAULT_THRESHOLD})`)
+                    .setMinValue(0).setMaxValue(100))),
 
     async execute(interaction) {
         const subcommand = interaction.options.getSubcommand();
@@ -93,6 +117,10 @@ export default {
                     return await handleAppeals(interaction, manager);
                 case 'stats':
                     return await handleStats(interaction, manager);
+                case 'check':
+                    return await handleCheck(interaction, manager);
+                case 'mode':
+                    return await handleMode(interaction);
             }
         } catch (error) {
             logger.error('[GlobalBan Command] Error:', { error: error.message, subcommand, stack: error.stack });
@@ -151,7 +179,7 @@ async function handleReport(interaction, manager) {
     }
 
     const embed = new EmbedBuilder()
-        .setColor(0x3498DB)
+        .setColor(themeColor(interaction.guildId, 'primary'))
         .setTitle('Global Ban Report Submitted')
         .addFields(
             { name: 'Report ID', value: `#${result.reportId}`, inline: true },
@@ -270,7 +298,7 @@ async function handleAppeal(interaction, manager) {
     }
 
     const embed = new EmbedBuilder()
-        .setColor(0x3498DB)
+        .setColor(themeColor(interaction.guildId, 'primary'))
         .setTitle('Appeal Submitted')
         .setDescription(`Your appeal (#${result.appealId}) has been submitted and will be reviewed by moderators.`)
         .addFields(
@@ -333,7 +361,7 @@ async function handleAppeals(interaction, manager) {
     }
 
     const embed = new EmbedBuilder()
-        .setColor(0x3498DB)
+        .setColor(themeColor(interaction.guildId, 'primary'))
         .setTitle('Pending Appeals')
         .setDescription(appeals.map(a => {
             const ts = Math.floor(new Date(a.created_at).getTime() / 1000);
@@ -354,7 +382,7 @@ async function handleStats(interaction, manager) {
 
     await interaction.deferReply({ ephemeral: true });
 
-    const stats = await manager.getStats();
+    const [stats, net] = await Promise.all([manager.getStats(), manager.getNetworkStats(interaction.guild.id)]);
     if (!stats) {
         return interaction.editReply('Failed to fetch statistics.');
     }
@@ -371,21 +399,114 @@ async function handleStats(interaction, manager) {
         ? stats.recentActions.map(a => `${a.action}: ${a.count}`).join(' | ')
         : 'None';
 
+    const modeText = Object.entries(net.enabledByMode).map(([m, n]) => `${m}: ${n}`).join(' | ') || 'None';
+    const additions = net.recent.slice(0, 5).map(e => {
+        const ts = Math.floor(new Date(e.created_at).getTime() / 1000);
+        return `<@${e.user_id}> ${e.severity} (${e.category}), confidence ${e.confidence} <t:${ts}:R>`;
+    }).join('\n') || 'None';
+    const settings = await manager.getSettings(interaction.guild.id);
+    const here = settings
+        ? `${settings.enabled ? 'On' : 'Off'} · ${normaliseMode(settings.mode)}${normaliseMode(settings.mode) === 'protect' ? ` at ${normaliseThreshold(settings.confidence_threshold)}` : ''}`
+            + ` · ${settings.auto_aggregate_opt_in ? 'contributing' : 'not contributing'}`
+        : 'Not set up (contributing by default)';
+
     const embed = new EmbedBuilder()
-        .setColor(0x3498DB)
-        .setTitle('Global Ban Database Statistics')
+        .setColor(themeColor(interaction.guildId, 'primary'))
+        .setTitle('Global Ban Network')
         .addFields(
-            { name: 'Active Entries', value: `${stats.activeEntries}`, inline: true },
-            { name: 'Pending Reports', value: `${stats.pendingReports}`, inline: true },
-            { name: 'Pending Appeals', value: `${stats.pendingAppeals}`, inline: true },
-            { name: 'Participating Guilds', value: `${stats.enabledGuilds}`, inline: true },
-            { name: 'Cache Size', value: `${stats.cacheSize}`, inline: true },
-            { name: '\u200B', value: '\u200B', inline: true },
+            { name: 'Listed Users', value: `${stats.activeEntries} (${net.automaticEntries} automatic)`, inline: true },
+            { name: 'Users With Signals (90d)', value: `${net.trackedUsers}`, inline: true },
+            { name: 'Contributing Servers (90d)', value: `${net.contributingServers}`, inline: true },
+            { name: 'Participating Servers', value: `${stats.enabledGuilds} (${modeText})`, inline: true },
+            { name: 'Added This Week', value: `${net.addedThisWeek} entries, ${net.signalsThisWeek} signals`, inline: true },
+            { name: 'Pending', value: `${stats.pendingReports} reports, ${stats.pendingAppeals} appeals`, inline: true },
             { name: 'By Severity', value: severityText, inline: false },
             { name: 'Top Categories', value: categoryText, inline: false },
-            { name: 'Actions (24h)', value: recentText, inline: false }
+            { name: 'Recent Additions', value: additions.slice(0, 1024), inline: false },
+            { name: 'This Server', value: `${here}\nLast 30 days: ${net.mine?.actions30d ?? 0} removed, ${net.mine?.alerts30d ?? 0} alerts; ${net.mine?.contributed90d ?? 0} bans contributed (90d)`, inline: false },
+            { name: 'Network Actions (24h)', value: recentText, inline: false }
         )
+        .setFooter({ text: 'Change this server\'s mode with /globalban mode or on the dashboard Global Ban page' })
         .setTimestamp();
 
     await interaction.editReply({ embeds: [embed] });
+}
+
+async function handleCheck(interaction, manager) {
+    if (!interaction.member.permissions.has(PermissionFlagsBits.ModerateMembers)) {
+        return interaction.reply({ content: 'You need the Moderate Members permission to check users.', ephemeral: true });
+    }
+
+    const user = interaction.options.getUser('user');
+    await interaction.deferReply({ ephemeral: true });
+
+    const c = await manager.getNetworkCheck(user.id, interaction.guild.id);
+    const color = c.confidence >= 75 ? 0xE74C3C : c.confidence >= 40 ? 0xE67E22 : 0x2ECC71;
+    const ts = (d) => (d ? `<t:${Math.floor(new Date(d).getTime() / 1000)}:R>` : 'never');
+    const what = { ban: 'Ban', kick: 'Kick', alert: 'Alert only', none: 'Nothing' };
+
+    const embed = new EmbedBuilder()
+        .setColor(color)
+        .setTitle(`Network Check: ${user.tag}`)
+        .setThumbnail(user.displayAvatarURL())
+        .addFields(
+            { name: 'Confidence', value: `**${c.confidence}/100**`, inline: true },
+            { name: 'Listed', value: c.listed ? `Yes — ${String(c.severity).toUpperCase()} (${c.category})` : 'No', inline: true },
+            { name: 'Independent Servers', value: `${c.independentServers}`, inline: true },
+            { name: 'Reported By', value: c.reportedBy.join(', ') || 'Nobody', inline: false },
+            { name: 'Reasons', value: c.reasons.join(', ') || '—', inline: true },
+            { name: 'First / Last Seen', value: `${ts(c.firstSeen)} / ${ts(c.lastSeen)}`, inline: true },
+            { name: 'Pending Reports', value: `${c.pendingReports}`, inline: true }
+        )
+        .setFooter({ text: `User ID: ${user.id} · reporting servers and moderators are never shown` })
+        .setTimestamp();
+
+    if (c.ownSignal) embed.addFields({ name: 'This Server', value: 'This server has reported them too.', inline: false });
+    if (c.decision) {
+        embed.addFields({
+            name: 'If They Join Here',
+            value: `${what[c.decision.action] || c.decision.action} — ${c.decision.mode} mode${c.decision.mode === 'protect' ? ` (threshold ${c.decision.threshold})` : ''}: ${c.decision.why}`.slice(0, 1024),
+            inline: false
+        });
+    }
+
+    await interaction.editReply({ embeds: [embed] });
+}
+
+async function handleMode(interaction) {
+    if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
+        return interaction.reply({ content: 'You need the Manage Server permission to change the global ban mode.', ephemeral: true });
+    }
+    const guildId = interaction.guild.id;
+    const mode = normaliseMode(interaction.options.getString('mode'));
+    const raw = interaction.options.getInteger('threshold');
+    const threshold = raw === null ? null : normaliseThreshold(raw);
+
+    await pool.execute('INSERT IGNORE INTO global_ban_config (guild_id) VALUES (?)', [guildId]);
+    if (threshold === null) {
+        await pool.execute('UPDATE global_ban_config SET mode = ? WHERE guild_id = ?', [mode, guildId]);
+    } else {
+        await pool.execute('UPDATE global_ban_config SET mode = ?, confidence_threshold = ? WHERE guild_id = ?', [mode, threshold, guildId]);
+    }
+    configCache.invalidate('global_ban_config', guildId);
+    configCache.invalidate('global_ban_config_any', guildId);
+
+    const [[row]] = await pool.execute('SELECT enabled, confidence_threshold FROM global_ban_config WHERE guild_id = ?', [guildId]);
+    const t = normaliseThreshold(row?.confidence_threshold);
+    const text = {
+        protect: `**Protect** — members at or above confidence **${t}** get this server's action for their severity; below it, an alert.`,
+        alert: '**Alert only** — nobody is removed; every network hit is posted to the alert channel.',
+        feed: '**Feed only** — this server keeps contributing its bans to the network but never acts or alerts.',
+    }[mode];
+
+    void logFeatureEvent(() => (interaction.guild), 'moderation.globalBanSettings', () => ({
+        title: '🌐 Global Ban Mode Changed',
+        fields: [['Mode', mode], ['Threshold', mode === 'protect' ? String(t) : null], ['By', userLabel(interaction.user)]],
+    }));
+    logger.info('[GlobalBan] Mode changed', { guildId, mode, threshold: t, by: interaction.user.username });
+
+    await interaction.reply({
+        content: `${text}${row?.enabled ? '' : '\n\nGlobal ban protection is currently **off** here — turn it on with `/protection globalban enable` or the dashboard.'}`,
+        ephemeral: true
+    });
 }

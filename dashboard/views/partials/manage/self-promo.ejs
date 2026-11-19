@@ -1,3 +1,9 @@
+<%#
+  Self-promo: watches a channel for stream links and adds those streamers to stream tracking,
+  with an optional gate on who may post in the announcement channel. One form saved as JSON to
+  PUT /api/guilds/:id/self-promo/config. Built on the settings-row kit (cf-settings.css); field
+  names and ids are unchanged.
+%>
 <%
 const spConfig = typeof selfPromoConfig !== 'undefined' ? selfPromoConfig : {};
 const spEnabled = !!spConfig.enabled;
@@ -15,121 +21,12 @@ if (!Array.isArray(spGateRequiredRoles)) spGateRequiredRoles = [];
 const spGateDeleteUnauth = spConfig.announce_delete_unauthorized !== undefined
     ? !!spConfig.announce_delete_unauthorized : true;
 const spRoles = typeof roles !== 'undefined' ? roles : [];
+const spPlatformName = { twitch: 'Twitch', kick: 'Kick', youtube: 'YouTube' };
+const spChannelName = (channels || []).find(c => c.id === spChannelId)?.name;
 %>
 
 <style>
-.sp-card {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(16, 185, 129, 0.15);
-    border-radius: 12px;
-    overflow: hidden;
-    margin-bottom: 16px;
-}
-.sp-card-header {
-    background: rgba(16, 185, 129, 0.08);
-    padding: 14px 18px;
-    border-bottom: 1px solid rgba(16, 185, 129, 0.15);
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-.sp-card-header i { font-size: 1rem; color: #10b981; }
-.sp-card-header h3 { font-size: 0.95rem; font-weight: 600; color: #fff; margin: 0; }
-.sp-card-body { padding: 18px; }
-.sp-form-group { margin-bottom: 16px; }
-.sp-form-label { display: block; font-size: 0.8rem; font-weight: 600; color: rgba(255,255,255,0.7); margin-bottom: 6px; }
-.sp-form-hint { font-size: 0.7rem; color: rgba(255,255,255,0.4); margin-top: 4px; }
-.sp-form-select {
-    width: 100%;
-    background: rgba(0,0,0,0.3);
-    border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 8px;
-    color: #fff;
-    padding: 8px 12px;
-    font-size: 0.85rem;
-}
-.sp-toggle-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 10px 14px;
-    background: rgba(0,0,0,0.15);
-    border: 1px solid rgba(255,255,255,0.06);
-    border-radius: 8px;
-    margin-bottom: 8px;
-}
-.sp-toggle-label { font-size: 0.85rem; color: rgba(255,255,255,0.8); }
-.sp-toggle-hint { font-size: 0.7rem; color: rgba(255,255,255,0.4); }
-.sp-checkbox-group { display: flex; gap: 12px; flex-wrap: wrap; }
-.sp-checkbox-item {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 8px 14px;
-    background: rgba(0,0,0,0.2);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 8px;
-    cursor: pointer;
-}
-.sp-checkbox-item input[type="checkbox"] { accent-color: #10b981; }
-.sp-checkbox-item label { font-size: 0.85rem; color: rgba(255,255,255,0.8); cursor: pointer; }
-.sp-save-btn {
-    background: linear-gradient(135deg, #10b981, #059669);
-    color: #fff;
-    border: none;
-    padding: 10px 24px;
-    border-radius: 8px;
-    font-weight: 600;
-    cursor: pointer;
-    font-size: 0.9rem;
-}
-.sp-save-btn:hover { opacity: 0.9; }
-.sp-status-msg {
-    padding: 8px 14px;
-    border-radius: 8px;
-    font-size: 0.85rem;
-    margin-bottom: 16px;
-    display: none;
-}
-.sp-status-msg.success { display: block; background: rgba(16, 185, 129, 0.15); color: #10b981; border: 1px solid rgba(16, 185, 129, 0.3); }
-.sp-status-msg.error { display: block; background: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); }
-.sp-toggle-switch {
-    position: relative;
-    display: inline-block;
-    width: 44px;
-    height: 24px;
-    flex-shrink: 0;
-}
-.sp-toggle-switch input {
-    opacity: 0;
-    width: 0;
-    height: 0;
-}
-.sp-toggle-slider {
-    position: absolute;
-    cursor: pointer;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(255,255,255,0.1);
-    border-radius: 999px;
-    transition: 0.2s;
-}
-.sp-toggle-slider::before {
-    position: absolute;
-    content: "";
-    height: 18px;
-    width: 18px;
-    left: 3px;
-    bottom: 3px;
-    background: #fff;
-    border-radius: 50%;
-    transition: 0.2s;
-}
-.sp-toggle-switch input:checked + .sp-toggle-slider {
-    background: #10b981;
-}
-.sp-toggle-switch input:checked + .sp-toggle-slider::before {
-    transform: translateX(20px);
-}
+    #sp-status { margin-right: auto; }
 </style>
 
 <div class="page-section">
@@ -137,196 +34,200 @@ const spRoles = typeof roles !== 'undefined' ? roles : [];
         <div>
             <div class="page-section-title">
                 <i class="fas fa-bullhorn"></i>
-                <span>Self-Promo</span>
+                <span>Self-promo</span>
             </div>
-            <div class="page-section-subtitle">
-                Auto-track streamers who post in a designated self-promo channel
-            </div>
+            <div class="page-section-subtitle"><%= spChannelName ? `Request channel: #${spChannelName}` : 'No request channel chosen yet' %></div>
         </div>
     </div>
 
-    <div id="sp-status" class="sp-status-msg"></div>
-
     <form id="sp-form">
-        <!-- Enable/Disable -->
-        <div class="sp-card">
-            <div class="sp-card-header">
-                <i class="fas fa-power-off"></i>
-                <h3>Enable Self-Promo</h3>
-            </div>
-            <div class="sp-card-body">
-                <div class="sp-toggle-row">
-                    <div>
-                        <div class="sp-toggle-label">Self-Promo System</div>
-                        <div class="sp-toggle-hint">Watch a channel for stream links and auto-track them</div>
+        <section class="cf-section" aria-labelledby="sp-channel-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="sp-channel-title">Channel and platforms</h2>
+                    <p class="cf-section-desc">Where members post their links, and which platforms are accepted.</p>
+                </div>
+            </header>
+            <div class="cf-rows">
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="sp-enabled">Self-promo</label>
+                        <p class="cf-row-desc">Watch the request channel for stream links and track them.</p>
                     </div>
-                    <label class="sp-toggle-switch">
-                        <input type="checkbox" name="enabled" id="sp-enabled" <%= spEnabled ? 'checked' : '' %>>
-                        <span class="sp-toggle-slider"></span>
-                    </label>
-                </div>
-            </div>
-        </div>
-
-        <!-- Channel Config -->
-        <div class="sp-card">
-            <div class="sp-card-header">
-                <i class="fas fa-hashtag"></i>
-                <h3>Channel & Platforms</h3>
-            </div>
-            <div class="sp-card-body">
-                <div class="sp-form-group">
-                    <label class="sp-form-label">Request Channel <span style="color:#ef4444;">*</span></label>
-                    <select name="channel_id" class="sp-form-select">
-                        <option value="">Select a channel...</option>
-                        <% channels.forEach(ch => { %>
-                            <option value="<%= ch.id %>" <%= spChannelId === ch.id ? 'selected' : '' %>>#<%= ch.name %></option>
-                        <% }); %>
-                    </select>
-                    <div class="sp-form-hint">Where users drop their stream links to get tracked.</div>
-                </div>
-
-                <div class="sp-toggle-row" style="margin-bottom: 12px;">
-                    <div>
-                        <div class="sp-toggle-label">Same Channel for Requests & Announcements</div>
-                        <div class="sp-toggle-hint">When off, go-live announcements will post in a separate channel.</div>
+                    <div class="cf-row-control">
+                        <input type="checkbox" class="cf-switch" role="switch" name="enabled" id="sp-enabled" data-feature-switch <%= spEnabled ? 'checked' : '' %>>
                     </div>
-                    <label class="sp-toggle-switch">
-                        <input type="checkbox" name="same_channel" id="sp-same-channel" <%= spSameChannel ? 'checked' : '' %> onchange="document.getElementById('sp-announce-channel').style.display = this.checked ? 'none' : 'block';">
-                        <span class="sp-toggle-slider"></span>
-                    </label>
                 </div>
-
-                <div class="sp-form-group" id="sp-announce-channel" style="<%= spSameChannel ? 'display:none;' : '' %>">
-                    <label class="sp-form-label">Announcement Channel</label>
-                    <select name="announcement_channel_id" class="sp-form-select">
-                        <option value="">Select a channel...</option>
-                        <% channels.forEach(ch => { %>
-                            <option value="<%= ch.id %>" <%= spAnnouncementChannelId === ch.id ? 'selected' : '' %>>#<%= ch.name %></option>
-                        <% }); %>
-                    </select>
-                    <div class="sp-form-hint">Where go-live announcements are posted when tracked streamers go live. If blank, uses the request channel.</div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="f-self-promo-channel_id">Request channel</label>
+                        <p class="cf-row-desc" id="f-self-promo-channel_id-desc">Required. Where members post their stream links.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <select id="f-self-promo-channel_id" name="channel_id" class="form-select" aria-describedby="f-self-promo-channel_id-desc">
+                            <option value="">Choose a channel</option>
+                            <% channels.forEach(ch => { %>
+                                <option value="<%= ch.id %>" <%= spChannelId === ch.id ? 'selected' : '' %>>#<%= ch.name %></option>
+                            <% }); %>
+                        </select>
+                    </div>
                 </div>
-
-                <div class="sp-form-group">
-                    <label class="sp-form-label">Allowed Platforms</label>
-                    <div class="sp-checkbox-group">
-                        <% ['twitch', 'kick', 'youtube'].forEach(p => { %>
-                            <div class="sp-checkbox-item">
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="sp-same-channel">Announce in the request channel</label>
+                        <p class="cf-row-desc">When off, go-live announcements are posted in a separate channel.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="checkbox" class="cf-switch" role="switch" name="same_channel" id="sp-same-channel" <%= spSameChannel ? 'checked' : '' %> onchange="document.getElementById('sp-announce-channel').style.display = this.checked ? 'none' : 'block';">
+                    </div>
+                </div>
+                <div id="sp-announce-channel" style="<%= spSameChannel ? 'display:none;' : '' %>">
+                    <div class="cf-row cf-row--sub">
+                        <div class="cf-row-text">
+                            <label class="cf-row-label" for="f-self-promo-announcement_channel_id">Announcement channel</label>
+                            <p class="cf-row-desc">Where go-live announcements for tracked streamers are posted. If empty, the request channel is used.</p>
+                        </div>
+                        <div class="cf-row-control">
+                            <select id="f-self-promo-announcement_channel_id" name="announcement_channel_id" class="form-select">
+                                    <option value="">Same as the request channel</option>
+                                <% channels.forEach(ch => { %>
+                                    <option value="<%= ch.id %>" <%= spAnnouncementChannelId === ch.id ? 'selected' : '' %>>#<%= ch.name %></option>
+                                <% }); %>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <p class="cf-row-label">Allowed platforms</p>
+                        <p class="cf-row-desc">Links to other platforms are not tracked, and are deleted when "Delete messages without a link" is on. With none ticked, every supported platform is accepted.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="cf-choices">
+                            <% ['twitch', 'kick', 'youtube'].forEach(p => { %>
+                            <div class="cf-choice">
                                 <input type="checkbox" name="platform_<%= p %>" id="sp-platform-<%= p %>" <%= spPlatforms.includes(p) ? 'checked' : '' %>>
-                                <label for="sp-platform-<%= p %>"><%= p.charAt(0).toUpperCase() + p.slice(1) %></label>
+                                <label for="sp-platform-<%= p %>"><%= spPlatformName[p] %></label>
                             </div>
-                        <% }); %>
+                            <% }); %>
+                        </div>
                     </div>
                 </div>
             </div>
+        </section>
+
+        <section class="cf-section" aria-labelledby="sp-behaviour-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="sp-behaviour-title">Behaviour</h2>
+                    <p class="cf-section-desc">What happens to a link once it is posted.</p>
+                </div>
+            </header>
+            <div class="cf-rows">
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <p class="cf-row-label">Add to stream tracking</p>
+                        <p class="cf-row-desc">Create the streamer and their subscription when a valid link is posted.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="checkbox" class="cf-switch" role="switch" name="auto_subscribe" aria-label="Add to stream tracking" <%= spConfig.auto_subscribe !== 0 ? 'checked' : '' %>>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <p class="cf-row-label">Keep members' posts</p>
+                        <p class="cf-row-desc">Promo posts stay up and nothing is deleted; members are still added to tracking, confirmed with a reaction and a DM. Leave off to run the channel as a sign-up box, where each link is removed once it is read.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="checkbox" class="cf-switch" role="switch" name="keep_message" aria-label="Keep members' posts" <%= spConfig.keep_message ? 'checked' : '' %>>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <p class="cf-row-label">Delete messages without a link</p>
+                        <p class="cf-row-desc">Removes messages that do not contain a valid stream link.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="checkbox" class="cf-switch" role="switch" name="delete_invalid" aria-label="Delete messages without a link" <%= spConfig.delete_invalid !== 0 ? 'checked' : '' %>>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <p class="cf-row-label">DM when tracked</p>
+                        <p class="cf-row-desc">Tells the member when they are added to stream tracking.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="checkbox" class="cf-switch" role="switch" name="dm_on_track" aria-label="DM when tracked" <%= spConfig.dm_on_track !== 0 ? 'checked' : '' %>>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <p class="cf-row-label">DM if already tracked</p>
+                        <p class="cf-row-desc">Tells the member when the account they posted is already tracked.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="checkbox" class="cf-switch" role="switch" name="dm_on_already_tracked" aria-label="DM if already tracked" <%= spConfig.dm_on_already_tracked !== 0 ? 'checked' : '' %>>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="cf-section" aria-labelledby="sp-gate-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="sp-gate-title">Announcement channel gate</h2>
+                    <p class="cf-section-desc">Limits who can post messages or create threads in the announcement channel. Posts and threads from members who do not qualify are deleted and they get a DM saying why. The request channel is not affected.</p>
+                </div>
+            </header>
+            <div class="cf-rows">
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="sp-gate-enabled">Announcement gate</label>
+                        <p class="cf-row-desc">Off by default. Choose an announcement channel first.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="checkbox" class="cf-switch" role="switch" name="announce_gate_enabled" id="sp-gate-enabled" <%= spGateEnabled ? 'checked' : '' %>>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--sub">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="sp-gate-min-level">Minimum level</label>
+                        <p class="cf-row-desc">0 for no level requirement. Ignored on custom bots without leveling.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="number" name="announce_min_level" id="sp-gate-min-level"
+                               min="0" max="200" value="<%= spGateMinLevel %>" class="form-control">
+                    </div>
+                </div>
+                <div class="cf-row cf-row--sub">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="sp-gate-required-roles">Required roles</label>
+                        <p class="cf-row-desc">Members need at least one of these. Leave empty for no role requirement.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <select name="announce_required_role_ids" id="sp-gate-required-roles" multiple size="6" class="form-select">
+                            <% spRoles.forEach(role => { %>
+                                <option value="<%= role.id %>" data-kind="role"<% if (role.hexColor && role.hexColor !== '#000000') { %> data-color="<%= role.hexColor %>"<% } %> <%= spGateRequiredRoles.includes(role.id) ? 'selected' : '' %>><%= role.name %></option>
+                            <% }); %>
+                        </select>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--switch cf-row--sub">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="sp-gate-delete-unauth">Delete posts and threads that do not qualify</label>
+                        <p class="cf-row-desc">When off, the bot leaves them up (not recommended).</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="checkbox" class="cf-switch" role="switch" name="announce_delete_unauthorized" id="sp-gate-delete-unauth" <%= spGateDeleteUnauth ? 'checked' : '' %>>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <div class="cf-form-actions">
+            <div id="sp-status" class="cf-status-line" role="status" aria-live="polite"></div>
+            <button type="submit" class="btn btn-primary">Save</button>
         </div>
-
-        <!-- Behavior Toggles -->
-        <div class="sp-card">
-            <div class="sp-card-header">
-                <i class="fas fa-sliders-h"></i>
-                <h3>Behavior</h3>
-            </div>
-            <div class="sp-card-body">
-                <div class="sp-toggle-row">
-                    <div>
-                        <div class="sp-toggle-label">Auto-Subscribe</div>
-                        <div class="sp-toggle-hint">Automatically create streamer + subscription when a valid link is posted</div>
-                    </div>
-                    <input type="checkbox" name="auto_subscribe" <%= spConfig.auto_subscribe !== 0 ? 'checked' : '' %> style="accent-color: #10b981;">
-                </div>
-                <div class="sp-toggle-row">
-                    <div>
-                        <div class="sp-toggle-label">Allow Self-Posting</div>
-                        <div class="sp-toggle-hint">Members' promo posts stay up and nothing is ever deleted. They're still auto-added to the stream tracker, confirmed with a ✅ and a DM. Leave this off to run the channel as a signup box, where the link is consumed and removed.</div>
-                    </div>
-                    <input type="checkbox" name="keep_message" <%= spConfig.keep_message ? 'checked' : '' %> style="accent-color: #10b981;">
-                </div>
-                <div class="sp-toggle-row">
-                    <div>
-                        <div class="sp-toggle-label">Delete Invalid Messages</div>
-                        <div class="sp-toggle-hint">Delete messages that don't contain a valid stream link</div>
-                    </div>
-                    <input type="checkbox" name="delete_invalid" <%= spConfig.delete_invalid !== 0 ? 'checked' : '' %> style="accent-color: #10b981;">
-                </div>
-                <div class="sp-toggle-row">
-                    <div>
-                        <div class="sp-toggle-label">DM on Track</div>
-                        <div class="sp-toggle-hint">Send a DM when a user is added to stream tracking</div>
-                    </div>
-                    <input type="checkbox" name="dm_on_track" <%= spConfig.dm_on_track !== 0 ? 'checked' : '' %> style="accent-color: #10b981;">
-                </div>
-                <div class="sp-toggle-row">
-                    <div>
-                        <div class="sp-toggle-label">DM if Already Tracked</div>
-                        <div class="sp-toggle-hint">DM the user if they post a link for an already-tracked account</div>
-                    </div>
-                    <input type="checkbox" name="dm_on_already_tracked" <%= spConfig.dm_on_already_tracked !== 0 ? 'checked' : '' %> style="accent-color: #10b981;">
-                </div>
-            </div>
-        </div>
-
-        <!-- Announcement Channel Gate -->
-        <div class="sp-card">
-            <div class="sp-card-header">
-                <i class="fas fa-shield-alt"></i>
-                <h3>Announcement Channel Gate</h3>
-            </div>
-            <div class="sp-card-body">
-                <p style="font-size:0.8rem; color:rgba(255,255,255,0.55); margin: 0 0 14px 0;">
-                    Restrict who can post messages <strong>or create threads</strong> in the
-                    announcement channel above. Members who don't meet the requirements have
-                    their messages/threads deleted and receive a DM explaining why. Leaves the
-                    request channel untouched.
-                </p>
-
-                <div class="sp-toggle-row">
-                    <div>
-                        <div class="sp-toggle-label">Enable Announcement Gate</div>
-                        <div class="sp-toggle-hint">Off by default — turn on after selecting an announcement channel.</div>
-                    </div>
-                    <label class="sp-toggle-switch">
-                        <input type="checkbox" name="announce_gate_enabled" id="sp-gate-enabled" <%= spGateEnabled ? 'checked' : '' %>>
-                        <span class="sp-toggle-slider"></span>
-                    </label>
-                </div>
-
-                <div class="sp-form-group" style="margin-top: 14px;">
-                    <label class="sp-form-label">Minimum Level</label>
-                    <input type="number" name="announce_min_level" id="sp-gate-min-level"
-                           min="0" max="200" value="<%= spGateMinLevel %>"
-                           class="sp-form-select" style="max-width: 140px;">
-                    <div class="sp-form-hint">0 = no level requirement. Ignored on custom-bot instances without a leveling manager.</div>
-                </div>
-
-                <div class="sp-form-group">
-                    <label class="sp-form-label">Required Role(s)</label>
-                    <select name="announce_required_role_ids" id="sp-gate-required-roles"
-                            multiple size="6" class="sp-form-select" style="height: auto; min-height: 120px;">
-                        <% spRoles.forEach(role => { %>
-                            <option value="<%= role.id %>" <%= spGateRequiredRoles.includes(role.id) ? 'selected' : '' %>><%= role.name %></option>
-                        <% }); %>
-                    </select>
-                    <div class="sp-form-hint">Hold Ctrl/Cmd to select multiple. User must have at least one of these roles. Empty = no role requirement.</div>
-                </div>
-
-                <div class="sp-toggle-row">
-                    <div>
-                        <div class="sp-toggle-label">Delete Unauthorized Posts & Threads</div>
-                        <div class="sp-toggle-hint">When off, the bot lets the post stand (not recommended).</div>
-                    </div>
-                    <label class="sp-toggle-switch">
-                        <input type="checkbox" name="announce_delete_unauthorized" id="sp-gate-delete-unauth" <%= spGateDeleteUnauth ? 'checked' : '' %>>
-                        <span class="sp-toggle-slider"></span>
-                    </label>
-                </div>
-            </div>
-        </div>
-
-        <button type="submit" class="sp-save-btn">
-            <i class="fas fa-save"></i> Save Self-Promo Config
-        </button>
     </form>
 </div>
 
@@ -368,11 +269,11 @@ document.getElementById('sp-form').addEventListener('submit', async (e) => {
             body: JSON.stringify(body)
         });
         const data = await res.json();
-        status.textContent = data.success ? 'Self-promo config saved!' : (data.error || 'Failed to save');
-        status.className = 'sp-status-msg ' + (data.success ? 'success' : 'error');
+        status.textContent = data.success ? 'Saved' : (data.error || 'Could not save');
+        status.className = 'cf-status-line ' + (data.success ? 'is-ok' : 'is-bad');
     } catch (err) {
-        status.textContent = 'Network error';
-        status.className = 'sp-status-msg error';
+        status.textContent = 'Could not reach the server';
+        status.className = 'cf-status-line is-bad';
     }
 });
 </script>

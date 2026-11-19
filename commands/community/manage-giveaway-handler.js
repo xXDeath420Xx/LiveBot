@@ -3,14 +3,19 @@ import GiveawayManager from '../../core/giveaway-manager.js';
 import pool from '../../utils/db.js';
 import logger from '../../utils/logger.js';
 import { formatDuration } from '../../utils/timeParser.js';
+import { logFeatureEvent, userLabel } from '../../core/feature-log.js';
+import { themeColor } from '../../core/guild-theme.js';
 
-let giveawayManager = null;
+// One manager per client. A single module-level singleton would bind to whichever
+// bot ran a giveaway command first, and GiveawayManager resolves guilds through
+// `this.client.guilds.cache` — so a custom bot's guild would come back "not found"
+// whenever the default bot got here first.
+const managers = new WeakMap();
 
 function getManager(client) {
-    if (!giveawayManager) {
-        giveawayManager = new GiveawayManager(client);
-    }
-    return giveawayManager;
+    if (client.giveawayManager) return client.giveawayManager;
+    if (!managers.has(client)) managers.set(client, new GiveawayManager(client));
+    return managers.get(client);
 }
 
 export async function handleStart(interaction) {
@@ -44,7 +49,7 @@ export async function handleStart(interaction) {
         );
 
         const embed = new EmbedBuilder()
-            .setColor('#57F287')
+            .setColor(themeColor(interaction.guildId, 'success'))
             .setTitle('✅ Giveaway Started')
             .setDescription(`Your giveaway has been created successfully!`)
             .addFields(
@@ -86,7 +91,7 @@ export async function handleEnd(interaction) {
             return await interaction.editReply('❌ This giveaway has already ended.');
         }
 
-        await mgr.endGiveaway(giveaway, false);
+        await mgr.endGiveaway(giveaway, false, interaction.user);
         await interaction.editReply('✅ Giveaway ended successfully!');
     } catch (error) {
         logger.error('[Giveaway] Failed to end giveaway', {
@@ -114,7 +119,7 @@ export async function handleReroll(interaction) {
             return await interaction.editReply('❌ This giveaway is not in this server.');
         }
 
-        await mgr.endGiveaway(giveaway, true);
+        await mgr.endGiveaway(giveaway, true, interaction.user);
         await interaction.editReply('✅ Giveaway rerolled!');
     } catch (error) {
         logger.error('[Giveaway] Failed to reroll giveaway', {
@@ -138,7 +143,7 @@ export async function handleListGiveaways(interaction) {
         }
 
         const embed = new EmbedBuilder()
-            .setColor('#5865F2')
+            .setColor(themeColor(interaction.guildId, 'primary'))
             .setTitle('🎉 Active Giveaways')
             .setDescription(
                 giveaways.map(g =>
@@ -179,7 +184,7 @@ export async function handleCancel(interaction) {
             return await interaction.editReply('❌ This giveaway has already ended.');
         }
 
-        const success = await mgr.cancelGiveaway(giveaway.id);
+        const success = await mgr.cancelGiveaway(giveaway.id, interaction.user);
 
         if (success) {
             await interaction.editReply('✅ Giveaway cancelled.');
@@ -225,6 +230,14 @@ export async function handleDelete(interaction) {
 
         // Delete the DB row
         await pool.execute('DELETE FROM giveaways WHERE id = ?', [giveaway.id]);
+
+        void logFeatureEvent(() => (interaction.guild), 'giveaway.deleted', () => ({
+            title: '🗑️ Giveaway Deleted',
+            fields: [
+                ['Prize', giveaway.prize], ['Status', giveaway.is_active ? 'Was running' : 'Had ended'],
+                ['Channel', `<#${giveaway.channel_id}>`], ['Deleted By', userLabel(interaction.user)],
+            ],
+        }));
 
         await interaction.editReply('✅ Giveaway deleted and message removed.');
     } catch (error) {

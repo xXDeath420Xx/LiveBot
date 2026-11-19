@@ -1,6 +1,7 @@
 import mysql from 'mysql2/promise';
 import dotenv from 'dotenv';
 import logger from './logger.js';
+import { installPoolGuards } from './db-guards.cjs';
 
 dotenv.config();
 
@@ -39,6 +40,11 @@ const pool = mysql.createPool({
   keepAliveInitialDelay: 0,
   timezone: '+00:00'
 });
+
+// Idempotent release (a double release used to hang the idle sweeper) and a read-only pool.pool
+// (H-314: overwriting it made every query recurse into itself). See utils/db-guards.cjs and
+// tests/db-pool-guards.test.js.
+installPoolGuards(pool, { label: 'db.js', warn: (msg, meta) => logger.warn(msg, meta) });
 
 /**
  * Test database connection with retry logic

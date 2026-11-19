@@ -1,0 +1,9 @@
+<%#
+  Sub-navigation for the public CertiFried Studio pages (dashboard/routes/legal-pages.js, /downloads/studio).
+  Locals: current ('overview' | 'how' | 'privacy' | 'faq' | 'download'). Styles: /css/cf-studio-pages.css (.sp-subnav).
+%>
+<% const _spCur = typeof current === 'string' ? current : ''; %>
+<nav class="sp-subnav" aria-label="CertiFried Studio">
+    <% [['overview', '/studio', 'Overview'], ['how', '/studio/how-it-works', 'How it works'], ['privacy', '/studio/privacy', 'Privacy'], ['faq', '/studio/faq', 'Questions'], ['download', '/downloads/studio', 'Download']].forEach(([k, href, label]) => { %><a href="<%= href %>"<% if (k === _spCur) { %> aria-current="page"<% } %>><%= label %></a><% }) %>
+    <a href="https://github.com/xXDeath420Xx/LiveBot" rel="noopener">Source code</a>
+</nav>

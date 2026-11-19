@@ -9,6 +9,18 @@ import {
   createSession, endSession, getSessionByChannel, bindChannel, unbindChannel,
   saveState, getStats, getLeaderboard,
 } from '../../core/word-game-manager.js';
+import { displayNameFor } from '../../utils/display-name.js';
+import { announceResult, resultEmbed } from '../../core/word-game-results.js';
+
+/** "Announce results in" (Word Games page) for a game stopped by a command. */
+function announceEnded(interaction, session) {
+  const story = session.gameType === 'one_word_story' ? renderStory(session.state) : null;
+  return announceResult({
+    client: interaction.client, guildId: session.guildId, sourceChannelId: interaction.channelId,
+    embed: resultEmbed(session.gameType, session.state, { outcome: 'ended', story, channelId: session.channelId }),
+  });
+}
+import { themeColor } from '../../core/guild-theme.js';
 
 // Posts an initial board/grid message and records its id on the session.
 // `ctx` only needs a `.channel` (a TextChannel) — NOT a full interaction.
@@ -144,8 +156,11 @@ export default {
         if (game.afterStart) await game.afterStart({ channel }, setupSession);
         return interaction.reply(`${game.emoji} **${game.label}** is now live in ${channel}. ${game.startBlurb}`);
       }
+      const running = getSessionByChannel(channel.id);
       await unbindChannel(guildId, channel.id);
-      return interaction.reply(`🛑 ${game.label} unbound from ${channel}.`);
+      await interaction.reply(`🛑 ${game.label} unbound from ${channel}.`);
+      if (running) await announceEnded(interaction, running);
+      return;
     }
 
     if (sub === 'start') {
@@ -169,7 +184,7 @@ export default {
       const session = getSessionByChannel(interaction.channelId);
       if (!session || session.gameType !== game.type) return interaction.reply({ content: `No ${game.label} game is active here.`, ephemeral: true });
       const story = renderStory(session.state);
-      return interaction.reply({ embeds: [new EmbedBuilder().setTitle(`${game.emoji} The story so far`).setColor(0x5865F2)
+      return interaction.reply({ embeds: [new EmbedBuilder().setTitle(`${game.emoji} The story so far`).setColor(themeColor(interaction.guildId, 'primary'))
         .setDescription(story ? story.slice(0, 4000) : '*(empty — add the first word!)*')] });
     }
 
@@ -180,16 +195,19 @@ export default {
       await endSession(session, 'ended');
       if (game.type === 'one_word_story') {
         const story = renderStory(session.state);
-        return interaction.reply({ embeds: [new EmbedBuilder().setTitle(`${game.emoji} Final Story`).setColor(0x57F287)
+        await interaction.reply({ embeds: [new EmbedBuilder().setTitle(`${game.emoji} Final Story`).setColor(themeColor(interaction.guildId, 'success'))
           .setDescription(story ? story.slice(0, 4000) : '*(no words were added)*')] });
+      } else {
+        await interaction.reply(game.endLine(session));
       }
-      return interaction.reply(game.endLine(session));
+      await announceEnded(interaction, session);
+      return;
     }
 
     if (sub === 'stats') {
       const user = interaction.options.getUser('user') || interaction.user;
       const st = await getStats(guildId, user.id, game.type);
-      const embed = new EmbedBuilder().setTitle(`${game.emoji} ${game.label} — ${user.username}`).setColor(0x5865F2)
+      const embed = new EmbedBuilder().setTitle(`${game.emoji} ${game.label} — ${displayNameFor(user, interaction.guild)}`).setColor(themeColor(interaction.guildId, 'primary'))
         .setDescription(st ? game.statLines(st) : 'No stats yet — play a round!');
       return interaction.reply({ embeds: [embed] });
     }
@@ -197,7 +215,7 @@ export default {
     if (sub === 'leaderboard') {
       const rows = await getLeaderboard(guildId, game.type, 10);
       const lines = rows.length ? rows.map((r, i) => game.lbLine(r, i)).join('\n') : 'No one has played yet.';
-      const embed = new EmbedBuilder().setTitle(`${game.emoji} ${game.label} — Leaderboard`).setColor(0x5865F2).setDescription(lines);
+      const embed = new EmbedBuilder().setTitle(`${game.emoji} ${game.label} — Leaderboard`).setColor(themeColor(interaction.guildId, 'primary')).setDescription(lines);
       return interaction.reply({ embeds: [embed] });
     }
   },

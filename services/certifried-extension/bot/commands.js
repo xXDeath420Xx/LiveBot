@@ -14,6 +14,7 @@ import {
 } from './bridge.js';
 import { formatCurrency } from './formatters.js';
 import { GAME } from '../config/game-constants.js';
+import { awardCash } from '../game/engine.js';
 
 /**
  * Handle !cfx or /cfx command - shows player stats
@@ -25,12 +26,12 @@ export async function handleStatsCommand(user, platform) {
     const stats = await getPlayerStats(user.id, platform);
 
     if (!stats) {
-        return `${user.displayName}, you haven't started playing CertiFried yet! Open the extension to begin.`;
+        return `${user.displayName}, you haven't started playing CertiFried yet! Play at https://certifriedmultitool.com/game or claim your daily reward to begin.`;
     }
 
     const parts = [
         `Level ${stats.level}`,
-        `${formatCurrency(stats.currency)} coins`,
+        `$${formatCurrency(stats.cash)} cash`,
         `${stats.activePlots}/${stats.maxPlots} plots active`,
         `${stats.unlockedStrains} strains unlocked`
     ];
@@ -95,7 +96,7 @@ export async function handleDailyReward(user, platform, bonusMultiplier = 1) {
     return {
         success: true,
         amount: totalReward,
-        message: `${user.displayName} collected ${formatCurrency(totalReward)} coins from their garden! (New balance: ${formatCurrency(result.newBalance)})`
+        message: `${user.displayName} collected $${formatCurrency(result.amount)} from their garden! (Cash: $${formatCurrency(result.newBalance)})`
     };
 }
 
@@ -107,14 +108,15 @@ export async function handleDailyReward(user, platform, bonusMultiplier = 1) {
 export async function handleLeaderboardCommand(type = 'level', limit = 10) {
     const orderBy = {
         level: 'level DESC, xp DESC',
-        currency: 'currency DESC',
+        currency: 'cash DESC',
+        cash: 'cash DESC',
         prestige: 'prestige_level DESC, prestige_tokens DESC'
     }[type] || 'level DESC';
 
     const [players] = await pool.execute(
-        `SELECT display_name, level, currency, prestige_level
+        `SELECT display_name, level, cash, prestige_level
          FROM cfx_players
-         WHERE is_banned = 0
+         WHERE is_banned = 0 AND platform <> 'dev'
          ORDER BY ${orderBy}
          LIMIT ?`,
         [limit]
@@ -127,7 +129,7 @@ export async function handleLeaderboardCommand(type = 'level', limit = 10) {
     const lines = players.map((p, i) => {
         const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`;
         const stat = type === 'level' ? `Lv.${p.level}` :
-                     type === 'currency' ? formatCurrency(p.currency) :
+                     (type === 'currency' || type === 'cash') ? `$${formatCurrency(p.cash)}` :
                      `P${p.prestige_level}`;
         return `${medal} ${p.display_name}: ${stat}`;
     });
@@ -140,7 +142,7 @@ export async function handleLeaderboardCommand(type = 'level', limit = 10) {
  */
 export async function handleMarketCommand() {
     const [prices] = await pool.execute(
-        `SELECT s.name, p.current_price, p.change_24h
+        `SELECT s.name, p.current_price, p.price_change_pct
          FROM cfx_market_prices p
          JOIN cfx_strains s ON p.strain_id = s.id
          ORDER BY p.current_price DESC
@@ -152,8 +154,10 @@ export async function handleMarketCommand() {
     }
 
     const lines = prices.map(p => {
-        const change = p.change_24h > 0 ? `+${p.change_24h.toFixed(1)}%` :
-                       p.change_24h < 0 ? `${p.change_24h.toFixed(1)}%` : '0%';
+        // price_change_pct = % move since the previous market tick (DECIMAL -> string from mysql2)
+        const pct = parseFloat(p.price_change_pct) || 0;
+        const change = pct > 0 ? `+${pct.toFixed(1)}%` :
+                       pct < 0 ? `${pct.toFixed(1)}%` : '0%';
         return `${p.name}: ${formatCurrency(p.current_price)} (${change})`;
     });
 
@@ -205,13 +209,10 @@ export async function handleQuickSellCommand(user, platform, strainName, quantit
         );
     }
 
-    // Add currency
-    await pool.execute(
-        `UPDATE cfx_players SET currency = currency + ? WHERE id = ?`,
-        [totalPrice, player.id]
-    );
+    // Pay into the game's cash balance (H-407)
+    const paid = await awardCash(player.id, totalPrice);
 
-    return `${user.displayName} sold ${sellQty}x ${item.strain_name} (${item.quality}% quality) for ${formatCurrency(totalPrice)}!`;
+    return `${user.displayName} sold ${sellQty}x ${item.strain_name} (${item.quality}% quality) for $${formatCurrency(paid.cashAwarded)}!`;
 }
 
 /**

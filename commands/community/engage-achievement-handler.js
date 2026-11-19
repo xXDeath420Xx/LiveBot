@@ -1,5 +1,7 @@
 import { EmbedBuilder, PermissionFlagsBits } from 'discord.js';
 import pool from '../../utils/db.js';
+import { displayNameFor } from '../../utils/display-name.js';
+import { themeColor } from '../../core/guild-theme.js';
 
 export async function handleList(interaction) {
     const achievementManager = interaction.client.achievementManager;
@@ -38,10 +40,10 @@ export async function handleList(interaction) {
     }, {});
 
     const embed = new EmbedBuilder()
-        .setColor('#FFD700')
-        .setTitle(`${isOwnProfile ? 'Your' : `${targetUser.username}'s`} Achievements${category ? ` (${category})` : ''}`)
+        .setColor(themeColor(interaction.guildId, 'warning'))
+        .setTitle(`${isOwnProfile ? 'Your' : `${displayNameFor(targetUser, interaction.guild)}'s`} Achievements${category ? ` (${category})` : ''}`)
         .setAuthor({
-            name: targetUser.username,
+            name: displayNameFor(targetUser, interaction.guild),
             iconURL: targetUser.displayAvatarURL()
         })
         .setTimestamp();
@@ -121,15 +123,15 @@ export async function handleProgress(interaction) {
 
     if (inProgress.length === 0) {
         return interaction.editReply({
-            content: `${isOwnProfile ? 'You have' : `${targetUser.username} has`} no achievements in progress.`
+            content: `${isOwnProfile ? 'You have' : `${displayNameFor(targetUser, interaction.guild)} has`} no achievements in progress.`
         });
     }
 
     const embed = new EmbedBuilder()
-        .setColor('#FFA500')
-        .setTitle(`${isOwnProfile ? 'Your' : `${targetUser.username}'s`} Achievement Progress`)
+        .setColor(themeColor(interaction.guildId, 'warning'))
+        .setTitle(`${isOwnProfile ? 'Your' : `${displayNameFor(targetUser, interaction.guild)}'s`} Achievement Progress`)
         .setAuthor({
-            name: targetUser.username,
+            name: displayNameFor(targetUser, interaction.guild),
             iconURL: targetUser.displayAvatarURL()
         })
         .setTimestamp();
@@ -168,7 +170,7 @@ export async function handleLeaderboard(interaction) {
     }
 
     const embed = new EmbedBuilder()
-        .setColor('#FFD700')
+        .setColor(themeColor(interaction.guildId, 'warning'))
         .setTitle('\ud83c\udfc6 Achievement Leaderboard')
         .setDescription('Top achievement earners in this server')
         .setTimestamp();
@@ -176,7 +178,7 @@ export async function handleLeaderboard(interaction) {
     const leaderboardText = await Promise.all(
         leaderboard.map(async (entry, index) => {
             const user = await interaction.client.users.fetch(entry.user_id).catch(() => null);
-            const username = user ? user.username : 'Unknown User';
+            const username = displayNameFor(user, interaction.guild);
             const medal = index === 0 ? '\ud83e\udd47' : index === 1 ? '\ud83e\udd48' : index === 2 ? '\ud83e\udd49' : `**${index + 1}.**`;
 
             return `${medal} **${username}**\n` +
@@ -205,7 +207,7 @@ export async function handleRecent(interaction) {
     }
 
     const embed = new EmbedBuilder()
-        .setColor('#00FF00')
+        .setColor(themeColor(interaction.guildId, 'success'))
         .setTitle('\ud83c\udf89 Recently Completed Achievements')
         .setDescription('Latest achievement completions in this server')
         .setTimestamp();
@@ -213,7 +215,7 @@ export async function handleRecent(interaction) {
     const recentText = await Promise.all(
         recent.map(async (entry) => {
             const user = await interaction.client.users.fetch(entry.user_id).catch(() => null);
-            const username = user ? user.username : 'Unknown User';
+            const username = displayNameFor(user, interaction.guild);
             const timeAgo = Math.floor((Date.now() - new Date(entry.completed_at)) / 1000 / 60);
             const timeText = timeAgo < 60
                 ? `${timeAgo}m ago`
@@ -247,7 +249,7 @@ export async function handleStats(interaction) {
     }
 
     const embed = new EmbedBuilder()
-        .setColor('#9B59B6')
+        .setColor(themeColor(interaction.guildId, 'accent'))
         .setTitle('\ud83d\udcca Server Achievement Statistics')
         .addFields(
             { name: '\ud83d\udc65 Active Users', value: stats.active_users.toString(), inline: true },
@@ -342,7 +344,7 @@ export async function handleInfo(interaction) {
         embed.addFields({
             name: 'Server Statistics',
             value: `**Total Completions:** ${stats.total_completions}\n` +
-                   `**First Completed By:** ${firstUser ? firstUser.username : 'Unknown'}`,
+                   `**First Completed By:** ${firstUser ? displayNameFor(firstUser, interaction.guild) : 'Unknown'}`,
             inline: false
         });
     }
@@ -383,7 +385,7 @@ export async function handleSetup(interaction) {
                     name: '\ud83d\udce2 Announcement Channel',
                     value: config && config.announcement_channel_id
                         ? `<#${config.announcement_channel_id}>`
-                        : 'Not set (will use first available text channel)',
+                        : 'Not set (unlocks are not announced)',
                     inline: true
                 }
             )

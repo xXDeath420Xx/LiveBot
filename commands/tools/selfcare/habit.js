@@ -1,5 +1,6 @@
 import { EmbedBuilder } from 'discord.js';
 import pool from '../../../utils/db.js';
+import { themeColor } from '../../../core/guild-theme.js';
 
 export async function execute(interaction) {
     const subcommand = interaction.options.getSubcommand();
@@ -97,7 +98,7 @@ async function handleList(interaction) {
     }
 
     const embed = new EmbedBuilder()
-        .setColor('#57F287')
+        .setColor(themeColor(interaction.guildId, 'success'))
         .setTitle('🎯 Your Habits')
         .setTimestamp();
 

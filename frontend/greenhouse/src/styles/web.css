@@ -1,0 +1,65 @@
+/* Website only (build.mjs adds it to the website's CSS, never to the Twitch panel's): the "Your data" card on the
+   Profile tab and its delete dialog (register H-641, src/views/your-data.js). */
+.your-data { margin-top: var(--cf-3); }
+.your-data-actions { display: flex; flex-wrap: wrap; gap: var(--cf-2); }
+.your-data .btn-danger-text:hover:not(:disabled) { color: var(--cf-danger); border-color: var(--cf-danger); }
+.delete-list { margin: 0; padding-left: 1.25em; display: grid; gap: var(--cf-1); }
+.field-error { color: var(--cf-danger); }
+
+/* Website only: the site's colour theme (dashboard/routes/greenhouse.js puts it on <html>, src/web-theme.js follows
+   the OS for Auto). Light uses the game's light set, the same one the Twitch panel uses for Twitch's light theme.
+   Auto in a light OS: the declarations below are the light set (cf-ui.css's Light block, kept equal by
+   tests/theme-render.test.js) so the first paint is right before web-theme.js sets data-theme="light". */
+@media (prefers-color-scheme: light) {
+    :root[data-theme-mode="auto"] {
+        color-scheme: light;
+        --cf-bg: #f6f7f8;
+        --cf-surface: #ffffff;
+        --cf-surface-2: #f3f4f6;
+        --cf-surface-3: #e9ebee;
+        --cf-inset: #ffffff;
+        --cf-border: #e1e3e7;
+        --cf-border-strong: #c3c7ce;
+        --cf-text: #16181c;
+        --cf-text-2: #4a4f58;
+        --cf-text-3: #5f646e;
+        --cf-accent: #4a7a10;
+        --cf-accent-hover: #3d6609;
+        --cf-accent-fg: #3f6a0c;
+        --cf-on-accent: #ffffff;
+        --cf-accent-soft: rgba(74, 122, 16, 0.10);
+        --cf-accent-line: rgba(74, 122, 16, 0.45);
+        --cf-success: #1d7f4e;
+        --cf-warning: #9a6200;
+        --cf-danger: #c53030;
+        --cf-info: #1f62b8;
+        --cf-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+        --cf-shadow-pop: 0 8px 24px rgba(16, 24, 40, 0.12), 0 0 0 1px var(--cf-border);
+        --gh-planter: #b9bec6;
+        --gh-planter-rim: #a3a9b2;
+        --gh-soil: #6b5b4e;
+    }
+}
+/* Sand: the site's warm light theme (cf-ui.css's Sand values) over the light set. */
+:root[data-theme-variant="sand"] {
+    --cf-bg: #faf6ef;
+    --cf-surface: #fffdf9;
+    --cf-surface-2: #f2ece1;
+    --cf-surface-3: #e9e1d3;
+    --cf-inset: #fffdf9;
+    --cf-border: #e4dac9;
+    --cf-border-strong: #cbbfa9;
+    --cf-text: #241d14;
+    --cf-text-2: #574b3b;
+    --cf-text-3: #6e604c;
+    --cf-accent: #8a5a20;
+    --cf-accent-fg: #8a5a20;
+    --cf-accent-hover: #754c1b;
+    --cf-accent-soft: rgba(138, 90, 32, 0.14);
+    --cf-accent-line: rgba(138, 90, 32, 0.45);
+    --cf-shadow: 0 1px 2px rgba(60, 45, 25, 0.08);
+    --cf-shadow-pop: 0 8px 24px rgba(60, 45, 25, 0.14), 0 0 0 1px var(--cf-border);
+    --gh-planter: #c9bda9;
+    --gh-planter-rim: #b2a58e;
+    --gh-soil: #6b5b4e;
+}

@@ -12,15 +12,37 @@ import express from 'express';
 import { PermissionFlagsBits } from 'discord.js';
 import pool from '../../../../utils/db.js';
 import logger from '../../../../utils/logger.js';
+import { logFeatureEvent, userLabel } from '../../../../core/feature-log.js';
 
 const router = express.Router({ mergeParams: true });
+
+const QUICK_STEP_NAMES = {
+    logging: 'Server logging', welcome: 'Welcome messages', leveling: 'Leveling',
+    prefixes: 'Command prefixes', timezone: 'Timezones',
+};
+
+/** Server-log line for a one-click setup step (after it was saved). */
+function logQuickSetup(req, step, channelId = null) {
+    const guildId = req.params.guildId;
+    const guild = global.botManager?.getClientForGuild?.(guildId)?.guilds.cache.get(guildId)
+        || req.botClient?.guilds?.cache?.get(guildId);
+    void logFeatureEvent(() => (guild), 'system.setupApplied', () => ({
+        title: '🛠️ Setup Applied',
+        description: `**${QUICK_STEP_NAMES[step] || step}** was set up from the dashboard's Initialize page.`,
+        fields: [
+            ['Feature', QUICK_STEP_NAMES[step] || step],
+            ['Channel', channelId ? `<#${channelId}>` : null],
+            ['By', userLabel(req.user)],
+        ],
+    }));
+}
 
 /** Permissions the bot needs for the features the wizard can enable. */
 const WANTED_PERMS = [
     ['ManageRoles', 'Assign level, reaction-role and Ko-fi supporter roles'],
     ['ManageMessages', 'Delete wrong numbers in counting, and clean spam'],
     ['EmbedLinks', 'Post rich embeds'],
-    ['ManageGuildExpressions', 'Steal and add emoji'],
+    ['CreateGuildExpressions', 'Steal and add emoji'],
     ['ViewAuditLog', 'Attribute bans and kicks in the log'],
     ['ModerateMembers', 'Time members out'],
 ];
@@ -41,11 +63,12 @@ async function buildSteps(guildId) {
         kofi, counting, catbot, tree, tz, streams, customCmds, autoResp, reactionRoles,
     ] = await Promise.all([
         one('SELECT * FROM prefix_command_config WHERE guild_id = ?', [guildId]),
-        one('SELECT log_channel_id FROM logging_config WHERE guild_id = ?', [guildId]),
+        one('SELECT log_channel_id, enabled FROM logging_config WHERE guild_id = ?', [guildId]),
         one('SELECT channel_id FROM welcome_settings WHERE guild_id = ?', [guildId]),
         one('SELECT enabled FROM level_config WHERE guild_id = ?', [guildId]),
         one('SELECT guild_id FROM moderation_config WHERE guild_id = ?', [guildId]).catch(() => null),
-        one('SELECT guild_id FROM anti_raid_config WHERE guild_id = ?', [guildId]).catch(() => null),
+        // Raid protection on (detection or the auto-lockdown trigger); anti_raid_config was never enforced.
+        one('SELECT guild_id FROM raid_detection_config WHERE guild_id = ? AND (enabled = 1 OR auto_lockdown_enabled = 1)', [guildId]).catch(() => null),
         one('SELECT enabled FROM kofi_config WHERE guild_id = ?', [guildId]),
         count('SELECT COUNT(*) AS n FROM counting_channels WHERE guild_id = ? AND is_active = 1', [guildId]),
         count('SELECT COUNT(*) AS n FROM catbot_channels WHERE guild_id = ? AND enabled = 1', [guildId]),
@@ -66,7 +89,7 @@ async function buildSteps(guildId) {
         {
             id: 'logging', group: 'essential', title: 'Server logging',
             description: 'Record deletes, edits, joins, bans and role changes to a channel.',
-            section: 'logging', done: !!logging?.log_channel_id,
+            section: 'logging', done: !!logging?.log_channel_id && logging.enabled !== 0,
         },
         {
             id: 'moderation', group: 'essential', title: 'Moderation',
@@ -74,9 +97,10 @@ async function buildSteps(guildId) {
             section: 'moderation', done: !!modConfig,
         },
         {
-            id: 'security', group: 'essential', title: 'Raid & spam protection',
-            description: 'Anti-raid, anti-nuke, phishing and adaptive spam defence.',
-            section: 'security', done: !!security,
+            // Done is read from raid_detection_config, which the Raid lockdown page sets.
+            id: 'security', group: 'essential', title: 'Raid protection',
+            description: 'Spot raids from waves of joins or spam, and lock the server down until they pass.',
+            section: 'advanced-protection', done: !!security,
         },
         {
             id: 'welcome', group: 'recommended', title: 'Welcome messages',
@@ -85,8 +109,9 @@ async function buildSteps(guildId) {
         },
         {
             id: 'prefixes', group: 'recommended', title: 'Command prefixes',
-            description: 'Let members run any slash command from chat with ! ? $ . or @mention.',
-            section: 'command-center', done: !!prefix,
+            description: 'Let members run any command from chat with a prefix such as ! or an @mention.',
+            // On by default: a server with no row already has prefixes and the bridge.
+            section: 'command-center', done: !prefix || (prefix.enabled !== 0 && prefix.universal_commands !== 0),
         },
         {
             id: 'leveling', group: 'recommended', title: 'Leveling & rank cards',
@@ -178,8 +203,9 @@ router.post('/quick/:step', async (req, res) => {
             case 'logging': {
                 if (!snowflake.test(String(channelId || ''))) return res.status(400).json({ error: 'Pick a channel.' });
                 await pool.execute(
-                    `INSERT INTO logging_config (guild_id, log_channel_id) VALUES (?, ?)
-                     ON DUPLICATE KEY UPDATE log_channel_id = VALUES(log_channel_id)`, [guildId, channelId]);
+                    `INSERT INTO logging_config (guild_id, log_channel_id, enabled) VALUES (?, ?, 1)
+                     ON DUPLICATE KEY UPDATE log_channel_id = VALUES(log_channel_id), enabled = 1`, [guildId, channelId]);
+                logQuickSetup(req, 'logging', channelId);
                 return res.json({ success: true });
             }
             case 'welcome': {
@@ -188,24 +214,28 @@ router.post('/quick/:step', async (req, res) => {
                     `INSERT INTO welcome_settings (guild_id, channel_id, message)
                      VALUES (?, ?, 'Welcome {user}! 🎉 Glad to have you.')
                      ON DUPLICATE KEY UPDATE channel_id = VALUES(channel_id)`, [guildId, channelId]);
+                logQuickSetup(req, 'welcome', channelId);
                 return res.json({ success: true });
             }
             case 'leveling': {
                 await pool.execute(
                     `INSERT INTO level_config (guild_id, enabled) VALUES (?, 1)
                      ON DUPLICATE KEY UPDATE enabled = 1`, [guildId]);
+                logQuickSetup(req, 'leveling');
                 return res.json({ success: true });
             }
             case 'prefixes': {
                 await pool.execute(
-                    `INSERT INTO prefix_command_config (guild_id, enabled) VALUES (?, 1)
-                     ON DUPLICATE KEY UPDATE enabled = 1`, [guildId]);
+                    `INSERT INTO prefix_command_config (guild_id, enabled, universal_commands) VALUES (?, 1, 1)
+                     ON DUPLICATE KEY UPDATE enabled = 1, universal_commands = 1`, [guildId]);
+                logQuickSetup(req, 'prefixes');
                 return res.json({ success: true });
             }
             case 'timezone': {
                 await pool.execute(
                     `INSERT INTO tz_guild_config (guild_id, enabled, auto_detect) VALUES (?, 1, 'react')
                      ON DUPLICATE KEY UPDATE enabled = 1`, [guildId]);
+                logQuickSetup(req, 'timezone');
                 return res.json({ success: true });
             }
             default:

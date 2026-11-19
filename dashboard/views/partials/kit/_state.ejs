@@ -1,0 +1,17 @@
+<%#
+  Empty, loading and error states for kit pages (cf-settings.css .cf-state). Inside a .cf-rows
+  panel it reads as one of its rows; with boxed: true it stands on its own.
+  Locals: kind ('empty' | 'loading' | 'error', default 'empty'), title, text (optional),
+          id (optional), boxed (optional), compact (optional: one line, left-aligned).
+%>
+<%
+const _kind = (typeof kind !== 'undefined' && ['empty', 'loading', 'error'].includes(kind)) ? kind : 'empty';
+const _cls = ['cf-state', `cf-state--${_kind}`];
+if (typeof boxed !== 'undefined' && boxed) _cls.push('cf-state--boxed');
+if (typeof compact !== 'undefined' && compact) _cls.push('cf-state--compact');
+%>
+<div class="<%= _cls.join(' ') %>"<% if (typeof id !== 'undefined' && id) { %> id="<%= id %>"<% } %><% if (_kind === 'loading') { %> role="status" aria-live="polite"<% } else if (_kind === 'error') { %> role="alert"<% } %>>
+    <% if (_kind === 'loading') { %><span class="cf-spinner" aria-hidden="true"></span><% } %>
+    <p class="cf-state-title"><%= (typeof title !== 'undefined' && title) ? title : (_kind === 'loading' ? 'Loading' : _kind === 'error' ? 'Something went wrong' : 'Nothing here yet') %></p>
+    <% if (typeof text !== 'undefined' && text) { %><p class="cf-state-text"><%= text %></p><% } %>
+</div>

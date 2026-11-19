@@ -6,6 +6,7 @@
 //   PATCH/DELETE /stream/api/destinations/:id
 //   POST /stream/api/key/regenerate   — rotate the Discord user's key
 //   GET  /stream/api/status           — live status (proxied from relay)
+//   GET  /stream/api/sessions         — recent relay sessions with per-destination results
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import { query } from '../../utils/db.js';
@@ -13,7 +14,7 @@ import logger from '../../utils/logger.js';
 import { PLATFORMS } from '../services/stream-platforms.js';
 import {
   getOrCreateDiscordKey, createGuestKey, listDestinations,
-  validateDestinationInput, generateStreamKey
+  validateDestinationInput, generateStreamKey, listRecentSessions
 } from '../services/stream-store.js';
 import { getRelayStatus } from '../services/relay-client.js';
 import { listConnectable } from '../services/platforms/registry.js';
@@ -139,6 +140,18 @@ router.get('/stream/api/status', async (req, res) => {
   const key = await resolveKey(req);
   if (!key) return res.status(401).json({ error: 'No active stream key' });
   res.json(await getRelayStatus(key.stream_key));
+});
+
+// Recent relay sessions for this key, with each destination's result (Recent sessions card).
+router.get('/stream/api/sessions', async (req, res) => {
+  const key = await resolveKey(req);
+  if (!key) return res.status(401).json({ error: 'No active stream key' });
+  try {
+    res.json({ sessions: await listRecentSessions(db, key.id, 10) });
+  } catch (err) {
+    logger.error('[stream] listing sessions failed: ' + err.message);
+    res.status(500).json({ error: 'Could not load sessions' });
+  }
 });
 
 export default router;

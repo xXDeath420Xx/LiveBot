@@ -1,0 +1,15 @@
+{
+  "name": "certifried-windrose-agent",
+  "version": "1.0.0",
+  "description": "Privileged control agent for the CertiFried Windrose server — Docker lifecycle, backups, config writes, and a rate-limited Windrose+ API client",
+  "type": "module",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "dockerode": "^4.0.2",
+    "dotenv": "^16.4.7"
+  }
+}

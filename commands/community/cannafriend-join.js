@@ -20,4 +20,4 @@ async function execute(interaction) {
 }
 
 export { data, execute };
-export default { category: 'community', data, execute };
+export default { category: 'community', guildScoped: true, data, execute };

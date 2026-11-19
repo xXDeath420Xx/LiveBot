@@ -12,10 +12,10 @@
 
 import 'dotenv/config';
 import pool from '../utils/db.js';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 
 const GUILD_ID  = '1428091358522114090';
-const BOT_ID    = '1506374126594691092';
+// The acting bot comes from guild_bot_mapping — never pinned here.
 
 // Destination categories (pre-existing)
 const CAT_WELCOME_IN   = '1448801173183139871';
@@ -56,9 +56,8 @@ const DELETE_CATEGORIES = [
 ];
 
 // ────────────────────────────────────────────────────────────────────────────
-const [rows] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id = ?', [BOT_ID]);
-if (!rows.length) { console.error('Bot row missing'); process.exit(1); }
-const TOKEN = encryption.decrypt(JSON.parse(rows[0].bot_token));
+const bot = await resolveBotForGuild(GUILD_ID, { db: pool });
+const TOKEN = bot.token;
 
 async function api(method, path, body) {
     await new Promise(r => setTimeout(r, 120));

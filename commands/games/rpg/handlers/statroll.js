@@ -3,6 +3,7 @@
  * Absorbed from rpg-status.js (formerly /rpgstatus statroll)
  */
 import { EmbedBuilder } from 'discord.js';
+import { themeColor } from '../../../../core/guild-theme.js';
 
 /**
  * Handle statroll subcommands (roll, standard, pointbuy)
@@ -43,7 +44,7 @@ export async function handleStatroll(interaction, subcommand, characterManager) 
 
         const embed = new EmbedBuilder()
             .setTitle('📊 Standard Array')
-            .setColor('#2196F3')
+            .setColor(themeColor(interaction.guildId, 'primary'))
             .setDescription('The Standard Array provides balanced starting stats.')
             .addFields({
                 name: 'Your Scores',

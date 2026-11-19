@@ -230,7 +230,7 @@ router.post('/reset', async (req, res) => {
             conn.release();
         }
 
-        logger.info('[Prestige] Player prestiged', {
+        logger.debug('[Prestige] Player prestiged', {
             playerId: player.id,
             newLevel: newPrestigeLevel,
             tokensEarned,

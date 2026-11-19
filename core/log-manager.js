@@ -1,8 +1,45 @@
 import logger from '../utils/logger.js';
 import db from '../utils/db.js';
-import { EmbedBuilder, WebhookClient } from 'discord.js';
+import { EmbedBuilder, WebhookClient, MessageFlags } from 'discord.js';
 import { safeJsonArray } from '../utils/safeJson.js';
-import { getMessageById } from '../utils/message-cache.js';
+import configCache from '../utils/configCache.js';
+import { getMessageById, markMessagesDeleted } from '../utils/message-cache.js';
+import { themeColor } from './guild-theme.js';
+import { recordBotMessage } from './bot-messages.js';
+import { optInAllowed } from './log-actions.js';
+import { isMessageLoggingOptedOut } from './privacy-settings.js';
+import { preserveDeletedAttachments, describeAttachments, getEvidenceConfig } from './evidence-capture.js';
+import { embedToContainer } from '../utils/log-v2-wrap.js';
+
+/**
+ * Resolve whether a guild wants its modlog rendered as Components V2.
+ * Soft-fails to the default (legacy embeds) if the column is missing — the
+ * migration adding it is 359 and this cache stops a hot modlog path hitting
+ * the DB on every log send.
+ */
+const _modlogV2Cache = new Map();  // guildId -> { on: boolean, expiresAt: number }
+async function usesModlogV2(guildId) {
+    if (!guildId) return false;
+    const cached = _modlogV2Cache.get(guildId);
+    if (cached && cached.expiresAt > Date.now()) return cached.on;
+    let on = false;
+    try {
+        const [rows] = await db.execute(
+            'SELECT modlog_components_v2 FROM guild_config WHERE guild_id = ? LIMIT 1',
+            [guildId]
+        );
+        on = !!rows?.[0]?.modlog_components_v2;
+    } catch { /* column/table missing — fall through as off */ }
+    _modlogV2Cache.set(guildId, { on, expiresAt: Date.now() + 60_000 });
+    if (_modlogV2Cache.size > 2000) _modlogV2Cache.clear();  // crude bound
+    return on;
+}
+export function _invalidateModlogV2Cache(guildId) { _modlogV2Cache.delete(guildId); }
+import {
+    fetchJoinSource, bypassedApplication, requiresApplication, findApprovalForJoin, claimForPosting,
+    decidedByText, answerFields,
+} from './join-request-tracker.js';
+import { riskFieldForJoin } from './member-insight.js';
 
 // ===========================
 // HELPER FUNCTIONS
@@ -35,82 +72,245 @@ async function getLogWebhookClient(client, channelId) {
 /**
  * Send a log embed to the configured Discord channel
  */
-async function sendLogEmbed(guild, eventType, embed) {
+/**
+ * Where (and whether) a log event of this type goes for a guild: logging_config (master switch,
+ * enabled_events, default channel) then log_event_config (per-event switch, channel override).
+ * Returns null when the event is not logged.
+ *
+ * log_event_config.embed_color (legacy, one colour per category) is deliberately NOT read: applying it
+ * painted every action in a category the same (voice join/leave/move all yellow). Colours are per action
+ * now — log_action_colors, applied in sendLogEmbed.
+ * @returns {Promise<null | { channelId: string }>}
+ */
+async function resolveLogTarget(guildId, eventType) {
+    // Get logging configuration for this guild
+    const [configRows] = await db.execute(
+        'SELECT log_channel_id, enabled_events, enabled, events_saved_at FROM logging_config WHERE guild_id = ?',
+        [guildId]
+    );
+
+    if (!configRows || configRows.length === 0) {
+        logger.debug(`[sendLogEmbed] No logging config found for guild ${guildId}`);
+        return null;
+    }
+
+    const config = configRows[0];
+
+    // Check if logging is globally disabled for this guild
+    if (config.enabled === 0) {
+        logger.debug(`[sendLogEmbed] Logging disabled for guild ${guildId}`);
+        return null;
+    }
+
+    const enabledEvents = safeJsonArray(config.enabled_events, 'logging enabled_events');
+
+    // Check if this event type is enabled (null/empty = all events allowed, defer to log_event_config)
+    if (enabledEvents.length > 0 && !enabledEvents.includes(eventType)) {
+        logger.debug(`[sendLogEmbed] Event type '${eventType}' not enabled for guild ${guildId}. Enabled: ${enabledEvents.join(', ')}`);
+        return null;
+    }
+
+    // Categories wired on 2026-10-06 need an explicit tick saved since then (core/log-actions.js OPT_IN_CATEGORIES).
+    if (!optInAllowed(eventType, enabledEvents, config.events_saved_at)) {
+        logger.debug(`[sendLogEmbed] Opt-in event '${eventType}' not switched on since it was wired, guild ${guildId}`);
+        return null;
+    }
+
+    logger.debug(`[sendLogEmbed] Event type '${eventType}' is enabled for guild ${guildId}`);
+
+    // Check for category-specific channel override
+    const [eventConfigRows] = await db.execute(
+        'SELECT log_channel_id, enabled FROM log_event_config WHERE guild_id = ? AND event_type = ?',
+        [guildId, eventType]
+    );
+
+    let targetChannelId = config.log_channel_id;
+
+    if (eventConfigRows && eventConfigRows.length > 0) {
+        const eventConfig = eventConfigRows[0];
+
+        // If event is explicitly disabled in log_event_config, don't log
+        if (eventConfig.enabled === 0) {
+            logger.debug(`[sendLogEmbed] Event '${eventType}' explicitly disabled in log_event_config for guild ${guildId}`);
+            return null;
+        }
+
+        // Use category override channel if set
+        if (eventConfig.log_channel_id) {
+            targetChannelId = eventConfig.log_channel_id;
+            logger.debug(`[sendLogEmbed] Using override channel ${targetChannelId} for event ${eventType}`);
+        }
+    }
+
+    if (!targetChannelId) {
+        logger.debug(`[sendLogEmbed] No target channel configured for guild ${guildId}, event ${eventType}`);
+        return null;
+    }
+
+    return { channelId: targetChannelId };
+}
+
+// Colours a server picked per log action on the Logging page (core/log-actions.js), cached briefly per guild.
+// The dashboard runs in this process and drops a guild's entry when it saves.
+const ACTION_COLOR_TTL_MS = 60_000;
+// The same cache holds the actions the server switched off (log_action_disabled, migration 413).
+const actionColorCache = new Map(); // guildId -> { at, colors: Map<action, '#RRGGBB'>, disabled: Set<action> }
+
+async function actionSettings(guildId) {
+    let entry = actionColorCache.get(guildId);
+    if (!entry || Date.now() - entry.at > ACTION_COLOR_TTL_MS) {
+        let colors = new Map();
+        let disabled = new Set();
+        try {
+            const [rows] = await db.execute('SELECT action, color FROM log_action_colors WHERE guild_id = ?', [guildId]);
+            colors = new Map(rows.map(r => [r.action, r.color]));
+        } catch (error) {
+            logger.debug(`[sendLogEmbed] Log action colours unavailable for guild ${guildId}: ${error.message}`);
+        }
+        try {
+            const [rows] = await db.execute('SELECT action FROM log_action_disabled WHERE guild_id = ?', [guildId]);
+            disabled = new Set(rows.map(r => r.action));
+        } catch (error) {
+            logger.debug(`[sendLogEmbed] Switched-off log actions unavailable for guild ${guildId}: ${error.message}`);
+        }
+        entry = { at: Date.now(), colors, disabled };
+        actionColorCache.set(guildId, entry);
+    }
+    return entry;
+}
+
+async function customActionColor(guildId, action) {
+    return (await actionSettings(guildId)).colors.get(action) || null;
+}
+
+async function isLogActionDisabled(guildId, action) {
+    return (await actionSettings(guildId)).disabled.has(action);
+}
+
+function invalidateLogActionColors(guildId) {
+    actionColorCache.delete(guildId);
+}
+
+/**
+ * The Logging page's ignore lists (logging_config.ignored_channels / ignored_roles / ignore_bots,
+ * migration 420). They apply only to what members do in channels — the categories below — and only
+ * when the caller names the subject (sendLogEmbed's 5th argument). Moderation, security and server
+ * logs are never hidden by them: ignoring a channel must not hide a ban.
+ */
+const IGNORABLE_LOG_EVENTS = new Set([
+    'messageDelete', 'messageUpdate', 'channelPinsUpdate',
+    'reactionAdd', 'reactionRemove', 'reactionRemoveAll', 'reactionRemoveEmoji',
+    'pollVoteAdd', 'pollVoteRemove',
+    'memberUpdate',
+    'voiceUpdate', 'voiceStream', 'voiceVideo', 'voiceSelfMute',
+    'commandUsage',
+]);
+
+const NO_LOG_IGNORES = Object.freeze({ channels: new Set(), roles: new Set(), bots: false, any: false });
+
+/** A guild's ignore lists, cached through utils/configCache.js (dropped when the dashboard saves). */
+async function logIgnoreFilters(guildId) {
+    try {
+        return await configCache.get('logging_ignores', guildId, async () => {
+            const [rows] = await db.execute(
+                'SELECT ignored_channels, ignored_roles, ignore_bots FROM logging_config WHERE guild_id = ?', [guildId]);
+            const row = rows?.[0];
+            if (!row) return NO_LOG_IGNORES;
+            const channels = new Set(safeJsonArray(row.ignored_channels, 'logging ignored_channels').map(String));
+            const roles = new Set(safeJsonArray(row.ignored_roles, 'logging ignored_roles').map(String));
+            const bots = !!row.ignore_bots;
+            return { channels, roles, bots, any: bots || channels.size > 0 || roles.size > 0 };
+        });
+    } catch (error) {
+        // Columns missing (migration 420 not applied) or the DB is unreachable: log as before.
+        logger.debug(`[sendLogEmbed] Log ignore lists unavailable for guild ${guildId}: ${error.message}`);
+        return NO_LOG_IGNORES;
+    }
+}
+
+/**
+ * Whether a log about this subject is hidden by the guild's ignore lists.
+ * @param {import('discord.js').Guild} guild
+ * @param {string} eventType  the log category
+ * @param {{ channel?: any, channelId?: string, channels?: Array<any>, member?: any, user?: any, userId?: string, bot?: boolean }} subject
+ *        channel(s): where it happened (a thread or channel also matches through its parent channel and category);
+ *        member / user / userId: who did it.
+ */
+async function isLogSubjectIgnored(guild, eventType, subject) {
+    if (!guild?.id || !subject || !IGNORABLE_LOG_EVENTS.has(eventType)) return false;
+    const filters = await logIgnoreFilters(guild.id);
+    if (!filters.any) return false;
+
+    if (filters.channels.size) {
+        const places = [subject.channel, subject.channelId, ...(Array.isArray(subject.channels) ? subject.channels : [])];
+        for (const place of places) {
+            if (!place) continue;
+            const channel = typeof place === 'string' ? guild.channels?.cache?.get(place) : place;
+            const ids = [typeof place === 'string' ? place : place.id, channel?.parentId, channel?.parent?.parentId];
+            if (ids.some(id => id && filters.channels.has(String(id)))) return true;
+        }
+    }
+
+    const userId = subject.userId ?? subject.member?.id ?? subject.user?.id ?? null;
+    const member = subject.member?.roles?.cache ? subject.member : (userId ? guild.members?.cache?.get(userId) : null);
+    const user = subject.user ?? member?.user ?? (userId ? guild.client?.users?.cache?.get(userId) : null);
+    if (filters.bots && (subject.bot === true || user?.bot)) return true;
+    if (filters.roles.size && member?.roles?.cache?.some(role => filters.roles.has(role.id))) return true;
+    return false;
+}
+
+/**
+ * @param action  the log's action key in core/log-actions.js. A category with one action uses the category
+ *                key (the default); one with several (voiceUpdate: join / leave / move) passes its own.
+ * @param subject where it happened and who did it, for the Logging page's ignore lists (isLogSubjectIgnored).
+ *                Omit it for logs those lists must never hide.
+ */
+async function sendLogEmbed(guild, eventType, embed, action = eventType, subject = null) {
     try {
         // Never log emoji / sticker / soundboard changes — the owner does not
         // want these categories logged in any guild.
         if (/^(emoji|sticker|soundboard)/i.test(eventType || '')) return;
-        // Get logging configuration for this guild
-        const [configRows] = await db.execute(
-            'SELECT log_channel_id, enabled_events, enabled FROM logging_config WHERE guild_id = ?',
-            [guild.id]
-        );
 
-        if (!configRows || configRows.length === 0) {
-            logger.debug(`[sendLogEmbed] No logging config found for guild ${guild.id}`);
+        // The Logging page's ignored channels, roles and bots (see isLogSubjectIgnored).
+        if (subject && await isLogSubjectIgnored(guild, eventType, subject)) {
+            logger.debug(`[sendLogEmbed] '${eventType}' skipped by the ignore lists for guild ${guild.id}`);
             return;
         }
 
-        const config = configRows[0];
-
-        // Check if logging is globally disabled for this guild
-        if (config.enabled === 0) {
-            logger.debug(`[sendLogEmbed] Logging disabled for guild ${guild.id}`);
+        // This one action switched off on the Logging page (its category can still be on).
+        if (await isLogActionDisabled(guild.id, action)) {
+            logger.debug(`[sendLogEmbed] Action '${action}' switched off for guild ${guild.id}`);
             return;
         }
 
-        const enabledEvents = safeJsonArray(config.enabled_events, 'logging enabled_events');
+        const target = await resolveLogTarget(guild.id, eventType);
+        if (!target) return;
+        const targetChannelId = target.channelId;
 
-        // Check if this event type is enabled (null/empty = all events allowed, defer to log_event_config)
-        if (enabledEvents.length > 0 && !enabledEvents.includes(eventType)) {
-            logger.debug(`[sendLogEmbed] Event type '${eventType}' not enabled for guild ${guild.id}. Enabled: ${enabledEvents.join(', ')}`);
-            return;
-        }
-
-        logger.debug(`[sendLogEmbed] Event type '${eventType}' is enabled for guild ${guild.id}`);
-
-        // Check for category-specific channel override
-        const [eventConfigRows] = await db.execute(
-            'SELECT log_channel_id, enabled FROM log_event_config WHERE guild_id = ? AND event_type = ?',
-            [guild.id, eventType]
-        );
-
-        let targetChannelId = config.log_channel_id;
-
-        if (eventConfigRows && eventConfigRows.length > 0) {
-            const eventConfig = eventConfigRows[0];
-
-            // If event is explicitly disabled in log_event_config, don't log
-            if (eventConfig.enabled === 0) {
-                logger.debug(`[sendLogEmbed] Event '${eventType}' explicitly disabled in log_event_config for guild ${guild.id}`);
-                return;
-            }
-
-            // Use category override channel if set
-            if (eventConfig.log_channel_id) {
-                targetChannelId = eventConfig.log_channel_id;
-                logger.debug(`[sendLogEmbed] Using override channel ${targetChannelId} for event ${eventType}`);
-            }
-
-            // Apply custom embed color if configured
-            if (eventConfig.embed_color) {
-                embed.setColor(parseInt(eventConfig.embed_color.replace('#', ''), 16));
-            }
-        }
-
-        if (!targetChannelId) {
-            logger.debug(`[sendLogEmbed] No target channel configured for guild ${guild.id}, event ${eventType}`);
-            return;
-        }
+        // A colour the server chose for this action; otherwise the embed keeps the colour its action gave it.
+        const customColor = await customActionColor(guild.id, action);
+        if (customColor) embed.setColor(customColor);
 
         logger.debug(`[sendLogEmbed] Attempting to send ${eventType} log to channel ${targetChannelId} for guild ${guild.id}`);
+
+        // Build the payload once. Guilds opted into Components V2 receive the
+        // container form; everyone else gets the legacy embed. Both payload
+        // shapes are accepted by both webhook.send and channel.send.
+        const v2 = await usesModlogV2(guild.id);
+        const payload = v2
+            ? { components: [embedToContainer(embed)], flags: MessageFlags.IsComponentsV2 }
+            : { embeds: [embed] };
 
         // Try to use webhook first (respects custom webhooks from dashboard)
         const webhookClient = await getLogWebhookClient(guild.client, targetChannelId);
 
         if (webhookClient) {
             try {
-                await webhookClient.send({ embeds: [embed] });
+                const posted = await webhookClient.send(payload);
+                recordBotMessage({
+                    guildId: guild.id, channelId: targetChannelId,
+                    messageId: posted?.id || null, templateKey: action, feature: 'log',
+                });
                 logger.debug(`[sendLogEmbed] Sent via webhook to channel ${targetChannelId}`);
                 return;
             } catch (webhookError) {
@@ -131,7 +331,11 @@ async function sendLogEmbed(guild, eventType, embed) {
             return;
         }
 
-        await logChannel.send({ embeds: [embed] });
+        const sent = await logChannel.send(payload);
+        recordBotMessage({
+            guildId: guild.id, channelId: targetChannelId,
+            messageId: sent?.id || null, templateKey: action, feature: 'log',
+        });
         logger.debug(`[sendLogEmbed] Successfully sent via channel.send() to channel ${targetChannelId}`);
     } catch (error) {
         logger.error('[sendLogEmbed] Error sending log embed', {
@@ -184,6 +388,9 @@ async function logMessageDelete(message) {
     let content;
     let authorInfo;
     let authorDisplay;
+    let authorId = message.author?.id ?? null;
+    let authorTag = message.author?.tag ?? null;
+    let cached = null;
 
     if (message.author) {
         // Discord.js in-memory cache hit — message was seen by this session
@@ -193,7 +400,7 @@ async function logMessageDelete(message) {
     } else {
         // Partial message — Discord.js didn't have it cached (bot restarted since it was sent)
         // Fall back to our DB message cache
-        const cached = await getMessageById(messageId);
+        cached = await getMessageById(messageId);
         if (cached) {
             // Skip bot messages from DB cache too
             if (cached.author_id === message.client.user?.id) return;
@@ -201,6 +408,8 @@ async function logMessageDelete(message) {
             content = cached.content ?? 'No text content';
             authorInfo = `${cached.author_tag} (${cached.author_id})`;
             authorDisplay = cached.author_tag;
+            authorId = cached.author_id;
+            authorTag = cached.author_tag;
         } else {
             content = 'Content unavailable (sent before bot restart)';
             authorInfo = 'Unknown (sent before bot restart)';
@@ -208,63 +417,208 @@ async function logMessageDelete(message) {
         }
     }
 
+    // /privacy opt-out message-logging: the bot keeps no copy of this member's messages (so the
+    // DB fallback above never has one) and writes no content to its own log files or evidence
+    // channel. The server's log embed still shows what discord.js held in memory.
+    const optedOut = authorId ? await isMessageLoggingOptedOut(authorId) : false;
+
     const botIdentifier = message.client.isDefaultBot
         ? 'Default Bot'
         : `Custom Bot ${message.client.botId}`;
 
-    logger.info(`[${botIdentifier}] Message deleted in #${message.channel?.name || channelId}${message.author ? ` by ${message.author.tag}` : ''}: ${content}`, {
+    const loggedContent = optedOut ? '[withheld: author opted out of message logging]' : content;
+    logger.info(`[${botIdentifier}] Message deleted in #${message.channel?.name || channelId}${message.author ? ` by ${message.author.tag}` : ''}: ${loggedContent}`, {
         guildId,
         channelId,
-        userId: message.author?.id,
+        userId: authorId,
         messageId,
-        content,
+        content: loggedContent,
         botId: message.client.botId || 'default',
         category: 'messageDelete'
     });
 
+    // Attachments: what discord.js held, else the URLs we cached. With deleted-image evidence on,
+    // images are re-hosted so the links below keep working after Discord removes the originals.
+    const liveAttachments = message.attachments?.size ? message.attachments : null;
+    const logSubject = { channel: message.channel, member: message.member, userId: authorId };
+    const ignored = await isLogSubjectIgnored(message.guild, 'messageDelete', logSubject);
+    let evidence = null;
+    if (!optedOut && !ignored && (await getEvidenceConfig(guildId)).enabled) {
+        const target = await resolveLogTarget(guildId, 'messageDelete').catch((error) => {
+            logger.error('[logMessageDelete] Could not resolve the delete-log channel', { guildId, error: error.message });
+            return null;
+        });
+        evidence = await preserveDeletedAttachments({
+            guild: message.guild,
+            sourceChannelId: channelId,
+            messageId,
+            authorId,
+            authorTag,
+            liveAttachments,
+            logRow: cached,
+            fallbackChannelId: target?.channelId || null,
+        }).catch((error) => {
+            logger.error('[logMessageDelete] Evidence capture failed', { guildId, messageId, error: error.message });
+            return null;
+        });
+    }
+    const fallbackAttachments = liveAttachments
+        ? [...liveAttachments.values()].map(a => ({ name: a.name, url: a.url }))
+        : (optedOut ? [] : cachedAttachmentList(cached));
+
     const embed = new EmbedBuilder()
-        .setColor(0xED4245)
+        .setColor(themeColor(guildId, 'danger'))
         .setTitle('💬 Message Deleted')
         .setDescription(`Message${message.author ? ` by ${authorDisplay}` : ''} was deleted in ${message.channel}`)
         .addFields(
             { name: 'Author', value: authorInfo, inline: true },
             { name: 'Channel', value: `${message.channel.name}`, inline: true },
             { name: 'Message ID', value: messageId, inline: true },
-            { name: 'Content', value: content.substring(0, 1024), inline: false }
+            { name: 'Content', value: (content || 'No text content').substring(0, 1024), inline: false }
         )
         .setTimestamp();
 
-    await sendLogEmbed(message.guild, 'messageDelete', embed);
+    const attachmentText = describeAttachments(evidence, fallbackAttachments);
+    if (attachmentText) {
+        embed.addFields({ name: 'Attachments', value: attachmentText, inline: false });
+    }
+    const firstImage = evidence?.items?.find(i => i.status === 'rehosted' && i.storedUrl);
+    if (firstImage) embed.setImage(firstImage.storedUrl);
+    if (optedOut) embed.setFooter({ text: 'Author has opted out of message logging — nothing from this message was stored by the bot.' });
+
+    if (!ignored) await sendLogEmbed(message.guild, 'messageDelete', embed, 'messageDelete', logSubject);
+
+    // The cached copy (if any) is now evidence of a deleted message rather than plain cache.
+    await markMessagesDeleted([messageId], 'DELETE');
 }
+
+/** Attachment names/URLs from a message_logs row (JSON array of URLs). */
+function cachedAttachmentList(row) {
+    if (!row?.attachment_urls) return [];
+    try {
+        const urls = JSON.parse(row.attachment_urls);
+        if (!Array.isArray(urls)) return [];
+        return urls.filter(u => typeof u === 'string').map(url => {
+            let name = 'attachment';
+            try { name = decodeURIComponent(new URL(url).pathname.split('/').pop() || name); } catch { /* keep default */ }
+            return { name, url };
+        });
+    } catch {
+        return [];
+    }
+}
+
+/**
+ * Log an automatic moderation action (spam filter, pattern match, heat threshold).
+ *
+ * The automod paths used to punish silently — they deleted messages and applied
+ * timeouts but only ever wrote to Winston, so a guild watching its log channels saw
+ * nothing while members were being muted. Routed through sendLogEmbed so the guild's
+ * normal logging_config / log_event_config wiring applies.
+ *
+ * @param {import('discord.js').Guild} guild
+ * @param {import('discord.js').User} user - the member acted on
+ * @param {string} action - 'Delete' | 'Warn' | 'Mute' | 'Kick' | 'Ban'
+ * @param {string} reason - human-readable trigger description
+ * @param {Object} [details] - optional extra fields
+ * @param {number} [details.durationMinutes] - timeout length, if any
+ * @param {string} [details.source] - which subsystem acted, e.g. 'Anti-Spam Filter'
+ * @param {import('discord.js').GuildChannel} [details.channel] - where it happened
+ */
+async function logAutomodAction(guild, user, action, reason, details = {}) {
+    if (!guild || !user) return;
+
+    const severity = (action === 'Kick' || action === 'Ban') ? 'danger'
+        : (action === 'Mute') ? 'warning'
+        : 'primary';
+
+    const embed = new EmbedBuilder()
+        .setColor(themeColor(guild.id, severity))
+        .setTitle(`🤖 Automod: ${action}`)
+        .addFields(
+            { name: 'User', value: `${user.tag ?? user.username} (${user.id})`, inline: true },
+            { name: 'Action', value: action, inline: true }
+        )
+        .setTimestamp();
+
+    if (details.source) embed.addFields({ name: 'Triggered By', value: details.source, inline: true });
+    if (details.channel) embed.addFields({ name: 'Channel', value: `${details.channel}`, inline: true });
+    if (details.durationMinutes) {
+        embed.addFields({ name: 'Duration', value: `${details.durationMinutes} minute(s)`, inline: true });
+    }
+    embed.addFields({ name: 'Reason', value: String(reason || 'No reason provided').substring(0, 1024) });
+
+    // The Logging page's toggle for this is "automodAction"; only a couple of older configs
+    // carry "automod". Posting under "automod" alone dropped every bot automod action — mutes
+    // included — for guilds that had ticked the toggle, leaving a bare "Member Timed Out" with no why.
+    if (await resolveLogTarget(guild.id, 'automod').catch(() => null)) {
+        await sendLogEmbed(guild, 'automod', embed,
+            severity === 'danger' ? 'automod.removed' : severity === 'warning' ? 'automod.muted' : 'automod.other');
+    } else {
+        await sendLogEmbed(guild, 'automodAction', embed,
+            severity === 'danger' ? 'automod.removed' : severity === 'warning' ? 'automod.muted' : 'automod.other');
+    }
+}
+
+// A real edit's gateway event lands within milliseconds. Anything claiming to be
+// older than this is Discord replaying a long-settled state, not a live edit.
+const EDIT_FRESHNESS_MS = 5 * 60 * 1000;
 
 async function logMessageUpdate(oldMessage, newMessage) {
     if (!newMessage.guild) return;
 
-    // Skip if no content change or if author is a bot (when available)
-    if (oldMessage.content === newMessage.content) return;
     if (newMessage.author && newMessage.author.bot) return;
 
     // Skip if we don't have author information (partial message)
     if (!newMessage.author) return;
 
+    // Discord fires MESSAGE_UPDATE for plenty of things a human never touched:
+    // link embeds finishing their unfurl, pins, flag changes, and — the big one —
+    // re-signing attachment CDN URLs on old posts, which our own message-cache seed
+    // provokes every startup by fetching message history. None of those are edits,
+    // and only a genuine user edit sets edited_timestamp.
+    if (!newMessage.editedTimestamp) return;
+
+    // An edited_timestamp from months ago rode in on one of those re-broadcasts —
+    // the message was edited once, long ago, and Discord is just restating it.
+    if (Date.now() - newMessage.editedTimestamp > EDIT_FRESHNESS_MS) return;
+
     const guildId = newMessage.guild.id;
     const channelId = newMessage.channel.id;
     const userId = newMessage.author.id;
     const messageId = newMessage.id;
-    const oldContent = oldMessage.content;
     const newContent = newMessage.content;
+
+    // oldMessage is a clone of whatever discord.js had cached. For a message posted
+    // before this process started there is no cached copy, so its content is null —
+    // which is not the same as "the message was empty". Fall back to our own
+    // message_logs copy (messageUpdate.js only overwrites it after we run).
+    const optedOut = await isMessageLoggingOptedOut(userId);
+
+    let oldContent = oldMessage && !oldMessage.partial ? oldMessage.content : null;
+    if ((oldContent === null || oldContent === undefined) && !optedOut) {
+        const cached = await getMessageById(messageId);
+        oldContent = cached ? cached.content : null;
+    }
+
+    // Content genuinely unchanged — an attachment or embed changed, not the text.
+    if (oldContent !== null && oldContent === newContent) return;
 
     const botIdentifier = newMessage.client.isDefaultBot
         ? 'Default Bot'
         : `Custom Bot ${newMessage.client.botId}`;
 
-    logger.info(`[${botIdentifier}] Message edited in #${newMessage.channel.toString()} by ${newMessage.author.tag}. Old: "${oldContent}" New: "${newContent}"`, {
+    // Opted-out authors' text stays out of the bot's own log files.
+    const withheld = '[withheld: author opted out of message logging]';
+    const loggedOld = optedOut ? withheld : oldContent;
+    const loggedNew = optedOut ? withheld : newContent;
+    logger.info(`[${botIdentifier}] Message edited in #${newMessage.channel.toString()} by ${newMessage.author.tag}. Old: "${loggedOld}" New: "${loggedNew}"`, {
         guildId,
         channelId,
         userId,
         messageId,
-        oldContent,
-        newContent,
+        oldContent: loggedOld,
+        newContent: loggedNew,
         botId: newMessage.client.botId || 'default',
         category: 'messageUpdate'
     });
@@ -276,12 +630,13 @@ async function logMessageUpdate(oldMessage, newMessage) {
         .addFields(
             { name: 'Author', value: `${newMessage.author.tag} (${newMessage.author.id})`, inline: true },
             { name: 'Channel', value: `${newMessage.channel.name}`, inline: true },
-            { name: 'Before', value: oldContent ? oldContent.substring(0, 1024) : 'No content', inline: false },
+            { name: 'Before', value: oldContent === null ? (optedOut ? '*Not stored — author opted out of message logging*' : '*Not cached*') : (oldContent ? oldContent.substring(0, 1024) : 'No content'), inline: false },
             { name: 'After', value: newContent ? newContent.substring(0, 1024) : 'No content', inline: false }
         )
         .setTimestamp();
 
-    await sendLogEmbed(newMessage.guild, 'messageUpdate', embed);
+    await sendLogEmbed(newMessage.guild, 'messageUpdate', embed, 'messageUpdate',
+        { channel: newMessage.channel, member: newMessage.member, user: newMessage.author });
 }
 
 async function logMemberUpdate(oldMember, newMember) {
@@ -300,7 +655,7 @@ async function logMemberUpdate(oldMember, newMember) {
         });
 
         const embed = new EmbedBuilder()
-            .setColor(0x5865F2)
+            .setColor(themeColor(guildId, 'primary'))
             .setTitle('👤 Nickname Changed')
             .setDescription(`${newMember} updated their nickname`)
             .addFields(
@@ -310,7 +665,7 @@ async function logMemberUpdate(oldMember, newMember) {
             )
             .setTimestamp();
 
-        await sendLogEmbed(newMember.guild, 'memberUpdate', embed);
+        await sendLogEmbed(newMember.guild, 'memberUpdate', embed, 'memberUpdate.nickname', { member: newMember });
     }
 
     const oldRoles = oldMember.roles.cache.map(r => r.id);
@@ -329,7 +684,7 @@ async function logMemberUpdate(oldMember, newMember) {
         });
 
         const embed = new EmbedBuilder()
-            .setColor(0x57F287)
+            .setColor(themeColor(guildId, 'success'))
             .setTitle('🎭 Roles Added')
             .setDescription(`${newMember} received new roles`)
             .addFields(
@@ -338,7 +693,7 @@ async function logMemberUpdate(oldMember, newMember) {
             )
             .setTimestamp();
 
-        await sendLogEmbed(newMember.guild, 'memberUpdate', embed);
+        await sendLogEmbed(newMember.guild, 'memberUpdate', embed, 'memberUpdate.rolesAdded', { member: newMember });
     }
 
     if (removedRoles.length > 0) {
@@ -351,7 +706,7 @@ async function logMemberUpdate(oldMember, newMember) {
         });
 
         const embed = new EmbedBuilder()
-            .setColor(0xED4245)
+            .setColor(themeColor(guildId, 'danger'))
             .setTitle('🎭 Roles Removed')
             .setDescription(`${newMember} lost roles`)
             .addFields(
@@ -360,7 +715,7 @@ async function logMemberUpdate(oldMember, newMember) {
             )
             .setTimestamp();
 
-        await sendLogEmbed(newMember.guild, 'memberUpdate', embed);
+        await sendLogEmbed(newMember.guild, 'memberUpdate', embed, 'memberUpdate.rolesRemoved', { member: newMember });
     }
 }
 
@@ -409,6 +764,17 @@ async function logVoiceStateUpdate(oldState, newState) {
 async function logMemberJoin(member) {
     if (!member.guild) return;
 
+    // Discord's own record of how they got in — exact, unlike the invite-use diff below,
+    // which stays as the fallback (and keeps invite_tracking counts current).
+    const joinSource = await fetchJoinSource(member.guild, member.id);
+    const application = requiresApplication(member.guild) && !member.user.bot
+        && (!joinSource || joinSource.type === 7)
+        ? await findApprovalForJoin(member.guild, member.id).catch(() => null)
+        : null;
+    // The join log announces the approval itself; the sync job skips a claimed row.
+    if (application && !application.posted_at) await claimForPosting(application.request_id).catch(() => {});
+    const bypassed = bypassedApplication(member.guild, joinSource, member);
+
     // Try to determine who invited this member
     let inviteInfo = null;
     try {
@@ -437,16 +803,27 @@ async function logMemberJoin(member) {
                     'UPDATE invite_tracking SET uses = ? WHERE guild_id = ? AND invite_code = ?',
                     [invite.uses, member.guild.id, code]
                 );
-
-                // Log who used which invite
-                await db.execute(
-                    `INSERT INTO invite_tracker_logs (guild_id, user_id, inviter_id, invite_code, event_type)
-                     VALUES (?, ?, ?, ?, 'join')`,
-                    [member.guild.id, member.id, inviteInfo.inviterId, code]
-                );
-
                 break;
             }
+        }
+
+        // Discord's answer beats the guess whenever it has one.
+        if (joinSource?.inviteCode) {
+            const live = currentInvites.get(joinSource.inviteCode);
+            inviteInfo = {
+                code: joinSource.inviteCode,
+                inviterId: joinSource.inviterId || live?.inviter?.id || inviteInfo?.inviterId,
+                inviterTag: live?.inviter?.tag || (inviteInfo?.code === joinSource.inviteCode ? inviteInfo.inviterTag : 'Unknown')
+            };
+        }
+
+        // Log who used which invite
+        if (inviteInfo) {
+            await db.execute(
+                `INSERT INTO invite_tracker_logs (guild_id, user_id, inviter_id, invite_code, event_type)
+                 VALUES (?, ?, ?, ?, 'join')`,
+                [member.guild.id, member.id, inviteInfo.inviterId, inviteInfo.code]
+            );
         }
 
         // Check for vanity URL
@@ -472,7 +849,7 @@ async function logMemberJoin(member) {
 
     const joinedTimestamp = Math.floor(member.joinedTimestamp / 1000);
     const embed = new EmbedBuilder()
-        .setColor(0x57F287)
+        .setColor(themeColor(member.guild?.id, 'success'))
         .setTitle('👋 Member Joined')
         .setDescription(`${member} joined the server`)
         .addFields(
@@ -491,7 +868,34 @@ async function logMemberJoin(member) {
         );
     }
 
-    await sendLogEmbed(member.guild, 'memberJoin', embed);
+    if (joinSource) {
+        embed.addFields({ name: 'Join Method', value: joinSource.label, inline: true });
+    }
+
+    // Risk insight (core/member-insight.js): account age against the server's threshold, default avatar,
+    // Discord's spammer flag, the global ban network, rejoins, earlier protection hits, badges, and a
+    // low / medium / high verdict. Per server on/off on the Logging page; never blocks the log.
+    const insight = member.user.bot ? null : await riskFieldForJoin(member);
+    if (insight) {
+        embed.addFields({ name: insight.field.name, value: insight.field.value, inline: false });
+    }
+    if (application) {
+        embed.addFields(
+            { name: 'Application Approved By', value: decidedByText(application), inline: false },
+            ...answerFields(application)
+        );
+    }
+    if (bypassed) {
+        embed.setColor(themeColor(member.guild?.id, 'danger'))
+            .setTitle('⚠️ Member Joined Without an Application')
+            .addFields({
+                name: 'Bypassed Apply-to-Join',
+                value: `This server requires an approved application, but Discord records this join as **${joinSource.label}**.`
+                    + (joinSource.type === 2 ? ' Check the server\'s linked integrations (Server Settings → Integrations).' : '')
+            });
+    }
+
+    await sendLogEmbed(member.guild, 'memberJoin', embed, bypassed ? 'memberJoin.noApplication' : 'memberJoin.joined');
 
     await saveAuditLog(
         member.guild.id,
@@ -508,7 +912,8 @@ async function logMemberJoin(member) {
             username: member.user.tag,
             createdAt: member.user.createdAt.toISOString(),
             inviteCode: inviteInfo?.code,
-            invitedBy: inviteInfo?.inviterTag
+            invitedBy: inviteInfo?.inviterTag,
+            ...(insight ? { risk: insight.risk.level, riskScore: insight.risk.score } : {})
         }
     );
 }
@@ -534,7 +939,7 @@ async function logMemberNicknameUpdate(oldMember, newMember) {
     });
 
     const embed = new EmbedBuilder()
-        .setColor(0x5865F2) // Blurple
+        .setColor(themeColor(guildId, 'primary')) // Blurple
         .setTitle('✏️ Nickname Changed')
         .setDescription(`${newMember}'s nickname was changed`)
         .addFields(
@@ -544,7 +949,7 @@ async function logMemberNicknameUpdate(oldMember, newMember) {
         )
         .setTimestamp();
 
-    await sendLogEmbed(newMember.guild, 'memberUpdate', embed);
+    await sendLogEmbed(newMember.guild, 'memberUpdate', embed, 'memberUpdate.nickname', { member: newMember });
 
     await saveAuditLog(
         guildId,
@@ -583,7 +988,7 @@ async function logMemberRoleUpdate(oldMember, newMember) {
         });
 
         const embed = new EmbedBuilder()
-            .setColor(0x57F287)
+            .setColor(themeColor(guildId, 'success'))
             .setTitle('🎭 Roles Added')
             .setDescription(`${newMember} received new roles`)
             .addFields(
@@ -592,7 +997,7 @@ async function logMemberRoleUpdate(oldMember, newMember) {
             )
             .setTimestamp();
 
-        await sendLogEmbed(newMember.guild, 'memberUpdate', embed);
+        await sendLogEmbed(newMember.guild, 'memberUpdate', embed, 'memberUpdate.rolesAdded', { member: newMember });
 
         await saveAuditLog(
             guildId,
@@ -619,7 +1024,7 @@ async function logMemberRoleUpdate(oldMember, newMember) {
         });
 
         const embed = new EmbedBuilder()
-            .setColor(0xED4245)
+            .setColor(themeColor(guildId, 'danger'))
             .setTitle('🎭 Roles Removed')
             .setDescription(`${newMember} lost roles`)
             .addFields(
@@ -628,7 +1033,7 @@ async function logMemberRoleUpdate(oldMember, newMember) {
             )
             .setTimestamp();
 
-        await sendLogEmbed(newMember.guild, 'memberUpdate', embed);
+        await sendLogEmbed(newMember.guild, 'memberUpdate', embed, 'memberUpdate.rolesRemoved', { member: newMember });
 
         await saveAuditLog(
             guildId,
@@ -666,7 +1071,8 @@ async function logVoiceJoin(newState) {
         )
         .setTimestamp();
 
-    await sendLogEmbed(newState.guild, 'voiceUpdate', embed);
+    await sendLogEmbed(newState.guild, 'voiceUpdate', embed, 'voiceUpdate.join',
+        { channel: newState.channel, member: newState.member });
 
     await saveAuditLog(
         newState.guild.id,
@@ -700,7 +1106,7 @@ async function logVoiceLeave(oldState) {
     });
 
     const embed = new EmbedBuilder()
-        .setColor(0xED4245)
+        .setColor(themeColor(oldState.guild.id, 'danger'))
         .setTitle('🔇 Voice Channel Leave')
         .setDescription(`${member || `<@${oldState.id}>`} left ${oldState.channel || channelName}`)
         .addFields(
@@ -709,20 +1115,23 @@ async function logVoiceLeave(oldState) {
         )
         .setTimestamp();
 
-    await sendLogEmbed(oldState.guild, 'voiceUpdate', embed);
+    await sendLogEmbed(oldState.guild, 'voiceUpdate', embed, 'voiceUpdate.leave',
+        { channel: oldState.channel, channelId: oldState.channelId, member: oldState.member, userId: oldState.id });
 
+    // oldState.channel is null when the channel no longer exists — handleTempChannels deletes an
+    // emptied temp channel before this runs — and oldState.member can be uncached.
     await saveAuditLog(
         oldState.guild.id,
         'VOICE_LEAVE',
-        oldState.member.id,
-        oldState.member.id,
+        oldState.id,
+        oldState.id,
         null,
         oldState.channelId,
         'Left voice channel',
         null,
-        oldState.channel.name,
+        channelName,
         null,
-        { username: oldState.member.user.tag }
+        { username: userName }
     );
 }
 
@@ -748,7 +1157,8 @@ async function logVoiceMove(oldState, newState) {
         )
         .setTimestamp();
 
-    await sendLogEmbed(newState.guild, 'voiceUpdate', embed);
+    await sendLogEmbed(newState.guild, 'voiceUpdate', embed, 'voiceUpdate.move',
+        { channels: [oldState.channel, newState.channel], member: newState.member });
 
     await saveAuditLog(
         newState.guild.id,
@@ -1151,12 +1561,18 @@ async function logGuildUpdate(oldGuild, newGuild) {
     );
 }
 
-async function logGuildBanAdd(ban) {
+/**
+ * @param opts.entry           the ban's audit-log entry when the caller already read it (events/guildBanAdd.js)
+ * @param opts.classification  core/global-ban-manager.js ingestBan's verdict (who / which protection),
+ *                             kept in the audit row's metadata for the dashboard ban log
+ */
+async function logGuildBanAdd(ban, { entry = undefined, classification = null } = {}) {
     if (!ban.guild) return;
 
     try {
-        const auditLogs = await ban.guild.fetchAuditLogs({ type: 22, limit: 1 });
-        const banLog = auditLogs.entries.first();
+        const banLog = entry !== undefined
+            ? entry
+            : (await ban.guild.fetchAuditLogs({ type: 22, limit: 1 })).entries.first();
         const moderator = banLog?.executor;
 
         // Get reason from audit log first (most reliable), fallback to ban object
@@ -1194,7 +1610,12 @@ async function logGuildBanAdd(ban) {
             reason,
             null,
             null,
-            { username: ban.user.tag, moderator: moderator?.tag }
+            {
+                username: ban.user.tag,
+                moderator: moderator?.tag,
+                ...(moderator ? { moderatorBot: !!moderator.bot } : {}),
+                ...(classification ? { source: classification.source, protection: classification.context || null } : {}),
+            }
         );
     } catch (error) {
         logger.error(`[BAN] Failed to log ban: ${error.message}`);
@@ -1266,7 +1687,7 @@ async function logGuildMemberRemove(member) {
             });
 
             const embed = new EmbedBuilder()
-                .setColor(0xED4245)
+                .setColor(themeColor(member.guild?.id, 'danger'))
                 .setTitle('🚪 Member Kicked')
                 .setDescription(`${member.user.tag} was kicked from the server`)
                 .addFields(
@@ -1458,13 +1879,14 @@ async function logRoleUpdate(oldRole, newRole) {
 // ===========================
 
 async function logEmojiCreate(emoji) {
-    // DISABLED ENTIRELY. The emoji cache is off (GuildEmojiManager: 0), so
-    // discord.js re-fires emojiCreate/Delete/Update for every existing emoji on
-    // every emoji-list update/reconnect across all guilds — a relentless log
-    // storm. Emoji logging is low-value, so it is turned off at the source.
-    return;
-    // eslint-disable-next-line no-unreachable
+    // These were switched off (2026-10) because the emoji cache was off (GuildEmojiManager: 0): with
+    // nothing cached, discord.js treats every emoji in each GUILD_EMOJIS_UPDATE / GUILD_CREATE as new
+    // and fired emojiCreate for all of them, a log storm, and never fired delete or update at all.
+    // The cache is on again (core/bot-manager.js), so these events are real diffs. Belt and braces:
+    // an emoji's id is minted when it is uploaded, so an "added" emoji older than ten minutes is a
+    // cache artifact, not an upload.
     if (!emoji.guild) return;
+    if (emoji.createdTimestamp && Date.now() - emoji.createdTimestamp > 10 * 60_000) return;
 
     logger.debug(`[EMOJI CREATE] :${emoji.name}: (${emoji.id})`, {
         guildId: emoji.guild.id,
@@ -1502,8 +1924,6 @@ async function logEmojiCreate(emoji) {
 }
 
 async function logEmojiDelete(emoji) {
-    return; // DISABLED — see logEmojiCreate note (cache-off emoji storm)
-    // eslint-disable-next-line no-unreachable
     if (!emoji.guild) return;
 
     logger.debug(`[EMOJI DELETE] :${emoji.name}: (${emoji.id})`, {
@@ -1542,8 +1962,6 @@ async function logEmojiDelete(emoji) {
 }
 
 async function logEmojiUpdate(oldEmoji, newEmoji) {
-    return; // DISABLED — see logEmojiCreate note (cache-off emoji storm)
-    // eslint-disable-next-line no-unreachable
     if (!newEmoji.guild) return;
 
     if (oldEmoji.name === newEmoji.name) return;
@@ -1822,7 +2240,7 @@ async function logWebhookUpdate(channel) {
         )
         .setTimestamp();
 
-    await sendLogEmbed(channel.guild, 'webhookUpdate', embed);
+    await sendLogEmbed(channel.guild, 'webhookUpdate', embed, 'webhookUpdate.modified');
 
     await saveAuditLog(
         channel.guild.id,
@@ -1874,7 +2292,11 @@ async function logIntegrationUpdate(guild) {
 export {
     // Helper functions
     sendLogEmbed,
+    resolveLogTarget,
+    isLogSubjectIgnored,
+    invalidateLogActionColors,
     saveAuditLog,
+    logAutomodAction,
 
     // Message events
     logMessageDelete,

@@ -1,0 +1,46 @@
+<%#
+  <option>s for a channel or role picker that know what they list, for the chip picker
+  (/js/cf-picker.js reads data-kind and data-color) and for roles the bot cannot give.
+  Same output as _options for plain data, so a form posts exactly what it did before. Locals:
+    items     channels or roles (discord.js objects or { id, name, type?, color?, position?, managed? })
+    selected  an id, or an array of ids (optional)
+    kind      'role' | 'text' | 'voice' | 'category' | 'channel' (text and voice, each marked)
+    only      for channels: 'text' keeps text and announcement channels, 'voice' voice and stage
+              channels (optional). A selected channel is always kept, so a saved value is not lost.
+    botTop    the bot's highest role position (roles at or above it, and managed roles, are shown
+              as "(above the bot)" and disabled unless already selected). Omit or null to skip.
+    empty     label of a first, empty option (optional)
+    prefix    true to put # before channel names (default true for text channels)
+%>
+<%
+const _items = (typeof items !== 'undefined' && Array.isArray(items)) ? items : [];
+const _sel = typeof selected === 'undefined' || selected === null ? [] : (Array.isArray(selected) ? selected.map(String) : [String(selected)]);
+const _kind = typeof kind !== 'undefined' && kind ? kind : 'channel';
+const _only = typeof only !== 'undefined' && only ? only : null;
+const _top = typeof botTop !== 'undefined' && botTop !== null && botTop !== undefined && Number.isFinite(Number(botTop)) ? Number(botTop) : null;
+const _hash = typeof prefix === 'undefined' || prefix === null ? true : !!prefix;
+const _voice = (c) => c && (c.type === 2 || c.type === 13);
+const _text = (c) => c && (c.type === undefined || c.type === 0 || c.type === 5);
+const _hex = (r) => {
+    if (r && typeof r.hexColor === 'string' && /^#[0-9a-f]{6}$/i.test(r.hexColor) && r.hexColor !== '#000000') return r.hexColor;
+    const n = Number(r && r.color);
+    return n > 0 ? '#' + n.toString(16).padStart(6, '0') : '';
+};
+%>
+<% if (typeof empty !== 'undefined' && empty !== null && empty !== false) { %><option value=""><%= empty %></option><% } %>
+<% _items.forEach(function (it) {
+    const id = String(it.id);
+    const on = _sel.includes(id);
+    if (_kind !== 'role' && _only && !on) {
+        if (_only === 'text' && !_text(it)) return;
+        if (_only === 'voice' && !_voice(it)) return;
+    }
+    if (_kind === 'role') {
+        const above = (_top !== null && Number(it.position) >= _top) || it.managed === true;
+        const colour = _hex(it);
+%><option value="<%= id %>" data-kind="role"<% if (colour) { %> data-color="<%= colour %>"<% } %><% if (on) { %> selected<% } %><% if (above && !on) { %> disabled<% } %>><%= it.name %><% if (above) { %> (above the bot)<% } %></option>
+<%  } else {
+        const k = _kind === 'category' || it.type === 4 ? 'category' : (_voice(it) ? 'voice' : 'text');
+%><option value="<%= id %>" data-kind="<%= k %>"<% if (on) { %> selected<% } %>><% if (k === 'text' && _hash) { %>#<% } %><%= it.name %></option>
+<%  }
+}); %>

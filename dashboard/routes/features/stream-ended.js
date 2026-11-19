@@ -2,8 +2,67 @@ import express from 'express';
 import pool from '../../../utils/db.js';
 import { ensureAuth, ensureGuildPerms } from '../api.js';
 import logger from '../../../utils/logger.js';
+import {
+    getStreamEndDefaults,
+    setStreamEndDefaults,
+    applyStreamEndDefaultsToExisting,
+} from '../../../core/stream-end-defaults.js';
 
 const router = express.Router();
+
+// GET /api/guilds/:guildId/stream-ended/defaults
+// The guild-wide answer new subscriptions inherit.
+router.get('/:guildId/stream-ended/defaults', ensureAuth, ensureGuildPerms, async (req, res) => {
+    try {
+        const defaults = await getStreamEndDefaults(req.guildId);
+        res.json({ success: true, defaults });
+    } catch (error) {
+        logger.error('[API Stream-Ended Defaults GET] Error:', { error: error.message });
+        res.status(500).json({ error: 'Failed to load defaults' });
+    }
+});
+
+// PUT /api/guilds/:guildId/stream-ended/defaults
+// Body: { edit_on_end, delete_on_end, apply_to_existing? }
+router.put('/:guildId/stream-ended/defaults', ensureAuth, ensureGuildPerms, async (req, res) => {
+    try {
+        const { edit_on_end, delete_on_end, apply_to_existing } = req.body;
+
+        // edit_on_end wins over delete_on_end at cleanup time, so "keep on end"
+        // (delete_on_end = 0) is only meaningful with edit off. Normalise here
+        // rather than storing a pair that reads one way and behaves another.
+        const edit = edit_on_end ? 1 : 0;
+        const del = edit ? 1 : (delete_on_end ? 1 : 0);
+
+        const defaults = await setStreamEndDefaults(req.guildId, {
+            edit_on_end: edit,
+            delete_on_end: del,
+        });
+
+        let applied = 0;
+        if (apply_to_existing) {
+            applied = await applyStreamEndDefaultsToExisting(req.guildId);
+        }
+
+        res.json({ success: true, defaults, applied });
+    } catch (error) {
+        logger.error('[API Stream-Ended Defaults PUT] Error:', { error: error.message });
+        res.status(500).json({ error: 'Failed to save defaults' });
+    }
+});
+
+// POST /api/guilds/:guildId/stream-ended/defaults/apply
+// Push the saved defaults onto every existing subscription. Deliberately separate
+// from the save above — it overwrites per-streamer choices.
+router.post('/:guildId/stream-ended/defaults/apply', ensureAuth, ensureGuildPerms, async (req, res) => {
+    try {
+        const applied = await applyStreamEndDefaultsToExisting(req.guildId);
+        res.json({ success: true, applied, message: `Applied to ${applied} subscription${applied === 1 ? '' : 's'}` });
+    } catch (error) {
+        logger.error('[API Stream-Ended Defaults APPLY] Error:', { error: error.message });
+        res.status(500).json({ error: 'Failed to apply defaults' });
+    }
+});
 
 // GET /api/guilds/:guildId/stream-ended/subscriptions
 router.get('/:guildId/stream-ended/subscriptions', ensureAuth, ensureGuildPerms, async (req, res) => {

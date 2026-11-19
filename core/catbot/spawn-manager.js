@@ -10,13 +10,16 @@
  * Exactly one concurrent caller sees affectedRows === 1. That's the whole lock — it
  * holds across shards and pooled connections, which an in-process list would not.
  */
-import { EmbedBuilder } from 'discord.js';
+import { EmbedBuilder, RESTJSONErrorCodes } from 'discord.js';
 import pool from '../../utils/db.js';
 import logger from '../../utils/logger.js';
+import { displayNameFor } from '../../utils/display-name.js';
+import { logFeatureEvent } from '../feature-log.js';
 import {
   rollCatType, valueOf, isRare, CATCH_WORD, DEFAULT_SPAWN_MIN, DEFAULT_SPAWN_MAX,
   RESPAWN_GRACE, SWEEP_INTERVAL_MS, BELATED_WINDOW_MS, BELATED_WINDOW_LEGACY_MS,
   BELATED_WINDOW_RAIN_MS, MAX_CATCHERS, ANTI_DOUBLE_CATCH_MS, RAIN_MIN_DELAY, RAIN_MAX_DELAY,
+  ACTIVITY_MIN_MSGS, ACTIVITY_MAX_MSGS,
 } from './constants.js';
 import { catEmoji } from './emoji.js';
 import { boostCatch } from './prisms.js';
@@ -31,6 +34,11 @@ import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 
 const nowSec = () => Math.floor(Date.now() / 1000);
+
+// How long to wait before retrying a channel whose bot isn't connected (or that Discord
+// couldn't hand us) — long enough for custom bots to finish booting, short enough that a
+// channel comes back on its own without anyone re-running /cat setup.
+const UNAVAILABLE_RETRY_MS = 60_000;
 
 // Our own generated sprites (scripts/catbot-generate-art.mjs). Absent = text-only spawns.
 const SPRITE_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'assets', 'catbot');
@@ -48,6 +56,14 @@ function spriteFor(type) {
 const timers = new Map();
 // channelId -> { type, at, catchers: string[], timer } for the belated window.
 const belated = new Map();
+
+// Activity booster. channelId -> { count, target, floorSec }: chatter counts toward the target, and
+// once it is reached (and the floor has passed) the cat spawns early. A quiet channel never fills the
+// counter and just waits out its ceiling timer instead.
+const activity = new Map();
+// Enabled cat-channel ids, refreshed by the sweeper — lets the per-message hook skip a DB round-trip.
+const catChannelIds = new Set();
+const randInt = (lo, hi) => lo + Math.floor(Math.random() * (hi - lo + 1));
 
 let sweeper = null;
 
@@ -115,8 +131,18 @@ function armTimer(channelId, delayMs) {
 
 // ── Spawning ─────────────────────────────────────────────────────────────────
 
+/**
+ * The client that can actually see this guild, or null.
+ *
+ * getClientForGuild() falls back to the default bot when nothing matches, which is wrong here:
+ * in a custom-bot guild the default bot isn't a member, so every fetch through it 404s. Verify
+ * the returned client really has the guild and report "not available" instead of handing back
+ * a client that is guaranteed to fail.
+ */
 function resolveClient(guildId) {
-  return global.botManager?.getClientForGuild?.(guildId) || global.client || null;
+  const candidate = global.botManager?.getClientForGuild?.(guildId) || global.client || null;
+  if (!candidate?.isReady?.()) return null;
+  return candidate.guilds?.cache?.has(guildId) ? candidate : null;
 }
 
 /** The three permissions a spawn genuinely needs: read the channel, post, attach the sprite. */
@@ -159,12 +185,39 @@ export async function spawnCat(channelId, forcedType = null) {
   const row = await getChannel(channelId);
   if (!row || !row.enabled) return null;
   if (row.cat_message_id) return null; // a cat is already out
+  activity.delete(channelId); // a fresh cycle's counter is set on the next scheduleRespawn
 
+  // The owning bot may not be connected yet — custom bots start after the spawn engine does,
+  // so an overdue spawn on boot lands here before its bot exists. That is temporary: retry,
+  // never disable, or one restart silently ends the game in that channel forever.
   const client = resolveClient(row.guild_id);
-  const channel = await client?.channels?.fetch(channelId).catch(() => null);
+  if (!client) {
+    logger.warn(`[CatBot] no connected bot for guild ${row.guild_id} yet; retrying ${channelId} later`);
+    armTimer(channelId, UNAVAILABLE_RETRY_MS);
+    return null;
+  }
+
+  let fetchErr = null;
+  const channel = await client.channels.fetch(channelId).catch(err => { fetchErr = err; return null; });
   if (!channel) {
-    logger.warn(`[CatBot] channel ${channelId} unreachable; disabling`);
-    await pool.execute('UPDATE catbot_channels SET enabled = 0 WHERE channel_id = ?', [channelId]);
+    // Only a channel that Discord says no longer exists is permanent. Anything else
+    // (rate limit, outage, a transient Missing Access) gets retried.
+    if (fetchErr?.code === RESTJSONErrorCodes.UnknownChannel) {
+      logger.warn(`[CatBot] channel ${channelId} no longer exists; disabling`);
+      await pool.execute('UPDATE catbot_channels SET enabled = 0 WHERE channel_id = ?', [channelId]);
+      void logFeatureEvent(() => (client.guilds.cache.get(row.guild_id)), 'system.featureDisabled', () => ({
+        title: '⛔ Feature Auto-Disabled',
+        description: 'Cat Bot spawns were turned off for a channel that was deleted. Set Cat Bot up in another channel to keep playing.',
+        fields: [
+          ['Feature', 'Cat Bot spawns'],
+          ['Why', 'Its channel was deleted'],
+          ['Channel ID', channelId],
+        ],
+      }));
+      return null;
+    }
+    logger.warn(`[CatBot] channel ${channelId} unreachable (${fetchErr?.code ?? 'no error'}); retrying later`);
+    armTimer(channelId, UNAVAILABLE_RETRY_MS);
     return null;
   }
 
@@ -209,6 +262,32 @@ export async function scheduleRespawn(channelId) {
     ? randBetween(RAIN_MIN_DELAY, RAIN_MAX_DELAY)
     : randBetween(row.spawn_min ?? DEFAULT_SPAWN_MIN, row.spawn_max ?? DEFAULT_SPAWN_MAX);
   await scheduleNext(channelId, delay);
+  // Arm the activity booster for the normal cadence. `delay` above is the ceiling (a quiet channel
+  // spawns then); spawn_min is the floor. Between them, ACTIVITY messages trigger an early spawn.
+  // Rain has its own back-to-back timing, so it opts out of the booster entirely.
+  if (raining) activity.delete(channelId);
+  else activity.set(channelId, {
+    count: 0,
+    target: randInt(ACTIVITY_MIN_MSGS, ACTIVITY_MAX_MSGS),
+    floorSec: nowSec() + Number(row.spawn_min ?? DEFAULT_SPAWN_MIN),
+  });
+}
+
+/**
+ * Count one human message toward the next spawn. The busier the channel, the sooner its cat — but
+ * never before the floor, and the ceiling timer still guarantees a cat in a channel nobody talks in.
+ * Called for every message in a known cat channel; a no-op when no spawn cycle is armed (e.g. a cat
+ * is already out).
+ */
+export async function bumpActivity(channelId) {
+  const a = activity.get(channelId);
+  if (!a) return;
+  a.count += 1;
+  if (a.count >= a.target && nowSec() >= a.floorSec) {
+    activity.delete(channelId);
+    clearTimer(channelId);
+    await spawnCat(channelId).catch(() => {});
+  }
 }
 
 // ── Catching ─────────────────────────────────────────────────────────────────
@@ -254,6 +333,10 @@ export async function handleCatMessage(message) {
     if (message.mentions?.users?.has(message.client.user.id)) {
       await awardPing(message).catch(() => {});
     }
+
+    // Activity booster: every human message in a cat channel nudges its next cat closer. Cheap O(1)
+    // set check so this stays free for the firehose of messages that are not in a cat channel.
+    if (catChannelIds.has(message.channelId)) await bumpActivity(message.channelId).catch(() => {});
 
     if (message.content.trim().toLowerCase() !== CATCH_WORD) return false;
 
@@ -433,7 +516,7 @@ async function announceAchievements(message, guildId, userId, settings, extra = 
     const embed = new EmbedBuilder()
       .setTitle('Achievement get!')
       .setColor(0xF2C14E)
-      .setAuthor({ name: message.author.username, iconURL: message.author.displayAvatarURL() })
+      .setAuthor({ name: displayNameFor(message.author, message.guild), iconURL: message.author.displayAvatarURL() })
       .addFields(earned.map(a => ({ name: `${a.emoji} ${a.name}`, value: a.description })));
 
     await message.channel.send({ embeds: [embed], allowedMentions: { users: [] } }).catch(() => {});
@@ -476,6 +559,12 @@ export function stopSpawnEngine() {
 }
 
 async function reviveDue() {
+  // Refresh the in-memory set the message hook checks, so a newly-enabled channel starts counting
+  // activity without a restart (and a disabled one stops).
+  const [all] = await pool.execute('SELECT channel_id FROM catbot_channels WHERE enabled = 1');
+  catChannelIds.clear();
+  for (const r of all) catChannelIds.add(r.channel_id);
+
   const [rows] = await pool.execute(
     'SELECT channel_id, yet_to_spawn FROM catbot_channels WHERE enabled = 1 AND cat_message_id IS NULL');
   const now = nowSec();

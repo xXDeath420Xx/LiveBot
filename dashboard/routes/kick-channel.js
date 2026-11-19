@@ -7,6 +7,7 @@ import express from 'express';
 import pool from '../../utils/db.js';
 import logger from '../../utils/logger.js';
 import { requireKickAuth } from './auth-tokes-bot.js';
+import { mountChannelCommandRoutes, commandsPageData } from './channel-bot-commands.js';
 import { resolveOwnedChannel } from '../../services/certifried-bot/defender/owned-channel.js';
 import { invalidateChannelCache } from '../../services/certifried-bot/command-registry.js';
 import { clearAutoResponderCache } from '../../services/certifried-bot/auto-responder.js';
@@ -19,6 +20,7 @@ import { resolveChannel } from '../../services/certifried-bot/defender/channel-t
 import { resolveKickUser } from '../../services/certifried-bot/defender/resolve-kick-user.js';
 import { banUser, unbanUser } from '../../services/certifried-bot/defender/kick-moderation.js';
 import { log as logEnforcement } from '../../services/certifried-bot/defender/enforcement-log.js';
+import { ensureSubscribed } from '../../services/certifried-bot/kick-event-subscriptions.js';
 import {
     validateCommandName, validateCommandResponse, validateCooldown,
     validateAliases, validateBoolean
@@ -26,12 +28,22 @@ import {
 
 const router = express.Router();
 
+// Error and "not allowed" pages for the /kick HTML routes: the site's styled message page
+// (views/kick/message.ejs) instead of a bare line of text.
+function kickPage(req, res, status, heading, message) {
+    return res.status(status).render('kick/message', {
+        heading, message,
+        kickUser: req.session?.tokesUser || null,
+        actionHref: '/kick', actionLabel: 'Back to your channels'
+    });
+}
+
 // ── Page: per-channel settings ──────────────────────────────────────────────
 router.get('/kick/channel/:channelId', requireKickAuth, async (req, res) => {
     try {
         const userId = req.session.tokesUser.id;
         const owned = await resolveOwnedChannel(userId, req.params.channelId);
-        if (!owned) return res.status(404).send('Channel not found.');
+        if (!owned) return kickPage(req, res, 404, 'Channel not found', 'That channel is not one of yours, or it was removed.');
         const [[channel]] = await pool.execute(
             `SELECT c.id, c.channel_id, c.channel_name, c.platform, c.is_enabled,
                     c.command_prefix, c.cooldown_global, c.cooldown_user, c.features_enabled
@@ -44,7 +56,7 @@ router.get('/kick/channel/:channelId', requireKickAuth, async (req, res) => {
         });
     } catch (error) {
         logger.error('[Kick Channel] settings page error', { error: error.message });
-        res.status(500).send('Failed to load channel settings.');
+        kickPage(req, res, 500, 'Could not load this channel', 'Something went wrong loading this page. Try again in a moment.');
     }
 });
 
@@ -86,167 +98,32 @@ router.get('/kick/channel/:channelId/commands', requireKickAuth, async (req, res
     try {
         const userId = req.session.tokesUser.id;
         const owned = await resolveOwnedChannel(userId, req.params.channelId);
-        if (!owned) return res.status(404).send('Channel not found.');
-        const [[channel]] = await pool.execute(
-            'SELECT id, channel_id, channel_name FROM tokes_channels WHERE id = ?', [owned.id]
-        );
-        const [commands] = await pool.execute(
-            'SELECT command_key, default_aliases, description, category, cooldown_default, mod_only FROM tokes_global_command_config WHERE is_enabled = 1 ORDER BY category, command_key'
-        );
-        const [channelCommands] = await pool.execute(
-            'SELECT command_key, is_enabled, custom_aliases, custom_response, cooldown_override, mod_only FROM tokes_channel_commands WHERE channel_id = ?', [owned.id]
-        );
-        const [customCommands] = await pool.execute(
-            'SELECT id, command_name, response, cooldown, mod_only, is_enabled, use_count FROM tokes_custom_commands WHERE channel_id = ? ORDER BY command_name', [owned.id]
-        );
+        if (!owned) return kickPage(req, res, 404, 'Channel not found', 'That channel is not one of yours, or it was removed.');
+        const { channel, commands, channelCommands, customCommands } = await commandsPageData(pool, owned.id);
         res.render('kick/channel-commands', {
             user: req.session.tokesUser, channel, commands, channelCommands, customCommands,
             csrfToken: req.csrfToken ? req.csrfToken() : (res.locals.csrfToken || '')
         });
     } catch (error) {
         logger.error('[Kick Channel] commands page error', { error: error.message });
-        res.status(500).send('Failed to load commands.');
+        kickPage(req, res, 500, 'Could not load commands', 'Something went wrong loading this page. Try again in a moment.');
     }
 });
 
 // ── API: toggle a built-in command ──────────────────────────────────────────
-router.post('/kick/api/channel/:channelId/commands/:commandKey/toggle', requireKickAuth, async (req, res) => {
-    try {
-        const userId = req.session.tokesUser.id;
-        const owned = await resolveOwnedChannel(userId, req.params.channelId);
-        if (!owned) return res.status(404).json({ error: 'Channel not found' });
-        const enabled = req.body.enabled ? 1 : 0;
-        await pool.execute(
-            `INSERT INTO tokes_channel_commands (channel_id, command_key, is_enabled) VALUES (?, ?, ?)
-             ON DUPLICATE KEY UPDATE is_enabled = VALUES(is_enabled)`,
-            [owned.id, req.params.commandKey, enabled]
-        );
-        invalidateChannelCache(owned.id);
-        res.json({ success: true, enabled: !!enabled });
-    } catch (error) {
-        logger.error('[Kick Channel] toggle error', { error: error.message });
-        res.status(500).json({ error: 'Failed to toggle command' });
-    }
+// Built-in commands, your own commands and auto-responders: shared with the stream bot's Twitch commands page
+// (dashboard/routes/channel-bot-commands.js). Same routes, same checks as before.
+mountChannelCommandRoutes(router, {
+    base: '/kick/api/channel', guard: requireKickAuth, label: '[Kick Channel]',
+    resolve: (req) => resolveOwnedChannel(req.session.tokesUser.id, req.params.channelId),
+    createdBy: (req) => req.session.tokesUser.name || 'owner',
 });
 
 // ── API: override a built-in command ────────────────────────────────────────
-router.put('/kick/api/channel/:channelId/commands/:commandKey', requireKickAuth, async (req, res) => {
-    try {
-        const userId = req.session.tokesUser.id;
-        const owned = await resolveOwnedChannel(userId, req.params.channelId);
-        if (!owned) return res.status(404).json({ error: 'Channel not found' });
-        const aliasesV = validateAliases(req.body.custom_aliases);
-        if (!aliasesV.valid) return res.status(400).json({ error: aliasesV.error });
-        let respValue = null;
-        if (req.body.custom_response) {
-            const respV = validateCommandResponse(req.body.custom_response);
-            if (!respV.valid) return res.status(400).json({ error: respV.error });
-            respValue = respV.value;
-        }
-        const cdV = validateCooldown(req.body.cooldown_override);
-        const modV = validateBoolean(req.body.mod_only, false);
-        if (!cdV.valid) return res.status(400).json({ error: cdV.error });
-        if (!modV.valid) return res.status(400).json({ error: modV.error });
-        await pool.execute(
-            `INSERT INTO tokes_channel_commands
-                (channel_id, command_key, custom_aliases, custom_response, cooldown_override, mod_only)
-             VALUES (?, ?, ?, ?, ?, ?)
-             ON DUPLICATE KEY UPDATE custom_aliases = VALUES(custom_aliases),
-                custom_response = VALUES(custom_response), cooldown_override = VALUES(cooldown_override),
-                mod_only = VALUES(mod_only), updated_at = CURRENT_TIMESTAMP`,
-            [owned.id, req.params.commandKey,
-             aliasesV.value.length ? JSON.stringify(aliasesV.value) : null,
-             respValue, cdV.value, modV.value ? 1 : 0]
-        );
-        invalidateChannelCache(owned.id);
-        res.json({ success: true });
-    } catch (error) {
-        logger.error('[Kick Channel] override error', { error: error.message });
-        res.status(500).json({ error: 'Failed to update command' });
-    }
-});
 
 // ── API: custom commands CRUD ───────────────────────────────────────────────
-router.post('/kick/api/channel/:channelId/custom', requireKickAuth, async (req, res) => {
-    try {
-        const userId = req.session.tokesUser.id;
-        const owned = await resolveOwnedChannel(userId, req.params.channelId);
-        if (!owned) return res.status(404).json({ error: 'Channel not found' });
-        const nameV = validateCommandName(req.body.command_name);
-        if (!nameV.valid) return res.status(400).json({ error: nameV.error });
-        const respV = validateCommandResponse(req.body.response);
-        if (!respV.valid) return res.status(400).json({ error: respV.error });
-        const cdV = validateCooldown(req.body.cooldown);
-        const modV = validateBoolean(req.body.mod_only, false);
-        if (!cdV.valid) return res.status(400).json({ error: cdV.error });
-        if (!modV.valid) return res.status(400).json({ error: modV.error });
-        const [[builtin]] = await pool.execute(
-            'SELECT command_key FROM tokes_global_command_config WHERE command_key = ?', [nameV.value]
-        );
-        if (builtin) return res.status(409).json({ error: 'That name is a built-in command' });
-        try {
-            const [result] = await pool.execute(
-                `INSERT INTO tokes_custom_commands (channel_id, command_name, response, cooldown, mod_only, created_by)
-                 VALUES (?, ?, ?, ?, ?, ?)`,
-                [owned.id, nameV.value, respV.value, cdV.value, modV.value ? 1 : 0, req.session.tokesUser.name || 'owner']
-            );
-            invalidateChannelCache(owned.id);
-            res.json({ success: true, commandId: result.insertId });
-        } catch (e) {
-            if (e.code === 'ER_DUP_ENTRY') return res.status(409).json({ error: 'Command already exists' });
-            throw e;
-        }
-    } catch (error) {
-        logger.error('[Kick Channel] custom create error', { error: error.message });
-        res.status(500).json({ error: 'Failed to create command' });
-    }
-});
 
-router.put('/kick/api/channel/:channelId/custom/:cmdId', requireKickAuth, async (req, res) => {
-    try {
-        const userId = req.session.tokesUser.id;
-        const owned = await resolveOwnedChannel(userId, req.params.channelId);
-        if (!owned) return res.status(404).json({ error: 'Channel not found' });
-        const [[existing]] = await pool.execute(
-            'SELECT id FROM tokes_custom_commands WHERE id = ? AND channel_id = ?', [req.params.cmdId, owned.id]
-        );
-        if (!existing) return res.status(404).json({ error: 'Command not found' });
-        const respV = validateCommandResponse(req.body.response);
-        if (!respV.valid) return res.status(400).json({ error: respV.error });
-        const cdV = validateCooldown(req.body.cooldown);
-        const modV = validateBoolean(req.body.mod_only, false);
-        const enV = validateBoolean(req.body.is_enabled, true);
-        if (!cdV.valid) return res.status(400).json({ error: cdV.error });
-        if (!modV.valid) return res.status(400).json({ error: modV.error });
-        if (!enV.valid) return res.status(400).json({ error: enV.error });
-        await pool.execute(
-            'UPDATE tokes_custom_commands SET response = ?, cooldown = ?, mod_only = ?, is_enabled = ? WHERE id = ?',
-            [respV.value, cdV.value, modV.value ? 1 : 0, enV.value ? 1 : 0, req.params.cmdId]
-        );
-        invalidateChannelCache(owned.id);
-        res.json({ success: true });
-    } catch (error) {
-        logger.error('[Kick Channel] custom update error', { error: error.message });
-        res.status(500).json({ error: 'Failed to update command' });
-    }
-});
 
-router.delete('/kick/api/channel/:channelId/custom/:cmdId', requireKickAuth, async (req, res) => {
-    try {
-        const userId = req.session.tokesUser.id;
-        const owned = await resolveOwnedChannel(userId, req.params.channelId);
-        if (!owned) return res.status(404).json({ error: 'Channel not found' });
-        const [result] = await pool.execute(
-            'DELETE FROM tokes_custom_commands WHERE id = ? AND channel_id = ?', [req.params.cmdId, owned.id]
-        );
-        if (!result.affectedRows) return res.status(404).json({ error: 'Command not found' });
-        invalidateChannelCache(owned.id);
-        res.json({ success: true });
-    } catch (error) {
-        logger.error('[Kick Channel] custom delete error', { error: error.message });
-        res.status(500).json({ error: 'Failed to delete command' });
-    }
-});
 
 // ── Live moderation: ban / unban / timeout a user by name ───────────────────
 // The streamer types a username; we resolve it to a Kick user id, use the
@@ -326,100 +203,10 @@ router.post('/kick/api/channel/:channelId/moderate', requireKickAuth, async (req
 });
 
 // ── Auto-responders CRUD ────────────────────────────────────────────────────
-const AR_MATCH_TYPES = ['contains', 'exact', 'starts', 'word'];
 
-router.get('/kick/api/channel/:channelId/responders', requireKickAuth, async (req, res) => {
-    try {
-        const userId = req.session.tokesUser.id;
-        const owned = await resolveOwnedChannel(userId, req.params.channelId);
-        if (!owned) return res.status(404).json({ error: 'Channel not found' });
-        const [rows] = await pool.execute(
-            `SELECT id, trigger_text, match_type, response, cooldown, is_enabled, use_count
-             FROM tokes_auto_responders WHERE channel_id = ? ORDER BY id DESC`,
-            [owned.id]
-        );
-        res.json({ responders: rows });
-    } catch (error) {
-        logger.error('[Kick Channel] responders list error', { error: error.message });
-        res.status(500).json({ error: 'Failed to load auto-responders' });
-    }
-});
 
-router.post('/kick/api/channel/:channelId/responders', requireKickAuth, async (req, res) => {
-    try {
-        const userId = req.session.tokesUser.id;
-        const owned = await resolveOwnedChannel(userId, req.params.channelId);
-        if (!owned) return res.status(404).json({ error: 'Channel not found' });
 
-        const trigger = String(req.body.trigger_text || '').trim().slice(0, 100);
-        if (!trigger) return res.status(400).json({ error: 'trigger_text required' });
-        const matchType = AR_MATCH_TYPES.includes(req.body.match_type) ? req.body.match_type : 'contains';
-        const respV = validateCommandResponse(req.body.response);
-        if (!respV.valid) return res.status(400).json({ error: respV.error });
-        const cdV = validateCooldown(req.body.cooldown);
-        if (!cdV.valid) return res.status(400).json({ error: cdV.error });
 
-        const [result] = await pool.execute(
-            `INSERT INTO tokes_auto_responders (channel_id, trigger_text, match_type, response, cooldown, created_by)
-             VALUES (?, ?, ?, ?, ?, ?)`,
-            [owned.id, trigger, matchType, respV.value, cdV.value, req.session.tokesUser.name || 'owner']
-        );
-        clearAutoResponderCache(owned.id);
-        res.json({ success: true, id: result.insertId });
-    } catch (error) {
-        logger.error('[Kick Channel] responder create error', { error: error.message });
-        res.status(500).json({ error: 'Failed to create auto-responder' });
-    }
-});
-
-router.put('/kick/api/channel/:channelId/responders/:id', requireKickAuth, async (req, res) => {
-    try {
-        const userId = req.session.tokesUser.id;
-        const owned = await resolveOwnedChannel(userId, req.params.channelId);
-        if (!owned) return res.status(404).json({ error: 'Channel not found' });
-        const [[existing]] = await pool.execute(
-            'SELECT id FROM tokes_auto_responders WHERE id = ? AND channel_id = ?', [req.params.id, owned.id]
-        );
-        if (!existing) return res.status(404).json({ error: 'Responder not found' });
-
-        const trigger = String(req.body.trigger_text || '').trim().slice(0, 100);
-        if (!trigger) return res.status(400).json({ error: 'trigger_text required' });
-        const matchType = AR_MATCH_TYPES.includes(req.body.match_type) ? req.body.match_type : 'contains';
-        const respV = validateCommandResponse(req.body.response);
-        if (!respV.valid) return res.status(400).json({ error: respV.error });
-        const cdV = validateCooldown(req.body.cooldown);
-        if (!cdV.valid) return res.status(400).json({ error: cdV.error });
-        const enV = validateBoolean(req.body.is_enabled, true);
-
-        await pool.execute(
-            `UPDATE tokes_auto_responders SET trigger_text = ?, match_type = ?, response = ?, cooldown = ?, is_enabled = ?
-             WHERE id = ?`,
-            [trigger, matchType, respV.value, cdV.value, enV.value ? 1 : 0, req.params.id]
-        );
-        clearAutoResponderCache(owned.id);
-        res.json({ success: true });
-    } catch (error) {
-        logger.error('[Kick Channel] responder update error', { error: error.message });
-        res.status(500).json({ error: 'Failed to update auto-responder' });
-    }
-});
-
-router.delete('/kick/api/channel/:channelId/responders/:id', requireKickAuth, async (req, res) => {
-    try {
-        const userId = req.session.tokesUser.id;
-        const owned = await resolveOwnedChannel(userId, req.params.channelId);
-        if (!owned) return res.status(404).json({ error: 'Channel not found' });
-        const [result] = await pool.execute(
-            'DELETE FROM tokes_auto_responders WHERE id = ? AND channel_id = ?', [req.params.id, owned.id]
-        );
-        if (!result.affectedRows) return res.status(404).json({ error: 'Responder not found' });
-        clearAutoResponderCache(owned.id);
-        res.json({ success: true });
-    } catch (error) {
-        logger.error('[Kick Channel] responder delete error', { error: error.message });
-        res.status(500).json({ error: 'Failed to delete auto-responder' });
-    }
-});
 
 // ── Per-channel activity trend (time-series) ────────────────────────────────
 router.get('/kick/api/channel/:channelId/trend', requireKickAuth, async (req, res) => {
@@ -712,40 +499,22 @@ router.post('/kick/api/channel/:channelId/giveaway/:id/close', requireKickAuth, 
     }
 });
 
-// ── Kick event subscriptions (webhooks: follows, subs, stream status) ───────
-const KICK_EVENT_TYPES = [
-    { name: 'channel.followed', version: 1 },
-    { name: 'channel.subscription.new', version: 1 },
-    { name: 'channel.subscription.renewal', version: 1 },
-    { name: 'channel.subscription.gifts', version: 1 },
-    { name: 'livestream.status.updated', version: 1 }
-];
+// ── Kick event subscriptions (webhooks: chat, follows, subs, stream status) ──
+// The event list and the subscribe call live in services/certifried-bot/kick-event-subscriptions.js.
 
 router.post('/kick/api/channel/:channelId/events/subscribe', requireKickAuth, async (req, res) => {
     try {
         const userId = req.session.tokesUser.id;
         const owned = await resolveOwnedChannel(userId, req.params.channelId);
         if (!owned) return res.status(404).json({ error: 'Channel not found' });
-        const ch = await resolveChannel(String(req.params.channelId));
-        if (!ch || !ch.token) return res.status(409).json({ error: 'Channel not enrolled or token unavailable.' });
-        if (!ch.scopes.includes('events:subscribe')) {
-            return res.status(403).json({ error: 'Re-authorize with Kick to grant event permissions.' });
-        }
-        const r = await fetch('https://api.kick.com/public/v1/events/subscriptions', {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${ch.token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                broadcaster_user_id: parseInt(req.params.channelId, 10),
-                events: KICK_EVENT_TYPES,
-                method: 'webhook'
-            })
-        });
-        const j = await r.json().catch(() => ({}));
-        if (!r.ok) {
-            logger.warn('[Kick Channel] event subscribe rejected', { status: r.status, body: JSON.stringify(j).slice(0, 300) });
-            return res.status(502).json({ error: `Kick rejected the subscription (status ${r.status}).` });
-        }
-        res.json({ success: true, results: j.data || j });
+        let fallbackToken = null;
+        try {
+            const ch = await resolveChannel(String(req.params.channelId));
+            if (ch?.token && ch.scopes?.includes('events:subscribe')) fallbackToken = ch.token;
+        } catch { /* the app token is the normal path */ }
+        const sub = await ensureSubscribed(String(req.params.channelId), { fallbackToken });
+        if (!sub.ok) return res.status(502).json({ error: sub.error || 'Kick did not accept the subscription.' });
+        res.json({ success: true, already: !!sub.already, added: sub.added, results: sub.results || [] });
     } catch (error) {
         logger.error('[Kick Channel] event subscribe error', { error: error.message });
         res.status(500).json({ error: 'Failed to subscribe to events' });

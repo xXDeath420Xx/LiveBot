@@ -2,6 +2,7 @@ import { EmbedBuilder } from 'discord.js';
 import pool from '../../../utils/db.js';
 import logger from '../../../utils/logger.js';
 import configCache from '../../../utils/configCache.js';
+import { themeColor } from '../../../core/guild-theme.js';
 
 export async function execute(interaction) {
     const subcommand = interaction.options.getSubcommand();
@@ -27,6 +28,7 @@ async function handleEnable(interaction, guildId) {
     );
 
     configCache.invalidate('global_ban_config', guildId);
+    configCache.invalidate('global_ban_config_any', guildId);
 
     await interaction.reply({
         content: '**Global Ban Protection Enabled**\n\nThis server now participates in the shared global ban database.\n\n**Defaults:**\n\u2022 Critical/High severity: Auto-ban\n\u2022 Medium severity: Auto-kick\n\u2022 Low severity: Alert only\n\u2022 Check on join: Enabled\n\nUse `/protection globalban config` to customize actions and set an alert channel.',
@@ -43,6 +45,7 @@ async function handleDisable(interaction, guildId) {
     );
 
     configCache.invalidate('global_ban_config', guildId);
+    configCache.invalidate('global_ban_config_any', guildId);
 
     await interaction.reply({
         content: '**Global Ban Protection Disabled**\n\nThis server will no longer enforce global bans. Existing moderation actions still contribute to the shared database.',
@@ -86,9 +89,10 @@ async function handleConfig(interaction, guildId) {
     await pool.execute(`UPDATE global_ban_config SET ${updates.join(', ')} WHERE guild_id = ?`, values);
 
     configCache.invalidate('global_ban_config', guildId);
+    configCache.invalidate('global_ban_config_any', guildId);
 
     const embed = new EmbedBuilder()
-        .setColor(0x2ECC71)
+        .setColor(themeColor(interaction.guildId, 'success'))
         .setTitle('Global Ban Configuration Updated');
 
     if (actionCritical !== null) embed.addFields({ name: 'Critical Action', value: actionCritical.toUpperCase(), inline: true });
@@ -122,7 +126,7 @@ async function handleStatus(interaction, guildId) {
     const cacheSize = manager ? manager.banCache.size : 0;
 
     const embed = new EmbedBuilder()
-        .setColor(0x3498DB)
+        .setColor(themeColor(interaction.guildId, 'primary'))
         .setTitle('Global Ban Protection Status')
         .addFields(
             { name: 'Status', value: 'Enabled', inline: true },
@@ -134,9 +138,10 @@ async function handleStatus(interaction, guildId) {
             { name: 'Low', value: (config.action_low || 'alert').toUpperCase(), inline: true },
             { name: 'Check on Join', value: config.check_on_join ? 'Yes' : 'No', inline: true },
             { name: 'Check on Message', value: config.check_on_message ? 'Yes' : 'No', inline: true },
-            { name: 'Auto-Aggregate', value: config.auto_aggregate_opt_in ? 'Opted In' : 'Opted Out', inline: true }
+            { name: 'Auto-Aggregate', value: config.auto_aggregate_opt_in ? 'Opted In' : 'Opted Out', inline: true },
+            { name: 'Mode', value: `${config.mode || 'protect'}${(config.mode || 'protect') === 'protect' ? ` (acts at confidence ${config.confidence_threshold ?? 75}+)` : ''}`, inline: false }
         )
-        .setFooter({ text: 'Use /protection globalban config to modify settings' })
+        .setFooter({ text: 'Use /protection globalban config or /globalban mode to modify settings' })
         .setTimestamp();
 
     await interaction.reply({ embeds: [embed], ephemeral: true });

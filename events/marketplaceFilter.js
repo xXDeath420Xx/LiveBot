@@ -6,6 +6,7 @@
 import { EmbedBuilder } from 'discord.js';
 import logger from '../utils/logger.js';
 import pool from '../utils/db.js';
+import { themeColor } from '../core/guild-theme.js';
 
 // Minimum account age in days
 const MIN_ACCOUNT_AGE_DAYS = 7;
@@ -33,7 +34,9 @@ export default {
 
         // Default to enabled if no settings exist
         const filterEnabled = settings.length === 0 || settings[0]?.account_age_filter !== 0;
-        const minAgeDays = settings[0]?.min_account_age_days || MIN_ACCOUNT_AGE_DAYS;
+        // A saved 0 means no minimum (the Marketplace Guards page allows 0); only unset falls back to 7 days.
+        const savedDays = settings[0]?.min_account_age_days;
+        const minAgeDays = savedDays === null || savedDays === undefined ? MIN_ACCOUNT_AGE_DAYS : Number(savedDays);
         const traderBypass = settings.length === 0 || settings[0]?.trader_role_bypass !== 0;
 
         if (!filterEnabled) return;
@@ -66,7 +69,7 @@ export default {
 
             // Send warning to user
             const embed = new EmbedBuilder()
-                .setColor(0xE74C3C)
+                .setColor(themeColor(message.guild.id, 'danger'))
                 .setTitle('⚠️ Account Too New')
                 .setDescription(`Your account must be at least **${minAgeDays} days old** to post in marketplace channels.`)
                 .addFields(
@@ -100,7 +103,7 @@ export default {
 
             if (modLogChannel) {
                 const logEmbed = new EmbedBuilder()
-                    .setColor(0xF39C12)
+                    .setColor(themeColor(message.guild.id, 'warning'))
                     .setTitle('🛡️ Marketplace Filter')
                     .setDescription(`Blocked message from new account in ${message.channel}`)
                     .addFields(

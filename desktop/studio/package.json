@@ -1,0 +1,84 @@
+{
+  "name": "certifried-studio",
+  "productName": "CertiFried Studio",
+  "version": "0.2.5",
+  "description": "CertiFried Studio: carries out CertiFried stream bot actions on your PC (OBS, sounds, hotkeys).",
+  "author": "CertiFried",
+  "license": "AGPL-3.0-or-later",
+  "private": true,
+  "main": "src/main/main.js",
+  "homepage": "https://certifriedmultitool.com/downloads/studio",
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test --test-force-exit --test-concurrency=1 \"test/*.test.js\"",
+    "icons": "python scripts/make-icons.py",
+    "build": "electron-builder --win nsis portable --x64 --publish never",
+    "build:dir": "electron-builder --win dir --x64 --publish never"
+  },
+  "dependencies": {
+    "electron-updater": "6.8.11",
+    "obs-websocket-js": "5.0.8",
+    "uiohook-napi": "1.5.5",
+    "ws": "8.18.3"
+  },
+  "devDependencies": {
+    "electron": "44.11.3",
+    "electron-builder": "26.18.0"
+  },
+  "build": {
+    "appId": "com.certifried.studio",
+    "productName": "CertiFried Studio",
+    "copyright": "CertiFried",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "!assets/logo-source.png",
+      "!src/main/dev-capture.js",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/uiohook-napi/**/*",
+      "src/voice/**/*"
+    ],
+    "protocols": [
+      {
+        "name": "CertiFried Studio pairing",
+        "schemes": ["certifried-studio"]
+      }
+    ],
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ],
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": true,
+      "verifyUpdateCodeSignature": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "CertiFried Studio",
+      "artifactName": "CertiFried-Studio-Setup-${version}.${ext}",
+      "deleteAppDataOnUninstall": false
+    },
+    "portable": {
+      "artifactName": "CertiFried-Studio-Portable-${version}.${ext}"
+    },
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://certifriedmultitool.com/downloads/studio/",
+        "channel": "latest"
+      }
+    ]
+  }
+}

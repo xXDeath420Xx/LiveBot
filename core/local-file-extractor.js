@@ -6,7 +6,20 @@
 import { BaseExtractor, Track } from 'discord-player';
 import fs from 'fs';
 import path from 'path';
-import { spawn } from 'child_process';
+import os from 'os';
+import { fileURLToPath } from 'url';
+
+// Only the bot's own generated/uploaded audio may be played from disk. Without this, any
+// /music play query that was an absolute path (e.g. /etc/hostname) was accepted — a
+// file-existence oracle, and ffmpeg would play any audio file on the box.
+const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const ALLOWED_ROOTS = [...new Set([PROJECT_ROOT, '/tmp', os.tmpdir()].map(d => path.resolve(d) + path.sep))];
+const AUDIO_EXT = /\.(wav|mp3|ogg|oga|flac|opus|m4a|aac|webm)$/i;
+
+function isAllowedLocalAudio(p) {
+    const resolved = path.resolve(p);
+    return AUDIO_EXT.test(resolved) && ALLOWED_ROOTS.some(root => resolved.startsWith(root));
+}
 
 export class LocalFileExtractor extends BaseExtractor {
     static identifier = 'com.certifried.local-file';
@@ -26,6 +39,8 @@ export class LocalFileExtractor extends BaseExtractor {
             return false;
         }
 
+        if (!isAllowedLocalAudio(query)) return false;
+
         // Check if file exists
         const exists = fs.existsSync(query);
         console.log('[LocalFileExtractor] File exists check for', query, ':', exists);
@@ -35,7 +50,7 @@ export class LocalFileExtractor extends BaseExtractor {
     async handle(query, searchOptions) {
         console.log('[LocalFileExtractor] handle() called with:', query);
 
-        if (!fs.existsSync(query)) {
+        if (!isAllowedLocalAudio(query) || !fs.existsSync(query)) {
             console.log('[LocalFileExtractor] File does not exist in handle():', query);
             return { playlist: null, tracks: [] };
         }
@@ -63,7 +78,7 @@ export class LocalFileExtractor extends BaseExtractor {
     async stream(info) {
         const filePath = info.url;
 
-        if (!fs.existsSync(filePath)) {
+        if (!isAllowedLocalAudio(filePath) || !fs.existsSync(filePath)) {
             throw new Error(`File not found: ${filePath}`);
         }
 

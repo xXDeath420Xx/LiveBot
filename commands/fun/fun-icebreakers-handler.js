@@ -1,5 +1,7 @@
 import { EmbedBuilder } from 'discord.js';
 import pool from '../../utils/db.js';
+import { displayNameFor } from '../../utils/display-name.js';
+import { themeColor } from '../../core/guild-theme.js';
 
 export async function handleIcebreaker(interaction) {
   const category = interaction.options.getString('category') || 'fun';
@@ -32,11 +34,11 @@ export async function handleProfile(interaction) {
   if (interestList.length === 0 || interestList.length > 10) return interaction.editReply({ content: '❌ Please provide between 1-10 interests, separated by commas.' });
   if (bio.length > 200) return interaction.editReply({ content: '❌ Bio is too long. Please limit to 200 characters.' });
 
-  await pool.execute(`CREATE TABLE IF NOT EXISTS social_profiles (id INT AUTO_INCREMENT PRIMARY KEY, guild_id VARCHAR(20) NOT NULL, user_id VARCHAR(20) NOT NULL, interests TEXT NOT NULL, bio TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, UNIQUE KEY unique_user (guild_id, user_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`);
+  // social_profiles is created by migration 263.
   await pool.execute(`INSERT INTO social_profiles (guild_id, user_id, interests, bio) VALUES (?, ?, ?, ?) ON DUPLICATE KEY UPDATE interests = VALUES(interests), bio = VALUES(bio), updated_at = CURRENT_TIMESTAMP`, [interaction.guild.id, interaction.user.id, interestList.join(','), bio]);
 
   const embed = new EmbedBuilder()
-    .setColor('#2ECC71').setTitle('✅ Social Profile Updated!').setDescription('Your profile has been saved.')
+    .setColor(themeColor(interaction.guildId, 'success')).setTitle('✅ Social Profile Updated!').setDescription('Your profile has been saved.')
     .addFields({ name: '🎯 Your Interests', value: interestList.map(i => `• ${i}`).join('\n') })
     .setFooter({ text: 'Use /fun icebreakers findmatch to find users with similar interests!' }).setTimestamp();
   if (bio) embed.addFields({ name: '📝 Your Bio', value: bio });
@@ -47,10 +49,10 @@ export async function handleViewProfile(interaction) {
   await interaction.deferReply();
   const targetUser = interaction.options.getUser('user') || interaction.user;
   const [[profile]] = await pool.execute('SELECT interests, bio, created_at FROM social_profiles WHERE guild_id = ? AND user_id = ?', [interaction.guild.id, targetUser.id]);
-  if (!profile) return interaction.editReply({ content: `❌ ${targetUser.id === interaction.user.id ? 'You haven\'t' : `${targetUser.username} hasn't`} created a social profile yet. Use \`/fun icebreakers profile\` to create one!` });
+  if (!profile) return interaction.editReply({ content: `❌ ${targetUser.id === interaction.user.id ? 'You haven\'t' : `${displayNameFor(targetUser, interaction.guild)} hasn't`} created a social profile yet. Use \`/fun icebreakers profile\` to create one!` });
 
   const embed = new EmbedBuilder()
-    .setColor('#9B59B6').setTitle(`👤 ${targetUser.username}'s Social Profile`).setThumbnail(targetUser.displayAvatarURL())
+    .setColor(themeColor(interaction.guildId, 'accent')).setTitle(`👤 ${displayNameFor(targetUser, interaction.guild)}'s Social Profile`).setThumbnail(targetUser.displayAvatarURL())
     .addFields({ name: '🎯 Interests', value: profile.interests.split(',').map(i => `• ${i}`).join('\n') })
     .setFooter({ text: `Profile created ${new Date(profile.created_at).toLocaleDateString()}` }).setTimestamp();
   if (profile.bio) embed.addFields({ name: '📝 Bio', value: profile.bio });
@@ -78,7 +80,7 @@ export async function handleFindMatch(interaction) {
   for (const match of matches.slice(0, 5)) {
     const user = await interaction.guild.members.fetch(match.userId).catch(() => null);
     if (!user) continue;
-    embed.addFields({ name: `${user.user.username} - ${match.matchScore} common interest${match.matchScore > 1 ? 's' : ''}`, value: `Shared: ${match.commonInterests.join(', ')}` });
+    embed.addFields({ name: `${displayNameFor(user)} - ${match.matchScore} common interest${match.matchScore > 1 ? 's' : ''}`, value: `Shared: ${match.commonInterests.join(', ')}` });
   }
   return interaction.editReply({ embeds: [embed] });
 }

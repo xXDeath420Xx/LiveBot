@@ -6,7 +6,7 @@ node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-package-lock.json
+# package-lock.json files are committed: CI runs npm ci against them
 
 # Logs
 logs/
@@ -48,15 +48,61 @@ user-data-dir/
 dashboard/public/ebook/
 piper_models/*
 temp_audio/*
-test*
+# loose test scripts in the repo root only (a bare test* also hid the tests/ folder, H-638)
+/test*
+!/tests/
 cookies.txt
+cookies.txt.*
+.music-resolver-secret*
 test-leveling.js
 test-security-insert.mjs
-test-trovo-api.mjs
-test-trovo-debug.mjs
-test-trovo.mjs
 test_db.js
 test_db2.js
 
 data/showcase/
 .claude/worktrees/
+
+# Guild archive snapshots (member ids, overwrites)
+archives/
+.youtube-alert-state.json
+
+# Music system runtime state + resolver bearer secret (never commit)
+.music-resolver-secret
+data/music-health.json
+data/music-health-state.json
+data/music-update-status.json
+.music-resolver-secret.workstation
+
+# .env backups/variants hold live secrets — never commit (.env.example is the safe template)
+.env.*
+!.env.example
+
+# NSFW classifier models (installed by deploy-backups/2026-10-12-nsfw-cleanup/install-model.sh)
+models/nsfw/*.onnx
+# Kokoro TTS model + dashboard preview clips (installed by deploy-backups/2026-10-14-kokoro-voices/run-deploy.sh)
+models/kokoro/
+
+# Never commit data: on 2026-11-19 DB dumps and ticket transcripts were found in the public repo history.
+/backups/
+/transcripts/
+*.sql.gz
+*.dump
+.env.bak
+.env.*.bak
+
+# Private data found in the public history on 2026-11-19 and purged from it; never commit these again.
+/dashboard/public/evidence/
+/.playwright-mcp/
+/scripts/lair/*.jsonl
+/scripts/lair/recon.json
+/scripts/lair/birthdays-imported.json
+/dashboard/sessions/
+/sessions/
+user-data-dir/
+dump.rdb
+*.db
+*.sqlite
+*.sqlite3
+/audit-*.json
+/audit-*.csv
+*-audit-output.txt

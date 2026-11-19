@@ -8,107 +8,46 @@ import pool from '../../../utils/db.js';
 import logger from '../../../utils/logger.js';
 import { verifyTwitchJWT } from './twitch-jwt.js';
 import { verifyGameJWT } from './oauth-auth.js';
+import { getOrCreatePlayer as createOrFindPlayer } from '../game/player-factory.js';
+import { isFrozen } from '../freeze.js';
 
 /**
- * Get or create player by platform credentials
- * @param {string} platform - 'twitch' or 'kick'
- * @param {string} platformUserId - Platform user ID
- * @param {string} displayName - Display name
- * @param {string} avatarUrl - Avatar URL (optional)
- * @returns {object} Player record
+ * Twitch display name + avatar for an extension viewer (the extension token
+ * only carries the numeric user id). Cached for 6 hours; null when Helix is
+ * unreachable, in which case the player keeps "Twitch User <id>" until a
+ * later request succeeds.
+ */
+const twitchProfiles = new Map();
+async function twitchProfile(userId) {
+    const hit = twitchProfiles.get(userId);
+    if (hit && hit.expires > Date.now()) return hit.profile;
+    let profile = null;
+    try {
+        const { getAccessToken } = await import('../../../utils/platforms/twitch.js');
+        const appToken = await getAccessToken();
+        const r = await fetch(`https://api.twitch.tv/helix/users?id=${encodeURIComponent(userId)}`, {
+            headers: { 'Authorization': `Bearer ${appToken}`, 'Client-Id': process.env.TWITCH_CLIENT_ID },
+            signal: AbortSignal.timeout(4000)
+        });
+        if (r.ok) {
+            const u = (await r.json())?.data?.[0];
+            if (u) profile = { name: u.display_name || u.login, avatar: u.profile_image_url || null };
+        }
+    } catch (error) {
+        logger.debug('[UnifiedAuth] Twitch profile lookup failed', { error: error.message });
+    }
+    if (twitchProfiles.size > 5000) twitchProfiles.clear();
+    twitchProfiles.set(userId, { profile, expires: Date.now() + (profile ? 6 * 3600e3 : 10 * 60e3) });
+    return profile;
+}
+
+/**
+ * Get or create player by platform credentials (shared factory, H-406)
  */
 async function getOrCreatePlayer(platform, platformUserId, displayName, avatarUrl = null) {
-    // Try to find existing player
-    const [existing] = await pool.execute(
-        'SELECT * FROM cfx_players WHERE platform = ? AND platform_user_id = ?',
-        [platform, platformUserId]
-    );
-
-    if (existing.length > 0) {
-        const player = existing[0];
-
-        // Update display name and avatar if changed
-        if (player.display_name !== displayName || (avatarUrl && player.avatar_url !== avatarUrl)) {
-            await pool.execute(
-                'UPDATE cfx_players SET display_name = ?, avatar_url = COALESCE(?, avatar_url), last_online_at = NOW() WHERE id = ?',
-                [displayName, avatarUrl, player.id]
-            );
-        } else {
-            // Just update last online
-            await pool.execute(
-                'UPDATE cfx_players SET last_online_at = NOW() WHERE id = ?',
-                [player.id]
-            );
-        }
-
-        return { ...player, display_name: displayName };
-    }
-
-    // Create new player
-    const [result] = await pool.execute(
-        `INSERT INTO cfx_players (platform, platform_user_id, display_name, avatar_url)
-         VALUES (?, ?, ?, ?)`,
-        [platform, platformUserId, displayName, avatarUrl]
-    );
-
-    const playerId = result.insertId;
-
-    // Create initial grow slots
-    await pool.execute(
-        `INSERT INTO cfx_grow_slots (player_id, slot_number) VALUES (?, 1), (?, 2)`,
-        [playerId, playerId]
-    );
-
-    // Grant starter strains (discoveries) and STARTER SEEDS
-    // Story: "You found these seeds in a dusty box left behind by the previous tenant..."
-    const [starters] = await pool.execute(
-        'SELECT id FROM cfx_strains WHERE is_starter = 1'
-    );
-
-    for (const strain of starters) {
-        // Mark strain as discovered
-        await pool.execute(
-            `INSERT INTO cfx_strain_discoveries (player_id, strain_id, discovery_method)
-             VALUES (?, ?, 'starter')`,
-            [playerId, strain.id]
-        );
-
-        // Give 5 starter seeds of each strain (found in abandoned warehouse)
-        await pool.execute(
-            `INSERT INTO cfx_seed_inventory (player_id, strain_id, quantity, total_gifted)
-             VALUES (?, ?, 5, 5)`,
-            [playerId, strain.id]
-        );
-    }
-
-    // Assign initial quests
-    const [dailyQuests] = await pool.execute(
-        `SELECT id, objective_target FROM cfx_quest_definitions
-         WHERE quest_type = 'daily' AND is_active = 1 AND min_level <= 1
-         ORDER BY RAND() LIMIT 3`
-    );
-
-    for (const quest of dailyQuests) {
-        await pool.execute(
-            `INSERT INTO cfx_player_quests (player_id, quest_id, target, expires_at)
-             VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL 1 DAY))`,
-            [playerId, quest.id, quest.objective_target]
-        );
-    }
-
-    logger.info('[UnifiedAuth] Created new player', {
-        playerId,
-        platform,
-        displayName
-    });
-
-    // Return new player data
-    const [newPlayer] = await pool.execute(
-        'SELECT * FROM cfx_players WHERE id = ?',
-        [playerId]
-    );
-
-    return newPlayer[0];
+    // Frozen (H-636): sign-in still works, but requests no longer count as visits
+    const { player } = await createOrFindPlayer(platform, platformUserId, displayName, avatarUrl, { touch: !isFrozen() });
+    return player;
 }
 
 /**
@@ -138,12 +77,21 @@ export async function unifiedAuth(req, res, next) {
                 });
             }
 
-            // Get or create player
+            const profile = await twitchProfile(twitchData.userId);
             const player = await getOrCreatePlayer(
                 'twitch',
                 twitchData.userId,
-                `Twitch User ${twitchData.userId}` // Will be updated with real name via API
+                profile?.name || `Twitch User ${twitchData.userId}`,
+                profile?.avatar || null
             );
+
+            if (player.is_banned) {
+                return res.status(403).json({
+                    error: 'Account is banned',
+                    code: 'BANNED',
+                    reason: player.ban_reason
+                });
+            }
 
             req.player = player;
             req.authMode = 'twitch_extension';
@@ -189,8 +137,8 @@ export async function unifiedAuth(req, res, next) {
                 });
             }
 
-            // Update last online
-            await pool.execute(
+            // Update last online (not while frozen, H-636)
+            if (!isFrozen()) await pool.execute(
                 'UPDATE cfx_players SET last_online_at = NOW() WHERE id = ?',
                 [player.id]
             );

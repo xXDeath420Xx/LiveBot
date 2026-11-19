@@ -1,8 +1,66 @@
 import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import pool from '../../utils/db.js';
 import logger from '../../utils/logger.js';
+import { themeColor } from '../../core/guild-theme.js';
+import { getConfig as getFeatureConfig } from '../../core/feature-config.js';
 
-const ITAD_KEY = process.env.ITAD_API_KEY || '***REMOVED***';
-const GEMINI_KEY = process.env.GOOGLE_AI_KEY;
+/*
+ * GamerPower was removed from this command along with its scraper. Its links are
+ * `gamerpower.com/open/...` redirects into third-party giveaway sites that ask a member to
+ * register an account or download an archive before they get a key — not something to hand a
+ * server's members. Free offers now come from the four storefronts the bot tracks itself
+ * (Steam, Epic, GOG, Amazon Prime Gaming), which the free-games scrapers already keep current
+ * in `free_games_products`, plus IsThereAnyDeal's 100%-off listings.
+ */
+
+/** Stores this bot will surface a free offer for. Matches core/free-games-manager.js. */
+const TRACKED_STORES = ['steam', 'epic', 'gog', 'prime'];
+
+const STORE_LABELS = {
+    steam: 'Steam',
+    epic: 'Epic Games',
+    gog: 'GOG',
+    prime: 'Prime Gaming',
+};
+
+/**
+ * Free offers the bot is currently tracking, newest first.
+ * Reads the same rows the notifier announces from, so /deals free and the alert channel can
+ * never disagree about what is free right now.
+ */
+async function currentlyFree(limit = 12) {
+    const [rows] = await pool.execute(
+        `SELECT title, store, url, org_price_usd, until_date, kind
+           FROM free_games_products
+          WHERE is_active = 1
+            AND store IN (?, ?, ?, ?)
+            AND (until_date IS NULL OR until_date > NOW())
+       ORDER BY created_at DESC
+          LIMIT ${Number(limit)}`,
+        TRACKED_STORES
+    );
+    return rows;
+}
+
+const ITAD_KEY = process.env.ITAD_API_KEY || '';
+// The Game Deals page's "Price region" (core/feature-config-spec.js deals.region): IsThereAnyDeal prices
+// for that country, shown in its currency. Unknown or unset is US.
+const DEAL_REGIONS = ['US', 'GB', 'DE', 'CA', 'AU', 'BR', 'JP'];
+export async function dealsRegion(guildId) {
+    if (!guildId) return 'US';
+    const cfg = await getFeatureConfig('deals', guildId).catch(() => ({}));
+    const region = String(cfg?.region || 'US').toUpperCase();
+    return DEAL_REGIONS.includes(region) ? region : 'US';
+}
+/** An IsThereAnyDeal price ({ amount, currency }) in its own currency. */
+export function dealMoney(p) {
+    const amount = Number(p?.amount) || 0;
+    const currency = /^[A-Z]{3}$/.test(p?.currency || '') ? p.currency : 'USD';
+    try { return new Intl.NumberFormat('en', { style: 'currency', currency }).format(amount); } catch { return `${amount.toFixed(2)} ${currency}`; }
+}
+
+// Either key works for text; they carry separate quotas, so take whichever has one.
+const GEMINI_KEY = process.env.GOOGLE_AI_KEY || process.env.GOOGLE_API_KEY;
 
 const data = new SlashCommandBuilder()
     .setName('deals')
@@ -59,17 +117,18 @@ async function handleSearch(interaction) {
         const games = searchRes.slice(0, 3);
         const gameIds = games.map(g => g.id);
 
-        // Step 2: Fetch prices, history low, and giveaways in parallel
-        const [pricesRes, historyRes, giveawaysRes] = await Promise.all([
-            fetch(`https://api.isthereanydeal.com/games/prices/v3?key=${ITAD_KEY}&country=US`, {
+        // Step 2: Fetch prices, history low, and our own tracked free offers in parallel
+        const region = await dealsRegion(interaction.guildId);
+        const [pricesRes, historyRes, tracked] = await Promise.all([
+            fetch(`https://api.isthereanydeal.com/games/prices/v3?key=${ITAD_KEY}&country=${region}`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(gameIds),
             }).then(r => r.json()).catch(() => []),
-            fetch(`https://api.isthereanydeal.com/games/historylow/v1?key=${ITAD_KEY}&country=US`, {
+            fetch(`https://api.isthereanydeal.com/games/historylow/v1?key=${ITAD_KEY}&country=${region}`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(gameIds),
             }).then(r => r.json()).catch(() => []),
-            fetch(`https://www.gamerpower.com/api/giveaways?sort-by=popularity`).then(r => r.json()).catch(() => []),
+            currentlyFree(40).catch(() => []),
         ]);
 
         // Build price map
@@ -82,9 +141,9 @@ async function handleSearch(interaction) {
             historyRes.forEach(g => { historyMap[g.id] = g; });
         }
 
-        // Filter giveaways matching query
-        const giveaways = (Array.isArray(giveawaysRes) ? giveawaysRes : [])
-            .filter(g => g.title?.toLowerCase().includes(query.toLowerCase()))
+        // Any of those that match what was searched for
+        const giveaways = tracked
+            .filter(g => String(g.title || '').toLowerCase().includes(query.toLowerCase()))
             .slice(0, 3);
 
         // Build embed for each game
@@ -112,9 +171,9 @@ async function handleSearch(interaction) {
                     if (seenStores.has(d.shop.name)) continue;
                     seenStores.add(d.shop.name);
                     const isFree = d.price.amount === 0;
-                    const price = isFree ? '**FREE**' : `**$${d.price.amount.toFixed(2)}**`;
+                    const price = isFree ? '**FREE**' : `**${dealMoney(d.price)}**`;
                     const voucher = d.voucher ? ` 🏷️ \`${d.voucher}\`` : '';
-                    dealLines.push(`${isFree ? '🎁' : '💰'} ${price} ~~$${d.regular.amount.toFixed(2)}~~ (**${d.cut}% off**) — ${d.shop.name}${voucher}`);
+                    dealLines.push(`${isFree ? '🎁' : '💰'} ${price} ~~${dealMoney(d.regular)}~~ (**${d.cut}% off**) — ${d.shop.name}${voucher}`);
                     if (dealLines.length >= 6) break;
                 }
                 embed.addFields({ name: '🏷️ Current Deals', value: dealLines.join('\n') });
@@ -125,7 +184,7 @@ async function handleSearch(interaction) {
                 const date = new Date(histLow.timestamp).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
                 embed.addFields({
                     name: '📉 Historical Low',
-                    value: `**$${histLow.price.amount.toFixed(2)}** (${histLow.cut}% off) at ${histLow.shop.name} — ${date}`,
+                    value: `**${dealMoney(histLow.price)}** (${histLow.cut}% off) at ${histLow.shop.name} — ${date}`,
                     inline: true,
                 });
             }
@@ -134,24 +193,25 @@ async function handleSearch(interaction) {
             if (priceData?.historyLow) {
                 const hl = priceData.historyLow;
                 const parts = [];
-                if (hl.all) parts.push(`All-time: **$${hl.all.amount.toFixed(2)}**`);
-                if (hl.y1) parts.push(`Past year: **$${hl.y1.amount.toFixed(2)}**`);
-                if (hl.m3) parts.push(`Past 3mo: **$${hl.m3.amount.toFixed(2)}**`);
+                if (hl.all) parts.push(`All-time: **${dealMoney(hl.all)}**`);
+                if (hl.y1) parts.push(`Past year: **${dealMoney(hl.y1)}**`);
+                if (hl.m3) parts.push(`Past 3mo: **${dealMoney(hl.m3)}**`);
                 if (parts.length) embed.addFields({ name: '📊 Price History', value: parts.join(' │ '), inline: true });
             }
 
-            embed.setFooter({ text: 'Data from IsThereAnyDeal • Prices in USD' });
+            embed.setFooter({ text: `Data from IsThereAnyDeal • ${region} prices` });
             embeds.push(embed);
         }
 
         // Add giveaways if found
         if (giveaways.length > 0) {
             const giveEmbed = new EmbedBuilder()
-                .setColor(0xFFD700)
+                .setColor(themeColor(interaction.guildId, 'warning'))
                 .setTitle('🎁 Active Giveaways');
             const lines = giveaways.map(g => {
-                const worth = g.worth && g.worth !== 'N/A' ? ` (worth ${g.worth})` : '';
-                return `🎮 **${g.title}**${worth}\n${g.platforms} — [Claim Free](${g.open_giveaway_url})`;
+                const worth = Number(g.org_price_usd) > 0 ? ` (worth $${Number(g.org_price_usd).toFixed(2)})` : '';
+                const until = g.until_date ? ` — until <t:${Math.floor(new Date(g.until_date).getTime() / 1000)}:D>` : '';
+                return `🎮 **${g.title}**${worth}\n${STORE_LABELS[g.store] || g.store}${until} — [Claim Free](${g.url})`;
             });
             giveEmbed.setDescription(lines.join('\n\n'));
             embeds.push(giveEmbed);
@@ -318,59 +378,53 @@ async function handleFree(interaction) {
     await interaction.deferReply();
 
     try {
-        // Fetch free games from ITAD (100% off deals) and GamerPower in parallel
-        const [itadFree, gpGames, gpDLC, gpLoot] = await Promise.all([
+        // Our own tracked storefront offers, plus ITAD's 100%-off listings.
+        const [itadFree, tracked] = await Promise.all([
             fetch(`https://api.isthereanydeal.com/deals/v2?key=${ITAD_KEY}&limit=10&filter=N4IgLgngDgpgTgSwPYBcoHcAOYC2YA2AxgBYIgA0IANjAhAC4wXECMTLADAEwPMBsAdh4BmAUIDMYgBwBOSQFYALKICsTKerZA`).then(r => r.json()).catch(() => ({})),
-            fetch('https://www.gamerpower.com/api/giveaways?type=game&sort-by=popularity').then(r => r.json()).catch(() => []),
-            fetch('https://www.gamerpower.com/api/giveaways?type=dlc&sort-by=popularity').then(r => r.json()).catch(() => []),
-            fetch('https://www.gamerpower.com/api/giveaways?type=loot&sort-by=popularity').then(r => r.json()).catch(() => []),
+            currentlyFree(24).catch(() => []),
         ]);
 
         const embed = new EmbedBuilder()
-            .setColor(0xFFD700)
-            .setTitle('🎁 Free Games, DLC & Loot')
-            .setDescription('Currently available for free across all platforms.')
+            .setColor(themeColor(interaction.guildId, 'warning'))
+            .setTitle('🎁 Free Right Now')
+            .setDescription('Claimed directly on the storefront — no third-party sign-ups, no downloads.')
             .setTimestamp();
 
-        // ITAD free games (100% off)
+        // One field per store, so it is obvious where each offer is claimed.
+        let trackedCount = 0;
+        for (const store of TRACKED_STORES) {
+            const offers = tracked.filter(g => g.store === store).slice(0, 6);
+            if (offers.length === 0) continue;
+            trackedCount += offers.length;
+            const lines = offers.map(g => {
+                const worth = Number(g.org_price_usd) > 0 ? ` (worth $${Number(g.org_price_usd).toFixed(2)})` : '';
+                const until = g.until_date ? ` · until <t:${Math.floor(new Date(g.until_date).getTime() / 1000)}:D>` : '';
+                const tag = g.kind === 'dlc' ? '📦' : '🎮';
+                return `${tag} **${g.title}**${worth}${until}\n\u2003[Claim](${g.url})`;
+            });
+            embed.addFields({ name: STORE_LABELS[store], value: lines.join('\n').substring(0, 1024) });
+        }
+
+        // ITAD free games (100% off) — anything the four scrapers have not picked up.
         const itadGames = itadFree?.list?.filter(d => d.deal?.price?.amount === 0)?.slice(0, 8) || [];
         if (itadGames.length > 0) {
             const lines = itadGames.map(g =>
-                `🎮 **${g.title}** — ~~$${g.deal.regular.amount.toFixed(2)}~~ → **FREE** (${g.deal.shop.name})`
+                `🎮 **${g.title}** — ~~${dealMoney(g.deal.regular)}~~ → **FREE** (${g.deal.shop.name})`
             );
-            embed.addFields({ name: '🏪 Free on Stores', value: lines.join('\n').substring(0, 1024) });
+            embed.addFields({ name: '🏪 Also 100% off elsewhere', value: lines.join('\n').substring(0, 1024) });
         }
 
-        // GamerPower free games
-        const games = (Array.isArray(gpGames) ? gpGames : []).slice(0, 6);
-        if (games.length > 0) {
-            const lines = games.map(g => {
-                const worth = g.worth && g.worth !== 'N/A' ? ` (worth ${g.worth})` : '';
-                return `🎁 **${g.title}**${worth}\n\u2003${g.platforms} — [Claim](${g.open_giveaway_url})`;
-            });
-            embed.addFields({ name: '🎮 Game Giveaways', value: lines.join('\n').substring(0, 1024) });
+        const total = itadGames.length + trackedCount;
+        if (total === 0) {
+            embed.addFields({ name: 'Nothing right now', value: 'No free offers are live on Steam, Epic, GOG or Prime Gaming at the moment. Check back soon.' });
         }
-
-        // Free DLC
-        const dlc = (Array.isArray(gpDLC) ? gpDLC : []).slice(0, 5);
-        if (dlc.length > 0) {
-            const lines = dlc.map(g => `📦 **${g.title}** — ${g.platforms} — [Claim](${g.open_giveaway_url})`);
-            embed.addFields({ name: '📦 Free DLC & Add-ons', value: lines.join('\n').substring(0, 1024) });
-        }
-
-        // Free loot
-        const loot = (Array.isArray(gpLoot) ? gpLoot : []).slice(0, 5);
-        if (loot.length > 0) {
-            const lines = loot.map(g => `🎲 **${g.title}** — ${g.platforms} — [Claim](${g.open_giveaway_url})`);
-            embed.addFields({ name: '🎲 Free Loot & In-Game Items', value: lines.join('\n').substring(0, 1024) });
-        }
-
-        const total = itadGames.length + games.length + dlc.length + loot.length;
-        embed.setFooter({ text: `${total} free items found • IsThereAnyDeal + GamerPower` });
+        embed.setFooter({ text: `${total} free item(s) • Steam · Epic · GOG · Prime Gaming · IsThereAnyDeal` });
 
         const buttons = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setLabel('Epic Free Games').setURL('https://store.epicgames.com/en-US/free-games').setStyle(ButtonStyle.Link),
+            new ButtonBuilder().setLabel('Prime Gaming').setURL('https://gaming.amazon.com/home').setStyle(ButtonStyle.Link),
+            new ButtonBuilder().setLabel('GOG Giveaway').setURL('https://www.gog.com/en/partner/free_games').setStyle(ButtonStyle.Link),
             new ButtonBuilder().setLabel('IsThereAnyDeal').setURL('https://isthereanydeal.com/specials/#/filter:&giveaway').setStyle(ButtonStyle.Link),
-            new ButtonBuilder().setLabel('GamerPower').setURL('https://www.gamerpower.com/giveaways').setStyle(ButtonStyle.Link),
         );
 
         await interaction.editReply({ embeds: [embed], components: [buttons] });
@@ -385,7 +439,8 @@ async function handleTop(interaction) {
     const limit = interaction.options.getInteger('limit') || 10;
 
     try {
-        const res = await fetch(`https://api.isthereanydeal.com/deals/v2?key=${ITAD_KEY}&limit=${limit}&sort=-cut`).then(r => r.json()).catch(() => ({}));
+        const region = await dealsRegion(interaction.guildId);
+        const res = await fetch(`https://api.isthereanydeal.com/deals/v2?key=${ITAD_KEY}&limit=${limit}&sort=-cut&country=${region}`).then(r => r.json()).catch(() => ({}));
         const deals = res?.list || [];
 
         if (deals.length === 0) {
@@ -400,10 +455,10 @@ async function handleTop(interaction) {
         const lines = deals.map((d, i) => {
             const deal = d.deal;
             const isFree = deal.price.amount === 0;
-            const price = isFree ? '**FREE**' : `**$${deal.price.amount.toFixed(2)}**`;
+            const price = isFree ? '**FREE**' : `**${dealMoney(deal.price)}**`;
             const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `**${i + 1}.**`;
             const voucher = deal.voucher ? ` 🏷️ \`${deal.voucher}\`` : '';
-            return `${medal} ${price} ~~$${deal.regular.amount.toFixed(2)}~~ (**${deal.cut}% off**) — ${deal.shop.name}${voucher}\n\u2003*${d.title}*`;
+            return `${medal} ${price} ~~${dealMoney(deal.regular)}~~ (**${deal.cut}% off**) — ${deal.shop.name}${voucher}\n\u2003*${d.title}*`;
         });
 
         // Split into fields if needed
@@ -419,7 +474,7 @@ async function handleTop(interaction) {
         }
         if (current) embed.addFields({ name: fieldNum === 1 ? `💰 Top ${deals.length} Deals` : '\u200b', value: current });
 
-        embed.setFooter({ text: 'Data from IsThereAnyDeal • Prices in USD' });
+        embed.setFooter({ text: `Data from IsThereAnyDeal • ${region} prices` });
 
         const buttons = new ActionRowBuilder().addComponents(
             new ButtonBuilder().setLabel('Browse All Deals').setURL('https://isthereanydeal.com/specials/#/').setStyle(ButtonStyle.Link),

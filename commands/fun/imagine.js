@@ -1,13 +1,58 @@
-import { SlashCommandBuilder, AttachmentBuilder, EmbedBuilder, PermissionsBitField, ChannelType } from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder, PermissionsBitField, ChannelType } from 'discord.js';
 import pool from '../../utils/db.js';
+import { accessibleAttachment } from '../../utils/accessible-attachment.js';
 import logger from '../../utils/logger.js';
+import { themeColor } from '../../core/guild-theme.js';
+import { generateImage } from '../../utils/image-generation.js';
 
-const HF_API_URL = 'https://router.huggingface.co/hf-inference/models';
+/* hf-inference no longer serves these models — it answers HTTP 410 "deprecated
+   and no longer supported by provider", which is why this command had stopped
+   working entirely. fal-ai serves the same weights through the same router.
+   Each model now carries its own full endpoint rather than sharing a prefix,
+   because the providers differ per model and will keep moving.
 
+   Naming a model is now a preference, not the only route: leave it unset and the
+   shared generator picks whatever provider is actually answering today. Ask for
+   one by name and you get that one, because someone who typed `sdxl` meant it. */
 const MODELS = {
-    flux: { id: 'black-forest-labs/FLUX.1-schnell', name: 'FLUX.1 Schnell', description: 'Fast, high quality' },
-    sdxl: { id: 'stabilityai/stable-diffusion-xl-base-1.0', name: 'Stable Diffusion XL', description: 'Detailed, artistic' },
+    flux: {
+        url: 'https://router.huggingface.co/fal-ai/fal-ai/flux/schnell',
+        name: 'FLUX.1 Schnell', description: 'Fast, high quality',
+    },
+    sdxl: {
+        url: 'https://router.huggingface.co/fal-ai/fal-ai/fast-sdxl',
+        name: 'Stable Diffusion XL', description: 'Detailed, artistic',
+    },
 };
+
+/* fal-ai does not answer with the image the way hf-inference did.
+ *
+ * The old provider took { inputs } and replied with the PNG bytes. fal-ai takes
+ * { prompt } and replies with JSON naming a URL to fetch — so a command written
+ * for the old shape gets a 200 with a body that is not an image, and gives up.
+ * Both halves had to change together; only the host had been updated. */
+async function generate(url, token, prompt, steps) {
+    const res = await fetch(url, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, num_inference_steps: steps }),
+        signal: AbortSignal.timeout(90_000),
+    });
+    if (!res.ok) return { ok: false, status: res.status, text: await res.text().catch(() => '') };
+
+    const body = await res.json().catch(() => null);
+    const image = body?.images?.[0];
+    if (!image?.url) {
+        return { ok: false, status: res.status, text: JSON.stringify(body || {}).slice(0, 200) };
+    }
+    const file = await fetch(image.url, { signal: AbortSignal.timeout(60_000) });
+    if (!file.ok) return { ok: false, status: file.status, text: 'the generated image could not be fetched' };
+    return {
+        ok: true,
+        buffer: Buffer.from(await file.arrayBuffer()),
+        contentType: image.content_type || file.headers.get('content-type') || 'image/jpeg',
+    };
+}
 
 const DEFAULT_MODEL = 'flux';
 const DEFAULT_COOLDOWN = 15;
@@ -120,14 +165,14 @@ async function handleConfig(interaction) {
     if (channel === null && enabled === null && cooldown === null && !reset) {
         const config = await getConfig(interaction.guildId);
         const embed = new EmbedBuilder()
-            .setColor(0x5865F2)
+            .setColor(themeColor(interaction.guildId, 'primary'))
             .setTitle('Imagine Configuration')
             .addFields(
                 { name: 'Enabled', value: config ? (config.enabled ? 'Yes' : 'No') : 'Yes (default)', inline: true },
                 { name: 'Allowed Channel', value: config?.allowed_channel_id ? `<#${config.allowed_channel_id}>` : 'Anywhere', inline: true },
                 { name: 'Cooldown', value: `${config?.cooldown_seconds ?? DEFAULT_COOLDOWN}s`, inline: true },
             )
-            .setFooter({ text: 'Use /imagine config with options to change settings' });
+            .setFooter({ text: 'Use /fun imagine config with options to change settings' });
         return interaction.reply({ embeds: [embed], ephemeral: true });
     }
 
@@ -155,7 +200,7 @@ async function handleConfig(interaction) {
     if (cooldown !== null) changes.push(`**Cooldown:** ${cooldown}s`);
 
     const embed = new EmbedBuilder()
-        .setColor(0x57F287)
+        .setColor(themeColor(interaction.guildId, 'success'))
         .setTitle('Imagine Config Updated')
         .setDescription(changes.join('\n'));
 
@@ -180,7 +225,8 @@ async function handleGenerate(interaction) {
     }
 
     const prompt = interaction.options.getString('prompt');
-    const modelKey = interaction.options.getString('model') || DEFAULT_MODEL;
+    const chosenModel = interaction.options.getString('model');
+    const modelKey = chosenModel || DEFAULT_MODEL;
     const ephemeral = interaction.options.getBoolean('private') || false;
     const model = MODELS[modelKey];
     const token = process.env.HF_API_TOKEN;
@@ -189,7 +235,10 @@ async function handleGenerate(interaction) {
         return interaction.reply({ content: 'Invalid model. Use `flux` or `sdxl`.', ephemeral: true });
     }
 
-    if (!token) {
+    /* One provider is enough. Refusing because the fal-ai token is missing, while
+       a Google key sits right there, is how this command stayed dead. */
+    const haveProvider = token || process.env.GOOGLE_API_KEY || process.env.GOOGLE_AI_KEY;
+    if (!haveProvider || (chosenModel && !token)) {
         return interaction.reply({ content: 'Image generation is not configured. Missing API token.', ephemeral: true });
     }
 
@@ -207,58 +256,56 @@ async function handleGenerate(interaction) {
     await interaction.deferReply({ ephemeral });
 
     try {
-        const response = await fetch(`${HF_API_URL}/${model.id}`, {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                inputs: prompt,
-                parameters: {
-                    num_inference_steps: modelKey === 'flux' ? 4 : 25,
-                }
-            }),
-            signal: AbortSignal.timeout(60000),
-        });
+        let result;
+        let credit = model.name;
+        if (chosenModel) {
+            result = await generate(model.url, token, prompt, modelKey === 'flux' ? 4 : 25);
+        } else {
+            /* Nobody named a model, so take the best provider that answers.
+               A spent quota on one of them stops being the user's problem. */
+            try {
+                const made = await generateImage({ prompt, aspect: 'square', timeout: 90_000 });
+                result = { ok: true, buffer: made.buffer, contentType: made.contentType };
+                credit = made.model;
+            } catch (e) {
+                result = { ok: false, status: 0, text: e.message };
+            }
+        }
 
-        if (!response.ok) {
-            const errorText = await response.text();
+        if (!result.ok) {
             let errorMsg = 'Image generation failed.';
-
-            if (response.status === 503) {
+            if (result.status === 503) {
                 errorMsg = 'Model is loading, please try again in ~30 seconds.';
-            } else if (response.status === 429) {
+            } else if (result.status === 429) {
                 errorMsg = 'Rate limited — too many requests. Try again in a minute.';
-            } else if (response.status === 422) {
+            } else if (result.status === 422) {
                 errorMsg = 'Invalid prompt. Try rephrasing your description.';
+            } else if (result.status === 402) {
+                errorMsg = 'The image generation quota for this month is used up.';
             }
 
-            logger.warn(`[Imagine] API error ${response.status}: ${errorText}`, { userId, prompt, model: modelKey });
+            logger.warn(`[Imagine] API error ${result.status}: ${result.text}`, { userId, prompt, model: modelKey });
             cooldowns.delete(userId);
             return interaction.editReply({ content: errorMsg });
         }
 
-        const contentType = response.headers.get('content-type') || '';
-        if (!contentType.includes('image')) {
-            const text = await response.text();
-            logger.warn(`[Imagine] Unexpected response type: ${contentType}`, { text: text.substring(0, 200) });
-            cooldowns.delete(userId);
-            return interaction.editReply({ content: 'Unexpected response from image API. Try again.' });
-        }
-
-        const buffer = Buffer.from(await response.arrayBuffer());
-        const ext = contentType.includes('png') ? 'png' : 'jpg';
+        const buffer = result.buffer;
+        const ext = result.contentType.includes('png') ? 'png' : 'jpg';
         const filename = `imagine-${Date.now()}.${ext}`;
 
-        const attachment = new AttachmentBuilder(buffer, { name: filename });
+        // Generated from the user's own prompt, so the prompt is the best
+        // available description of what the image depicts.
+        const attachment = accessibleAttachment(buffer, {
+            name: filename,
+            description: `AI-generated image. Prompt: ${prompt}`,
+        });
 
         const embed = new EmbedBuilder()
-            .setColor(0x5865F2)
+            .setColor(themeColor(interaction.guildId, 'primary'))
             .setAuthor({ name: interaction.user.displayName, iconURL: interaction.user.displayAvatarURL() })
             .setDescription(`**Prompt:** ${prompt}`)
             .setImage(`attachment://${filename}`)
-            .setFooter({ text: `${model.name} • /imagine` })
+            .setFooter({ text: `${credit} • /imagine` })
             .setTimestamp();
 
         await interaction.editReply({ embeds: [embed], files: [attachment] });

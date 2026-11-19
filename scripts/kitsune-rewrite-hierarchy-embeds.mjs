@@ -6,10 +6,10 @@
 // Idempotent: PATCH is a no-op when color matches; post-then-delete is safe.
 import 'dotenv/config';
 import pool from '../utils/db.js';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 
 const GUILD_ID = '1469931133981687873';
-const BOT_ID   = '1498486251576229958';
+// The acting bot comes from guild_bot_mapping — never pinned here.
 const CHANNEL  = '1469932427647516856';  // #Leaders
 
 // Old embed-chain message — delete after new post succeeds.
@@ -45,8 +45,8 @@ const ROLE_COLOR_OVERRIDES = {
   [ROLES.ITTO]:        0x0ea5e9,  // cyan-blue (was #06f895 — too close to Musashi/Santo)
 };
 
-const [rows] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id = ?', [BOT_ID]);
-const token = encryption.decrypt(JSON.parse(rows[0].bot_token));
+const bot = await resolveBotForGuild(GUILD_ID, { db: pool });
+const token = bot.token;
 
 async function api(method, path, body) {
   const init = {

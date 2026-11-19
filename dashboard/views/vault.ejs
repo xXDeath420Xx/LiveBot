@@ -1,0 +1,1092 @@
+<!DOCTYPE html>
+<html data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>" lang="en">
+<head>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        :root {
+            --bg-primary: #0b0f11;
+            --bg-secondary: #0f1316;
+            --bg-card: rgba(255, 255, 255, 0.03);
+            --bg-card-hover: rgba(255, 255, 255, 0.06);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --text-primary: #ffffff;
+            --text-secondary: rgba(255, 255, 255, 0.7);
+            --text-muted: rgba(255, 255, 255, 0.5);
+            --accent-purple: var(--cf-accent);
+            --accent-blue: #60a5fa;
+            --accent-green: #34d399;
+            --accent-cyan: #22d3ee;
+            --accent-yellow: #fbbf24;
+            --accent-red: #f87171;
+        }
+        /* Light and Sand: the pill colour cf-ui.css has no name for. Dark keeps it. */
+        :root { --vt-burn: #fb923c; }
+        :root:is([data-theme="light"], [data-theme="sand"]) { --vt-burn: var(--cf-warning-ink); }
+        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg-primary); color: var(--text-primary); min-height: 100vh; overflow-x: hidden; }
+        a { color: inherit; }
+
+        .bg-effects { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
+        .orb { position: absolute; border-radius: 50%; filter: blur(100px); opacity: 0.15; }
+        .orb-1 { width: 500px; height: 500px; background: linear-gradient(135deg, var(--cf-accent-hover), var(--cf-accent)); top: -15%; right: -10%; }
+        .orb-2 { width: 400px; height: 400px; background: linear-gradient(135deg, #3b82f6, #60a5fa); bottom: -15%; left: -10%; }
+
+        .navbar { position: fixed; top: 0; left: 0; right: 0; z-index: 1000; padding: 1rem 0; background: color-mix(in srgb, var(--cf-bg) 90%, transparent); backdrop-filter: blur(20px); border-bottom: 1px solid var(--border-color); }
+        .navbar-container { max-width: 1200px; margin: 0 auto; padding: 0 clamp(1rem, 4vw, 2rem); display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+        .navbar-brand { display: flex; align-items: center; gap: 0.75rem; text-decoration: none; color: var(--text-primary); font-weight: 700; }
+        .navbar-logo { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 2px solid var(--accent-purple); }
+        .navbar-links { display: flex; align-items: center; gap: 1.5rem; }
+        .navbar-links a { color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; font-weight: 500; }
+        .navbar-links a:hover { color: var(--text-primary); }
+        .navbar-user { display: flex; align-items: center; gap: 0.6rem; padding: 0.4rem 0.9rem; background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 50px; font-size: 0.85rem; }
+        .navbar-user img { width: 26px; height: 26px; border-radius: 50%; }
+        @media (max-width: 720px) { .navbar-links { display: none; } }
+
+        .container { width: 100%; max-width: 1200px; margin: 0 auto; padding: 0 clamp(1rem, 4vw, 2rem); }
+        main { position: relative; z-index: 1; padding: 100px 0 4rem; min-height: 100vh; }
+
+        .page-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 2rem; flex-wrap: wrap; gap: 1rem; }
+        .page-header-content { display: flex; align-items: center; gap: 1rem; }
+        .page-icon { width: 56px; height: 56px; background: linear-gradient(135deg, color-mix(in srgb, var(--cf-accent) 20%, transparent), color-mix(in srgb, var(--cf-accent) 20%, transparent)); border: 1px solid color-mix(in srgb, var(--cf-accent) 30%, transparent); border-radius: 16px; display: flex; align-items: center; justify-content: center; }
+        .page-icon i { font-size: 1.5rem; color: var(--accent-purple); }
+        .page-title { font-size: clamp(1.5rem, 4vw, 2rem); font-weight: 800; background: linear-gradient(135deg, var(--text-primary), var(--accent-purple)); -webkit-background-clip: text; background-clip: text;  }
+        .page-subtitle { color: var(--text-secondary); font-size: 0.95rem; margin-top: 0.25rem; }
+        .admin-badge { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; background: rgba(52, 211, 153, 0.1); border: 1px solid rgba(52, 211, 153, 0.3); border-radius: 50px; font-size: 0.75rem; font-weight: 600; color: var(--cf-success-ink); }
+
+        .card { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; backdrop-filter: blur(10px); margin-bottom: 1.5rem; }
+        .card-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border-color); flex-wrap: wrap; }
+        .card-title { display: flex; align-items: center; gap: 0.6rem; font-weight: 600; font-size: 0.95rem; }
+        .card-title i { color: var(--accent-purple); }
+        .card-body { padding: 1.25rem; }
+
+        .quota { display: flex; align-items: center; gap: 1rem; flex-wrap: wrap; font-size: 0.8rem; color: var(--text-muted); }
+        .quota-bar { flex: 1; min-width: 160px; height: 8px; background: color-mix(in srgb, var(--cf-text) 8%, transparent); border-radius: 8px; overflow: hidden; }
+        .quota-fill { height: 100%; width: 0; background: linear-gradient(90deg, var(--accent-green), var(--accent-yellow)); transition: width 0.4s ease; }
+        .quota-fill.high { background: linear-gradient(90deg, var(--accent-yellow), var(--accent-red)); }
+
+        .dropzone { border: 2px dashed color-mix(in srgb, var(--cf-accent) 35%, transparent); border-radius: 16px; padding: 2.5rem 1.5rem; text-align: center; cursor: pointer; transition: all 0.2s; background: color-mix(in srgb, var(--cf-accent) 3%, transparent); }
+        .dropzone:hover, .dropzone.over { border-color: var(--accent-purple); background: color-mix(in srgb, var(--cf-accent) 8%, transparent); }
+        .dropzone i { font-size: 2rem; color: var(--accent-purple); margin-bottom: 0.75rem; display: block; }
+        .dropzone-hint { color: var(--text-muted); font-size: 0.8rem; margin-top: 0.5rem; }
+
+        .btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; padding: 0.55rem 0.95rem; border-radius: 10px; font-size: 0.85rem; font-weight: 600; text-decoration: none; cursor: pointer; border: none; font-family: inherit; transition: all 0.2s; }
+        .btn-primary { background: linear-gradient(135deg, var(--accent-purple), var(--accent-blue)); color: #fff; }
+        .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 4px 15px color-mix(in srgb, var(--cf-accent) 30%, transparent); }
+        .btn-ghost { background: color-mix(in srgb, var(--cf-text) 5%, transparent); border: 1px solid var(--border-color); color: var(--text-primary); }
+        .btn-ghost:hover { background: var(--bg-card-hover); border-color: var(--accent-purple); }
+        .btn-danger { background: rgba(248,113,113,0.15); border: 1px solid rgba(248,113,113,0.3); color: var(--cf-danger-ink); }
+        .btn-danger:hover { background: rgba(248,113,113,0.25); }
+        .btn-sm { padding: 0.4rem 0.7rem; font-size: 0.78rem; }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+        .input, select.input, textarea.input { width: 100%; padding: 0.6rem 0.85rem; background: color-mix(in srgb, var(--cf-text) 5%, transparent); border: 1px solid var(--border-color); border-radius: 10px; color: var(--text-primary); font-size: 0.85rem; font-family: inherit; }
+        .input:focus { outline: none; border-color: var(--accent-purple); }
+        select.input option { background: var(--bg-primary); }
+        label.field { display: block; margin-bottom: 0.9rem; }
+        label.field span { display: block; font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.35rem; text-transform: uppercase; letter-spacing: 0.04em; }
+
+        .upload-row { padding: 0.9rem; background: color-mix(in srgb, var(--cf-text) 2%, transparent); border: 1px solid var(--border-color); border-radius: 12px; margin-bottom: 0.75rem; }
+        .upload-top { display: flex; justify-content: space-between; gap: 1rem; align-items: baseline; }
+        .upload-name { font-weight: 600; font-size: 0.88rem; word-break: break-all; }
+        .upload-meta { font-size: 0.75rem; color: var(--text-muted); white-space: nowrap; }
+        .progress-bar { height: 6px; background: color-mix(in srgb, var(--cf-text) 10%, transparent); border-radius: 6px; overflow: hidden; margin: 0.6rem 0 0.4rem; }
+        .progress-fill { height: 100%; width: 0; background: linear-gradient(90deg, var(--accent-purple), var(--accent-blue)); transition: width 0.25s ease; }
+        .progress-fill.done { background: var(--accent-green); }
+        .progress-fill.failed { background: var(--accent-red); }
+        .upload-status { font-size: 0.75rem; color: var(--text-secondary); }
+
+        .file-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.9rem; background: color-mix(in srgb, var(--cf-text) 2%, transparent); border: 1px solid var(--border-color); border-radius: 12px; margin-bottom: 0.75rem; flex-wrap: wrap; }
+        .file-row:hover { background: var(--bg-card-hover); }
+        .file-main { min-width: 0; flex: 1; }
+        .file-name { font-weight: 600; font-size: 0.9rem; word-break: break-all; }
+        .file-sub { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.2rem; }
+        .file-note { font-size: 0.78rem; color: var(--text-secondary); margin-top: 0.3rem; font-style: italic; word-break: break-word; }
+        .file-actions { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+        .pill { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.15rem 0.5rem; border-radius: 50px; font-size: 0.68rem; font-weight: 600; }
+        .pill-link { background: rgba(34, 211, 238, 0.12); color: var(--cf-info-ink); }
+        .pill-soon { background: rgba(251, 191, 36, 0.12); color: var(--cf-warning-ink); }
+        .pill-keep { background: color-mix(in srgb, var(--cf-text) 6%, transparent); color: var(--text-muted); }
+
+        .empty { text-align: center; padding: 2rem 1rem; color: var(--text-muted); font-size: 0.85rem; }
+
+        label.check { display: flex; gap: 0.65rem; align-items: flex-start; padding: 0.75rem 0.9rem; background: rgba(251, 191, 36, 0.05); border: 1px solid rgba(251, 191, 36, 0.2); border-radius: 12px; cursor: pointer; }
+        label.check input { margin-top: 0.15rem; accent-color: var(--accent-yellow); width: 16px; height: 16px; flex-shrink: 0; }
+        label.check strong { display: block; font-size: 0.83rem; font-weight: 600; }
+        label.check em { display: block; font-style: normal; font-size: 0.74rem; color: var(--text-muted); margin-top: 0.2rem; line-height: 1.45; }
+
+        .pill-burn { background: rgba(251, 146, 60, 0.15); color: var(--vt-burn); }
+        .dl-row { display: flex; justify-content: space-between; align-items: baseline; gap: 0.75rem; padding: 0.6rem 0; border-bottom: 1px solid color-mix(in srgb, var(--cf-text) 5%, transparent); font-size: 0.78rem; }
+        .dl-who { font-weight: 600; }
+        .dl-meta { color: var(--text-muted); font-size: 0.72rem; margin-top: 0.15rem; }
+        .dl-ok { color: var(--accent-green); font-weight: 600; white-space: nowrap; }
+        .dl-partial { color: var(--accent-yellow); font-weight: 600; white-space: nowrap; }
+
+        .modal-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 2000; display: none; align-items: center; justify-content: center; padding: 1rem; }
+        .modal-backdrop.open { display: flex; }
+        .modal { background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 16px; width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto; }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border-color); font-weight: 600; }
+        .modal-body { padding: 1.25rem; }
+        .modal-footer { display: flex; justify-content: flex-end; gap: 0.5rem; padding: 1rem 1.25rem; border-top: 1px solid var(--border-color); }
+        .modal-close { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 1rem; }
+
+        .share-result { background: rgba(52,211,153,0.08); border: 1px solid rgba(52,211,153,0.3); border-radius: 10px; padding: 0.85rem; margin-bottom: 1rem; }
+        .share-url { font-family: ui-monospace, monospace; font-size: 0.75rem; word-break: break-all; color: var(--accent-green); margin: 0.4rem 0 0.6rem; }
+        .link-row { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; padding: 0.6rem 0.75rem; background: color-mix(in srgb, var(--cf-text) 2%, transparent); border: 1px solid var(--border-color); border-radius: 10px; margin-bottom: 0.5rem; font-size: 0.78rem; }
+        .link-row.dead { opacity: 0.45; }
+
+        .log-row { display: flex; gap: 0.75rem; padding: 0.5rem 0; border-bottom: 1px solid color-mix(in srgb, var(--cf-text) 4%, transparent); font-size: 0.76rem; }
+        .log-when { color: var(--text-muted); white-space: nowrap; }
+        .log-what { flex: 1; word-break: break-word; }
+
+        .toast { position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%); background: var(--bg-secondary); border: 1px solid var(--border-color); border-radius: 12px; padding: 0.75rem 1.25rem; font-size: 0.85rem; z-index: 3000; opacity: 0; pointer-events: none; transition: opacity 0.2s; }
+        .toast.show { opacity: 1; }
+        .toast.error { border-color: rgba(248,113,113,0.5); color: var(--cf-danger-ink); }
+
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+        @media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+    </style>
+<%- include('partials/site-head', { title: 'Vault - CertiFried MultiTool', noindex: true }) %>
+    <style>
+        /* After cf-ui.css: page-specific pieces on the design-system tokens */
+        main { padding-top: 24px; }
+        .page-icon { background: var(--cf-surface-2) !important; border-color: var(--cf-border) !important; color: var(--cf-text-2); }
+        .page-title { -webkit-text-fill-color: currentColor; }
+        .card { margin-bottom: 20px; }
+        .card-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+        .btn-primary { box-shadow: none !important; transform: none !important; }
+        .progress-fill { background: var(--cf-accent) !important; }
+    </style>
+</head>
+<body>
+    <%- include('partials/site-header', { user, active: '', returnTo: '/vault' }) %>
+
+    <main id="main-content" tabindex="-1">
+    <div class="container">
+        <div class="page-header">
+            <div class="page-header-content">
+                <div class="page-icon"><i class="fas fa-vault"></i></div>
+                <div>
+                    <h1 class="page-title">Vault</h1>
+                    <p class="page-subtitle">Private file transfer. Nothing here is public unless you mint a link for it.</p>
+                </div>
+            </div>
+            <span class="admin-badge"><i class="fas fa-lock"></i> <span id="member-count">Members only</span></span>
+        </div>
+
+        <!-- Upload -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title"><i class="fas fa-cloud-arrow-up"></i> Upload</div>
+                <div class="quota">
+                    <span id="quota-text">-</span>
+                    <div class="quota-bar"><div class="quota-fill" id="quota-fill"></div></div>
+                </div>
+            </div>
+            <div class="card-body">
+                <div class="dropzone" id="dropzone">
+                    <i class="fas fa-arrow-up-from-bracket"></i>
+                    <div><strong>Drop files here</strong> or click to choose</div>
+                    <div class="dropzone-hint">
+                        Up to <span id="max-file"></span> per file. Uploads are sliced and sent in pieces,
+                        so a dropped connection resumes instead of starting over.
+                    </div>
+                </div>
+                <input type="file" id="file-input" multiple hidden>
+
+                <div class="grid-2" style="margin-top: 1rem;">
+                    <label class="field">
+                        <span>Auto-delete after</span>
+                        <select class="input" id="retention">
+                            <option value="5">5 minutes</option>
+                            <option value="15">15 minutes</option>
+                            <option value="30">30 minutes</option>
+                            <option value="60">1 hour</option>
+                            <option value="360">6 hours</option>
+                            <option value="720">12 hours</option>
+                            <option value="1440">1 day</option>
+                            <option value="10080">7 days</option>
+                            <option value="43200" selected>30 days</option>
+                            <option value="129600">90 days</option>
+                            <option value="0">Never (counts against the quota forever)</option>
+                        </select>
+                    </label>
+                    <label class="field">
+                        <span>Note (optional)</span>
+                        <input class="input" id="upload-note" maxlength="500" placeholder="What is this?">
+                    </label>
+                </div>
+
+                <label class="check">
+                    <input type="checkbox" id="burn-toggle">
+                    <span>
+                        <strong>Delete as soon as it has been downloaded once</strong>
+                        <em>The file is removed the moment a download finishes - by you, or by anyone
+                        holding a share link. A download that fails partway leaves it alone.</em>
+                    </span>
+                </label>
+
+                <div id="upload-list"></div>
+            </div>
+        </div>
+
+        <!-- Files -->
+        <div class="card">
+            <div class="card-header">
+                <div class="card-title"><i class="fas fa-folder-open"></i> Files</div>
+                <button class="btn btn-ghost btn-sm" id="refresh-btn"><i class="fas fa-rotate"></i> Refresh</button>
+            </div>
+            <div class="card-body">
+                <div id="pending-list"></div>
+                <div id="file-list"><div class="empty">Loading...</div></div>
+            </div>
+        </div>
+
+        <div class="grid-2">
+            <!-- Members -->
+            <div class="card">
+                <div class="card-header"><div class="card-title"><i class="fas fa-user-shield"></i> Who has access</div></div>
+                <div class="card-body">
+                    <div id="member-list"></div>
+                    <% if (locals.isOwner) { %>
+                    <div style="display:flex; gap:0.5rem; margin-top:1rem;">
+                        <input class="input" id="member-id" placeholder="Discord user ID" inputmode="numeric">
+                        <input class="input" id="member-label" placeholder="Name" style="max-width:130px;">
+                        <button class="btn btn-primary btn-sm" id="member-add">Add</button>
+                    </div>
+                    <% } %>
+                </div>
+            </div>
+
+            <!-- Activity -->
+            <div class="card">
+                <div class="card-header"><div class="card-title"><i class="fas fa-clock-rotate-left"></i> Activity</div></div>
+                <div class="card-body" style="max-height: 340px; overflow-y: auto;">
+                    <div id="audit-list"><div class="empty">Loading...</div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    </main>
+    <%- include('partials/site-footer') %>
+
+    <!-- Share modal -->
+    <div class="modal-backdrop" id="share-modal">
+        <div class="modal">
+            <div class="modal-header">
+                <span>Share <span id="share-filename"></span></span>
+                <button class="modal-close" data-close><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <div id="share-result" style="display:none;"></div>
+                <label class="field">
+                    <span>Expires after</span>
+                    <select class="input" id="share-days">
+                        <option value="1">1 day</option>
+                        <option value="3">3 days</option>
+                        <option value="7" selected>7 days</option>
+                        <option value="30">30 days</option>
+                    </select>
+                </label>
+                <label class="field">
+                    <span>Download limit (blank = unlimited)</span>
+                    <input class="input" id="share-max" type="number" min="1" placeholder="e.g. 1">
+                </label>
+                <label class="field">
+                    <span>Password (optional)</span>
+                    <input class="input" id="share-password" type="text" autocomplete="off" placeholder="Leave blank for none">
+                </label>
+                <label class="field">
+                    <span>Label, for your own reference</span>
+                    <input class="input" id="share-label" maxlength="120" placeholder="e.g. for the editor">
+                </label>
+                <div style="font-size:0.75rem;color:var(--text-muted);margin-bottom:1rem;">
+                    Anyone holding the link can download this file until it expires. The link is shown once
+                    and cannot be recovered afterwards - only its hash is stored.
+                </div>
+                <div id="share-links"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" data-close>Close</button>
+                <button class="btn btn-primary" id="share-create"><i class="fas fa-link"></i> Create link</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Expiry modal -->
+    <div class="modal-backdrop" id="expiry-modal">
+        <div class="modal" style="max-width: 400px;">
+            <div class="modal-header">
+                <span>Auto-delete</span>
+                <button class="modal-close" data-close><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <label class="field">
+                    <span>Delete this file in</span>
+                    <select class="input" id="expiry-minutes">
+                        <option value="5">5 minutes</option>
+                        <option value="15">15 minutes</option>
+                        <option value="30">30 minutes</option>
+                        <option value="60">1 hour</option>
+                        <option value="360">6 hours</option>
+                        <option value="720">12 hours</option>
+                        <option value="1440">1 day</option>
+                        <option value="10080">7 days</option>
+                        <option value="43200">30 days</option>
+                        <option value="129600">90 days</option>
+                        <option value="0">Never</option>
+                    </select>
+                </label>
+                <label class="check" style="margin-bottom: 0.9rem;">
+                    <input type="checkbox" id="expiry-burn">
+                    <span>
+                        <strong>Delete after one completed download</strong>
+                        <em>Applies to share links too.</em>
+                    </span>
+                </label>
+                <label class="field">
+                    <span>Note</span>
+                    <input class="input" id="expiry-note" maxlength="500">
+                </label>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" data-close>Cancel</button>
+                <button class="btn btn-primary" id="expiry-save">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Download log modal -->
+    <div class="modal-backdrop" id="downloads-modal">
+        <div class="modal" style="max-width: 560px;">
+            <div class="modal-header">
+                <span>Downloads of <span id="downloads-filename"></span></span>
+                <button class="modal-close" data-close><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <div id="downloads-list"><div class="empty">Loading...</div></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-ghost" data-close>Close</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="toast" id="toast"></div>
+
+<script>
+(function () {
+    'use strict';
+
+    // Angle brackets in embedded JSON are escaped: a value containing a closing script tag
+    // would otherwise end this block early and dump the rest of the file onto the page as
+    // text. The values here are ours, but the rule is cheap - and the hazard is real enough
+    // that even writing that tag inside this comment did it.
+    const CONFIG = <%- JSON.stringify(config).replace(/</g, '\\u003c') %>;
+    const ME = <%- JSON.stringify({ id: user.id, username: user.username }).replace(/</g, '\\u003c') %>;
+    const CSRF = document.querySelector('meta[name="csrf-token"]').content;
+
+    // -----------------------------------------------------------------------
+    // Helpers
+    // -----------------------------------------------------------------------
+
+    function fmt(bytes) {
+        const n = Number(bytes) || 0;
+        if (n < 1024) return n + ' B';
+        const u = ['KB', 'MB', 'GB', 'TB'];
+        let v = n / 1024, i = 0;
+        while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+        return (v >= 100 ? v.toFixed(0) : v.toFixed(1)) + ' ' + u[i];
+    }
+
+    function when(value) {
+        if (!value) return '';
+        const d = new Date(value);
+        return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+    }
+
+    function plural(n, unit) { return n + ' ' + unit + (n === 1 ? '' : 's'); }
+
+    function untilLabel(value) {
+        if (!value) return null;
+        const ms = new Date(value) - Date.now();
+        if (ms <= 0) return 'expired';
+        const days = Math.floor(ms / 86400000);
+        if (days >= 1) return plural(days, 'day');
+        const hours = Math.floor(ms / 3600000);
+        if (hours >= 1) return plural(hours, 'hour');
+        const mins = Math.max(1, Math.ceil(ms / 60000));
+        return plural(mins, 'minute');
+    }
+
+    let toastTimer = null;
+    function toast(message, isError) {
+        const el = document.getElementById('toast');
+        el.textContent = message;
+        el.classList.toggle('error', !!isError);
+        el.classList.add('show');
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => el.classList.remove('show'), 3500);
+    }
+
+    async function api(path, options) {
+        const opts = Object.assign({ headers: {} }, options || {});
+        opts.headers = Object.assign({ 'x-csrf-token': CSRF }, opts.headers);
+        if (opts.json !== undefined) {
+            opts.headers['Content-Type'] = 'application/json';
+            opts.body = JSON.stringify(opts.json);
+            delete opts.json;
+        }
+        const res = await fetch(path, opts);
+        let data = null;
+        try { data = await res.json(); } catch (e) { /* non-JSON error page */ }
+        if (!res.ok) {
+            const err = new Error((data && data.error) || ('HTTP ' + res.status));
+            err.status = res.status;
+            err.data = data;
+            throw err;
+        }
+        return data;
+    }
+
+    // Build rows with textContent, never innerHTML: a filename is attacker-controlled text as
+    // far as this page is concerned, and it is displayed in a dozen places.
+    function el(tag, className, text) {
+        const node = document.createElement(tag);
+        if (className) node.className = className;
+        if (text !== undefined && text !== null) node.textContent = text;
+        return node;
+    }
+
+    // -----------------------------------------------------------------------
+    // Uploading
+    //
+    // Cloudflare rejects bodies over 100 MB, and the origin has its own limit we cannot see, so
+    // the file goes up in slices. A 413 means we guessed the slice size too high for whatever
+    // sits in front of us - halve it and carry on rather than failing the whole transfer.
+    // -----------------------------------------------------------------------
+
+    const MIN_CHUNK = 1024 * 1024;
+    const MAX_RETRIES = 5;
+    let chunkSize = CONFIG.chunkBytes;
+    const queue = [];
+    let uploading = false;
+
+    function uploadCard(file) {
+        const row = el('div', 'upload-row');
+        const top = el('div', 'upload-top');
+        top.appendChild(el('div', 'upload-name', file.name));
+        const meta = el('div', 'upload-meta', fmt(file.size));
+        top.appendChild(meta);
+        row.appendChild(top);
+        const bar = el('div', 'progress-bar');
+        const fill = el('div', 'progress-fill');
+        bar.appendChild(fill);
+        row.appendChild(bar);
+        const status = el('div', 'upload-status', 'Queued');
+        row.appendChild(status);
+        document.getElementById('upload-list').appendChild(row);
+        return { row, fill, status, meta };
+    }
+
+    function enqueue(files) {
+        for (const file of files) {
+            if (file.size === 0) { toast(file.name + ' is empty.', true); continue; }
+            if (file.size > CONFIG.maxFileBytes) {
+                toast(file.name + ' is over the ' + fmt(CONFIG.maxFileBytes) + ' limit.', true);
+                continue;
+            }
+            queue.push({ file, ui: uploadCard(file) });
+        }
+        drain();
+    }
+
+    async function drain() {
+        if (uploading) return;
+        uploading = true;
+        while (queue.length) {
+            const job = queue.shift();
+            try {
+                await uploadOne(job);
+            } catch (err) {
+                job.ui.fill.classList.add('failed');
+                job.ui.status.textContent = 'Failed: ' + err.message;
+                toast(job.file.name + ': ' + err.message, true);
+            }
+        }
+        uploading = false;
+        refresh();
+    }
+
+    async function uploadOne(job) {
+        const { file, ui } = job;
+        ui.status.textContent = 'Starting...';
+
+        const start = await api('/vault/api/uploads', {
+            method: 'POST',
+            json: {
+                name: file.name,
+                size: file.size,
+                contentType: file.type || null,
+                note: document.getElementById('upload-note').value || null,
+                retentionMinutes: document.getElementById('retention').value,
+                deleteOnDownload: document.getElementById('burn-toggle').checked
+            }
+        });
+
+        const uploadId = start.uploadId;
+        let offset = start.offset || 0;
+        let retries = 0;
+        const began = Date.now();
+
+        while (offset < file.size) {
+            const end = Math.min(offset + chunkSize, file.size);
+            const slice = file.slice(offset, end);
+
+            let res;
+            try {
+                res = await fetch('/vault/api/uploads/' + uploadId, {
+                    method: 'PATCH',
+                    headers: {
+                        'x-csrf-token': CSRF,
+                        'x-upload-offset': String(offset),
+                        'Content-Type': 'application/octet-stream'
+                    },
+                    body: slice
+                });
+            } catch (netErr) {
+                // Connection dropped mid-slice. The server truncated back to the last
+                // acknowledged offset, so re-asking where it is costs one request.
+                if (++retries > MAX_RETRIES) throw new Error('connection lost');
+                ui.status.textContent = 'Connection dropped, retrying (' + retries + '/' + MAX_RETRIES + ')...';
+                await new Promise(r => setTimeout(r, 1000 * retries));
+                offset = (await api('/vault/api/uploads/' + uploadId)).offset;
+                continue;
+            }
+
+            if (res.status === 413 || res.status === 502 || res.status === 504) {
+                // Something between us and the server will not take a slice this big.
+                if (chunkSize <= MIN_CHUNK) throw new Error('the server rejected even a 1 MB slice');
+                chunkSize = Math.max(MIN_CHUNK, Math.floor(chunkSize / 2));
+                ui.status.textContent = 'Slice too large for the proxy, retrying at ' + fmt(chunkSize) + '...';
+                continue;
+            }
+
+            let body = null;
+            try { body = await res.json(); } catch (e) { /* proxy error page */ }
+
+            if (res.status === 409 && body && typeof body.offset === 'number') {
+                offset = body.offset;
+                continue;
+            }
+            if (!res.ok || !body || typeof body.offset !== 'number') {
+                // A 200 with no JSON is a proxy answering for us. Re-ask the server where the
+                // upload actually got to rather than assuming this slice landed.
+                if (++retries > MAX_RETRIES) throw new Error((body && body.error) || ('HTTP ' + res.status));
+                await new Promise(r => setTimeout(r, 1000 * retries));
+                offset = (await api('/vault/api/uploads/' + uploadId)).offset;
+                continue;
+            }
+
+            retries = 0;
+            offset = body.offset;
+
+            const pct = (offset / file.size) * 100;
+            ui.fill.style.width = pct.toFixed(1) + '%';
+            const elapsed = (Date.now() - began) / 1000;
+            const rate = elapsed > 0 ? offset / elapsed : 0;
+            const left = rate > 0 ? Math.round((file.size - offset) / rate) : null;
+            ui.status.textContent = pct.toFixed(1) + '% - ' + fmt(rate) + '/s'
+                + (left !== null && left > 0 ? ' - about ' + (left > 90 ? Math.ceil(left / 60) + ' min' : left + ' s') + ' left' : '');
+            ui.meta.textContent = fmt(offset) + ' / ' + fmt(file.size);
+        }
+
+        ui.status.textContent = 'Verifying...';
+        const done = await api('/vault/api/uploads/' + uploadId + '/complete', { method: 'POST' });
+        ui.fill.style.width = '100%';
+        ui.fill.classList.add('done');
+        ui.status.textContent = 'Done - SHA-256 ' + (done.file.sha256 || '').slice(0, 16) + '...';
+        setTimeout(() => ui.row.remove(), 8000);
+    }
+
+    // -----------------------------------------------------------------------
+    // Rendering
+    // -----------------------------------------------------------------------
+
+    let state = { files: [], members: [], usage: null, isOwner: false, pending: [] };
+
+    function renderQuota(u) {
+        const pct = u.maxBytes ? Math.min(100, (u.usedBytes / u.maxBytes) * 100) : 0;
+        const fill = document.getElementById('quota-fill');
+        fill.style.width = pct.toFixed(1) + '%';
+        fill.classList.toggle('high', pct > 80);
+        document.getElementById('quota-text').textContent =
+            fmt(u.usedBytes) + ' of ' + fmt(u.maxBytes) + ' used'
+            + (u.reservedBytes ? ' (' + fmt(u.reservedBytes) + ' reserved by uploads in progress)' : '');
+    }
+
+    function renderFiles(files) {
+        const list = document.getElementById('file-list');
+        list.textContent = '';
+        if (!files.length) {
+            list.appendChild(el('div', 'empty', 'Nothing in the vault yet.'));
+            return;
+        }
+        for (const f of files) {
+            const row = el('div', 'file-row');
+            const main = el('div', 'file-main');
+
+            const nameLine = el('div', 'file-name');
+            nameLine.appendChild(document.createTextNode(f.original_name));
+            if (Number(f.active_links) > 0) {
+                const pill = el('span', 'pill pill-link', ' ' + f.active_links + ' link' + (f.active_links > 1 ? 's' : ''));
+                pill.style.marginLeft = '0.5rem';
+                nameLine.appendChild(pill);
+            }
+            main.appendChild(nameLine);
+
+            const owner = state.members.find(m => m.user_id === f.owner_id);
+            const bits = [
+                fmt(f.size_bytes),
+                'by ' + (owner ? (owner.username || owner.label || owner.user_id) : f.owner_id),
+                when(f.created_at)
+            ];
+            if (Number(f.download_count) > 0) bits.push(f.download_count + ' download' + (f.download_count > 1 ? 's' : ''));
+            const sub = el('div', 'file-sub', bits.join('  ·  '));
+
+            const remaining = untilLabel(f.expires_at);
+            const pill = el('span', 'pill ' + (f.expires_at ? 'pill-soon' : 'pill-keep'),
+                f.expires_at ? 'deletes in ' + remaining : 'kept');
+            pill.style.marginLeft = '0.5rem';
+            sub.appendChild(pill);
+
+            if (Number(f.delete_on_download)) {
+                const burn = el('span', 'pill pill-burn', 'burns on download');
+                burn.style.marginLeft = '0.35rem';
+                sub.appendChild(burn);
+            }
+            main.appendChild(sub);
+
+            if (f.note) main.appendChild(el('div', 'file-note', f.note));
+            row.appendChild(main);
+
+            const actions = el('div', 'file-actions');
+
+            const dl = el('a', 'btn btn-ghost btn-sm');
+            dl.href = '/vault/files/' + f.file_id + '/download';
+            dl.appendChild(el('i', 'fas fa-download'));
+            dl.appendChild(document.createTextNode(' Download'));
+            if (Number(f.delete_on_download)) {
+                // Clicking this destroys the file. Say so before it happens, not after.
+                dl.onclick = (e) => {
+                    if (!confirm('"' + f.original_name + '" is set to delete itself once a download '
+                        + 'finishes. Downloading it now will remove it from the vault. Continue?')) {
+                        e.preventDefault();
+                    }
+                };
+            }
+            actions.appendChild(dl);
+
+            const log = el('button', 'btn btn-ghost btn-sm');
+            log.appendChild(el('i', 'fas fa-list-check'));
+            log.appendChild(document.createTextNode(' Log'));
+            log.title = 'Who has downloaded this';
+            log.onclick = () => openDownloads(f);
+            actions.appendChild(log);
+
+            const share = el('button', 'btn btn-ghost btn-sm');
+            share.appendChild(el('i', 'fas fa-link'));
+            share.appendChild(document.createTextNode(' Share'));
+            share.onclick = () => openShare(f);
+            actions.appendChild(share);
+
+            const edit = el('button', 'btn btn-ghost btn-sm');
+            edit.appendChild(el('i', 'fas fa-clock'));
+            edit.onclick = () => openExpiry(f);
+            actions.appendChild(edit);
+
+            const del = el('button', 'btn btn-danger btn-sm');
+            del.appendChild(el('i', 'fas fa-trash'));
+            del.onclick = () => removeFile(f);
+            actions.appendChild(del);
+
+            row.appendChild(actions);
+            list.appendChild(row);
+        }
+    }
+
+    function renderPending(pending) {
+        const box = document.getElementById('pending-list');
+        box.textContent = '';
+        if (!pending.length) return;
+        for (const p of pending) {
+            const row = el('div', 'upload-row');
+            const top = el('div', 'upload-top');
+            top.appendChild(el('div', 'upload-name', p.original_name));
+            top.appendChild(el('div', 'upload-meta',
+                fmt(p.received_bytes) + ' / ' + fmt(p.size_bytes)));
+            row.appendChild(top);
+            const bar = el('div', 'progress-bar');
+            const fill = el('div', 'progress-fill');
+            fill.style.width = ((p.received_bytes / p.size_bytes) * 100).toFixed(1) + '%';
+            bar.appendChild(fill);
+            row.appendChild(bar);
+
+            const foot = el('div', 'upload-top');
+            foot.appendChild(el('div', 'upload-status',
+                'Interrupted ' + when(p.updated_at) + '. Pick the same file again to finish it.'));
+            const discard = el('button', 'btn btn-danger btn-sm');
+            discard.textContent = 'Discard';
+            discard.onclick = async () => {
+                await api('/vault/api/uploads/' + p.upload_id, { method: 'DELETE' });
+                refresh();
+            };
+            foot.appendChild(discard);
+            row.appendChild(foot);
+            box.appendChild(row);
+        }
+    }
+
+    function renderMembers(members, isOwner) {
+        const box = document.getElementById('member-list');
+        box.textContent = '';
+        document.getElementById('member-count').textContent =
+            members.length + ' member' + (members.length === 1 ? '' : 's');
+        for (const m of members) {
+            const row = el('div', 'link-row');
+            const left = el('div');
+            left.appendChild(el('div', null, m.username || m.label || 'Unknown'));
+            const id = el('div', null, m.user_id + (m.label && m.username ? '  ·  ' + m.label : ''));
+            id.style.color = 'var(--text-muted)';
+            id.style.fontSize = '0.7rem';
+            left.appendChild(id);
+            row.appendChild(left);
+
+            if (m.permanent) {
+                // The owner cannot be removed - by anyone, through any path. Say so instead of
+                // showing a button that the server would refuse anyway.
+                const pill = el('span', 'pill pill-keep', 'permanent');
+                row.appendChild(pill);
+            } else if (isOwner && m.user_id !== ME.id) {
+                const btn = el('button', 'btn btn-danger btn-sm', 'Remove');
+                btn.onclick = async () => {
+                    if (!confirm('Remove ' + (m.username || m.user_id) + ' from the vault?')) return;
+                    try {
+                        await api('/vault/api/members/' + m.user_id, { method: 'DELETE' });
+                        toast('Removed.');
+                    } catch (err) {
+                        toast(err.message, true);
+                    }
+                    refresh();
+                };
+                row.appendChild(btn);
+            }
+            box.appendChild(row);
+        }
+    }
+
+    const ACTIONS = {
+        upload: 'uploaded', upload_start: 'started uploading', download: 'downloaded',
+        delete: 'deleted', expire: 'auto-deleted', burn: 'burned after download',
+        link_create: 'created a share link for',
+        link_revoke: 'revoked a share link', share_download: 'downloaded via share link',
+        share_password_fail: 'failed the password on', denied: 'was denied access to',
+        member_add: 'added a member', member_remove: 'removed a member'
+    };
+    const DOWNLOAD_ACTIONS = new Set(['download', 'share_download']);
+
+    async function loadAudit() {
+        const box = document.getElementById('audit-list');
+        try {
+            const { entries } = await api('/vault/api/audit?limit=60');
+            box.textContent = '';
+            if (!entries.length) { box.appendChild(el('div', 'empty', 'Nothing yet.')); return; }
+            for (const e of entries) {
+                const row = el('div', 'log-row');
+                row.appendChild(el('div', 'log-when', when(e.created_at)));
+                const actor = e.actor_id
+                    ? (state.members.find(m => m.user_id === e.actor_id) || {}).username || e.actor_id
+                    : 'Someone with a link';
+                let what = ACTIONS[e.action] || e.action;
+                // "downloaded" and "started a download and abandoned it" are different facts.
+                if (DOWNLOAD_ACTIONS.has(e.action) && e.completed !== null && !e.completed) {
+                    what = 'started but did not finish downloading';
+                }
+                const subject = e.original_name || e.detail || '';
+                const size = DOWNLOAD_ACTIONS.has(e.action) && e.bytes ? ' (' + fmt(e.bytes) + ')' : '';
+                row.appendChild(el('div', 'log-what', actor + ' ' + what + (subject ? ' ' + subject : '') + size));
+                box.appendChild(row);
+            }
+        } catch (err) {
+            box.textContent = '';
+            box.appendChild(el('div', 'empty', 'Could not load activity.'));
+        }
+    }
+
+    async function refresh() {
+        try {
+            const data = await api('/vault/api/state');
+            state = data;
+            renderQuota(data.usage);
+            renderMembers(data.members, data.isOwner);
+            renderPending(data.pending);
+            renderFiles(data.files);
+            loadAudit();
+        } catch (err) {
+            toast('Could not load the vault: ' + err.message, true);
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // Actions
+    // -----------------------------------------------------------------------
+
+    async function removeFile(f) {
+        if (!confirm('Delete "' + f.original_name + '" permanently? Any share links for it die with it.')) return;
+        try {
+            await api('/vault/api/files/' + f.file_id, { method: 'DELETE' });
+            toast('Deleted.');
+            refresh();
+        } catch (err) {
+            toast(err.message, true);
+        }
+    }
+
+    async function openDownloads(f) {
+        document.getElementById('downloads-filename').textContent = f.original_name;
+        const box = document.getElementById('downloads-list');
+        box.textContent = '';
+        box.appendChild(el('div', 'empty', 'Loading...'));
+        document.getElementById('downloads-modal').classList.add('open');
+
+        let entries;
+        try {
+            ({ entries } = await api('/vault/api/files/' + f.file_id + '/downloads'));
+        } catch (err) {
+            box.textContent = '';
+            box.appendChild(el('div', 'empty', 'Could not load the log: ' + err.message));
+            return;
+        }
+
+        box.textContent = '';
+        if (!entries.length) {
+            box.appendChild(el('div', 'empty', 'Nobody has fetched this yet.'));
+            return;
+        }
+
+        for (const e of entries) {
+            const row = el('div', 'dl-row');
+            const left = el('div');
+
+            // A share-link download has no Discord identity by definition - the whole point of
+            // a link is that the recipient does not need an account. The IP and the link's
+            // label are the identifying detail we actually have.
+            const who = e.actor_id
+                ? (e.username || e.actor_id)
+                : 'Share link visitor';
+            left.appendChild(el('div', 'dl-who', who));
+
+            const bits = [when(e.created_at)];
+            if (e.ip) bits.push(e.ip);
+            if (e.bytes !== null && e.bytes !== undefined) bits.push(fmt(e.bytes) + ' transferred');
+            if (!e.actor_id && e.detail) bits.push(e.detail);
+            left.appendChild(el('div', 'dl-meta', bits.join('  ·  ')));
+            row.appendChild(left);
+
+            row.appendChild(e.completed
+                ? el('div', 'dl-ok', 'completed')
+                : el('div', 'dl-partial', 'did not finish'));
+            box.appendChild(row);
+        }
+    }
+
+    let shareFile = null;
+
+    async function openShare(f) {
+        shareFile = f;
+        document.getElementById('share-filename').textContent = f.original_name;
+        document.getElementById('share-result').style.display = 'none';
+        document.getElementById('share-password').value = '';
+        document.getElementById('share-max').value = '';
+        document.getElementById('share-label').value = '';
+        document.getElementById('share-modal').classList.add('open');
+        await loadLinks(f.file_id);
+    }
+
+    async function loadLinks(fileId) {
+        const box = document.getElementById('share-links');
+        box.textContent = '';
+        const { links } = await api('/vault/api/files/' + fileId + '/links');
+        if (!links.length) return;
+        const heading = el('div', null, 'Existing links');
+        heading.style.cssText = 'font-size:0.72rem;color:var(--text-muted);text-transform:uppercase;margin-bottom:0.5rem;';
+        box.appendChild(heading);
+        for (const l of links) {
+            const dead = l.revoked_at || new Date(l.expires_at) <= new Date()
+                || (l.max_downloads !== null && l.download_count >= l.max_downloads);
+            const row = el('div', 'link-row' + (dead ? ' dead' : ''));
+            const left = el('div');
+            left.appendChild(el('div', null, l.label || 'Unlabelled'));
+            const parts = [];
+            parts.push(dead ? 'dead' : 'expires in ' + untilLabel(l.expires_at));
+            parts.push(l.download_count + (l.max_downloads !== null ? ' / ' + l.max_downloads : '') + ' used');
+            if (l.has_password) parts.push('password');
+            const sub = el('div', null, parts.join('  ·  '));
+            sub.style.cssText = 'color:var(--text-muted);font-size:0.7rem;';
+            left.appendChild(sub);
+            row.appendChild(left);
+            if (!dead) {
+                const btn = el('button', 'btn btn-danger btn-sm', 'Revoke');
+                btn.onclick = async () => {
+                    await api('/vault/api/links/' + l.token_hash + '/revoke', { method: 'POST' });
+                    toast('Link revoked.');
+                    loadLinks(fileId);
+                    refresh();
+                };
+                row.appendChild(btn);
+            }
+            box.appendChild(row);
+        }
+    }
+
+    document.getElementById('share-create').onclick = async function () {
+        if (!shareFile) return;
+        this.disabled = true;
+        try {
+            const out = await api('/vault/api/files/' + shareFile.file_id + '/links', {
+                method: 'POST',
+                json: {
+                    days: document.getElementById('share-days').value,
+                    maxDownloads: document.getElementById('share-max').value || null,
+                    password: document.getElementById('share-password').value || null,
+                    label: document.getElementById('share-label').value || null
+                }
+            });
+            const box = document.getElementById('share-result');
+            box.textContent = '';
+            box.className = 'share-result';
+            box.style.display = 'block';
+            box.appendChild(el('div', null, 'Copy this now - it is not shown again.'));
+            box.appendChild(el('div', 'share-url', out.url));
+            const copy = el('button', 'btn btn-primary btn-sm');
+            copy.appendChild(el('i', 'fas fa-copy'));
+            copy.appendChild(document.createTextNode(' Copy link'));
+            copy.onclick = () => {
+                navigator.clipboard.writeText(out.url).then(
+                    () => toast('Copied.'),
+                    () => toast('Could not copy - select it by hand.', true));
+            };
+            box.appendChild(copy);
+            loadLinks(shareFile.file_id);
+            refresh();
+        } catch (err) {
+            toast(err.message, true);
+        } finally {
+            this.disabled = false;
+        }
+    };
+
+    let expiryFile = null;
+
+    function openExpiry(f) {
+        expiryFile = f;
+        document.getElementById('expiry-note').value = f.note || '';
+        document.getElementById('expiry-burn').checked = !!Number(f.delete_on_download);
+
+        // Snap the remaining time to the nearest option at or above it, so reopening the dialog
+        // on a file with 3 minutes left does not silently offer to extend it to 30 days.
+        const select = document.getElementById('expiry-minutes');
+        let value = '0';
+        if (f.expires_at) {
+            const left = Math.max(1, Math.round((new Date(f.expires_at) - Date.now()) / 60000));
+            const options = Array.from(select.options)
+                .map(o => Number(o.value)).filter(n => n > 0).sort((a, b) => a - b);
+            value = String(options.find(n => n >= left) || options[options.length - 1]);
+        }
+        select.value = value;
+        document.getElementById('expiry-modal').classList.add('open');
+    }
+
+    document.getElementById('expiry-save').onclick = async function () {
+        if (!expiryFile) return;
+        this.disabled = true;
+        try {
+            await api('/vault/api/files/' + expiryFile.file_id, {
+                method: 'PATCH',
+                json: {
+                    expiresInMinutes: document.getElementById('expiry-minutes').value,
+                    deleteOnDownload: document.getElementById('expiry-burn').checked,
+                    note: document.getElementById('expiry-note').value
+                }
+            });
+            document.getElementById('expiry-modal').classList.remove('open');
+            toast('Saved.');
+            refresh();
+        } catch (err) {
+            toast(err.message, true);
+        } finally {
+            this.disabled = false;
+        }
+    };
+
+    const memberAdd = document.getElementById('member-add');
+    if (memberAdd) {
+        memberAdd.onclick = async () => {
+            const userId = document.getElementById('member-id').value.trim();
+            const label = document.getElementById('member-label').value.trim();
+            try {
+                await api('/vault/api/members', { method: 'POST', json: { userId, label } });
+                document.getElementById('member-id').value = '';
+                document.getElementById('member-label').value = '';
+                toast('Added.');
+                refresh();
+            } catch (err) {
+                toast(err.message, true);
+            }
+        };
+    }
+
+    // -----------------------------------------------------------------------
+    // Wiring
+    // -----------------------------------------------------------------------
+
+    const dropzone = document.getElementById('dropzone');
+    const fileInput = document.getElementById('file-input');
+
+    dropzone.onclick = () => fileInput.click();
+    fileInput.onchange = () => { enqueue(fileInput.files); fileInput.value = ''; };
+
+    ['dragenter', 'dragover'].forEach(ev => dropzone.addEventListener(ev, e => {
+        e.preventDefault(); dropzone.classList.add('over');
+    }));
+    ['dragleave', 'drop'].forEach(ev => dropzone.addEventListener(ev, e => {
+        e.preventDefault(); dropzone.classList.remove('over');
+    }));
+    dropzone.addEventListener('drop', e => {
+        if (e.dataTransfer && e.dataTransfer.files.length) enqueue(e.dataTransfer.files);
+    });
+    // Dropping a file anywhere else must not make the browser navigate to it.
+    ['dragover', 'drop'].forEach(ev => window.addEventListener(ev, e => e.preventDefault()));
+
+    document.getElementById('refresh-btn').onclick = refresh;
+
+    document.querySelectorAll('[data-close]').forEach(btn => {
+        btn.onclick = () => btn.closest('.modal-backdrop').classList.remove('open');
+    });
+    document.querySelectorAll('.modal-backdrop').forEach(bd => {
+        bd.onclick = e => { if (e.target === bd) bd.classList.remove('open'); };
+    });
+
+    window.addEventListener('beforeunload', e => {
+        if (uploading) { e.preventDefault(); e.returnValue = ''; }
+    });
+
+    // Retention can now be minutes, so a page left open goes stale fast. Re-poll while idle;
+    // never mid-upload, where a re-render would fight the progress rows.
+    setInterval(() => { if (!uploading && !document.hidden) refresh(); }, 60000);
+
+    document.getElementById('max-file').textContent = fmt(CONFIG.maxFileBytes);
+    refresh();
+})();
+</script>
+</body>
+</html>

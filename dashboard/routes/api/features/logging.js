@@ -45,8 +45,7 @@ router.get('/config', async (req, res) => {
         eventConfigs.forEach(e => {
             events[e.event_type] = {
                 enabled: e.enabled === 1,
-                channel_id: e.log_channel_id,
-                embed_color: e.embed_color || null
+                channel_id: e.log_channel_id
             };
         });
 
@@ -112,17 +111,16 @@ router.put('/config', async (req, res) => {
             for (const eventType of allEventKeys) {
                 const eventEnabled = enabled_logs.includes(eventType) ? 1 : 0;
                 const eventChannelId = (log_categories && log_categories[eventType]) || null;
-                const eventColor = (event_colors && event_colors[eventType]) || null;
 
+                // Colours are per action now (core/log-actions.js, log_action_colors); embed_color was dropped.
                 await pool.execute(`
                     INSERT INTO log_event_config
-                        (guild_id, event_type, enabled, log_channel_id, embed_color)
-                    VALUES (?, ?, ?, ?, ?)
+                        (guild_id, event_type, enabled, log_channel_id)
+                    VALUES (?, ?, ?, ?)
                     ON DUPLICATE KEY UPDATE
                         enabled = VALUES(enabled),
-                        log_channel_id = COALESCE(VALUES(log_channel_id), log_channel_id),
-                        embed_color = COALESCE(VALUES(embed_color), embed_color)
-                `, [guildId, eventType, eventEnabled, eventChannelId, eventColor]);
+                        log_channel_id = COALESCE(VALUES(log_channel_id), log_channel_id)
+                `, [guildId, eventType, eventEnabled, eventChannelId]);
             }
         }
 
@@ -131,18 +129,16 @@ router.put('/config', async (req, res) => {
             for (const [eventType, eventConfig] of Object.entries(events)) {
                 await pool.execute(`
                     INSERT INTO log_event_config
-                        (guild_id, event_type, enabled, log_channel_id, embed_color)
-                    VALUES (?, ?, ?, ?, ?)
+                        (guild_id, event_type, enabled, log_channel_id)
+                    VALUES (?, ?, ?, ?)
                     ON DUPLICATE KEY UPDATE
                         enabled = VALUES(enabled),
-                        log_channel_id = VALUES(log_channel_id),
-                        embed_color = VALUES(embed_color)
+                        log_channel_id = VALUES(log_channel_id)
                 `, [
                     guildId,
                     eventType,
                     eventConfig.enabled ? 1 : 0,
-                    eventConfig.channel_id || null,
-                    eventConfig.embed_color || null
+                    eventConfig.channel_id || null
                 ]);
             }
         }
@@ -153,6 +149,86 @@ router.put('/config', async (req, res) => {
     } catch (error) {
         logger.error('[API Logging Config PUT] Error:', error);
         res.status(500).json({ error: 'Failed to update logging config' });
+    }
+});
+
+/**
+ * Ignore lists (logging_config.ignored_channels / ignored_roles / ignore_bots, migration 420), applied by
+ * core/log-manager.js isLogSubjectIgnored to message, reaction, poll, pin, voice, member-update and
+ * command-usage logs. Moderation and server logs are never hidden by them.
+ *
+ * GET /api/guilds/:guildId/logging/ignores  → { channels: [id], roles: [id], ignoreBots: bool }
+ * PUT /api/guilds/:guildId/logging/ignores  { channels, roles, ignoreBots } → the saved values
+ */
+const MAX_IGNORED_CHANNELS = 200;
+const MAX_IGNORED_ROLES = 100;
+
+function liveGuild(guildId) {
+    return global.botManager?.getClientForGuild?.(guildId)?.guilds.cache.get(guildId) || null;
+}
+
+function idList(value) {
+    const list = Array.isArray(value) ? value : (value == null || value === '' ? [] : [value]);
+    return [...new Set(list.map(v => String(v).trim()).filter(v => /^\d{17,20}$/.test(v)))];
+}
+
+function parseIdArray(raw) {
+    if (!raw) return [];
+    try {
+        const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        return Array.isArray(parsed) ? parsed.map(String) : [];
+    } catch {
+        return [];
+    }
+}
+
+router.get('/ignores', async (req, res) => {
+    try {
+        const { guildId } = req.params;
+        const [rows] = await pool.execute(
+            'SELECT ignored_channels, ignored_roles, ignore_bots FROM logging_config WHERE guild_id = ?', [guildId]);
+        const row = rows[0] || {};
+        res.json({
+            channels: parseIdArray(row.ignored_channels),
+            roles: parseIdArray(row.ignored_roles),
+            ignoreBots: !!row.ignore_bots,
+        });
+    } catch (error) {
+        logger.error('[API Logging Ignores GET] Error:', error);
+        res.status(500).json({ error: 'Could not load the ignore lists.' });
+    }
+});
+
+router.put('/ignores', async (req, res) => {
+    try {
+        const { guildId } = req.params;
+        const guild = liveGuild(guildId);
+        if (!guild) return res.status(503).json({ error: 'The bot cannot see this server right now. Try again in a minute.' });
+
+        const body = req.body || {};
+        const channels = idList(body.channels);
+        const roles = idList(body.roles);
+        if (channels.length > MAX_IGNORED_CHANNELS) return res.status(400).json({ error: `Choose at most ${MAX_IGNORED_CHANNELS} channels.` });
+        if (roles.length > MAX_IGNORED_ROLES) return res.status(400).json({ error: `Choose at most ${MAX_IGNORED_ROLES} roles.` });
+        const badChannel = channels.find(id => !guild.channels.cache.has(id));
+        if (badChannel) return res.status(400).json({ error: `Channel ${badChannel} is not in this server.` });
+        const badRole = roles.find(id => !guild.roles.cache.has(id) || id === guild.id);
+        if (badRole) return res.status(400).json({ error: `Role ${badRole} is not in this server.` });
+        const ignoreBots = body.ignoreBots === true || body.ignoreBots === 'true' || body.ignoreBots === 1 || body.ignoreBots === '1' || body.ignoreBots === 'on';
+
+        await pool.execute(`
+            INSERT INTO logging_config (guild_id, ignored_channels, ignored_roles, ignore_bots)
+            VALUES (?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE
+                ignored_channels = VALUES(ignored_channels),
+                ignored_roles = VALUES(ignored_roles),
+                ignore_bots = VALUES(ignore_bots)
+        `, [guildId, JSON.stringify(channels), JSON.stringify(roles), ignoreBots ? 1 : 0]);
+
+        res.json({ channels, roles, ignoreBots });
+    } catch (error) {
+        logger.error('[API Logging Ignores PUT] Error:', error);
+        res.status(500).json({ error: 'Could not save the ignore lists.' });
     }
 });
 

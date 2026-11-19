@@ -108,3 +108,65 @@ export function remaining(state) {
 export function renderGrid(state) {
   return state.grid.map(row => row.map(c => c.toUpperCase()).join(' ')).join('\n');
 }
+
+// ── hints ─────────────────────────────────────────────────────────────────────────────
+// Pure: the runtime decides WHEN (after N wrong guesses); this decides WHAT to reveal.
+// Hints escalate on one word — first letter, then two letters, then where it starts and which
+// way it runs — before moving to another, so a stuck channel gets unstuck rather than being
+// sprinkled with weak clues about ten different words.
+
+export const MAX_HINT_LEVEL = 3;
+
+const DIRECTION_NAMES = {
+  '0,1': 'left to right', '0,-1': 'right to left', '1,0': 'downwards', '-1,0': 'upwards',
+  '1,1': 'diagonally down and right', '1,-1': 'diagonally down and left',
+  '-1,1': 'diagonally up and right', '-1,-1': 'diagonally up and left',
+};
+
+/** Where a planted word starts (as read forwards) and the direction it runs. */
+export function locateWord(grid, word) {
+  const path = traceWord(grid, word);
+  if (!path) return null;
+  let cells = path.cells;
+  // traceWord may have matched the reversed spelling; orient the path so cells[0] is word[0].
+  if (String(grid[cells[0][0]][cells[0][1]]).toLowerCase() !== word[0]
+      || (cells.length > 1 && String(grid[cells[1][0]][cells[1][1]]).toLowerCase() !== word[1])) {
+    cells = [...cells].reverse();
+  }
+  const [r0, c0] = cells[0];
+  const [r1, c1] = cells[1] ?? cells[0];
+  return { row: r0 + 1, col: c0 + 1, direction: DIRECTION_NAMES[`${r1 - r0},${c1 - c0}`] || 'in a straight line' };
+}
+
+/**
+ * Produce the next hint. Returns { hint, text } where `hint` is the new state.hint
+ * ({ word, level }), or null when there is nothing left to hint.
+ */
+export function nextHint(state, rng = Math.random) {
+  const left = remaining(state);
+  if (!left.length) return null;
+
+  let { word, level } = state.hint && left.includes(state.hint.word) ? state.hint : { word: null, level: 0 };
+  if (!word || level >= MAX_HINT_LEVEL) {
+    // Fully hinted (or none yet): move to a different unfound word when there is one.
+    const others = left.filter(w => w !== word);
+    const pool = others.length ? others : left;
+    word = pool[Math.floor(rng() * pool.length)];
+    level = word === state.hint?.word ? MAX_HINT_LEVEL - 1 : 0;
+  }
+  level += 1;
+
+  const up = word.toUpperCase();
+  let text;
+  if (level === 1) {
+    text = `One of the hidden words starts with **${up[0]}** and has **${up.length}** letters.`;
+  } else if (level === 2) {
+    text = `One of the hidden words starts with **${up.slice(0, 2)}…** and has **${up.length}** letters.`;
+  } else {
+    const at = locateWord(state.grid, word);
+    text = at
+      ? `The **${up.length}**-letter word starting with **${up.slice(0, 2)}…** begins at **row ${at.row}, column ${at.col}** and reads **${at.direction}**.`
+      : `One of the hidden words starts with **${up.slice(0, 3)}…** and has **${up.length}** letters.`;
+  }
+  return { hint: { word, level, text }, text };
+}

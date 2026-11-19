@@ -1,7 +1,13 @@
 // Generic per-game patch-note watcher. Each row = one game in one guild.
-// Provider tells the manager how to fetch news (callofduty.com blog scrape, fortnite-api.com, etc.)
+// Provider tells the manager how to fetch news (callofduty.com blog scrape, fortnite.com/news, etc.)
 // last_seen_id is used to dedupe across polls and is set when a row is created so the
 // FIRST posted item is the NEXT-NEW one (not whatever's currently latest).
+//
+// `provider` is deliberately a VARCHAR, not an ENUM. Providers are registered in code
+// (core/game-patch-watcher-manager.js) and adding one must not require a schema change —
+// the original ENUM listed 'fortnite-api', a provider that never shipped, while rejecting
+// 'fortnite-news' and 'twitter-rss', the two that did. Production was widened by hand;
+// the ALTER below brings any table created from the old migration back in line.
 export async function up(db) {
   await db.execute(`
     CREATE TABLE IF NOT EXISTS game_patch_watchers (
@@ -9,7 +15,7 @@ export async function up(db) {
       guild_id VARCHAR(20) NOT NULL,
       channel_id VARCHAR(20) NOT NULL,
       role_ping_id VARCHAR(20) DEFAULT NULL,
-      provider ENUM('cod-blog','fortnite-api') NOT NULL,
+      provider VARCHAR(50) NOT NULL,
       game_label VARCHAR(80) NOT NULL,
       provider_config JSON DEFAULT NULL,
       last_seen_ids JSON DEFAULT NULL,
@@ -23,6 +29,12 @@ export async function up(db) {
       KEY idx_guild (guild_id)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
   `);
+
+  // Idempotent repair for tables already created with the old ENUM column.
+  const [cols] = await db.execute(`SHOW COLUMNS FROM game_patch_watchers LIKE 'provider'`);
+  if (cols[0] && /^enum/i.test(cols[0].Type)) {
+    await db.execute(`ALTER TABLE game_patch_watchers MODIFY provider VARCHAR(50) NOT NULL`);
+  }
 }
 
 export async function down(db) {

@@ -1,0 +1,31 @@
+<%#
+  <option>s for a channel or role picker (the kit's pickers are plain selects, so they keep working
+  with every form that already posts them). Locals:
+    items     [{ id, name }]  channels or roles
+    selected  an id, or an array of ids for a multi-select (optional)
+    prefix    text before each name, e.g. '#' for channels (optional)
+    empty     label of a first, empty option (optional; omit for none)
+    kind      optional: 'text' | 'voice' | 'category' | 'role', written as data-kind for the chip picker
+              (cf-picker.js); roles also get data-color from role.hexColor
+    assign    optional, with kind 'role': the bot gives these roles, so a role at or above the bot's
+              highest role is labelled "(above the bot)" and disabled (kept enabled if it is already
+              selected, because a disabled option is not submitted and saving would drop it)
+%>
+<%
+const _items = (typeof items !== 'undefined' && Array.isArray(items)) ? items : [];
+const _sel = typeof selected === 'undefined' || selected === null ? [] : (Array.isArray(selected) ? selected.map(String) : [String(selected)]);
+const _prefix = typeof prefix !== 'undefined' && prefix ? prefix : '';
+const _kind = typeof kind !== 'undefined' && kind ? String(kind) : '';
+const _botTop = (function () {
+    if (_kind !== 'role' || typeof assign === 'undefined' || !assign) return null;
+    const r = _items.find(function (it) { return it && it.guild && it.guild.members && it.guild.members.me; });
+    return r ? r.guild.members.me.roles.highest.position : null;
+})();
+%>
+<% if (typeof empty !== 'undefined' && empty !== null && empty !== false) { %><option value=""><%= empty %></option><% } %>
+<% _items.forEach(function (it) {
+    const _on = _sel.includes(String(it.id));
+    const _above = _botTop !== null && typeof it.position === 'number' && it.position >= _botTop;
+    const _hex = _kind === 'role' && it.hexColor && it.hexColor !== '#000000' ? it.hexColor : '';
+%><option value="<%= it.id %>"<% if (_kind) { %> data-kind="<%= _kind %>"<% } %><% if (_hex) { %> data-color="<%= _hex %>"<% } %><% if (_on) { %> selected<% } %><% if (_above && !_on) { %> disabled<% } %>><%= _prefix %><%= it.name %><% if (_above) { %> (above the bot)<% } %></option>
+<% }); %>

@@ -1,8 +1,9 @@
 import { EmbedBuilder } from 'discord.js';
 import axios from 'axios';
+import { themeColor } from '../../core/guild-theme.js';
 
 const JUDGE0_API = 'https://judge0-ce.p.rapidapi.com';
-const RAPID_API_KEY = '***REMOVED***';
+const RAPID_API_KEY = process.env.RAPIDAPI_KEY || '';
 const RAPID_API_HOST = 'judge0-ce.p.rapidapi.com';
 
 const LANGUAGES = {
@@ -109,7 +110,7 @@ export async function handleRun(interaction) {
 
 export async function handleLanguages(interaction) {
   const embed = new EmbedBuilder()
-    .setColor('#5865F2')
+    .setColor(themeColor(interaction.guildId, 'primary'))
     .setTitle('🌐 Supported Programming Languages')
     .setDescription('Execute code in any of these languages using `/tools code run`')
     .addFields(

@@ -1,6 +1,8 @@
 import { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ChannelType } from 'discord.js';
 import pool from '../../utils/db.js';
 import logger from '../../utils/logger.js';
+import { handleVoiceTools, addVoiceToolGroups, voiceToolsAutocomplete } from './voice-tools-handler.js';
+import { logFeatureEvent, userLabel } from '../../core/feature-log.js';
 
 async function getTempChannelContext(interaction) {
   const member = interaction.member;
@@ -26,9 +28,9 @@ function ownerCheck(record, member) {
 }
 
 export default {
-  data: new SlashCommandBuilder()
+  data: addVoiceToolGroups(new SlashCommandBuilder()
     .setName('voice')
-    .setDescription('Controls for your join-to-create voice room.')
+    .setDescription('Voice rooms, the chat reader, and live transcription.')
     .setDMPermission(false)
     .addSubcommand(s => s
       .setName('rename').setDescription('Rename your room.')
@@ -51,9 +53,16 @@ export default {
     .addSubcommand(s => s
       .setName('untrust').setDescription('Revoke trust.')
       .addUserOption(o => o.setName('user').setDescription('Who to untrust.').setRequired(true)))
-    .addSubcommand(s => s.setName('info').setDescription('Show this room\'s state.')),
+    .addSubcommand(s => s.setName('info').setDescription('Show this room\'s state.'))),
+
+  async autocomplete(interaction) {
+    return voiceToolsAutocomplete(interaction);
+  },
 
   async execute(interaction) {
+    // reader / transcribe / privacy groups; the flat subcommands below are temp-room controls.
+    if (await handleVoiceTools(interaction)) return;
+
     const ctx = await getTempChannelContext(interaction);
     if (ctx.error) {
       return interaction.reply({ content: ctx.error, flags: 64 });
@@ -103,6 +112,15 @@ export default {
             return interaction.reply({ content: `${target} isn't in this room.`, flags: 64 });
           }
           await pool.execute('UPDATE temp_voice_channels SET owner_id = ? WHERE channel_id = ?', [target.id, voiceChannel.id]);
+          void logFeatureEvent(() => (interaction.guild), 'temp-channels.transferred', () => ({
+            title: '👑 Temp Channel Owner Changed',
+            fields: [
+              ['Channel', `<#${voiceChannel.id}>`],
+              ['New owner', userLabel(target)],
+              ['Previous owner', userLabel(record.owner_id)],
+              ['How', 'Transferred'],
+            ],
+          }));
           return interaction.reply({ content: `👑 Ownership transferred to ${target}.`, flags: 64 });
         }
 
@@ -115,6 +133,15 @@ export default {
             return interaction.reply({ content: 'You\'re already the owner.', flags: 64 });
           }
           await pool.execute('UPDATE temp_voice_channels SET owner_id = ? WHERE channel_id = ?', [member.id, voiceChannel.id]);
+          void logFeatureEvent(() => (interaction.guild), 'temp-channels.transferred', () => ({
+            title: '👑 Temp Channel Owner Changed',
+            fields: [
+              ['Channel', `<#${voiceChannel.id}>`],
+              ['New owner', userLabel(member)],
+              ['Previous owner', userLabel(record.owner_id)],
+              ['How', 'Claimed — the previous owner had left'],
+            ],
+          }));
           return interaction.reply({ content: `👑 You\'ve claimed the room, ${member}.`, flags: 64 });
         }
 

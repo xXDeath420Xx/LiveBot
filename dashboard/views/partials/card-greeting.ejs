@@ -33,7 +33,7 @@
         <% } %>
         display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 60px 40px;
     }
-    .gc-cover-avatar { width: 100px; height: 100px; border-radius: 50%; border: 4px solid rgba(255,255,255,0.2); margin-bottom: 20px; object-fit: cover; }
+    .gc-cover-avatar { /* theme: fixed (card art: on the card cover, whose colour the creator picks) */ width: 100px; height: 100px; border-radius: 50%; border: 4px solid rgba(255,255,255,0.2); margin-bottom: 20px; object-fit: cover; }
     .gc-cover-title {
         font-size: <%= card.title_font_size || 36 %>px; font-weight: 700; color: <%= card.title_font_color || '#ffffff' %>;
         <% if (card.title_font) { %>font-family: '<%= card.title_font %>', sans-serif;<% } %>
@@ -43,7 +43,7 @@
         font-size: 16px; color: <%= card.subtitle_font_color || 'rgba(255,255,255,0.6)' %>;
         <% if (card.subtitle_font) { %>font-family: '<%= card.subtitle_font %>', sans-serif;<% } %>
     }
-    .gc-cover-badge { margin-top: 20px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 20px; padding: 6px 16px; font-size: 0.8rem; color: rgba(255,255,255,0.7); }
+    .gc-cover-badge { /* theme: fixed (card art: on the card cover, whose colour the creator picks) */ margin-top: 20px; background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2); border-radius: 20px; padding: 6px 16px; font-size: 0.8rem; color: rgba(255,255,255,0.7); }
 
     /* Content pages */
     .gc-content-page {
@@ -78,7 +78,7 @@
         background: <%= card.header_bg_color || '#1a1a2e' %>;
         display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 60px 40px; min-height: 300px;
     }
-    .gc-back-text { color: rgba(255,255,255,0.6); font-size: 14px; line-height: 1.6; }
+    .gc-back-text { /* theme: fixed (card art: on the card cover, whose colour the creator picks) */ color: rgba(255,255,255,0.6); font-size: 14px; line-height: 1.6; }
     .gc-back-logo { height: 32px; opacity: 0.5; margin-top: 16px; }
 
     /* Navigation */
@@ -148,7 +148,14 @@
                     <% } %>
                     <div class="gc-msg-name"><%= sig.signer_username || 'Anonymous' %></div>
                     <div class="gc-msg-text" style="<% if (sig.font_color) { %>color: <%= sig.font_color %>;<% } %><% if (sig.font_family) { %>font-family: '<%= sig.font_family %>', sans-serif;<% } %><% if (sig.font_size) { %>font-size: <%= sig.font_size %>px;<% } %>"><%= sig.message %></div>
-                    <% if (sig.gif_url) { %>
+                    <% if (sig.video && sig.video.embedUrl) { %>
+                    <div class="sig-video" data-embed="<%= sig.video.embedUrl %>" onclick="playVideo(this)" title="Play video">
+                        <% if (sig.video.thumbnailUrl || sig.gif_url) { %>
+                        <img src="<%= sig.video.thumbnailUrl || sig.gif_url %>" alt="" loading="lazy">
+                        <% } %>
+                        <span class="sig-video-play"><i class="fas fa-play"></i></span>
+                    </div>
+                    <% } else if (sig.gif_url) { %>
                     <img src="<%= sig.gif_url %>" class="gc-msg-gif" alt="" loading="lazy">
                     <% } %>
                     <% if (sig.audio_url) { %>
@@ -160,14 +167,15 @@
                             <i class="<%= isLiked || hasLikes ? 'fas' : 'far' %> fa-heart"></i> <span><%= sig.likes || 0 %></span>
                         </button>
                         <button type="button" onclick="toggleReply(<%= sig.id %>)"><i class="far fa-comment"></i></button>
-                        <% const canMove = user && (user.id === sig.signer_user_id || user.id === card.user_id || user.id === card.creator_user_id); %>
+                        <% const isMod = typeof canModerate !== 'undefined' && canModerate; %>
+                        <% const canMove = user && (user.id === sig.signer_user_id || isMod); %>
                         <% if (canMove && !card.is_posted) { %>
                         <button type="button" onclick="moveSig(<%= sig.id %>, <%= (sig.page_number || 1) - 1 %>)" title="Move to previous page" <%= (sig.page_number || 1) <= 1 ? 'disabled style="opacity:0.3;"' : '' %>><i class="fas fa-chevron-left"></i><i class="fas fa-chevron-left"></i></button>
                         <button type="button" onclick="moveSig(<%= sig.id %>, <%= (sig.page_number || 1) + 1 %>)" title="Move to next page"><i class="fas fa-chevron-right"></i><i class="fas fa-chevron-right"></i></button>
                         <% } %>
-                        <% const canDelete = user && (user.id === sig.signer_user_id || user.id === card.user_id || user.id === card.creator_user_id); %>
+                        <% const canDelete = user && (user.id === sig.signer_user_id || isMod); %>
                         <% if (canDelete) { %>
-                        <button type="button" onclick="deleteSig(<%= sig.id %>)" title="Delete"><i class="far fa-trash-alt"></i></button>
+                        <button type="button" onclick="deleteSig(<%= sig.id %>, false)" title="Delete"><i class="far fa-trash-alt"></i></button>
                         <% } %>
                     </div>
                     <!-- Replies -->
@@ -206,7 +214,7 @@
             <% if (card.custom_logo_url) { %>
             <img src="<%= card.custom_logo_url %>" class="gc-back-logo" alt="">
             <% } %>
-            <div style="margin-top: 20px; font-size: 0.7rem; color: rgba(255,255,255,0.25);">Powered by CertiFried</div>
+            <div style="margin-top: 20px; font-size: 0.7rem; color: rgba(255,255,255,0.25); /* theme: fixed (card art) */">Powered by CertiFried</div>
         </div>
     </div>
 

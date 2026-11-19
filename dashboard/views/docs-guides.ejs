@@ -1,0 +1,173 @@
+<%#
+  /docs/guides and /docs/guides/:slug: the guides index and every guide, one template driven by the data in
+  dashboard/content/guides/ (route in dashboard/server.js). Screenshots come from
+  dashboard/public/img/guides/manifest.json (scripts/site-shots/run.mjs).
+  Locals: guide (null on the index), guides, areas, guideImage(id), inline(text), user, clientId.
+%>
+<%
+  const _guides = locals.guides || [];
+  const _areas = locals.areas || [];
+  const _img = typeof locals.guideImage === 'function' ? locals.guideImage : () => null;
+  const _inline = typeof locals.inline === 'function' ? locals.inline : (t) => String(t);
+  const _g = locals.guide || null;
+  const _bySlug = new Map(_guides.map((x) => [x.slug, x]));
+  const _title = _g ? `${_g.title} · Guides · CertiFried` : 'Guides · CertiFried';
+  const _desc = _g ? _g.summary : 'Step-by-step guides for setting up CertiFried on a Discord server: alerts, moderation, levels, tickets, music and more.';
+  const _path = _g ? `/docs/guides/${_g.slug}` : '/docs/guides';
+  // An <img> with its real size, so the page never jumps while it loads.
+  const _pic = (id, { eager = false, sizes = '(max-width: 860px) 100vw, 780px', cls = '' } = {}) => {
+      const im = _img(id);
+      if (!im) return '';
+      return `<img class="${cls}" src="${im.src}" alt="${String(im.alt).replace(/"/g, '&quot;')}" width="${im.width}" height="${im.height}" sizes="${sizes}" ${eager ? 'fetchpriority="high"' : 'loading="lazy"'} decoding="async">`;
+  };
+%>
+<!DOCTYPE html>
+<html lang="en" data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>">
+<head>
+<%- include('partials/site-head', { title: _title, description: _desc, path: _path }) %>
+    <style>
+        .gd-crumbs { margin: 0 0 var(--cf-3); font-size: var(--cf-text-sm); color: var(--cf-text-3); }
+        .gd-crumbs a { color: var(--cf-text-2); text-decoration: none; }
+        .gd-crumbs a:hover { color: var(--cf-text); text-decoration: underline; }
+        .gd-crumbs span[aria-hidden] { margin: 0 6px; }
+        .gd-area { margin-top: var(--cf-10); }
+        .gd-area:first-of-type { margin-top: 0; }
+        .gd-area h2 { margin: 0 0 var(--cf-4); font-size: var(--cf-text-xl); font-weight: 600; letter-spacing: -0.015em; color: var(--cf-text); }
+        .gd-cards { display: grid; gap: var(--cf-4); grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); margin: 0; padding: 0; list-style: none; }
+        .gd-cards li { margin: 0; min-width: 0; }
+        .gd-card { display: flex; flex-direction: column; height: 100%; overflow: hidden; background: var(--cf-surface); border: 1px solid var(--cf-border); border-radius: var(--cf-radius-lg); color: var(--cf-text); text-decoration: none; transition: border-color var(--cf-fast) var(--cf-ease); }
+        .gd-card:hover { border-color: var(--cf-border-strong); color: var(--cf-text); }
+        .gd-card:focus-visible { outline: 2px solid var(--cf-accent); outline-offset: 2px; }
+        .gd-thumb { display: block; aspect-ratio: 16 / 9; background: var(--cf-shot-bg); border-bottom: 1px solid var(--cf-border); overflow: hidden; }
+        .gd-thumb img { display: block; width: 100%; height: 100%; object-fit: cover; object-position: top left; }
+        .gd-card-body { display: flex; flex-direction: column; gap: 6px; padding: var(--cf-4); }
+        .gd-card h3 { margin: 0; font-size: var(--cf-text-md); font-weight: 600; }
+        .gd-card p { margin: 0; font-size: var(--cf-text-sm); line-height: 1.55; color: var(--cf-text-2); }
+
+        .gd-main { max-width: 860px; }
+        .gd-figure { margin: 0 0 var(--cf-6); }
+        .gd-figure a { display: block; border-radius: var(--cf-radius-lg); }
+        .gd-figure a:focus-visible { outline: 2px solid var(--cf-accent); outline-offset: 3px; }
+        .gd-figure img { display: block; width: 100%; height: auto; border: 1px solid var(--cf-border); border-radius: var(--cf-radius-lg); background: var(--cf-shot-bg); }
+        .gd-figure figcaption { margin-top: var(--cf-2); font-size: var(--cf-text-sm); color: var(--cf-text-3); }
+        .gd-steps { list-style: none; counter-reset: gd; margin: 0; padding: 0; }
+        .gd-steps > li { counter-increment: gd; position: relative; margin: 0; padding: 0 0 var(--cf-6) 44px; }
+        .gd-steps > li::before {
+            content: counter(gd); position: absolute; left: 0; top: 2px; width: 28px; height: 28px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center; font-size: var(--cf-text-sm); font-weight: 600;
+            background: var(--cf-surface-2); border: 1px solid var(--cf-border-strong); color: var(--cf-text);
+        }
+        .gd-steps > li::after { content: ''; position: absolute; left: 14px; top: 36px; bottom: 8px; width: 1px; background: var(--cf-border); }
+        .gd-steps > li:last-child::after { display: none; }
+        .cfs-prose .gd-steps h3 { margin: 0 0 var(--cf-2); font-size: var(--cf-text-lg); }
+        .gd-cmd { display: flex; align-items: flex-start; gap: var(--cf-2); margin: 0 0 var(--cf-4); padding: 10px 12px; background: var(--cf-inset, var(--cf-surface-2)); border: 1px solid var(--cf-border); border-radius: var(--cf-radius); }
+        .gd-cmd code { flex: 1; min-width: 0; padding: 0; border: 0; background: none; white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--cf-text-sm); }
+        .gd-copy { flex: none; height: 26px; padding: 0 10px; font-size: var(--cf-text-xs); color: var(--cf-text-2); background: transparent; border: 1px solid var(--cf-border-strong); border-radius: var(--cf-radius-sm); cursor: pointer; }
+        .gd-copy:hover { color: var(--cf-text); background: var(--cf-surface-2); }
+        .gd-copy:focus-visible { outline: 2px solid var(--cf-accent); outline-offset: 2px; }
+        .gd-steps .gd-figure { margin: var(--cf-2) 0 0; }
+        .gd-related { display: grid; gap: var(--cf-3); grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); margin: 0; padding: 0; list-style: none; }
+        .gd-related li { margin: 0; }
+        .gd-related a { display: block; height: 100%; padding: var(--cf-3) var(--cf-4); background: var(--cf-surface); border: 1px solid var(--cf-border); border-radius: var(--cf-radius-lg); text-decoration: none; }
+        .gd-related a:hover { border-color: var(--cf-border-strong); }
+        .gd-related strong { display: block; color: var(--cf-text); }
+        .gd-related span { display: block; margin-top: 2px; font-size: var(--cf-text-sm); color: var(--cf-text-2); line-height: 1.5; }
+        .gd-foot { margin-top: var(--cf-10); padding-top: var(--cf-5); border-top: 1px solid var(--cf-border); font-size: var(--cf-text-sm); color: var(--cf-text-3); }
+        @media (max-width: 600px) { .gd-steps > li { padding-left: 38px; } }
+    </style>
+</head>
+<body class="cfs-body">
+<%- include('partials/site-header', { active: 'docs', user: locals.user || null, returnTo: _path }) %>
+<% if (!_g) { %>
+    <main id="main-content" tabindex="-1" class="cfs-main cfs-main--wide">
+        <nav class="gd-crumbs" aria-label="Breadcrumb"><a href="/docs">Docs</a><span aria-hidden="true">/</span><span aria-current="page">Guides</span></nav>
+        <div class="cfs-pagehead">
+            <h1>Guides</h1>
+            <p class="cfs-lede">Step-by-step guides for the things most servers set up first. Each one shows the result in Discord, then the exact command or dashboard setting for every step.</p>
+        </div>
+        <% _areas.forEach(function (area) { const list = _guides.filter((x) => x.area === area.id); if (!list.length) return; %>
+        <section class="gd-area" aria-labelledby="area-<%= area.id %>">
+            <h2 id="area-<%= area.id %>"><%= area.title %></h2>
+            <ul class="gd-cards">
+                <% list.forEach(function (x) { const _full = _img(x.result && x.result.image); const im = _full && (_full.thumb || _full); %>
+                <li>
+                    <a class="gd-card" href="/docs/guides/<%= x.slug %>">
+                        <% if (im) { %><div class="gd-thumb"><img src="<%= im.src %>" alt="" width="<%= im.width %>" height="<%= im.height %>" loading="lazy" decoding="async"></div><% } %>
+                        <div class="gd-card-body"><h3><%= x.title %></h3><p><%= x.summary %></p></div>
+                    </a>
+                </li>
+                <% }); %>
+            </ul>
+        </section>
+        <% }); %>
+        <p class="gd-foot">Looking for a command? The <a href="/commands">command list</a> has every command with its options. The <a href="/docs">documentation overview</a> covers every feature area.</p>
+    </main>
+<% } else { %>
+    <main id="main-content" tabindex="-1" class="cfs-main gd-main">
+        <nav class="gd-crumbs" aria-label="Breadcrumb"><a href="/docs">Docs</a><span aria-hidden="true">/</span><a href="/docs/guides">Guides</a><span aria-hidden="true">/</span><span aria-current="page"><%= _g.title %></span></nav>
+        <div class="cfs-pagehead">
+            <h1><%= _g.title %></h1>
+            <p class="cfs-lede"><%- _inline(_g.summary) %></p>
+        </div>
+        <div class="cfs-prose">
+            <% const _res = _g.result && _img(_g.result.image); if (_res) { %>
+            <h2 id="result">What you'll get</h2>
+            <figure class="gd-figure">
+                <a href="<%= _res.src %>"><%- _pic(_g.result.image, { eager: true }) %></a>
+                <% if (_g.result.caption) { %><figcaption><%- _inline(_g.result.caption) %></figcaption><% } %>
+            </figure>
+            <% } %>
+
+            <% if (_g.before && _g.before.length) { %>
+            <h2 id="before">Before you start</h2>
+            <% _g.before.forEach(function (t) { %><p><%- _inline(t) %></p><% }); %>
+            <% } %>
+
+            <h2 id="steps">Steps</h2>
+            <ol class="gd-steps">
+                <% _g.steps.forEach(function (s, i) { %>
+                <li>
+                    <h3 id="step-<%= i + 1 %>"><%- _inline(s.title) %></h3>
+                    <% (s.text || []).forEach(function (t) { %><p><%- _inline(t) %></p><% }); %>
+                    <% if (s.command) { %><div class="gd-cmd"><code><%= s.command %></code><button type="button" class="gd-copy" data-copy="<%= s.command %>" aria-label="Copy the command <%= s.command %>">Copy</button></div><% } %>
+                    <% const _si = s.image && _img(s.image); if (_si) { %>
+                    <figure class="gd-figure"><a href="<%= _si.src %>"><%- _pic(s.image) %></a></figure>
+                    <% } %>
+                </li>
+                <% }); %>
+            </ol>
+
+            <% if (_g.notes && _g.notes.length) { %>
+            <h2 id="good-to-know">Good to know</h2>
+            <ul>
+                <% _g.notes.forEach(function (t) { %><li><%- _inline(t) %></li><% }); %>
+            </ul>
+            <% } %>
+
+            <% const _rel = (_g.related || []).map((r) => _bySlug.get(r)).filter(Boolean); if (_rel.length) { %>
+            <h2 id="related">Related guides</h2>
+            <ul class="gd-related">
+                <% _rel.forEach(function (r) { %><li><a href="/docs/guides/<%= r.slug %>"><strong><%= r.title %></strong><span><%= r.summary %></span></a></li><% }); %>
+            </ul>
+            <% } %>
+        </div>
+        <p class="gd-foot"><a href="/docs/guides">All guides</a> · <a href="/commands">Command list</a> · <a href="/discord" rel="noopener">Ask in the support server</a> · <a href="mailto:support@certifriedmultitool.com">support@certifriedmultitool.com</a></p>
+    </main>
+<% } %>
+<%- include('partials/site-footer') %>
+<script>
+(function () {
+    // Copy buttons on commands. Without clipboard access the command stays selectable as text.
+    document.querySelectorAll('.gd-copy').forEach(function (b) {
+        if (!navigator.clipboard) { b.hidden = true; return; }
+        b.addEventListener('click', function () {
+            navigator.clipboard.writeText(b.getAttribute('data-copy') || '').then(function () {
+                b.textContent = 'Copied';
+                setTimeout(function () { b.textContent = 'Copy'; }, 1500);
+            }, function () { b.textContent = 'Select and copy'; });
+        });
+    });
+})();
+</script>
+</body>
+</html>

@@ -167,7 +167,7 @@ router.post('/manage/:guildId/achievements/config', async (req, res) => {
          enabled = VALUES(enabled),
          announcement_channel_id = VALUES(announcement_channel_id),
          updated_at = NOW()`,
-      [guildId, enabled ? 1 : 0, announcement_channel_id]
+      [guildId, enabled ? 1 : 0, /^\d{15,25}$/.test(String(announcement_channel_id || '')) ? String(announcement_channel_id) : null]
     );
 
     res.json({ success: true });

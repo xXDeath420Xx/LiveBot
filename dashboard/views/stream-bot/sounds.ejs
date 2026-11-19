@@ -1,0 +1,70 @@
+<%#
+  GET /stream/bot/sounds (Phase 2). Locals: sounds [{ id, name, size, mime, sha256, uploadedAt }], limits { fileMb, count, totalMb },
+  usedBytes. Uploads and deletes go through /js/stream-bot.js (POST and DELETE /stream/bot/api/sounds). CertiFried Studio
+  downloads these with its device token and plays them for the "Play a sound" action.
+%>
+<%- include('_head', { pageTitle: 'Sounds', active: 'sounds' }) %>
+<%
+  const _when = (iso) => iso ? new Date(iso).toISOString().slice(0, 16).replace('T', ' ') + ' UTC' : '';
+  const _size = (n) => n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB';
+%>
+<div class="cf-page-head">
+    <div>
+        <h1 class="cf-page-title">Sounds</h1>
+        <p class="cf-page-sub">Sounds you upload here are copied to CertiFried Studio, which plays them for the Play a sound action. Use the sound's name in the action. Studio can also play files from its own sounds folder on your PC.</p>
+    </div>
+</div>
+<%- include('_tabs', { active: 'sounds' }) %>
+
+<section class="cf-section" aria-labelledby="sb-snd-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sb-snd-title">Your sounds</h2>
+        <p class="cf-section-desc"><%= sounds.length %> of <%= limits.count %>, <%= _size(usedBytes || 0) %> of <%= limits.totalMb %> MB used.</p></div>
+        <div class="cf-section-actions"><span class="cf-status-line" id="sb-snd-status" role="status" aria-live="polite"></span></div></header>
+    <div class="cf-rows">
+        <% if (!sounds.length) { %>
+        <div class="cf-state cf-state--compact"><p class="cf-state-title">No sounds yet.</p></div>
+        <% } else { %>
+        <div class="cf-list">
+            <% sounds.forEach((s) => { %>
+            <div class="cf-list-item cf-list-item--multi">
+                <div class="cf-list-main">
+                    <p class="cf-list-title"><%= s.name %></p>
+                    <p class="cf-list-meta">
+                        <span><%= _size(s.size) %></span>
+                        <span><%= String(s.mime || '').replace('audio/', '').replace('mpeg', 'mp3').replace('mp4', 'm4a').toUpperCase() %></span>
+                        <% if (s.uploadedAt) { %><span>Added <time datetime="<%= s.uploadedAt %>"><%= _when(s.uploadedAt) %></time></span><% } %>
+                    </p>
+                </div>
+                <div class="cf-list-actions">
+                    <button type="button" class="btn btn-secondary btn-sm" data-play-sound="<%= s.id %>" data-name="<%= s.name %>">Play here</button>
+                    <button type="button" class="btn btn-secondary btn-sm" data-delete-sound="<%= s.id %>" data-name="<%= s.name %>">Delete</button>
+                </div>
+            </div>
+            <% }) %>
+        </div>
+        <% } %>
+    </div>
+</section>
+
+<section class="cf-section" aria-labelledby="sb-up-title">
+    <header class="cf-section-head"><div><h2 class="cf-section-title" id="sb-up-title">Add a sound</h2>
+        <p class="cf-section-desc">MP3, WAV, OGG, M4A or WebM audio, up to <%= limits.fileMb %> MB each. A connected Studio copies a new sound straight away; one that is offline copies it when it next connects.</p></div></header>
+    <div class="cf-rows">
+        <form id="sb-snd-form" novalidate>
+            <div class="cf-row">
+                <div class="cf-row-text"><label class="cf-row-label" for="sb-snd-file">Audio file</label></div>
+                <div class="cf-row-control"><input type="file" id="sb-snd-file" accept="audio/mpeg,audio/wav,audio/x-wav,audio/ogg,audio/mp4,audio/x-m4a,audio/webm,.mp3,.wav,.ogg,.m4a,.webm"></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text"><label class="cf-row-label" for="sb-snd-name">Name</label><p class="cf-row-desc">What you type in the action, such as airhorn. The file name is used when this is empty.</p></div>
+                <div class="cf-row-control"><input type="text" id="sb-snd-name" maxlength="80" autocomplete="off"></div>
+            </div>
+            <div class="cf-section-foot">
+                <span class="cf-status-line" id="sb-up-status" role="status" aria-live="polite"></span>
+                <button type="submit" class="btn btn-primary btn-sm">Upload</button>
+            </div>
+        </form>
+    </div>
+</section>
+
+<%- include('_foot') %>

@@ -1,6 +1,7 @@
 import { EmbedBuilder } from 'discord.js';
 import pool from '../../utils/db.js';
 import axios from 'axios';
+import { themeColor } from '../../core/guild-theme.js';
 
 export async function handleMinecraft(interaction) {
     const serverIp = interaction.options.getString('ip');
@@ -15,7 +16,7 @@ export async function handleMinecraft(interaction) {
         }
 
         const embed = new EmbedBuilder()
-            .setColor('#57F287')
+            .setColor(themeColor(interaction.guildId, 'success'))
             .setTitle(`⛏️ ${data.hostname || serverIp}`)
             .addFields(
                 { name: '🌐 IP', value: serverIp, inline: true },
@@ -78,7 +79,7 @@ export async function handleListServers(interaction) {
         }
 
         const embed = new EmbedBuilder()
-            .setColor('#5865F2')
+            .setColor(themeColor(interaction.guildId, 'primary'))
             .setTitle('🖥️ Tracked Game Servers')
             .setTimestamp();
 

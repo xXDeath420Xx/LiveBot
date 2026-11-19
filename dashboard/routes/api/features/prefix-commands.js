@@ -73,25 +73,35 @@ router.put('/config', async (req, res) => {
             prefixList = cleaned;
         }
 
+        // Only the settings the request sends are written. The Prefixes and aliases page sends the
+        // prefixes and the three switches; writing every column reset the clean-up settings saved
+        // on the General settings page (delete trigger, self-destruct delay, private categories).
+        const cols = {};
+        if (prefix !== undefined) cols.prefix = prefix || '!';
+        if (prefixList) cols.prefixes = prefixList.length ? JSON.stringify(prefixList) : null;
+        if (allow_mention !== undefined) cols.allow_mention = allow_mention === false ? 0 : 1;
+        if (universal_commands !== undefined) cols.universal_commands = universal_commands === false ? 0 : 1;
+        if (enabled !== undefined) cols.enabled = enabled ? 1 : 0;
+        if (delete_trigger !== undefined) cols.delete_trigger = delete_trigger ? 1 : 0;
+        if (cleanup_delay !== undefined) {
+            const seconds = Number(cleanup_delay);
+            if (!Number.isInteger(seconds) || seconds < 0 || seconds > 300) {
+                return res.status(400).json({ error: 'The self-destruct delay must be 0 to 300 seconds.' });
+            }
+            cols.cleanup_delay = seconds;
+        }
+        if (private_categories !== undefined) {
+            const cats = Array.isArray(private_categories) ? private_categories.map(String).filter(Boolean) : [];
+            cols.private_categories = cats.length ? JSON.stringify(cats) : null;
+        }
+        const names = Object.keys(cols);
+        if (!names.length) return res.status(400).json({ error: 'Nothing to save.' });
+
         await pool.execute(
-            `INSERT INTO prefix_command_config
-               (guild_id, prefix, prefixes, allow_mention, universal_commands, enabled, delete_trigger, cleanup_delay, private_categories)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-             ON DUPLICATE KEY UPDATE prefix = VALUES(prefix), prefixes = VALUES(prefixes),
-             allow_mention = VALUES(allow_mention), universal_commands = VALUES(universal_commands),
-             enabled = VALUES(enabled), delete_trigger = VALUES(delete_trigger),
-             cleanup_delay = VALUES(cleanup_delay), private_categories = VALUES(private_categories)`,
-            [
-                guildId,
-                prefix || '!',
-                prefixList ? JSON.stringify(prefixList) : null,
-                allow_mention === false ? 0 : 1,
-                universal_commands === false ? 0 : 1,
-                enabled ? 1 : 0,
-                delete_trigger ? 1 : 0,
-                cleanup_delay || 0,
-                private_categories ? JSON.stringify(private_categories) : null
-            ]
+            `INSERT INTO prefix_command_config (guild_id, ${names.join(', ')})
+             VALUES (?, ${names.map(() => '?').join(', ')})
+             ON DUPLICATE KEY UPDATE ${names.map((n) => `${n} = VALUES(${n})`).join(', ')}`,
+            [guildId, ...names.map((n) => cols[n])]
         );
 
         invalidateGuildCache(guildId);

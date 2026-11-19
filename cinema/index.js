@@ -4,8 +4,6 @@
 // idle/health watchdog. Loads NO bot token — only its own cinema/.env.
 
 import dotenv from 'dotenv';
-// Load THIS service's own .env (cinema/.env) regardless of the process CWD —
-// it holds CINEMA_USER_TOKEN, which the root .env does not.
 dotenv.config({ path: new URL('.env', import.meta.url) });
 import express from 'express';
 import { timingSafeEqual } from 'node:crypto';
@@ -14,18 +12,14 @@ import { Client } from 'discord.js-selfbot-v13';
 import pool from '../utils/db.js';
 import { CinemaStreamer } from './streamer.js';
 
-// @dank074/discord-video-stream's voice/media transport uses the GLOBAL WebSocket,
-// which only became a Node global in v22. We run on Node 20, so polyfill it from
-// the already-present `ws` package. Must be set before any Go Live connection.
 globalThis.WebSocket ??= WebSocket;
 
 const PORT = Number(process.env.CINEMA_PORT || 8099);
-// Fail closed: an empty/absent secret would let any loopback request through.
 const SECRET = process.env.CINEMA_API_SECRET || '';
 if (!SECRET) { console.error('[cinema] CINEMA_API_SECRET must be set — refusing to start'); process.exit(1); }
 const SECRET_BUF = Buffer.from(SECRET);
 const IDLE_MIN = Number(process.env.CINEMA_IDLE_TIMEOUT_MIN || 10);
-const ENC = { width: 1280, height: 720, fps: 30, bitrateKbps: 2500 }; // free-tier 720p
+const ENC = { width: 1280, height: 720, fps: 30, bitrateKbps: 2500 };
 
 const client = new Client();
 const streamer = new CinemaStreamer(client, ENC);
@@ -34,19 +28,25 @@ const streamer = new CinemaStreamer(client, ENC);
 async function writeState() {
   const s = streamer.state();
   if (!s.busy) { await pool.execute('DELETE FROM cinema_state WHERE id = 1'); return; }
+  // NOTE: the UPDATE clause MUST refresh item_id/item_name (not just status/position)
+  // — otherwise a seamless auto-advance to the next episode leaves the DB (and the
+  // bot's Now-Playing panel) showing the previous episode.
   await pool.execute(
     `INSERT INTO cinema_state (id, guild_id, channel_id, voice_channel_id, item_id, item_name,
-        started_by, audio_index, sub_index, status, position_secs)
-     VALUES (1,?,?,?,?,?,?,?,?,?,?)
-     ON DUPLICATE KEY UPDATE status=VALUES(status), position_secs=VALUES(position_secs)`,
+        started_by, audio_index, sub_index, status, position_secs, queue_remaining, up_next)
+     VALUES (1,?,?,?,?,?,?,?,?,?,?,?,?)
+     ON DUPLICATE KEY UPDATE
+        item_id=VALUES(item_id), item_name=VALUES(item_name),
+        status=VALUES(status), position_secs=VALUES(position_secs),
+        queue_remaining=VALUES(queue_remaining), up_next=VALUES(up_next)`,
     [s.session.guildId, s.session.channelId ?? '', s.session.voiceChannelId,
      s.session.itemId, s.session.itemName, s.session.startedBy ?? '',
-     s.session.audioIndex ?? null, s.session.subIndex ?? null, s.status, s.positionSecs]
+     s.session.audioIndex ?? null, s.session.subIndex ?? null, s.status, s.positionSecs,
+     s.queueRemaining ?? 0, s.upNext?.itemName ?? null]
   );
 }
 
 async function reconcileOnBoot() {
-  // The service just started => nothing is actually streaming. Clear any orphaned lock.
   if (!streamer.isBusy()) {
     await pool.execute('DELETE FROM cinema_state WHERE id = 1').catch(() => {});
     console.log('[cinema] cleared orphaned cinema_state lock on boot');
@@ -54,6 +54,11 @@ async function reconcileOnBoot() {
 }
 
 streamer.onEnd = async () => { await writeState().catch(() => {}); };
+streamer.onAdvance = async () => {
+  await writeState().catch(() => {});
+  const s = streamer.state();
+  console.log(`[cinema] auto-advanced -> ${s.session?.itemName} (${s.queueRemaining} left in queue)`);
+};
 streamer.onError = (e) => console.error('[cinema] stream error:', e?.message || e);
 
 // --- loopback control API ---
@@ -78,10 +83,20 @@ app.post('/play', async (req, res) => {
       guildId: b.guildId, voiceChannelId: b.voiceChannelId,
       itemId: b.itemId, itemName: b.itemName,
       audioIndex: b.audioIndex ?? null, subIndex: b.subIndex ?? null,
+      queue: b.queue, // optional ordered playlist [{itemId,itemName}]
     });
     Object.assign(streamer.session, { channelId: b.channelId, startedBy: b.startedBy });
     await writeState();
-    res.json({ ok: true });
+    res.json({ ok: true, queueLength: streamer.state().queueLength });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Skip to the next queued item. Returns { done:true } if nothing was queued after.
+app.post('/next', async (_req, res) => {
+  try {
+    const r = await streamer.playNext();
+    await writeState();
+    res.json({ ok: true, ...r });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -99,20 +114,15 @@ app.post('/seek', async (req, res) => {
 
 app.get('/status', (_req, res) => res.json(streamer.state()));
 
-// Ops helper: which guilds is the Cinema account in, and their voice channels?
-// Used during setup to confirm the account can actually join a target VC.
 app.get('/guilds', (_req, res) => {
   const guilds = [...client.guilds.cache.values()].map((g) => ({
-    id: g.id,
-    name: g.name,
+    id: g.id, name: g.name,
     voiceChannels: [...g.channels.cache.values()]
-      .filter((c) => c.type === 2 /* GuildVoice */)
-      .map((c) => ({ id: c.id, name: c.name })),
+      .filter((c) => c.type === 2).map((c) => ({ id: c.id, name: c.name })),
   }));
   res.json({ count: guilds.length, guilds });
 });
 
-// Ops helper: have the Cinema account accept a server invite (setup only).
 app.post('/join', async (req, res) => {
   try {
     const invite = req.body?.invite;
@@ -138,7 +148,6 @@ setInterval(async () => {
   } catch { /* ignore transient fetch errors */ }
 }, 15_000);
 
-// --- boot ---
 client.on('ready', () => console.log(`[cinema] selfbot ready as ${client.user.tag}`));
 client.login(process.env.CINEMA_USER_TOKEN)
   .then(async () => {
@@ -146,5 +155,10 @@ client.login(process.env.CINEMA_USER_TOKEN)
     app.listen(PORT, '127.0.0.1', () => console.log(`[cinema] control API on 127.0.0.1:${PORT}`));
   })
   .catch((e) => { console.error('[cinema] login failed:', e.message); process.exit(1); });
+
+// Safety net: a throw from the streaming library (e.g. DAVE/voice protocol edge
+// cases) must never silently wedge the service. Log and keep serving.
+process.on('uncaughtException', (e) => console.error('[cinema] uncaughtException:', e?.stack || e));
+process.on('unhandledRejection', (e) => console.error('[cinema] unhandledRejection:', e?.stack || e));
 
 process.on('SIGTERM', async () => { try { await streamer.stop(); } catch {} process.exit(0); });

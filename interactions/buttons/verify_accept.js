@@ -1,55 +1,71 @@
-import pool from '../../utils/db.js';
+/*
+ * Verification buttons. The logic lives in core/verification.js; these are the registry's entry points.
+ *
+ *   verify_accept        the panel's button ("I agree" or "Verify me", by mode)
+ *   verify_member        the same, on panels posted by the old `/admin verification setup`
+ *   vcap:<guild>:<key>   the CAPTCHA keypad (digits, back, clear, submit, type it, new image)
+ *   vcapm:<guild>        the "type it" modal
+ *   vwiz_ok:<token> / vwiz_no:<token>   `/systems verification setup` preview: apply / cancel
+ */
+import { EmbedBuilder } from 'discord.js';
 import logger from '../../utils/logger.js';
+import {
+    handleVerifyButton, handleKeypad, handleAnswerModal, wizardApply, wizardProgress, VerificationError,
+} from '../../core/verification.js';
+import { takeWizardPreview, peekWizardPreview, wizardResultEmbed } from '../../commands/admin/systems-verify-handler.js';
+
+const EPHEMERAL = { flags: 64 };
 
 export async function handleVerifyAccept(interaction) {
-    try {
-        const guildId = interaction.guild?.id;
-        if (!guildId) return;
+    return handleVerifyButton(interaction);
+}
 
-        const [rows] = await pool.execute(
-            'SELECT verified_role_id, unverified_role_id, enabled FROM verify_config WHERE guild_id = ?',
-            [guildId]
-        );
-        if (!rows.length || !rows[0].enabled) {
-            return interaction.reply({ content: 'Verification is not configured for this server.', ephemeral: true });
-        }
+export async function handleVerifyKeypad(interaction) {
+    return handleKeypad(interaction);
+}
 
-        const { verified_role_id, unverified_role_id } = rows[0];
-        const member = interaction.member;
+export async function handleVerifyModal(interaction) {
+    return handleAnswerModal(interaction);
+}
 
-        if (verified_role_id && member.roles.cache.has(verified_role_id)) {
-            return interaction.reply({ content: '✅ You are already verified. Welcome!', ephemeral: true });
-        }
-
-        const verifiedRole = interaction.guild.roles.cache.get(verified_role_id);
-        if (!verifiedRole) {
-            logger.error(`[verify_accept] verified_role_id ${verified_role_id} missing in guild ${guildId}`);
-            return interaction.reply({ content: 'Verified role not found — ping a mod.', ephemeral: true });
-        }
-
-        const me = await interaction.guild.members.fetchMe();
-        if (me.roles.highest.position <= verifiedRole.position) {
-            logger.error(`[verify_accept] bot role (${me.roles.highest.position}) not above verified role (${verifiedRole.position}) in guild ${guildId}`);
-            return interaction.reply({ content: 'Bot hierarchy is misconfigured — ping a mod.', ephemeral: true });
-        }
-
-        try {
-            await member.roles.add(verifiedRole, 'Verification: user accepted the rules');
-            if (unverified_role_id && member.roles.cache.has(unverified_role_id)) {
-                await member.roles.remove(unverified_role_id, 'Verification: cleanup').catch(() => {});
-            }
-        } catch (err) {
-            logger.error(`[verify_accept] role toggle failed for ${member.id} in ${guildId}: ${err.message}`);
-            return interaction.reply({ content: 'Could not grant Verified — the bot is missing Manage Roles, or its role sits below Verified. Ping a mod.', ephemeral: true });
-        }
-
-        await interaction.reply({ content: '✅ Verified. Enjoy the server!', ephemeral: true });
-    } catch (err) {
-        logger.error('[verify_accept] handler error', { error: err.message, stack: err.stack });
-        if (!interaction.replied) {
-            await interaction.reply({ content: 'Verification hit an error — ping a mod.', ephemeral: true }).catch(() => {});
-        }
+/** `vwiz_ok:<token>` — run the previewed setup. */
+export async function handleVerifyWizardConfirm(interaction) {
+    const token = interaction.customId.split(':')[1];
+    const entry = peekWizardPreview(token);
+    if (!entry || entry.guildId !== interaction.guildId) {
+        return interaction.update({ content: 'This preview has expired. Run `/systems verification setup` again.', embeds: [], components: [] });
     }
+    if (entry.actorId !== interaction.user.id) {
+        return interaction.reply({ content: 'Only the person who ran the setup can confirm it.', ...EPHEMERAL });
+    }
+    takeWizardPreview(token);
+    await interaction.update({ content: 'Setting verification up…', embeds: [], components: [] });
+    try {
+        await wizardApply(interaction.guild, entry.input, interaction.user);
+        // Wait for the background job (it reports progress for the dashboard; here we just wait).
+        for (let i = 0; i < 390; i++) {           // ~13 minutes: inside the 15-minute interaction token
+            const p = wizardProgress(interaction.guildId);
+            if (!p?.running) break;
+            await new Promise(r => setTimeout(r, 2000));
+        }
+        const p = wizardProgress(interaction.guildId);
+        if (p?.running) return interaction.editReply({ content: 'Still working — check the dashboard Verification page for progress.' });
+        return interaction.editReply({ content: '', embeds: [wizardResultEmbed(p)] });
+    } catch (err) {
+        if (!(err instanceof VerificationError)) logger.error(`[Verification] wizard from command failed: ${err.message}`);
+        return interaction.editReply({ content: '', embeds: [new EmbedBuilder().setColor(0xE74C3C).setTitle('Setup did not run').setDescription(err.message)] });
+    }
+}
+
+/** `vwiz_no:<token>` */
+export async function handleVerifyWizardCancel(interaction) {
+    const token = interaction.customId.split(':')[1];
+    const entry = peekWizardPreview(token);
+    if (entry && entry.actorId !== interaction.user.id) {
+        return interaction.reply({ content: 'Only the person who ran the setup can cancel it.', ...EPHEMERAL });
+    }
+    takeWizardPreview(token);
+    return interaction.update({ content: 'Setup cancelled — nothing was changed.', embeds: [], components: [] });
 }
 
 export default handleVerifyAccept;

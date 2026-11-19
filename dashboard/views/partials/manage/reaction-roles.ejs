@@ -1,560 +1,496 @@
+<%# Reaction roles — panels members use to give themselves roles (buttons, a dropdown or reactions).
+    Create (blank) and delete panels and repost them through the form routes; edit, post, the role
+    mappings and template panels go through /api/guilds/:id/reaction-roles (templates create any
+    missing roles first through /api/guilds/:id/bulk-roles/create). Laid out with the settings-row
+    kit (cf-settings.css); every id, field name, data-* hook and handler is unchanged.
+    Lists, previews and template rows are built with createElement/textContent. %>
+<%
+const rrPanels = reactionRolePanels || [];
+const rrTypeLabel = (t) => t === 'button' ? 'Buttons' : (t === 'select_menu' ? 'Dropdown' : (t === 'reaction' ? 'Reactions' : 'Buttons'));
+const rrTotalRoles = rrPanels.reduce((sum, p) => sum + (p.mappings?.length || 0), 0);
+// Roles the bot cannot hand out: managed by an integration, or at/above the bot's highest role.
+const rrBotTop = (guild && guild.members && guild.members.me && guild.members.me.roles && guild.members.me.roles.highest)
+    ? guild.members.me.roles.highest.position : null;
+const rrBlocked = (r) => !!r.managed || (typeof rrBotTop === 'number' && Number(r.position) >= rrBotTop);
+const rrBotName = (guild && guild.members && guild.members.me && (guild.members.me.displayName || (guild.members.me.user && guild.members.me.user.username))) || 'CertiFried Utility';
+%>
+<style>
+    .rr-panel-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px var(--cf-2); }
+    .rr-panel-meta .rr-sep { color: var(--cf-border-strong); }
+    .rr-inline-form { display: inline-flex; margin: 0; }
+    .rr-toolbar { display: flex; justify-content: flex-end; margin: 0 0 var(--cf-4); }
+
+    /* Role mappings on a panel (drawn by rrRenderMappings) */
+    .rr-mapping-main { display: flex; align-items: center; gap: var(--cf-3); min-width: 0; }
+    .rr-mapping-emoji {
+        flex: none; display: inline-flex; align-items: center; justify-content: center; min-width: 32px; height: 32px; padding: 0 6px;
+        border-radius: var(--cf-radius-sm); background: var(--cf-surface-2); border: 1px solid var(--cf-border); font-size: 1.1rem; line-height: 1;
+    }
+    .rr-mapping-emoji:empty { display: none; }
+    .rr-mapping-role { display: block; font-weight: 500; color: var(--cf-text); overflow-wrap: anywhere; }
+    .rr-mapping-hint { display: block; font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+
+    /* Add a role */
+    .rr-opt { font-weight: 400; color: var(--cf-text-3); }
+    .rr-emoji-field { position: relative; }
+    .rr-emoji-field > input { width: 100%; padding-right: 44px; cursor: pointer; }
+    .emoji-picker-btn {
+        position: absolute; top: 0; right: 0; bottom: 0; width: 40px; display: inline-flex; align-items: center; justify-content: center;
+        border: 0; background: none; color: var(--cf-text-3); cursor: pointer; border-radius: 0 var(--cf-radius) var(--cf-radius) 0;
+    }
+    .emoji-picker-btn:hover { color: var(--cf-text); }
+    .emoji-picker-btn:focus-visible { outline: 2px solid var(--cf-accent); outline-offset: -2px; }
+    .cf-section-foot > .rr-inline-status, .rr-bulk-actions > .rr-inline-status { margin-right: auto; }
+
+    /* Add several at once (an expandable row of the panel) */
+    .rr-bulk-help { margin: 0 0 var(--cf-3); }
+    .rr-bulk-text { width: 100%; font-family: var(--cf-mono); font-size: var(--cf-text-sm); resize: vertical; }
+    .rr-bulk-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: var(--cf-2); margin-top: var(--cf-3); }
+    .rr-bulk-report { margin-top: var(--cf-2); font-size: var(--cf-text-sm); }
+    .rr-bulk-report:empty { display: none; }
+    .rr-bulk-ok { color: var(--cf-text-2); }
+    .rr-bulk-ok strong { color: var(--cf-success); font-weight: 600; }
+    .rr-bulk-errors { margin: var(--cf-2) 0 0; padding-left: 1.1rem; color: var(--cf-danger); }
+
+    /* Create and edit dialogs (Bootstrap modals; labels and hints are the kit's .form-label/.form-text) */
+    .rr-modal-body { display: grid; gap: var(--cf-4); }
+    .rr-modal-body > .cf-notice { margin: 0; }
+    .rr-field { display: flex; flex-direction: column; min-width: 0; }
+    .rr-field > .form-control, .rr-field > .form-select { width: 100%; margin: 0; }
+    .rr-field > input[type=color] { width: 64px; height: 36px; padding: 2px; }
+    .rr-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); gap: var(--cf-4); }
+    .rr-tpl-pick { margin: 2px 0 4px; }
+
+    /* Template rows in the create dialog */
+    .rr-tpl-head { display: flex; align-items: center; justify-content: space-between; gap: var(--cf-2); flex-wrap: wrap; }
+    .rr-tpl-head .form-label { margin: 0; }
+    .rr-tpl-rows { display: grid; gap: var(--cf-2); margin-top: var(--cf-2); }
+    .rr-tpl-row { display: grid; grid-template-columns: 3.5rem minmax(0, 1fr) minmax(0, 1.2fr) auto auto; gap: var(--cf-2); align-items: center; }
+    .rr-tpl-row.no-style { grid-template-columns: 3.5rem minmax(0, 1fr) minmax(0, 1.2fr) auto; }
+    .rr-tpl-row > input, .rr-tpl-row > select { width: 100%; min-width: 0; margin: 0; }
+    .rr-tpl-row .rr-tpl-emoji { text-align: center; }
+    .rr-tpl-swatch { width: 10px; height: 10px; border-radius: 50%; background: var(--rr-swatch, transparent); }
+
+    /* Discord-style preview of the panel message */
+    .rr-pv { min-width: 0; padding: var(--cf-3) var(--cf-4); border: 1px solid var(--cf-border); border-radius: var(--cf-radius); background: var(--cf-surface-2); font-size: var(--cf-text-sm); color: var(--cf-text); line-height: 1.45; overflow-wrap: anywhere; }
+    .rr-pv-msg { display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: var(--cf-3); }
+    .rr-pv-avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--cf-border-strong); }
+    .rr-pv-author { display: flex; align-items: center; gap: 6px; font-weight: 600; }
+    .rr-pv-app { padding: 0 4px; border-radius: 3px; font-size: 10px; font-weight: 600; line-height: 15px; color: var(--cf-on-accent); background: var(--cf-accent); }
+    .rr-pv-embed { max-width: 520px; margin-top: 6px; padding: var(--cf-3); border-left: 4px solid var(--rr-pv-colour, var(--cf-accent)); border-radius: var(--cf-radius-sm); background: var(--cf-surface); }
+    .rr-pv-title { font-weight: 600; margin-bottom: 4px; }
+    .rr-pv-desc { white-space: pre-wrap; color: var(--cf-text-2); }
+    .rr-pv-field { margin-top: 8px; }
+    .rr-pv-field-name { font-size: var(--cf-text-xs); font-weight: 600; margin-bottom: 2px; }
+    .rr-pv-line { color: var(--cf-text-2); }
+    .rr-pv-img { margin-top: 8px; padding: var(--cf-2); border: 1px dashed var(--cf-border-strong); border-radius: var(--cf-radius-sm); text-align: center; font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+    .rr-pv-mention { padding: 0 2px; border-radius: 3px; color: var(--cf-accent-fg); background: color-mix(in srgb, var(--cf-accent) 18%, transparent); }
+    .rr-pv-controls { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; max-width: 520px; }
+    .rr-pv-btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 4px; font-size: var(--cf-text-sm); font-weight: 500; color: #fff; background: #5865f2; }
+    .rr-pv-btn.is-secondary { background: #4e5058; }
+    .rr-pv-btn.is-success { background: #248046; }
+    .rr-pv-btn.is-danger { background: #da373c; }
+    .rr-pv-btn * { color: inherit; }
+    :root:is([data-theme="light"], [data-theme="sand"]) .rr-pv-btn.is-secondary { background: #6d6f78; }
+    .rr-pv-select { display: flex; align-items: center; justify-content: space-between; width: 100%; height: 40px; padding: 0 12px; border-radius: 4px; border: 1px solid var(--cf-border-strong); background: var(--cf-surface); color: var(--cf-text-3); }
+    .rr-pv-options { width: 100%; display: grid; gap: 2px; padding: 4px; border: 1px solid var(--cf-border); border-radius: 4px; background: var(--cf-surface); }
+    .rr-pv-option { display: flex; align-items: center; gap: 8px; padding: 4px 8px; }
+    .rr-pv-option small { display: block; color: var(--cf-text-3); }
+    .rr-pv-react { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 8px; border-radius: 8px; border: 1px solid var(--cf-border-strong); background: var(--cf-surface); font-size: var(--cf-text-xs); }
+    .rr-pv-empty { color: var(--cf-text-3); font-size: var(--cf-text-xs); margin-top: 8px; }
+
+    /* Emoji picker (the kit's .cf-modal shell, narrow) */
+    .rr-emoji-dialog { --cf-modal-w: 22.5rem; }
+    .emoji-grid { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 4px; }
+    .emoji-item { font-size: 22px; line-height: 1; padding: 6px 0; border-radius: var(--cf-radius-sm); cursor: pointer; text-align: center; border: 0; background: none; }
+    .emoji-item:hover, .emoji-item:focus-visible { background: var(--cf-surface-2); }
+
+    @media (max-width: 640px) {
+        .rr-bulk-actions .btn { flex: 1 1 auto; min-height: 44px; }
+        .emoji-picker-btn { width: 44px; }
+        .rr-panel .cf-section-actions { width: 100%; }
+        .rr-panel .cf-section-actions > .btn, .rr-panel .cf-section-actions > .rr-inline-form { flex: 1 1 auto; }
+        .rr-panel .cf-section-actions .rr-inline-form .btn { width: 100%; }
+        .rr-tpl-row, .rr-tpl-row.no-style { grid-template-columns: 3.5rem minmax(0, 1fr) auto; padding-bottom: var(--cf-2); border-bottom: 1px solid var(--cf-border); }
+        .rr-tpl-row > select { grid-column: 1 / -1; min-height: 44px; }
+        .rr-tpl-row > input { min-height: 44px; }
+        .rr-toolbar .cf-search { width: 100%; }
+    }
+</style>
+
 <div class="page-section">
     <div class="page-section-header">
         <div>
             <div class="page-section-title">
                 <i class="fas fa-hand-pointer"></i>
-                <span>Reaction Roles</span>
+                <span>Reaction roles</span>
             </div>
-            <div class="page-section-subtitle">
-                Allow users to assign themselves roles by reacting to a message
-            </div>
+            <div class="page-section-subtitle">Buttons and dropdowns hold up to 25 roles, reactions up to 20.</div>
         </div>
-        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createPanelModal">
-            <i class="fas fa-plus"></i>
-            <span>Create Panel</span>
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createPanelModal">
+            <i class="fas fa-plus" aria-hidden="true"></i>
+            <span>Create panel</span>
         </button>
     </div>
 
-    <!-- Stats Overview -->
-    <% if (reactionRolePanels && reactionRolePanels.length > 0) { %>
-        <div class="rr-stats-grid">
-            <div class="rr-stat-card">
-                <div class="rr-stat-label">Total Panels</div>
-                <div class="rr-stat-value"><%= reactionRolePanels.length %></div>
-            </div>
-            <div class="rr-stat-card">
-                <div class="rr-stat-label">Total Roles</div>
-                <div class="rr-stat-value purple"><%= reactionRolePanels.reduce((sum, p) => sum + (p.mappings?.length || 0), 0) %></div>
-            </div>
-            <div class="rr-stat-card">
-                <div class="rr-stat-label">Avg per Panel</div>
-                <div class="rr-stat-value accent"><%= Math.round(reactionRolePanels.reduce((sum, p) => sum + (p.mappings?.length || 0), 0) / reactionRolePanels.length) %></div>
-            </div>
+    <%# Every form on this page redirects back with ?success=/?error=, and nothing used to
+        render them — a failed Repost looked exactly like a successful one. %>
+    <div id="rrFlash" class="cf-notice" role="status" hidden></div>
+
+    <% if (rrPanels.length > 0) { %>
+        <dl class="cf-kpis" aria-label="Reaction roles at a glance">
+            <div class="cf-kpi"><dt>Panels</dt><dd class="cf-kpi-value"><%= rrPanels.length %></dd></div>
+            <div class="cf-kpi"><dt>Roles on panels</dt><dd class="cf-kpi-value" id="rrStatRoles"><%= rrTotalRoles %></dd></div>
+            <div class="cf-kpi"><dt>Not posted yet</dt><dd class="cf-kpi-value"><%= rrPanels.filter(p => !p.message_id || p.message_id === 'PENDING').length %></dd></div>
+        </dl>
+        <%# Kept for the stats script; the average is no longer shown. %>
+        <span id="rrStatAvg" hidden></span>
+    <% } %>
+
+    <% if (rrPanels.length > 15) { %>
+        <div class="rr-toolbar">
+            <span class="cf-search"><i class="fas fa-search" aria-hidden="true"></i><input type="search" class="form-control rr-filter" placeholder="Filter <%= rrPanels.length %> panels" aria-label="Filter panels"></span>
         </div>
     <% } %>
 
-    <!-- Panels List -->
-    <% if (reactionRolePanels && reactionRolePanels.length > 0) { %>
-        <div class="rr-panels-list">
-            <% reactionRolePanels.forEach(panel => { %>
-                <div class="rr-panel-card">
-                    <div class="rr-panel-header">
-                        <div>
-                            <h3 class="rr-panel-title">
-                                <%= panel.panel_name %>
-                                <% if (panel.message_id === 'PENDING') { %>
-                                    <span class="rr-pending-badge">PENDING</span>
-                                <% } %>
-                            </h3>
-                            <div class="rr-panel-channel">
-                                <i class="fas fa-hashtag"></i>
-                                <%= channels.find(c => c.id === panel.channel_id)?.name || 'Unknown Channel' %>
-                            </div>
-                        </div>
-                        <div class="rr-panel-actions">
-                            <% if (panel.message_id === 'PENDING' && panel.mappings && panel.mappings.length > 0) { %>
-                                <button type="button" class="btn btn-sm btn-success" onclick="postPanel('<%= guild.id %>', '<%= panel.id %>')">
-                                    <i class="fas fa-paper-plane"></i>
-                                    <span>Post to Discord</span>
-                                </button>
-                            <% } %>
-                            <form action="/manage/<%= guild.id %>/repost-rr-panel" method="POST" style="display:inline;">
-                                <input type="hidden" name="panelId" value="<%= panel.id %>">
-                                <button type="submit" class="btn btn-sm btn-secondary" title="Delete the old message and repost with current mappings">
-                                    <i class="fas fa-sync"></i>
-                                    <span>Repost</span>
-                                </button>
-                            </form>
-                            <form action="/manage/<%= guild.id %>/delete-rr-panel" method="POST" onsubmit="return confirm('Delete this panel and all its role mappings?');">
-                                <input type="hidden" name="panelId" value="<%= panel.id %>">
-                                <button type="submit" class="btn btn-sm btn-danger">
-                                    <i class="fas fa-trash"></i>
-                                    <span>Delete Panel</span>
-                                </button>
-                            </form>
-                        </div>
+    <% if (rrPanels.length > 0) { %>
+        <% rrPanels.forEach(panel => { const unposted = !panel.message_id || panel.message_id === 'PENDING'; const chName = (channels.find(c => c.id === panel.channel_id) || {}).name; %>
+            <section class="cf-section rr-panel" aria-labelledby="rr-panel-<%= panel.id %>-title">
+                <header class="cf-section-head">
+                    <div>
+                        <h2 class="cf-section-title" id="rr-panel-<%= panel.id %>-title"><%= panel.panel_name %></h2>
+                        <p class="cf-section-desc rr-panel-meta">
+                            <span><%= chName ? '#' + chName : 'Channel no longer exists' %></span>
+                            <span class="rr-sep" aria-hidden="true">·</span>
+                            <span><%= rrTypeLabel(panel.interaction_type) %><%= panel.panel_mode === 'unique' ? ', one role at a time' : '' %></span>
+                            <% if (unposted) { %><span class="cf-pill is-warn">Not posted</span><% } else { %><span class="cf-pill is-ok">Posted</span><% } %>
+                        </p>
+                    </div>
+                    <div class="cf-section-actions">
+                        <%# Unposted means NULL (after a Repost) or the 'PENDING' sentinel (fresh panel).
+                            Kept in the DOM even with zero mappings, just hidden — adding the first role
+                            reveals it in place instead of needing a reload. %>
+                        <% if (unposted) { %>
+                            <button type="button" class="btn btn-sm btn-primary" data-post-btn="<%= panel.id %>"
+                                    onclick="postPanel('<%= guild.id %>', '<%= panel.id %>', this)"
+                                    <%= (panel.mappings && panel.mappings.length) ? '' : 'hidden' %>>
+                                Post to Discord
+                            </button>
+                        <% } %>
+                        <button type="button" class="btn btn-sm btn-secondary" onclick="openEditPanel('<%= panel.id %>')">Edit</button>
+                        <% if (!unposted) { %>
+                        <form class="rr-inline-form" action="/manage/<%= guild.id %>/repost-rr-panel" method="POST" onsubmit="return confirm('Delete the posted message and post a fresh copy? Links to the old message stop working.');">
+                            <input type="hidden" name="panelId" value="<%= panel.id %>">
+                            <button type="submit" class="btn btn-sm btn-secondary" title="Delete the old message and post it again with the current roles">Repost</button>
+                        </form>
+                        <% } %>
+                        <form class="rr-inline-form" action="/manage/<%= guild.id %>/delete-rr-panel" method="POST" onsubmit="return confirm('Delete this panel and all its role mappings?');">
+                            <input type="hidden" name="panelId" value="<%= panel.id %>">
+                            <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+                        </form>
+                    </div>
+                </header>
+
+                <div class="cf-rows" data-panel-body="<%= panel.id %>">
+                    <%# Rendered by rrRenderMappings(): the role list and the message preview, so adding and
+                        removing roles redraws just this panel instead of reloading the whole page. %>
+                    <div id="rrMappingsWrap-<%= panel.id %>">
+                        <%- include('../kit/_state', { kind: 'loading', title: 'Loading roles', compact: true }) %>
                     </div>
 
-                    <div class="rr-panel-body">
-                        <!-- Role Mappings -->
-                        <% if (panel.mappings && panel.mappings.length > 0) { %>
-                            <div class="rr-mappings-section">
-                                <h4 class="rr-mappings-title">Role Mappings (<%= panel.mappings.length %>)</h4>
-                                <div class="rr-mappings-grid">
-                                    <% panel.mappings.forEach(mapping => {
-                                        const role = roles.find(r => r.id === mapping.role_id);
-                                    %>
-                                        <div class="rr-mapping-item">
-                                            <div class="rr-mapping-info">
-                                                <div class="rr-mapping-emoji"><%= mapping.emoji_id %></div>
-                                                <div>
-                                                    <div class="rr-mapping-role"><%= role ? role.name : 'Unknown Role' %></div>
-                                                    <div class="rr-mapping-hint">React to assign</div>
-                                                </div>
-                                            </div>
-                                            <form action="/manage/<%= guild.id %>/remove-rr-mapping" method="POST" class="d-inline">
-                                                <input type="hidden" name="mappingId" value="<%= mapping.id %>">
-                                                <button type="submit" class="btn btn-sm btn-secondary" onclick="return confirm('Remove this role mapping?');">
-                                                    <i class="fas fa-times"></i>
-                                                </button>
-                                            </form>
-                                        </div>
-                                    <% }); %>
-                                </div>
-                            </div>
-                        <% } else { %>
-                            <div class="rr-no-mappings">
-                                <i class="fas fa-info-circle"></i>
-                                No role mappings added yet
-                            </div>
-                        <% } %>
-
-                        <!-- Add New Role Mapping -->
-                        <div class="rr-add-mapping">
-                            <h4 class="rr-add-mapping-title">
-                                <i class="fas fa-plus"></i>
-                                Add New Role Mapping
-                            </h4>
-                            <form action="/manage/<%= guild.id %>/add-rr-mapping" method="POST">
-                                <input type="hidden" name="panelId" value="<%= panel.id %>">
-                                <div class="rr-add-mapping-grid">
-                                    <div>
-                                        <label class="form-label">Emoji <% if (panel.interaction_type === 'reaction') { %><span style="color:#ef4444;">*</span><% } else { %><span style="font-weight:400;color:var(--color-text-muted);">(optional)</span><% } %></label>
-                                        <div style="position: relative;">
-                                            <input type="text" name="emoji_id" class="form-control emoji-input" <%= panel.interaction_type === 'reaction' ? 'required' : '' %> placeholder="Click to select emoji" readonly style="cursor: pointer;">
-                                            <button type="button" class="emoji-picker-btn" onclick="openEmojiPicker(this)">
-                                                <i class="fas fa-smile"></i>
-                                            </button>
-                                        </div>
-                                        <div style="font-size: 0.7rem; color: var(--color-text-muted); margin-top: 2px;">
-                                            <% if (panel.interaction_type === 'reaction') { %>
-                                                Required. The emoji users will react with.
-                                            <% } else if (panel.interaction_type === 'button') { %>
-                                                Shown on the button before the text. Leave blank for text-only buttons.
-                                            <% } else { %>
-                                                Shown next to the option in the dropdown. Leave blank for text-only.
-                                            <% } %>
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <label class="form-label">Role <span style="color:#ef4444;">*</span></label>
-                                        <select name="role_id" class="form-select" required>
-                                            <option value="">Select role...</option>
-                                            <% roles.forEach(role => { %>
-                                                <option value="<%= role.id %>"><%= role.name %></option>
-                                            <% }); %>
-                                        </select>
-                                        <div style="font-size: 0.7rem; color: var(--color-text-muted); margin-top: 2px;">Required. The role to assign/remove when clicked.</div>
-                                    </div>
-                                    <% if (panel.interaction_type === 'button') { %>
-                                    <div>
-                                        <label class="form-label">Button Text <span style="font-weight:400;color:var(--color-text-muted);">(optional)</span></label>
-                                        <input type="text" name="label" class="form-control" placeholder="e.g. 🎮 Gaming" maxlength="80">
-                                        <div style="font-size: 0.7rem; color: var(--color-text-muted); margin-top: 2px;">The label shown on the button. Defaults to the role name if left blank.</div>
-                                    </div>
-                                    <div>
-                                        <label class="form-label">Button Color <span style="font-weight:400;color:var(--color-text-muted);">(optional)</span></label>
-                                        <select name="button_style" class="form-select">
-                                            <option value="primary">🔵 Blue (default)</option>
-                                            <option value="secondary">⚪ Grey</option>
-                                            <option value="success">🟢 Green</option>
-                                            <option value="danger">🔴 Red</option>
-                                        </select>
-                                        <div style="font-size: 0.7rem; color: var(--color-text-muted); margin-top: 2px;">The color of the button. Defaults to Blue.</div>
-                                    </div>
-                                    <% } else if (panel.interaction_type === 'select_menu') { %>
-                                    <div>
-                                        <label class="form-label">Option Label <span style="font-weight:400;color:var(--color-text-muted);">(optional)</span></label>
-                                        <input type="text" name="label" class="form-control" placeholder="e.g. Gaming Notifications" maxlength="80">
-                                        <div style="font-size: 0.7rem; color: var(--color-text-muted); margin-top: 2px;">The text shown in the dropdown. Defaults to the role name if left blank.</div>
-                                    </div>
-                                    <% } %>
-                                    <div>
-                                        <button type="submit" class="btn btn-primary" style="width: 100%;">
-                                            <i class="fas fa-plus"></i>
-                                            <span>Add</span>
+                    <form class="rr-add-form" data-panel="<%= panel.id %>" data-type="<%= panel.interaction_type || 'reaction' %>" onsubmit="return rrAddMapping(event)">
+                        <div class="cf-rows-head">Add a role</div>
+                        <input type="hidden" name="panelId" value="<%= panel.id %>">
+                        <div class="cf-row cf-row--stack">
+                            <div class="cf-fields">
+                                <div class="cf-field">
+                                    <label>Emoji <% if (panel.interaction_type !== 'reaction') { %><span class="rr-opt">(optional)</span><% } %></label>
+                                    <div class="rr-emoji-field">
+                                        <input type="text" name="emoji_id" class="form-control emoji-input" <%= panel.interaction_type === 'reaction' ? 'required' : '' %> placeholder="Pick an emoji" readonly aria-label="Emoji">
+                                        <button type="button" class="emoji-picker-btn" onclick="openEmojiPicker(this)" aria-label="Pick an emoji">
+                                            <i class="fas fa-face-smile" aria-hidden="true"></i>
                                         </button>
                                     </div>
+                                    <span class="cf-field-hint">
+                                        <% if (panel.interaction_type === 'reaction') { %>
+                                            Required. The emoji members react with.
+                                        <% } else if (panel.interaction_type === 'button') { %>
+                                            Shown on the button before the text.
+                                        <% } else { %>
+                                            Shown next to the option in the dropdown.
+                                        <% } %>
+                                    </span>
                                 </div>
-                            </form>
+                                <div class="cf-field">
+                                    <label for="f-reaction-roles-role_id">Role</label>
+                                    <select id="f-reaction-roles-role_id" name="role_id" class="form-select" required>
+                                        <option value="">Select a role</option>
+                                        <% roles.forEach(role => { const blocked = rrBlocked(role); %>
+                                            <option value="<%= role.id %>"<%= blocked ? ' disabled' : '' %>><%= role.name %><%= blocked ? ' (above the bot)' : '' %></option>
+                                        <% }); %>
+                                    </select>
+                                    <span class="cf-field-hint">Given or taken away when a member picks it.</span>
+                                </div>
+                                <% if (panel.interaction_type === 'button') { %>
+                                <div class="cf-field">
+                                    <label for="f-reaction-roles-label">Button text <span class="rr-opt">(optional)</span></label>
+                                    <input id="f-reaction-roles-label" type="text" name="label" class="form-control" placeholder="Defaults to the role name" maxlength="80">
+                                    <span class="cf-field-hint">Up to 80 characters.</span>
+                                </div>
+                                <div class="cf-field">
+                                    <label for="f-reaction-roles-button_style">Button colour</label>
+                                    <select id="f-reaction-roles-button_style" name="button_style" class="form-select">
+                                        <option value="primary">Blue</option>
+                                        <option value="secondary">Grey</option>
+                                        <option value="success">Green</option>
+                                        <option value="danger">Red</option>
+                                    </select>
+                                    <span class="cf-field-hint">Discord's four button colours.</span>
+                                </div>
+                                <% } else if (panel.interaction_type === 'select_menu') { %>
+                                <div class="cf-field">
+                                    <label for="f-reaction-roles-label-2">Option text <span class="rr-opt">(optional)</span></label>
+                                    <input id="f-reaction-roles-label-2" type="text" name="label" class="form-control" placeholder="Defaults to the role name" maxlength="80">
+                                    <span class="cf-field-hint">Up to 80 characters.</span>
+                                </div>
+                                <% } %>
+                            </div>
                         </div>
-                    </div>
+                        <div class="cf-section-foot">
+                            <span class="cf-status-line rr-inline-status" data-status="<%= panel.id %>" role="status"></span>
+                            <button type="submit" class="btn btn-primary">Add role</button>
+                        </div>
+                    </form>
+
+                    <details class="cf-expand rr-bulk" data-bulk="<%= panel.id %>">
+                        <summary>Add several at once</summary>
+                        <div class="cf-expand-body">
+                            <p class="cf-row-desc rr-bulk-help">
+                                One role per line, by name, ID or @mention. Anything after a <code>|</code> is read as a label,
+                                an emoji or a button colour, in any order. Lines starting with <code>//</code> are ignored.
+                            </p>
+                            <textarea class="form-control rr-bulk-text" rows="6" spellcheck="false" aria-label="Roles to add, one per line"
+                                      placeholder="Gaming&#10;Movie night | Movie pings | green&#10;Announcements | Ping me | blue"></textarea>
+                            <div class="rr-bulk-actions">
+                                <span class="cf-status-line rr-inline-status" data-bulk-status="<%= panel.id %>" role="status"></span>
+                                <button type="button" class="btn btn-sm btn-secondary" onclick="rrBulkPreview('<%= panel.id %>')">Check list</button>
+                                <button type="button" class="btn btn-sm btn-primary" onclick="rrBulkAdd('<%= panel.id %>')">Add all</button>
+                            </div>
+                            <div class="rr-bulk-report" data-bulk-report="<%= panel.id %>"></div>
+                        </div>
+                    </details>
                 </div>
-            <% }); %>
+            </section>
+        <% }); %>
+        <div class="cf-state cf-state--boxed rr-filter-empty" hidden>
+            <p class="cf-state-title">No panels match</p>
+            <p class="cf-state-text">Try part of the panel or channel name.</p>
         </div>
     <% } else { %>
-        <div class="empty-state">
-            <div class="empty-state-icon">
-                <i class="fas fa-hand-pointer"></i>
+        <section class="cf-section" aria-labelledby="rr-panels-title">
+            <header class="cf-section-head">
+                <div>
+                    <h2 class="cf-section-title" id="rr-panels-title">Panels</h2>
+                    <p class="cf-section-desc">Each panel is one message in a channel, with the roles members can pick from it.</p>
+                </div>
+            </header>
+            <div class="cf-rows">
+                <div class="cf-state cf-state--empty">
+                    <p class="cf-state-title">No reaction role panels yet</p>
+                    <p class="cf-state-text">Start from a template such as name colours or pronouns, or build one from scratch.</p>
+                    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createPanelModal">Create the first panel</button>
+                </div>
             </div>
-            <div class="empty-state-title">No Reaction Role Panels</div>
-            <div class="empty-state-description">
-                Create a panel to allow users to self-assign roles via reactions
-            </div>
-            <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#createPanelModal">
-                <i class="fas fa-plus"></i>
-                <span>Create First Panel</span>
-            </button>
-        </div>
+        </section>
     <% } %>
 </div>
 
-<!-- Create Panel Modal -->
-<div class="modal fade" id="createPanelModal" tabindex="-1">
-    <div class="modal-dialog">
+<!-- Create panel dialog. "Blank" posts the form as before; a template saves through the API. -->
+<div class="modal fade" id="createPanelModal" tabindex="-1" aria-labelledby="rr-create-title">
+    <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">Create Reaction Role Panel</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                <h5 class="modal-title" id="rr-create-title">Create a reaction role panel</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <form action="/manage/<%= guild.id %>/create-rr-panel" method="POST">
-                <div class="modal-body">
-                    <div class="rr-form-group">
-                        <label class="form-label">Panel Name <span style="color:#ef4444;">*</span></label>
-                        <input type="text" name="panel_name" class="form-control" required placeholder="e.g., Notification Roles">
-                        <div class="form-help">Required. The title displayed at the top of the embed.</div>
+                <div class="modal-body rr-modal-body">
+                    <div class="rr-field">
+                        <span class="form-label">Start from</span>
+                        <div class="cf-segmented rr-tpl-pick" role="group" aria-label="Start from">
+                            <button type="button" class="cf-segment rr-tpl-btn" value="" aria-pressed="true">Blank</button>
+                            <button type="button" class="cf-segment rr-tpl-btn" value="colours" aria-pressed="false">Name colours</button>
+                            <button type="button" class="cf-segment rr-tpl-btn" value="pronouns" aria-pressed="false">Pronouns</button>
+                            <button type="button" class="cf-segment rr-tpl-btn" value="notifications" aria-pressed="false">Notifications</button>
+                            <button type="button" class="cf-segment rr-tpl-btn" value="regions" aria-pressed="false">Regions</button>
+                        </div>
+                        <span class="form-text">A template fills in the panel and its roles. Change anything before you create it.</span>
                     </div>
-                    <div class="rr-form-group">
-                        <label class="form-label">Channel <span style="color:#ef4444;">*</span></label>
-                        <select name="channel_id" class="form-select" required>
-                            <option value="">Select channel...</option>
+                    <div class="rr-field">
+                        <label class="form-label" for="f-reaction-roles-panel_name">Panel name</label>
+                        <input id="f-reaction-roles-panel_name" type="text" name="panel_name" class="form-control" required maxlength="256" placeholder="e.g. Notification roles">
+                        <span class="form-text">The title at the top of the embed.</span>
+                    </div>
+                    <div class="rr-field">
+                        <label class="form-label" for="f-reaction-roles-channel_id">Channel</label>
+                        <select id="f-reaction-roles-channel_id" name="channel_id" class="form-select" required>
+                            <option value="">Select a channel</option>
                             <% channels.forEach(c => { %>
                                 <option value="<%= c.id %>">#<%= c.name %></option>
                             <% }); %>
                         </select>
-                        <div class="form-help">Required. The channel where the reaction role message will be posted.</div>
+                        <span class="form-text">Where the panel is posted.</span>
                     </div>
-                    <div class="rr-form-group">
-                        <label class="form-label">Embed Description <span style="font-weight:400;color:var(--color-text-muted);">(optional)</span></label>
-                        <textarea name="description" class="form-control" rows="5" placeholder="Pick your roles by clicking the buttons below!"></textarea>
-                        <div class="form-help">Optional. The main message content shown in the embed body. Supports up to 4096 characters.</div>
+                    <div class="rr-field">
+                        <label class="form-label" for="f-reaction-roles-description">Embed text <span class="rr-opt">(optional)</span></label>
+                        <textarea id="f-reaction-roles-description" name="description" class="form-control" rows="4" maxlength="4096" placeholder="Pick your roles with the buttons below."></textarea>
                     </div>
-                    <div class="rr-form-group">
-                        <label class="form-label">Embed Color <span style="font-weight:400;color:var(--color-text-muted);">(optional)</span></label>
-                        <input type="color" name="embed_color" class="form-control" value="#a78bfa">
-                        <div class="form-help">Optional. The accent color of the embed border. Defaults to purple.</div>
-                    </div>
-                    <div class="rr-form-row">
-                        <div>
-                            <label class="form-label">Panel Mode <span style="color:#ef4444;">*</span></label>
-                            <select name="panel_mode" class="form-select">
-                                <option value="normal">Normal (Multiple Roles)</option>
-                                <option value="unique">Unique (One Role Only)</option>
-                            </select>
-                            <div class="form-help">Normal: users can pick multiple roles. Unique: selecting one removes the others.</div>
+                    <div class="rr-pair">
+                        <div class="rr-field">
+                            <label class="form-label" for="f-reaction-roles-embed_color">Embed colour</label>
+                            <input id="f-reaction-roles-embed_color" type="color" name="embed_color" class="form-control" value="#a78bfa">
+                            <span class="form-text">The stripe down the side of the embed.</span>
                         </div>
-                        <div>
-                            <label class="form-label">Interaction Type <span style="color:#ef4444;">*</span></label>
-                            <select name="interaction_type" class="form-select">
+                        <div class="rr-field">
+                            <label class="form-label" for="f-reaction-roles-panel_mode">Panel mode</label>
+                            <select id="f-reaction-roles-panel_mode" name="panel_mode" class="form-select">
+                                <option value="normal">Several roles</option>
+                                <option value="unique">One role at a time</option>
+                            </select>
+                            <span class="form-text">One at a time: picking a role removes the others on this panel.</span>
+                        </div>
+                        <div class="rr-field">
+                            <label class="form-label" for="f-reaction-roles-interaction_type">How members pick</label>
+                            <select id="f-reaction-roles-interaction_type" name="interaction_type" class="form-select">
                                 <option value="button">Buttons</option>
-                                <option value="select_menu">Select Menu (Dropdown)</option>
-                                <option value="reaction">Reactions (Emoji)</option>
+                                <option value="select_menu">Dropdown menu</option>
+                                <option value="reaction">Reactions (emoji)</option>
                             </select>
-                            <div class="form-help">Buttons: clickable buttons with labels. Dropdown: select from a list. Reactions: click emoji on the message.</div>
                         </div>
                     </div>
+                    <div class="rr-field rr-tpl" hidden>
+                        <div class="rr-tpl-head">
+                            <span class="form-label">Roles on this panel</span>
+                            <button type="button" class="btn btn-sm btn-secondary rr-tpl-add">Add a row</button>
+                        </div>
+                        <span class="form-text">Pick an existing role for each row, or keep "Create" to have the bot make it. New roles go to the bottom of the role list; colour roles only show their colour when they sit above members' other coloured roles.</span>
+                        <div class="rr-tpl-rows"></div>
+                    </div>
+                    <div class="rr-field">
+                        <span class="form-label">Preview</span>
+                        <div class="rr-pv-slot rr-create-pv"></div>
+                    </div>
+                    <div class="cf-notice rr-create-status" role="status" hidden></div>
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fas fa-plus"></i>
-                        <span>Create Panel</span>
-                    </button>
+                    <button type="submit" class="btn btn-primary rr-create-submit">Create panel</button>
                 </div>
             </form>
         </div>
     </div>
 </div>
 
-<style>
-/* Compact Reaction Roles Styles */
-.rr-stats-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 12px;
-    margin-bottom: 18px;
-}
-
-.rr-stat-card {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(167, 139, 250, 0.15);
-    border-radius: 10px;
-    padding: 14px 16px;
-}
-
-.rr-stat-label {
-    font-size: 0.7rem;
-    color: rgba(255, 255, 255, 0.5);
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    margin-bottom: 4px;
-}
-
-.rr-stat-value {
-    font-size: 1.5rem;
-    font-weight: 700;
-    color: #ffffff;
-}
-
-.rr-stat-value.purple { color: #a78bfa; }
-.rr-stat-value.accent { color: #c084fc; }
-
-/* Panel Cards */
-.rr-panels-list {
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-}
-
-.rr-panel-card {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(167, 139, 250, 0.15);
-    border-radius: 12px;
-    overflow: hidden;
-}
-
-.rr-panel-header {
-    background: rgba(167, 139, 250, 0.08);
-    padding: 14px 16px;
-    border-bottom: 1px solid rgba(167, 139, 250, 0.15);
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-}
-
-.rr-panel-title {
-    font-size: 1rem;
-    font-weight: 600;
-    color: #ffffff;
-    margin: 0 0 4px 0;
-}
-
-.rr-pending-badge {
-    display: inline-block;
-    background: #fbbf24;
-    color: #1a1d21;
-    font-size: 0.6rem;
-    font-weight: 700;
-    padding: 2px 6px;
-    border-radius: 4px;
-    margin-left: 8px;
-    vertical-align: middle;
-}
-
-.rr-panel-channel {
-    font-size: 0.8rem;
-    color: rgba(255, 255, 255, 0.5);
-}
-
-.rr-panel-channel i { color: #a78bfa; margin-right: 4px; }
-
-.rr-panel-actions { display: flex; gap: 8px; }
-
-.rr-panel-body { padding: 16px; }
-
-/* Mappings */
-.rr-mappings-section { margin-bottom: 14px; }
-
-.rr-mappings-title {
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: rgba(255, 255, 255, 0.5);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-    margin-bottom: 10px;
-}
-
-.rr-mappings-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 10px;
-}
-
-.rr-mapping-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    background: rgba(0, 0, 0, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 8px;
-    padding: 10px 12px;
-}
-
-.rr-mapping-info {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.rr-mapping-emoji { font-size: 1.25rem; }
-.rr-mapping-role { font-weight: 600; color: #ffffff; font-size: 0.85rem; }
-.rr-mapping-hint { font-size: 0.7rem; color: rgba(255, 255, 255, 0.5); }
-
-.rr-no-mappings {
-    background: rgba(0, 0, 0, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 8px;
-    padding: 18px;
-    text-align: center;
-    font-size: 0.85rem;
-    color: rgba(255, 255, 255, 0.5);
-    margin-bottom: 14px;
-}
-
-.rr-no-mappings i { margin-right: 6px; }
-
-/* Add Mapping */
-.rr-add-mapping {
-    background: rgba(0, 0, 0, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 8px;
-    padding: 14px;
-}
-
-.rr-add-mapping-title {
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: #ffffff;
-    margin-bottom: 12px;
-}
-
-.rr-add-mapping-title i { margin-right: 6px; color: #a78bfa; }
-
-.rr-add-mapping-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr auto;
-    gap: 10px;
-    align-items: end;
-}
-
-/* Form Styles */
-.rr-form-group { margin-bottom: 14px; }
-.rr-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-
-.form-label {
-    display: block;
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: #ffffff;
-    margin-bottom: 6px;
-}
-
-.form-help {
-    font-size: 0.7rem;
-    color: rgba(255, 255, 255, 0.45);
-    margin-top: 4px;
-}
-
-/* Empty State */
-.empty-state {
-    text-align: center;
-    padding: 48px 24px;
-}
-
-.empty-state-icon {
-    font-size: 2.5rem;
-    color: rgba(255, 255, 255, 0.3);
-    margin-bottom: 14px;
-}
-
-.empty-state-title {
-    font-size: 1.1rem;
-    font-weight: 600;
-    color: #ffffff;
-    margin-bottom: 8px;
-}
-
-.empty-state-description {
-    font-size: 0.85rem;
-    color: rgba(255, 255, 255, 0.5);
-    margin-bottom: 20px;
-}
-
-/* Emoji Picker */
-.emoji-picker-btn {
-    position: absolute;
-    right: 8px;
-    top: 50%;
-    transform: translateY(-50%);
-    background: none;
-    border: none;
-    color: rgba(255, 255, 255, 0.5);
-    cursor: pointer;
-    padding: 4px 8px;
-    font-size: 1rem;
-}
-
-.emoji-picker-btn:hover { color: #a78bfa; }
-
-.emoji-picker-modal {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.7);
-    display: none;
-    justify-content: center;
-    align-items: center;
-    z-index: 10000;
-}
-
-.emoji-picker-modal.active { display: flex; }
-
-.emoji-picker-content {
-    background: rgba(26, 29, 33, 0.98);
-    border: 1px solid rgba(167, 139, 250, 0.2);
-    border-radius: 12px;
-    padding: 14px;
-    max-width: 360px;
-    width: 90%;
-    max-height: 450px;
-    overflow-y: auto;
-}
-
-.emoji-grid {
-    display: grid;
-    grid-template-columns: repeat(8, 1fr);
-    gap: 6px;
-    margin-top: 10px;
-}
-
-.emoji-item {
-    font-size: 22px;
-    padding: 6px;
-    border-radius: 6px;
-    cursor: pointer;
-    text-align: center;
-    transition: all 0.2s;
-}
-
-.emoji-item:hover {
-    background: rgba(167, 139, 250, 0.2);
-}
-
-@media (max-width: 768px) {
-    .rr-stats-grid { grid-template-columns: 1fr; }
-    .rr-mappings-grid { grid-template-columns: 1fr; }
-    .rr-add-mapping-grid { grid-template-columns: 1fr; }
-    .rr-form-row { grid-template-columns: 1fr; }
-}
-</style>
-
-<!-- Emoji Picker Modal -->
-<div id="emojiPickerModal" class="emoji-picker-modal" onclick="closeEmojiPicker(event)">
-    <div class="emoji-picker-content" onclick="event.stopPropagation()">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-            <h4 style="margin: 0; color: #ffffff; font-size: 0.95rem; font-weight: 600;">Select Emoji</h4>
-            <button type="button" class="btn-close" onclick="closeEmojiPicker()"></button>
+<!-- Edit panel dialog: one dialog reused for every panel, filled from RR_PANELS on open -->
+<div class="modal fade" id="editPanelModal" tabindex="-1" aria-labelledby="rr-edit-title">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="rr-edit-title">Edit panel: <span id="rrEditName"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body rr-modal-body">
+                <input type="hidden" id="rrEditId">
+                <div class="rr-field">
+                    <label class="form-label" for="rrEditPanelName">Panel name</label>
+                    <input type="text" id="rrEditPanelName" class="form-control" required maxlength="256">
+                    <span class="form-text">The title at the top of the embed.</span>
+                </div>
+                <div class="rr-field">
+                    <label class="form-label" for="rrEditChannel">Panel channel</label>
+                    <select id="rrEditChannel" class="form-select">
+                        <% channels.forEach(c => { %>
+                            <option value="<%= c.id %>">#<%= c.name %></option>
+                        <% }); %>
+                    </select>
+                    <span class="form-text" id="rrEditChannelHelp">Moving a posted panel deletes the old message; you then post it fresh in the new channel.</span>
+                </div>
+                <div class="rr-field">
+                    <label class="form-label" for="rrEditDescription">Embed text</label>
+                    <textarea id="rrEditDescription" class="form-control" rows="4" maxlength="4096"></textarea>
+                </div>
+                <div class="rr-pair">
+                    <div class="rr-field">
+                        <label class="form-label" for="rrEditColor">Colour</label>
+                        <input type="color" id="rrEditColor" class="form-control">
+                    </div>
+                    <div class="rr-field">
+                        <label class="form-label" for="rrEditMode">Mode</label>
+                        <select id="rrEditMode" class="form-select">
+                            <option value="normal">Several roles</option>
+                            <option value="unique">One role at a time</option>
+                        </select>
+                    </div>
+                    <div class="rr-field">
+                        <label class="form-label" for="rrEditType">Members pick with</label>
+                        <select id="rrEditType" class="form-select">
+                            <option value="button">Buttons</option>
+                            <option value="select_menu">Dropdown menu</option>
+                            <option value="reaction">Reactions (emoji)</option>
+                        </select>
+                        <span class="form-text">Changing this redraws the posted message.</span>
+                    </div>
+                </div>
+                <div class="rr-pair" id="rrEditSelectOnly">
+                    <div class="rr-field">
+                        <label class="form-label" for="rrEditPlaceholder">Dropdown placeholder</label>
+                        <input type="text" id="rrEditPlaceholder" class="form-control" maxlength="100" placeholder="Choose your roles">
+                    </div>
+                    <div class="rr-field">
+                        <label class="form-label" for="rrEditMaxSelections">Most options in one pick</label>
+                        <input type="number" id="rrEditMaxSelections" class="form-control" min="0" max="25" placeholder="No limit">
+                        <span class="form-text">How many options a member can choose from the menu in one go. Each pick still adds or removes roles one by one, so this does not cap how many of the panel's roles they hold. Blank or 0 means no limit.</span>
+                    </div>
+                </div>
+                <div class="rr-pair">
+                    <div class="rr-field">
+                        <label class="form-label" for="rrEditThumbnail">Thumbnail URL</label>
+                        <input type="url" id="rrEditThumbnail" class="form-control" placeholder="https://">
+                    </div>
+                    <div class="rr-field">
+                        <label class="form-label" for="rrEditImage">Image URL</label>
+                        <input type="url" id="rrEditImage" class="form-control" placeholder="https://">
+                    </div>
+                </div>
+                <div class="rr-field">
+                    <span class="form-label">Preview</span>
+                    <div class="rr-pv-slot rr-edit-pv"></div>
+                </div>
+                <div id="rrEditStatus" class="cf-notice is-info" role="status" hidden></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="rrEditSave">Save changes</button>
+            </div>
         </div>
-        <div class="emoji-grid" id="emojiGrid"></div>
+    </div>
+</div>
+
+<!-- Emoji picker -->
+<div id="emojiPickerModal" class="cf-modal" onclick="closeEmojiPicker(event)" hidden>
+    <div class="cf-modal-dialog rr-emoji-dialog" role="dialog" aria-modal="true" aria-labelledby="rr-emoji-title" onclick="event.stopPropagation()">
+        <header class="cf-modal-head">
+            <div><h4 class="cf-modal-title" id="rr-emoji-title">Pick an emoji</h4></div>
+            <button type="button" class="cf-modal-close" onclick="closeEmojiPicker()" aria-label="Close"><i class="fas fa-xmark" aria-hidden="true"></i></button>
+        </header>
+        <div class="cf-modal-body"><div class="emoji-grid" id="emojiGrid"></div></div>
     </div>
 </div>
 
 <script>
 let currentEmojiInput = null;
 
-// Common emojis for reaction roles
+// The emoji offered by the picker. These are content: the reaction a panel's members use.
 const commonEmojis = [
     '✅', '❌', '✔️', '❎', '⭕', '🔴', '🟢', '🔵', '🟡', '🟣',
     '🟠', '⚪', '⚫', '🟤', '1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣',
@@ -563,30 +499,31 @@ const commonEmojis = [
     '👍', '👎', '👌', '✌️', '🤝', '👏', '🙌', '👋', '✋', '👊',
     '🌟', '⭐', '🌙', '☀️', '⛅', '🌈', '❤️', '💙', '💚', '💛',
     '🧡', '💜', '🖤', '🤍', '🤎', '💯', '🔥', '💧', '💨', '⚡',
-    '😀', '😃', '😄', '😁', '😆', '😅', '😂', '🤣', '😊', '😇'
+    '📢', '📅', '🎉', '🔔', '📊', '🌎', '🌍', '🌏', '😀', '😊'
 ];
 
 function openEmojiPicker(button) {
     currentEmojiInput = button.previousElementSibling;
     const modal = document.getElementById('emojiPickerModal');
     const grid = document.getElementById('emojiGrid');
-
-    // Populate emoji grid
-    grid.innerHTML = '';
+    grid.replaceChildren();
     commonEmojis.forEach(emoji => {
-        const item = document.createElement('div');
+        const item = document.createElement('button');
+        item.type = 'button';
         item.className = 'emoji-item';
         item.textContent = emoji;
+        item.setAttribute('aria-label', emoji);
         item.onclick = () => selectEmoji(emoji);
         grid.appendChild(item);
     });
-
-    modal.classList.add('active');
+    modal.hidden = false;
+    const first = grid.querySelector('button');
+    if (first) first.focus();
 }
 
 function closeEmojiPicker(event) {
     if (!event || event.target.id === 'emojiPickerModal') {
-        document.getElementById('emojiPickerModal').classList.remove('active');
+        document.getElementById('emojiPickerModal').hidden = true;
         currentEmojiInput = null;
     }
 }
@@ -594,43 +531,681 @@ function closeEmojiPicker(event) {
 function selectEmoji(emoji) {
     if (currentEmojiInput) {
         currentEmojiInput.value = emoji;
+        currentEmojiInput.dispatchEvent(new Event('input', { bubbles: true }));
     }
     closeEmojiPicker();
 }
+document.addEventListener('keydown', (e) => {
+    const m = document.getElementById('emojiPickerModal');
+    if (e.key === 'Escape' && m && !m.hidden) closeEmojiPicker();
+});
 
-async function postPanel(guildId, panelId) {
-    if (!confirm('Post this panel to Discord? This will create the message in the selected channel.')) {
+// ── Small DOM helper: every value from the server is set as text, never parsed as HTML ──
+function rrEl(tag, props, ...kids) {
+    const n = document.createElement(tag);
+    if (props) for (const [k, v] of Object.entries(props)) {
+        if (v === null || v === undefined || v === false) continue;
+        if (k === 'text') n.textContent = v;
+        else if (k === 'className') n.className = v;
+        else if (k === 'hidden') n.hidden = !!v;
+        else if (k.startsWith('on')) n.addEventListener(k.slice(2), v);
+        else if (k === 'value') n.value = v;
+        else n.setAttribute(k, v === true ? '' : v);
+    }
+    for (const kid of kids.flat(Infinity)) if (kid !== null && kid !== undefined && kid !== false) n.appendChild(typeof kid === 'string' ? document.createTextNode(kid) : kid);
+    return n;
+}
+
+// ── Redirect flash messages ──────────────────────────────────────────────────
+function rrFlash(text, ok) {
+    const el = document.getElementById('rrFlash');
+    el.textContent = text;
+    el.classList.remove('is-ok', 'is-bad', 'is-warn');
+    el.classList.add(ok ? 'is-ok' : 'is-bad');
+    el.hidden = false;
+    el.scrollIntoView({ block: 'nearest' });
+}
+(function showRrFlash() {
+    const params = new URLSearchParams(location.search);
+    const success = params.get('success');
+    const error = params.get('error');
+    if (!success && !error) return;
+
+    const TEXT = {
+        panel_reposted: 'Panel reposted. The old message was deleted and a fresh one is live.',
+        panel_created: 'Panel created. Check the roles below, then use Post to Discord.',
+        panel_posted: 'Panel posted.',
+        panel_deleted: 'Panel deleted.',
+        panel_updated: 'Panel updated.',
+        mapping_added: 'Role mapping added.',
+        mapping_removed: 'Role mapping removed.',
+        repost_failed: "Repost failed: the new message could not be posted. Check that the bot can see and send in that channel.",
+        no_mappings: 'That panel has no role mappings yet, so there is nothing to post.',
+        panel_not_found: 'That panel no longer exists.',
+        missing_fields: 'Some required fields were missing.',
+        create_failed: 'Could not create that panel.',
+        emoji_required: 'Reaction panels need an emoji for each role.',
+        delete_failed: 'Could not delete that panel.',
+        remove_mapping_failed: 'Could not remove that mapping.',
+        add_mapping_failed: 'Could not add that mapping.',
+    };
+
+    const key = success || error;
+    rrFlash(TEXT[key] || (success ? 'Done.' : `Something went wrong (${key}).`), !!success);
+
+    // Drop the params so a refresh doesn't replay a stale banner.
+    params.delete('success'); params.delete('error'); params.delete('note');
+    history.replaceState({}, '', location.pathname + (params.toString() ? '?' + params : ''));
+})();
+
+// ── Page data ────────────────────────────────────────────────────────────────
+const RR_GUILD_ID = '<%= guild.id %>';
+const RR_BOT_NAME = <%- JSON.stringify(String(rrBotName)).replace(/</g, '\\u003c') %>;
+// Roles for the template rows: `blocked` = managed or at/above the bot's highest role.
+const RR_ROLES = <%- JSON.stringify((roles || []).map(r => ({ id: r.id, name: r.name, color: r.hexColor || null, blocked: rrBlocked(r) }))).replace(/</g, '\\u003c') %>;
+// Panel-level fields only. Role mappings stay under each panel's add/remove controls,
+// because the PUT replaces the whole mapping set when it's given one.
+const RR_PANELS = <%- JSON.stringify((reactionRolePanels || []).map(p => ({
+    id: p.id,
+    panel_name: p.panel_name || '',
+    channel_id: p.channel_id || '',
+    description: p.description || '',
+    embed_color: p.embed_color || '#a78bfa',
+    panel_mode: p.panel_mode || 'normal',
+    interaction_type: p.interaction_type || 'button',
+    placeholder_text: p.placeholder_text || '',
+    max_selections: p.max_selections || '',
+    thumbnail_url: p.thumbnail_url || '',
+    image_url: p.image_url || '',
+    posted: !!(p.message_id && p.message_id !== 'PENDING'),
+    // Seeds the first paint of each panel's mapping list; every later change replaces it
+    // with whatever the API returns, so the two can't disagree.
+    mappings: (p.mappings || []).map(m => ({
+        id: m.id,
+        role_id: m.role_id,
+        role_name: (roles.find(r => r.id === m.role_id) || {}).name || null,
+        emoji_id: m.emoji_id,
+        label: m.label,
+        button_style: m.button_style || 'primary'
+    }))
+}))).replace(/</g, '\\u003c') %>;
+
+const RR_API = (panelId, path = '') => `/api/guilds/${RR_GUILD_ID}/reaction-roles/panels/${panelId}/mappings${path}`;
+const rrRoleName = (id) => (RR_ROLES.find(r => r.id === String(id)) || {}).name || null;
+
+async function rrRequest(url, options) {
+    const res = await fetch(url, { credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, ...options });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) { const e = new Error(body.error || `Request failed (${res.status})`); e.body = body; throw e; }
+    return body;
+}
+
+function rrStatus(el, message, ok = true) {
+    if (!el) return;
+    el.textContent = message;
+    el.classList.toggle('is-bad', !ok);
+    el.classList.toggle('is-ok', ok && !!message);
+    if (message && ok) setTimeout(() => { if (el.textContent === message) el.textContent = ''; }, 4000);
+}
+
+// What happened to the message members actually see. Silence here is how a panel ends up
+// looking correct on the dashboard and stale in Discord.
+const RR_LIVE_NOTE = {
+    updated: '',
+    not_posted: ' (panel not posted yet)',
+    message_gone: " The panel's message is gone from Discord; use Repost.",
+    no_mappings: '',
+    failed: " But the message in Discord could not be updated.",
+};
+
+function rrHint(type) {
+    if (type === 'button') return 'Button';
+    if (type === 'select_menu' || type === 'select') return 'Dropdown option';
+    return 'Reaction';
+}
+
+function rrUpdateStats() {
+    const total = RR_PANELS.reduce((sum, p) => sum + (p.mappings?.length || 0), 0);
+    const roles = document.getElementById('rrStatRoles');
+    const avg = document.getElementById('rrStatAvg');
+    if (roles) roles.textContent = total;
+    if (avg && RR_PANELS.length) avg.textContent = Math.round(total / RR_PANELS.length);
+}
+
+// ── Discord-style preview of a panel message ─────────────────────────────────
+// Mirrors core/reaction-role-manager.js buildPanelMessage: title, colour, text, the
+// "Available Roles" field, then buttons (5 per row), one dropdown, or reactions.
+// rows: [{ emoji, label, role }] where role is the role's display name.
+function rrPreview(panel, rows) {
+    const type = panel.interaction_type || 'button';
+    const colour = /^#[0-9a-f]{6}$/i.test(panel.embed_color || '') ? panel.embed_color : '#a78bfa';
+    const embed = rrEl('div', { className: 'rr-pv-embed' },
+        rrEl('div', { className: 'rr-pv-title', text: panel.panel_name || 'Panel name' }),
+        panel.description ? rrEl('div', { className: 'rr-pv-desc', text: panel.description }) : null);
+    embed.style.setProperty('--rr-pv-colour', colour);
+    if (rows.length) {
+        const field = rrEl('div', { className: 'rr-pv-field' }, rrEl('div', { className: 'rr-pv-field-name', text: 'Available Roles' }));
+        rows.forEach(r => field.appendChild(rrEl('div', { className: 'rr-pv-line' },
+            (type === 'reaction' ? (r.emoji || '▪️') + ' — ' : '▪️ '),
+            rrEl('span', { className: 'rr-pv-mention', text: '@' + (r.role || 'role') }))));
+        embed.appendChild(field);
+    }
+    if (panel.image_url) embed.appendChild(rrEl('div', { className: 'rr-pv-img', text: 'Image' }));
+
+    let controls = null;
+    if (!rows.length) {
+        controls = rrEl('div', { className: 'rr-pv-empty', text: 'Roles you add show here.' });
+    } else if (type === 'button') {
+        controls = rrEl('div', { className: 'rr-pv-controls' }, rows.slice(0, 25).map(r =>
+            rrEl('span', { className: 'rr-pv-btn' + (r.style && r.style !== 'primary' ? ' is-' + r.style : '') },
+                r.emoji ? rrEl('span', { text: r.emoji }) : null, rrEl('span', { text: r.label || r.role || 'Role' }))));
+    } else if (type === 'select_menu' || type === 'select') {
+        controls = rrEl('div', { className: 'rr-pv-controls' },
+            rrEl('div', { className: 'rr-pv-select' }, rrEl('span', { text: panel.placeholder_text || 'Choose your roles' }), rrEl('i', { className: 'fas fa-chevron-down', 'aria-hidden': 'true' })),
+            rrEl('div', { className: 'rr-pv-options' }, rows.slice(0, 25).map(r => rrEl('div', { className: 'rr-pv-option' },
+                r.emoji ? rrEl('span', { text: r.emoji }) : null,
+                rrEl('span', null, r.label || r.role || 'Role', rrEl('small', { text: 'Get the ' + (r.role || 'role') + ' role' }))))));
+    } else {
+        controls = rrEl('div', { className: 'rr-pv-controls' }, rows.filter(r => r.emoji).slice(0, 20).map(r =>
+            rrEl('span', { className: 'rr-pv-react' }, rrEl('span', { text: r.emoji }), rrEl('span', { text: '1' }))));
+    }
+    return rrEl('div', { className: 'rr-pv', 'aria-label': 'Preview of the panel message' },
+        rrEl('div', { className: 'rr-pv-msg' },
+            rrEl('span', { className: 'rr-pv-avatar', 'aria-hidden': 'true' }),
+            rrEl('div', null,
+                rrEl('div', { className: 'rr-pv-author' }, rrEl('span', { text: RR_BOT_NAME }), rrEl('span', { className: 'rr-pv-app', text: 'APP' })),
+                embed, controls)));
+}
+const rrMappingRows = (mappings) => (mappings || []).map(m => ({
+    emoji: m.emoji_id || '', label: m.label || m.role_name || rrRoleName(m.role_id) || '', role: m.role_name || rrRoleName(m.role_id) || 'deleted role', style: m.button_style || 'primary',
+}));
+
+// ── Role mappings: add, bulk add, remove — all without a page reload ─────────
+function rrRenderMappings(panelId, mappings) {
+    const panel = RR_PANELS.find(p => String(p.id) === String(panelId));
+    if (panel) panel.mappings = mappings;
+
+    const postBtn = document.querySelector(`[data-post-btn="${panelId}"]`);
+    if (postBtn) postBtn.hidden = mappings.length === 0;
+    rrUpdateStats();
+
+    const wrap = document.getElementById(`rrMappingsWrap-${panelId}`);
+    if (!wrap) return;
+
+    if (!mappings.length) {
+        wrap.replaceChildren(rrEl('div', { className: 'cf-state cf-state--empty' },
+            rrEl('p', { className: 'cf-state-title', text: 'No roles on this panel yet' }),
+            rrEl('p', { className: 'cf-state-text', text: 'Add one below. The panel can be posted once it has a role.' })));
         return;
     }
 
-    const btn = event.target.closest('button');
-    const originalContent = btn.innerHTML;
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Posting...';
+    const hint = rrHint(panel?.interaction_type);
+    const list = rrEl('div', { className: 'cf-list' }, mappings.map(m => rrEl('div', { className: 'cf-list-item' },
+        rrEl('div', { className: 'cf-list-main rr-mapping-main' },
+            rrEl('span', { className: 'rr-mapping-emoji', text: m.emoji_id || '' }),
+            rrEl('span', null,
+                rrEl('span', { className: 'rr-mapping-role', text: m.label || m.role_name || 'Deleted role' }),
+                rrEl('span', { className: 'rr-mapping-hint', text: (m.label && m.role_name ? '@' + m.role_name + ' · ' : (!m.role_name ? 'The role was deleted; remove this row · ' : '')) + hint }))),
+        rrEl('div', { className: 'cf-list-actions' },
+            rrEl('button', { type: 'button', className: 'btn btn-sm btn-secondary', title: 'Remove this role from the panel', text: 'Remove',
+                onclick: (e) => rrRemoveMapping(panelId, m.id, e.currentTarget) })))));
+    // The preview stays open across redraws once someone has opened it.
+    const wasOpen = !!wrap.querySelector('details.rr-pv-details[open]');
+    const details = rrEl('details', { className: 'cf-expand rr-pv-details' }, rrEl('summary', { text: 'Preview the message' }),
+        rrEl('div', { className: 'cf-expand-body' }, panel ? rrPreview(panel, rrMappingRows(mappings)) : null));
+    if (wasOpen) details.open = true;
+    wrap.replaceChildren(rrEl('div', { className: 'cf-rows-head', text: `Roles on this panel (${mappings.length})` }), list, details);
+}
 
+async function rrAddMapping(event) {
+    event.preventDefault();
+    const form = event.target;
+    const panelId = form.dataset.panel;
+    const status = form.querySelector('[data-status]');
+    const submit = form.querySelector('button[type=submit]');
+    const data = new FormData(form);
+
+    if (form.dataset.type === 'reaction' && !data.get('emoji_id')) { rrStatus(status, 'Pick an emoji first.', false); return false; }
+    submit.disabled = true;
+    rrStatus(status, 'Adding…');
+    try {
+        const body = await rrRequest(RR_API(panelId), {
+            method: 'POST',
+            body: JSON.stringify({
+                role_id: data.get('role_id'),
+                emoji_id: data.get('emoji_id') || null,
+                label: data.get('label') || null,
+                button_style: data.get('button_style') || 'primary',
+            }),
+        });
+        rrRenderMappings(panelId, body.mappings);
+        form.reset();
+        rrStatus(status, `Added.${RR_LIVE_NOTE[body.liveMessage] ?? ''}`, body.liveMessage !== 'failed');
+    } catch (err) {
+        rrStatus(status, err.message, false);
+    } finally {
+        submit.disabled = false;
+    }
+    return false;
+}
+
+async function rrRemoveMapping(panelId, mappingId, button) {
+    if (!confirm('Remove this role from the panel?')) return;
+    button.disabled = true;
+    const status = document.querySelector(`[data-status="${panelId}"]`);
+    try {
+        const body = await rrRequest(RR_API(panelId, `/${mappingId}`), { method: 'DELETE' });
+        rrRenderMappings(panelId, body.mappings);
+        rrStatus(status, `Removed.${RR_LIVE_NOTE[body.liveMessage] ?? ''}`, body.liveMessage !== 'failed');
+    } catch (err) {
+        button.disabled = false;
+        rrStatus(status, err.message, false);
+    }
+}
+
+function rrBulkReport(panelId, { added, errors }) {
+    const box = document.querySelector(`[data-bulk-report="${panelId}"]`);
+    if (!box) return;
+    const parts = [];
+    if (added && added.length) {
+        parts.push(rrEl('div', { className: 'rr-bulk-ok' }, rrEl('strong', { text: `${added.length} will be added: ` }),
+            added.map(a => [a.emoji_id, a.label || a.role_name].filter(Boolean).join(' ')).join(', ')));
+    }
+    if (errors && errors.length) {
+        parts.push(rrEl('ul', { className: 'rr-bulk-errors' }, errors.map(e => rrEl('li', { text: `Line ${Number(e.line)}: ${e.error}` }))));
+    }
+    box.replaceChildren(...(parts.length ? parts : [rrEl('div', { className: 'rr-bulk-ok', text: 'Nothing to add.' })]));
+}
+
+async function rrBulkPreview(panelId) {
+    const text = document.querySelector(`[data-bulk="${panelId}"] .rr-bulk-text`).value;
+    const status = document.querySelector(`[data-bulk-status="${panelId}"]`);
+    rrStatus(status, 'Checking…');
+    try {
+        const body = await rrRequest(RR_API(panelId, '/bulk'), {
+            method: 'POST', body: JSON.stringify({ text, dryRun: true }),
+        });
+        rrBulkReport(panelId, { added: body.add, errors: body.errors });
+        rrStatus(status, `${body.add.length} ready · ${body.used} of ${body.capacity} slots used`);
+    } catch (err) {
+        rrBulkReport(panelId, { added: [], errors: err.body?.errors || [] });
+        rrStatus(status, err.message, false);
+    }
+}
+
+async function rrBulkAdd(panelId) {
+    const box = document.querySelector(`[data-bulk="${panelId}"]`);
+    const text = box.querySelector('.rr-bulk-text').value;
+    const status = document.querySelector(`[data-bulk-status="${panelId}"]`);
+    rrStatus(status, 'Adding…');
+    try {
+        const body = await rrRequest(RR_API(panelId, '/bulk'), {
+            method: 'POST', body: JSON.stringify({ text }),
+        });
+        rrRenderMappings(panelId, body.mappings);
+        rrBulkReport(panelId, { added: [], errors: body.errors });
+        // Only clear the box on a clean run — otherwise the rejected lines are still there to fix.
+        if (!body.errors.length) box.querySelector('.rr-bulk-text').value = '';
+        rrStatus(status, `Added ${body.added}.${RR_LIVE_NOTE[body.liveMessage] ?? ''}`, body.liveMessage !== 'failed');
+    } catch (err) {
+        rrBulkReport(panelId, { added: [], errors: err.body?.errors || [] });
+        rrStatus(status, err.message, false);
+    }
+}
+
+function rrPaintAll() { RR_PANELS.forEach(p => rrRenderMappings(p.id, p.mappings || [])); }
+// The lists live in the DOM only after this runs, so never wait on an event that already fired.
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', rrPaintAll);
+else rrPaintAll();
+
+// Filter panels (shown when there are more than 15).
+(function () {
+    const input = document.querySelector('.rr-filter');
+    if (!input) return;
+    const empty = document.querySelector('.rr-filter-empty');
+    input.addEventListener('input', () => {
+        const q = input.value.trim().toLowerCase();
+        let shown = 0;
+        document.querySelectorAll('section.rr-panel').forEach(s => {
+            const hit = !q || s.querySelector('.cf-section-head').textContent.toLowerCase().includes(q);
+            s.hidden = !hit;
+            if (hit) shown++;
+        });
+        if (empty) empty.hidden = shown > 0;
+    });
+})();
+
+// ── Templates: starting points for a new panel ──────────────────────────────
+// Each row's label doubles as the name of the role the bot creates when no existing role is picked.
+const RR_TEMPLATES = {
+    colours: {
+        panel_name: 'Name colours', panel_mode: 'unique', interaction_type: 'button', embed_color: '#e91e63',
+        description: 'Pick a colour for your name. Picking another one swaps it.',
+        style: 'secondary', colours: true,
+        rows: [['🔴', 'Red', '#e74c3c'], ['🟠', 'Orange', '#e67e22'], ['🟡', 'Yellow', '#f1c40f'], ['🟢', 'Green', '#2ecc71'],
+               ['🔵', 'Blue', '#3498db'], ['🟣', 'Purple', '#9b59b6'], ['🌸', 'Pink', '#ff6fae'], ['🟤', 'Brown', '#a0522d'],
+               ['⚪', 'White', '#f2f3f5'], ['⚫', 'Black', '#111214']],
+    },
+    pronouns: {
+        panel_name: 'Pronouns', panel_mode: 'normal', interaction_type: 'button', embed_color: '#5865f2',
+        description: 'Pick the pronouns you use. Pick one again to remove it.',
+        style: 'secondary',
+        rows: [['', 'He/him'], ['', 'She/her'], ['', 'They/them'], ['', 'Any pronouns'], ['', 'Ask my pronouns']],
+    },
+    notifications: {
+        panel_name: 'Notifications', panel_mode: 'normal', interaction_type: 'button', embed_color: '#f1c40f',
+        description: 'Choose what you want to be pinged for. Pick one again to stop.',
+        style: 'primary',
+        rows: [['📢', 'Announcements'], ['📅', 'Events'], ['🎉', 'Giveaways'], ['🔴', 'Going live'], ['📊', 'Polls'], ['🔔', 'Updates']],
+    },
+    regions: {
+        panel_name: 'Regions', panel_mode: 'unique', interaction_type: 'select_menu', embed_color: '#2ecc71',
+        description: 'Where are you based? It helps people find others in their time zone.',
+        style: 'primary',
+        rows: [['🌎', 'North America'], ['🌎', 'South America'], ['🌍', 'Europe'], ['🌍', 'Africa'], ['🌏', 'Asia'], ['🌏', 'Oceania']],
+    },
+};
+const RR_STYLES = [['primary', 'Blue'], ['secondary', 'Grey'], ['success', 'Green'], ['danger', 'Red']];
+const RR_NEW = '__new__';
+
+(function rrCreateDialog() {
+    const modal = document.getElementById('createPanelModal');
+    if (!modal) return;
+    const form = modal.querySelector('form');
+    const f = (id) => document.getElementById(id);
+    const tplBox = modal.querySelector('.rr-tpl');
+    const rowsBox = modal.querySelector('.rr-tpl-rows');
+    const pvSlot = modal.querySelector('.rr-create-pv');
+    const status = modal.querySelector('.rr-create-status');
+    const submit = modal.querySelector('.rr-create-submit');
+    let tpl = null;   // the chosen template, or null for a blank panel
+
+    const type = () => f('f-reaction-roles-interaction_type').value;
+
+    function roleSelect(name) {
+        const sel = rrEl('select', { className: 'form-select', 'aria-label': 'Role for this row' });
+        const match = RR_ROLES.find(r => r.name.toLowerCase() === String(name || '').trim().toLowerCase() && !r.blocked);
+        sel.appendChild(rrEl('option', { value: RR_NEW, text: 'Create "' + (name || 'new role') + '"' }));
+        RR_ROLES.forEach(r => sel.appendChild(rrEl('option', { value: r.id, disabled: r.blocked, text: r.name + (r.blocked ? ' (above the bot)' : '') })));
+        sel.value = match ? match.id : RR_NEW;
+        return sel;
+    }
+
+    function addRow(emoji, label, colour, style) {
+        const row = rrEl('div', { className: 'rr-tpl-row' + (type() === 'button' ? '' : ' no-style') });
+        row._colour = colour || null;
+        const emojiIn = rrEl('input', { type: 'text', className: 'form-control rr-tpl-emoji', maxlength: '64', value: emoji || '', 'aria-label': 'Emoji', placeholder: 'Emoji' });
+        const labelIn = rrEl('input', { type: 'text', className: 'form-control rr-tpl-label', maxlength: '80', value: label || '', 'aria-label': 'Text and role name', placeholder: 'Text' });
+        const sel = roleSelect(label);
+        const styleSel = rrEl('select', { className: 'form-select rr-tpl-style', 'aria-label': 'Button colour', hidden: type() !== 'button' },
+            RR_STYLES.map(([v, t]) => rrEl('option', { value: v, text: t })));
+        styleSel.value = style || 'primary';
+        const remove = rrEl('button', { type: 'button', className: 'btn btn-sm btn-secondary', 'aria-label': 'Remove this row', title: 'Remove this row' }, rrEl('i', { className: 'fas fa-xmark', 'aria-hidden': 'true' }));
+        labelIn.addEventListener('input', () => {
+            const opt = sel.querySelector(`option[value="${RR_NEW}"]`);
+            if (opt) opt.textContent = 'Create "' + (labelIn.value.trim() || 'new role') + '"';
+            draw();
+        });
+        [emojiIn, sel, styleSel].forEach(n => n.addEventListener(n.tagName === 'INPUT' ? 'input' : 'change', draw));
+        remove.addEventListener('click', () => { row.remove(); draw(); });
+        row.append(emojiIn, labelIn, sel, styleSel, remove);
+        rowsBox.appendChild(row);
+    }
+
+    function rows() {
+        return [...rowsBox.querySelectorAll('.rr-tpl-row')].map(row => {
+            const [emojiIn, labelIn, sel, styleSel] = row.querySelectorAll('input, select');
+            const label = labelIn.value.trim();
+            return { emoji: emojiIn.value.trim(), label, roleId: sel.value, colour: row._colour, style: styleSel.value,
+                role: sel.value === RR_NEW ? label : rrRoleName(sel.value) };
+        });
+    }
+
+    function draw() {
+        const panel = {
+            panel_name: f('f-reaction-roles-panel_name').value.trim(),
+            description: f('f-reaction-roles-description').value,
+            embed_color: f('f-reaction-roles-embed_color').value,
+            interaction_type: type(),
+        };
+        const isButton = type() === 'button';
+        rowsBox.querySelectorAll('.rr-tpl-row').forEach(row => {
+            row.classList.toggle('no-style', !isButton);
+            row.querySelector('.rr-tpl-style').hidden = !isButton;
+        });
+        pvSlot.replaceChildren(rrPreview(panel, tpl ? rows() : []));
+    }
+
+    function choose(key) {
+        tpl = RR_TEMPLATES[key] || null;
+        modal.querySelectorAll('.rr-tpl-btn').forEach(b => b.setAttribute('aria-pressed', String(b.value === (key || ''))));
+        rowsBox.replaceChildren();
+        status.hidden = true;
+        if (tpl) {
+            f('f-reaction-roles-panel_name').value = tpl.panel_name;
+            f('f-reaction-roles-description').value = tpl.description;
+            f('f-reaction-roles-embed_color').value = tpl.embed_color;
+            f('f-reaction-roles-panel_mode').value = tpl.panel_mode;
+            f('f-reaction-roles-interaction_type').value = tpl.interaction_type;
+            tpl.rows.forEach(([emoji, label, colour]) => addRow(emoji, label, colour, tpl.style));
+        }
+        tplBox.hidden = !tpl;
+        draw();
+    }
+
+    modal.querySelectorAll('.rr-tpl-btn').forEach(b => b.addEventListener('click', () => choose(b.value)));
+    modal.querySelector('.rr-tpl-add').addEventListener('click', () => { addRow('', '', null, tpl ? tpl.style : 'primary'); draw(); rowsBox.lastElementChild.querySelector('.rr-tpl-label').focus(); });
+    ['f-reaction-roles-panel_name', 'f-reaction-roles-description', 'f-reaction-roles-embed_color'].forEach(id => f(id).addEventListener('input', draw));
+    f('f-reaction-roles-interaction_type').addEventListener('change', draw);
+    modal.addEventListener('show.bs.modal', draw);
+    draw();
+
+    function fail(message) {
+        status.className = 'cf-notice is-bad rr-create-status';
+        status.textContent = message;
+        status.hidden = false;
+        submit.disabled = false;
+    }
+
+    // A blank panel posts the form as before. A template creates any missing roles, then the
+    // panel with all its roles, through the API.
+    form.addEventListener('submit', async (e) => {
+        const list = tpl ? rows() : [];
+        if (!list.length) return;
+        e.preventDefault();
+        status.hidden = true;
+
+        const t = type();
+        if (list.some(r => !r.label)) return fail('Every row needs text. Remove the empty rows.');
+        if (t === 'reaction' && list.some(r => !r.emoji)) return fail('Reaction panels need an emoji on every row.');
+        if (list.length > (t === 'reaction' ? 20 : 25)) return fail(`A ${t === 'reaction' ? 'reaction' : 'button or dropdown'} panel holds at most ${t === 'reaction' ? 20 : 25} roles.`);
+        const toCreate = list.filter(r => r.roleId === RR_NEW);
+        if (toCreate.some(r => r.label.includes('|') || r.label.startsWith('//') || r.label.length > 100)) return fail('Role names cannot contain "|", start with "//" or be longer than 100 characters.');
+        const picked = list.filter(r => r.roleId !== RR_NEW).map(r => r.roleId);
+        if (new Set(picked).size !== picked.length) return fail('The same role is picked on two rows.');
+        if (toCreate.length && !confirm(`Create ${toCreate.length} new role${toCreate.length === 1 ? '' : 's'} (${toCreate.map(r => r.label).join(', ')})?`)) return;
+
+        submit.disabled = true;
+        try {
+            const idByName = {};
+            if (toCreate.length) {
+                status.className = 'cf-notice is-info rr-create-status'; status.textContent = 'Creating roles…'; status.hidden = false;
+                const names = toCreate.map(r => r.label + (r.colour ? ' | ' + r.colour : '')).join('\n');
+                const made = await rrRequest(`/api/guilds/${RR_GUILD_ID}/bulk-roles/create`, { method: 'POST', body: JSON.stringify({ names, preset: 'none' }) });
+                (made.created || []).forEach(r => { idByName[r.name.toLowerCase()] = r.id; RR_ROLES.push({ id: r.id, name: r.name, color: r.color, blocked: false }); });
+                const missing = toCreate.filter(r => !idByName[r.label.toLowerCase()]);
+                if (missing.length) {
+                    const why = (made.failed || []).map(x => `${x.name}: ${x.error}`).join('; ');
+                    return fail(`Could not create ${missing.map(r => r.label).join(', ')}${why ? ` (${why})` : ''}. Roles that were created are kept; pick them in the rows and try again.`);
+                }
+            }
+            status.className = 'cf-notice is-info rr-create-status'; status.textContent = 'Creating the panel…'; status.hidden = false;
+            const body = {
+                panel_name: f('f-reaction-roles-panel_name').value.trim(),
+                channel_id: f('f-reaction-roles-channel_id').value,
+                description: f('f-reaction-roles-description').value,
+                embed_color: f('f-reaction-roles-embed_color').value,
+                panel_mode: f('f-reaction-roles-panel_mode').value,
+                interaction_type: t,
+                max_selections: 0,
+                mappings: list.map(r => ({
+                    role_id: r.roleId === RR_NEW ? idByName[r.label.toLowerCase()] : r.roleId,
+                    emoji_id: r.emoji || null,
+                    // Text equal to the role name is left blank so the panel follows a later rename.
+                    label: r.label && r.label !== r.role ? r.label : null,
+                    button_style: t === 'button' ? r.style : 'primary',
+                })),
+            };
+            await rrRequest(`/api/guilds/${RR_GUILD_ID}/reaction-roles/panels`, { method: 'POST', body: JSON.stringify(body) });
+            location.href = `/manage/${RR_GUILD_ID}?page=reaction-roles&success=panel_created`;
+        } catch (err) {
+            fail(err.message);
+        }
+    });
+})();
+
+// ── Panel editing ────────────────────────────────────────────────────────────
+function rrToggleSelectFields() {
+    const isSelect = document.getElementById('rrEditType').value === 'select_menu';
+    document.getElementById('rrEditSelectOnly').hidden = !isSelect;
+}
+
+function rrEditPanelValues() {
+    return {
+        panel_name: document.getElementById('rrEditPanelName').value.trim(),
+        description: document.getElementById('rrEditDescription').value,
+        embed_color: document.getElementById('rrEditColor').value,
+        interaction_type: document.getElementById('rrEditType').value,
+        placeholder_text: document.getElementById('rrEditPlaceholder').value,
+        image_url: document.getElementById('rrEditImage').value,
+    };
+}
+function rrDrawEditPreview() {
+    const id = document.getElementById('rrEditId').value;
+    const panel = RR_PANELS.find(p => String(p.id) === String(id));
+    const slot = document.querySelector('#editPanelModal .rr-edit-pv');
+    if (slot) slot.replaceChildren(rrPreview(rrEditPanelValues(), rrMappingRows(panel ? panel.mappings : [])));
+}
+
+function openEditPanel(panelId) {
+    const panel = RR_PANELS.find(p => String(p.id) === String(panelId));
+    if (!panel) return;
+    document.getElementById('rrEditId').value = panel.id;
+    document.getElementById('rrEditName').textContent = panel.panel_name;
+    document.getElementById('rrEditPanelName').value = panel.panel_name;
+    document.getElementById('rrEditChannel').value = panel.channel_id;
+    document.getElementById('rrEditDescription').value = panel.description;
+    document.getElementById('rrEditColor').value = /^#[0-9a-f]{6}$/i.test(panel.embed_color) ? panel.embed_color : '#a78bfa';
+    document.getElementById('rrEditMode').value = panel.panel_mode;
+    document.getElementById('rrEditType').value = panel.interaction_type;
+    document.getElementById('rrEditPlaceholder').value = panel.placeholder_text;
+    document.getElementById('rrEditMaxSelections').value = panel.max_selections;
+    document.getElementById('rrEditThumbnail').value = panel.thumbnail_url;
+    document.getElementById('rrEditImage').value = panel.image_url;
+    document.getElementById('rrEditChannelHelp').textContent = panel.posted
+        ? 'Moving a posted panel deletes the old message; you then post it fresh in the new channel.'
+        : 'This panel has not been posted yet, so changing the channel just changes where it will go.';
+    const status = document.getElementById('rrEditStatus');
+    status.hidden = true;
+    status.textContent = '';
+    rrToggleSelectFields();
+    rrDrawEditPreview();
+    new bootstrap.Modal(document.getElementById('editPanelModal')).show();
+}
+
+document.addEventListener('DOMContentLoaded', function () {
+    const typeSel = document.getElementById('rrEditType');
+    if (typeSel) typeSel.addEventListener('change', () => { rrToggleSelectFields(); rrDrawEditPreview(); });
+    ['rrEditPanelName', 'rrEditDescription', 'rrEditColor', 'rrEditPlaceholder', 'rrEditImage'].forEach(id => {
+        const n = document.getElementById(id);
+        if (n) n.addEventListener('input', rrDrawEditPreview);
+    });
+
+    const saveBtn = document.getElementById('rrEditSave');
+    if (!saveBtn) return;
+    saveBtn.addEventListener('click', async function () {
+        const panelId = document.getElementById('rrEditId').value;
+        const status = document.getElementById('rrEditStatus');
+        const name = document.getElementById('rrEditPanelName').value.trim();
+        if (!name) {
+            status.hidden = false; status.className = 'cf-notice is-bad';
+            status.textContent = 'Panel name is required.';
+            return;
+        }
+
+        const maxRaw = document.getElementById('rrEditMaxSelections').value;
+        const body = {
+            panel_name: name,
+            channel_id: document.getElementById('rrEditChannel').value,
+            description: document.getElementById('rrEditDescription').value,
+            embed_color: document.getElementById('rrEditColor').value,
+            panel_mode: document.getElementById('rrEditMode').value,
+            interaction_type: document.getElementById('rrEditType').value,
+            placeholder_text: document.getElementById('rrEditPlaceholder').value,
+            max_selections: maxRaw === '' ? 0 : parseInt(maxRaw, 10) || 0,
+            thumbnail_url: document.getElementById('rrEditThumbnail').value,
+            image_url: document.getElementById('rrEditImage').value
+        };
+
+        saveBtn.disabled = true;
+        const original = saveBtn.textContent;
+        saveBtn.textContent = 'Saving…';
+        status.hidden = false; status.className = 'cf-notice is-info'; status.textContent = 'Saving…';
+
+        try {
+            const resp = await fetch(`/api/guilds/${RR_GUILD_ID}/reaction-roles/panels/${panelId}`, {
+                method: 'PUT',
+                credentials: 'same-origin',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            const data = await resp.json().catch(() => ({}));
+            if (!resp.ok || data.error) throw new Error(data.error || `Save failed (${resp.status})`);
+
+            const outcomes = {
+                updated: ['ok', 'Saved. The posted message was updated in place, so pins and links still work.'],
+                not_posted: ['ok', 'Saved. This panel is not posted yet; use Post to Discord when you are ready.'],
+                moved_needs_post: ['warn', 'Saved and moved. The old message was deleted; use Post to Discord to post it in the new channel.'],
+                message_gone: ['warn', 'Saved, but the posted message no longer exists in Discord. Use Post to Discord to put it back.'],
+                no_mappings: ['warn', 'Saved, but this panel has no roles yet, so there is nothing to show.'],
+                failed: ['warn', 'Saved, but refreshing the posted message failed. Check the bot logs, then try Repost.']
+            };
+            const [cls, text] = outcomes[data.liveMessage] || ['ok', 'Saved.'];
+            status.className = 'cf-notice ' + ({ ok: 'is-ok', warn: 'is-warn' }[cls] || 'is-info');
+            status.textContent = text + ' Reloading…';
+            setTimeout(() => window.location.reload(), 1600);
+        } catch (err) {
+            status.className = 'cf-notice is-bad';
+            status.textContent = err.message;
+        } finally {
+            saveBtn.disabled = false;
+            saveBtn.textContent = original;
+        }
+    });
+});
+
+async function postPanel(guildId, panelId, btn) {
+    if (!confirm('Post this panel to Discord? This creates the message in the panel channel.')) return;
+    btn = btn || document.querySelector(`[data-post-btn="${panelId}"]`);
+    const original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Posting…';
     try {
         const response = await fetch(`/api/guilds/${guildId}/reaction-roles/${panelId}/post`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            }
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json' }
         });
-
-        const data = await response.json();
-
+        const data = await response.json().catch(() => ({}));
         if (data.success) {
-            alert('Panel posted successfully! Reloading page...');
-            window.location.reload();
-        } else {
-            alert(`Error: ${data.error || 'Failed to post panel'}`);
-            btn.disabled = false;
-            btn.innerHTML = originalContent;
+            location.href = `/manage/${guildId}?page=reaction-roles&success=panel_posted`;
+            return;
         }
+        rrFlash(`Could not post the panel: ${data.error || 'unknown error'}`, false);
     } catch (error) {
-        console.error('Error posting panel:', error);
-        alert('Failed to post panel. Please try again.');
-        btn.disabled = false;
-        btn.innerHTML = originalContent;
+        rrFlash('Could not post the panel. Check your connection and try again.', false);
     }
+    btn.disabled = false;
+    btn.textContent = original;
 }
 </script>

@@ -11,6 +11,7 @@ import {
 import logger from '../utils/logger.js';
 import pool from '../utils/db.js';
 import { getLeaveOptions } from '../utils/music_helpers.js';
+import { voiceToolHolding } from './music-leave-policy.js';
 
 class MusicPanel {
     constructor(client, guildId) {
@@ -36,6 +37,10 @@ class MusicPanel {
             try {
                 const [rows] = await pool.execute('SELECT channel_id, message_id FROM music_panels WHERE guild_id = ?', [this.guildId]);
                 if (rows.length > 0 && rows[0].message_id) {
+                    // Resolve the client that actually serves this guild (custom bots come up after
+                    // the main client loads panels, and only they can see their guild's channels).
+                    const owner = global.botManager?.getClientForGuild?.(this.guildId);
+                    if (owner) this.client = owner;
                     const channel = await this.client.channels.fetch(rows[0].channel_id).catch(() => null);
                     if (channel) {
                         this.message = await channel.messages.fetch(rows[0].message_id).catch(() => null);
@@ -291,7 +296,7 @@ class MusicPanel {
                     logger.error(`[Music Panel] spotify-direct control error: ${e.message}`);
                 }
                 if (interaction.customId !== 'music-add-song' && interaction.customId !== 'music-ai-dj') {
-                    try { await interaction.reply({ content: 'Nothing is playing right now.', ephemeral: true }); } catch {}
+                    try { await interaction.followUp({ content: 'Nothing is playing right now.', ephemeral: true }); } catch {}
                 }
                 return this.updatePanel(undefined);
             }
@@ -322,10 +327,10 @@ class MusicPanel {
                         }
 
                         // If DJ mode, fire off banter generation in background (non-blocking)
-                        if (queue.metadata?.djMode && this.client.djManager) {
+                        if (queue.metadata?.djMode && (this.client.djManager || global.djManager)) {
                             if (isLastTrack) {
                                 setTimeout(() => {
-                                    this.client.djManager.onQueueEnd(queue)
+                                    (this.client.djManager || global.djManager).onQueueEnd(queue)
                                         .catch(err => logger.error(`[Music Panel] onQueueEnd error:`, { error: err.message }));
                                 }, 500);
                             }
@@ -337,9 +342,19 @@ class MusicPanel {
                         });
                     }
                     break;
-                case 'music-stop':
-                    if (queue) queue.delete();
+                case 'music-stop': {
+                    // Same as /music stop: a recording, transcription or the chat reader still needs the
+                    // connection, so end the music only (no DJ refill, no repeat) instead of leaving.
+                    const tool = await voiceToolHolding(interaction.guildId);
+                    if (!tool) { queue.delete(); break; }
+                    if (queue.metadata?.djMode) queue.setMetadata({ ...queue.metadata, djMode: false, favoritesSeed: false });
+                    queue.setRepeatMode(0);
+                    queue.node.stop();
+                    try {
+                        await interaction.followUp({ content: `Music stopped. I'm staying in the voice channel (${tool}).`, ephemeral: true });
+                    } catch {}
                     break;
+                }
                 case 'music-clear':
                     if (queue && queue.tracks.size > 0) queue.tracks.clear();
                     break;
@@ -366,7 +381,7 @@ class MusicPanel {
                         const list = tracks.map((t, i) => `**${i + 1}.** ${t.title} — ${t.author}`).join('\n');
                         const total = queue.tracks.size;
                         try {
-                            await interaction.reply({
+                            await interaction.followUp({
                                 content: `**Queue** (${total} song${total !== 1 ? 's' : ''}):\n${list}${total > 10 ? `\n... and ${total - 10} more` : ''}`,
                                 ephemeral: true
                             });
@@ -479,14 +494,18 @@ class MusicPanel {
             const geminiApi = (await import('../utils/gemini-api.cjs')).default;
             console.log('[DJ Direct] Gemini API loaded');
 
-            // Get recommendations from Gemini
-            const recommendations = await geminiApi.generatePlaylistRecommendations(
+            // Get recommendations from Gemini, honouring the server's AI DJ blocklist (prompt + filter)
+            const djm = interaction.client.djManager || global.djManager;
+            const blocked = djm ? await djm.getBlocklist(interaction.guildId) : [];
+            const exclusion = (await import('./dj-blocklist.cjs')).default.exclusionText(blocked);
+            const rawRecommendations = await geminiApi.generatePlaylistRecommendations(
                 null, // song
                 null, // artist
                 null, // genre
                 [],   // played tracks
-                'A mix of popular songs from various genres' // prompt
+                ['A mix of popular songs from various genres', exclusion].filter(Boolean).join(' ') // prompt
             );
+            const recommendations = djm ? djm.filterBlocked(rawRecommendations, blocked, interaction.guildId, 'recommendations') : rawRecommendations;
 
             console.log('[DJ Direct] Gemini returned:', recommendations ? recommendations.length : 0, 'recommendations');
 
@@ -596,6 +615,19 @@ class MusicPanel {
 
                 console.log('[DJ Direct] Generating TTS commentary...');
 
+                // A Kokoro voice (kokoro_*, utils/kokoro-tts.js) writes the WAV itself; if it can't,
+                // the Piper voice below speaks instead.
+                let spoken = false;
+                if (String(djVoice).startsWith('kokoro_')) {
+                    try {
+                        const { kokoroToFile } = await import('../utils/kokoro-tts.js');
+                        await kokoroToFile(djText, djVoice, commentaryPath);
+                        spoken = true;
+                    } catch (kokoroError) {
+                        logger.warn(`[DJ Direct] Kokoro voice ${djVoice} unavailable (${kokoroError.message}); using the default Piper voice`);
+                    }
+                }
+
                 // Map voice name to model path
                 const piperModelsDir = process.env.PIPER_MODEL_DIR || '/home/death/CertiFriedUtility/piper_models';
                 const voiceModels = {
@@ -605,9 +637,9 @@ class MusicPanel {
                     'cori': `${piperModelsDir}/en_GB/cori/high/en_GB-cori-high.onnx`
                 };
                 const modelPath = voiceModels[djVoice] || voiceModels['alan'];
-                console.log(`[DJ Direct] Using TTS voice: ${djVoice} (${modelPath})`);
+                if (!spoken) console.log(`[DJ Direct] Using TTS voice: ${djVoice} (${modelPath})`);
 
-                await new Promise((resolve, reject) => {
+                if (!spoken) await new Promise((resolve, reject) => {
                     const piper = spawn('piper', [
                         '--model', modelPath,
                         '--output_file', commentaryPath

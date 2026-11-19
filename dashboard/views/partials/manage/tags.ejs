@@ -1,251 +1,176 @@
-<div class="page-section">
+<%#
+  Tags: every tag members created with /engage tags create, with search and sort, the full text in a dialog,
+  and delete (POST /manage/:id/delete-tag, field tagId). Built on the settings-row kit
+  (cf-settings.css).
+%>
+<%
+const tagList = Array.isArray(tags) ? tags : [];
+const tagCreators = new Set(tagList.map(t => t.creator_id)).size;
+const tagUses = tagList.reduce((n, t) => n + (Number(t.use_count) || 0), 0);
+const tagTopRow = tagList.reduce((best, t) => (Number(t.use_count) || 0) > (Number(best && best.use_count) || 0) ? t : best, null);
+const tagWho = (t) => {
+    if (t.creator_tag) return t.creator_tag;
+    const m = guild && guild.members && guild.members.cache ? guild.members.cache.get(String(t.creator_id)) : null;
+    if (m) return m.displayName || m.user.username;
+    return t.creator_id ? 'Member ' + String(t.creator_id).slice(-4) : 'Unknown';
+};
+const tagTime = (d) => { const n = new Date(d).getTime(); return Number.isFinite(n) ? n : 0; };
+%>
+<style>
+    #cfk-tg-page .tg-count { margin-left: 6px; font-size: var(--cf-text-sm); font-weight: 500; color: var(--cf-text-3); font-variant-numeric: tabular-nums; }
+    #cfk-tg-page .tg-search { width: 16rem; max-width: 100%; }
+    #cfk-tg-page .tg-sort { width: auto; min-width: 8.5rem; }
+    #cfk-tg-page .tg-name { font-family: var(--cf-mono); font-size: var(--cf-text-sm); font-weight: 600; color: var(--cf-text); overflow-wrap: anywhere; }
+    #cfk-tg-page .tg-content { max-width: 32rem; max-height: 4.5em; overflow: hidden; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--cf-text-2); }
+    #cfk-tg-page .tg-creator { color: var(--cf-text-2); overflow-wrap: anywhere; }
+    #cfk-tg-page .tg-uses { font-variant-numeric: tabular-nums; color: var(--cf-text-2); }
+    #cfk-tg-page .tg-actions { display: inline-flex; gap: var(--cf-2); flex-wrap: wrap; justify-content: flex-end; }
+    #cfk-tg-page .tg-actions form { display: inline; margin: 0; }
+    #view-tag-modal .tg-full { white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--cf-mono); font-size: var(--cf-text-sm); max-height: 60vh; overflow-y: auto;
+        margin: 0; padding: var(--cf-4); background: var(--cf-surface-2); border: 1px solid var(--cf-border); border-radius: var(--cf-radius); color: var(--cf-text); }
+    @media (max-width: 640px) { #cfk-tg-page .tg-content { max-width: none; } #cfk-tg-page .tg-sort { flex: 1 1 auto; } }
+</style>
+
+<div class="page-section" id="cfk-tg-page">
     <div class="page-section-header">
         <div>
             <div class="page-section-title">
                 <i class="fas fa-tags"></i>
-                <span>Tag Management</span>
+                <span>Tags</span>
             </div>
-            <div class="page-section-subtitle">
-                View and manage all custom tags created in your server. Users can create tags with <code>/tag create</code>
-            </div>
+            <div class="page-section-subtitle">Made by members with <code>/engage tags create</code>, posted with <code>/engage tags get</code>.</div>
         </div>
     </div>
 
-    <!-- Stats Overview -->
-    <div class="grid grid-cols-4" style="margin-bottom: var(--spacing-6);">
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Total Tags</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary);"><%= (tags || []).length %></div>
-        </div>
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Unique Creators</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-primary-400);"><%= new Set((tags || []).map(t => t.creator_id)).size %></div>
-        </div>
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Avg Tag Length</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-accent-purple);">
-                <%= (tags || []).length > 0 ? Math.round((tags || []).reduce((sum, t) => sum + (t.tag_content?.length || 0), 0) / tags.length) : 0 %> chars
-            </div>
-        </div>
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Most Used</div>
-            <div style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-success); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                <%= (tags || []).length > 0 ? (tags.reduce((max, t) => (t.use_count || 0) > (max.use_count || 0) ? t : max, tags[0]).tag_name || 'N/A') : 'N/A' %>
-            </div>
-        </div>
-    </div>
+    <dl class="cf-kpis" aria-label="Tags at a glance">
+        <div class="cf-kpi"><dt>Tags</dt><dd class="cf-kpi-value"><%= tagList.length %></dd></div>
+        <div class="cf-kpi"><dt>Times used</dt><dd class="cf-kpi-value"><%= tagUses.toLocaleString('en-US') %></dd></div>
+        <div class="cf-kpi"><dt>Creators</dt><dd class="cf-kpi-value"><%= tagCreators %></dd></div>
+        <div class="cf-kpi"><dt>Most used</dt><dd class="cf-kpi-value is-small"><%= tagTopRow ? tagTopRow.tag_name : 'None yet' %></dd></div>
+    </dl>
 
-    <!-- Search Bar -->
-    <div style="margin-bottom: var(--spacing-4);">
-        <div class="input-group">
-            <span class="input-group-icon">
-                <i class="fas fa-search"></i>
-            </span>
-            <input type="text" id="tagSearch" class="form-control" placeholder="Search tags by name, content, or creator...">
-        </div>
-    </div>
-
-    <!-- Tags Table -->
-    <% if (tags && tags.length > 0) { %>
-        <div class="table-container">
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th>Tag Name</th>
-                        <th>Content</th>
-                        <th>Creator</th>
-                        <th>Uses</th>
-                        <th class="text-end">Actions</th>
-                    </tr>
-                </thead>
-                <tbody id="tagsTableBody">
-                    <% tags.forEach(tag => { %>
+    <section class="cf-section" aria-labelledby="tg-list-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="tg-list-title">All tags <span class="tg-count"><%= tagList.length %></span></h2>
+                <p class="cf-section-desc">Deleting a tag removes it for everyone; its creator can make it again.</p>
+            </div>
+            <% if (tagList.length) { %>
+            <div class="cf-section-actions">
+                <label class="visually-hidden" for="cfk-tg-sort">Sort tags</label>
+                <select id="cfk-tg-sort" class="form-select form-select-sm tg-sort"<%= tagList.length > 1 ? '' : ' hidden' %>>
+                    <option value="uses">Most used</option>
+                    <option value="name">A to Z</option>
+                    <option value="new">Newest</option>
+                </select>
+                <input type="search" id="tagSearch" class="form-control tg-search" placeholder="Search name, text or creator" aria-label="Search tags"<%= tagList.length > 15 ? '' : ' hidden' %>>
+            </div>
+            <% } %>
+        </header>
+        <div class="cf-rows">
+            <% if (tagList.length > 0) { %>
+            <div class="cf-table-wrap">
+                <table class="cf-table cf-table--stack">
+                    <thead>
+                        <tr>
+                            <th scope="col">Name</th>
+                            <th scope="col">Text</th>
+                            <th scope="col">Creator</th>
+                            <th scope="col">Uses</th>
+                            <th scope="col"><span class="visually-hidden">Actions</span></th>
+                        </tr>
+                    </thead>
+                    <tbody id="tagsTableBody">
+                        <% tagList.slice().sort((a, b) => (Number(b.use_count) || 0) - (Number(a.use_count) || 0) || String(a.tag_name).localeCompare(String(b.tag_name))).forEach(tag => { const who = tagWho(tag); %>
                         <tr class="tag-row"
-                            data-tag-name="<%= tag.tag_name.toLowerCase() %>"
+                            data-tag-name="<%= String(tag.tag_name).toLowerCase() %>"
                             data-content="<%= (tag.tag_content || '').toLowerCase() %>"
-                            data-creator="<%= (tag.creator_tag || tag.creator_id || '').toLowerCase() %>">
-                            <td>
-                                <div style="display: flex; align-items: center; gap: var(--spacing-2);">
-                                    <i class="fas fa-tag" style="color: var(--color-primary-400);"></i>
-                                    <code style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary); background: var(--color-dark-600); padding: var(--spacing-1) var(--spacing-2); border-radius: var(--radius-sm);">
-                                        <%= tag.tag_name %>
-                                    </code>
-                                </div>
-                            </td>
-                            <td>
-                                <div style="max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: pre-wrap; color: var(--color-text-secondary); font-size: var(--font-size-sm); max-height: 60px; overflow-y: auto;">
-                                    <%= tag.tag_content %>
-                                </div>
-                            </td>
-                            <td>
-                                <div style="display: flex; align-items: center; gap: var(--spacing-2);">
-                                    <i class="fas fa-user" style="color: var(--color-text-muted); font-size: var(--font-size-sm);"></i>
-                                    <span style="color: var(--color-text-secondary); font-size: var(--font-size-sm);">
-                                        <%= tag.creator_tag || (tag.creator_id ? tag.creator_id.substring(0, 8) + '...' : 'Unknown') %>
-                                    </span>
-                                </div>
-                            </td>
-                            <td>
-                                <% if (tag.use_count) { %>
-                                    <span class="badge badge-primary"><%= tag.use_count %> uses</span>
-                                <% } else { %>
-                                    <span class="badge" style="background: var(--color-dark-500); color: var(--color-text-muted);">0 uses</span>
-                                <% } %>
-                            </td>
-                            <td class="text-end">
-                                <button class="btn btn-sm btn-secondary" onclick="viewTagContent('<%= tag.tag_name %>', `<%= tag.tag_content.replace(/`/g, '\\`').replace(/\n/g, '\\n') %>`)">
-                                    <i class="fas fa-eye"></i>
-                                    <span>View</span>
-                                </button>
-                                <form action="/manage/<%= guild.id %>/delete-tag" method="POST" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete the tag \'<%= tag.tag_name %>\'?')">
-                                    <input type="hidden" name="tagId" value="<%= tag.id %>">
-                                    <button type="submit" class="btn btn-sm btn-danger">
-                                        <i class="fas fa-trash"></i>
-                                        <span>Delete</span>
-                                    </button>
-                                </form>
+                            data-creator="<%= who.toLowerCase() %>"
+                            data-uses="<%= Number(tag.use_count) || 0 %>"
+                            data-created="<%= tagTime(tag.created_at) %>">
+                            <td data-label="Name"><span class="tg-name"><%= tag.tag_name %></span><% if (tag.embed_data) { %> <span class="cf-pill">Embed</span><% } %></td>
+                            <td data-label="Text"><div class="tg-content"><%= tag.tag_content %></div></td>
+                            <td data-label="Creator"><span class="tg-creator"><%= who %></span></td>
+                            <td data-label="Uses"><span class="tg-uses"><%= (Number(tag.use_count) || 0).toLocaleString('en-US') %></span></td>
+                            <td class="cf-cell-end">
+                                <span class="tg-actions">
+                                    <button type="button" class="btn btn-sm btn-secondary" data-name="<%= tag.tag_name %>" data-text="<%= tag.tag_content || '' %>" onclick="viewTagContent(this.dataset.name, this.dataset.text)">View</button>
+                                    <form action="/manage/<%= guild.id %>/delete-tag" method="POST" data-tg-delete="<%= tag.tag_name %>">
+                                        <input type="hidden" name="tagId" value="<%= tag.id %>">
+                                        <button type="submit" class="btn btn-sm btn-danger" aria-label="Delete the tag <%= tag.tag_name %>">Delete</button>
+                                    </form>
+                                </span>
                             </td>
                         </tr>
-                    <% }); %>
-                </tbody>
-            </table>
-        </div>
-    <% } else { %>
-        <div class="empty-state">
-            <div class="empty-state-icon">
-                <i class="fas fa-tags"></i>
+                        <% }); %>
+                    </tbody>
+                </table>
             </div>
-            <div class="empty-state-title">No Tags Created Yet</div>
-            <div class="empty-state-description">
-                Users can create custom tags using the <code>/tag create</code> command. Tags are reusable text snippets that can be quickly recalled.
-            </div>
+            <div class="cf-state cf-state--compact" id="tag-nomatch-empty" hidden><p class="cf-state-text">No tag matches that search.</p></div>
+            <% } else { %>
+            <%- include('../kit/_state', { kind: 'empty', title: 'No tags yet', text: 'Members create tags with /engage tags create, and they are listed here.', id: null, boxed: false, compact: false }) %>
+            <% } %>
         </div>
-    <% } %>
+    </section>
 </div>
 
-<!-- View Tag Modal -->
-<div class="modal fade" id="view-tag-modal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content" style="background: var(--color-dark-700); border: 1px solid var(--color-dark-400);">
-            <div class="modal-header" style="border-bottom: 1px solid var(--color-dark-400);">
-                <h5 class="modal-title">
-                    <i class="fas fa-tag" style="color: var(--color-primary-400); margin-right: var(--spacing-2);"></i>
-                    <span id="modal-tag-name">Tag Content</span>
-                </h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400); white-space: pre-wrap; font-family: monospace; max-height: 400px; overflow-y: auto;" id="modal-tag-content">
-                    <!-- Content will be inserted here -->
-                </div>
-            </div>
-            <div class="modal-footer" style="border-top: 1px solid var(--color-dark-400);">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-            </div>
+<dialog class="cf-modal-dialog is-wide" id="view-tag-modal" aria-labelledby="modal-tag-name">
+    <header class="cf-modal-head">
+        <div>
+            <h3 class="cf-modal-title" id="modal-tag-name">Tag</h3>
+            <p class="cf-modal-desc">The full text members see.</p>
         </div>
-    </div>
-</div>
-
-<style>
-.table-container {
-    overflow-x: auto;
-    border: 1px solid var(--color-dark-400);
-    border-radius: var(--radius-lg);
-}
-
-.data-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-.data-table thead {
-    background: var(--color-dark-600);
-    border-bottom: 2px solid var(--color-dark-400);
-}
-
-.data-table th {
-    padding: var(--spacing-4);
-    text-align: left;
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-
-.data-table td {
-    padding: var(--spacing-4);
-    border-bottom: 1px solid var(--color-dark-400);
-}
-
-.data-table tbody tr {
-    transition: background var(--transition-base);
-}
-
-.data-table tbody tr:hover {
-    background: var(--color-dark-600);
-}
-
-.data-table tbody tr:last-child td {
-    border-bottom: none;
-}
-
-.empty-state {
-    text-align: center;
-    padding: var(--spacing-12) var(--spacing-8);
-}
-
-.empty-state-icon {
-    font-size: 4rem;
-    color: var(--color-text-muted);
-    margin-bottom: var(--spacing-4);
-}
-
-.empty-state-title {
-    font-size: var(--font-size-xl);
-    font-weight: var(--font-weight-bold);
-    color: var(--color-text-primary);
-    margin-bottom: var(--spacing-2);
-}
-
-.empty-state-description {
-    font-size: var(--font-size-base);
-    color: var(--color-text-secondary);
-    margin-bottom: var(--spacing-6);
-}
-</style>
+        <button type="button" class="cf-modal-close" data-tg-close data-bs-dismiss="modal" aria-label="Close"><i class="fas fa-times" aria-hidden="true"></i></button>
+    </header>
+    <div class="cf-modal-body"><pre class="tg-full" id="modal-tag-content"></pre></div>
+    <footer class="cf-modal-foot"><button type="button" class="btn btn-secondary" data-tg-close data-bs-dismiss="modal">Close</button></footer>
+</dialog>
 
 <script>
-document.addEventListener('DOMContentLoaded', () => {
-    // Search functionality
-    const searchInput = document.getElementById('tagSearch');
-    const tableBody = document.getElementById('tagsTableBody');
+(function () {
+    const root = document.getElementById('cfk-tg-page');
+    if (!root || root.dataset.init) return;
+    root.dataset.init = '1';
+    const body = document.getElementById('tagsTableBody');
+    const search = document.getElementById('tagSearch');
+    const sort = document.getElementById('cfk-tg-sort');
+    const dialog = document.getElementById('view-tag-modal');
 
-    if (searchInput && tableBody) {
-        searchInput.addEventListener('input', (e) => {
-            const query = e.target.value.toLowerCase();
-            const rows = tableBody.querySelectorAll('.tag-row');
-
-            rows.forEach(row => {
-                const name = row.dataset.tagName;
-                const content = row.dataset.content;
-                const creator = row.dataset.creator;
-
-                if (name.includes(query) || content.includes(query) || creator.includes(query)) {
-                    row.style.display = '';
-                } else {
-                    row.style.display = 'none';
-                }
-            });
+    function apply() {
+        if (!body) return;
+        const q = search ? search.value.trim().toLowerCase() : '';
+        const mode = sort ? sort.value : 'uses';
+        const rows = Array.from(body.querySelectorAll('.tag-row'));
+        rows.sort((a, b) => {
+            if (mode === 'name') return a.dataset.tagName.localeCompare(b.dataset.tagName);
+            if (mode === 'new') return Number(b.dataset.created) - Number(a.dataset.created);
+            return Number(b.dataset.uses) - Number(a.dataset.uses) || a.dataset.tagName.localeCompare(b.dataset.tagName);
         });
+        let shown = 0;
+        rows.forEach((row) => {
+            const hit = !q || row.dataset.tagName.includes(q) || row.dataset.content.includes(q) || row.dataset.creator.includes(q);
+            row.hidden = !hit;
+            if (hit) shown++;
+            body.appendChild(row);
+        });
+        document.getElementById('tag-nomatch-empty').hidden = shown > 0;
     }
-});
+    if (search) search.addEventListener('input', apply);
+    if (sort) sort.addEventListener('change', apply);
 
-// View tag content in modal
-function viewTagContent(tagName, content) {
-    const modal = new bootstrap.Modal(document.getElementById('view-tag-modal'));
-    document.getElementById('modal-tag-name').textContent = tagName;
-    document.getElementById('modal-tag-content').textContent = content;
-    modal.show();
-}
+    // The View buttons call this (it reads the tag's text from the button's data attributes).
+    window.viewTagContent = function (name, text) {
+        document.getElementById('modal-tag-name').textContent = name;
+        document.getElementById('modal-tag-content').textContent = text;
+        if (dialog.showModal) dialog.showModal(); else dialog.setAttribute('open', '');
+    };
+    dialog.addEventListener('click', (e) => {
+        if (e.target === dialog || e.target.closest('[data-tg-close]')) dialog.close ? dialog.close() : dialog.removeAttribute('open');
+    });
+    root.querySelectorAll('form[data-tg-delete]').forEach((form) => {
+        form.addEventListener('submit', (e) => {
+            if (!confirm('Delete the tag "' + form.dataset.tgDelete + '"? Members lose it straight away.')) e.preventDefault();
+        });
+    });
+})();
 </script>

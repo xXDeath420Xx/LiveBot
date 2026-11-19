@@ -1,125 +1,187 @@
-<%# Ko-fi supporter roles. API-driven; needs `guild`, `channels`, `roles` in locals. %>
-<div class="page-section" id="kofiPage" data-guild-id="<%= guild.id %>">
+<%#
+  Ko-fi supporter roles: the webhook connection, the thank-you post (with a live preview and a test
+  post), tier-to-role rules and the supporters list. API: /api/guilds/:id/kofi
+  (dashboard/routes/api/features/kofi.js); payments arrive at dashboard/routes/webhooks/kofi.js.
+  Needs `guild`, `channels`, `roles` in locals; ids are unchanged.
+%>
+<%
+const kfText = (locals.channels || []).filter(c => c.type === 0 || c.type === 5 || c.type === undefined);
+const kfRoles = (locals.roles || []).filter(r => r.name !== '@everyone');
+const kfMe = guild && guild.members && guild.members.me;
+const kfCanManage = !kfMe || (kfMe.permissions && kfMe.permissions.has && kfMe.permissions.has('ManageRoles'));
+const kfAssignable = (r) => !r.managed && (!kfMe || !kfMe.roles || r.position < kfMe.roles.highest.position);
+const kfUser = (locals.user && (locals.user.global_name || locals.user.username)) || 'Supporter';
+%>
+<style>
+  #kofiPage .cf-section-foot > .cf-status-line { margin-right: auto; }
+  #kofiPage .kofi-muted { color: var(--cf-text-3); font-size: var(--cf-text-sm); }
+  #kofiPage .kofi-name { font-weight: 500; color: var(--cf-text); overflow-wrap: anywhere; }
+  #kofiPage .kofi-url { flex: 1 1 14rem; min-width: 0; width: auto; }
+</style>
+
+<div class="page-section" id="kofiPage" data-guild-id="<%= guild.id %>" data-user-id="<%= (locals.user && locals.user.id) || '' %>" data-user-name="<%= kfUser %>">
     <div class="page-section-header">
         <div>
             <div class="page-section-title">
-                <i class="fas fa-mug-hot"></i>
+                <i class="fas fa-mug-hot" aria-hidden="true"></i>
                 <span>Ko-fi</span>
             </div>
-            <div class="page-section-subtitle">
-                Grant roles automatically when someone tips or subscribes on Ko-fi.
+            <div class="page-section-subtitle">Connect Ko-fi once, then match tiers or amounts to roles.</div>
+        </div>
+    </div>
+
+    <div id="kofiError" class="cf-notice is-bad" role="alert" hidden></div>
+    <% if (!kfCanManage) { %>
+    <div class="cf-notice is-warn" role="note"><i class="fas fa-triangle-exclamation" aria-hidden="true"></i><p class="cf-notice-body">The bot does not have Manage Roles here, so it cannot give supporter roles until it does.</p></div>
+    <% } %>
+
+    <section class="cf-section" aria-labelledby="kofi-conn-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="kofi-conn-title">Connection</h2>
+                <p class="cf-section-desc">In Ko-fi open Settings, then API. Paste the verification token here and save, then copy the webhook URL shown here into Ko-fi's webhook URL field.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="kofiEnabled">Process Ko-fi payments</label>
+                    <p class="cf-row-desc">Can be switched on once a verification token is saved.</p>
+                </div>
+                <div class="cf-row-control">
+                    <input type="checkbox" class="cf-switch" role="switch" id="kofiEnabled" data-feature-switch data-no-savebar>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="kofiToken">Verification token</label>
+                    <p class="cf-row-desc" id="kofiTokenHint"></p>
+                </div>
+                <div class="cf-row-control">
+                    <input type="password" id="kofiToken" class="form-control" placeholder="Leave blank to keep the current one" autocomplete="off" data-no-savebar>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="kofiDays">How long a perk lasts</label>
+                    <p class="cf-row-desc">Ko-fi never reports a cancelled membership; it just stops sending renewals. Each payment extends the role by this long, and the role is removed when it runs out.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-unit">
+                        <input type="number" id="kofiDays" class="form-control" min="1" max="365" data-no-savebar>
+                        <span class="cf-unit">days</span>
+                    </div>
+                </div>
+            </div>
+            <div class="cf-row cf-row--stack" id="kofiUrlWrap" hidden>
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="kofiUrl">Webhook URL</label>
+                    <p class="cf-row-desc">Paste this into Ko-fi. Treat it like a password.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-inline">
+                        <input type="text" id="kofiUrl" class="form-control kofi-url" readonly data-no-savebar>
+                        <button type="button" class="btn btn-secondary" id="kofiCopy">Copy</button>
+                    </div>
+                </div>
             </div>
         </div>
-        <label class="switch" title="Process Ko-fi webhooks">
-            <input type="checkbox" id="kofiEnabled">
-            <span class="slider"></span>
-        </label>
-    </div>
+    </section>
 
-    <div id="kofiError" class="alert alert-danger" hidden></div>
-
-    <!-- Connection -->
-    <div class="kofi-card">
-        <h3 class="kofi-h"><i class="fas fa-plug"></i> Connection</h3>
-        <p class="form-help">
-            Open <strong>Ko-fi → Settings → API</strong>. Copy the <em>Verification Token</em> below,
-            save, then paste the webhook URL we give you back into Ko-fi's <em>Webhook URL</em> field.
-        </p>
-
-        <div class="form-group">
-            <label class="form-label">Verification token</label>
-            <input type="password" id="kofiToken" class="form-control" placeholder="Paste from Ko-fi (leave blank to keep the current one)" autocomplete="off">
-            <small class="form-help" id="kofiTokenHint"></small>
-        </div>
-
-        <div class="form-group">
-            <label class="form-label">Thank-you channel</label>
-            <select id="kofiChannel" class="form-control">
-                <option value="">Don't announce</option>
-                <% (locals.channels || []).filter(c => c.type === 0 || c.type === 5).forEach(c => { %>
-                    <option value="<%= c.id %>">#<%= c.name %></option>
-                <% }) %>
-            </select>
-        </div>
-
-        <div class="form-group">
-            <label class="form-label">Thank-you message <span class="form-help">— {user}, {amount}, {tier}</span></label>
-            <input type="text" id="kofiMessage" class="form-control" maxlength="500"
-                   placeholder="☕ {user} supported us with {amount}. Thank you!">
-        </div>
-
-        <div class="form-group">
-            <label class="form-label">How long a perk lasts</label>
-            <input type="number" id="kofiDays" class="form-control" min="1" max="365" style="max-width:8rem">
-            <small class="form-help">
-                Ko-fi never tells us a membership was cancelled — it just stops sending renewals.
-                Each payment extends the window; when it lapses, the role is removed.
-            </small>
-        </div>
-
-        <div class="kofi-actions">
-            <button class="btn btn-primary" id="kofiSave">Save connection</button>
-            <span class="kofi-status" id="kofiSaveStatus"></span>
-        </div>
-
-        <div class="form-group" id="kofiUrlWrap" hidden>
-            <label class="form-label">Webhook URL — treat this like a password</label>
-            <div class="kofi-url-row">
-                <input type="text" id="kofiUrl" class="form-control" readonly>
-                <button class="btn btn-secondary" id="kofiCopy">Copy</button>
+    <section class="cf-section" aria-labelledby="kofi-thanks-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="kofi-thanks-title">Thank-you post</h2>
+                <p class="cf-section-desc">Posted for each payment. Supporters who asked Ko-fi to keep their payment private are shown as "Someone".</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="kofiChannel">Channel</label>
+                </div>
+                <div class="cf-row-control">
+                    <select id="kofiChannel" class="form-select" data-no-savebar>
+                        <option value="">Don't post</option>
+                        <% kfText.forEach(c => { %><option value="<%= c.id %>" data-kind="text">#<%= c.name %></option>
+                        <% }) %>
+                    </select>
+                </div>
+            </div>
+            <div class="cf-row cf-row--stack">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="kofiMessage">Message</label>
+                    <p class="cf-row-desc" id="kofiMessage-desc">Leave blank for the standard line. You can use {user}, {amount} and {tier}. A public Ko-fi note is posted under it as a quote.</p>
+                </div>
+                <div class="cf-row-control">
+                    <textarea id="kofiMessage" class="form-control" rows="2" maxlength="500" aria-describedby="kofiMessage-desc" placeholder="{user} supported us with {amount}. Thank you." data-no-savebar></textarea>
+                </div>
+            </div>
+            <div class="cf-row cf-row--stack">
+                <div class="cf-row-text"><span class="cf-row-label">Preview</span></div>
+                <div class="cf-row-control">
+                    <div class="cf-mp-frame"><div id="cfk-kofi-preview"></div></div>
+                </div>
+            </div>
+            <div class="cf-section-foot">
+                <span class="cf-status-line" id="kofiSaveStatus" role="status" aria-live="polite"></span>
+                <button type="button" class="btn btn-secondary" id="cfk-kofi-test">Send test</button>
+                <button type="button" class="btn btn-primary" id="kofiSave">Save</button>
             </div>
         </div>
-    </div>
+    </section>
 
-    <!-- Tiers -->
-    <div class="kofi-card">
-        <h3 class="kofi-h"><i class="fas fa-layer-group"></i> Tiers → roles</h3>
-        <p class="form-help">
-            A <strong>tier name</strong> matches Ko-fi memberships exactly. A <strong>minimum amount</strong>
-            catches one-off tips — the highest amount a payment clears wins, so a $20 tip earns the $20 role.
-        </p>
-
-        <div class="kofi-tier-form">
-            <select id="kofiRole" class="form-control">
-                <option value="">Choose a role…</option>
-                <% (locals.roles || []).filter(r => r.name !== '@everyone').forEach(r => { %>
-                    <option value="<%= r.id %>"><%= r.name %></option>
-                <% }) %>
-            </select>
-            <input type="text" id="kofiTierName" class="form-control" placeholder="Ko-fi tier name (e.g. Gold)">
-            <input type="number" id="kofiMinAmount" class="form-control" min="0" step="0.01" placeholder="or min amount">
-            <button class="btn btn-primary" id="kofiAddTier">Add</button>
+    <section class="cf-section" aria-labelledby="kofi-tiers-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="kofi-tiers-title">Tiers and roles <span class="cf-tab-count" id="cfk-kofi-tier-count">0</span></h2>
+                <p class="cf-section-desc">A tier name matches a Ko-fi membership exactly. A minimum amount catches one-off tips; the highest amount a payment reaches wins, so a 20 tip earns the 20 role.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div id="kofiTiers" class="cf-list"><%- include('../kit/_state', { kind: 'loading', title: 'Loading tiers', text: null, id: null, boxed: false, compact: true }) %></div>
+            <div class="cf-rows-head" id="kofi-add-head">Add a tier</div>
+            <div class="cf-row cf-row--stack">
+                <div class="cf-fields">
+                    <div class="cf-field">
+                        <label for="kofiRole">Role to give</label>
+                        <select id="kofiRole" class="form-select" data-no-savebar>
+                            <option value="">Choose a role</option>
+                            <% kfRoles.forEach(r => { const ok = kfAssignable(r); %><option value="<%= r.id %>" data-kind="role" data-color="<%= r.hexColor || '' %>"<%= ok ? '' : ' disabled' %>><%= r.name %><%= ok ? '' : ' (above the bot)' %></option>
+                            <% }) %>
+                        </select>
+                    </div>
+                    <div class="cf-field">
+                        <label for="kofiTierName">Ko-fi tier name</label>
+                        <input type="text" id="kofiTierName" class="form-control" maxlength="100" placeholder="Gold" data-no-savebar>
+                    </div>
+                    <div class="cf-field">
+                        <label for="kofiMinAmount">Or a minimum amount</label>
+                        <input type="number" id="kofiMinAmount" class="form-control" min="0" step="0.01" placeholder="5.00" data-no-savebar>
+                    </div>
+                </div>
+            </div>
+            <div class="cf-section-foot">
+                <span class="cf-status-line" id="kofiTierStatus" role="status" aria-live="polite"></span>
+                <button type="button" class="btn btn-primary" id="kofiAddTier">Add tier</button>
+            </div>
         </div>
-        <span class="kofi-status" id="kofiTierStatus"></span>
+    </section>
 
-        <div id="kofiTiers" class="kofi-list">Loading…</div>
-    </div>
-
-    <!-- Supporters -->
-    <div class="kofi-card">
-        <h3 class="kofi-h"><i class="fas fa-heart"></i> Supporters</h3>
-        <p class="form-help">
-            Members link their Ko-fi with <code>/kofi link</code>, which gives them a one-time code to put
-            in their Ko-fi message. After that, renewals match automatically by email.
-        </p>
-        <div id="kofiSupporters" class="kofi-list">Loading…</div>
-    </div>
+    <section class="cf-section" aria-labelledby="kofi-sup-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="kofi-sup-title">Supporters</h2>
+                <p class="cf-section-desc">Members link their Ko-fi with <code>/creator kofi link</code>, which gives them a one-time code to put in their Ko-fi message. After that, renewals match by email. The 25 most recent are shown.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div id="kofiSupporters" class="cf-list"><%- include('../kit/_state', { kind: 'loading', title: 'Loading supporters', text: null, id: null, boxed: false, compact: true }) %></div>
+        </div>
+    </section>
 </div>
 
-<style>
-  #kofiPage .kofi-card { background:#1e2028; border:1px solid #2c2f3a; border-radius:10px; padding:1.1rem 1.25rem; margin-bottom:1rem; }
-  #kofiPage .kofi-h { margin:0 0 .35rem; font-size:1rem; font-weight:600; }
-  #kofiPage .kofi-actions { display:flex; align-items:center; gap:.75rem; margin-top:.5rem; }
-  #kofiPage .kofi-status { font-size:.85rem; min-height:1em; color:#57F287; }
-  #kofiPage .kofi-url-row { display:flex; gap:.5rem; }
-  #kofiPage .kofi-tier-form { display:grid; grid-template-columns: 1fr 1fr 9rem auto; gap:.5rem; align-items:center; }
-  @media (max-width: 800px) { #kofiPage .kofi-tier-form { grid-template-columns: 1fr; } }
-  #kofiPage .kofi-list { margin-top:.9rem; display:grid; gap:.45rem; }
-  #kofiPage .kofi-row { display:flex; align-items:center; justify-content:space-between; gap:1rem;
-    padding:.6rem .8rem; border:1px solid #2c2f3a; border-radius:8px; background:#14161c; font-size:.9rem; }
-  #kofiPage .kofi-muted { color:#8b8f9e; }
-</style>
-
+<script src="/js/cf-msgpreview.js" defer></script>
 <script>
 (function () {
   const root = document.getElementById('kofiPage');
@@ -127,66 +189,93 @@
   const guildId = root.dataset.guildId;
   const api = (p) => `/api/guilds/${guildId}/kofi${p}`;
   const $ = (id) => document.getElementById(id);
-  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  const ROLES = <%- JSON.stringify(Object.fromEntries(kfRoles.map(r => [r.id, r.name]))).replace(/</g, '\\u003c') %>;
+  const CHANNELS = <%- JSON.stringify(kfText.map(c => ({ id: String(c.id), name: c.name }))).replace(/</g, '\\u003c') %>;
+  const roleName = (id) => ROLES[id] ? '@' + ROLES[id] : 'a deleted role';
+  const BOT = <%- JSON.stringify({ name: (guild.members && guild.members.me && guild.members.me.displayName) || 'CertiFried', avatar: (guild.members && guild.members.me && guild.members.me.displayAvatarURL ? guild.members.me.displayAvatarURL({ size: 64 }) : null) }).replace(/</g, '\\u003c') %>;
 
-  // Resolve role ids to names; a deleted role should say so rather than show a bare snowflake.
-  const ROLES = <%- JSON.stringify(Object.fromEntries((locals.roles || []).map(r => [r.id, r.name]))) %>;
-  const roleName = (id) => ROLES[id] ? `@${ROLES[id]}` : `deleted role (${id})`;
-
+  let syncing = false;
+  function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+  function stateBox(text) { const s = el('div', 'cf-state cf-state--compact'); s.appendChild(el('p', 'cf-state-text', text)); return s; }
   async function req(url, options) {
     const res = await fetch(url, { credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, ...options });
     const body = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
     return body;
   }
-  const showError = (msg) => { const el = $('kofiError'); if (!msg) { el.hidden = true; return; } el.textContent = msg; el.hidden = false; };
-  const flash = (el, msg, ok = true) => { el.textContent = msg; el.style.color = ok ? '#57F287' : '#ED4245'; setTimeout(() => { el.textContent = ''; }, 3000); };
+  const showError = (msg) => { const n = $('kofiError'); if (!msg) { n.hidden = true; return; } n.textContent = msg; n.hidden = false; };
+  const flash = (n, msg, ok = true) => { n.textContent = msg; n.className = 'cf-status-line ' + (ok ? 'is-ok' : 'is-bad'); setTimeout(() => { n.textContent = ''; n.className = 'cf-status-line'; }, 4000); };
+
+  // Preview: built exactly like announce() in dashboard/routes/webhooks/kofi.js, with sample values.
+  function renderPreview() {
+    if (!window.CFMsgPreview) return;
+    const userId = root.dataset.userId || '100000000000000001';
+    const who = `<@${userId}>`;
+    const amount = '**USD 5.00**';
+    const tpl = $('kofiMessage').value.trim();
+    const content = tpl
+      ? tpl.replace(/{user}/g, who).replace(/{amount}/g, amount).replace(/{tier}/g, 'Gold')
+      : `☕ ${who} sent a tip — ${amount}. Thank you!`;
+    const target = $('cfk-kofi-preview');
+    if (!$('kofiChannel').value) {
+      target.replaceChildren(el('p', 'kofi-muted', 'Choose a channel to post thank-yous.'));
+      return;
+    }
+    CFMsgPreview.render(target, { username: BOT.name, avatarUrl: BOT.avatar, content }, { users: [{ id: userId, name: root.dataset.userName }], channels: CHANNELS });
+  }
+  $('kofiMessage').addEventListener('input', renderPreview);
+  $('kofiChannel').addEventListener('change', renderPreview);
+  window.addEventListener('load', renderPreview);
 
   function renderTiers(tiers) {
-    const el = $('kofiTiers');
-    if (!tiers.length) { el.innerHTML = '<div class="kofi-muted">No tiers yet. Nothing will be granted.</div>'; return; }
-    el.innerHTML = tiers.map(t => `
-      <div class="kofi-row">
-        <div>
-          ${t.tier_name
-            ? `Tier <strong>${esc(t.tier_name)}</strong>`
-            : `<strong>${Number(t.min_amount).toFixed(2)}+</strong>`}
-          → <strong>${esc(roleName(t.role_id))}</strong>
-        </div>
-        <button class="btn btn-sm btn-danger" data-del-tier="${esc(t.role_id)}">Remove</button>
-      </div>`).join('');
+    const box = $('kofiTiers');
+    $('cfk-kofi-tier-count').textContent = String(tiers.length);
+    if (!tiers.length) { box.replaceChildren(stateBox('No tiers yet. Nothing will be given until you add one.')); return; }
+    box.replaceChildren(...tiers.map(t => {
+      const row = el('div', 'cf-list-item');
+      const main = el('div', 'cf-list-main');
+      main.appendChild(el('span', 'kofi-name', t.tier_name ? `Tier "${t.tier_name}"` : `${Number(t.min_amount).toFixed(2)} or more`));
+      main.appendChild(el('span', 'kofi-muted', ' gives ' + roleName(t.role_id)));
+      const rm = el('button', 'btn btn-sm btn-danger', 'Remove');
+      rm.type = 'button';
+      rm.dataset.delTier = t.role_id;
+      row.append(main, rm);
+      return row;
+    }));
   }
 
   function renderSupporters(rows) {
-    const el = $('kofiSupporters');
-    if (!rows.length) { el.innerHTML = '<div class="kofi-muted">No supporters recorded yet.</div>'; return; }
-    el.innerHTML = rows.map(s => {
-      const who = s.user_id ? `Member ${s.user_id}` : (s.from_name || 'Anonymous');
-      const expires = s.expires_at ? new Date(s.expires_at).toLocaleDateString() : '—';
-      return `<div class="kofi-row">
-        <div><strong>${esc(who)}</strong> ${s.tier_name ? `<span class="kofi-muted">· ${esc(s.tier_name)}</span>` : ''}</div>
-        <div class="kofi-muted">${esc(s.currency || '')} ${Number(s.lifetime_amount).toFixed(2)} · expires ${esc(expires)}</div>
-      </div>`;
-    }).join('');
+    const box = $('kofiSupporters');
+    if (!rows.length) { box.replaceChildren(stateBox('No supporters recorded yet.')); return; }
+    box.replaceChildren(...rows.map(s => {
+      const row = el('div', 'cf-list-item');
+      const main = el('div', 'cf-list-main');
+      const who = s.member_name ? '@' + s.member_name : (s.user_id ? 'A member who left' : (s.from_name || 'Anonymous') + ' (not linked)');
+      main.appendChild(el('span', 'kofi-name', who));
+      if (s.tier_name) main.appendChild(el('span', 'kofi-muted', ' · ' + s.tier_name));
+      const expires = s.expires_at ? new Date(s.expires_at).toLocaleDateString() : 'no end date';
+      const side = el('div', 'kofi-muted', `${s.currency || ''} ${Number(s.lifetime_amount).toFixed(2)} in total · until ${expires}`.trim());
+      row.append(main, side);
+      return row;
+    }));
   }
 
   function fill(data) {
     const c = data.config;
     $('kofiEnabled').checked = !!c?.enabled;
     $('kofiEnabled').disabled = !data.configured;
+    syncing = true;
+    $('kofiEnabled').dispatchEvent(new Event('change'));   // keep the header switch in step
+    syncing = false;
     $('kofiChannel').value = c?.announce_channel_id || '';
     $('kofiMessage').value = c?.thank_you_message || '';
+    $('kofiMessage').dispatchEvent(new Event('change'));
     $('kofiDays').value = c?.role_duration_days ?? data.defaultDurationDays;
-    $('kofiTokenHint').textContent = c?.has_verification_token
-      ? 'A token is saved. Leave blank to keep it.'
-      : 'Required — copy it from Ko-fi.';
-
-    if (c?.webhook_url) {
-      $('kofiUrlWrap').hidden = false;
-      $('kofiUrl').value = c.webhook_url;
-    }
+    $('kofiTokenHint').textContent = c?.has_verification_token ? 'A token is saved. Leave blank to keep it.' : 'Required. Copy it from Ko-fi.';
+    if (c?.webhook_url) { $('kofiUrlWrap').hidden = false; $('kofiUrl').value = c.webhook_url; }
     renderTiers(data.tiers || []);
     renderSupporters(data.supporters || []);
+    renderPreview();
   }
 
   async function load() {
@@ -195,21 +284,33 @@
   }
 
   $('kofiSave').addEventListener('click', async () => {
+    const days = Number($('kofiDays').value);
+    if (!Number.isInteger(days) || days < 1 || days > 365) return flash($('kofiSaveStatus'), 'Perk length must be 1 to 365 days.', false);
     try {
-      const body = {
+      await req(api('/config'), { method: 'PUT', body: JSON.stringify({
         verification_token: $('kofiToken').value.trim() || null,
         announce_channel_id: $('kofiChannel').value || null,
         thank_you_message: $('kofiMessage').value.trim() || null,
-        role_duration_days: Number($('kofiDays').value),
-      };
-      await req(api('/config'), { method: 'PUT', body: JSON.stringify(body) });
+        role_duration_days: days,
+      }) });
       $('kofiToken').value = '';
       flash($('kofiSaveStatus'), 'Saved.');
       await load();
     } catch (err) { flash($('kofiSaveStatus'), err.message, false); }
   });
 
+  $('cfk-kofi-test').addEventListener('click', async () => {
+    const btn = $('cfk-kofi-test');
+    btn.disabled = true;
+    try {
+      await req(api('/test'), { method: 'POST', body: JSON.stringify({ channel_id: $('kofiChannel').value, thank_you_message: $('kofiMessage').value }) });
+      flash($('kofiSaveStatus'), 'Test posted.');
+    } catch (err) { flash($('kofiSaveStatus'), err.message, false); }
+    finally { btn.disabled = false; }
+  });
+
   $('kofiEnabled').addEventListener('change', async (e) => {
+    if (syncing) return;   // our own sync event from fill()
     try { await req(api('/toggle'), { method: 'POST', body: JSON.stringify({ enabled: e.target.checked }) }); }
     catch (err) { showError(err.message); e.target.checked = !e.target.checked; }
   });
@@ -235,10 +336,9 @@
   root.addEventListener('click', async (e) => {
     const btn = e.target.closest('[data-del-tier]');
     if (!btn) return;
-    try {
-      await req(api(`/tiers/${btn.dataset.delTier}`), { method: 'DELETE' });
-      await load();
-    } catch (err) { showError(err.message); }
+    btn.disabled = true;
+    try { await req(api(`/tiers/${encodeURIComponent(btn.dataset.delTier)}`), { method: 'DELETE' }); await load(); }
+    catch (err) { btn.disabled = false; showError(err.message); }
   });
 
   load();

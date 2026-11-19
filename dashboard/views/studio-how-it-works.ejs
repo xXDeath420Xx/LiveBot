@@ -1,0 +1,120 @@
+<%#
+  GET /studio/how-it-works (dashboard/routes/legal-pages.js). Locals: user, facts (STUDIO_FACTS).
+  Checked against docs/superpowers/specs/2026-11-19-stream-bot-design.md §2.4, §5, §8.3 and desktop/studio/src/main
+  (engine-client.js, pairing.js, vod-safe.js, voice.js, obs-docks.js, obs-setup.js, updater.js).
+%>
+<!DOCTYPE html>
+<html lang="en" data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>">
+<head>
+<%- include('partials/site-head', { title: 'How CertiFried Studio works · CertiFried', description: 'How CertiFried Studio, the dashboard, the stream bot engine and OBS fit together: pairing, what runs where, VOD-safe music, voice commands, docks, offline behaviour and updates.', path: '/studio/how-it-works' }) %>
+    <link rel="stylesheet" href="/css/cf-studio-pages.css">
+</head>
+<body class="cfs-body">
+<%- include('partials/site-header', { active: '', user: locals.user || null, returnTo: '/studio/how-it-works' }) %>
+<% const _f = locals.facts || {}; %>
+    <main id="main-content" tabindex="-1" class="cfs-main">
+        <div class="cfs-pagehead">
+            <span class="cfs-eyebrow">CertiFried Studio</span>
+            <h1>How it works</h1>
+            <p class="cfs-lede">Four parts, each doing what it is best placed to do. Your settings live in one place, the decisions are made on the CertiFried server, and only the work that has to happen on your PC happens there.</p>
+        </div>
+        <%- include('partials/studio-nav', { current: 'how' }) %>
+
+        <div class="sp-flow" role="img" aria-label="The dashboard talks to the CertiFried engine over HTTPS; the engine talks to CertiFried Studio over an encrypted WebSocket; Studio talks to OBS over OBS WebSocket on your own PC.">
+            <div class="sp-flow-node"><b>Dashboard</b><span class="sp-where">Your browser</span><span>Automations, sounds, song request rules, devices</span></div>
+            <div class="sp-flow-link">HTTPS</div>
+            <div class="sp-flow-node"><b>Engine</b><span class="sp-where">CertiFried server</span><span>Hears Twitch, Kick and tip services; runs automations</span></div>
+            <div class="sp-flow-link">Encrypted WebSocket</div>
+            <div class="sp-flow-node"><b>Studio</b><span class="sp-where">Your streaming PC</span><span>Carries out OBS, sound, hotkey and voice actions</span></div>
+            <div class="sp-flow-link">OBS WebSocket, on your PC</div>
+            <div class="sp-flow-node"><b>OBS</b><span class="sp-where">Your streaming PC</span><span>Scenes, sources, audio, the music player</span></div>
+        </div>
+
+        <div class="cfs-doc">
+            <nav class="cfs-toc" aria-label="On this page">
+                <h2>On this page</h2>
+                <ol>
+                    <li><a href="#what-runs-where">What runs where</a></li>
+                    <li><a href="#pairing">Pairing</a></li>
+                    <li><a href="#vod-safe-music">VOD-safe music</a></li>
+                    <li><a href="#voice-commands">Voice commands</a></li>
+                    <li><a href="#docks-and-theme">Docks, theme and setup</a></li>
+                    <li><a href="#overlays">Overlays</a></li>
+                    <li><a href="#changes-to-obs">What Studio changes in OBS</a></li>
+                    <li><a href="#offline">When something is offline</a></li>
+                    <li><a href="#updates">Updates and checksums</a></li>
+                    <li><a href="#smartscreen">The SmartScreen warning</a></li>
+                </ol>
+            </nav>
+            <div class="cfs-prose">
+                <h2 id="what-runs-where">What runs where</h2>
+                <div class="cfs-table-wrap"><table class="cfs-table-stack">
+                    <thead><tr><th>Work</th><th>Where</th></tr></thead>
+                    <tbody>
+                        <tr><td>Listening to Twitch, Kick and tip services, and deciding which automations run</td><td data-label="Where">CertiFried server</td></tr>
+                        <tr><td>Chat replies and timers</td><td data-label="Where">CertiFried server: the CertiFried bot account on Twitch, Kick Defender on Kick</td></tr>
+                        <tr><td>Title, category, clips, polls, predictions, raids, ads</td><td data-label="Where">CertiFried server, using the permission you gave with the Stream bot grant</td></tr>
+                        <tr><td>OBS scenes, sources, audio, filters, recording, screenshots</td><td data-label="Where">Studio, through OBS WebSocket on your PC</td></tr>
+                        <tr><td>Sounds and hotkeys</td><td data-label="Where">Studio, on the output device you choose</td></tr>
+                        <tr><td>Voice command recognition</td><td data-label="Where">Studio, with the speech recognition built into Windows</td></tr>
+                        <tr><td>Song request audio</td><td data-label="Where">Found by CertiFried's music service and streamed to the CertiFried Music browser source in OBS</td></tr>
+                        <tr><td>Docks in OBS</td><td data-label="Where">Pages on certifriedmultitool.com, opened by OBS with a dock key</td></tr>
+                    </tbody>
+                </table></div>
+                <p>Studio holds no automations of its own. It asks the server for your automation list (for hotkeys and buttons) and your voice phrases, and it tells the server what your OBS looks like so the editor can suggest scene and source names.</p>
+
+                <h2 id="pairing">Pairing</h2>
+                <p>Studio has to prove it belongs to your account once. There are two ways:</p>
+                <ul>
+                    <li><strong>Sign in with CertiFried.</strong> Studio opens your browser on certifriedmultitool.com. If the page shows the same four-character code as Studio, choose Approve. The request works once and only for 10 minutes.</li>
+                    <li><strong>Pairing code.</strong> On the dashboard's Devices page, make an eight-character code and type it into Studio. A code works once, for 10 minutes.</li>
+                </ul>
+                <p>Either way Studio receives a device token. Studio keeps it encrypted on your PC; the server keeps only a hash of it, so the token cannot be read back from our database. The device shows on the Devices page under the name Studio gives it (<code><%= _f.deviceName %></code> unless you choose another). <strong>Revoke</strong> there stops it at once. <strong>Unpair this PC</strong> in Studio deletes the token from your PC; revoke it on the dashboard as well.</p>
+
+                <h2 id="vod-safe-music">VOD-safe music</h2>
+                <p>Song requests must not end up in your saved Twitch VODs. With OBS's Advanced output, Twitch receives the live mix plus a separate VOD track that becomes the VOD's audio. Studio keeps the music off that track:</p>
+                <ul>
+                    <li>Music plays only through one OBS browser source, <strong>CertiFried Music</strong>, set to be controlled by OBS (so it never goes through Windows desktop audio) and monitored so you hear it.</li>
+                    <li>Its audio goes on every track except the VOD track. Studio checks this when OBS connects, when scenes or profiles change, every minute, and right before every song.</li>
+                    <li>If the VOD track is off, Studio turns it on while you are neither streaming nor recording, after copying your OBS profile file.</li>
+                    <li>If you are live and protection is not active, music stays paused. Chat is told requests are paused.</li>
+                </ul>
+                <p>This is best effort, and some things it cannot cover. <strong>Twitch clips</strong> are cut from the live stream, so they contain the music. <strong>Kick</strong> has no VOD track, so music Kick receives live is in Kick's VODs (with the obs-multi-rtmp plugin you can give the Kick output its own audio track without music). <strong>Local recordings</strong> include the music unless you turn on Record without music in Studio. Other audio on the VOD track, such as Desktop Audio or another sound alert tool, is reported in Studio but never changed unless you click <strong>Keep out of VOD</strong>.</p>
+
+                <h2 id="voice-commands">Voice commands</h2>
+                <p>Add a Voice command trigger to an automation and list its phrases. In Studio, turn the microphone on (it is off by default) and choose always listening or push-to-talk. Studio passes the audio to the speech recogniser built into Windows, on your PC, which listens only for your phrases. Nothing is recorded or saved, and no audio leaves your PC; when a phrase is recognised, only the phrase text and how confident the match was are sent to CertiFried to start the automation.</p>
+
+                <h2 id="docks-and-theme">Docks, theme and setup</h2>
+                <p>Studio's <strong>Set up OBS</strong> checklist offers three changes. Each says what it will do and runs only when you click it.</p>
+                <ul>
+                    <li><strong>Docks</strong>: Activity, Controls and Chat panels inside OBS. Studio writes them into OBS's own settings while OBS is closed (OBS rewrites that file when it exits), after a backup, and keeps your other docks. Each dock address carries a dock key that can only show your feed and run your automations; replace it from Studio or revoke it on Devices.</li>
+                    <li><strong>Theme</strong>: Studio copies the CertiFried, CertiFried Light and CertiFried Sand themes into OBS's themes folder. You choose one in OBS under Settings, Appearance.</li>
+                    <li><strong>Starter scenes</strong>: Starting Soon, Be Right Back and Ending, only if you do not have them.</li>
+                </ul>
+
+                <h2 id="overlays">Overlays</h2>
+                <p>Alerts, goals, event lists and chat overlays are being built as OBS browser sources. They will connect to the same engine as Studio, each with its own key, and nothing about viewers is stored by them: alerts and chat are sent live.</p>
+
+                <h2 id="changes-to-obs">What Studio changes in OBS</h2>
+                <p>Without asking, only what VOD-safe music needs: Studio adds the CertiFried Music browser source to your scenes, sets its audio tracks, and turns on the Twitch VOD track in your OBS profile while you are offline (after copying the profile file to <code>basic.ini.certifried-backup-&lt;time&gt;</code>). Everything else, docks, the theme, starter scenes, the WebSocket settings, recording tracks and your other sources, changes only when you click.</p>
+
+                <h2 id="offline">When something is offline</h2>
+                <ul>
+                    <li><strong>Studio closed or disconnected</strong>: OBS, sound and hotkey actions wait two minutes (or the time you set on the action), then expire and show as expired in Run history. Studio reconnects by itself, waiting a little longer after each failed try.</li>
+                    <li><strong>CertiFried unreachable</strong>: Studio keeps trying. Its local hotkeys (play a sound, stop sounds, OBS actions) still work; hotkeys that run an automation need the server.</li>
+                    <li><strong>OBS closed</strong>: OBS actions fail and are reported as failed. Song requests pause until OBS is back and the VOD track is protected again.</li>
+                    <li><strong>Two copies with the same pairing</strong>: the newer one takes over and the other stops, so they never fight.</li>
+                </ul>
+
+                <h2 id="updates">Updates and checksums</h2>
+                <p>The installed app checks <code>certifriedmultitool.com/downloads/studio/</code> shortly after it starts and then every <%= _f.updateHours %> hours. A new version downloads in the background and is checked against the SHA-512 hash in the update feed before it is installed, when you quit Studio or choose Restart to update. The portable app cannot replace itself; it tells you when a newer version is on the download page. You can turn update checks off in Studio's Settings.</p>
+                <p>The download page shows the SHA-256 checksum of each build and links <code>SHA256SUMS.txt</code>. To check a file in PowerShell: <code>Get-FileHash .\CertiFried-Studio-Setup-x.y.z.exe</code>, then compare the result with the page.</p>
+
+                <h2 id="smartscreen">The SmartScreen warning</h2>
+                <p>Studio is not code-signed and will stay that way: a signing certificate costs money every year, and CertiFried charges nobody. The first time you open it, Windows SmartScreen shows "Windows protected your PC". Click <strong>More info</strong>, then <strong>Run anyway</strong>. If you want to be sure the file is ours, compare its checksum first, or read and build the <a href="<%= _f.githubRepo %>" rel="noopener">source code</a> yourself.</p>
+            </div>
+        </div>
+    </main>
+<%- include('partials/site-footer') %>
+</body>
+</html>

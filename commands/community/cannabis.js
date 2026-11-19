@@ -1,8 +1,17 @@
-import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ChannelType } from 'discord.js';
 import pool from '../../utils/db.js';
 import * as tokeHandlers from './cannabis-toke-handler.js';
+import { handleClockPost, handleClockStop, handleClockView } from './cannabis-clock-handler.js';
+import { themeColor } from '../../core/guild-theme.js';
+import { getCannabisSettings, getCannabisDayClock } from '../../core/cannabis-settings.js';
 
 export default {
+    // Cannabis content is not eligible for the App Directory, which requires apps to be
+    // appropriate for 13+ audiences. This keeps the command out of the main bot's GLOBAL
+    // payload; scripts/deploy-guild-scoped-commands.js registers it per-guild instead.
+    // Custom bots deploy their own command set and are unaffected.
+    guildScoped: true,
+
     category: 'community',
     data: new SlashCommandBuilder()
         .setName('cannabis')
@@ -117,7 +126,21 @@ export default {
                     sub.setName('setmessage').setDescription('Set a custom toke message')
                         .addStringOption(opt => opt.setName('message').setDescription('Your custom toke message').setRequired(true)))
                 .addSubcommand(sub =>
-                    sub.setName('clearmessage').setDescription('Clear your custom toke message'))),
+                    sub.setName('clearmessage').setDescription('Clear your custom toke message')))
+
+        // ===== CLOCK GROUP =====
+        .addSubcommandGroup(group =>
+            group.setName('clock').setDescription('4:20 world clock')
+                .addSubcommand(sub =>
+                    sub.setName('view').setDescription('See where in the world it is 4:20 right now'))
+                .addSubcommand(sub =>
+                    sub.setName('post').setDescription('Post a 4:20 world clock panel that updates itself')
+                        .addChannelOption(opt => opt.setName('channel').setDescription('Where to post it (default: this channel)')
+                            .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setRequired(false)))
+                .addSubcommand(sub =>
+                    sub.setName('stop').setDescription('Remove a 4:20 world clock panel')
+                        .addChannelOption(opt => opt.setName('channel').setDescription('Channel with the panel (default: this channel)')
+                            .addChannelTypes(ChannelType.GuildText, ChannelType.GuildAnnouncement).setRequired(false)))),
 
     async execute(interaction) {
         const group = interaction.options.getSubcommandGroup();
@@ -194,6 +217,14 @@ export default {
                     }
                     break;
 
+                case 'clock':
+                    switch (subcommand) {
+                        case 'view': await handleClockView(interaction); break;
+                        case 'post': await handleClockPost(interaction); break;
+                        case 'stop': await handleClockStop(interaction); break;
+                    }
+                    break;
+
                 default:
                     await interaction.reply({ content: 'Unknown command!', ephemeral: true });
             }
@@ -221,6 +252,10 @@ async function handleDailyJoint(interaction, guildId, userId) {
     try {
         await interaction.deferReply();
 
+        // A "day" starts at the Cannabis Community page's daily reset hour, in the server's timezone.
+        const clock = await getCannabisDayClock(guildId);
+        const today = clock.day(now);
+
         await conn.beginTransaction();
 
         const [rows] = await conn.execute(
@@ -232,19 +267,17 @@ async function handleDailyJoint(interaction, guildId, userId) {
 
         if (existingRecord?.last_claimed) {
             const lastClaimedDate = new Date(existingRecord.last_claimed);
-            const msSinceLastClaim = now.getTime() - lastClaimedDate.getTime();
-            const hoursSinceLastClaim = msSinceLastClaim / (1000 * 60 * 60);
 
-            if (hoursSinceLastClaim < 24) {
+            if (clock.day(lastClaimedDate) >= today) {
                 await conn.rollback();
 
-                const nextClaimTime = new Date(lastClaimedDate.getTime() + (24 * 60 * 60 * 1000));
-                const remainingMs = nextClaimTime.getTime() - now.getTime();
+                const nextClaimTime = clock.nextReset(now);
+                const remainingMs = Math.max(0, nextClaimTime.getTime() - now.getTime());
                 const remainingHours = Math.floor(remainingMs / (1000 * 60 * 60));
                 const remainingMinutes = Math.floor((remainingMs % (1000 * 60 * 60)) / (1000 * 60));
 
                 const embed = new EmbedBuilder()
-                    .setColor(0xffa500)
+                    .setColor(themeColor(interaction.guildId, 'warning'))
                     .setTitle('Woah there, easy does it!')
                     .setDescription(`\ud83d\ude14 You've already claimed your joint for the day! Come back in **${remainingHours}h ${remainingMinutes}m**`)
                     .addFields(
@@ -256,16 +289,10 @@ async function handleDailyJoint(interaction, guildId, userId) {
             }
         }
 
+        // The streak carries on only if the last claim was on the day before this one.
         let newStreak = 1;
-        if (existingRecord?.last_claimed) {
-            const yesterday = new Date();
-            yesterday.setDate(yesterday.getDate() - 1);
-            const lastClaimDateOnly = new Date(existingRecord.last_claimed).toDateString();
-            const yesterdayDateOnly = yesterday.toDateString();
-
-            if (lastClaimDateOnly === yesterdayDateOnly) {
-                newStreak = existingRecord.streak + 1;
-            }
+        if (existingRecord?.last_claimed && clock.day(new Date(existingRecord.last_claimed)) === today - 1) {
+            newStreak = (Number(existingRecord.streak) || 0) + 1;
         }
 
         const [strainRows] = await conn.execute(
@@ -304,7 +331,7 @@ async function handleDailyJoint(interaction, guildId, userId) {
         const newTotalClaims = existingRecord ? (existingRecord.total_claims || 0) + 1 : 1;
 
         const embed = new EmbedBuilder()
-            .setColor(0x00ff00)
+            .setColor(themeColor(interaction.guildId, 'success'))
             .setTitle('\ud83d\udd25 Daily Joint Claimed!')
             .setDescription(`Congrats, <@${userId}>! You've claimed your daily joint!`)
             .addFields(
@@ -345,7 +372,7 @@ async function handleStrain(interaction) {
         if (strainRows && strainRows.length > 0) {
             const cachedStrain = strainRows[0];
             const embed = new EmbedBuilder()
-                .setColor(0x1abc9c)
+                .setColor(themeColor(interaction.guildId, 'info'))
                 .setTitle(`\ud83c\udf3f ${cachedStrain.strain_name}`)
                 .addFields(
                     { name: '\ud83d\udcdc Description', value: cachedStrain.description || 'N/A' },
@@ -387,7 +414,7 @@ async function handleStrains(interaction) {
             const strainsList = pageStrains.map(s => `\u2022 **${s.strain_name}** (${s.rarity})`).join('\n');
 
             return new EmbedBuilder()
-                .setColor(0x2ecc71)
+                .setColor(themeColor(interaction.guildId, 'success'))
                 .setTitle('\ud83c\udf3f Available Cannabis Strains')
                 .setDescription(strainsList)
                 .setFooter({ text: `Page ${page + 1}/${totalPages} \u2022 ${allStrains.length} total strains | Use /cannabis strain lookup <name> for details` });
@@ -446,6 +473,12 @@ async function handleStrains(interaction) {
 // ===== SMOKE CIRCLE =====
 async function handleSmokeCircle(interaction, guildId) {
     try {
+        // Cannabis Community page, "Smoke circle channel": circles run only there when it is set.
+        const settings = await getCannabisSettings(guildId);
+        if (settings.circleChannelId && interaction.channelId !== settings.circleChannelId) {
+            return interaction.reply({ content: `Smoke circles in this server run in <#${settings.circleChannelId}>. Start one there.`, ephemeral: true });
+        }
+
         const [existingCircle] = await pool.execute(
             `SELECT id FROM smoke_circles WHERE guild_id = ? AND status = 'active'`,
             [guildId]
@@ -493,10 +526,29 @@ async function handleJoinCircle(interaction, guildId, userId) {
             return interaction.reply({ content: "You're already in the circle!", ephemeral: true });
         }
 
+        // Cannabis Community page, "Maximum people per circle".
+        const settings = await getCannabisSettings(guildId);
+        const [[{ inCircle }]] = await pool.execute(
+            'SELECT COUNT(*) AS inCircle FROM smoke_circle_participants WHERE circle_id = ?',
+            [circleId]
+        );
+        if (Number(inCircle) >= settings.circleMaxPlayers) {
+            return interaction.reply({ content: `The circle is full (${settings.circleMaxPlayers} people). Catch the next one.`, ephemeral: true });
+        }
+
         await pool.execute(
             `INSERT INTO smoke_circle_participants (circle_id, user_id, puffs_taken, high_meter) VALUES (?, ?, 0, 0)`,
             [circleId, userId]
         );
+
+        // Once there is someone to pass to, the turn clock ("Seconds per turn") starts.
+        // smoke_circles.expires_at is when the current turn runs out (jobs/cannabis-scheduler.js).
+        if (Number(inCircle) + 1 >= 2) {
+            await pool.execute(
+                'UPDATE smoke_circles SET expires_at = DATE_ADD(NOW(), INTERVAL ? SECOND) WHERE id = ? AND expires_at IS NULL',
+                [settings.circleTurnSeconds, circleId]
+            );
+        }
 
         await interaction.reply(`Welcome, <@${userId}>, to the smoke circle!`);
     } catch (err) {
@@ -599,10 +651,14 @@ async function handlePass(interaction, guildId, userId) {
 
         const nextTurn = (circle.current_turn + 1) % participants.length;
 
-        // turn_puffs resets: the next person gets their own two.
+        // turn_puffs resets: the next person gets their own two, and their own turn clock.
+        const { circleTurnSeconds } = await getCannabisSettings(guildId);
         await pool.execute(
-            `UPDATE smoke_circles SET current_turn = ?, turn_puffs = 0 WHERE id = ?`,
-            [nextTurn, circle.id]
+            `UPDATE smoke_circles
+                SET current_turn = ?, turn_puffs = 0,
+                    expires_at = IF(? >= 2, DATE_ADD(NOW(), INTERVAL ? SECOND), NULL)
+              WHERE id = ?`,
+            [nextTurn, participants.length, circleTurnSeconds, circle.id]
         );
 
         // CannaFriend addresses the person RECEIVING the joint, not the one passing it.
@@ -644,7 +700,7 @@ async function handleCheers(interaction, guildId, userId) {
         const totalTokes = rows[0]?.count || 1;
 
         const embed = new EmbedBuilder()
-            .setColor(0x4CAF50)
+            .setColor(themeColor(interaction.guildId, 'success'))
             .setTitle('Cheers!')
             .setDescription(`\ud83c\udf3f **${interaction.member.displayName}**, you've taken **${totalTokes} tokes** in this server!`)
             .setFooter({ text: 'Keep blazing responsibly!' })
@@ -693,7 +749,7 @@ async function handleGlobalCheers(interaction, guildId) {
         }
 
         const embed = new EmbedBuilder()
-            .setColor(0x2ecc71)
+            .setColor(themeColor(interaction.guildId, 'success'))
             .setTitle('\ud83c\udf0d Global Cheers Statistics')
             .setDescription(leaderboard)
             .addFields(
@@ -726,7 +782,7 @@ async function handleStonedThought(interaction, guildId) {
         }
 
         const embed = new EmbedBuilder()
-            .setColor(0x9b59b6)
+            .setColor(themeColor(interaction.guildId, 'accent'))
             .setTitle('\ud83d\udcad Stoned Thought')
             .setDescription(thoughts[0].thought_text)
             .setFooter({ text: 'Deep thoughts from the community' });
@@ -794,7 +850,7 @@ async function handleTrivia(interaction, guildId) {
         );
 
         const embed = new EmbedBuilder()
-            .setColor(0x3498db)
+            .setColor(themeColor(interaction.guildId, 'primary'))
             .setTitle('\ud83e\udde0 Cannabis Trivia!')
             .setDescription(question.question)
             .addFields(
@@ -857,7 +913,7 @@ async function handleTriviaScore(interaction, guildId, userId) {
         const totalScore = score && score.length > 0 ? score[0].score : 0;
 
         const embed = new EmbedBuilder()
-            .setColor(0x3498db)
+            .setColor(themeColor(interaction.guildId, 'primary'))
             .setTitle('\ud83e\udde0 Your Trivia Score')
             .setDescription(`<@${userId}> has answered **${totalScore}** questions correctly!`)
             .setFooter({ text: 'Keep playing to increase your score!' });
@@ -883,7 +939,7 @@ async function handleTriviaTop(interaction, guildId) {
         const leaderboard = results.map((r, i) => `${i + 1}. <@${r.user_id}>: **${r.score} correct**`).join('\n');
 
         const embed = new EmbedBuilder()
-            .setColor(0x3498db)
+            .setColor(themeColor(interaction.guildId, 'primary'))
             .setTitle('\ud83c\udfc6 Trivia Leaderboard')
             .setDescription(leaderboard)
             .setFooter({ text: 'Top trivia masters' });

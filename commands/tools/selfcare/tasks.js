@@ -1,5 +1,6 @@
 import { EmbedBuilder } from 'discord.js';
 import pool from '../../../utils/db.js';
+import { themeColor } from '../../../core/guild-theme.js';
 
 export async function execute(interaction) {
     const subcommand = interaction.options.getSubcommand();
@@ -43,23 +44,18 @@ async function handleAddTask(interaction) {
         });
     }
 
-    try {
-        // Create tasks table if it doesn't exist
-        await pool.execute(`
-            CREATE TABLE IF NOT EXISTS productivity_tasks (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                guild_id VARCHAR(20) NOT NULL,
-                user_id VARCHAR(20) NOT NULL,
-                task_description TEXT NOT NULL,
-                priority VARCHAR(10) DEFAULT 'medium',
-                due_date DATE,
-                completed BOOLEAN DEFAULT FALSE,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                completed_at TIMESTAMP NULL,
-                INDEX idx_user_tasks (guild_id, user_id, completed)
-            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-        `);
+    // Reject impossible dates (e.g. 2024-02-31) that the pattern above lets through
+    if (dueDate) {
+        const parsed = new Date(`${dueDate}T00:00:00Z`);
+        if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== dueDate) {
+            return interaction.editReply({
+                content: '❌ That date does not exist. Please use a real date in YYYY-MM-DD format.'
+            });
+        }
+    }
 
+    try {
+        // productivity_tasks is created by migration 263.
         // Insert task
         const [result] = await pool.execute(
             'INSERT INTO productivity_tasks (guild_id, user_id, task_description, priority, due_date) VALUES (?, ?, ?, ?, ?)',
@@ -73,7 +69,7 @@ async function handleAddTask(interaction) {
         };
 
         const embed = new EmbedBuilder()
-            .setColor('#2ECC71')
+            .setColor(themeColor(interaction.guildId, 'success'))
             .setTitle('✅ Task Added!')
             .addFields(
                 {
@@ -127,12 +123,13 @@ async function handleViewTasks(interaction) {
         } else if (filter === 'completed') {
             query += ' AND completed = TRUE';
         } else if (filter === 'high') {
-            query += ' AND priority = "high" AND completed = FALSE';
+            query += " AND priority = 'high' AND completed = FALSE";
         } else if (filter === 'overdue') {
             query += ' AND completed = FALSE AND due_date < CURDATE()';
         }
 
-        query += ' ORDER BY priority DESC, due_date ASC, created_at ASC LIMIT 20';
+        // priority is text, so sort it by meaning (high > medium > low), then soonest due date
+        query += " ORDER BY FIELD(priority, 'high', 'medium', 'low'), due_date IS NULL, due_date ASC, created_at ASC LIMIT 20";
 
         const [tasks] = await pool.execute(query, params);
 
@@ -151,7 +148,7 @@ async function handleViewTasks(interaction) {
         };
 
         const embed = new EmbedBuilder()
-            .setColor('#3498DB')
+            .setColor(themeColor(interaction.guildId, 'primary'))
             .setTitle(`📋 Your Tasks - ${filter.charAt(0).toUpperCase() + filter.slice(1)}`)
             .setDescription(`Showing ${tasks.length} task${tasks.length > 1 ? 's' : ''}`)
             .setFooter({ text: 'Use /selfcare tasks complete <id> to mark tasks complete' })
@@ -213,7 +210,7 @@ async function handleCompleteTask(interaction) {
         );
 
         const embed = new EmbedBuilder()
-            .setColor('#2ECC71')
+            .setColor(themeColor(interaction.guildId, 'success'))
             .setTitle('🎉 Task Completed!')
             .setDescription(`**${task.task_description}**`)
             .addFields({
@@ -310,7 +307,7 @@ async function handleStats(interaction) {
                 SUM(completed) as completed_tasks,
                 SUM(CASE WHEN completed = FALSE THEN 1 ELSE 0 END) as active_tasks,
                 SUM(CASE WHEN completed = FALSE AND due_date < CURDATE() THEN 1 ELSE 0 END) as overdue_tasks,
-                SUM(CASE WHEN priority = 'high' AND completed = FALSE THEN 1 ELSE 0 END) as high_priority
+                SUM(CASE WHEN priority = 'high' AND completed = FALSE THEN 1 ELSE 0 END) as high_priority_count
             FROM productivity_tasks
             WHERE guild_id = ? AND user_id = ?
         `, [guildId, userId]);
@@ -326,7 +323,7 @@ async function handleStats(interaction) {
             : 0;
 
         const embed = new EmbedBuilder()
-            .setColor('#9B59B6')
+            .setColor(themeColor(interaction.guildId, 'accent'))
             .setTitle('📊 Your Productivity Statistics')
             .addFields(
                 {
@@ -336,7 +333,7 @@ async function handleStats(interaction) {
                 },
                 {
                     name: '📈 Performance',
-                    value: `**Completion Rate:** ${completionRate}%\n**Overdue:** ${stats.overdue_tasks}\n**High Priority:** ${stats.high_priority}`,
+                    value: `**Completion Rate:** ${completionRate}%\n**Overdue:** ${stats.overdue_tasks}\n**High Priority:** ${stats.high_priority_count}`,
                     inline: true
                 }
             )

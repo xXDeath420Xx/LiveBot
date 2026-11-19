@@ -6,25 +6,25 @@ import mysql from 'mysql2/promise';
 
 const BANNER_LOCAL = '/home/death/CertiFriedUtility/dashboard/public/images/certifried-banner.png';
 const TARGETS = [
-    { name: 'Lair',  channelId: '1496641274151698673', oldMsgId: '1496641275569377474', botId: '1496406792417185802' },
-    { name: 'Pac',   channelId: '1496641417173532683', oldMsgId: '1496641418892939356', botId: '1496352090950467595' },
+    // The acting bot comes from guild_bot_mapping — never pinned here.
+    { name: 'Lair',  guildId: '1216126780767731722', channelId: '1496641274151698673', oldMsgId: '1496641275569377474' },
+    { name: 'Pac',   guildId: '1099732505243959407', channelId: '1496641417173532683', oldMsgId: '1496641418892939356' },
 ];
 
 const pool = mysql.createPool({
     host: process.env.DB_HOST, user: process.env.DB_USER,
     password: process.env.DB_PASSWORD, database: process.env.DB_NAME,
 });
-const enc = (await import('/home/death/CertiFriedUtility/utils/encryption.js')).default;
+const { resolveBotForGuild } = await import('/home/death/CertiFriedUtility/utils/bot-resolver.js');
 
-async function tokenFor(botId) {
-    if (botId === '1409904443125665875') return process.env.DISCORD_TOKEN;
-    const [r] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id = ?', [botId]);
-    return enc.decrypt(JSON.parse(r[0].bot_token));
+async function tokenFor(guildId) {
+    const bot = await resolveBotForGuild(guildId, { db: pool });
+    return bot.token;
 }
 
 for (const t of TARGETS) {
     console.log(`\n-- ${t.name} --`);
-    const token = await tokenFor(t.botId);
+    const token = await tokenFor(t.guildId);
 
     // 1. Delete old duplicate-image banner message
     const del = await fetch(

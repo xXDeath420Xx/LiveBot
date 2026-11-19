@@ -1,10 +1,9 @@
-import { Events } from 'discord.js';
+import { Events, EmbedBuilder } from 'discord.js';
 import logger from '../utils/logger.js';
-import { saveAuditLog } from '../core/log-manager.js';
+import { sendLogEmbed, saveAuditLog } from '../core/log-manager.js';
 import { shouldIgnoreGuild } from '../utils/custom-bot-check.js';
+import { themeColor } from '../core/guild-theme.js';
 
-// Channel-embed audit log removed 2026-10-18 — reaction events were spamming log
-// channels. Internal DB row is kept so dashboard forensics still see mod-wipes.
 export default {
     name: Events.MessageReactionRemoveAll,
     async execute(message, reactions) {
@@ -19,6 +18,20 @@ export default {
                 messageId: message.id,
                 category: 'reactions'
             });
+
+            const embed = new EmbedBuilder()
+                .setColor(themeColor(message.guild?.id, 'danger'))
+                .setTitle('💨 All Reactions Removed')
+                .setDescription(`All reactions were removed from a message`)
+                .addFields(
+                    { name: 'Channel', value: `${message.channel}`, inline: true },
+                    { name: 'Message ID', value: message.id, inline: true },
+                    { name: 'Message Link', value: `[Jump to message](${message.url})`, inline: true }
+                )
+                .setTimestamp();
+
+            await sendLogEmbed(message.guild, 'reactionRemoveAll', embed, 'reactionRemoveAll',
+                { channel: message.channel });
 
             await saveAuditLog(message.guild.id, 'REACTION_REMOVE_ALL', null, message.id, null, message.channel.id, 'All reactions removed', null, null, null, {});
         } catch (error) {

@@ -1,204 +1,197 @@
+<%#
+  Stat displays: voice channels the bot renames to show a live number, the time or the date.
+  The list is server-rendered; add (POST), edit (PATCH) and remove (DELETE) go through
+  /api/guilds/:id/core/stat-displays. Built on the settings-row kit (cf-settings.css); ids,
+  data attributes and handlers are unchanged.
+%>
+<% const sdList = typeof statDisplayChannels !== 'undefined' ? statDisplayChannels : []; %>
+<% const vcList = typeof voiceChannels !== 'undefined' ? voiceChannels : []; %>
+<style>
+    .sd-item { flex-wrap: wrap; }
+    .sd-name { display: block; font-weight: 600; color: var(--cf-text); }
+    .sd-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 4px; color: var(--cf-text-3); font-size: var(--cf-text-xs); }
+    .sd-meta code { overflow-wrap: anywhere; }
+    .sd-edit { flex: 1 1 100%; padding-top: var(--cf-3); border-top: 1px dashed var(--cf-border); }
+    .sd-edit[hidden] { display: none; }
+    .sd-edit .sd-preview { margin-top: var(--cf-2); }
+    .sd-edit-row { display: flex; gap: var(--cf-2); align-items: flex-end; flex-wrap: wrap; }
+    .sd-edit-row .cf-field { flex: 1 1 14rem; }
+    .sd-preview { display: inline-flex; align-items: center; gap: 8px; min-height: 36px; padding: 0 12px; max-width: 100%;
+        border-radius: var(--cf-radius); background: var(--cf-surface-2); border: 1px solid var(--cf-border);
+        color: var(--cf-text); font-weight: 600; font-size: var(--cf-text-sm); overflow-wrap: anywhere; }
+    .sd-preview i { color: var(--cf-text-3); font-size: 0.85em; }
+</style>
+
 <div class="page-section">
     <div class="page-section-header">
         <div>
             <div class="page-section-title">
                 <i class="fas fa-tv"></i>
-                <span>Stat Display Channels</span>
+                <span>Stat displays</span>
             </div>
             <div class="page-section-subtitle">
-                Voice channels that auto-rename to show live stats, time, date, or role member counts. Updates every 10 minutes (Discord rate limit).
+                Discord lets the bot rename a channel about twice every 10 minutes, so names lag a little behind.
             </div>
         </div>
     </div>
 
-    <!-- Existing stat displays -->
-    <% const sdList = typeof statDisplayChannels !== 'undefined' ? statDisplayChannels : []; %>
-    <% if (sdList.length > 0) { %>
-    <div style="margin-bottom: var(--spacing-6);">
-        <h3 style="font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-3);">
-            Active Displays (<%= sdList.length %>)
-        </h3>
-        <div style="display: flex; flex-direction: column; gap: 8px;">
-            <% sdList.forEach(sd => {
-                const iconMap = { time: 'clock', date: 'calendar-alt', members: 'users', humans: 'user', bots: 'robot', online: 'circle', channels: 'hashtag', roles: 'tags', boosts: 'gem', role: 'user-tag', twitch_followers: 'twitch' };
-                const config = sd.config ? (typeof sd.config === 'string' ? JSON.parse(sd.config) : sd.config) : {};
-                const roleInfo = sd.stat_type === 'role' && config.role_id ? (typeof roles !== 'undefined' ? roles.find(r => r.id === config.role_id) : null) : null;
-            %>
-            <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-md); padding: var(--spacing-3) var(--spacing-4);">
-                <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-                    <div style="display: flex; align-items: center; gap: var(--spacing-3);">
-                        <div style="width: 36px; height: 36px; background: rgba(167,139,250,0.15); border-radius: 8px; display: flex; align-items: center; justify-content: center;">
-                            <i class="<%= sd.stat_type === 'twitch_followers' ? 'fab' : 'fas' %> fa-<%= iconMap[sd.stat_type] || 'chart-bar' %>" style="font-size: 0.85rem; color: <%= sd.stat_type === 'twitch_followers' ? '#9146FF' : '#a78bfa' %>;"></i>
-                        </div>
-                        <div>
-                            <div style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary); font-size: var(--font-size-sm);">
-                                <%= sd.stat_type === 'role' ? 'Role: ' + (sd.role_name || (roleInfo ? roleInfo.name : 'Unknown')) : sd.stat_type === 'twitch_followers' ? 'Twitch: ' + (config.twitch_username || 'Unknown') : sd.stat_type.replace('_', ' ').replace(/\b\w/g, c => c.toUpperCase()) %>
-                            </div>
-                            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted);">
-                                Channel: <code style="background: rgba(0,0,0,0.3); padding: 1px 6px; border-radius: 3px; font-size: 0.7rem;"><%= sd.channel_id %></code>
-                            </div>
-                        </div>
+    <section class="cf-section" aria-labelledby="sd-list-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="sd-list-title">Displays</h2>
+                <p class="cf-section-desc"><%= sdList.length ? `${sdList.length} channel${sdList.length === 1 ? '' : 's'} kept up to date.` : 'Channels the bot keeps renamed.' %></p>
+            </div>
+            <div class="cf-section-actions"><span id="cfk-sd-list-status" class="cf-status-line" role="status" aria-live="polite"></span></div>
+        </header>
+        <div class="cf-rows">
+            <% if (sdList.length > 0) { %>
+            <div class="cf-list">
+                <% sdList.forEach(sd => {
+                    const config = sd.config ? (typeof sd.config === 'string' ? JSON.parse(sd.config) : sd.config) : {};
+                    const roleInfo = sd.stat_type === 'role' && config.role_id ? (typeof roles !== 'undefined' ? roles.find(r => r.id === config.role_id) : null) : null;
+                    const vc = vcList.find(v => v.id === sd.channel_id);
+                    const label = sd.stat_type === 'role' ? 'Members with ' + (sd.role_name || (roleInfo ? roleInfo.name : 'a deleted role'))
+                        : sd.stat_type === 'twitch_followers' ? 'Twitch followers of ' + (config.twitch_username || 'an unknown channel')
+                        : ({ members: 'Total members', humans: 'Human members', bots: 'Bots', online: 'Online members', channels: 'Channel count', roles: 'Role count', boosts: 'Server boosts', time: 'Local time', date: 'Local date' })[sd.stat_type] || sd.stat_type.replace('_', ' ');
+                %>
+                <div class="cf-list-item sd-item">
+                    <div class="cf-list-main">
+                        <span class="sd-name"><%= label %></span>
+                        <span class="sd-meta">
+                            <% if (vc) { %><span><i class="fas fa-volume-up" aria-hidden="true"></i> <%= vc.name %></span><% } else { %><span>Channel <code><%= sd.channel_id %></code></span><% } %>
+                            <span class="cf-token"><%= sd.template %></span>
+                        </span>
                     </div>
-                    <div style="display: flex; gap: 6px;">
-                        <button type="button" onclick="toggleEditSd(<%= sd.id %>)" style="background: rgba(96,165,250,0.1); border: 1px solid rgba(96,165,250,0.2); border-radius: var(--radius-md); padding: 6px 12px; color: #60a5fa; cursor: pointer; font-size: 0.75rem;">
-                            <i class="fas fa-pen"></i>
-                        </button>
-                        <button type="button" class="sd-remove-btn" data-id="<%= sd.id %>" style="background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.2); border-radius: var(--radius-md); padding: 6px 12px; color: #f87171; cursor: pointer; font-size: 0.75rem;">
-                            <i class="fas fa-trash"></i>
-                        </button>
+                    <div class="cf-list-actions">
+                        <button type="button" class="btn btn-secondary btn-sm" onclick="toggleEditSd(<%= sd.id %>)" aria-controls="sd-edit-<%= sd.id %>" aria-expanded="false">Edit</button>
+                        <button type="button" class="btn btn-danger btn-sm sd-remove-btn" data-id="<%= sd.id %>">Remove</button>
+                    </div>
+                    <div id="sd-edit-<%= sd.id %>" class="sd-edit" hidden>
+                        <div class="sd-edit-row">
+                            <div class="cf-field">
+                                <label for="sd-template-<%= sd.id %>">Channel name</label>
+                                <input type="text" id="sd-template-<%= sd.id %>" value="<%= sd.template %>" class="form-control sd-edit-template" maxlength="100" data-type="<%= sd.stat_type %>">
+                            </div>
+                            <button type="button" class="btn btn-primary btn-sm" onclick="saveSd(<%= sd.id %>)">Save</button>
+                        </div>
+                        <p class="cf-field-hint">Put <code>{value}</code> where the number or text goes, for example <code>Members: {value}</code>. At most 100 characters.</p>
+                        <span class="sd-preview"><i class="fas fa-volume-up" aria-hidden="true"></i><span class="sd-edit-preview"><%= String(sd.template || '').replace('{value}', '42') %></span></span>
+                        <span class="cf-status-line sd-edit-status" role="status" aria-live="polite"></span>
                     </div>
                 </div>
-                <!-- Inline edit form (hidden by default) -->
-                <div id="sd-edit-<%= sd.id %>" style="display: none; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.06);">
-                    <div style="display: flex; gap: 8px; align-items: flex-end; flex-wrap: wrap;">
-                        <div style="flex: 2; min-width: 200px;">
-                            <label style="font-size: 0.7rem; color: var(--color-text-muted); display: block; margin-bottom: 3px;">Template <span style="font-weight:400;">(must include {value})</span></label>
-                            <input type="text" id="sd-template-<%= sd.id %>" value="<%= sd.template %>" class="form-control" style="font-size: 0.8rem; padding: 6px 10px;">
-                        </div>
-                        <button type="button" onclick="saveSd(<%= sd.id %>)" style="padding: 6px 16px; background: linear-gradient(135deg, #7c3aed, #a78bfa); color: white; border: none; border-radius: 8px; font-size: 0.8rem; font-weight: 600; cursor: pointer;">
-                            Save
-                        </button>
+                <% }); %>
+            </div>
+            <% } else { %>
+            <%- include('../kit/_state', { kind: 'empty', title: 'No stat displays yet', text: 'Add one below to show a live count in a voice channel name.', id: null, boxed: false, compact: false }) %>
+
+            <% } %>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="sd-add-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="sd-add-title">Add a display</h2>
+                <p class="cf-section-desc">Choose a voice channel and what its name should show.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div id="sd-add-error" class="sd-error cf-notice is-bad" role="alert" hidden></div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="sd-channel">Voice channel</label>
+                    <p class="cf-row-desc">Use an existing voice channel, or let the bot create one that members cannot join. The bot needs Manage Channels.</p>
+                </div>
+                <div class="cf-row-control">
+                    <select id="sd-channel" class="form-select">
+                        <option value="">Choose a voice channel</option>
+                        <option value="create">Create a new channel</option>
+                        <% vcList.forEach(vc => { %>
+                        <option value="<%= vc.id %>"><%= vc.name %></option>
+                        <% }); %>
+                    </select>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="sd-type">What it shows</label>
+                    <p class="cf-row-desc">Time reads like 7:36pm and date like Sunday, Mar 22nd, in the server's timezone. A role count is the members who have one role; Twitch shows a channel's followers.</p>
+                </div>
+                <div class="cf-row-control">
+                    <select id="sd-type" class="form-select">
+                        <optgroup label="Counts">
+                            <option value="members">Total members</option>
+                            <option value="humans">Human members</option>
+                            <option value="bots">Bots</option>
+                            <option value="online">Online members</option>
+                            <option value="channels">Channel count</option>
+                            <option value="roles">Role count</option>
+                            <option value="boosts">Server boosts</option>
+                        </optgroup>
+                        <optgroup label="Role">
+                            <option value="role">Members with a role</option>
+                        </optgroup>
+                        <optgroup label="Social">
+                            <option value="twitch_followers">Twitch followers</option>
+                        </optgroup>
+                        <optgroup label="Date and time">
+                            <option value="time">Local time</option>
+                            <option value="date">Local date</option>
+                        </optgroup>
+                    </select>
+                </div>
+            </div>
+            <div id="sd-role-row" hidden>
+                <div class="cf-row cf-row--sub">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="sd-role">Role to count</label>
+                        <p class="cf-row-desc">The name shows how many members have this role.</p>
                     </div>
-                    <div style="font-size: 0.65rem; color: var(--color-text-muted); margin-top: 6px;">
-                        Use <code>{value}</code> where the stat number should appear. Example: <code>Members: {value}</code> or <code>🕐 | {value}</code>
+                    <div class="cf-row-control">
+                        <select id="sd-role" class="form-select">
+                            <option value="">Choose a role</option>
+                            <% if (typeof roles !== 'undefined') { roles.forEach(role => { %>
+                            <option value="<%= role.id %>"><%= role.name %></option>
+                            <% }); } %>
+                        </select>
                     </div>
                 </div>
             </div>
-            <% }); %>
-        </div>
-    </div>
-    <% } else { %>
-    <div style="text-align: center; padding: 40px 20px; color: var(--color-text-muted); margin-bottom: var(--spacing-6);">
-        <i class="fas fa-tv" style="font-size: 2.5rem; margin-bottom: var(--spacing-3); display: block; opacity: 0.25;"></i>
-        <div style="font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); margin-bottom: 4px;">No stat display channels</div>
-        <div style="font-size: var(--font-size-sm);">Add one below to show live stats in a voice channel name</div>
-    </div>
-    <% } %>
-
-    <!-- Add new stat display -->
-    <div style="background: var(--color-dark-600); border: 1px solid var(--color-dark-400); border-radius: var(--radius-lg); padding: var(--spacing-6);">
-        <h3 style="font-size: var(--font-size-base); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-4);">
-            <i class="fas fa-plus" style="color: var(--accent-purple); margin-right: var(--spacing-2);"></i>
-            Add Stat Display
-        </h3>
-
-        <div id="sd-add-error" style="display: none; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); border-radius: var(--radius-md); padding: var(--spacing-3); margin-bottom: var(--spacing-4); color: var(--color-danger); font-size: var(--font-size-sm);"></div>
-
-        <!-- Row 1: Channel + Type -->
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: var(--spacing-4); margin-bottom: var(--spacing-4);">
-            <div>
-                <label class="form-label">Voice Channel</label>
-                <select id="sd-channel" class="form-select">
-                    <option value="">Select a voice channel...</option>
-                    <option value="create" style="color: #a78bfa; font-weight: 600;">+ Create new channel</option>
-                    <% const vcList = typeof voiceChannels !== 'undefined' ? voiceChannels : []; %>
-                    <% vcList.forEach(vc => { %>
-                    <option value="<%= vc.id %>"><%= vc.name %></option>
-                    <% }); %>
-                </select>
-                <div class="form-help">Pick an existing voice channel or create a new one automatically</div>
+            <div id="sd-twitch-row" hidden>
+                <div class="cf-row cf-row--sub">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="sd-twitch-username">Twitch channel</label>
+                        <p class="cf-row-desc">The name shows this channel's follower count.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input type="text" id="sd-twitch-username" class="form-control" placeholder="Twitch username" maxlength="25" autocomplete="off" spellcheck="false">
+                    </div>
+                </div>
             </div>
-            <div>
-                <label class="form-label">Stat Type</label>
-                <select id="sd-type" class="form-select">
-                    <optgroup label="Counters">
-                        <option value="members">Total Members</option>
-                        <option value="humans">Human Members</option>
-                        <option value="bots">Bots</option>
-                        <option value="online">Online Members</option>
-                        <option value="channels">Channel Count</option>
-                        <option value="roles">Role Count</option>
-                        <option value="boosts">Server Boosts</option>
-                    </optgroup>
-                    <optgroup label="Role Counter">
-                        <option value="role">Members with Role</option>
-                    </optgroup>
-                    <optgroup label="Social">
-                        <option value="twitch_followers">Twitch Followers</option>
-                    </optgroup>
-                    <optgroup label="Date & Time">
-                        <option value="time">Local Time</option>
-                        <option value="date">Local Date</option>
-                    </optgroup>
-                </select>
-                <div class="form-help">What information to display</div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="sd-template">Channel name</label>
+                    <p class="cf-row-desc">Put <code>{value}</code> where the number or text goes. At most 100 characters.</p>
+                </div>
+                <div class="cf-row-control">
+                    <input type="text" id="sd-template" class="form-control" placeholder="Members: {value}" maxlength="100">
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <span class="cf-row-label">Preview</span>
+                    <p class="cf-row-desc">How the channel will read, with a sample value.</p>
+                </div>
+                <div class="cf-row-control">
+                    <span class="sd-preview"><i class="fas fa-volume-up" aria-hidden="true"></i><span id="sd-preview">Members: 42</span></span>
+                </div>
+            </div>
+            <div class="cf-section-foot">
+                <button type="button" id="sd-add-btn" class="btn btn-primary"><span>Add display</span></button>
             </div>
         </div>
-
-        <!-- Role selector (shown only when type=role) -->
-        <div id="sd-role-row" style="display: none; margin-bottom: var(--spacing-4);">
-            <label class="form-label">
-                <i class="fas fa-user-tag" style="margin-right: var(--spacing-1); color: var(--accent-purple);"></i>
-                Count Members With Role
-            </label>
-            <select id="sd-role" class="form-select">
-                <option value="">Select a role...</option>
-                <% if (typeof roles !== 'undefined') { roles.forEach(role => { %>
-                <option value="<%= role.id %>"><%= role.name %></option>
-                <% }); } %>
-            </select>
-            <div class="form-help">The channel name will show how many members have this role</div>
-        </div>
-
-        <!-- Twitch username (shown only when type=twitch_followers) -->
-        <div id="sd-twitch-row" style="display: none; margin-bottom: var(--spacing-4);">
-            <label class="form-label">
-                <i class="fab fa-twitch" style="margin-right: var(--spacing-1); color: #9146FF;"></i>
-                Twitch Username
-            </label>
-            <input type="text" id="sd-twitch-username" class="form-control" placeholder="e.g. fliiqzy">
-            <div class="form-help">The channel name will show this streamer's follower count</div>
-        </div>
-
-        <!-- Row 2: Template + Preview -->
-        <div style="margin-bottom: var(--spacing-4);">
-            <label class="form-label">
-                Channel Name Template
-                <span style="font-weight: 400; color: var(--color-text-muted);"> — use <code style="background: rgba(0,0,0,0.3); padding: 1px 4px; border-radius: 3px;">{value}</code> where the number/text should appear</span>
-            </label>
-            <input type="text" id="sd-template" class="form-control" placeholder="e.g. Members: {value}">
-        </div>
-
-        <!-- Live Preview -->
-        <div style="background: var(--color-dark-700); border: 1px solid var(--color-dark-400); border-radius: var(--radius-md); padding: var(--spacing-4); margin-bottom: var(--spacing-4);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: var(--spacing-2);">Preview</div>
-            <div style="display: flex; align-items: center; gap: var(--spacing-2);">
-                <i class="fas fa-volume-up" style="color: var(--color-text-muted); font-size: 0.85rem;"></i>
-                <span id="sd-preview" style="font-weight: var(--font-weight-semibold); color: var(--color-text-primary); font-size: var(--font-size-sm);">Members: 42</span>
-            </div>
-        </div>
-
-        <!-- Info cards -->
-        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--spacing-3); margin-bottom: var(--spacing-4);">
-            <div style="background: var(--color-dark-700); border-radius: var(--radius-md); padding: var(--spacing-3); font-size: var(--font-size-xs); color: var(--color-text-muted);">
-                <i class="fas fa-clock" style="color: var(--accent-purple); margin-right: 4px;"></i>
-                <strong>Time</strong> shows like <code>7:36pm</code>
-            </div>
-            <div style="background: var(--color-dark-700); border-radius: var(--radius-md); padding: var(--spacing-3); font-size: var(--font-size-xs); color: var(--color-text-muted);">
-                <i class="fas fa-calendar-alt" style="color: var(--accent-purple); margin-right: 4px;"></i>
-                <strong>Date</strong> shows like <code>Sunday, Mar 22nd</code>
-            </div>
-            <div style="background: var(--color-dark-700); border-radius: var(--radius-md); padding: var(--spacing-3); font-size: var(--font-size-xs); color: var(--color-text-muted);">
-                <i class="fas fa-user-tag" style="color: var(--accent-purple); margin-right: 4px;"></i>
-                <strong>Role</strong> counts members with a specific role
-            </div>
-            <div style="background: var(--color-dark-700); border-radius: var(--radius-md); padding: var(--spacing-3); font-size: var(--font-size-xs); color: var(--color-text-muted);">
-                <i class="fab fa-twitch" style="color: #9146FF; margin-right: 4px;"></i>
-                <strong>Twitch</strong> shows follower count for a channel
-            </div>
-        </div>
-
-        <button type="button" id="sd-add-btn" class="btn btn-primary">
-            <i class="fas fa-plus"></i>
-            <span>Add Display Channel</span>
-        </button>
-    </div>
+    </section>
 </div>
-
-<style>
-.form-label { display: block; font-size: var(--font-size-sm); font-weight: var(--font-weight-semibold); color: var(--color-text-primary); margin-bottom: var(--spacing-2); }
-.form-help { font-size: var(--font-size-xs); color: var(--color-text-muted); margin-top: var(--spacing-2); }
-</style>
 
 <script>
 (function() {
@@ -214,7 +207,7 @@
     var defaults = {
         members: 'Members: {value}', humans: 'Humans: {value}', bots: 'Bots: {value}',
         online: 'Online: {value}', channels: 'Channels: {value}', roles: 'Roles: {value}',
-        boosts: 'Boosts: {value}', time: '\uD83D\uDD50 | {value}', date: '\uD83D\uDCC5 | {value}',
+        boosts: 'Boosts: {value}', time: '🕐 | {value}', date: '📅 | {value}',
         role: '{value} Members', twitch_followers: 'Followers: {value}'
     };
 
@@ -231,8 +224,8 @@
     }
 
     function updateConditionalRows() {
-        roleRow.style.display = typeSelect.value === 'role' ? 'block' : 'none';
-        twitchRow.style.display = typeSelect.value === 'twitch_followers' ? 'block' : 'none';
+        roleRow.hidden = typeSelect.value !== 'role';
+        twitchRow.hidden = typeSelect.value !== 'twitch_followers';
     }
 
     typeSelect.addEventListener('change', function() {
@@ -256,12 +249,13 @@
         var statType = typeSelect.value;
         var template = templateInput.value.trim();
         var errorDiv = document.getElementById('sd-add-error');
-        errorDiv.style.display = 'none';
+        errorDiv.hidden = true;
 
-        if (!channelId) { errorDiv.textContent = 'Please select a voice channel.'; errorDiv.style.display = 'block'; return; }
-        if (!template || !template.includes('{value}')) { errorDiv.textContent = 'Template must include {value} placeholder.'; errorDiv.style.display = 'block'; return; }
-        if (statType === 'role' && !roleSelect.value) { errorDiv.textContent = 'Please select a role to count.'; errorDiv.style.display = 'block'; return; }
-        if (statType === 'twitch_followers' && !twitchInput.value.trim()) { errorDiv.textContent = 'Please enter a Twitch username.'; errorDiv.style.display = 'block'; return; }
+        if (!channelId) { errorDiv.textContent = 'Choose a voice channel.'; errorDiv.hidden = false; return; }
+        if (!template || !template.includes('{value}')) { errorDiv.textContent = 'The channel name must include {value}.'; errorDiv.hidden = false; return; }
+        if (statType === 'role' && !roleSelect.value) { errorDiv.textContent = 'Choose a role to count.'; errorDiv.hidden = false; return; }
+        if (statType === 'twitch_followers' && !/^[A-Za-z0-9_]{3,25}$/.test(twitchInput.value.trim())) { errorDiv.textContent = 'Enter a Twitch username: 3 to 25 letters, numbers or underscores.'; errorDiv.hidden = false; return; }
+        if (template.length > 100) { errorDiv.textContent = 'Channel names can be at most 100 characters.'; errorDiv.hidden = false; return; }
 
         var body = { channel_id: channelId, stat_type: statType, template: template };
         if (statType === 'role') body.role_id = roleSelect.value;
@@ -273,64 +267,85 @@
         fetch('/api/guilds/' + guildId + '/core/stat-displays', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'same-origin',
             body: JSON.stringify(body)
         })
         .then(function(r) {
             if (!r.ok) {
                 return r.json().then(function(d) {
                     errorDiv.textContent = d.error || 'Failed';
-                    errorDiv.style.display = 'block';
+                    errorDiv.hidden = false;
                     addBtn.disabled = false;
-                    addBtn.querySelector('span').textContent = 'Add Display Channel';
+                    addBtn.querySelector('span').textContent = 'Add display';
                 });
             }
             window.location.reload();
         })
         .catch(function() {
             errorDiv.textContent = 'Network error';
-            errorDiv.style.display = 'block';
+            errorDiv.hidden = false;
             addBtn.disabled = false;
-            addBtn.querySelector('span').textContent = 'Add Display Channel';
+            addBtn.querySelector('span').textContent = 'Add display';
         });
     });
 
-    // Remove
+    function say(node, cls, text) {
+        if (!node) return;
+        node.className = node.className.replace(/\bis-(ok|bad|busy|warn)\b/g, '').trim() + (cls ? ' ' + cls : '');
+        node.textContent = text;
+    }
+
+    // Remove (the channel itself is left alone; only the renaming stops).
+    var listStatus = document.getElementById('cfk-sd-list-status');
     document.querySelectorAll('.sd-remove-btn').forEach(function(btn) {
         btn.addEventListener('click', function() {
-            if (!confirm('Remove this stat display?')) return;
+            if (!confirm('Stop renaming this channel? The channel itself is not deleted.')) return;
             btn.disabled = true;
-            fetch('/api/guilds/' + guildId + '/core/stat-displays/' + btn.getAttribute('data-id'), { method: 'DELETE' })
-            .then(function() { window.location.reload(); })
-            .catch(function() { alert('Failed to remove'); btn.disabled = false; });
+            fetch('/api/guilds/' + guildId + '/core/stat-displays/' + btn.getAttribute('data-id'), { method: 'DELETE', credentials: 'same-origin' })
+            .then(function(r) {
+                if (!r.ok) return r.json().catch(function() { return {}; }).then(function(d) { throw new Error(d.error || ('HTTP ' + r.status)); });
+                window.location.reload();
+            })
+            .catch(function(e) { say(listStatus, 'is-bad', 'Could not remove: ' + e.message); btn.disabled = false; });
         });
     });
-    // Edit toggle and save
+
+    // Edit toggle, live preview and save
     window.toggleEditSd = function(id) {
-        var el = document.getElementById('sd-edit-' + id);
-        if (el) el.style.display = el.style.display === 'none' ? '' : 'none';
+        var box = document.getElementById('sd-edit-' + id);
+        if (!box) return;
+        box.hidden = !box.hidden;
+        var toggle = document.querySelector('[aria-controls="sd-edit-' + id + '"]');
+        if (toggle) toggle.setAttribute('aria-expanded', String(!box.hidden));
+        if (!box.hidden) { var input = document.getElementById('sd-template-' + id); if (input) input.focus(); }
     };
+    document.querySelectorAll('.sd-edit-template').forEach(function(input) {
+        var out = input.closest('.sd-edit').querySelector('.sd-edit-preview');
+        input.addEventListener('input', function() {
+            out.textContent = (input.value || '{value}').replace('{value}', sampleValues[input.getAttribute('data-type')] || '42');
+        });
+        input.dispatchEvent(new Event('input'));
+    });
 
     window.saveSd = function(id) {
-        var template = document.getElementById('sd-template-' + id).value.trim();
-        if (!template.includes('{value}')) {
-            alert('Template must include {value}');
-            return;
-        }
+        var input = document.getElementById('sd-template-' + id);
+        var status = input.closest('.sd-edit').querySelector('.sd-edit-status');
+        var template = input.value.trim();
+        if (!template.includes('{value}')) { say(status, 'is-bad', 'The channel name must include {value}.'); input.focus(); return; }
+        if (template.length > 100) { say(status, 'is-bad', 'Channel names can be at most 100 characters.'); input.focus(); return; }
+        say(status, 'is-busy', 'Saving');
         fetch('/api/guilds/' + guildId + '/core/stat-displays/' + id, {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             credentials: 'include',
             body: JSON.stringify({ template: template })
         })
-        .then(function(resp) { return resp.json(); })
+        .then(function(resp) { return resp.json().catch(function() { return {}; }); })
         .then(function(data) {
-            if (data.success) {
-                window.location.reload();
-            } else {
-                alert('Error: ' + (data.error || 'Failed to save'));
-            }
+            if (data.success) window.location.reload();
+            else say(status, 'is-bad', data.error || 'Could not save');
         })
-        .catch(function() { alert('Failed to save'); });
+        .catch(function() { say(status, 'is-bad', 'Could not save. Check your connection.'); });
     };
 })();
 </script>

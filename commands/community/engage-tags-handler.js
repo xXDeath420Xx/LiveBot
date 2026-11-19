@@ -1,6 +1,7 @@
 import { EmbedBuilder } from 'discord.js';
 import TagsManager from '../../core/tags-manager.js';
 import logger from '../../utils/logger.js';
+import { themeColor } from '../../core/guild-theme.js';
 
 let tagsManager = null;
 
@@ -35,7 +36,7 @@ export async function handleCreate(interaction) {
 
     if (result.success) {
         const embed = new EmbedBuilder()
-            .setColor('#57F287')
+            .setColor(themeColor(interaction.guildId, 'success'))
             .setTitle('\u2705 Tag Created')
             .setDescription(`Tag \`${tagName}\` has been created successfully!`)
             .setFooter({ text: `Created by ${interaction.user.tag}` })
@@ -143,7 +144,7 @@ export async function handleListTags(interaction) {
     }
 
     const embed = new EmbedBuilder()
-        .setColor('#5865F2')
+        .setColor(themeColor(interaction.guildId, 'primary'))
         .setTitle(`\ud83d\udcd1 Tags in ${interaction.guild.name}`)
         .setDescription(
             result.tags
@@ -175,7 +176,7 @@ export async function handleSearch(interaction) {
     }
 
     const embed = new EmbedBuilder()
-        .setColor('#5865F2')
+        .setColor(themeColor(interaction.guildId, 'primary'))
         .setTitle(`\ud83d\udd0d Search Results for "${query}"`)
         .setDescription(
             tags.map(tag => `\`${tag.tag_name}\` - ${tag.use_count} uses`).join('\n')
@@ -202,7 +203,7 @@ export async function handleInfo(interaction) {
     const creator = await interaction.client.users.fetch(tag.creator_id).catch(() => null);
 
     const embed = new EmbedBuilder()
-        .setColor('#5865F2')
+        .setColor(themeColor(interaction.guildId, 'primary'))
         .setTitle(`\u2139\ufe0f Tag Information: ${tag.tag_name}`)
         .addFields(
             { name: 'Creator', value: creator ? `${creator.tag}` : 'Unknown', inline: true },
@@ -235,7 +236,7 @@ export async function handleTop(interaction) {
     }
 
     const embed = new EmbedBuilder()
-        .setColor('#FFD700')
+        .setColor(themeColor(interaction.guildId, 'warning'))
         .setTitle(`\ud83c\udfc6 Top ${tags.length} Most Used Tags`)
         .setDescription(
             tags

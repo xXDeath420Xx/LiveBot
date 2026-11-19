@@ -213,7 +213,7 @@ await pool.execute(`
     VALUES (?, 1, ?, ?, 0, 1, 1, 0, ?, 0)
     ON DUPLICATE KEY UPDATE enabled = 1, channel_id = VALUES(channel_id), allowed_platforms = VALUES(allowed_platforms),
         delete_invalid = 1, announcement_channel_id = VALUES(announcement_channel_id)`,
-    [GUILD, CH.selfPromoAff, JSON.stringify(['twitch','kick','youtube','tiktok','trovo','facebook']), CH.whosLiveNow]);
+    [GUILD, CH.selfPromoAff, JSON.stringify(['twitch','kick','youtube','tiktok','facebook']), CH.whosLiveNow]);
 console.log('  self_promo_config ✓');
 
 // 6. stream_signup_config (gated to level 3)

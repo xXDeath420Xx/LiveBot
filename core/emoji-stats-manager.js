@@ -149,6 +149,7 @@ class EmojiStatsManager {
                 COUNT(DISTINCT emoji_id) as unique_emojis
          FROM emoji_usage
          WHERE guild_id = ? AND stat_date >= DATE_SUB(CURDATE(), INTERVAL ? DAY)
+           AND user_id NOT IN (SELECT user_id FROM user_privacy_settings WHERE opt_out_leaderboards = 1)
          GROUP BY user_id
          ORDER BY total_emojis DESC
          LIMIT ?`,

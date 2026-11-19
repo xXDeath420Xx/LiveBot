@@ -12,6 +12,8 @@
 
 import pool from '../../utils/db.js';
 import logger from '../../utils/logger.js';
+import { withTx, OwoUserError } from './tx.js';
+import { bookAllowanceTx, lockLimitRowsTx, logTransferTx } from './give-limits.js';
 
 // OwO currency identity — separate from the guild's Economy currency.
 export const CURRENCY_NAME = 'cowoncy';
@@ -82,13 +84,85 @@ export async function trySpendCowoncy(guildId, userId, amount, reason = '') {
     return { ok: true, balance: bal - amount };
 }
 
-export async function transferCowoncy(guildId, fromUserId, toUserId, amount) {
-    if (!Number.isFinite(amount) || amount <= 0) throw new Error('Amount must be > 0');
-    if (fromUserId === toUserId) throw new Error('Cannot transfer to yourself');
-    const spend = await trySpendCowoncy(guildId, fromUserId, amount, `transfer to ${toUserId}`);
-    if (!spend.ok) throw new Error(`Insufficient cowoncy — have ${spend.balance}, need ${amount}`);
-    await addCowoncy(guildId, toUserId, amount, `transfer from ${fromUserId}`);
-    return { from: fromUserId, to: toUserId, amount };
+// ── Transaction helpers (run inside core/owo/tx.js withTx) ───────────────────
+
+/** Make sure a member has a cowoncy row (new rows start at STARTING_COWONCY), inside a transaction. */
+export async function ensureRowTx(conn, guildId, userId) {
+    await conn.execute(
+        `INSERT IGNORE INTO owo_cowoncy (guild_id, id, money, daily_streak) VALUES (?, ?, ?, 0)`,
+        [guildId, userId, STARTING_COWONCY]
+    );
+}
+
+/**
+ * Lock the cowoncy rows of one or more members (creating missing ones) in id order and return
+ * their balances. Locking in a fixed order keeps two opposite transfers from deadlocking.
+ * @returns {Promise<Map<string, number>>}
+ */
+export async function lockBalancesTx(conn, guildId, userIds) {
+    const ids = [...new Set(userIds.map(String))].sort();
+    for (const id of ids) await ensureRowTx(conn, guildId, id);
+    const [rows] = await conn.execute(
+        `SELECT id, money FROM owo_cowoncy WHERE guild_id = ? AND id IN (${ids.map(() => '?').join(',')}) ORDER BY id FOR UPDATE`,
+        [guildId, ...ids]
+    );
+    return new Map(rows.map(r => [String(r.id), Number(r.money) || 0]));
+}
+
+/** Guarded debit inside a transaction; throws OwoUserError when the balance can't cover it. */
+export async function debitTx(conn, guildId, userId, amount, message = null) {
+    if (!amount) return;
+    await ensureRowTx(conn, guildId, userId);
+    const [r] = await conn.execute(
+        'UPDATE owo_cowoncy SET money = money - ? WHERE guild_id = ? AND id = ? AND money >= ?',
+        [amount, guildId, userId, amount]
+    );
+    if (r.affectedRows !== 1) {
+        throw new OwoUserError(message || "You don't have enough cowoncy! >:c", 'insufficient_funds');
+    }
+}
+
+/** Credit inside a transaction (creates the row if needed). */
+export async function creditTx(conn, guildId, userId, amount) {
+    if (!amount) return;
+    await ensureRowTx(conn, guildId, userId);
+    await conn.execute(
+        'UPDATE owo_cowoncy SET money = money + ? WHERE guild_id = ? AND id = ?',
+        [amount, guildId, userId]
+    );
+}
+
+/**
+ * `owo give`: move cowoncy between two members as ONE transaction — balance check, upstream's
+ * daily send/receive caps, debit, credit and the owo_transaction audit row all commit together or
+ * not at all.
+ *
+ * Throws an Error whose message is safe to show the player (OwoUserError for rule failures such
+ * as "not enough cowoncy" or a cap; a generic message for unexpected failures, which are logged).
+ */
+export async function transferCowoncy(guildId, fromUserId, toUserId, amount, { receiverName = null } = {}) {
+    if (!Number.isSafeInteger(amount) || amount <= 0) throw new OwoUserError('Amount must be a whole number above 0.');
+    if (String(fromUserId) === String(toUserId)) throw new OwoUserError("You can't give cowoncy to yourself.");
+    try {
+        return await withTx(async (conn) => {
+            const balances = await lockBalancesTx(conn, guildId, [fromUserId, toUserId]);
+            const have = balances.get(String(fromUserId)) ?? 0;
+            if (have < amount) {
+                throw new OwoUserError(`You silly hooman! You don't have enough cowoncy — you have **${have.toLocaleString('en-US')}**.`, 'insufficient_funds');
+            }
+            await lockLimitRowsTx(conn, guildId, [fromUserId, toUserId]);
+            await bookAllowanceTx(conn, guildId, fromUserId, 'send', amount);
+            await bookAllowanceTx(conn, guildId, toUserId, 'receive', amount, { name: receiverName });
+            await debitTx(conn, guildId, fromUserId, amount);
+            await creditTx(conn, guildId, toUserId, amount);
+            await logTransferTx(conn, guildId, fromUserId, toUserId, amount);
+            return { from: fromUserId, to: toUserId, amount, senderBalance: have - amount };
+        }, { label: 'give' });
+    } catch (e) {
+        if (e instanceof OwoUserError) throw e;
+        logger.error('[owo-cowoncy] transfer failed', { guildId, fromUserId, toUserId, amount, err: e.message, code: e.code });
+        throw new Error('The transfer failed — nothing was moved. Please try again in a moment.');
+    }
 }
 
 /**
@@ -171,4 +245,5 @@ export default {
     CURRENCY_NAME, CURRENCY_EMOJI,
     getCowoncy, addCowoncy, removeCowoncy, trySpendCowoncy,
     transferCowoncy, claimDailyCowoncy, getCurrencyMeta,
+    ensureRowTx, lockBalancesTx, debitTx, creditTx,
 };

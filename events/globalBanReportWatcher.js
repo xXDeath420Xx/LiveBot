@@ -10,9 +10,10 @@
  * If missing, the watcher is silently disabled.
  */
 
-import { Client, GatewayIntentBits, Partials } from 'discord.js';
+import { Client, GatewayIntentBits, Partials, Events } from 'discord.js';
 import logger from '../utils/logger.js';
 import pool from '../utils/db.js';
+import AdaptiveSpamManager from '../core/adaptive-spam-manager.js';
 import { REPORT_PATTERNS } from '../utils/report-patterns.js';
 import { mkdirSync } from 'fs';
 import { join, extname } from 'path';
@@ -24,13 +25,15 @@ const PROJECT_ROOT = join(__dirname, '..');
 const EVIDENCE_DIR = join(PROJECT_ROOT, 'dashboard', 'public', 'evidence');
 const BASE_URL = 'https://certifriedmultitool.com/evidence';
 
-// Watched channels: channelId -> { category, label }
+// Watched channels and authorised reporter roles live in audit_watch_channels / audit_watch_roles
+// (migration 414) and are edited on the dashboard (dashboard/routes/audit-bot.js). These constants
+// are what the code held before, used only when those tables cannot be read at all.
+// category: 'auto' = inferCategory() works it out from the report, anything else is fixed.
 const CHANNELS = {
-    '899865437267963924': { category: 'other', label: 'Various red flags' },
+    '899865437267963924': { category: 'auto', label: 'Various red flags' },
     '1142508311594410086': { category: 'spam', label: 'GFX spammer' }
 };
 
-// Roles authorized to trigger ban entry creation (in the AuditBot guild)
 const AUTHORIZED_ROLES = new Set([
     '889550893727494185',
     '1345811788020711626',
@@ -38,6 +41,34 @@ const AUTHORIZED_ROLES = new Set([
     '1345812273234579507',
     '995576900091138108'
 ]);
+
+const CONFIG_TTL_MS = 60 * 1000;
+let liveConfig = null; // { channels: {id: {category,label,guildId}}, roles: Set, loadedAt }
+
+/**
+ * Current watcher settings. Reads the DB at most once a minute; the dashboard calls
+ * invalidateWatcherConfig() after a save so a change applies to the next message.
+ * An empty table is respected (nothing watched / nobody authorised); only a failed read
+ * falls back — to the last good settings, or to the constants above if there are none yet.
+ */
+export async function loadWatcherConfig({ force = false } = {}) {
+    if (!force && liveConfig && Date.now() - liveConfig.loadedAt < CONFIG_TTL_MS) return liveConfig;
+    try {
+        const [chRows] = await pool.query('SELECT guild_id, channel_id, category, label FROM audit_watch_channels WHERE enabled = 1');
+        const [roRows] = await pool.query('SELECT role_id FROM audit_watch_roles');
+        const channels = {};
+        for (const r of chRows) channels[r.channel_id] = { category: r.category || 'auto', label: r.label || r.channel_id, guildId: r.guild_id };
+        liveConfig = { channels, roles: new Set(roRows.map(r => r.role_id)), loadedAt: Date.now(), source: 'db' };
+    } catch (err) {
+        logger.warn('[GlobalBanWatcher] Could not read watcher settings - using last known', { error: err.message });
+        liveConfig = liveConfig
+            ? { ...liveConfig, loadedAt: Date.now() }
+            : { channels: { ...CHANNELS }, roles: new Set(AUTHORIZED_ROLES), loadedAt: Date.now(), source: 'fallback' };
+    }
+    return liveConfig;
+}
+
+export function invalidateWatcherConfig() { liveConfig = null; }
 
 // ID extraction: bare IDs and mention formats (<@ID> and <@!ID>)
 const ID_REGEX = /\b\d{17,19}\b/g;
@@ -76,15 +107,15 @@ function classifyId(id, content, authorId) {
     for (const link of links) {
         if (link.includes(id)) return 'in_link';
     }
-    if (KNOWN_NON_USER_IDS.has(id)) return 'known_non_user';
+    if (KNOWN_NON_USER_IDS.has(id) || (liveConfig && liveConfig.channels[id])) return 'known_non_user';
     const hasReportSignal = REPORT_PATTERNS.some(p => p.test(content));
     const hasConversationSignal = CONVERSATION_PATTERNS.some(p => p.test(content));
     if (hasConversationSignal && !hasReportSignal) return 'conversation';
     return 'reported';
 }
 
-function inferCategory(channelId, content, offenderUsername = '') {
-    if (channelId === '1142508311594410086') return 'spam';
+function inferCategory(channelCategory, content, offenderUsername = '') {
+    if (channelCategory && channelCategory !== 'auto') return channelCategory;
     const searchText = `${content} ${offenderUsername}`;
     if (/phish/i.test(searchText)) return 'phishing';
     if (/scam/i.test(searchText)) return 'scam';
@@ -131,7 +162,8 @@ async function processReportMessage(message) {
     // Skip bots and DMs
     if (message.author.bot || !message.guild) return;
 
-    const channelConfig = CHANNELS[message.channel.id];
+    const watch = await loadWatcherConfig();
+    const channelConfig = watch.channels[message.channel.id];
     if (!channelConfig) return;
 
     // Role gate with member fetch fallback
@@ -139,15 +171,18 @@ async function processReportMessage(message) {
     if (!member) {
         try {
             member = await message.guild.members.fetch(message.author.id);
-        } catch {
-            logger.warn('[GlobalBanWatcher] Could not fetch member', {
-                userId: message.author.id, guildId: message.guild.id
+        } catch (error) {
+            // 10007 Unknown Member: the reporter has left, so their role can't be checked and the report
+            // is skipped. Expected for old messages, which catch-up re-reads on every boot.
+            const log = error?.code === 10007 ? logger.debug : logger.warn;
+            log.call(logger, '[GlobalBanWatcher] Could not fetch member', {
+                userId: message.author.id, guildId: message.guild.id, code: error?.code
             });
             return;
         }
     }
 
-    const hasRole = member.roles.cache.some(role => AUTHORIZED_ROLES.has(role.id));
+    const hasRole = member.roles.cache.some(role => watch.roles.has(role.id));
     if (!hasRole) return;
 
     const content = message.content;
@@ -209,7 +244,7 @@ async function processReportMessage(message) {
             }
 
             // Infer category per-offender (username may contain keywords like "GFX")
-            const category = inferCategory(message.channel.id, content, username);
+            const category = inferCategory(channelConfig.category, content, username);
 
             // Deduplicate: check for existing active entry
             const [existing] = await pool.execute(
@@ -296,7 +331,8 @@ async function processReportMessage(message) {
 // ─── Catch-up: process missed messages on startup ────────────
 
 async function catchUpMessages(auditClient, limit = 50) {
-    for (const [channelId, config] of Object.entries(CHANNELS)) {
+    const watch = await loadWatcherConfig({ force: true });
+    for (const [channelId, config] of Object.entries(watch.channels)) {
         try {
             const channel = await auditClient.channels.fetch(channelId).catch(() => null);
             if (!channel) {
@@ -329,6 +365,80 @@ async function catchUpMessages(auditClient, limit = 50) {
     }
 }
 
+// ─── Adaptive anti-spam ──────────────────────────────────────
+
+/**
+ * Files a spammer the adaptive filter just banned into the global ban tracker.
+ *
+ * Wired in as AdaptiveSpamManager#onSpamConfirmed below, so it only ever runs for AuditBot — the
+ * other guilds running adaptive spam detection never touch the tracker. Mirrors the dedupe/merge
+ * behaviour of processReportMessage(): an existing active entry is updated rather than duplicated.
+ *
+ * `source` is 'system' (not 'manual_report') so an automated catch is always distinguishable from a
+ * human-filed report in the audit trail.
+ */
+async function fileGlobalBanForSpammer(message, config, spamScore) {
+    const { guild, author } = message;
+    const userId = author.id;
+    const username = author.tag || author.username || userId;
+
+    // The cross-channel row is the evidence: which channels, and a preview of the repeated content.
+    const [hits] = await pool.execute(
+        `SELECT channel_count, message_preview FROM cross_channel_spam
+         WHERE guild_id = ? AND user_id = ? ORDER BY id DESC LIMIT 1`,
+        [guild.id, userId]
+    );
+    const hit = hits[0];
+    const preview = (hit?.message_preview || message.content || '').slice(0, 300);
+    const spread = hit?.channel_count
+        ? `${hit.channel_count} channels`
+        : `${config.cross_channel_threshold || 3}+ channels`;
+
+    const reason = `[Adaptive spam filter] Posted identical content across ${spread} `
+        + `within ${config.cross_channel_timeframe_minutes || 5} minutes (score ${Math.round(spamScore)}). `
+        + `Auto-banned in ${guild.name}.${preview ? ` Content: "${preview}"` : ''}`;
+
+    const globalBanManager = global.botManager?.getDefaultClient?.()?.globalBanManager;
+    const reporterId = message.client.user?.id || null;
+    const reporterName = 'AuditBot (adaptive spam filter)';
+
+    const [existing] = await pool.execute(
+        'SELECT id FROM global_ban_entries WHERE user_id = ? AND active = 1',
+        [userId]
+    );
+
+    if (existing.length > 0) {
+        await pool.execute(
+            'UPDATE global_ban_entries SET reason = ?, reporter_name = COALESCE(reporter_name, ?), updated_at = NOW() WHERE id = ?',
+            [reason, reporterName, existing[0].id]
+        );
+        logger.info('[GlobalBanWatcher] Adaptive spam updated existing ban entry', {
+            entryId: existing[0].id, userId, username
+        });
+        return;
+    }
+
+    const [result] = await pool.execute(
+        `INSERT INTO global_ban_entries (user_id, username, severity, category, reason, evidence, source, reporter_id, reporter_name, source_guild_id, verified, verification_votes)
+         VALUES (?, ?, 'high', 'spam', ?, NULL, 'system', ?, ?, ?, 1, 0)`,
+        [userId, username, reason, reporterId, reporterName, guild.id]
+    );
+
+    const entryId = result.insertId;
+
+    if (globalBanManager) {
+        globalBanManager.banCache.set(userId, { severity: 'high', category: 'spam', entryId });
+        await globalBanManager.logAction(
+            entryId, guild.id, userId, 'entry_created', reporterId,
+            `Adaptive spam filter auto-ban (score ${Math.round(spamScore)}, ${spread})`
+        );
+    }
+
+    logger.warn('[GlobalBanWatcher] Adaptive spam filed new global ban entry', {
+        entryId, userId, username, spamScore: Math.round(spamScore), spread
+    });
+}
+
 // ─── Public API ──────────────────────────────────────────────
 
 let auditClient = null;
@@ -355,16 +465,55 @@ export async function startAuditWatcher() {
         partials: [Partials.Message, Partials.GuildMember],
     });
 
-    auditClient.on('messageCreate', processReportMessage);
+    // Bring AuditBot into the CertiFried manager stack. It cannot be registered in `custom_bots` —
+    // bot-manager would log this same token in a SECOND time and every message would be processed
+    // twice (double bans, double tracker entries) — so the managers are attached to the client it
+    // already has. Gated entirely on an enabled adaptive_spam_config row, so it stays inert in any
+    // guild that has not opted in.
+    // Dashboard-only registration: core/bot-manager.js keeps auxiliary bots out of `clients`,
+    // so no event loader, command deploy or guild count ever picks this client up.
+    global.botManager?.registerAuxiliaryClient?.('audit', auditClient, { label: 'Audit bot', page: 'audit-bot' });
 
-    auditClient.once('ready', async () => {
+    const spamManager = new AdaptiveSpamManager(auditClient);
+    spamManager.onSpamConfirmed = fileGlobalBanForSpammer;
+    auditClient.adaptiveSpamManager = spamManager;
+
+    auditClient.on('messageCreate', async (message) => {
+        await processReportMessage(message);
+
+        // analyzeMessage() filters neither bots nor DMs itself — the main bot's messageCreate does
+        // that upstream before calling it — so both guards have to live here.
+        if (message.author?.bot || !message.guild) return;
+        try {
+            await spamManager.analyzeMessage(message);
+        } catch (err) {
+            logger.error('[GlobalBanWatcher] Adaptive spam analysis failed', {
+                error: err.message, messageId: message.id, guildId: message.guild.id
+            });
+        }
+    });
+
+    // The spam alert embed carries "False Positive" / "Reset Profile" buttons. handleButtonInteraction
+    // parses any customId it is handed, so only give it the ones that are actually its own.
+    auditClient.on('interactionCreate', async (interaction) => {
+        if (!interaction.isButton?.() || !interaction.customId?.startsWith('adaptivespam_')) return;
+        try {
+            await spamManager.handleButtonInteraction(interaction);
+        } catch (err) {
+            logger.error('[GlobalBanWatcher] Adaptive spam button failed', { error: err.message });
+        }
+    });
+
+    auditClient.once(Events.ClientReady, async () => {
         logger.info(`[GlobalBanWatcher] Audit bot connected as ${auditClient.user.tag}`);
-        logger.info(`[GlobalBanWatcher] Watching ${Object.keys(CHANNELS).length} channels for live reports`);
+        const watchNow = await loadWatcherConfig({ force: true });
+        logger.info(`[GlobalBanWatcher] Watching ${Object.keys(watchNow.channels).length} channels for live reports`);
 
         updateWatcherStatus({
             connected: true,
+            connectedAt: new Date().toISOString(),
             botTag: auditClient.user.tag,
-            channelsWatched: Object.keys(CHANNELS).length,
+            channelsWatched: Object.keys(watchNow.channels).length,
             processedCount: 0
         });
 
@@ -387,5 +536,5 @@ export async function startAuditWatcher() {
 export { processReportMessage, catchUpMessages, CHANNELS };
 
 // Not a standard event handler — started via startAuditWatcher() from index.js.
-// loadEvents() checks for .name and .execute; this object has neither, so it's skipped.
-export default {};
+// loadEvents() skips modules marked notAnEvent instead of warning once per bot on every boot.
+export default { notAnEvent: true };

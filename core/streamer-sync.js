@@ -3,7 +3,7 @@
  *
  * When a Discord user is added to a guild's stream list on ANY one platform,
  * this pulls in every OTHER platform that user is already linked to in the
- * system (Twitch / Kick / YouTube / Trovo …) and subscribes those too — so
+ * system (Twitch / Kick / YouTube / TikTok …) and subscribes those too — so
  * nobody has to add each platform by hand (death420's request, generalized).
  *
  * Safety: it only ADDS platforms not yet subscribed in the guild; it never
@@ -22,7 +22,7 @@ const keyOf = (platform, username) => `${platform}:${String(username).toLowerCas
 // live (utils/platforms/tiktok.js isStreamerLive via tiktok-live-connector, wired
 // into stream-manager's platformModules). Only true FEED platforms (instagram /
 // facebook) are excluded — they have no go-live concept.
-const LIVE_PLATFORMS = new Set(['twitch', 'kick', 'youtube', 'trovo', 'tiktok']);
+const LIVE_PLATFORMS = new Set(['twitch', 'kick', 'youtube', 'tiktok']);
 
 /**
  * Pure: merge platform rows from `streamers` and `community_twitch_links` into a

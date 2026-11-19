@@ -23,8 +23,13 @@ export async function getOrCreateUserEconomy(guildId, userId, config) {
     }
 
     // Create new economy profile and return the data directly (avoid duplicate SELECT)
-    const startingBalance = config.starting_balance || 1000;
-    const bankCapacity = startingBalance * 10;
+    // A saved starting balance of 0 is kept (the Economy page allows it); only a missing value is 1000.
+    const savedStart = Number(config.starting_balance);
+    const startingBalance = config.starting_balance !== null && config.starting_balance !== undefined && Number.isFinite(savedStart) && savedStart >= 0
+        ? savedStart : 1000;
+    // The Economy page's "Bank limit" (economy_config.max_bank_capacity); unset keeps 10x the starting balance,
+    // or 10,000 when that is 0 (so members can still bank).
+    const bankCapacity = Number(config.max_bank_capacity) > 0 ? Number(config.max_bank_capacity) : (startingBalance * 10 || 10000);
 
     const [result] = await db.execute(
         `INSERT INTO user_economy (guild_id, user_id, wallet, bank, bank_capacity)
@@ -52,13 +57,41 @@ export async function getOrCreateUserEconomy(guildId, userId, config) {
 }
 
 /**
+ * What a server that never saved the Economy page plays with, and what the page shows until it is saved.
+ * The one set of defaults (H-668): the Economy page (dashboard/services/manage-sections.js passes these
+ * to the template), the economy API and the economy_config column defaults (migration 443) all match it.
+ */
+export const ECONOMY_DEFAULTS = Object.freeze({
+    enabled: true,
+    currency_name: 'coins',
+    currency_emoji: '💰',
+    starting_balance: 1000,
+    daily_amount: 500,
+    weekly_amount: 3500,
+    work_min_amount: 100,
+    work_max_amount: 500,
+    work_cooldown: 3600, // 1 hour in seconds
+    crime_min_amount: 200,
+    crime_max_amount: 1000,
+    crime_success_rate: 0.6,
+    crime_fine_multiplier: 0.5,
+    rob_min_amount: 500,
+    rob_max_amount: 5000,
+    rob_success_rate: 0.4,
+    rob_fine_amount: 1000,
+    allow_gifting: true,
+    allow_trading: true,
+    max_bank_capacity: null,
+});
+
+/**
  * Get economy configuration for a guild
  * @param {string} guildId - Guild ID
  * @returns {Promise<Object>} Economy configuration
  */
 export async function getEconomyConfig(guildId) {
     const [rows] = await db.execute(
-        'SELECT guild_id, enabled, currency_name, currency_emoji, starting_balance, daily_amount, weekly_amount, work_min_amount, work_max_amount, work_cooldown, crime_min_amount, crime_max_amount, crime_success_rate, crime_fine_multiplier, rob_min_amount, rob_max_amount, rob_success_rate, rob_fine_amount, allow_gifting FROM economy_config WHERE guild_id = ?',
+        'SELECT guild_id, enabled, currency_name, currency_emoji, starting_balance, daily_amount, weekly_amount, work_min_amount, work_max_amount, work_cooldown, crime_min_amount, crime_max_amount, crime_success_rate, crime_fine_multiplier, rob_min_amount, rob_max_amount, rob_success_rate, rob_fine_amount, allow_gifting, allow_trading, max_bank_capacity FROM economy_config WHERE guild_id = ?',
         [guildId]
     );
 
@@ -66,28 +99,29 @@ export async function getEconomyConfig(guildId) {
         return rows[0];
     }
 
-    // Return default config
-    return {
-        enabled: true,
-        currency_name: 'coins',
-        currency_emoji: '💰',
-        starting_balance: 1000,
-        daily_amount: 500,
-        weekly_amount: 3500,
-        work_min_amount: 100,
-        work_max_amount: 500,
-        work_cooldown: 3600, // 1 hour in seconds
-        crime_min_amount: 500,
-        crime_max_amount: 2000,
-        crime_success_rate: 0.5,
-        crime_fine_multiplier: 1.5,
-        rob_min_amount: 500,
-        rob_max_amount: 5000,
-        rob_success_rate: 0.4,
-        rob_fine_amount: 1000,
-        allow_gifting: true
-    };
+    // Never saved: the built-in defaults (the same ones the Economy page shows).
+    return { ...ECONOMY_DEFAULTS };
 }
+
+/**
+ * Whether the economy is switched on for a guild, as the dashboard's Economy toggle stores it.
+ *   'enabled'      economy_config row with enabled = 1
+ *   'disabled'     economy_config row with enabled = 0 — an admin turned it off
+ *   'unconfigured' no row; /economy runs on the defaults above, as it always has
+ * Member-run economy actions (/economy, heists, trades, poll bets) are refused only when
+ * 'disabled'. Automatic payouts nobody asked for (achievement rewards) require 'enabled' — the
+ * same rule the counting, hangman and trivia coin rewards use.
+ * @param {string} guildId
+ * @returns {Promise<'enabled'|'disabled'|'unconfigured'>}
+ */
+export async function economyStatus(guildId) {
+    const [rows] = await db.execute('SELECT enabled FROM economy_config WHERE guild_id = ?', [guildId]);
+    if (!rows || rows.length === 0) return 'unconfigured';
+    return Number(rows[0].enabled) === 1 ? 'enabled' : 'disabled';
+}
+
+/** The message shown when a member-run economy action is refused because the economy is off. */
+export const ECONOMY_DISABLED_MESSAGE = '❌ The economy is turned off on this server.';
 
 /**
  * Log a transaction
@@ -117,6 +151,39 @@ export async function logTransaction(
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [guildId, userId, type, amount, balanceBefore, balanceAfter, description, relatedUserId, relatedItemId]
     );
+    noteChallengeProgress(guildId, userId, type, amount);
+}
+
+/*
+ * Daily challenges: "Earn 1000 coins" counts money earned (not gifts, admin grants or rewards, so a
+ * challenge reward can't feed itself), and "Play 5 games" counts each gamble. Every earning path
+ * writes its ledger row here, so this is the one place to report it. Imported lazily because
+ * daily-challenges-manager imports this module.
+ */
+const EARNING_TYPES = new Set(['daily', 'weekly', 'work', 'crime', 'rob', 'gamble']);
+
+function noteChallengeProgress(guildId, userId, type, amount) {
+    const credits = [];
+    if (EARNING_TYPES.has(type) && Number(amount) > 0) credits.push(['economy', Math.round(Number(amount))]);
+    if (type === 'gamble') credits.push(['games', 1]);
+    if (!credits.length) return;
+    import('./daily-challenges-manager.js')
+        .then(({ updateChallengeProgress }) =>
+            Promise.all(credits.map(([challengeType, n]) => updateChallengeProgress(guildId, userId, challengeType, n))))
+        .catch(err => logger.warn('[DailyChallenges] economy progress failed', { error: err.message }));
+}
+
+/**
+ * Credit "earn N coins" daily-challenge progress for money won outside logTransaction's earning
+ * types — a heist ledger row carries the gross payout (stake included), so the heist settles the
+ * challenge with the net profit through here instead.
+ */
+export function noteEarnings(guildId, userId, amount) {
+    const n = Math.round(Number(amount) || 0);
+    if (n <= 0) return;
+    import('./daily-challenges-manager.js')
+        .then(({ updateChallengeProgress }) => updateChallengeProgress(guildId, userId, 'economy', n))
+        .catch(err => logger.warn('[DailyChallenges] economy progress failed', { error: err.message }));
 }
 
 /**
@@ -770,7 +837,7 @@ export async function getLeaderboard(guildId, limit = 10) {
     const [rows] = await db.execute(
         `SELECT user_id, wallet, bank, (wallet + bank) as net_worth
          FROM user_economy
-         WHERE guild_id = ?
+         WHERE guild_id = ? AND user_id NOT IN (SELECT user_id FROM user_privacy_settings WHERE opt_out_leaderboards = 1)
          ORDER BY net_worth DESC
          LIMIT ?`,
         [guildId, limit]
@@ -805,6 +872,8 @@ export async function getTransactions(guildId, userId, limit = 10) {
 export default {
     getOrCreateUserEconomy,
     getEconomyConfig,
+    economyStatus,
+    noteEarnings,
     logTransaction,
     formatMoney,
     getBalance,

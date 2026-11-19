@@ -9,6 +9,7 @@ import { MARKET } from '../config/game-constants.js';
 import { getBonuses } from './bonus-resolver.js';
 import { awardCash, awardXp } from './engine.js';
 import { updateQuestProgress } from './quest-system.js';
+import { seasonEarningsSql } from './season-system.js';
 
 /**
  * Calculate NPC quick-sell price
@@ -307,8 +308,10 @@ export async function buyListing(buyerId, listingId, quantity = null) {
 
         // Add to seller (inside transaction)
         await conn.execute(
-            'UPDATE cfx_players SET cash = cash + ?, lifetime_earnings = lifetime_earnings + ? WHERE id = ?',
-            [sellerProceeds, sellerProceeds, listing.player_id]
+            `UPDATE cfx_players SET cash = cash + ?, lifetime_earnings = lifetime_earnings + ?${seasonEarningsSql()} WHERE id = ?`,
+            seasonEarningsSql()
+                ? [sellerProceeds, sellerProceeds, sellerProceeds, listing.player_id]
+                : [sellerProceeds, sellerProceeds, listing.player_id]
         );
 
         // Add item to buyer's inventory with FOR UPDATE lock
@@ -577,7 +580,7 @@ export async function recalculatePrices() {
         }
     }
 
-    logger.info('[MarketEngine] Prices recalculated with stock-like fluctuations');
+    logger.debug('[MarketEngine] Prices recalculated with stock-like fluctuations');
 }
 
 /**
@@ -608,7 +611,7 @@ export async function triggerMarketEvent(strainId, eventType, magnitude = 0.2) {
         [newPrice, newTrend, newVolatility, (multiplier - 1) * 100, strainId]
     );
 
-    logger.info(`[MarketEngine] Market event: ${eventType} on strain ${strainId}, ${(magnitude * 100).toFixed(0)}% change`);
+    logger.debug(`[MarketEngine] Market event: ${eventType} on strain ${strainId}, ${(magnitude * 100).toFixed(0)}% change`);
 
     return { strainId, eventType, oldPrice: priceData.current_price, newPrice };
 }

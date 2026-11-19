@@ -13,10 +13,10 @@ import 'dotenv/config';
 import { buildAboutEmbed } from './lib/about-embed.mjs';
 import fs from 'fs';
 import pool from '../utils/db.js';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 
 const GUILD_ID = '1469931133981687873';
-const BOT_ID   = '1498486251576229958';
+// The acting bot comes from guild_bot_mapping — never pinned here.
 
 // ── role IDs (from audit) ────────────────────────────────────────────────
 const ROLE = {
@@ -117,11 +117,12 @@ const BANNER_PATH    = '/home/death/CertiFriedUtility/dashboard/public/images/ce
 
 // ── token + REST helpers ─────────────────────────────────────────────────
 let _token;
+let _botId;
 async function token() {
   if (_token) return _token;
-  const [rows] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id = ?', [BOT_ID]);
-  if (!rows.length) throw new Error('Kitsune bot row missing in custom_bots');
-  _token = encryption.decrypt(JSON.parse(rows[0].bot_token));
+  const bot = await resolveBotForGuild(GUILD_ID, { db: pool });
+  _botId = bot.botId;
+  _token = bot.token;
   return _token;
 }
 
@@ -368,7 +369,8 @@ async function phase6_verify() {
 
 // ── main ────────────────────────────────────────────────────────────────
 try {
-  console.log(`Kitsune authoritative structure — guild ${GUILD_ID}, bot ${BOT_ID}`);
+  await token();
+  console.log(`Kitsune authoritative structure — guild ${GUILD_ID}, bot ${_botId}`);
   await phase1_rolePerms();
   await phase2_killKanrisha();
   await phase3_memberSync();

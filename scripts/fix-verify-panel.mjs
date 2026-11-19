@@ -1,14 +1,14 @@
 // FIX: rewire the Verification panel button + DB mapping to the current
 // "Verified" role. REST only (no gateway). Idempotent + verifies after.
-// Guild 1475352754682597468, custom bot 1475353066243883111.
+// Guild 1475352754682597468, acting as whichever bot guild_bot_mapping names.
 import { REST, Routes } from 'discord.js';
 import dotenv from 'dotenv';
 import pool from '../utils/db.js';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 
 dotenv.config();
 
-const BOT_ID   = '1475353066243883111';
+// The acting bot comes from guild_bot_mapping — never pinned here.
 const GUILD    = '1475352754682597468';
 const CHANNEL  = '1475365704772358237';
 const MESSAGE  = '1475365831817957466';
@@ -19,8 +19,8 @@ const MAPPING_ID = 130;
 const OLD_CUSTOM = `rr_${OLD_ROLE}`;
 const NEW_CUSTOM = `rr_${VERIFIED}`;
 
-const [[bot]] = [await pool.query('SELECT bot_token FROM custom_bots WHERE bot_id = ?', [BOT_ID])];
-const token = encryption.decrypt(JSON.parse(bot[0].bot_token));
+const bot = await resolveBotForGuild(GUILD, { db: pool });
+const token = bot.token;
 const rest = new REST({ version: '10' }).setToken(token);
 
 // Guard: confirm the Verified role still exists before pointing anything at it.

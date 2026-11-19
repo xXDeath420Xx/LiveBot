@@ -16,14 +16,19 @@ async function checkTikTokVideos(client) {
         // Get all TikTok streamers with video notifications enabled
         const [subscriptions] = await pool.execute(`
             SELECT DISTINCT s.streamer_id, s.username, s.profile_image_url, s.platform,
+                   sub.subscription_id,
                    sub.guild_id, sub.announcement_channel_id AS video_announcement_channel_id,
                    sub.tiktok_vod_notifications AS notify_videos,
-                   sub.custom_message, sub.tiktok_embed_video, sub.ping_role_id
+                   sub.custom_message, sub.tiktok_embed_video, sub.ping_role_id,
+                   sub.feed_posted_from
             FROM streamers s
             JOIN subscriptions sub ON s.streamer_id = sub.streamer_id
             WHERE s.platform = 'tiktok'
             AND sub.tiktok_vod_notifications = 1
             AND sub.announcement_channel_id IS NOT NULL
+            -- Skip subscriptions paused by the leveling gate or by streamer-departure. Without
+            -- this, somebody who left the server still gets their TikTok VODs posted in it.
+            AND sub.paused = 0
         `);
 
         if (subscriptions.length === 0) {
@@ -139,7 +144,7 @@ async function checkStreamerVideos(client, streamerData) {
                 }
             }
 
-            // Skip videos older than 24 hours (prevent backfill spam on first enable)
+            // Second line of defence: even with no watermark, never backfill.
             if (video.posted_at) {
                 const videoAge = Date.now() - new Date(video.posted_at).getTime();
                 if (videoAge > 24 * 60 * 60 * 1000) {
@@ -151,7 +156,9 @@ async function checkStreamerVideos(client, streamerData) {
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     `, [streamer_id, video.video_id, video.url || null, (video.title || '').substring(0, 500),
                         (video.description || '').substring(0, 2000), video.thumbnail || null,
-                        video.views || 0, video.likes || 0, video.shares || 0, video.comments || 0, postedAtMysql]);
+                        // Same fields as the insert below (utils/platforms/tiktok.js returns view_count etc.; the old
+                        // views/likes/shares/comments names do not exist, so these rows were saved with zeros).
+                        video.view_count ?? 0, video.like_count ?? 0, video.share_count ?? 0, video.comment_count ?? 0, postedAtMysql]);
                     logger.info(`[TikTok Video Checker] Skipping old video ${video.video_id} from ${username} (${Math.round(videoAge / 3600000)}h old)`);
                     continue;
                 }
@@ -181,6 +188,15 @@ async function checkStreamerVideos(client, streamerData) {
             // Announce to all subscribed guilds - use fresh avatar
             for (const sub of subscriptions) {
                 try {
+                    // The watermark, checked per guild because each one switched the feed
+                    // on at its own moment. Nothing that already existed at that instant is
+                    // ever announced there — stricter than the 24-hour rule above, which
+                    // would still let through a video posted twenty-three hours ago.
+                    if (sub.feed_posted_from && video.posted_at
+                        && new Date(video.posted_at) <= new Date(sub.feed_posted_from)) {
+                        logger.info(`[TikTok Video Checker] ${video.video_id} predates guild ${sub.guild_id}'s watermark — not announced there`);
+                        continue;
+                    }
                     await announceVideo(client, sub, video, username, freshAvatarUrl);
                 } catch (error) {
                     logger.error(`[TikTok Video Checker] Failed to announce video to guild ${sub.guild_id}:`, {
@@ -227,9 +243,40 @@ async function announceVideo(client, subscription, video, username, profileImage
         return;
     }
 
-    const channel = guild.channels.cache.get(video_announcement_channel_id);
+    /* One account, two audiences. Her TikTok carries Fortnite clips and her dog,
+       and they belong in different rooms. A caption route diverts the posts that
+       match its terms and leaves everything else on the subscription's channel. */
+    let destinationId = video_announcement_channel_id;
+    try {
+        const [routes] = await pool.execute(
+            'SELECT match_terms, channel_id, label FROM feed_caption_routes WHERE subscription_id = ? AND enabled = 1',
+            [subscription.subscription_id]);
+        if (routes.length) {
+            const hay = `${video.description || ''}`.toLowerCase();
+            for (const route of routes) {
+                const terms = JSON.parse(route.match_terms || '[]');
+                // Whole-word match: "ellie" must not fire on "intelligence".
+                const hit = terms.find((t) => {
+                    const term = String(t).toLowerCase().trim();
+                    if (!term) return false;
+                    if (term.startsWith('#')) return hay.includes(term);
+                    return new RegExp(`(^|[^a-z0-9])${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}([^a-z0-9]|$)`, 'i').test(hay);
+                });
+                if (hit) {
+                    destinationId = route.channel_id;
+                    logger.info(`[TikTok Video Checker] ${video.video_id} -> ${route.label || route.channel_id} (matched "${hit}")`);
+                    break;
+                }
+            }
+        }
+    } catch (e) {
+        // A routing fault must never swallow the post — fall back to the default room.
+        logger.error(`[TikTok Video Checker] caption routing failed: ${e.message}`);
+    }
+
+    const channel = guild.channels.cache.get(destinationId);
     if (!channel) {
-        logger.warn(`[TikTok Video Checker] Channel ${video_announcement_channel_id} not found in guild ${guild_id}`);
+        logger.warn(`[TikTok Video Checker] Channel ${destinationId} not found in guild ${guild_id}`);
         return;
     }
 
@@ -347,7 +394,7 @@ function formatNumber(num) {
  */
 export function startTikTokVideoChecker(client) {
     if (schedulerTask) {
-        logger.warn('[TikTok Video Checker] Scheduler already running');
+        logger.debug('[TikTok Video Checker] Scheduler already running'); // expected: index.js calls this again once custom bots load
         return;
     }
 

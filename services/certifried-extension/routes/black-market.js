@@ -234,8 +234,7 @@ router.post('/sell', async (req, res) => {
                 );
             }
 
-            // Commit transaction first, then add heat via proper system
-            // (heat is tracked in cfx_player_heat, not cfx_player_raid_status)
+            // Heat is added after commit via the raid system (cfx_player_heat)
 
             // Record sale
             await conn.execute(
@@ -261,7 +260,7 @@ router.post('/sell', async (req, res) => {
             // Award cash using proper engine function (applies bonuses)
             const cashResult = await awardCash(playerId, finalPrice);
 
-            // Add heat via proper raid system (not the broken cfx_player_raid_status table)
+            // Add heat via the raid system (cfx_player_heat)
             try {
                 await addHeat(playerId, heatGenerated, 'black_market_sale');
             } catch (heatErr) {
@@ -271,7 +270,7 @@ router.post('/sell', async (req, res) => {
             // Award reputation for black market dealings (fire-and-forget)
             awardReputation(playerId, 'shadow_syndicate', 5).catch(() => {});
 
-            logger.info('[BlackMarket] Sale', {
+            logger.debug('[BlackMarket] Sale', {
                 playerId,
                 contactId,
                 quantity: sellQty,

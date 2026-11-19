@@ -5,7 +5,7 @@ const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June',
     'July', 'August', 'September', 'October', 'November', 'December'];
 
 /**
- * Handles 'bday:modal:self:<month>' and 'bday:modal:admin:<userId>:<month>'.
+ * Handles 'bday:modal:self', 'bday:modal:self:<month>' and 'bday:modal:admin:<userId>:<month>'.
  * Parses Day + optional Year, validates, and writes via the birthday manager.
  */
 export async function handleBirthdaySetModal(interaction) {
@@ -25,7 +25,11 @@ export async function handleBirthdaySetModal(interaction) {
         }
     } else {
         targetUserId = interaction.user.id;
-        month = parseInt(parts[3], 10);
+        // 'bday:modal:self' (panel button) carries the month as a select inside the modal;
+        // 'bday:modal:self:<month>' is the older dropdown panel, still live on posted messages.
+        month = parts[3] !== undefined
+            ? parseInt(parts[3], 10)
+            : parseInt(interaction.fields.getStringSelectValues('month')?.[0], 10);
     }
 
     const day = parseIntStrict(interaction.fields.getTextInputValue('day'));

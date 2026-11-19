@@ -5,10 +5,10 @@
 // Idempotent: reuses the role if it already exists by name.
 import 'dotenv/config';
 import mysql from 'mysql2/promise';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 
 const GUILD_ID     = '1469931133981687873';
-const BOT_ID       = '1498486251576229958';
+// The acting bot comes from guild_bot_mapping — never pinned here.
 const SANCTUARY_ID = '1502435691412459540';
 
 const ROLE_NAME  = 'Sanctuary Guest';
@@ -38,9 +38,9 @@ const conn = await mysql.createConnection({
   host: process.env.DB_HOST, user: process.env.DB_USER,
   password: process.env.DB_PASSWORD, database: process.env.DB_NAME,
 });
-const [rows] = await conn.execute('SELECT bot_token FROM custom_bots WHERE bot_id = ?', [BOT_ID]);
+const bot = await resolveBotForGuild(GUILD_ID, { db: conn });
 await conn.end();
-const token = encryption.decrypt(JSON.parse(rows[0].bot_token));
+const token = bot.token;
 
 async function api(method, path, body) {
   const init = {

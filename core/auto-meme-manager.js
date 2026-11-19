@@ -1,10 +1,13 @@
 import { EmbedBuilder } from 'discord.js';
-import axios from 'axios';
 import pool from '../utils/db.js';
 import logger from '../utils/logger.js';
 import configCache from '../utils/configCache.js';
+import { fetchSubredditPosts, redditAvailable, REDDIT_UNAVAILABLE_NOTE } from '../utils/reddit.js';
 
 export default class AutoMemeManager {
+  // One warning per process, not one per scheduled post.
+  static warnedNsfwUnavailable = false;
+
   constructor(client) {
     this.client = client;
   }
@@ -13,6 +16,7 @@ export default class AutoMemeManager {
    * Configure auto-meme posting for a guild
    */
   async configureGuild(guildId, enabled, channelId = null, subreddit = 'memes', intervalHours = 24) {
+    if (enabled && !redditAvailable()) throw new Error(REDDIT_UNAVAILABLE_NOTE);
     try {
       const [existing] = await pool.execute(
         'SELECT * FROM auto_meme_config WHERE guild_id = ?',
@@ -75,6 +79,7 @@ export default class AutoMemeManager {
    * Post memes to all configured guilds
    */
   async postScheduledMemes() {
+    if (!redditAvailable()) return;   // H-201: Reddit refuses the server without approved credentials
     try {
       // Get all enabled configurations that are due for a post
       const [configs] = await pool.execute(
@@ -128,6 +133,11 @@ export default class AutoMemeManager {
         return;
       }
 
+      // The dashboard saves a comma-separated list; post from one of them at random.
+      const subreddits = String(config.subreddit || 'memes').split(',').map(s => s.trim()).filter(Boolean);
+      const subreddit = subreddits[Math.floor(Math.random() * subreddits.length)] || 'memes';
+      config = { ...config, subreddit };
+
       // Fetch a random meme from Reddit
       const meme = await this.fetchRedditMeme(config.subreddit, config.guild_id);
 
@@ -140,9 +150,9 @@ export default class AutoMemeManager {
       const embed = new EmbedBuilder()
         .setColor('#FF4500')
         .setTitle(meme.title.length > 256 ? meme.title.substring(0, 253) + '...' : meme.title)
-        .setURL(`https://reddit.com${meme.permalink}`)
-        .setImage(meme.url)
-        .setFooter({ text: `👍 ${meme.ups} upvotes • r/${config.subreddit}` })
+        .setURL(meme.permalink)
+        .setImage(meme.mediaUrl)
+        .setFooter({ text: `👍 ${meme.score} upvotes • r/${config.subreddit}` })
         .setTimestamp();
 
       // Post to channel
@@ -178,18 +188,26 @@ export default class AutoMemeManager {
    */
   async fetchRedditMeme(subreddit, guildId) {
     try {
-      const response = await axios.get(`https://www.reddit.com/r/${subreddit}/hot.json?limit=100`, {
-        headers: { 'User-Agent': 'Discord Bot CertiFriedUtility/1.0' },
-        timeout: 10000
+      // Reddit's unauthenticated `hot.json` endpoint now returns 403; utils/reddit.js
+      // uses OAuth when credentials exist and the public Atom feed otherwise.
+      const { posts: fetched, nsfwKnown } = await fetchSubredditPosts(subreddit, {
+        sort: 'hot', limit: 100
       });
 
-      const posts = response.data.data.children
-        .filter(post =>
-          !post.data.stickied &&
-          !post.data.over_18 &&
-          (post.data.post_hint === 'image' || post.data.url.match(/\.(jpg|jpeg|png|gif)$/i))
-        )
-        .map(post => post.data);
+      // The Atom feed doesn't expose `over_18`. Posting from it would mean posting
+      // images we cannot confirm are SFW into arbitrary guild channels, so decline
+      // rather than guess. Setting REDDIT_CLIENT_ID / REDDIT_CLIENT_SECRET restores
+      // the flag and re-enables auto-memes.
+      if (!nsfwKnown) {
+        if (!AutoMemeManager.warnedNsfwUnavailable) {
+          AutoMemeManager.warnedNsfwUnavailable = true;
+          logger.warn('[AutoMeme] Skipping Reddit memes: the public feed carries no NSFW flag. ' +
+            'Set REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET to re-enable.');
+        }
+        return null;
+      }
+
+      const posts = fetched.filter(post => !post.isStickied && !post.isNsfw && post.isImage);
 
       if (posts.length === 0) {
         return null;
@@ -253,9 +271,9 @@ export default class AutoMemeManager {
       const embed = new EmbedBuilder()
         .setColor('#FF4500')
         .setTitle(meme.title.length > 256 ? meme.title.substring(0, 253) + '...' : meme.title)
-        .setURL(`https://reddit.com${meme.permalink}`)
-        .setImage(meme.url)
-        .setFooter({ text: `👍 ${meme.ups} upvotes • r/${subreddit}` })
+        .setURL(meme.permalink)
+        .setImage(meme.mediaUrl)
+        .setFooter({ text: `👍 ${meme.score} upvotes • r/${subreddit}` })
         .setTimestamp();
 
       await channel.send({ embeds: [embed] });

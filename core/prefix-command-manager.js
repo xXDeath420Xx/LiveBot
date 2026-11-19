@@ -1,7 +1,9 @@
 import { MessageContextAdapter } from './message-context-adapter.js';
 import { getCommand, getAllCommands, getCategories, getCommandsByCategory } from './prefix-command-registry.js';
 import { PermissionsBitField, EmbedBuilder } from 'discord.js';
-import { runUniversalCommand, DEFAULT_PREFIXES, isKnownPath, resolve as resolveUniversal } from './universal-commands.js';
+import { runUniversalCommand, DEFAULT_PREFIXES, SLASH_TEXT_PREFIX, isKnownPath, resolve as resolveUniversal, tryAiFallback, ensureIndex, trackChatUse } from './universal-commands.js';
+import { BUILTIN_NAMES } from './command-registration.js';
+import { isScopedCommandAvailable, legacyScopedCommand } from './guild-scoped-access.js';
 import pool from '../utils/db.js';
 import logger from '../utils/logger.js';
 import { dirname, join } from 'path';
@@ -60,8 +62,26 @@ function resolvePrefixList(row) {
     }
     if (!Array.isArray(list) || !list.length) list = [...DEFAULT_PREFIXES];
     const primary = row?.prefix || DEFAULT_PREFIX;
-    const all = [...new Set([primary, ...list])].filter(p => typeof p === 'string' && p.length);
+    // "/" is always on: it is how members reach the text commands, which have no slash command.
+    const all = [...new Set([primary, ...list, SLASH_TEXT_PREFIX])].filter(p => typeof p === 'string' && p.length);
     return all.sort((a, b) => b.length - a.length);
+}
+
+// "/word" that is not a command gets a short hint (other prefixes stay silent). Not for tone tags
+// ("/s", "/j"), not for Discord's own commands, and at most once a minute per member.
+// With "/" these never run a command either: "/s" on its own is sarcasm, not the `s` (skip) shortcut,
+// and "/p" or "/q" alone are tone tags more often than music. `/play`, `/skip`, `/queue` still work.
+const TONE_TAGS = new Set(['s', 'j', 'srs', 'hj', 'lh', 'gen', 'pos', 'neg', 'nm', 'nbh', 'rh', 'sarc', 'ref', 'lyr', 'nsrs', 'jk', 'hyp', 'ex', 'c', 'l', 'p', 'q', 't', 'r', 'g', 'm', 'nc', 'nf', 'neu', 'ot', 'th', 'cb', 'pc', 'sx', 'x', 'ly', 'li', 'lu', 'nbr', 'npa', 'nay', 'ay', 'nsx', 'rt', 'pf', 'o', 'cr', 'f', 'pl', 'sr']);
+const unknownHintAt = new Map();
+async function hintUnknownSlashText(message, word) {
+    const w = String(word || '').toLowerCase();
+    if (!/^[a-z][a-z0-9_-]{1,31}$/.test(w) || TONE_TAGS.has(w) || BUILTIN_NAMES.has(w)) return;
+    const key = `${message.guildId}:${message.author.id}`;
+    const now = Date.now();
+    if (now - (unknownHintAt.get(key) || 0) < 60_000) return;
+    unknownHintAt.set(key, now);
+    if (unknownHintAt.size > 5000) for (const [k, t] of unknownHintAt) if (now - t > 60_000) unknownHintAt.delete(k);
+    await message.reply({ content: 'Unknown command — try /help', allowedMentions: { repliedUser: false } }).catch(() => {});
 }
 
 /**
@@ -530,12 +550,20 @@ export async function handlePrefixCommand(message) {
     if (!message.guild || message.author.bot) return false;
 
     const config = await getGuildConfig(message.guildId);
-    if (!config.enabled) return false;
-
-    const stripped = stripPrefix(message, config);
+    // With prefix commands switched off, "/" still reaches the text commands (they have no slash
+    // command, so it is their only way in) and nothing else.
+    const stripped = stripPrefix(message, config.enabled ? config : { ...config, allowMention: false, prefixes: [SLASH_TEXT_PREFIX] });
     if (!stripped) return false;
     const { prefix, body: withoutPrefix } = stripped;
     if (!withoutPrefix) return false;
+    if (prefix === SLASH_TEXT_PREFIX && TONE_TAGS.has(withoutPrefix.split(/\s+/)[0].toLowerCase())) return false;
+
+    if (prefix === SLASH_TEXT_PREFIX && !config.enabled) {
+        const tokens = withoutPrefix.split(/\s+/).filter(Boolean);
+        if (await runUniversalCommand(message, tokens, prefix, { textOnly: true })) return true;
+        await hintUnknownSlashText(message, tokens[0]);
+        return false;   // let the rest of message handling (automod) see it
+    }
 
     const spaceIndex = withoutPrefix.indexOf(' ');
     let commandName = (spaceIndex === -1 ? withoutPrefix : withoutPrefix.slice(0, spaceIndex)).toLowerCase();
@@ -548,7 +576,11 @@ export async function handlePrefixCommand(message) {
     }
 
     // Look up command in the default registry
-    const commandDef = getCommand(commandName);
+    let commandDef = getCommand(commandName);
+    // The 'cannabis' legacy commands (!toke, !strain, !startgrow) run the /cannabis and /grow handlers, which are
+    // per-server (guildScoped): they follow the same rule as the slash commands (core/guild-scoped-access.js, H-711).
+    const scopedAs = legacyScopedCommand(commandDef);
+    if (scopedAs && !(await isScopedCommandAvailable(message.client, message.guildId, scopedAs))) commandDef = null;
 
     // A flat legacy command must not shadow a richer slash subsystem. `birthday` is registered
     // here as a one-shot "set your birthday" with a required date, which swallowed
@@ -577,7 +609,14 @@ export async function handlePrefixCommand(message) {
             // re-splitting the original message.
             const tokens = [...commandName.split(/\s+/), ...rawArgs.split(/\s+/)].filter(Boolean);
             if (await runUniversalCommand(message, tokens, prefix)) return true;
+        } else if (prefix === SLASH_TEXT_PREFIX) {
+            // The bridge is off here, but the text commands have no other way in.
+            const tokens = [...commandName.split(/\s+/), ...rawArgs.split(/\s+/)].filter(Boolean);
+            if (await runUniversalCommand(message, tokens, prefix, { textOnly: true })) return true;
         }
+        // "/word" was meant as a command: say so, but still return false so automod and the other
+        // message handlers see the message.
+        if (prefix === SLASH_TEXT_PREFIX) await hintUnknownSlashText(message, commandName.split(/\s+/)[0]);
         return false; // fall through to tags etc.
     }
 
@@ -597,6 +636,16 @@ export async function handlePrefixCommand(message) {
         return true;
     }
 
+    // An admin who switched the economy off meant every way in, not just /economy. The admin
+    // grant (`give`) stays usable, as it does under /economy.
+    if (commandDef.category === 'economy' && canonicalName !== 'give') {
+        const { economyStatus, ECONOMY_DISABLED_MESSAGE } = await import('./economy-manager.js');
+        if (await economyStatus(message.guild.id) === 'disabled') {
+            await message.reply({ content: ECONOMY_DISABLED_MESSAGE });
+            return true;
+        }
+    }
+
     // Parse args based on command definition
     const parsedArgs = parseArgs(rawArgs, commandDef.args);
 
@@ -612,9 +661,24 @@ export async function handlePrefixCommand(message) {
     // Build adapter
     const ctx = new MessageContextAdapter(message, commandName, parsedArgs);
 
+    // Usage is recorded under the slash path this legacy command stands for when there is one
+    // (`!play` -> "music play"), so the Commands page counts both ways in together.
+    let usagePath = canonicalName;
+    try {
+        ensureIndex(message.client);
+        const hit = resolveUniversal([canonicalName]);
+        if (hit?.entry && hit.path) usagePath = hit.path;
+    } catch { /* keep the legacy name */ }
+    const usageStart = Date.now();
     try {
         const handler = await resolveHandler(commandDef.handler);
-        await handler(ctx);
+        try {
+            await handler(ctx);
+        } catch (runErr) {
+            trackChatUse(message, usagePath.split(' ')[0], usagePath, prefix, usageStart, runErr);
+            throw runErr;
+        }
+        trackChatUse(message, usagePath.split(' ')[0], usagePath, prefix, usageStart, null);
     } catch (error) {
         logger.error(`[PrefixCmd] Error executing !${commandName}:`, {
             error: error.message,
@@ -624,13 +688,20 @@ export async function handlePrefixCommand(message) {
             category: 'prefix'
         });
 
-        await message.reply({ content: 'Something went wrong running that command.' }).catch(() => {});
+        // A mention is ambiguous — "@bot give me game ideas" starts with the real command `give`.
+        // Hand the sentence to the AI rather than reporting a command failure. No-op for symbol
+        // prefixes and for guilds without the assistant enabled.
+        //
+        // Deliberately NOT an early return: the cleanup below (private-category message deletion)
+        // must still run whichever way this went.
+        const answered = await tryAiFallback(message);
+        if (!answered) {
+            await message.reply({ content: 'Something went wrong running that command.' }).catch(() => {});
+        }
     }
 
     // ── Cleanup logic ──
-    const category = commandDef.category;
-    const isPrivate = config.privateCategories.has(category);
-    const delay = config.cleanupDelay || 10;
+    const delayMs = privateReplyDelayMs(config, commandDef.category);
 
     // Delete the user's trigger message (e.g. "!ban @user")
     if (config.deleteTrigger) {
@@ -638,13 +709,24 @@ export async function handlePrefixCommand(message) {
     }
 
     // Auto-delete bot response for private categories (moderation, etc.)
-    if (isPrivate && ctx._replyMessage) {
+    if (delayMs && ctx._replyMessage) {
         setTimeout(() => {
             ctx._replyMessage?.delete().catch(() => {});
-        }, delay * 1000);
+        }, delayMs);
     }
 
     return true;
+}
+
+/**
+ * How long a reply to a command in `category` stays up before it deletes itself, in ms; 0 = never.
+ * Only categories marked private self-destruct, and a delay of 0 turns it off (the Core page and
+ * the cleanup command both say so; it used to fall back to 10 seconds).
+ */
+export function privateReplyDelayMs(config, category) {
+    const seconds = Number(config?.cleanupDelay) || 0;
+    if (seconds <= 0 || !config?.privateCategories?.has?.(category)) return 0;
+    return Math.min(300, seconds) * 1000;
 }
 
 export default { handlePrefixCommand, getPrefix, invalidateGuildCache };

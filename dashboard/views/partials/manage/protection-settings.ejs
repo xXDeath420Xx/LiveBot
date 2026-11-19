@@ -1,0 +1,759 @@
+<%# Protection settings — the allowlist, bot-manager roles and the pause every protection shares (core/protection-exempt.js), and the AI second opinion (core/ai-judge.js). API-driven (dashboard/routes/api/features/protection-settings.js); needs `guild` in locals. Built on the settings-row kit (cf-settings.css); every id the script below uses is unchanged. %>
+<div class="page-section" id="protectionSettingsPage" data-guild-id="<%= guild.id %>">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-user-shield"></i>
+                <span>Protection settings</span>
+            </div>
+            <div class="page-section-subtitle">Every protection at a glance, and the exemptions and pause they all share.</div>
+        </div>
+    </div>
+
+    <div id="psError" class="cf-notice is-bad" role="alert" hidden></div>
+    <div id="psNotice" class="cf-notice is-info" role="status" hidden></div>
+
+    <section class="cf-section" aria-labelledby="ps-overview-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="ps-overview-title">Protections</h2>
+                <p class="cf-section-desc">Select a protection to set it up. The server owner is always exempt, and so are bots except from anti-nuke.</p>
+            </div>
+            <div class="cf-section-actions"><span id="cfk-ps-overview-count" class="cf-pill"></span></div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--stack">
+                <div class="cf-segmented" role="group" aria-label="Show" id="cfk-ps-overview-filter">
+                    <button type="button" class="cf-segment" value="all" aria-pressed="true">All</button>
+                    <button type="button" class="cf-segment" value="on" aria-pressed="false">On</button>
+                    <button type="button" class="cf-segment" value="off" aria-pressed="false">Off</button>
+                </div>
+            </div>
+            <div id="psOverview" class="ps-checklist"><%- include('../kit/_state', { kind: 'loading', title: 'Loading protections', compact: true }) %></div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="ps-pause-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="ps-pause-title">Pause all protections</h2>
+                <p class="cf-section-desc">While paused, protections still detect and log what they would have done, but ban, kick, time out,
+                    change roles and delete nothing. A timed pause ends by itself.</p>
+            </div>
+            <div class="cf-section-actions"><span id="psPauseBadge" class="cf-pill"></span></div>
+        </header>
+        <div class="cf-rows" id="psPauseCard">
+            <div class="cf-row cf-row--stack">
+                <div id="psPauseState" class="ps-state">Loading...</div>
+            </div>
+            <div id="psPauseForm">
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="psPauseDuration">Pause for</label>
+                        <p class="cf-row-desc">Custom takes a length such as 45m, 1h30m or 2d, up to 30 days.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <select id="psPauseDuration" class="form-select" aria-label="How long">
+                            <option value="30m">30 minutes</option>
+                            <option value="1h" selected>1 hour</option>
+                            <option value="2h">2 hours</option>
+                            <option value="6h">6 hours</option>
+                            <option value="12h">12 hours</option>
+                            <option value="1d">1 day</option>
+                            <option value="3d">3 days</option>
+                            <option value="7d">7 days</option>
+                            <option value="custom">Custom...</option>
+                            <option value="">Until I resume</option>
+                        </select>
+                        <input id="psPauseCustom" class="form-control" placeholder="e.g. 45m, 1h30m, 2d" aria-label="Custom length" hidden>
+                    </div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="psPauseReason">Reason</label>
+                        <p class="cf-row-desc">Optional. Shown with the pause in the log.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <input id="psPauseReason" class="form-control" placeholder="Reason (optional)" maxlength="200">
+                    </div>
+                </div>
+            </div>
+            <div class="cf-section-foot">
+                <button type="button" class="btn btn-secondary" id="psResumeBtn" hidden><span>Resume now</span></button>
+                <button type="button" class="btn btn-primary" id="psPauseBtn"><span>Pause</span></button>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="ps-users-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="ps-users-title">Allowlisted users</h2>
+                <p class="cf-section-desc">No automatic protection acts on these people, AutoMod and the spammer check included. Anti-nuke ignores this list and keeps its
+                    own trusted list (see Feature-specific lists below); only the pause holds it.</p>
+            </div>
+            <div class="cf-section-actions"><span id="psUserCount" class="cf-pill"></span></div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="psUserQuery">Find a member</label>
+                    <p class="cf-row-desc">Search by name, @mention or user ID, then add them from the results.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-group">
+                        <input type="search" id="psUserQuery" class="form-control" placeholder="Name, @mention or user ID">
+                        <button type="button" class="btn btn-secondary" id="psUserSearch"><span>Find</span></button>
+                    </div>
+                </div>
+            </div>
+            <div id="psUserResults" class="ps-list ps-results"></div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="psUserNote">Note</label>
+                    <p class="cf-row-desc">Optional. Saved with the next member you add.</p>
+                </div>
+                <div class="cf-row-control">
+                    <input id="psUserNote" class="form-control" placeholder="Note for the list (optional)" maxlength="200">
+                </div>
+            </div>
+            <div class="cf-rows-head" id="ps-users-head">On the allowlist</div>
+            <div id="psUsers" class="ps-list"><%- include('../kit/_state', { kind: 'loading', title: 'Loading the allowlist', compact: true }) %></div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="ps-roles-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="ps-roles-title">Allowlisted roles</h2>
+                <p class="cf-section-desc">Everyone holding one of these is exempt. Anyone seen holding it is recorded under "Once held an allowlisted
+                    role" and stays exempt after the role is taken off them, until you clear them or take the role off this list.</p>
+            </div>
+            <div class="cf-section-actions"><span id="psRoleCount" class="cf-pill"></span></div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="psRolePick">Add a role</label>
+                    <p class="cf-row-desc">Roles already on the list are not offered.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-group">
+                        <select id="psRolePick" class="form-select" aria-label="Role"></select>
+                        <button type="button" class="btn btn-primary" id="psRoleAdd"><span>Add</span></button>
+                    </div>
+                </div>
+            </div>
+            <div id="psRoles" class="ps-list"></div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="ps-held-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="ps-held-title">Once held an allowlisted role</h2>
+                <p class="cf-section-desc">Recorded automatically. They stay exempt even without the role. You can clear someone once they no longer hold it.</p>
+            </div>
+            <div class="cf-section-actions"><span id="psHeldCount" class="cf-pill"></span></div>
+        </header>
+        <div class="cf-rows">
+            <div id="psHeld" class="ps-list"><%- include('../kit/_state', { kind: 'loading', title: 'Loading', compact: true }) %></div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="ps-mgr-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="ps-mgr-title">Bot-manager roles</h2>
+                <p class="cf-section-desc">Holders can configure the bot on this dashboard without Manage Server, and are allowlisted. Discord actions
+                    such as banning still need the Discord permission. For <code>/protection</code>, allow the command for the role in Server
+                    Settings, Integrations.</p>
+            </div>
+            <div class="cf-section-actions"><span id="psMgrCount" class="cf-pill"></span></div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row" id="psMgrForm">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="psMgrPick">Add a manager role</label>
+                    <p class="cf-row-desc">Only the server owner or an Administrator can change this list.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-group">
+                        <select id="psMgrPick" class="form-select" aria-label="Role"></select>
+                        <button type="button" class="btn btn-primary" id="psMgrAdd"><span>Add</span></button>
+                    </div>
+                </div>
+            </div>
+            <div id="psMgrLocked" class="ps-note" hidden>Only the server owner or an Administrator can change bot-manager roles.</div>
+            <div id="psMgrs" class="ps-list"></div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="ps-bots-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="ps-bots-title">Trusted bots</h2>
+                <p class="cf-section-desc">Bots you expect. When a bot that is not on this list is added, the log flags it so you can check who added it.
+                    Nothing is removed automatically.</p>
+            </div>
+            <div class="cf-section-actions"><span id="cfk-ps-bot-count" class="cf-pill"></span></div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="cfk-ps-bot-id">Bot user ID</label>
+                    <p class="cf-row-desc">Right-click the bot in Discord and choose Copy User ID (needs Developer Mode).</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-group">
+                        <input type="text" id="cfk-ps-bot-id" class="form-control" placeholder="18-20 digit bot ID" inputmode="numeric" pattern="[0-9]{17,20}">
+                        <button type="button" class="btn btn-secondary" id="cfk-ps-bot-add"><span>Add</span></button>
+                    </div>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="cfk-ps-bot-note">Note</label>
+                    <p class="cf-row-desc">Optional. Saved with the next bot you add.</p>
+                </div>
+                <div class="cf-row-control">
+                    <input id="cfk-ps-bot-note" class="form-control" placeholder="e.g. &quot;MEE6 — approved by owner&quot;" maxlength="200">
+                </div>
+            </div>
+            <div class="cf-rows-head">Trusted bots</div>
+            <div id="cfk-ps-bots" class="ps-list"><%- include('../kit/_state', { kind: 'loading', title: 'Loading trusted bots', compact: true }) %></div>
+        </div>
+    </section>
+
+    <section class="cf-section" id="psAiCard" aria-labelledby="ps-ai-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="ps-ai-title">AI second opinion</h2>
+                <p class="cf-section-desc">Borderline cases only. Advise adds the AI's verdict and reason to the review queue and the log. Act also
+                    carries out the protection's action when the AI agrees at or above the confidence set here. If the AI fails or the daily cap
+                    is used up, the protection works as if this were off. Never sent: DMs, anything from age-restricted channels, images a model thought
+                    might show a minor, and other members' names.</p>
+            </div>
+            <div class="cf-section-actions"><span id="psAiBadge" class="cf-pill"></span></div>
+        </header>
+        <div class="cf-rows">
+            <div id="psAiNotConfigured" class="cf-notice is-warn" role="alert" hidden>This bot has no AI key configured, so no verdicts can be made.</div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="psAiAvatarMode">Avatar impersonation (near-matches)</label>
+                    <p class="cf-row-desc">Avatars that nearly match a staff member's.</p>
+                </div>
+                <div class="cf-row-control">
+                    <select id="psAiAvatarMode" class="form-select"><option value="off">Off</option><option value="advise">Advise</option><option value="act">Act</option></select>
+                </div>
+            </div>
+            <div class="cf-row cf-row--sub">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="psAiAvatarConf">Act at confidence (%)</label>
+                    <p class="cf-row-desc">From 50 to 99. Used when avatar checks are set to Act.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-unit"><input id="psAiAvatarConf" type="number" class="form-control" min="50" max="99" step="1"><span class="cf-unit">%</span></div>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="psAiTextMode">Scam text</label>
+                    <p class="cf-row-desc">Borderline message threats and text read from images.</p>
+                </div>
+                <div class="cf-row-control">
+                    <select id="psAiTextMode" class="form-select"><option value="off">Off</option><option value="advise">Advise</option><option value="act">Act</option></select>
+                </div>
+            </div>
+            <div class="cf-row cf-row--sub">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="psAiTextConf">Scam text: act at confidence (%)</label>
+                    <p class="cf-row-desc">From 50 to 99. Used when scam text is set to Act.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-unit"><input id="psAiTextConf" type="number" class="form-control" min="50" max="99" step="1"><span class="cf-unit">%</span></div>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="psAiNsfw">NSFW third opinion</label>
+                    <p class="cf-row-desc">Advise only, on borderline items in the review queue.</p>
+                </div>
+                <div class="cf-row-control">
+                    <select id="psAiNsfw" class="form-select"><option value="0">Off</option><option value="1">Advise</option></select>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="psAiCap">Daily cap</label>
+                    <p class="cf-row-desc">AI checks this server may use per day, from 1 to 2000.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-unit"><input id="psAiCap" type="number" class="form-control" min="1" max="2000" step="1"><span class="cf-unit">checks a day</span></div>
+                </div>
+            </div>
+            <div class="cf-section-foot">
+                <button type="button" class="btn btn-primary" id="psAiSave"><span>Save</span></button>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="ps-ai-use-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="ps-ai-use-title">AI use, last 30 days</h2>
+                <p class="cf-section-desc">AI checks per day for this server, by kind.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--stack">
+                <div id="psAiToday" class="ps-muted"></div>
+                <div id="psAiChart" class="ps-ai-chart" role="img" aria-label="AI checks per day"></div>
+                <div id="psAiLegend" class="ps-muted ps-ai-legend"></div>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="ps-other-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="ps-other-title">Feature-specific lists</h2>
+                <p class="cf-section-desc">These mean something narrower than "exempt from everything", so they stay with their feature.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div id="psOther" class="ps-grid"><%- include('../kit/_state', { kind: 'loading', title: 'Loading lists', compact: true }) %></div>
+        </div>
+    </section>
+</div>
+
+<style>
+  #protectionSettingsPage .ps-muted { color: var(--cf-text-3); font-size: var(--cf-text-sm); }
+  #protectionSettingsPage .ps-state { font-size: var(--cf-text-sm); color: var(--cf-text-2); line-height: 1.5; }
+  #protectionSettingsPage .ps-state div { margin-top: 2px; color: var(--cf-text-3); }
+  #protectionSettingsPage #psPauseCard.paused { border-color: color-mix(in srgb, var(--cf-warning) 55%, var(--cf-border)); }
+  #protectionSettingsPage #psPauseCard.paused .ps-state { color: var(--cf-text); }
+  #protectionSettingsPage .cf-pill:empty { display: none; }
+  #protectionSettingsPage .ps-note { padding: var(--cf-4) var(--cf-5); font-size: var(--cf-text-sm); color: var(--cf-text-3); }
+
+  /* Lists the script fills (allowlist, roles, managers, search results). */
+  #protectionSettingsPage .ps-list { display: block; max-height: 26rem; overflow-y: auto; }
+  #protectionSettingsPage .ps-results { background: color-mix(in srgb, var(--cf-surface-2) 40%, var(--cf-surface)); }
+  #protectionSettingsPage .ps-list > .ps-muted { padding: var(--cf-4) var(--cf-5); }
+  #protectionSettingsPage .ps-item { display: flex; align-items: center; gap: var(--cf-3); min-width: 0; padding: var(--cf-3) var(--cf-5); font-size: var(--cf-text-sm); color: var(--cf-text); }
+  #protectionSettingsPage .ps-item + .ps-item { border-top: 1px solid var(--cf-border); }
+  #protectionSettingsPage .ps-item img { width: 28px; height: 28px; border-radius: 50%; flex: none; object-fit: cover; }
+  #protectionSettingsPage .ps-item > .fa-user { width: 28px; text-align: center; color: var(--cf-text-3); flex: none; }
+  #protectionSettingsPage .ps-item .ps-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #protectionSettingsPage .ps-item .ps-name .ps-muted { font-size: var(--cf-text-xs); }
+  #protectionSettingsPage .ps-dot { width: 10px; height: 10px; border-radius: 50%; flex: none; background: var(--cf-text-3); display: inline-block; }
+  #protectionSettingsPage .ps-x { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; flex: none; background: none; border: 0; border-radius: var(--cf-radius); color: var(--cf-text-3); cursor: pointer; padding: 0; }
+  #protectionSettingsPage .ps-x:hover:not(:disabled) { color: var(--cf-danger); background: var(--cf-surface-2); }
+  #protectionSettingsPage .ps-x:focus-visible { outline: 2px solid var(--cf-accent); outline-offset: 1px; }
+  #protectionSettingsPage .ps-x:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* Protection status grid: link rows split by hairlines. */
+  #protectionSettingsPage .ps-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr)); overflow: hidden; border-radius: inherit; }
+  #protectionSettingsPage .ps-grid > .cf-state { grid-column: 1 / -1; }
+  #protectionSettingsPage .ps-tile { display: flex; justify-content: space-between; align-items: center; gap: var(--cf-2); min-width: 0; padding: var(--cf-3) var(--cf-5);
+      font-size: var(--cf-text-sm); color: var(--cf-text); text-decoration: none; box-shadow: 1px 0 0 var(--cf-border), 0 1px 0 var(--cf-border); }
+  #protectionSettingsPage .ps-tile > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+  #protectionSettingsPage .ps-tile:hover { background: var(--cf-surface-2); }
+  #protectionSettingsPage .ps-tile:focus-visible { outline: 2px solid var(--cf-accent); outline-offset: -2px; }
+
+  /* Protections checklist: one link row per protection, grouped, with its state. */
+  #protectionSettingsPage .ps-checklist > .cf-state { margin: var(--cf-4) var(--cf-5); }
+  #protectionSettingsPage .ps-group-head { display: flex; justify-content: space-between; gap: var(--cf-3); padding: var(--cf-4) var(--cf-5) var(--cf-2);
+      font-size: var(--cf-text-xs); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--cf-text-3); border-top: 1px solid var(--cf-border); }
+  #protectionSettingsPage .ps-group:first-child .ps-group-head { border-top: 0; }
+  #protectionSettingsPage .ps-group-head span:last-child { font-weight: 500; text-transform: none; letter-spacing: 0; font-variant-numeric: tabular-nums; }
+  #protectionSettingsPage .ps-check { display: flex; align-items: center; gap: var(--cf-3); min-width: 0; padding: var(--cf-3) var(--cf-5);
+      color: var(--cf-text); text-decoration: none; border-top: 1px solid var(--cf-border); }
+  #protectionSettingsPage .ps-group-head + .ps-check { border-top: 0; }
+  #protectionSettingsPage .ps-check:hover { background: var(--cf-surface-2); }
+  #protectionSettingsPage .ps-check:focus-visible { outline: 2px solid var(--cf-accent); outline-offset: -2px; }
+  #protectionSettingsPage .ps-check-icon { flex: none; width: 1.25rem; text-align: center; color: var(--cf-text-3); }
+  #protectionSettingsPage .ps-check.is-on .ps-check-icon { color: var(--cf-success); }
+  #protectionSettingsPage .ps-check.is-paused .ps-check-icon { color: var(--cf-warning); }
+  #protectionSettingsPage .ps-check-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  #protectionSettingsPage .ps-check-name { font-size: var(--cf-text-sm); font-weight: 500; }
+  #protectionSettingsPage .ps-check-desc { font-size: var(--cf-text-xs); color: var(--cf-text-3); overflow-wrap: anywhere; }
+  #protectionSettingsPage .ps-check-go { flex: none; color: var(--cf-text-3); font-size: var(--cf-text-xs); }
+  #protectionSettingsPage .ps-checklist .cf-pill { flex: none; }
+
+  /* AI use chart. */
+  #protectionSettingsPage .ps-ai-chart { display: flex; align-items: flex-end; gap: 2px; height: 7rem; padding: var(--cf-1) 0 0; border-bottom: 1px solid var(--cf-border); }
+  #protectionSettingsPage .ps-ai-col { flex: 1; display: flex; flex-direction: column-reverse; min-width: 3px; height: 100%; }
+  #protectionSettingsPage .ps-ai-col span { display: block; width: 100%; }
+  #protectionSettingsPage .ps-ai-legend { display: flex; gap: var(--cf-2) var(--cf-4); flex-wrap: wrap; font-size: var(--cf-text-xs); }
+  #protectionSettingsPage .ps-ai-key { display: inline-flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; }
+  #protectionSettingsPage .ps-ai-key i { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+  @media (max-width: 640px) {
+    #protectionSettingsPage .ps-item, #protectionSettingsPage .ps-tile, #protectionSettingsPage .ps-note, #protectionSettingsPage .ps-list > .ps-muted,
+    #protectionSettingsPage .ps-check, #protectionSettingsPage .ps-group-head { padding-left: var(--cf-4); padding-right: var(--cf-4); }
+    #protectionSettingsPage .ps-check-go { display: none; }
+    #protectionSettingsPage .ps-x { width: 44px; height: 44px; }
+  }
+</style>
+
+<script>
+(function () {
+  const root = document.getElementById('protectionSettingsPage');
+  if (!root) return;
+  const guildId = root.dataset.guildId;
+  const api = (p) => `/api/guilds/${guildId}/protection-settings${p}`;
+  const $ = (id) => document.getElementById(id);
+  let state = null;
+
+  // DOM builder: every server value goes in through textContent / attributes, never markup.
+  function el(tag, attrs = {}, ...kids) {
+    const n = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (v == null || v === false) continue;
+      if (k === 'class') n.className = v;
+      else if (k === 'text') n.textContent = v;
+      else if (k.startsWith('on')) n.addEventListener(k.slice(2), v);
+      else n.setAttribute(k, v === true ? '' : v);
+    }
+    for (const kid of kids.flat()) if (kid != null) n.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
+    return n;
+  }
+  const icon = (cls) => el('i', { class: cls });
+  const when = (t) => (t ? new Date(t).toLocaleString() : '');
+  const dot = (color) => { const d = el('span', { class: 'ps-dot' }); if (color) d.style.background = color; return d; };
+
+  async function req(url, options = {}) {
+    const res = await fetch(url, { credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, ...options });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
+    return body;
+  }
+  const showError = (m) => { const e = $('psError'); e.hidden = !m; e.textContent = m || ''; if (m) e.scrollIntoView({ block: 'nearest' }); };
+  const notice = (m) => { const e = $('psNotice'); e.hidden = !m; e.textContent = m || ''; };
+  async function act(fn, done) {
+    showError('');
+    try { await fn(); if (done) notice(done); await load(); } catch (err) { showError(err.message); }
+  }
+
+  // ── pause ────────────────────────────────────────────────────────────────
+  let countdown = null;
+  function renderPause() {
+    const p = state.pause;
+    const card = $('psPauseCard');
+    card.classList.toggle('paused', p.paused);
+    const badge = $('psPauseBadge');
+    badge.className = 'cf-pill ' + (p.paused ? 'is-warn' : 'is-ok');
+    badge.textContent = p.paused ? 'Paused' : 'Active';
+    clearInterval(countdown);
+    const s = $('psPauseState');
+    if (!p.paused) {
+      s.textContent = 'Protections are acting normally.';
+    } else {
+      const tick = () => {
+        s.textContent = '';
+        const left = p.until ? Math.max(0, new Date(p.until).getTime() - Date.now()) : null;
+        s.append('Paused', p.byName ? ` by ${p.byName}` : '', p.at ? ` at ${when(p.at)}` : '', '. ',
+          p.until ? `Resumes automatically at ${when(p.until)} (in ${fmt(left)}).` : 'Stays paused until someone resumes it.',
+          p.reason ? el('div', { text: `Reason: ${p.reason}` }) : null);
+        if (p.until && left === 0) { clearInterval(countdown); setTimeout(load, 1500); }
+      };
+      tick();
+      countdown = setInterval(tick, 30000);
+    }
+    $('psResumeBtn').hidden = !p.paused;
+    $('psPauseBtn').querySelector('span').textContent = p.paused ? 'Change pause' : 'Pause';
+    for (const id of ['psPauseBtn', 'psResumeBtn', 'psPauseDuration', 'psPauseReason', 'psPauseCustom']) $(id).disabled = !state.actor.canConfigure;
+  }
+  function fmt(ms) {
+    let m = Math.round(ms / 60000); const d = Math.floor(m / 1440); m -= d * 1440; const h = Math.floor(m / 60); m -= h * 60;
+    return [d && `${d}d`, h && `${h}h`, `${m}m`].filter(Boolean).join(' ');
+  }
+  $('psPauseDuration').addEventListener('change', () => { $('psPauseCustom').hidden = $('psPauseDuration').value !== 'custom'; });
+  $('psPauseBtn').addEventListener('click', () => {
+    const pick = $('psPauseDuration').value;
+    const duration = pick === 'custom' ? $('psPauseCustom').value.trim() : pick;
+    const label = pick === '' ? 'until you resume them' : `for ${duration}`;
+    if (!confirm(`Pause every automatic protection ${label}? They will keep logging but take no action.`)) return;
+    act(() => req(api('/pause'), { method: 'POST', body: JSON.stringify({ duration, reason: $('psPauseReason').value.trim() || null }) }), 'Protections paused.');
+  });
+  $('psResumeBtn').addEventListener('click', () => act(() => req(api('/resume'), { method: 'POST', body: '{}' }), 'Protections resumed.'));
+
+  // ── overview ─────────────────────────────────────────────────────────────
+  // Every protection, grouped the way an admin thinks about them. Each row: [label, what it does,
+  // page, state getter]. A getter returns { on: true|false|null, detail } from overview.protections;
+  // null means the feature's table is missing, shown as "Unknown".
+  const sub = (key, part) => (p) => (p[key] == null ? { on: null } : { on: !!p[key][part] });
+  const top = (key, prefix = 'Action') => (p) => (p[key] == null ? { on: null } : { on: !!p[key].on, detail: p[key].action || null, prefix });
+  const CHECKLIST = [
+    ['Joining', [
+      ['Verification', 'New members press a button or solve a captcha before they can talk.', 'verification', top('verification', 'Mode')],
+      ['Account age gate', 'Acts on accounts younger than the age you set.', 'security', sub('joinGate', 'ageGate')],
+      ['Rejoin limit', 'Stops members who leave and rejoin again and again.', 'security', sub('joinGate', 'rejoinLimit')],
+      ['Spammer flag', 'Acts on accounts Discord has flagged as likely spammers.', 'security', sub('joinGate', 'spammer')],
+      ['Name filters', 'Names that copy your staff or match scam patterns.', 'name-filters', top('nameFilters')],
+      ['Avatar protection', 'Copies of staff avatars and known scam profile pictures.', 'avatar-protection', top('avatarProtection')],
+      ['NSFW avatars', 'Explicit profile pictures.', 'nsfw-protection', top('nsfwAvatars')],
+      ['Auto-prune', 'Kicks new members who are still without a role after a set time.', 'verification', top('autoPrune')],
+      ['Inactivity prune', 'Members who never post, or who have gone quiet.', 'verification', top('inactivityPrune', 'Rules')],
+    ]],
+    ['Raids and admins', [
+      ['Raid detection', 'Waves of joins or spam, with an optional lockdown.', 'advanced-protection', top('raid')],
+      ['Anti-nuke', 'Stops mass deletion of channels and roles and mass bans. Uses its own trusted list.', 'security', top('antiNuke')],
+      ['Self-bot detection', 'Accounts run by automation on a user token.', 'advanced-protection', top('selfbot')],
+    ]],
+    ['Messages', [
+      ['Phishing links', 'Links to known phishing and scam sites.', 'phishing', top('phishing')],
+      ['Message threats', 'Disguised scam links, mass mentions, QR codes and text in images.', 'message-threats', top('messageThreats')],
+      ['NSFW chat images', 'Explicit images posted in chat.', 'nsfw-protection', top('nsfwImages')],
+      ['Adaptive spam', 'Learns spam patterns and catches the same message posted across channels.', 'advanced-protection', top('adaptiveSpam')],
+      ['Link filter', 'Only sites you approve; new sites wait in a queue.', 'link-filter', top('linkPolicy')],
+      ['Commission filter', 'Commission and self-promotion adverts.', 'commission-filter', top('commissionFilter')],
+    ]],
+    ['Shared', [
+      ['Global ban', 'Bans shared between servers that use this bot.', 'global-ban', top('globalBan')],
+      ['AI second opinion', 'A second check on borderline cases, set below.', null, top('aiJudge', 'Using')],
+    ]],
+  ];
+  const cap = (s) => (s ? String(s).charAt(0).toUpperCase() + String(s).slice(1) : '');
+  let overviewShow = 'all';
+  function checkRow(label, desc, page, st, paused) {
+    const on = st.on === true;
+    const pill = el('span', { class: 'cf-pill' + (on ? (paused ? ' is-warn' : ' is-ok') : ''), text: st.on == null ? 'Unknown' : on ? (paused ? 'Paused' : 'On') : 'Off' });
+    const iconCls = st.on == null ? 'fas fa-circle-question' : on ? 'fas fa-circle-check' : 'far fa-circle';
+    const href = page ? `/manage/${guildId}?page=${page}` : '#psAiCard';
+    return el('a', { class: 'ps-check' + (on ? ' is-on' : '') + (on && paused ? ' is-paused' : ''), href, 'data-on': on ? '1' : '0' },
+      el('span', { class: 'ps-check-icon', 'aria-hidden': 'true' }, icon(iconCls)),
+      el('span', { class: 'ps-check-text' },
+        el('span', { class: 'ps-check-name', text: label }),
+        el('span', { class: 'ps-check-desc', text: on && st.detail ? `${desc} ${st.prefix}: ${cap(st.detail)}.` : desc })),
+      pill,
+      icon('fas fa-chevron-right ps-check-go'));
+  }
+  function tile(label, value, page, on) {
+    const v = el('span', { class: 'cf-pill' + (on ? ' is-ok' : ''), text: value });
+    return el('a', { class: 'ps-tile', href: `/manage/${guildId}?page=${page}` }, el('span', { text: label }), v);
+  }
+  function renderOverview() {
+    const p = state.overview.protections || {};
+    const paused = !!state.pause?.paused;
+    let total = 0, onCount = 0;
+    const groups = CHECKLIST.map(([name, items]) => {
+      const rows = items.map(([label, desc, page, get]) => {
+        const st = get(p);
+        total += 1; if (st.on) onCount += 1;
+        return { st, node: checkRow(label, desc, page, st, paused) };
+      });
+      const shown = rows.filter(r => overviewShow === 'all' || (overviewShow === 'on') === !!r.st.on);
+      if (!shown.length) return null;
+      const groupOn = rows.filter(r => r.st.on).length;
+      return el('div', { class: 'ps-group', role: 'group', 'aria-label': name },
+        el('div', { class: 'ps-group-head' }, el('span', { text: name }), el('span', { text: `${groupOn} of ${rows.length} on` })),
+        ...shown.map(r => r.node));
+    }).filter(Boolean);
+    const count = $('cfk-ps-overview-count');
+    count.textContent = paused ? `Paused · ${onCount} of ${total} on` : `${onCount} of ${total} on`;
+    count.className = 'cf-pill' + (paused ? ' is-warn' : onCount ? ' is-ok' : '');
+    $('psOverview').replaceChildren(...(groups.length ? groups
+      : [el('div', { class: 'cf-state cf-state--compact' }, el('p', { class: 'cf-state-title', text: overviewShow === 'on' ? 'No protection is on yet.' : 'Every protection is on.' }))]));
+
+    const o = state.overview.otherLists || {};
+    $('psOther').replaceChildren(
+      tile('Anti-nuke trusted users', String(o.antiNukeTrusted ?? 0), 'security', false),
+      tile('Invite links: allowed users, roles and channels', String(o.inviteLinkAllowed ?? 0), 'advanced-protection', false),
+      tile('Self-bot exempt roles', String(o.selfbotExemptRoles?.length ?? 0), 'advanced-protection', false),
+      tile('Global ban exempt roles', String(o.globalBanExemptRoles?.length ?? 0), 'global-ban', false),
+      tile('Commission filter rulings', String(o.commissionRulings ?? 0), 'commission-filter', false),
+    );
+  }
+  $('cfk-ps-overview-filter').addEventListener('click', (e) => {
+    const b = e.target.closest('button[value]');
+    if (!b) return;
+    overviewShow = b.value;
+    for (const x of $('cfk-ps-overview-filter').querySelectorAll('button[value]')) x.setAttribute('aria-pressed', String(x === b));
+    if (state) renderOverview();
+  });
+
+  // ── lists ────────────────────────────────────────────────────────────────
+  function userItem(u, extra, removeBtn) {
+    return el('div', { class: 'ps-item' },
+      u.avatar ? el('img', { src: u.avatar, alt: '' }) : icon('fas fa-user'),
+      el('span', { class: 'ps-name' }, u.displayName || u.username || u.id, ' ',
+        el('span', { class: 'ps-muted', text: u.username ? `@${u.username}` : u.id }),
+        u.inServer === false ? el('span', { class: 'ps-muted', text: ' · not in the server' }) : null,
+        extra ? el('span', { class: 'ps-muted', text: ` · ${extra}` }) : null),
+      removeBtn);
+  }
+  function roleLabel(r) { return r.deleted ? `deleted role ${r.id}` : r.name; }
+  function xButton(title, onclick, disabled, why) {
+    return el('button', { type: 'button', class: 'ps-x', title: disabled ? why : title, 'aria-label': title, disabled: disabled || !state.actor.canConfigure, onclick }, icon('fas fa-times'));
+  }
+
+  function renderUsers() {
+    $('psUserCount').textContent = String(state.users.length);
+    $('psUsers').replaceChildren(...(state.users.length ? state.users.map(u => userItem(u,
+      [u.note, u.addedAt && `added ${when(u.addedAt)}`, u.lockedByRole && `holds ${roleLabel(u.lockedByRole)}`].filter(Boolean).join(' · '),
+      xButton('Remove from the allowlist', () => {
+        if (!confirm(`Take ${u.displayName || u.id} off the allowlist? Automatic protections will apply to them again.`)) return;
+        act(() => req(api(`/allowlist/user/${u.id}`), { method: 'DELETE' }), 'Removed from the allowlist.');
+      }, !!u.lockedByRole, 'They hold an allowlisted role; take that off first'))) : [el('div', { class: 'ps-muted', text: 'Nobody yet.' })]));
+  }
+
+  function renderRoles() {
+    $('psRoleCount').textContent = String(state.roles.length);
+    $('psRoles').replaceChildren(...(state.roles.length ? state.roles.map(r => el('div', { class: 'ps-item' },
+      dot(r.color), el('span', { class: 'ps-name' }, roleLabel(r), ' ', el('span', { class: 'ps-muted', text: `${r.members} member(s)${r.note ? ` · ${r.note}` : ''}` })),
+      xButton('Remove role', () => {
+        if (!confirm(`Take ${roleLabel(r)} off the allowlist? Members recorded as once holding it lose their exemption too.`)) return;
+        act(() => req(api(`/allowlist/role/${r.id}`), { method: 'DELETE' }), 'Role removed from the allowlist.');
+      }))) : [el('div', { class: 'ps-muted', text: 'No roles yet.' })]));
+    const taken = new Set(state.roles.map(r => r.id));
+    fillRolePicker($('psRolePick'), state.guildRoles.filter(r => !taken.has(r.id)));
+    $('psRoleAdd').disabled = $('psRolePick').disabled = !state.actor.canConfigure;
+  }
+
+  function renderBots() {
+    $('cfk-ps-bot-count').textContent = String((state.bots || []).length);
+    const bots = state.bots || [];
+    $('cfk-ps-bots').replaceChildren(...(bots.length ? bots.map(b => el('div', { class: 'ps-item' },
+      el('span', { class: 'ps-name' },
+        b.username ? `${b.username} ` : 'Bot ',
+        el('span', { class: 'ps-muted', text: `(${b.id})${b.inServer ? ' · in server' : ' · not currently in server'}${b.note ? ' · ' + b.note : ''}` })),
+      xButton('Remove from trusted list', () => {
+        if (!confirm(`Remove ${b.username || b.id} from the trusted-bot list? Future joins by this bot will be flagged as unauthorized in the log.`)) return;
+        act(() => req(api(`/allowlist/bot/${b.id}`), { method: 'DELETE' }), 'Removed from trusted bots.');
+      }))) : [el('div', { class: 'ps-muted', text: 'No trusted bots yet.' })]));
+  }
+
+  function renderHeld() {
+    $('psHeldCount').textContent = String(state.held.length);
+    $('psHeld').replaceChildren(...(state.held.length ? state.held.map(h => userItem(h,
+      `${h.stillHolds ? 'holds' : 'held'} ${roleLabel(h.via)} · since ${when(h.since)}`,
+      xButton('Clear', () => {
+        if (!confirm(`Clear ${h.displayName || h.id}? They lose the exemption they kept from ${roleLabel(h.via)}.`)) return;
+        act(() => req(api(`/allowlist/user/${h.id}`), { method: 'DELETE' }), 'Cleared.');
+      }, h.stillHolds, 'They still hold the role'))) : [el('div', { class: 'ps-muted', text: 'Nobody recorded.' })]));
+  }
+
+  function renderManagers() {
+    $('psMgrCount').textContent = String(state.managers.length);
+    const can = state.actor.canEditManagers;
+    $('psMgrs').replaceChildren(...(state.managers.length ? state.managers.map(r => el('div', { class: 'ps-item' },
+      dot(r.color), el('span', { class: 'ps-name' }, roleLabel(r), ' ', el('span', { class: 'ps-muted', text: `${r.members} member(s)` })),
+      el('button', { type: 'button', class: 'ps-x', title: 'Remove', 'aria-label': 'Remove', disabled: !can, onclick: () => {
+        if (!confirm(`Remove ${roleLabel(r)} as a bot-manager role? Its holders lose dashboard access unless they have Manage Server.`)) return;
+        act(() => req(api(`/managers/${r.id}`), { method: 'DELETE' }), 'Manager role removed.');
+      } }, icon('fas fa-times')))) : [el('div', { class: 'ps-muted', text: 'No manager roles.' })]));
+    const taken = new Set(state.managers.map(r => r.id));
+    fillRolePicker($('psMgrPick'), state.guildRoles.filter(r => !taken.has(r.id) && !r.managed));
+    $('psMgrForm').hidden = !can;
+    $('psMgrLocked').hidden = can;
+  }
+
+  function fillRolePicker(select, roles) {
+    select.replaceChildren(el('option', { value: '', text: roles.length ? 'Pick a role…' : 'No roles left to add' }),
+      ...roles.map(r => el('option', { value: r.id, text: r.name, 'data-kind': 'role', 'data-color': r.color || null })));
+  }
+
+  $('psRoleAdd').addEventListener('click', () => {
+    const id = $('psRolePick').value;
+    if (!id) return;
+    act(() => req(api('/allowlist'), { method: 'POST', body: JSON.stringify({ kind: 'role', id }) }), 'Role allowlisted.');
+  });
+  $('psMgrAdd').addEventListener('click', () => {
+    const id = $('psMgrPick').value;
+    if (!id) return;
+    const name = $('psMgrPick').selectedOptions[0]?.textContent;
+    if (!confirm(`Make ${name} a bot-manager role? Everyone holding it can configure the bot on the dashboard and is exempt from automatic protections.`)) return;
+    act(() => req(api('/managers'), { method: 'POST', body: JSON.stringify({ roleId: id }) }), 'Manager role added.');
+  });
+
+  async function search() {
+    const q = $('psUserQuery').value.trim();
+    const box = $('psUserResults');
+    if (!q) { box.replaceChildren(); return; }
+    box.replaceChildren(el('div', { class: 'ps-muted', text: 'Searching…' }));
+    try {
+      const { members } = await req(api(`/members?q=${encodeURIComponent(q)}`));
+      const have = new Set(state.users.map(u => u.id));
+      box.replaceChildren(...(members.length ? members.map(m => userItem(m, m.bot ? 'bot (always exempt)' : null,
+        have.has(m.id) ? el('span', { class: 'ps-muted', text: 'already on' })
+          : el('button', { type: 'button', class: 'btn btn-sm btn-primary', disabled: !state.actor.canConfigure, onclick: () =>
+              act(() => req(api('/allowlist'), { method: 'POST', body: JSON.stringify({ kind: 'user', id: m.id, note: $('psUserNote').value.trim() || null }) }),
+                'User allowlisted.').then(() => { box.replaceChildren(); $('psUserQuery').value = ''; $('psUserNote').value = ''; }) }, icon('fas fa-plus'), ' Add')))
+        : [el('div', { class: 'ps-muted', text: 'No one found. Try their user ID.' })]));
+    } catch (err) { box.replaceChildren(el('div', { class: 'ps-muted', text: err.message })); }
+  }
+  $('psUserSearch').addEventListener('click', search);
+  $('psUserQuery').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); search(); } });
+
+  // ── AI second opinion ────────────────────────────────────────────────────
+  // Series colours come from the theme tokens, so the chart follows every colour theme.
+  const AI_SERIES = [['avatar', 'Avatar checks', 'var(--cf-info)'], ['text', 'Scam-text checks', 'var(--cf-accent)'], ['nsfw', 'NSFW checks', 'var(--cf-text-2)'],
+    ['cached', 'Answered from cache', 'var(--cf-success)'], ['skipped', 'Skipped (cap / rate)', 'var(--cf-warning)'], ['failed', 'No verdict (error)', 'var(--cf-danger)']];
+  function renderAi(ai) {
+    const s = ai.settings;
+    $('psAiNotConfigured').hidden = !!ai.configured;
+    const on = s.avatar.mode !== 'off' || s.text.mode !== 'off' || s.nsfw.advise;
+    const badge = $('psAiBadge');
+    badge.textContent = !ai.configured ? 'No key' : on ? 'On' : 'Off';
+    badge.className = 'cf-pill' + (on && ai.configured ? ' is-ok' : '');
+    $('psAiAvatarMode').value = s.avatar.mode; $('psAiAvatarConf').value = Math.round(s.avatar.confidence * 100);
+    $('psAiTextMode').value = s.text.mode; $('psAiTextConf').value = Math.round(s.text.confidence * 100);
+    $('psAiNsfw').value = s.nsfw.advise ? '1' : '0'; $('psAiCap').value = s.dailyCap;
+    $('psAiToday').textContent = `Today: ${ai.today.used} of ${ai.today.cap} checks used · model ${ai.model} · at most ${ai.perMinute} checks a minute across all servers`;
+    const disabled = !ai.actor?.canConfigure;
+    for (const id of ['psAiAvatarMode', 'psAiAvatarConf', 'psAiTextMode', 'psAiTextConf', 'psAiNsfw', 'psAiCap', 'psAiSave']) $(id).disabled = disabled;
+    const max = Math.max(1, ...ai.series.map(d => AI_SERIES.reduce((t, [k]) => t + (d[k] || 0), 0)));
+    $('psAiChart').replaceChildren(...ai.series.map(d => {
+      const total = AI_SERIES.reduce((t, [k]) => t + (d[k] || 0), 0);
+      const col = el('div', { class: 'ps-ai-col', title: `${d.date}: ${AI_SERIES.map(([k, l]) => `${l} ${d[k] || 0}`).join(', ')}` });
+      for (const [k, , color] of AI_SERIES) {
+        if (!d[k]) continue;
+        const seg = el('span');
+        seg.style.height = `${(d[k] / max) * 100}%`;
+        seg.style.background = color;
+        col.append(seg);
+      }
+      if (!total) { const z = el('span'); z.style.height = '1px'; z.style.background = 'var(--cf-border)'; col.append(z); }
+      return col;
+    }));
+    $('psAiLegend').replaceChildren(...AI_SERIES.map(([k, l, color]) => {
+      const sw = el('i'); sw.style.background = color;
+      return el('span', { class: 'ps-ai-key' }, sw, `${l}: ${ai.series.reduce((t, d) => t + (d[k] || 0), 0)}`);
+    }));
+  }
+  async function loadAi() {
+    try { renderAi(await req(api('/ai'))); } catch (err) { $('psAiToday').textContent = err.message; }
+  }
+  $('psAiSave').addEventListener('click', () => {
+    const body = {
+      ai_avatar_mode: $('psAiAvatarMode').value, ai_avatar_confidence: Number($('psAiAvatarConf').value) / 100,
+      ai_text_mode: $('psAiTextMode').value, ai_text_confidence: Number($('psAiTextConf').value) / 100,
+      ai_nsfw_advise: $('psAiNsfw').value === '1', ai_daily_cap: Number($('psAiCap').value),
+    };
+    if ((body.ai_avatar_mode === 'act' || body.ai_text_mode === 'act')
+        && !confirm('Act mode lets the AI confirm an automatic action (ban, kick, timeout or delete, whatever the protection is set to). Continue?')) return;
+    act(async () => { await req(api('/ai'), { method: 'POST', body: JSON.stringify(body) }); await loadAi(); }, 'AI settings saved.');
+  });
+
+  async function load() {
+    loadAi();
+    try {
+      state = await req(api('/'));
+      if (!state.actor.canConfigure) notice('This page is view-only for you.');
+      renderPause(); renderOverview(); renderUsers(); renderRoles(); renderHeld(); renderManagers(); renderBots();
+    } catch (err) { showError(err.message); }
+  }
+  $('cfk-ps-bot-add')?.addEventListener('click', () => {
+    const id = ($('cfk-ps-bot-id').value || '').trim();
+    const note = ($('cfk-ps-bot-note').value || '').trim();
+    if (!/^[0-9]{17,20}$/.test(id)) { notice('That doesn\'t look like a Discord user ID (17-20 digits).'); return; }
+    act(async () => {
+      await req(api('/allowlist'), { method: 'POST', body: JSON.stringify({ kind: 'bot', id, note: note || undefined }) });
+      $('cfk-ps-bot-id').value = ''; $('cfk-ps-bot-note').value = '';
+    }, 'Bot added to trusted list.');
+  });
+
+  load();
+})();
+</script>

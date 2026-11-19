@@ -19,10 +19,10 @@ import {
 } from 'discord.js';
 import { readFile } from 'fs/promises';
 import pool from '../utils/db.js';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 
 const GUILD_ID = '980331356196311070';
-const BOT_ID = '1482157000426258493';
+// The acting bot comes from guild_bot_mapping — never pinned here.
 const STABCRAZY_ID = '274331594280665088';
 const SOCIAL_LIVE_CATEGORY = '980331357391695883';
 const DAILY_QUOTES_BOT_ID = '880237210484506675';
@@ -104,9 +104,8 @@ async function cloneAndReplace(guild, channelId, reason) {
 }
 
 async function setup() {
-    const [bots] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id = ?', [BOT_ID]);
-    if (!bots.length) { console.error('Bot not found'); process.exit(1); }
-    const token = encryption.decrypt(JSON.parse(bots[0].bot_token));
+    const bot = await resolveBotForGuild(GUILD_ID, { db: pool });
+    const token = bot.token;
 
     const client = new Client({
         intents: [

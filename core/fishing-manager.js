@@ -12,6 +12,17 @@ import {
   SHINY_CHANCE, SHINY_VALUE_MULT, SHINY_SUFFIX,
   XP_PER_RARITY, levelFromXp, xpForLevel, LEVEL_LUCK_PER, LEVEL_LUCK_CAP,
 } from './fishing-data.js';
+import { getConfig as getFeatureConfig } from './feature-config.js';
+
+/**
+ * Milliseconds between casts: the Fishing page's "Seconds between casts" (0-600; COOLDOWN_MS when the
+ * server has no value), less the equipped pet's cut, never under 0.8 s. Pure.
+ */
+export function castCooldownMs(seconds, pet = null) {
+  const s = seconds === null || seconds === undefined || seconds === '' ? NaN : Number(seconds);
+  const base = Number.isFinite(s) && s >= 0 ? Math.min(s, 600) * 1000 : COOLDOWN_MS;
+  return Math.max(800, base - (pet?.cdReduce || 0));
+}
 
 function todayStr() { return new Date().toISOString().slice(0, 10); }
 function rand(min, max) { return Math.random() * (max - min) + min; }
@@ -145,7 +156,8 @@ export async function cast(userId, guildId = null) {
   const p = await getPlayer(userId);
   const now = Date.now();
   const pet = p.pet ? PETS_BY_ID[p.pet] : null;
-  const cooldown = Math.max(800, COOLDOWN_MS - (pet?.cdReduce || 0));
+  const fcfg = guildId ? await getFeatureConfig('fishing', guildId).catch(() => null) : null;
+  const cooldown = castCooldownMs(fcfg ? fcfg.cooldown_seconds : null, pet);
   const remaining = p.lastCastAt + cooldown - now;
   if (remaining > 0) return { cooldown: true, remainingMs: remaining };
 

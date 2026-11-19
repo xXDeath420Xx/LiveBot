@@ -1,0 +1,68 @@
+<%#
+  GET /legal/data (dashboard/routes/legal-pages.js). Locals: user, categories (CATEGORIES from
+  dashboard/content/legal/data-inventory.js), retention(row) -> { text, kind }, liveRetention (data_retention_policy was read).
+%>
+<!DOCTYPE html>
+<html lang="en" data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>">
+<head>
+<%- include('partials/site-head', { title: 'Data we collect · CertiFried', description: 'Every kind of data CertiFried keeps, across the Discord bot, the dashboard, the stream bot, CertiFried Studio, song requests and Greenhouse Tycoon: why, where, for how long, who can see it and how to remove it.', path: '/legal/data' }) %>
+    <link rel="stylesheet" href="/css/cf-studio-pages.css">
+</head>
+<body class="cfs-body">
+<%- include('partials/site-header', { active: '', user: locals.user || null, returnTo: '/legal/data' }) %>
+<%
+  const _cats = Array.isArray(locals.categories) ? locals.categories : [];
+  const _ret = typeof locals.retention === 'function' ? locals.retention : (r) => ({ text: (r.retention && (r.retention.text || (r.retention.days + ' days'))) || '', kind: 'written' });
+  const _kindNote = { policy: 'Deleted nightly by the retention sweep', written: 'Deleted nightly by the retention sweep', feature: 'Deleted by the feature itself', none: 'No automatic deletion' };
+%>
+    <main id="main-content" tabindex="-1" class="cfs-main cfs-main--wide">
+        <div class="cfs-pagehead">
+            <span class="cfs-eyebrow"><a href="/legal">Legal and data</a></span>
+            <h1>Data we collect</h1>
+            <p class="cfs-lede">Everything CertiFried keeps, product by product: what it is, why we keep it, where, for how long, who can see it and how to remove it. The <a href="/privacy">Privacy Policy</a> says the same in prose.</p>
+            <p class="cfs-meta">Last updated November 19, 2026. <% if (locals.liveRetention) { %>Times marked "retention sweep" are read from the retention table the server enforces every night.<% } else { %>Times shown are the values set on November 19, 2026.<% } %></p>
+        </div>
+
+        <ul class="sp-anchor-list" aria-label="Products">
+            <% _cats.forEach((c) => { %><li><a href="#<%= c.id %>"><%= c.title %></a></li><% }) %>
+        </ul>
+
+        <% _cats.forEach((c) => { %>
+        <section class="cfs-section" aria-labelledby="<%= c.id %>">
+            <h2 id="<%= c.id %>"><%= c.title %></h2>
+            <% if (c.intro) { %><p class="cfs-section-desc"><%= c.intro %></p><% } %>
+            <div class="cfs-prose">
+            <div class="cfs-table-wrap"><table class="cfs-table-stack sp-data">
+                <thead><tr><th>Data</th><th>Why</th><th>Where it is stored</th><th>How long</th><th>Who can see it</th><th>How to remove it</th></tr></thead>
+                <tbody>
+                    <% c.rows.forEach((r) => { const t = _ret(r); %>
+                    <tr>
+                        <td><%= r.data %></td>
+                        <td data-label="Why"><%= r.purpose %></td>
+                        <td data-label="Where"><%= r.where %></td>
+                        <td data-label="How long"><span class="<%= t.kind === 'none' || t.kind === 'feature' ? '' : 'sp-ret' %>"><%= t.text %></span><span class="sp-src"><%= _kindNote[t.kind] %></span></td>
+                        <td data-label="Who can see it"><%= r.who %></td>
+                        <td data-label="How to remove it"><%= r.remove %></td>
+                    </tr>
+                    <% }) %>
+                </tbody>
+            </table></div>
+            </div>
+        </section>
+        <% }) %>
+
+        <section class="cfs-section" aria-labelledby="ld-notes-h">
+            <h2 id="ld-notes-h">Notes</h2>
+            <div class="cfs-prose">
+                <ul>
+                    <li><strong>No automatic deletion</strong> means no time limit is set: the data stays until you, a server's staff or the bot's removal delete it. We say so rather than invent a period.</li>
+                    <li><code>/privacy export</code> and <code>/privacy delete</code> with the CertiFried bot work in any server or in a direct message with it. Moderation and safety records, and things you sent to a server's staff, are kept; the <a href="/privacy#your-rights">Privacy Policy</a> lists them.</li>
+                    <li>"CertiFried's operators" are the two administrators named in the <a href="/privacy#administrator-access-disclosure">Privacy Policy</a>. They look at data only to give support.</li>
+                    <li>CertiFried never sells data, shows no ads, and never processes payments.</li>
+                </ul>
+            </div>
+        </section>
+    </main>
+<%- include('partials/site-footer') %>
+</body>
+</html>

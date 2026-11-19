@@ -1,0 +1,8 @@
+<%#
+  The Digimon page and its two quiz sub-pages, as one row of links: include('_digimon-nav', { dgNav: 'digimon' | 'digimon-quiz' | 'digimon-odds' }).
+%><% const _dgNavActive = (typeof dgNav !== 'undefined' && dgNav) ? dgNav : 'digimon'; %>
+<nav class="cf-segmented gk-subnav" aria-label="Digimon pages">
+    <% [['digimon', 'Game and settings'], ['digimon-quiz', 'Quiz questions'], ['digimon-odds', 'Quiz odds']].forEach(function (p) { %>
+    <a class="cf-segment<%= p[0] === _dgNavActive ? ' is-active' : '' %>" href="/manage/<%= guild.id %>?page=<%= p[0] %>"<% if (p[0] === _dgNavActive) { %> aria-current="page"<% } %>><%= p[1] %></a>
+    <% }) %>
+</nav>

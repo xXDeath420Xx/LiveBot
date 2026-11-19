@@ -92,6 +92,11 @@ export function startTeamSyncScheduler(client) {
 
     logger.info('[Team Sync Scheduler] Scheduler started (every hour at :00, multi-bot support enabled)', { category: 'team-sync' });
 
+    // Live boards (one self-updating "who is live" message per team that has a board channel).
+    import('../core/team-live-board.js')
+        .then(m => m.startTeamLiveBoards())
+        .catch(e => logger.error(`[Team Sync Scheduler] live boards failed to start: ${e.message}`, { category: 'team-sync' }));
+
     // Run initial sync after 2 minutes to let all bots initialize
     setTimeout(async () => {
         logger.info('[Team Sync Scheduler] Running initial team sync', { category: 'team-sync' });
@@ -103,6 +108,7 @@ export function startTeamSyncScheduler(client) {
  * Stop the team sync scheduler
  */
 export function stopTeamSyncScheduler() {
+    import('../core/team-live-board.js').then(m => m.stopTeamLiveBoards()).catch(() => {});
     if (schedulerTask) {
         schedulerTask.stop();
         schedulerTask = null;

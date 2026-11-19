@@ -31,16 +31,21 @@ class ReminderManager {
     }
 
     /**
-     * Create a new reminder
+     * Create a new reminder. `repeat` (optional): { interval: seconds between sends (at least one
+     * hour), count: sends in all, -1 or null = until deleted }.
      */
-    async createReminder(userId, guildId, channelId, reminderText, duration, isDm = false) {
+    async createReminder(userId, guildId, channelId, reminderText, duration, isDm = false, repeat = null) {
         try {
             const remindAt = new Date(Date.now() + duration);
+            const interval = repeat && Number(repeat.interval) >= 3600 ? Math.floor(Number(repeat.interval)) : null;
+            const count = interval ? (Number.isInteger(Number(repeat.count)) && Number(repeat.count) > 1 ? Number(repeat.count) : -1) : null;
 
+            // The text column is `message` (the dashboard's Reminders page reads the same column).
             const [result] = await pool.execute(
-                `INSERT INTO reminders (user_id, guild_id, channel_id, reminder_text, remind_at, is_dm, created_at)
-                 VALUES (?, ?, ?, ?, ?, ?, NOW())`,
-                [userId, guildId, channelId, reminderText, remindAt, isDm ? 1 : 0]
+                `INSERT INTO reminders (user_id, guild_id, channel_id, message, remind_at, is_dm, created_at,
+                                        recurring_interval, recurring_count, next_occurrence, occurrences_sent)
+                 VALUES (?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?, 0)`,
+                [userId, guildId, channelId, reminderText, remindAt, isDm ? 1 : 0, interval, count, interval ? remindAt : null]
             );
 
             logger.info(`[ReminderManager] Created reminder ${result.insertId} for user ${userId}`);
@@ -78,8 +83,9 @@ class ReminderManager {
      */
     async getUserReminders(userId, guildId) {
         try {
+            // `/notes remind list` reads r.reminder_text; the column itself is `message`.
             const [reminders] = await pool.execute(
-                'SELECT * FROM reminders WHERE user_id = ? AND guild_id = ? ORDER BY remind_at ASC',
+                'SELECT *, message AS reminder_text FROM reminders WHERE user_id = ? AND guild_id = ? ORDER BY remind_at ASC',
                 [userId, guildId]
             );
 
@@ -95,6 +101,10 @@ class ReminderManager {
      * Supports multi-bot system - filters reminders by bot assignment
      */
     async checkReminders() {
+        // A slow pass (many due reminders, slow Discord) must not overlap the next 30s tick, or the
+        // same reminder gets picked up twice and sent twice before the first pass deletes it.
+        if (this.checking) return;
+        this.checking = true;
         try {
             // Build guild filter based on bot assignment to prevent race conditions
             let guildFilter = '';
@@ -127,12 +137,41 @@ class ReminderManager {
                 } catch (error) {
                     logger.error(`[ReminderManager] Failed to send reminder ${reminder.id}: ${error.message}`);
                 } finally {
-                    // Always delete the reminder after attempting to send
-                    await pool.execute('DELETE FROM reminders WHERE id = ?', [reminder.id]);
+                    await this.finishOccurrence(reminder);
                 }
             }
         } catch (error) {
             logger.error(`[ReminderManager] Error checking reminders: ${error.message}`);
+        } finally {
+            this.checking = false;
+        }
+    }
+
+    /**
+     * After a reminder fires: a recurring one (recurring_interval seconds, recurring_count total
+     * sends, -1 = forever) is pushed to its next time; everything else is deleted.
+     */
+    async finishOccurrence(reminder) {
+        try {
+            const interval = Number(reminder.recurring_interval) || 0;
+            const sent = (Number(reminder.occurrences_sent) || 0) + 1;
+            const total = reminder.recurring_count == null ? -1 : Number(reminder.recurring_count);
+            if (interval > 0 && (total < 0 || sent < total)) {
+                // Step past now so a reminder that was overdue by several intervals fires once, not in a burst.
+                const behindMs = Date.now() - new Date(reminder.remind_at).getTime();
+                const steps = Math.max(1, Math.floor(behindMs / (interval * 1000)) + 1);
+                const next = new Date(new Date(reminder.remind_at).getTime() + steps * interval * 1000);
+                await pool.execute(
+                    'UPDATE reminders SET remind_at = ?, next_occurrence = ?, occurrences_sent = ? WHERE id = ?',
+                    [next, next, sent, reminder.id]
+                );
+            } else {
+                await pool.execute('DELETE FROM reminders WHERE id = ?', [reminder.id]);
+            }
+        } catch (error) {
+            logger.error(`[ReminderManager] Failed to clear/reschedule reminder ${reminder.id}: ${error.message}`, {
+                guildId: reminder.guild_id
+            });
         }
     }
 
@@ -152,7 +191,7 @@ class ReminderManager {
             const embed = new EmbedBuilder()
                 .setColor('#5865F2')
                 .setTitle('🔔 Reminder!')
-                .setDescription(reminder.reminder_text)
+                .setDescription(reminder.message)
                 .setFooter({ text: `Set ${new Date(reminder.created_at).toLocaleString()}` })
                 .setTimestamp();
 
@@ -160,7 +199,8 @@ class ReminderManager {
                 await user.send({ embeds: [embed] });
                 logger.info(`[ReminderManager] Sent DM reminder to user ${user.id}`);
             } else {
-                const channel = await this.client.channels.fetch(reminder.channel_id).catch(() => null);
+                // Same client that owns the guild (multi-bot): the default bot may not be in it.
+                const channel = await guildClient.channels.fetch(reminder.channel_id).catch(() => null);
                 if (channel && channel.isTextBased()) {
                     await channel.send({ content: `${user}`, embeds: [embed] });
                     logger.info(`[ReminderManager] Sent channel reminder to ${channel.id}`);
@@ -180,7 +220,7 @@ class ReminderManager {
      */
     startScheduler(intervalSeconds = 30) {
         if (this.checkInterval) {
-            logger.warn('[ReminderManager] Scheduler already running');
+            logger.debug('[ReminderManager] Scheduler already running'); // expected: initReminderScheduler re-runs once custom bots load
             return;
         }
 

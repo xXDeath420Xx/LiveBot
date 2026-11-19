@@ -86,7 +86,7 @@ router.get('/slots', async (req, res) => {
                     [req.player.id]
                 );
 
-                logger.info('[Grow] Created missing slots', {
+                logger.debug('[Grow] Created missing slots', {
                     playerId: req.player.id,
                     created: slotsToCreate.length,
                     totalSlots: maxSlots
@@ -674,7 +674,7 @@ router.post('/remove', async (req, res) => {
             [playerId, slotNumber]
         );
 
-        logger.info('[Grow] Plant removed', {
+        logger.debug('[Grow] Plant removed', {
             playerId,
             slotNumber,
             strainId: slot.strain_id

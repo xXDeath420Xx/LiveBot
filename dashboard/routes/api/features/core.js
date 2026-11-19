@@ -6,7 +6,6 @@
 import express from 'express';
 import pool from '../../../../utils/db.js';
 import logger from '../../../../utils/logger.js';
-import socketService from '../../../services/SocketService.js';
 
 const router = express.Router({ mergeParams: true });
 
@@ -55,54 +54,11 @@ router.get('/', async (req, res) => {
     }
 });
 
-/**
- * PUT /api/guilds/:guildId/core
- * Update core guild settings
+/*
+ * There is no PUT /api/guilds/:guildId/core. The old one stored any timezone unchecked and wrote prefix '!' and
+ * language 'en' whenever they were left out; nothing called it (H-720). Core settings are saved by
+ * POST /manage/:guildId/update-core-settings (dashboard/server.js), which validates them.
  */
-router.put('/', async (req, res) => {
-    try {
-        const { guildId } = req.params;
-        const {
-            timezone,
-            prefix,
-            language,
-            bot_nickname,
-            embed_color
-        } = req.body;
-
-        // Update guild_settings
-        await pool.execute(`
-            INSERT INTO guild_settings (guild_id, timezone, prefix, language)
-            VALUES (?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE
-                timezone = VALUES(timezone),
-                prefix = VALUES(prefix),
-                language = VALUES(language)
-        `, [guildId, timezone || 'UTC', prefix || '!', language || 'en']);
-
-        // Update guild_config for appearance
-        if (bot_nickname !== undefined || embed_color !== undefined) {
-            await pool.execute(`
-                INSERT INTO guild_config (guild_id, bot_nickname, embed_color)
-                VALUES (?, ?, ?)
-                ON DUPLICATE KEY UPDATE
-                    bot_nickname = VALUES(bot_nickname),
-                    embed_color = VALUES(embed_color)
-            `, [guildId, bot_nickname || null, embed_color || '#a78bfa']);
-        }
-
-        // Notify connected clients
-        socketService.configSaved(guildId, 'core', { timezone, prefix, language });
-
-        res.json({
-            success: true,
-            message: 'Core settings updated successfully'
-        });
-    } catch (error) {
-        logger.error('[API Core PUT] Error:', error);
-        res.status(500).json({ error: 'Failed to update settings' });
-    }
-});
 
 /**
  * GET /api/guilds/:guildId/core/channels
@@ -149,7 +105,11 @@ router.get('/roles', async (req, res) => {
             }))
             .sort((a, b) => b.position - a.position);
 
-        res.json({ success: true, roles });
+        // The bot can only assign roles below its own highest role (and never managed ones);
+        // pickers use this to mark the rest "(above the bot)".
+        const botHighestPosition = guild.members?.me?.roles?.highest?.position ?? null;
+
+        res.json({ success: true, roles, botHighestPosition });
     } catch (error) {
         logger.error('[API Core Roles] Error:', error);
         res.status(500).json({ error: 'Failed to fetch roles' });
@@ -175,30 +135,29 @@ router.get('/stats', async (req, res) => {
             AND log_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
         `, [guildId]);
 
-        // Get member activity
-        const [memberStats] = await pool.execute(`
-            SELECT event_type, COUNT(*) as count
-            FROM member_logs
+        // Member joins/leaves: daily counts in activity_stats (member_logs was never written)
+        const [[memberStats]] = await pool.execute(`
+            SELECT COALESCE(SUM(members_joined), 0) AS joins, COALESCE(SUM(members_left), 0) AS leaves
+            FROM activity_stats
             WHERE guild_id = ?
-            AND timestamp >= DATE_SUB(NOW(), INTERVAL 30 DAY)
-            GROUP BY event_type
+            AND stat_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
         `, [guildId]);
 
-        // Get moderation stats
+        // Moderation stats by infraction type
         const [modStats] = await pool.execute(`
-            SELECT action, COUNT(*) as count
+            SELECT type AS action, COUNT(*) as count
             FROM infractions
             WHERE guild_id = ?
-            AND timestamp >= DATE_SUB(NOW(), INTERVAL 30 DAY)
-            GROUP BY action
+            AND created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+            GROUP BY type
         `, [guildId]);
 
         const stats = {
             members: {
                 total: guild.memberCount,
                 online: guild.members.cache.filter(m => m.presence?.status === 'online').size,
-                joins: memberStats.find(s => s.event_type === 'JOIN')?.count || 0,
-                leaves: memberStats.find(s => s.event_type === 'LEAVE')?.count || 0
+                joins: Number(memberStats?.joins) || 0,
+                leaves: Number(memberStats?.leaves) || 0
             },
             messages: {
                 total: messageStats[0]?.total_messages || 0,
@@ -234,11 +193,11 @@ router.post('/sync', async (req, res) => {
 
         // Update guild record
         await pool.execute(`
-            INSERT INTO guilds (guild_id, name, icon, member_count)
+            INSERT INTO guilds (guild_id, guild_name, icon_hash, member_count)
             VALUES (?, ?, ?, ?)
             ON DUPLICATE KEY UPDATE
-                name = VALUES(name),
-                icon = VALUES(icon),
+                guild_name = VALUES(guild_name),
+                icon_hash = VALUES(icon_hash),
                 member_count = VALUES(member_count)
         `, [guild.id, guild.name, guild.icon, guild.memberCount]);
 
@@ -297,6 +256,32 @@ router.post('/stat-displays', async (req, res) => {
 
         if (stat_type === 'twitch_followers' && !req.body.twitch_username) {
             return res.status(400).json({ error: 'Enter a Twitch username to track followers for' });
+        }
+
+        if (template !== undefined && template !== null && template !== '') {
+            if (typeof template !== 'string' || !template.includes('{value}')) {
+                return res.status(400).json({ error: 'The channel name must include {value}' });
+            }
+            if (template.length > 100) {
+                return res.status(400).json({ error: 'Channel names can be at most 100 characters' });
+            }
+        }
+        if (stat_type === 'twitch_followers' && !/^[A-Za-z0-9_]{3,25}$/.test(String(req.body.twitch_username).trim())) {
+            return res.status(400).json({ error: 'Enter a valid Twitch username (3 to 25 letters, numbers or underscores)' });
+        }
+        // Channels and roles must belong to this server, as the bot serving it sees it.
+        const sdGuild = global.botManager?.getClientForGuild?.(guildId)?.guilds.cache.get(guildId) || req.guildObject || null;
+        if (stat_type === 'role') {
+            const roleId = String(req.body.role_id);
+            if (!/^\d{15,25}$/.test(roleId) || (sdGuild && !sdGuild.roles.cache.has(roleId))) {
+                return res.status(400).json({ error: 'That role is not in this server' });
+            }
+        }
+        if (channel_id && channel_id !== 'create') {
+            const ch = /^\d{15,25}$/.test(String(channel_id)) && sdGuild ? sdGuild.channels.cache.get(String(channel_id)) : null;
+            if (!/^\d{15,25}$/.test(String(channel_id)) || (sdGuild && (!ch || !ch.isVoiceBased?.()))) {
+                return res.status(400).json({ error: 'Choose a voice channel in this server' });
+            }
         }
 
         const finalTemplate = template || `${stat_type.charAt(0).toUpperCase() + stat_type.slice(1)}: {value}`;
@@ -378,13 +363,19 @@ router.patch('/stat-displays/:id', async (req, res) => {
         const values = [];
 
         if (template !== undefined) {
-            if (!template.includes('{value}')) {
+            if (typeof template !== 'string' || !template.includes('{value}')) {
                 return res.status(400).json({ error: 'Template must include {value}' });
+            }
+            if (template.length > 100) {
+                return res.status(400).json({ error: 'Channel names can be at most 100 characters' });
             }
             updates.push('template = ?');
             values.push(template);
         }
         if (stat_type !== undefined) {
+            if (!['members', 'humans', 'bots', 'online', 'channels', 'roles', 'boosts', 'time', 'date', 'role', 'twitch_followers'].includes(stat_type)) {
+                return res.status(400).json({ error: 'Invalid stat type' });
+            }
             updates.push('stat_type = ?');
             values.push(stat_type);
         }

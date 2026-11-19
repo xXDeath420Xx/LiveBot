@@ -1,0 +1,227 @@
+<%
+// CertiFried Network Intel review surface.
+//
+// Pending DM-spam reports -> Confirm / False-positive buttons here write back via POST, same as the
+// per-guild staff channel buttons. The network blacklist is READ by every guild that enables
+// network_intel_enabled (set on the Security page, POST /manage/:id/security/network-intel); this
+// page is the only place to remove an entry if an auto-blacklist went wrong. Every section shows an
+// empty state rather than failing when its table is empty. Built on the settings-row kit
+// (cf-settings.css, partials/kit/); form actions are unchanged.
+
+const pending = locals.pendingReports || [];
+const recent = locals.recentReports || [];
+const blacklist = locals.blacklistEntries || [];
+const stats = locals.networkStats || {};
+const fmtTime = (t) => t ? new Date(t).toLocaleString() : 'Unknown';
+const fmtDelta = (s) => s == null ? 'Unknown'
+    : s < 60 ? `${s}s`
+    : s < 3600 ? `${Math.round(s/60)}m`
+    : s < 86400 ? `${Math.round(s/3600)}h`
+    : `${Math.round(s/86400)}d`;
+const sourceLabel = (s) => { const v = String(s || 'manual').replace(/_/g, ' '); return v.charAt(0).toUpperCase() + v.slice(1); };
+%>
+<style>
+    .ni-id { font-family: var(--cf-mono); font-size: var(--cf-text-xs); color: var(--cf-text-3); overflow-wrap: anywhere; }
+    .ni-name { font-weight: 500; color: var(--cf-text); overflow-wrap: anywhere; }
+    .ni-content { max-width: 26rem; color: var(--cf-text-2); overflow-wrap: anywhere; }
+    .ni-muted { font-size: var(--cf-text-sm); color: var(--cf-text-3); font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .ni-actions { display: flex; gap: var(--cf-2); flex-wrap: wrap; justify-content: flex-end; }
+    .ni-actions form { margin: 0; }
+    @media (max-width: 640px) {
+        .ni-content { max-width: none; }
+        .ni-actions { justify-content: flex-start; }
+    }
+</style>
+
+<div class="page-section" id="networkIntelPage">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-satellite-dish"></i>
+                <span>Network intel</span>
+            </div>
+            <div class="page-section-subtitle">Review your members' scam DM reports and fix wrong entries on the shared list.</div>
+        </div>
+    </div>
+
+    <%- include('../kit/_kpis', { label: 'Network at a glance', items: [
+        { label: 'Users tracked', value: stats.totalTracked || 0 },
+        { label: 'On the blacklist', value: stats.blacklistedCount || 0 },
+        { label: 'Reports waiting, all servers', value: stats.pendingReportsAllGuilds || 0 },
+        { label: 'Banned from 3+ servers', value: stats.bannedFromMany || 0 },
+    ] }) %>
+
+    <div class="cf-notice is-info">
+        <i class="fas fa-circle-info" aria-hidden="true"></i>
+        <div class="cf-notice-body">The numbers above cover every server the bot is in. Whether this server bans, kicks or flags people on the blacklist is set on <a href="/manage/<%= guild.id %>?page=security">Security</a>, under Network intel.</div>
+    </div>
+
+    <section class="cf-section" aria-labelledby="sec-ni-pending">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="sec-ni-pending">Reports waiting for review</h2>
+                <p class="cf-section-desc">Scam DMs your members reported with <code>/engage report-dm</code>. A report counts toward the network blacklist from the moment it is filed; marking it a false positive takes it out of the count, confirming keeps it in.</p>
+            </div>
+            <div class="cf-section-actions"><span class="cf-pill<%= pending.length ? ' is-warn' : '' %>"><%= pending.length %></span></div>
+        </header>
+        <div class="cf-rows">
+            <% if (!pending.length) { %>
+            <%- include('../kit/_state', { kind: 'empty', title: 'No reports waiting', text: 'New scam DM reports from your members show up here.', compact: false }) %>
+            <% } else { %>
+            <div class="cf-table-wrap">
+                <table class="cf-table cf-table--stack">
+                    <thead>
+                        <tr>
+                            <th scope="col">Reported</th>
+                            <th scope="col">By</th>
+                            <th scope="col">Message</th>
+                            <th scope="col">Join to DM</th>
+                            <th scope="col">Filed</th>
+                            <th scope="col"><span class="visually-hidden">Decide</span></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% pending.forEach(r => { %>
+                        <tr>
+                            <td data-label="Reported"><span class="ni-id"><%= r.reported_user_id %></span></td>
+                            <td data-label="By"><span class="ni-id"><%= r.reporter_user_id %></span></td>
+                            <td data-label="Message"><div class="ni-content"><%= r.content_preview || 'No text' %></div></td>
+                            <td data-label="Join to DM"><span class="ni-muted"><%= fmtDelta(r.join_delta_seconds) %></span></td>
+                            <td data-label="Filed"><span class="ni-muted"><%= fmtTime(r.created_at) %></span></td>
+                            <td class="cf-cell-end">
+                                <div class="ni-actions">
+                                    <form action="/manage/<%= guild.id %>/network-intel/report/<%= r.id %>/verdict" method="POST">
+                                        <input type="hidden" name="verdict" value="confirmed">
+                                        <button type="submit" class="btn btn-danger btn-sm">Confirm</button>
+                                    </form>
+                                    <form action="/manage/<%= guild.id %>/network-intel/report/<%= r.id %>/verdict" method="POST">
+                                        <input type="hidden" name="verdict" value="rejected">
+                                        <button type="submit" class="btn btn-secondary btn-sm">False positive</button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                        <% }) %>
+                    </tbody>
+                </table>
+            </div>
+            <% } %>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="sec-ni-blacklist">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="sec-ni-blacklist">Network blacklist</h2>
+                <p class="cf-section-desc">People the network agrees are commission spammers. Every server with network intel on acts on them when they join. Remove an entry the automatic blacklist got wrong.</p>
+            </div>
+            <div class="cf-section-actions"><span class="cf-pill"><%= blacklist.length %></span></div>
+        </header>
+        <div class="cf-rows">
+            <% if (!blacklist.length) { %>
+            <%- include('../kit/_state', { kind: 'empty', title: 'The blacklist is empty', text: 'People are added automatically once enough servers report the same account.', compact: false }) %>
+            <% } else { %>
+            <% if (blacklist.length > 15) { %>
+            <div class="cf-row cf-row--stack">
+                <div class="cf-search">
+                    <i class="fas fa-magnifying-glass" aria-hidden="true"></i>
+                    <label class="visually-hidden" for="niBlacklistSearch">Search the blacklist</label>
+                    <input type="search" id="niBlacklistSearch" class="form-control" placeholder="Search by name or user ID">
+                </div>
+            </div>
+            <% } %>
+            <div class="cf-table-wrap">
+                <table class="cf-table cf-table--stack">
+                    <thead>
+                        <tr>
+                            <th scope="col">User</th>
+                            <th scope="col">Source</th>
+                            <th scope="col">Servers joined / active / banned</th>
+                            <th scope="col">Reports</th>
+                            <th scope="col">Added</th>
+                            <th scope="col"><span class="visually-hidden">Action</span></th>
+                        </tr>
+                    </thead>
+                    <tbody id="niBlacklistBody">
+                        <% blacklist.forEach(b => { %>
+                        <tr>
+                            <td data-label="User">
+                                <% if (b.last_username) { %><div class="ni-name"><%= b.last_username %></div><% } %>
+                                <span class="ni-id"><%= b.user_id %></span>
+                            </td>
+                            <td data-label="Source"><span class="cf-pill"><%= sourceLabel(b.source) %></span></td>
+                            <td data-label="Joined / active / banned"><span class="ni-muted"><%= b.guilds_joined || 0 %> / <%= b.guilds_active || 0 %> / <%= b.guilds_banned_from || 0 %></span></td>
+                            <td data-label="Reports"><span class="ni-muted"><%= b.dm_reports_count || 0 %></span></td>
+                            <td data-label="Added"><span class="ni-muted"><%= fmtTime(b.blacklisted_at) %></span></td>
+                            <td class="cf-cell-end">
+                                <form action="/manage/<%= guild.id %>/network-intel/blacklist/<%= b.id %>/remove" method="POST" class="ni-remove">
+                                    <button type="submit" class="btn btn-secondary btn-sm">Remove</button>
+                                </form>
+                            </td>
+                        </tr>
+                        <% }) %>
+                    </tbody>
+                </table>
+            </div>
+            <% } %>
+        </div>
+    </section>
+
+    <% if (recent.length) { %>
+    <section class="cf-section" aria-labelledby="sec-ni-recent">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="sec-ni-recent">Recently reviewed</h2>
+                <p class="cf-section-desc">Reports your staff already decided. Confirmed ones stay in the network tally.</p>
+            </div>
+            <div class="cf-section-actions"><span class="cf-pill"><%= recent.length %></span></div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-table-wrap">
+                <table class="cf-table cf-table--stack">
+                    <thead>
+                        <tr>
+                            <th scope="col">Reported</th>
+                            <th scope="col">Message</th>
+                            <th scope="col">Verdict</th>
+                            <th scope="col">Reviewed</th>
+                            <th scope="col">Reviewer</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <% recent.forEach(r => { const confirmed = r.verdict === 'confirmed'; %>
+                        <tr>
+                            <td data-label="Reported"><span class="ni-id"><%= r.reported_user_id %></span></td>
+                            <td data-label="Message"><div class="ni-content"><%= r.content_preview || 'No text' %></div></td>
+                            <td data-label="Verdict">
+                                <span class="cf-pill <%= confirmed ? 'is-bad' : '' %>"><%= confirmed ? 'Confirmed' : (r.verdict === 'rejected' ? 'False positive' : (r.verdict || 'Unknown')) %><%= r.contributed_to_blacklist ? ', blacklisted' : '' %></span>
+                            </td>
+                            <td data-label="Reviewed"><span class="ni-muted"><%= fmtTime(r.reviewed_at) %></span></td>
+                            <td data-label="Reviewer"><span class="ni-id"><%= r.reviewed_by || 'Unknown' %></span></td>
+                        </tr>
+                        <% }) %>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+    <% } %>
+</div>
+
+<script>
+(function () {
+    const page = document.getElementById('networkIntelPage');
+    if (!page) return;
+    page.querySelectorAll('form.ni-remove').forEach(form => form.addEventListener('submit', (e) => {
+        if (!confirm('Remove this user from the network blacklist? Every server will stop acting on them.')) e.preventDefault();
+    }));
+    const search = document.getElementById('niBlacklistSearch');
+    if (search) {
+        const rows = Array.from(document.querySelectorAll('#niBlacklistBody tr'));
+        search.addEventListener('input', () => {
+            const q = search.value.trim().toLowerCase();
+            rows.forEach(tr => { tr.hidden = !!q && !tr.textContent.toLowerCase().includes(q); });
+        });
+    }
+})();
+</script>

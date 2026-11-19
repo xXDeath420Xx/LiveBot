@@ -1,0 +1,125 @@
+/*
+ * Places for the !dropkick chat command.
+ *
+ * Combined as "<from> <into>", so the two lists multiply: the numbers below give
+ * thousands of distinct results before anyone sees a repeat. Edit either list freely —
+ * nothing else needs changing, and entries are used verbatim.
+ *
+ * House style: cartoon slapstick only. No slurs, no sexual content, no real people,
+ * nothing that reads as genuine violence — these land in Twitch chat under their ToS.
+ */
+
+export const FROM = [
+    'from the top rope',
+    'from the roof of a Waffle House',
+    'off the back of a moving Zamboni',
+    'from the nosebleed seats',
+    'off a rickety pirate ship',
+    'from the top of a very tall ladder',
+    'off the edge of a bouncy castle',
+    'from inside a ball pit',
+    'off the high dive',
+    'from the top bunk',
+    'out of a perfectly good hot air balloon',
+    'from the second floor of an IKEA',
+    'off a parade float',
+    'from the back of a shopping trolley',
+    'off the roof of a double-decker bus',
+    'from the top of a climbing wall',
+    'out of a bouncy inflatable slide',
+    'from the diving board of an empty pool',
+    'off the lip of a skate ramp',
+    'from the balcony of a community theatre',
+    'out of a trebuchet',
+    'from the top of a bouncy haystack',
+    'off the deck of a canal boat',
+    'from a poorly assembled bunk bed',
+    'off the roof of a garden shed',
+    'from the top of a very steep escalator',
+    'out of the drive-thru window',
+    'from inside a wheelie bin',
+    'off the back of a hay wagon',
+    'from the top of a lighthouse',
+    'off a wobbly stepladder',
+    'from the upper deck of a ferry',
+    'out of a slingshot the size of a barn',
+    'from the top of a bouncy trampoline park',
+    'off the edge of a frozen pond',
+    'from the roof of a bowling alley',
+    'out of a comically large cannon',
+    'from the top of a haunted house queue',
+    'off the back of a tandem bicycle',
+    'from a treehouse with questionable engineering',
+    'off the roof of a laundromat',
+    'from the top of a water slide',
+    'out of the back of a bouncy van',
+    'from the rafters of a barn',
+    'off a very tall stack of pancakes',
+    'from the top of a snowy hill',
+    'out of a revolving door',
+    'from the peak of a bouncy inflatable volcano',
+    'off the edge of a very long pier',
+    'from the top of a corn maze watchtower',
+];
+
+export const INTO = [
+    'into a vat of nacho cheese',
+    'into next Tuesday',
+    'into a pile of unfolded laundry',
+    'into the shadow realm',
+    'into a kiddie pool full of pudding',
+    'into a bouncy castle',
+    'into the frozen food aisle',
+    'into a haystack',
+    'into low Earth orbit',
+    'into a bin full of packing peanuts',
+    'into the deep end',
+    'into a pit of foam blocks',
+    'into a stack of cardboard boxes',
+    'into a snowdrift',
+    'into a giant birthday cake',
+    'into the ball pit at a family restaurant',
+    'into a pile of autumn leaves',
+    'into a bouncy inflatable dinosaur',
+    'into last week',
+    'into a swimming pool full of jelly',
+    'into a mountain of bubble wrap',
+    'into a hedge maze',
+    'into the lost property bin',
+    'into a trampoline factory',
+    'into a barrel of pickles',
+    'into a giant beanbag',
+    'into a fountain in the town square',
+    'into the returns queue at a garden centre',
+    'into a wheelbarrow full of mashed potato',
+    'into a tent that was not pitched properly',
+    'into a paddling pool of custard',
+    'into a room full of squeaky toys',
+    'into a bouncy inflatable maze',
+    'into a lorry full of mattresses',
+    'into a pile of beach balls',
+    'into a cornfield',
+    'into the middle of a conga line',
+    'into a canal in slow motion',
+    'into a giant sock drawer',
+    'into a warehouse of pool noodles',
+    'into a heap of soggy cereal',
+    'into a skip full of sofa cushions',
+    'into a puddle deeper than it looked',
+    'into a vat of glitter',
+    'into a bakery window display',
+    'into the middle of a knitting circle',
+    'into a lake made entirely of soup',
+    'into a bouncy castle that was already full',
+    'into a pile of laundry that was clean until now',
+    'into the sunset, dramatically',
+];
+
+/** One random "<from> <into>" phrase. */
+export function randomDropkick() {
+    const from = FROM[Math.floor(Math.random() * FROM.length)];
+    const into = INTO[Math.floor(Math.random() * INTO.length)];
+    return `${from} ${into}`;
+}
+
+export default { FROM, INTO, randomDropkick };

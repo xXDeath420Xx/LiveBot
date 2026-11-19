@@ -67,6 +67,32 @@
     --gradient-purple: var(--gradient-primary);
 }
 
+/* Theme hooks. cf-ui.css re-points the shared names above (--bg-*, --text-*, --border-color, --accent-*) in
+   every theme; these are the rest. Dark keeps the values above; Light and Sand take the tokens. */
+:root {
+    --udt-ink: #ffffff;
+    --udt-well: #000000;
+    --udt-bar: #0b0f11;
+}
+:root:is([data-theme="light"], [data-theme="sand"]) {
+    --udt-ink: var(--cf-text);
+    --udt-well: var(--cf-inset);
+    --udt-bar: var(--cf-surface);
+    --bg-elevated: var(--cf-surface-2);
+    --border-color-hover: var(--cf-border-strong);
+    --text-disabled: color-mix(in srgb, var(--cf-text) 40%, transparent);
+    --accent-purple-light: var(--cf-accent-hover);
+    --shadow-sm: var(--cf-shadow);
+    --shadow-md: var(--cf-shadow);
+    --shadow-lg: var(--cf-shadow-pop);
+    --shadow-xl: var(--cf-shadow-pop);
+}
+:root:is([data-theme="light"], [data-theme="sand"]) body,
+:root:is([data-theme="light"], [data-theme="sand"]) {
+    color-scheme: light;
+}
+:root:is([data-theme="light"], [data-theme="sand"]) .btn-close { filter: none; }
+
 /* ============================================
    BASE STYLES
    ============================================ */
@@ -171,7 +197,7 @@ small, .small {
     left: 0;
     right: 0;
     z-index: 1000;
-    background: rgba(11, 15, 17, 0.95);
+    background: color-mix(in srgb, var(--udt-bar) 95%, transparent);
     backdrop-filter: blur(20px);
     -webkit-backdrop-filter: blur(20px);
     border-bottom: 1px solid var(--border-color);
@@ -513,7 +539,7 @@ input[type="url"],
 input[type="search"],
 textarea,
 select {
-    background: rgba(0, 0, 0, 0.4) !important;
+    background: color-mix(in srgb, var(--udt-well) 40%, transparent) !important;
     border: 1px solid var(--border-color) !important;
     border-radius: 10px;
     color: var(--text-primary) !important;
@@ -527,7 +553,7 @@ select {
 input:focus,
 textarea:focus,
 select:focus {
-    background: rgba(0, 0, 0, 0.5) !important;
+    background: color-mix(in srgb, var(--udt-well) 50%, transparent) !important;
     border-color: var(--accent-purple) !important;
     box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.2) !important;
     color: var(--text-primary) !important;
@@ -544,7 +570,7 @@ textarea::placeholder {
 .form-select:disabled,
 input:disabled,
 textarea:disabled {
-    background: rgba(255, 255, 255, 0.02) !important;
+    background: color-mix(in srgb, var(--udt-ink) 2%, transparent) !important;
     color: var(--text-disabled) !important;
     cursor: not-allowed;
 }
@@ -570,7 +596,7 @@ select option {
 
 /* Form Check (Checkboxes & Radio) */
 .form-check-input {
-    background-color: rgba(0, 0, 0, 0.4);
+    background-color: color-mix(in srgb, var(--udt-well) 40%, transparent);
     border-color: var(--border-color);
 }
 
@@ -590,7 +616,7 @@ select option {
 
 /* Input Groups */
 .input-group-text {
-    background: rgba(0, 0, 0, 0.3);
+    background: color-mix(in srgb, var(--udt-well) 30%, transparent);
     border: 1px solid var(--border-color);
     color: var(--text-secondary);
 }
@@ -699,7 +725,7 @@ body.modal-open {
 .modal textarea,
 .modal input,
 .modal select {
-    background: rgba(0, 0, 0, 0.5) !important;
+    background: color-mix(in srgb, var(--udt-well) 50%, transparent) !important;
     border: 1px solid var(--border-color);
     color: var(--text-primary) !important;
 }
@@ -708,7 +734,7 @@ body.modal-open {
 .modal .form-select:focus,
 .modal input:focus,
 .modal textarea:focus {
-    background: rgba(0, 0, 0, 0.6) !important;
+    background: color-mix(in srgb, var(--udt-well) 60%, transparent) !important;
     border-color: var(--accent-purple);
     box-shadow: 0 0 0 3px rgba(167, 139, 250, 0.2);
 }
@@ -870,7 +896,7 @@ body.modal-open {
    ============================================ */
 
 .progress {
-    background: rgba(255, 255, 255, 0.05);
+    background: color-mix(in srgb, var(--udt-ink) 5%, transparent);
     border-radius: 10px;
     height: 10px;
     overflow: hidden;
@@ -976,7 +1002,7 @@ body.modal-open {
 }
 
 ::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.02);
+    background: color-mix(in srgb, var(--udt-ink) 2%, transparent);
 }
 
 ::-webkit-scrollbar-thumb {

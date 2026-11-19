@@ -144,7 +144,11 @@ export class KickBot {
             this.socket.on('open', () => {
                 logger.info('[KickBot] WebSocket connected');
                 this.isConnected = true;
-                this.reconnectAttempts = 0;
+                // Only reset the backoff once the connection has proved stable; resetting on
+                // every open let a socket that is rejected right after connecting retry every
+                // 5 s forever (5,894 times on 2026-11-18).
+                clearTimeout(this.stableTimer);
+                this.stableTimer = setTimeout(() => { this.reconnectAttempts = 0; }, 60_000);
 
                 // Start ping interval
                 this.pingInterval = setInterval(() => {
@@ -159,9 +163,11 @@ export class KickBot {
             });
 
             this.socket.on('close', () => {
-                logger.warn('[KickBot] WebSocket disconnected');
                 this.isConnected = false;
                 this.clearPingInterval();
+                clearTimeout(this.stableTimer);
+                if (this.retired) return; // Kick rejected the app key; see handleSocketMessage
+                logger.warn('[KickBot] WebSocket disconnected');
                 this.attemptReconnect();
             });
 
@@ -216,8 +222,10 @@ export class KickBot {
             return;
         }
 
+        if (this.retired) return;
         this.reconnectAttempts++;
-        const delay = this.reconnectDelay * this.reconnectAttempts;
+        // Exponential backoff, capped at 10 minutes.
+        const delay = Math.min(this.reconnectDelay * 2 ** (this.reconnectAttempts - 1), 10 * 60_000);
 
         logger.info(`[KickBot] Reconnecting in ${delay / 1000}s (attempt ${this.reconnectAttempts})`);
 
@@ -264,6 +272,20 @@ export class KickBot {
             }
 
             switch (message.event) {
+                case 'pusher:error': {
+                    // 4001 = "App key not in this cluster": Kick has retired the key, so every
+                    // reconnect will fail the same way. Chat now comes from the official
+                    // chat.message.sent webhook (kick-events.js); stop the socket for good.
+                    let code = null;
+                    try { code = (typeof message.data === 'string' ? JSON.parse(message.data) : message.data)?.code; } catch { /* ignore */ }
+                    if (code === 4001 || code === 4003 || code === 4005) {
+                        if (!this.retired) logger.warn('[KickBot] Pusher app key rejected by Kick - chat socket retired; chat comes from the chat.message.sent webhook', { code });
+                        this.retired = true;
+                        try { this.socket?.close(); } catch { /* ignore */ }
+                    }
+                    break;
+                }
+
                 case 'pusher:connection_established':
                     logger.info('[KickBot] Pusher connection established');
                     break;
@@ -420,7 +442,24 @@ export class KickBot {
 
             if (!response.ok) {
                 const error = await response.text();
-                logger.error('[KickBot] Failed to refresh token', { status: response.status, error });
+
+                // `invalid_grant` means Kick has revoked or expired this refresh token —
+                // the user disconnected the app, or it sat unused past its lifetime.
+                // Retrying can never succeed, so mark the connection and stop: the
+                // scheduler skips needs_relink rows, which is what turns a permanent
+                // hourly error into a one-time actionable state.
+                const permanent = /invalid_grant/i.test(error) || response.status === 400;
+                if (permanent) {
+                    await pool.execute(
+                        'UPDATE tokes_platform_connections SET needs_relink = 1 WHERE id = ?',
+                        [connectionId]
+                    ).catch(() => {});
+                    logger.warn('[KickBot] Refresh token rejected by Kick — connection needs to be re-linked', {
+                        connectionId, status: response.status
+                    });
+                } else {
+                    logger.error('[KickBot] Failed to refresh token', { status: response.status, error });
+                }
                 return null;
             }
 
@@ -436,7 +475,8 @@ export class KickBot {
             // Update database with new tokens
             await pool.execute(`
                 UPDATE tokes_platform_connections
-                SET access_token = ?, refresh_token = ?, expires_at = ?, token_updated_at = NOW()
+                SET access_token = ?, refresh_token = ?, expires_at = ?, token_updated_at = NOW(),
+                    needs_relink = 0
                 WHERE id = ?
             `, [
                 encryptToken(data.access_token),

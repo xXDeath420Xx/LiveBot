@@ -90,28 +90,24 @@ async function fetchGuildStats(guildId) {
             stats.messages.today = messageStats[0].today || 0;
         }
 
-        // Member stats (last 30 days)
-        const [memberStats] = await pool.execute(`
-            SELECT event_type, COUNT(*) as count
-            FROM member_logs
+        // Member stats (last 30 days): daily counts in activity_stats (member_logs was never written)
+        const [[memberStats]] = await pool.execute(`
+            SELECT COALESCE(SUM(members_joined), 0) AS joins, COALESCE(SUM(members_left), 0) AS leaves
+            FROM activity_stats
             WHERE guild_id = ?
-            AND timestamp >= DATE_SUB(NOW(), INTERVAL 30 DAY)
-            GROUP BY event_type
+            AND stat_date >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
         `, [guildId]);
-
-        memberStats.forEach(stat => {
-            if (stat.event_type === 'JOIN') stats.members.joins = stat.count;
-            if (stat.event_type === 'LEAVE') stats.members.leaves = stat.count;
-        });
+        stats.members.joins = Number(memberStats?.joins) || 0;
+        stats.members.leaves = Number(memberStats?.leaves) || 0;
 
         // Moderation stats
         const [modStats] = await pool.execute(`
             SELECT
                 COUNT(*) as total,
-                SUM(CASE WHEN DATE(timestamp) = CURDATE() THEN 1 ELSE 0 END) as today
+                SUM(CASE WHEN DATE(created_at) = CURDATE() THEN 1 ELSE 0 END) as today
             FROM infractions
             WHERE guild_id = ?
-            AND timestamp >= DATE_SUB(NOW(), INTERVAL 30 DAY)
+            AND created_at >= DATE_SUB(NOW(), INTERVAL 30 DAY)
         `, [guildId]);
 
         if (modStats[0]) {

@@ -2,6 +2,7 @@ import { Events, EmbedBuilder } from 'discord.js';
 import logger from '../utils/logger.js';
 import { sendLogEmbed, saveAuditLog } from '../core/log-manager.js';
 import { shouldIgnoreGuild } from '../utils/custom-bot-check.js';
+import { themeColor } from '../core/guild-theme.js';
 
 export default {
     name: Events.AutoModerationRuleDelete,
@@ -19,7 +20,7 @@ export default {
             });
 
             const embed = new EmbedBuilder()
-                .setColor(0xED4245)
+                .setColor(themeColor(guild?.id, 'danger'))
                 .setTitle('🛡️ AutoMod Rule Deleted')
                 .setDescription(`AutoMod rule has been deleted`)
                 .addFields(

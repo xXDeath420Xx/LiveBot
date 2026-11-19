@@ -1,5 +1,8 @@
 import pool from '../utils/db.js';
 import logger from '../utils/logger.js';
+import RPGConditionManager from './rpg-condition-manager.js';
+import RPGSpellManager from './rpg-spell-manager.js';
+import RPGLeaderboardManager from './rpg-leaderboard-manager.js';
 
 /**
  * RPG Combat Manager - Handles turn-based combat
@@ -8,6 +11,64 @@ class RPGCombatManager {
     constructor(client, characterManager) {
         this.client = client;
         this.characterManager = characterManager;
+    }
+
+    /**
+     * Combined mechanical effects of the character's active conditions.
+     * Never throws (conditions must not break combat).
+     * @private
+     */
+    async _getConditionEffects(characterId) {
+        try {
+            return await RPGConditionManager.getActiveEffects(characterId);
+        } catch (err) {
+            logger.error(`[RPGCombatManager] Could not read conditions for ${characterId}: ${err.message}`);
+            return {};
+        }
+    }
+
+    /**
+     * Rage damage bonus by level (D&D 5e: +2, +3 at 9, +4 at 16).
+     * @private
+     */
+    _rageDamageBonus(level) {
+        const lvl = Number(level) || 1;
+        return lvl >= 16 ? 4 : lvl >= 9 ? 3 : 2;
+    }
+
+    /**
+     * Apply incoming-damage condition effects (resistance halves, min 1).
+     * @private
+     */
+    _applyIncomingDamageEffects(damage, effects, notes) {
+        if (effects.resistance_physical || effects.resistance_all) {
+            notes.push('🛡️ Resistance halves the blow.');
+            return Math.max(1, Math.floor(damage / 2));
+        }
+        return damage;
+    }
+
+    /**
+     * End-of-round bookkeeping for the character: tick condition durations and,
+     * if they took damage while concentrating, roll the concentration save.
+     * Never throws. Appends player-facing notes.
+     * @private
+     */
+    async _endOfRound(characterId, damageTaken, notes) {
+        try {
+            const expired = await RPGConditionManager.processEndOfTurn(characterId);
+            for (const name of expired) notes.push(`⌛ ${name} has worn off.`);
+        } catch (err) {
+            logger.error(`[RPGCombatManager] Condition tick failed for ${characterId}: ${err.message}`);
+        }
+        if (damageTaken > 0) {
+            try {
+                const check = await RPGSpellManager.concentrationCheck(characterId, damageTaken);
+                if (check && check.concentrating) notes.push(`🧠 ${check.message} (CON ${check.total} vs DC ${check.dc})`);
+            } catch (err) {
+                logger.error(`[RPGCombatManager] Concentration check failed for ${characterId}: ${err.message}`);
+            }
+        }
     }
 
     /**
@@ -97,7 +158,7 @@ class RPGCombatManager {
     async getActiveBattle(characterId) {
         try {
             const [battles] = await pool.execute(
-                `SELECT b.*, e.enemy_name, e.damage as enemy_damage, c.character_name
+                `SELECT b.*, e.enemy_name, e.damage as enemy_damage, c.character_name, c.level as character_level
                  FROM dnd_battles b
                  JOIN dnd_enemies e ON b.enemy_id = e.enemy_id
                  JOIN dnd_characters c ON b.character_id = c.character_id
@@ -120,7 +181,8 @@ class RPGCombatManager {
                     id: characterId,
                     name: battle.character_name,
                     health: battle.character_health,
-                    damage: characterDamage
+                    damage: characterDamage,
+                    level: battle.character_level
                 },
                 enemy: {
                     id: battle.enemy_id,
@@ -149,12 +211,23 @@ class RPGCombatManager {
                 throw new Error('No active battle found');
             }
 
+            const notes = [];
+            const effects = await this._getConditionEffects(characterId);
+
             // Calculate damage with some randomness (80-120% of base damage)
             const damageMultiplier = 0.8 + Math.random() * 0.4;
-            const damage = Math.floor(battle.character.damage * damageMultiplier);
+            let damage = Math.floor(battle.character.damage * damageMultiplier);
 
-            // Apply damage to enemy
+            // Raging: melee damage bonus
+            if (effects.rage_damage_bonus) {
+                const bonus = this._rageDamageBonus(battle.character.level);
+                damage += bonus;
+                notes.push(`😤 Rage adds **+${bonus}** damage.`);
+            }
+
+            // Apply damage to enemy (track only what actually landed)
             const newEnemyHealth = Math.max(0, battle.enemy.health - damage);
+            RPGLeaderboardManager.trackStat(characterId, 'total_damage_dealt', battle.enemy.health - newEnemyHealth);
 
             await pool.execute(
                 'UPDATE dnd_battles SET enemy_health = ?, turn = turn + 1 WHERE battle_id = ?',
@@ -172,7 +245,7 @@ class RPGCombatManager {
 
             // Get character's defense
             const defense = await this.characterManager.calculateDefense(characterId);
-            const actualDamage = Math.max(1, enemyDamage - defense);
+            const actualDamage = this._applyIncomingDamageEffects(Math.max(1, enemyDamage - defense), effects, notes);
 
             const newCharacterHealth = Math.max(0, battle.character.health - actualDamage);
 
@@ -186,13 +259,16 @@ class RPGCombatManager {
                 return await this.endBattle(battle.battleId, 'defeat');
             }
 
+            await this._endOfRound(characterId, actualDamage, notes);
+
             return {
                 status: 'ongoing',
                 playerDamage: damage,
                 enemyDamage: actualDamage,
                 characterHealth: newCharacterHealth,
                 enemyHealth: newEnemyHealth,
-                turn: battle.turn + 1
+                turn: battle.turn + 1,
+                notes
             };
 
         } catch (error) {
@@ -253,10 +329,12 @@ class RPGCombatManager {
             }
 
             // Enemy gets a turn
+            const notes = [];
+            const effects = await this._getConditionEffects(characterId);
             const enemyDamageMultiplier = 0.8 + Math.random() * 0.4;
             const enemyDamage = Math.floor(battle.enemy.damage * enemyDamageMultiplier);
             const defense = await this.characterManager.calculateDefense(characterId);
-            const actualDamage = Math.max(1, enemyDamage - defense);
+            const actualDamage = this._applyIncomingDamageEffects(Math.max(1, enemyDamage - defense), effects, notes);
 
             const [currentBattle] = await pool.execute(
                 'SELECT character_health FROM dnd_battles WHERE battle_id = ?',
@@ -275,6 +353,8 @@ class RPGCombatManager {
                 return await this.endBattle(battle.battleId, 'defeat');
             }
 
+            await this._endOfRound(characterId, actualDamage, notes);
+
             return {
                 status: 'ongoing',
                 itemName: item.item_name,
@@ -282,7 +362,8 @@ class RPGCombatManager {
                 manaAmount,
                 enemyDamage: actualDamage,
                 characterHealth: newCharacterHealth,
-                turn: battle.turn + 1
+                turn: battle.turn + 1,
+                notes
             };
 
         } catch (error) {
@@ -311,6 +392,13 @@ class RPGCombatManager {
                     [battle.battleId]
                 );
 
+                // Battle-bound conditions (e.g. Rage) end with the battle
+                try {
+                    await RPGConditionManager.clearCombatConditions(characterId, battle.battleId);
+                } catch (err) {
+                    logger.error(`[RPGCombatManager] Failed to clear combat conditions: ${err.message}`);
+                }
+
                 logger.info(`[RPGCombatManager] Character ${characterId} fled from battle ${battle.battleId}`);
 
                 return {
@@ -319,10 +407,12 @@ class RPGCombatManager {
                 };
             } else {
                 // Failed to flee, enemy attacks
+                const notes = [];
+                const effects = await this._getConditionEffects(characterId);
                 const enemyDamageMultiplier = 0.8 + Math.random() * 0.4;
                 const enemyDamage = Math.floor(battle.enemy.damage * enemyDamageMultiplier);
                 const defense = await this.characterManager.calculateDefense(characterId);
-                const actualDamage = Math.max(1, enemyDamage - defense);
+                const actualDamage = this._applyIncomingDamageEffects(Math.max(1, enemyDamage - defense), effects, notes);
 
                 const newCharacterHealth = Math.max(0, battle.character.health - actualDamage);
 
@@ -336,12 +426,15 @@ class RPGCombatManager {
                     return await this.endBattle(battle.battleId, 'defeat');
                 }
 
+                await this._endOfRound(characterId, actualDamage, notes);
+
                 return {
                     status: 'ongoing',
                     success: false,
                     enemyDamage: actualDamage,
                     characterHealth: newCharacterHealth,
-                    turn: battle.turn + 1
+                    turn: battle.turn + 1,
+                    notes
                 };
             }
 
@@ -358,7 +451,7 @@ class RPGCombatManager {
         try {
             // Get battle info
             const [battles] = await pool.execute(
-                `SELECT b.*, e.exp_reward, e.gold_reward, c.character_id
+                `SELECT b.*, e.exp_reward, e.gold_reward, e.enemy_name, c.character_id
                  FROM dnd_battles b
                  JOIN dnd_enemies e ON b.enemy_id = e.enemy_id
                  JOIN dnd_characters c ON b.character_id = c.character_id
@@ -388,6 +481,13 @@ class RPGCombatManager {
                 [battle.character_health, battle.character_id]
             );
 
+            // Battle-bound conditions (e.g. Rage) end with the battle
+            try {
+                await RPGConditionManager.clearCombatConditions(battle.character_id, battleId);
+            } catch (err) {
+                logger.error(`[RPGCombatManager] Failed to clear combat conditions: ${err.message}`);
+            }
+
             let rewards = {
                 exp: 0,
                 gold: 0,
@@ -413,6 +513,12 @@ class RPGCombatManager {
                         rewards.newLevel = expResult.newLevel;
                     }
                 }
+
+                // Stats + achievements (fire-and-forget; never blocks the result)
+                RPGLeaderboardManager.trackStat(battle.character_id, 'total_monsters_killed', 1);
+                RPGLeaderboardManager.trackKill(battle.character_id, battle.enemy_name);
+            } else if (dbStatus === 'lost') {
+                RPGLeaderboardManager.trackStat(battle.character_id, 'deaths', 1);
             }
 
             logger.info(`[RPGCombatManager] Battle ${battleId} ended with result: ${result}`);

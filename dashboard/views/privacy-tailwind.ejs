@@ -1,162 +1,70 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Privacy Policy - CertiFried MultiTool</title>
-    <meta name="description" content="Privacy Policy for CertiFried MultiTool Discord bot. Learn how we handle your data.">
-    <meta name="theme-color" content="#a78bfa">
-    <meta property="og:title" content="Privacy Policy - CertiFried MultiTool">
-    <meta property="og:description" content="Privacy Policy for CertiFried MultiTool Discord bot.">
-    <meta property="og:image" content="/images/CertiFried.png">
-    <link rel="icon" type="image/png" href="/images/CertiFried.png">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<%- include('partials/site-head', { title: 'Privacy Policy · CertiFried', description: 'What the CertiFried Discord bot, dashboard, stream bot, song requests and CertiFried Studio store, for how long, and how to export or delete it.', path: '/privacy' }) %>
     <style>
-        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
-        :root {
-            --bg-primary: #0b0f11;
-            --bg-card: rgba(255, 255, 255, 0.03);
-            --border-color: rgba(255, 255, 255, 0.08);
-            --text-primary: #ffffff;
-            --text-secondary: rgba(255, 255, 255, 0.7);
-            --text-muted: rgba(255, 255, 255, 0.5);
-            --accent-purple: #a78bfa;
-            --accent-blue: #60a5fa;
-            --accent-green: #34d399;
+        /* Legal text: the old cards become plain sections; one notice style. */
+        .legal .notice-box, .legal .highlight-box {
+            margin: 0 0 var(--cf-8); padding: var(--cf-3) var(--cf-4); border: 1px solid var(--cf-border);
+            border-left: 3px solid var(--cf-accent-line); border-radius: var(--cf-radius); background: var(--cf-surface);
+            color: var(--cf-text-2); font-size: var(--cf-text-sm);
         }
-        html { scroll-behavior: smooth; }
-        body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: var(--bg-primary); color: var(--text-primary); min-height: 100vh; line-height: 1.7; }
-        .bg-effects { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 0; overflow: hidden; }
-        .orb { position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.3; animation: float 20s ease-in-out infinite; }
-        .orb-1 { width: 500px; height: 500px; background: linear-gradient(135deg, #10b981, #34d399); top: -10%; right: -10%; }
-        .orb-2 { width: 400px; height: 400px; background: linear-gradient(135deg, #7c3aed, #a78bfa); bottom: 10%; left: -10%; animation-delay: -10s; }
-        @keyframes float { 0%, 100% { transform: translate(0, 0); } 50% { transform: translate(30px, 30px); } }
-        .container { width: 100%; max-width: 900px; margin: 0 auto; padding: 0 1.5rem; }
-        .navbar { position: fixed; top: 0; left: 0; right: 0; z-index: 1000; padding: 1rem 0; background: rgba(11, 15, 17, 0.9); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); border-bottom: 1px solid var(--border-color); }
-        .navbar-container { max-width: 1400px; margin: 0 auto; padding: 0 1.5rem; display: flex; align-items: center; justify-content: space-between; }
-        .navbar-brand { display: flex; align-items: center; gap: 0.75rem; text-decoration: none; color: var(--text-primary); font-weight: 700; }
-        .navbar-logo { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 2px solid var(--accent-purple); }
-        .navbar-links { display: flex; align-items: center; gap: 1.5rem; }
-        .navbar-links a { color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; font-weight: 500; transition: color 0.2s; }
-        .navbar-links a:hover { color: var(--text-primary); }
-        .nav-cta { padding: 0.5rem 1rem; background: linear-gradient(135deg, var(--accent-purple), var(--accent-blue)); color: white !important; border-radius: 8px; font-weight: 600; font-size: 0.85rem; }
-        main { position: relative; z-index: 1; padding: 120px 0 4rem; }
-        .page-header { text-align: center; margin-bottom: 3rem; }
-        .page-header h1 { font-size: clamp(2rem, 4vw, 2.75rem); font-weight: 800; background: linear-gradient(135deg, var(--text-primary), var(--accent-green)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin-bottom: 0.75rem; }
-        .page-header .updated { color: var(--text-muted); font-size: 0.9rem; margin-bottom: 1rem; }
-        .privacy-badge { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; background: rgba(52, 211, 153, 0.15); color: var(--accent-green); border-radius: 50px; font-size: 0.85rem; font-weight: 600; }
-        .notice-box { background: linear-gradient(135deg, rgba(52, 211, 153, 0.1), rgba(96, 165, 250, 0.1)); border: 1px solid rgba(52, 211, 153, 0.3); border-left: 4px solid var(--accent-green); border-radius: 12px; padding: 1.25rem 1.5rem; margin-bottom: 2.5rem; display: flex; align-items: center; gap: 1rem; }
-        .notice-box svg { width: 24px; height: 24px; color: var(--accent-green); flex-shrink: 0; }
-        .notice-box p { color: var(--text-secondary); font-size: 0.95rem; }
-        .legal-section { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; padding: 2rem; margin-bottom: 1.5rem; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); transition: border-color 0.3s; }
-        .legal-section:hover { border-color: rgba(52, 211, 153, 0.3); }
-        .legal-section h2 { font-size: 1.35rem; font-weight: 700; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.75rem; }
-        .legal-section h2 svg { width: 22px; height: 22px; color: var(--accent-green); }
-        .legal-section h3 { font-size: 1.1rem; font-weight: 600; margin: 1.5rem 0 0.75rem; color: var(--text-primary); }
-        .legal-section p { color: var(--text-secondary); margin-bottom: 1rem; }
-        .legal-section ul, .legal-section ol { margin-left: 1.5rem; margin-bottom: 1rem; color: var(--text-secondary); }
-        .legal-section li { margin-bottom: 0.5rem; }
-        .legal-section a { color: var(--accent-purple); text-decoration: none; }
-        .legal-section a:hover { text-decoration: underline; }
-        .data-table { width: 100%; border-collapse: collapse; margin: 1rem 0; }
-        .data-table th { background: rgba(52, 211, 153, 0.1); color: var(--text-primary); padding: 0.75rem; text-align: left; font-weight: 600; border-bottom: 2px solid var(--accent-green); }
-        .data-table td { padding: 0.75rem; border-bottom: 1px solid var(--border-color); color: var(--text-secondary); }
-        .data-table tr:last-child td { border-bottom: none; }
-        .highlight-box { background: rgba(52, 211, 153, 0.15); border: 1px solid rgba(52, 211, 153, 0.3); border-radius: 10px; padding: 1rem 1.25rem; margin: 1rem 0; display: flex; align-items: center; gap: 0.75rem; color: var(--accent-green); font-weight: 500; }
-        .highlight-box svg { width: 20px; height: 20px; flex-shrink: 0; }
-        .contact-box { background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 16px; padding: 2rem; text-align: center; margin-top: 2rem; }
-        .contact-box h3 { font-size: 1.25rem; margin-bottom: 1rem; }
-        .contact-box p { color: var(--text-secondary); margin-bottom: 1.5rem; }
-        .contact-links { display: flex; flex-direction: column; gap: 0.75rem; align-items: center; }
-        .contact-links a { color: var(--accent-purple); text-decoration: none; display: flex; align-items: center; gap: 0.5rem; }
-        .contact-links a:hover { text-decoration: underline; }
-        .contact-links svg { width: 18px; height: 18px; }
-        .footer { padding: clamp(2rem, 5vh, 3.5rem) 0; background: var(--bg-primary); border-top: 1px solid var(--border-color); text-align: center; margin-top: 3rem; }
-        .footer-links { display: flex; gap: clamp(1.25rem, 2.5vw, 2.5rem); justify-content: center; flex-wrap: wrap; margin-bottom: 1.5rem; }
-        .footer-link { color: var(--text-secondary); text-decoration: none; font-size: 0.9rem; transition: color 0.3s ease; }
-        .footer-link:hover { color: var(--accent-purple); }
-        .footer-copyright { color: var(--text-muted); font-size: 0.85rem; }
-        @media (max-width: 768px) { .navbar-links { display: none; } .legal-section { padding: 1.5rem; } .data-table { font-size: 0.85rem; } .data-table th, .data-table td { padding: 0.5rem; } .footer-links { flex-direction: column; gap: 0.75rem; } }
-        /* Mobile Menu Styles */
-        .mobile-menu-btn { display: none; background: none; border: none; cursor: pointer; padding: 0.5rem; z-index: 1001; }
-        .mobile-menu-btn svg { width: 24px; height: 24px; color: var(--text-primary); }
-        .mobile-menu { position: fixed; top: 0; right: -100%; width: 280px; height: 100vh; background: rgba(11, 15, 17, 0.98); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); z-index: 1000; transition: right 0.3s ease; padding: 5rem 1.5rem 2rem; border-left: 1px solid var(--border-color); }
-        .mobile-menu.active { right: 0; }
-        .mobile-menu-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.5); z-index: 999; opacity: 0; visibility: hidden; transition: opacity 0.3s ease, visibility 0.3s ease; }
-        .mobile-menu-overlay.active { opacity: 1; visibility: visible; }
-        .mobile-menu-close { position: absolute; top: 1rem; right: 1rem; background: none; border: none; cursor: pointer; padding: 0.5rem; }
-        .mobile-menu-close svg { width: 24px; height: 24px; color: var(--text-primary); }
-        .mobile-menu-links { display: flex; flex-direction: column; gap: 0.5rem; }
-        .mobile-menu-links a { color: var(--text-secondary); text-decoration: none; font-size: 1rem; font-weight: 500; padding: 0.75rem 1rem; border-radius: 8px; transition: all 0.2s; }
-        .mobile-menu-links a:hover { color: var(--text-primary); background: rgba(255, 255, 255, 0.05); }
-        .mobile-menu-links .nav-cta { display: inline-block; text-align: center; margin-top: 1rem; padding: 0.75rem 1.5rem; background: linear-gradient(135deg, var(--accent-purple), var(--accent-blue)); color: white !important; border-radius: 8px; font-weight: 600; }
-        @media (max-width: 768px) { .mobile-menu-btn { display: block; } }
+        .legal .highlight-box { margin: 0 0 var(--cf-4); color: var(--cf-text); font-weight: 500; }
+        .legal .notice-box p { margin: 0; }
+        .legal .legal-section { padding: 0 0 var(--cf-2); border-bottom: 1px solid var(--cf-border); margin-bottom: var(--cf-8); }
+        .legal .legal-section:last-of-type { border-bottom: 0; }
+        .legal .legal-section h2 { margin-top: 0; }
+        .legal .contact-box { margin-top: var(--cf-8); padding: var(--cf-5); border: 1px solid var(--cf-border); border-radius: var(--cf-radius-lg); background: var(--cf-surface); }
+        .legal .contact-box h3 { margin-top: 0; }
+        .legal .contact-links { display: flex; flex-wrap: wrap; gap: var(--cf-2) var(--cf-5); }
+        .legal .contact-links a { display: inline-flex; align-items: center; min-height: 40px; }
     </style>
 </head>
-<body>
-    <div class="bg-effects"><div class="orb orb-1"></div><div class="orb orb-2"></div></div>
-
-    <nav class="navbar">
-        <div class="navbar-container">
-            <a href="/" class="navbar-brand">
-                <img src="/images/CertiFried.png" alt="CertiFried" class="navbar-logo">
-                <span>CertiFried</span>
-            </a>
-            <div class="navbar-links">
-                <a href="/">Home</a>
-                <a href="/commands">Commands</a>
-                <a href="/cards">Cards</a>
-                <a href="/status">Status</a>
-                <a href="/donate">Donate</a>
-                <a href="/auth/discord" class="nav-cta">Login</a>
-            </div>
-            <button class="mobile-menu-btn" aria-label="Open menu">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/></svg>
-            </button>
+<body class="cfs-body">
+<%- include('partials/site-header', { active: '', user: locals.user || null, returnTo: '/privacy' }) %>
+    <main id="main-content" tabindex="-1" class="cfs-main">
+        <div class="cfs-pagehead">
+            <h1>Privacy Policy</h1>
+            <p class="cfs-meta">Last updated November 19, 2026</p>
         </div>
-    </nav>
+        <div class="cfs-doc">
+            <nav class="cfs-toc" aria-label="On this page">
+                <h2>On this page</h2>
+                <ol>
+                    <li><a href="#introduction">1. Introduction</a></li>
+                    <li><a href="#information-we-collect">2. Information We Collect</a></li>
+                    <li><a href="#how-we-use-your-information">3. How We Use Your Information</a></li>
+                    <li><a href="#administrator-access-disclosure">Administrator Access Disclosure</a></li>
+                    <li><a href="#information-sharing">4. Information Sharing</a></li>
+                    <li><a href="#data-security">5. Data Security</a></li>
+                    <li><a href="#data-retention">6. Data Retention</a></li>
+                    <li><a href="#your-rights">7. Your Rights</a></li>
+                    <li><a href="#children-s-privacy">8. Children's Privacy</a></li>
+                    <li><a href="#changes-to-this-policy">9. Changes to This Policy</a></li>
+                    <li><a href="#changelog">Changelog</a></li>
+                </ol>
+                <h2>Related</h2>
+                <ul>
+                    <li><a href="/legal/data">Data we collect (tables)</a></li>
+                    <li><a href="/studio/privacy">CertiFried Studio privacy</a></li>
+                    <li><a href="/legal">All policies</a></li>
+                </ul>
+            </nav>
+            <div class="cfs-prose legal">
 
-    <!-- Mobile Menu -->
-    <div class="mobile-menu-overlay"></div>
-    <div class="mobile-menu">
-        <button class="mobile-menu-close" aria-label="Close menu">
-            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-        </button>
-        <div class="mobile-menu-links">
-            <a href="/">Home</a>
-            <a href="/commands">Commands</a>
-                <a href="/cards">Cards</a>
-            <a href="/status">Status</a>
-            <a href="/donate">Donate</a>
-            <a href="/auth/discord" class="nav-cta">Login</a>
-        </div>
-    </div>
-
-    <main>
-        <div class="container">
-            <div class="page-header">
-                <h1>Privacy Policy</h1>
-                <p class="updated">Last Updated: <%= new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) %></p>
-                <span class="privacy-badge">
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
-                    Your Privacy Matters
-                </span>
-            </div>
-
-            <div class="notice-box">
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                <p>This Privacy Policy explains how CertiFried MultiTool collects, uses, stores, and protects your information when you use our Discord bot and dashboard.</p>
+<div class="notice-box">
+                <p>This Privacy Policy explains how CertiFried MultiTool collects, uses, stores, and protects your information when you use our Discord bot, the dashboard, the stream bot (including song requests), the CertiFried Studio app for Windows, and Greenhouse Tycoon. <a href="/legal/data">Data we collect</a> gives the same information as tables, product by product.</p>
             </div>
 
             <div class="legal-section">
-                <h2><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>1. Introduction</h2>
+                <h2 id="introduction">1. Introduction</h2>
                 <p>At CertiFried MultiTool, we are committed to protecting your privacy. We only collect the minimum data necessary to provide our services and never sell your information to third parties.</p>
             </div>
 
             <div class="legal-section">
-                <h2><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"/></svg>2. Information We Collect</h2>
+                <h2 id="information-we-collect">2. Information We Collect</h2>
                 <h3>Automatically Collected Data</h3>
-                <table class="data-table">
+                <div class="cfs-table-wrap"><table class="data-table">
                     <thead><tr><th>Data Type</th><th>Purpose</th><th>Retention</th></tr></thead>
                     <tbody>
                         <tr><td><strong>Discord User ID</strong></td><td>Identify users for features</td><td>Until deletion request</td></tr>
@@ -164,19 +72,22 @@
                         <tr><td><strong>Username</strong></td><td>Display in commands/leaderboards</td><td>Cached temporarily</td></tr>
                         <tr><td><strong>Channel & Role IDs</strong></td><td>Configure features</td><td>Until changed</td></tr>
                     </tbody>
-                </table>
+                </table></div>
                 <h3>User-Provided Data</h3>
                 <ul>
-                    <li>Streamer tracking preferences and platform usernames (Twitch, Kick, YouTube, Trovo, TikTok, Facebook) and social feed subscriptions (Reddit, YouTube, Twitter/X, Bluesky, Facebook)</li>
-                    <li>Custom command and custom embed configurations</li>
+                    <li>Streamer tracking preferences and platform usernames (Twitch, Kick, YouTube, Rumble, TikTok) and social feed subscriptions (YouTube, Twitter/X, Bluesky, TikTok videos, RSS)</li>
+                    <li>Custom command and custom embed configurations, and the values a server's custom commands save for you or for the server (<code>{db:…}</code> and <code>{sdb:…}</code> storage)</li>
                     <li>Economy, leveling, gambling, trading, and pet data (currency balances, inventories, shop purchases)</li>
                     <li>Game progress and stats: Dungeons &amp; Dragons 5e RPG character data (characters, inventory, combat and quest progress), word-game and Cards Against Humanity scores, trivia, hangman, and counting stats</li>
                     <li>Form responses, ticket messages, and support interactions, including Stream Team application form responses</li>
                     <li>Moderation logs, warnings, and infraction history</li>
+                    <li>Voice transcripts, in servers whose staff turn on voice transcription: the text of what each speaker said, with their user ID and display name</li>
+                    <li>If you connect your Twitch channel to the dashboard: your channel's stream statistics, chatter lists, moderator actions, held AutoMod messages, Bits and raids, and, only if you turn on chat sampling, the text of chat messages</li>
                     <li>Birthday dates and birthday card signatures, messages, likes, and replies</li>
                     <li>Reaction role selections</li>
                     <li>Welcome card and appearance customizations (uploaded images)</li>
                     <li>Suggestion, poll, and giveaway participation</li>
+                    <li>Anonymous confessions you send, and, privately for 30 days, the fact that you sent them</li>
                     <li>Custom bot tokens (encrypted with AES-256-GCM at rest)</li>
                     <li>Per-user Buy Me a Coffee API keys you link for supporter announcements (encrypted at rest)</li>
                 </ul>
@@ -187,7 +98,7 @@
                     <li><strong>Voice recordings:</strong> Audio files (WebM format, max 30 seconds) recorded via browser MediaRecorder API, stored as files on our server</li>
                     <li><strong>Gift card codes:</strong> Encrypted with AES-256-GCM before storage. The plaintext code exists only briefly in server memory during encryption/decryption. Codes are never logged, never rendered in HTML, and never accessible to administrators</li>
                     <li><strong>Guest signer data:</strong> Name and optional email address provided by the guest. No account is created. Guest entries are identified by a random ID (not trackable across cards)</li>
-                    <li><strong>AI image prompts:</strong> Text prompts used to generate card covers are stored alongside the card for reference. Prompts are sent to Google Gemini API for image generation</li>
+                    <li><strong>AI image prompts:</strong> Text prompts used to generate card covers are stored alongside the card for reference. Prompts are sent to Google&rsquo;s Gemini API for image generation, or to Hugging Face&rsquo;s image service when Gemini cannot make the image</li>
                     <li><strong>Likes, replies, and view counts:</strong> Signature likes, threaded replies, and page view counts</li>
                 </ul>
                 <h3>Dashboard Data</h3>
@@ -196,22 +107,56 @@
                     <li>Session IP address and user agent (for security monitoring)</li>
                     <li>Uploaded files (avatars, welcome banners, PDF imports, voice recordings, AI-generated images) stored on the server</li>
                 </ul>
+                <h3 id="greenhouse-tycoon">Greenhouse Tycoon (website game, Twitch panel and Discord)</h3>
+                <ul>
+                    <li><strong>Account:</strong> the platforms you sign in with (Discord, Twitch or Kick), your user ID and display name on each, and the name you play under. Discord sign-in uses your dashboard login; Twitch and Kick sign-in only read your basic profile. If you link your sign-ins, they share one save.</li>
+                    <li><strong>Twitch panel:</strong> Twitch gives every extension an anonymous viewer ID. The panel only receives your real Twitch user ID if you choose to share it, so your greenhouse is kept between streams and matches the website. You can revoke this in Twitch&rsquo;s settings at any time.</li>
+                    <li><strong>Game progress:</strong> in-game cash and items, your plants and the hybrids you bred, upgrades and staff, quests, achievements, decorations and badges, season standings, notifications, and when you last played.</li>
+                    <li><strong>Records the game keeps to work fairly:</strong> every change to your cash and items, daily reward claims, and when sign-ins were linked or unlinked (so a reward or starter kit cannot be claimed twice).</li>
+                    <li><strong>On your device:</strong> the website keeps a sign-in token in your browser&rsquo;s local storage. Signing out removes it. The Twitch panel stores nothing on your device.</li>
+                    <li>The game has no purchases. It does not use Bits, subscriptions or payment details.</li>
+                    <li><strong>Your data:</strong> on the website, the <strong>Your data</strong> card in the game&rsquo;s Profile lets you download a copy of your save or delete it, whichever platform you sign in with (see Your Rights below).</li>
+                    <li><strong>The old game:</strong> Greenhouse Tycoon replaces CertiFried Tycoon, the earlier game on this site, which is closed. Nothing carries over from it. Its data was deleted from our database on November 19, 2026; one offline backup, kept only in case the change had to be undone, is deleted on February 17, 2027.</li>
+                </ul>
+                <h3 id="stream-bot-data">Stream bot (your own Twitch and Kick channels)</h3>
+                <p>The stream bot belongs to your CertiFried account, not to a Discord server. If you use it, we keep:</p>
+                <ul>
+                    <li><strong>Profile and channels:</strong> your settings, the Twitch and Kick channels you linked, and the Discord channels you chose for posts.</li>
+                    <li><strong>Twitch Stream bot grant:</strong> access and refresh tokens and the permissions you approved, encrypted. The grant never asks for the list of channels you follow or for your earnings.</li>
+                    <li><strong>Tip services:</strong> which services you connected (StreamElements, Streamlabs, Ko-fi, Buy Me a Coffee, Throne, Fourthwall) and, for StreamElements and Streamlabs, your token, encrypted. We only receive notifications of tips, memberships and orders; CertiFried never processes a payment and never sees payment details.</li>
+                    <li><strong>Event log:</strong> follows, subs, cheers, raids, channel point redemptions, polls, tips, OBS events and voice command phrases, each with the viewer&rsquo;s platform ID, login and display name where there is one, the amount and the message, and the notification as the platform sent it (up to 16 KB). Chat messages are only kept if you turn on <strong>Keep chat in the event log</strong>; otherwise chat runs your automations and is not stored.</li>
+                    <li><strong>Your setup:</strong> automations, timers, counters and stored values, sounds you upload, overlay settings and the images and videos you upload for alerts, and the reports of Firebot or Streamer.bot imports (passwords and tokens are removed before anything is stored).</li>
+                    <li><strong>Run history</strong> (what each automation did) and the actions sent to CertiFried Studio and overlays, with their results.</li>
+                    <li><strong>Paired devices:</strong> each device&rsquo;s name, app version, what it can do, when it was last seen, and a SHA-256 hash of its token (never the token itself).</li>
+                </ul>
+                <h3 id="viewer-data">Viewers in a streamer&rsquo;s channel</h3>
+                <p>If you chat, follow, cheer, tip or request songs in the channel of a streamer who uses the stream bot, that streamer&rsquo;s stream bot records the event with your platform ID, login and display name, and what you typed for a song request. The streamer can see it. You can export or delete it with <code>/privacy</code> if your Twitch or Kick account is linked to CertiFried; otherwise email us (see Contact below).</p>
+                <h3 id="song-requests">Song requests</h3>
+                <ul>
+                    <li>A request stores who asked (platform ID, login and display name), what they typed, the song found and what happened to it. A viewer&rsquo;s <code>!like</code> is stored too.</li>
+                    <li>To find a song, the text typed is looked up in Spotify&rsquo;s catalogue with CertiFried&rsquo;s own Spotify app (no user account is involved) and on YouTube and YouTube Music through our own resolvers; SoundCloud and YouTube links are read directly. The audio is streamed from our server to the streamer&rsquo;s OBS.</li>
+                    <li>A streamer who linked their own Spotify can choose to play requests with it (off by default); that uses their linked Spotify session.</li>
+                </ul>
+                <h3 id="certifried-studio">CertiFried Studio (the Windows app)</h3>
+                <p>Studio keeps its settings, encrypted secrets and logs on your PC. It sends CertiFried the names of your OBS scenes, sources, audio sources and filters and of your sounds, OBS events, recognised voice command phrases and the results of actions. Microphone audio and your OBS password never leave your PC, and Studio contains no analytics, telemetry or crash reporting. The full list, checked against the app&rsquo;s code, is on <a href="/studio/privacy">Studio privacy</a>.</p>
             </div>
 
             <div class="legal-section">
-                <h2><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/></svg>3. How We Use Your Information</h2>
+                <h2 id="how-we-use-your-information">3. How We Use Your Information</h2>
                 <ul>
                     <li>Deliver bot features and process commands</li>
                     <li>Send stream notifications and announcements</li>
                     <li>Manage economy, leveling, and game systems</li>
+                    <li>Run Greenhouse Tycoon: your greenhouse and progress, seasons, weekly challenges and leaderboards</li>
+                    <li>Run your stream bot: automations, chat replies, timers, song requests, and the actions CertiFried Studio carries out on your PC</li>
                     <li>Provide moderation and security tools</li>
-                    <li>Analyze usage patterns to improve features</li>
+                    <li>Analyze usage patterns to improve features (from our own records; we use no third-party analytics or advertising)</li>
                     <li>Prevent abuse and enforce Terms of Service</li>
                 </ul>
             </div>
 
             <div class="legal-section">
-                <h2><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>Administrator Access Disclosure</h2>
+                <h2 id="administrator-access-disclosure">Administrator Access Disclosure</h2>
                 <p>In the interest of full transparency, the following authorized administrators have dashboard access to view guild settings and bot configurations for any server with the bot installed:</p>
                 <ul>
                     <li><strong>xXDeath420Xx</strong> (Discord ID: 365905620060340224) &mdash; Lead Developer &amp; Bot Owner</li>
@@ -222,137 +167,152 @@
             </div>
 
             <div class="legal-section">
-                <h2><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/></svg>4. Information Sharing</h2>
+                <h2 id="information-sharing">4. Information Sharing</h2>
                 <div class="highlight-box">
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
                     We will NEVER sell, rent, or trade your personal information to third parties.
                 </div>
-                <p>We integrate with third-party APIs (Twitch, YouTube, Kick, Discord) to provide features. These services have their own privacy policies. We may disclose information if required by law.</p>
+                <p>Some game information is visible to other players by design: Greenhouse Tycoon leaderboards and season results show the name you play under, your level, your Replant count and your season score, and a server's admins can see on the dashboard which of their members play with Discord.</p>
+                <p>We integrate with third-party APIs (Discord, Twitch, Kick, YouTube, TikTok, Rumble, Bluesky, X through FxTwitter, SoundCloud, Spotify, Steam, Buy Me a Coffee, Throne, Fourthwall and Ko-fi) to provide features. Weather commands send the place or ZIP code you give to Open-Meteo, Zippopotam.us and the US National Weather Service. Lookup and fun commands (dictionary, game prices, movies, GIFs and the like) send only what you type to the service that answers them. These services have their own privacy policies.</p>
+                <p>AI features (AI chat replies, the D&amp;D Dungeon Master, generated card covers and schedule images) send the text you give them to Google&rsquo;s Gemini API. Generated images go to Hugging Face&rsquo;s image service instead when Gemini cannot make them. Some AI replies run on language models on our own servers first, and voice transcription runs only on our own servers: that audio is never sent to a third party or stored (the transcript text is kept as described under Data Retention).</p>
+                <p>For the stream bot, we call Twitch and Kick on your behalf with the permissions you gave (reading your channel&rsquo;s events, sending chat, changing your title or category, making clips and the like), and connect to StreamElements or Streamlabs with your token to receive tip notifications. Song lookups send what was typed to Spotify (catalogue search only), YouTube and SoundCloud, as described above. Twitch, Kick, OBS, Spotify, YouTube, SoundCloud and the tip services each have their own privacy policies.</p>
+                <p>Our website and its connections (including CertiFried Studio&rsquo;s) are served through Cloudflare, which processes visitors&rsquo; IP addresses and request details to deliver and protect the site.</p>
+                <p>We may disclose information if required by law.</p>
             </div>
 
             <div class="legal-section">
-                <h2><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>5. Data Security</h2>
+                <h2 id="data-security">5. Data Security</h2>
                 <ul>
                     <li><strong>Transport Encryption:</strong> All data in transit uses TLS/SSL</li>
                     <li><strong>At-Rest Encryption:</strong> Sensitive data (custom bot tokens, gift card codes) is encrypted with AES-256-GCM using a server-side encryption key</li>
                     <li><strong>Password Hashing:</strong> Card passwords and user authentication tokens are hashed with SHA-256 (one-way, non-reversible)</li>
                     <li><strong>Database Security:</strong> Password-protected with restricted access, private network only</li>
-                    <li><strong>Gift Code Isolation:</strong> Encrypted gift card codes are never rendered in page HTML, never logged, and only decryptable via an authenticated API request by the card recipient</li>
+                    <li><strong>Stream bot secrets:</strong> device tokens and pairing codes are stored only as SHA-256 hashes; Twitch grant tokens and tip-service tokens are encrypted with AES-256-GCM and are never shown or exported</li>
+                    <li><strong>Gift Code Isolation:</strong> Encrypted gift card codes are never rendered in page HTML, never logged, and only decryptable through a signed-in request by the card's recipient or its creator</li>
                     <li><strong>Rate Limiting:</strong> Protection against abuse on all API endpoints</li>
                     <li><strong>Regular Updates:</strong> Security patches applied promptly</li>
                 </ul>
             </div>
 
             <div class="legal-section">
-                <h2><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>6. Data Retention</h2>
-                <table class="data-table">
+                <h2 id="data-retention">6. Data Retention</h2>
+                <div class="cfs-table-wrap"><table class="data-table">
                     <thead><tr><th>Data Category</th><th>Retention Period</th></tr></thead>
                     <tbody>
                         <tr><td>Server configurations</td><td>Until bot removal</td></tr>
                         <tr><td>User economy/leveling data</td><td>Until deletion request</td></tr>
-                        <tr><td>Moderation logs &amp; infractions</td><td>90 days (configurable)</td></tr>
-                        <tr><td>Command statistics</td><td>30 days (anonymized)</td></tr>
-                        <tr><td>Message activity logs</td><td>90 days</td></tr>
+                        <tr><td>Moderation &amp; audit logs</td><td>365 days (each server can choose a shorter period)</td></tr>
+                        <tr><td>Moderation records (warnings, infractions, bans)</td><td>Warnings are deleted after one year. Other records (bans, kicks, mutes and the like) are deleted after two years, so moderators can see repeat offences meanwhile; that server's staff can remove them sooner. Not removed by <code>/privacy delete</code></td></tr>
+                        <tr><td>Support tickets (form answers, staff notes) and their transcripts</td><td>365 days after the ticket is closed; an open ticket is kept while it is open. Not removed by <code>/privacy delete</code>: ask that server's staff</td></tr>
+                        <tr><td>Modmail conversations (the messages you and a server's staff sent through the bot)</td><td>365 days after the conversation is closed; an open conversation is kept while it is open. Not removed by <code>/privacy delete</code>: ask that server's staff</td></tr>
+                        <tr><td>Raid lockdown records (when a lockdown ran and which accounts it kept out)</td><td>180 days after the lockdown ends</td></tr>
+                        <tr><td>Server join history (when you joined each server)</td><td>Kept indefinitely so a server's rejoin limit can count past joins; that server's staff can reset your count. Not removed by <code>/privacy delete</code></td></tr>
+                        <tr><td>Command usage (which command you ran, in which server and channel, when, and whether it worked)</td><td>400 days, then deleted; removed by <code>/privacy delete</code></td></tr>
+                        <tr><td>Daily command totals per server (no user IDs)</td><td>Kept indefinitely</td></tr>
+                        <tr><td>Cached message copies (for deleted/edited message logs)</td><td>90 days (each server can choose a shorter period); none at all if you use <code>/privacy opt-out</code></td></tr>
+                        <tr><td>Images from deleted messages (servers that turn on evidence capture)</td><td>Private copy for up to 72 hours; if the message is deleted, re-posted to that server's evidence channel</td></tr>
+                        <tr><td>Activity statistics</td><td>180 days</td></tr>
+                        <tr><td>Invite tracking (which invite you joined a server with)</td><td>180 days</td></tr>
+                        <tr><td>Voice transcripts (servers that turn on voice transcription)</td><td>30 days, or the period that server sets (1 to 365 days); your own lines are removed by <code>/privacy delete</code></td></tr>
+                        <tr><td>Roles kept for members who leave (servers that turn on sticky roles)</td><td>30 days after you leave, or the period that server sets (1 to 365 days)</td></tr>
+                        <tr><td>Values custom commands save (<code>{db:…}</code> for you, <code>{sdb:…}</code> for a server)</td><td>Deleted after 400 days without being read or written; yours are removed by <code>/privacy delete</code></td></tr>
+                        <tr><td>AI chat memory (recent messages the AI reply feature uses as context)</td><td>24 hours</td></tr>
+                        <tr><td>Who sent an anonymous confession</td><td>Stored privately for 30 days, then deleted. Members never see it; that server's admins can reveal it from the dashboard, and every reveal is logged. Not removed by <code>/privacy delete</code></td></tr>
                         <tr><td>Stream announcements</td><td>Deleted when stream ends (configurable)</td></tr>
+                        <tr><td>Stream history of tracked streamers (when each stream started and ended)</td><td>730 days</td></tr>
+                        <tr><td>Twitch channel statistics for channels connected to the dashboard (per-minute stream and chatter snapshots, sampled chat text)</td><td>90 days</td></tr>
+                        <tr><td>Twitch moderator actions and held AutoMod messages for connected channels</td><td>180 days</td></tr>
+                        <tr><td>Twitch Bits and raids for connected channels</td><td>365 days</td></tr>
                         <tr><td>Birthday cards &amp; signatures</td><td>Indefinite (deletable by card creator or admin)</td></tr>
                         <tr><td>Standalone greeting cards</td><td>Indefinite (deletable by card creator)</td></tr>
-                        <tr><td>Voice recordings</td><td>Deleted with the associated signature or card</td></tr>
+                        <tr><td>Voice recordings</td><td>Deleted with the associated signature or card (the audio file within a day); a recording never added to a signature is deleted after a day</td></tr>
                         <tr><td>Encrypted gift card codes</td><td>Deleted with the associated signature or card</td></tr>
-                        <tr><td>AI-generated images &amp; prompts</td><td>Deleted with the associated card</td></tr>
+                        <tr><td>AI-generated images &amp; prompts</td><td>Deleted with the associated card (the image file within a day); a cover that was generated but never used is deleted after a day</td></tr>
                         <tr><td>Guest signer names &amp; emails</td><td>Deleted with the associated signature or card</td></tr>
-                        <tr><td>Uploaded files (avatars, banners, images)</td><td>Until replaced or deleted</td></tr>
+                        <tr><td>Uploaded files (avatars, banners, images)</td><td>Until replaced or deleted. A replaced bot avatar, welcome banner or schedule image is deleted when the new one is saved, or at the latest by the next night's clean-up; one a server backup still uses is kept while that backup exists</td></tr>
                         <tr><td>Custom bot tokens</td><td>Encrypted at rest; deleted on bot removal</td></tr>
                         <tr><td>Dashboard sessions</td><td>7 days (auto-expire)</td></tr>
-                        <tr><td>Error logs</td><td>3 days</td></tr>
+                        <tr><td>Music play history (what was played, in which server and voice channel or on which stream, who requested or skipped it)</td><td>365 days</td></tr>
+                        <tr><td>Stream bot event log (follows, subs, cheers, raids, tips, OBS events, voice phrases, and chat if you chose to keep it)</td><td>90 days</td></tr>
+                        <tr><td>Stream bot run history</td><td>30 days</td></tr>
+                        <tr><td>Stream bot actions sent to CertiFried Studio and overlays, with their results</td><td>7 days</td></tr>
+                        <tr><td>Stream bot pairing codes (stored as hashes; each works for 10 minutes)</td><td>1 day</td></tr>
+                        <tr><td>Stream bot stored values (<code>{db:…}</code> and <code>{sdb:…}</code>)</td><td>Deleted after 400 days without being changed</td></tr>
+                        <tr><td>Firebot and Streamer.bot import reports</td><td>400 days</td></tr>
+                        <tr><td>Song requests (who asked, what they typed, the song)</td><td>365 days</td></tr>
+                        <tr><td>Song likes (<code>!like</code>)</td><td>400 days</td></tr>
+                        <tr><td>Stream bot profile, linked channels, grant, automations, timers, uploaded sounds and media, overlays, playlists, banned songs and paired devices</td><td>Until you delete them or use <code>/privacy delete</code>. A revoked device stays listed as revoked</td></tr>
+                        <tr><td>What CertiFried Studio last reported about your OBS (names only)</td><td>Only the latest report is kept, until you delete your stream bot data</td></tr>
+                        <tr><td>CertiFried Studio&rsquo;s files on your PC (settings, encrypted secrets, logs)</td><td>On your PC until you delete them; logs rotate at 1 MB, keeping 5 old files. See <a href="/studio/privacy">Studio privacy</a></td></tr>
+                        <tr><td>Voice channel recordings started by a server's staff (who started it, where and when, and the audio file)</td><td>365 days</td></tr>
+                        <tr><td>Greenhouse Tycoon save and game progress</td><td>Kept while you play; removed by <strong>Delete my save</strong> in the game&rsquo;s Profile, by <code>/privacy delete</code>, or on request (see Contact below)</td></tr>
+                        <tr><td>Greenhouse Tycoon record of cash and item changes</td><td>180 days</td></tr>
+                        <tr><td>Greenhouse Tycoon daily reward claims and sign-in link history</td><td>180 days</td></tr>
+                        <tr><td>Greenhouse Tycoon quest progress</td><td>90 days</td></tr>
+                        <tr><td>Greenhouse Tycoon orders</td><td>30 days after the order closes</td></tr>
+                        <tr><td>Greenhouse Tycoon notifications</td><td>30 days</td></tr>
+                        <tr><td>Greenhouse Tycoon season results</td><td>Kept as the season's history; deleted with your save</td></tr>
+                        <tr><td>Greenhouse Tycoon market history (no user IDs)</td><td>400 days</td></tr>
+                        <tr><td>CertiFried Tycoon (the old game, closed)</td><td>Deleted from our database on November 19, 2026. One offline backup, kept only in case the change had to be undone, is deleted on February 17, 2027</td></tr>
+                        <tr><td>Application and error logs</td><td>30 days</td></tr>
                     </tbody>
-                </table>
+                </table></div>
             </div>
 
             <div class="legal-section">
-                <h2><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/></svg>7. Your Rights</h2>
+                <h2 id="your-rights">7. Your Rights</h2>
                 <ul>
                     <li><strong>Access:</strong> Request a copy of your data</li>
                     <li><strong>Correction:</strong> Update inaccurate information</li>
                     <li><strong>Deletion:</strong> Request removal of your data</li>
                     <li><strong>Opt-out:</strong> Disable specific features to reduce data collection</li>
                 </ul>
-                <p>To exercise these rights, contact us through our Discord Support Server.</p>
+                <p>You can exercise these rights yourself with the bot's <code>/privacy</code> command, in any server or in a DM with the bot:</p>
+                <ul>
+                    <li><code>/privacy export</code> &mdash; a JSON file of the data the bot holds about you, sent by DM (once a day). Moderation and safety records are listed as counts only.</li>
+                    <li><code>/privacy delete</code> &mdash; deletes your cached messages, activity and statistics, levels, economy, game progress, preferences and linked accounts in every server (asks you to confirm; cannot be undone). Moderation and safety records, copies of messages a server logged as deleted, tickets and forms you sent to a server, and payment records are kept.</li>
+                    <li>For Greenhouse Tycoon, <code>/privacy export</code> and <code>/privacy delete</code> cover the save linked to your Discord account, including the Twitch and Kick sign-ins linked to it.</li>
+                    <li>On the Greenhouse Tycoon website, open <strong>Profile</strong> and use the <strong>Your data</strong> card. It works whether you sign in with Discord, Twitch or Kick, so you do not need Discord. <strong>Download my data</strong> saves a JSON file of your save and every sign-in linked to it (up to three times an hour). <strong>Delete my save</strong> deletes the same and signs you out on every device; you type DELETE to confirm, and it cannot be undone. Hybrids you bred first stay in the game&rsquo;s shared list of varieties without your name.</li>
+                    <li>For the stream bot, <code>/privacy export</code> includes your stream bot profile and everything under it (without tokens, hashes or keys) and, as a viewer, events, song requests and likes about you in other streamers&rsquo; channels, found through the Twitch and Kick accounts you linked to CertiFried. <code>/privacy delete</code> deletes your stream bot profile and everything under it, including uploaded sound files; as a viewer it deletes those events and likes and removes your name and what you typed from song requests (the streamer keeps a nameless line). Viewers without a linked account can email us.</li>
+                    <li>To disconnect a device, choose <strong>Revoke</strong> on the stream bot&rsquo;s <a href="/stream/bot/devices">Devices</a> page. To withdraw the Twitch grant, disconnect CertiFried in Twitch&rsquo;s Connections settings.</li>
+                    <li><code>/privacy opt-out</code> / <code>/privacy opt-in</code> &mdash; stop or resume message logging (the bot keeps no copies of your messages) and appearing on leaderboards.</li>
+                    <li><code>/privacy status</code> &mdash; see your current choices.</li>
+                </ul>
+                <p>Voice transcription and the chat reader have their own switch: <code>/voice privacy opt-out</code>. For anything the commands do not cover, including correcting inaccurate information, contact us through our Discord support server or at <a href="mailto:support@certifriedmultitool.com">support@certifriedmultitool.com</a>.</p>
             </div>
 
             <div class="legal-section">
-                <h2><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>8. Children's Privacy</h2>
-                <p>CertiFried MultiTool is not intended for users under age 13. Discord requires users to be at least 13 years old. If we become aware that we have collected data from a child under 13, we will delete it promptly.</p>
+                <h2 id="children-s-privacy">8. Children's Privacy</h2>
+                <p>CertiFried MultiTool is not intended for users under age 13. Discord requires users to be at least 13 years old (older in some countries). Twitch and Kick also require users to be at least 13, or older where local law says so, and expect users under 18 (or the age of majority) to have a parent&rsquo;s or guardian&rsquo;s permission or supervision. If you use the stream bot or CertiFried Studio, you must meet the minimum age of each platform you connect. If we become aware that we have collected data from a child under 13, we will delete it promptly.</p>
             </div>
 
             <div class="legal-section">
-                <h2><svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>9. Changes to This Policy</h2>
+                <h2 id="changes-to-this-policy">9. Changes to This Policy</h2>
                 <p>We may update this Privacy Policy from time to time. We will notify users of significant changes through the dashboard or Discord. Your continued use after changes constitutes acceptance.</p>
+            </div>
+
+            <div class="legal-section">
+                <h2 id="changelog">Changelog</h2>
+                <ul>
+                    <li><strong>November 19, 2026:</strong> Added the stream bot, viewers in a streamer&rsquo;s channel, song requests and CertiFried Studio (what is collected, sharing, security, retention and your rights); named Cloudflare; added Twitch and Kick minimum ages; linked <a href="/legal/data">Data we collect</a>.</li>
+                </ul>
             </div>
 
             <div class="contact-box">
                 <h3>Contact Us About Privacy</h3>
                 <p>If you have questions or wish to exercise your data rights, please contact us:</p>
+                <p><code>/privacy export</code> and <code>/privacy delete</code> cover the Discord bot's data and Greenhouse Tycoon saves linked to Discord. If you play Greenhouse Tycoon only with Twitch or Kick, use the <strong>Your data</strong> card in the game&rsquo;s Profile on the website (sign in there with the same Twitch or Kick account). If you cannot, ask in the Discord support server or email <a href="mailto:support@certifriedmultitool.com">support@certifriedmultitool.com</a> to export or delete your game data; we do it within 30 days.</p>
                 <div class="contact-links">
-                    <a href="https://certifriedmultitool.com/discord" target="_blank">
-                        <svg fill="currentColor" viewBox="0 0 24 24"><path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03z"/></svg>
-                        Discord Support Server
+                    <a href="/discord" target="_blank" rel="noopener">
+                        Support server on Discord
                     </a>
+                    <a href="mailto:support@certifriedmultitool.com">support@certifriedmultitool.com</a>
                     <a href="/terms">Terms of Service</a>
-                    <a href="/">Return to Home</a>
+                    <a href="/">Home</a>
                 </div>
+            </div>
             </div>
         </div>
     </main>
-
-    <footer class="footer">
-        <div class="container">
-            <div class="footer-links">
-                <a href="/commands" class="footer-link">Commands</a>
-                <a href="/cards" class="footer-link">Cards</a>
-                <a href="/status" class="footer-link">Status</a>
-                <a href="/docs" class="footer-link">Documentation</a>
-                <a href="/terms" class="footer-link">Terms</a>
-                <a href="/privacy" class="footer-link">Privacy</a>
-                <a href="/eula" class="footer-link">EULA</a>
-            </div>
-            <p class="footer-copyright">&copy; <%= new Date().getFullYear() %> CertiFried MultiTool. All rights reserved.</p>
-        </div>
-    </footer>
-
-    <script>
-        // Mobile Menu Functionality
-        const mobileMenuBtn = document.querySelector('.mobile-menu-btn');
-        const mobileMenuClose = document.querySelector('.mobile-menu-close');
-        const mobileMenu = document.querySelector('.mobile-menu');
-        const mobileMenuOverlay = document.querySelector('.mobile-menu-overlay');
-
-        function openMobileMenu() {
-            mobileMenu.classList.add('active');
-            mobileMenuOverlay.classList.add('active');
-            document.body.style.overflow = 'hidden';
-        }
-
-        function closeMobileMenu() {
-            mobileMenu.classList.remove('active');
-            mobileMenuOverlay.classList.remove('active');
-            document.body.style.overflow = '';
-        }
-
-        mobileMenuBtn.addEventListener('click', openMobileMenu);
-        mobileMenuClose.addEventListener('click', closeMobileMenu);
-        mobileMenuOverlay.addEventListener('click', closeMobileMenu);
-
-        // Close menu on escape key
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && mobileMenu.classList.contains('active')) {
-                closeMobileMenu();
-            }
-        });
-
-        // Close menu when clicking on a link
-        document.querySelectorAll('.mobile-menu-links a').forEach(link => {
-            link.addEventListener('click', closeMobileMenu);
-        });
-    </script>
+<%- include('partials/site-footer') %>
 </body>
 </html>

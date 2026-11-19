@@ -2,6 +2,7 @@ import { Events, EmbedBuilder } from 'discord.js';
 import logger from '../utils/logger.js';
 import { sendLogEmbed, saveAuditLog } from '../core/log-manager.js';
 import { shouldIgnoreGuild } from '../utils/custom-bot-check.js';
+import { themeColor } from '../core/guild-theme.js';
 
 export default {
     name: Events.MessagePollVoteRemove,
@@ -21,7 +22,7 @@ export default {
             });
 
             const embed = new EmbedBuilder()
-                .setColor(0xED4245)
+                .setColor(themeColor(message.guild?.id, 'danger'))
                 .setTitle('🗳️ Poll Vote Removed')
                 .setDescription(`<@${userId}> removed their vote from a poll`)
                 .addFields(
@@ -31,7 +32,8 @@ export default {
                 )
                 .setTimestamp();
 
-            await sendLogEmbed(message.guild, 'pollVoteRemove', embed);
+            await sendLogEmbed(message.guild, 'pollVoteRemove', embed, 'pollVoteRemove',
+                { channel: message.channel, userId });
 
             await saveAuditLog(message.guild.id, 'POLL_VOTE_REMOVE', userId, message.id, null, message.channel.id, 'Poll vote removed', null, pollAnswer.text, null, {});
         } catch (error) {

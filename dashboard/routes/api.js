@@ -3,7 +3,7 @@ import pool from '../../utils/db.js';
 import os from 'os';
 import logger from '../../utils/logger.js';
 import { isSuperAdmin, INPUT_LIMITS } from '../../utils/constants.js';
-import { apiCheckAuth, apiCheckSuperAdmin } from '../middleware/auth.js';
+import { apiCheckAuth, apiCheckSuperAdmin, managerAccess } from '../middleware/auth.js';
 import {
     getNetworkStats,
     getDiskStats,
@@ -37,15 +37,19 @@ async function ensureGuildPerms(req, res, next) {
   // Check if user has access to this guild (from Discord OAuth guilds)
   const userGuild = req.user.guilds?.find(g => g.id === guildId);
 
-  if (!userGuild) {
-    return res.status(403).json({ error: 'You are not a member of this guild' });
-  }
-
   // Check if user has MANAGE_GUILD permission (0x20)
-  const hasPerms = (parseInt(userGuild.permissions) & 0x20) === 0x20;
+  const hasPerms = !!userGuild && (parseInt(userGuild.permissions) & 0x20) === 0x20;
 
   if (!hasPerms) {
-    return res.status(403).json({ error: 'You need Manage Server permission' });
+    // Bot-manager roles (core/protection-exempt.js liveConfigAccess, checked live, the same rule the
+    // /api/guilds/:guildId routes use): managers may configure without Manage Server. Admins are
+    // unaffected — they pass on Manage Server above, exactly as before.
+    const viaManager = await managerAccess(req, guildId).catch(() => false);
+    if (viaManager) {
+      req.guildId = guildId;
+      return next();
+    }
+    return res.status(403).json({ error: userGuild ? 'You need Manage Server permission' : 'You are not a member of this guild' });
   }
 
   req.guildId = guildId;
@@ -90,7 +94,7 @@ router.get('/user/guilds', apiCheckAuth, (req, res) => {
 router.get('/stats', async (req, res) => {
   try {
     const [guilds] = await pool.execute('SELECT COUNT(*) as count FROM guild_config');
-    const [users] = await pool.execute('SELECT COUNT(DISTINCT user_id) as count FROM economy WHERE user_id IS NOT NULL');
+    const [users] = await pool.execute('SELECT COUNT(DISTINCT user_id) as count FROM user_economy WHERE user_id IS NOT NULL');
     const [logs] = await pool.execute('SELECT COUNT(*) as count FROM audit_logs');
 
     res.json({
@@ -141,7 +145,7 @@ router.get('/status/server-stats', apiCheckSuperAdmin, async (req, res) => {
     let dbStatus = 'online';
     try {
       const [guildRows] = await pool.execute('SELECT COUNT(*) as count FROM guild_config');
-      const [userRows] = await pool.execute('SELECT COUNT(DISTINCT user_id) as count FROM economy WHERE user_id IS NOT NULL');
+      const [userRows] = await pool.execute('SELECT COUNT(DISTINCT user_id) as count FROM user_economy WHERE user_id IS NOT NULL');
       dbGuilds = guildRows[0].count;
       dbUsers = userRows[0].count;
 
@@ -417,7 +421,6 @@ function getPlatformUrl(platform, username) {
     twitch: `https://twitch.tv/${username}`,
     youtube: `https://youtube.com/@${username}`,
     kick: `https://kick.com/${username}`,
-    trovo: `https://trovo.live/${username}`,
     tiktok: `https://tiktok.com/@${username}`,
     facebook: `https://facebook.com/${username}`,
     rumble: `https://rumble.com/user/${username}`

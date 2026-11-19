@@ -8,18 +8,18 @@
 
 import 'dotenv/config';
 import pool from '../utils/db.js';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 
 const GUILD = '800157336458231848';
-const HARLEY_BOT_ID = '1503936879635202149';
+// The acting bot comes from guild_bot_mapping — never pinned here.
 const CITIZEN = '800252381513777158';
 const MUTED   = '1503946366542548992';
 
 const VIEW = 1024n;
 const READ_HIST = 65536n;
 
-const [row] = await pool.execute('SELECT bot_token FROM custom_bots WHERE bot_id=?', [HARLEY_BOT_ID]);
-const token = encryption.decrypt(JSON.parse(row[0].bot_token));
+const actingBot = await resolveBotForGuild(GUILD, { db: pool });
+const token = actingBot.token;
 
 async function api(method, path) {
   await new Promise(r => setTimeout(r, 50));

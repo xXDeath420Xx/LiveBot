@@ -102,6 +102,20 @@ export function extractCode(message) {
   return m ? `CF-${m[1].toUpperCase()}` : null;
 }
 
+/**
+ * Find a Discord user id in a Ko-fi message — a raw 17-20 digit snowflake or a `<@id>` mention.
+ *
+ * Friendlier than the claim-code dance: a supporter can just paste their Discord id (dev mode →
+ * right-click → Copy User ID) into the Ko-fi note and get their role, no `/creator kofi` first. It is
+ * marginally more spoofable than a code — someone could paste another person's id — but nobody
+ * pays money to hand SOMEONE ELSE a supporter perk, so the risk is academic. A code, when present,
+ * still wins (it PROVES the payer is that user); this is only the fallback when there is no code.
+ */
+export function extractDiscordId(message) {
+  const m = /(?:<@!?)?\b(\d{17,20})\b>?/.exec(String(message || ''));
+  return m ? m[1] : null;
+}
+
 // ── Config ───────────────────────────────────────────────────────────────────
 
 export async function getConfig(guildId) {
@@ -252,6 +266,19 @@ export async function processPayment(guildId, payload, client) {
   const code = extractCode(payload.message);
   let userId = await findLinkedUser(guildId, emailHash);
   if (!userId && code) userId = await redeemCode(guildId, code, emailHash);
+  // Fallback: a bare Discord id (or @mention) pasted in the note. Bind it to this email so every
+  // future payment from the same supporter auto-grants too — the same durable link a redeemed code
+  // leaves behind. A code, when present, already won above; this only fires when there is none.
+  if (!userId) {
+    const did = extractDiscordId(payload.message);
+    if (did) {
+      await pool.execute(
+        `INSERT INTO kofi_links (guild_id, email_hash, user_id) VALUES (?, ?, ?)
+         ON DUPLICATE KEY UPDATE user_id = VALUES(user_id)`,
+        [guildId, emailHash, did]);
+      userId = did;
+    }
+  }
 
   const tiers = await getTiers(guildId);
   const tier = matchTier(tiers, payload);

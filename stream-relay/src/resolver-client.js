@@ -2,7 +2,7 @@
 const { config } = require('./config');
 
 // Node 20 has global fetch; allow injection for tests.
-async function resolveViaDashboard(streamKey, opts = {}) {
+async function callResolver(streamKey, opts = {}) {
   const url = opts.url || config.resolverUrl;
   const secret = opts.secret || config.internalSecret;
   const fetchFn = opts.fetchFn || fetch;
@@ -13,8 +13,22 @@ async function resolveViaDashboard(streamKey, opts = {}) {
     signal: AbortSignal.timeout(4000),
   });
   if (!res.ok) throw new Error('resolver HTTP ' + res.status);
-  const data = await res.json();
+  return res.json();
+}
+
+async function resolveViaDashboard(streamKey, opts = {}) {
+  const data = await callResolver(streamKey, opts);
   return data.destinations || [];
 }
 
-module.exports = { resolveViaDashboard };
+// The destinations to start, plus the ones the dashboard could not resolve at go-live
+// ({ id, name, platform, error }) so the relay can record them as failed for the session.
+async function resolveWithFailures(streamKey, opts = {}) {
+  const data = await callResolver(streamKey, opts);
+  return {
+    destinations: data.destinations || [],
+    failed: Array.isArray(data.failed) ? data.failed : [],
+  };
+}
+
+module.exports = { resolveViaDashboard, resolveWithFailures };

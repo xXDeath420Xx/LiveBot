@@ -1,0 +1,649 @@
+<%# Raid lockdown: join lockdown, auto-trigger, same-name floods, Discord invite/DM pause, history (core/raid-lockdown.js).
+    API-driven (dashboard/routes/api/features/raid-lockdown.js); included by advanced-protection.ejs; needs `guild`.
+    Built on the settings-row kit (cf-settings.css); every id the script below uses is unchanged. %>
+<div id="raid-lockdown" class="rl-anchor">
+<div id="raidLockdownPanel" data-guild-id="<%= guild.id %>">
+    <div id="rlError" class="cf-notice is-bad" role="alert" hidden></div>
+    <div id="rlNotice" class="cf-notice is-info" role="status" hidden></div>
+
+    <section class="cf-section" aria-labelledby="rl-lockdown-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="rl-lockdown-title">Raid lockdown</h2>
+                <p class="cf-section-desc">Until it ends, every new join is kicked, banned, timed out, quarantined or logged. Members already here are never touched.
+                    Members on the <a href="/manage/<%= guild.id %>?page=protection-settings">Protection settings</a> allowlist are skipped, and the pause there stops every action.</p>
+            </div>
+            <div class="cf-section-actions"><span id="rlBadge" class="cf-pill"></span></div>
+        </header>
+        <div class="cf-rows rl-panel" id="rlStatusCard">
+            <div class="cf-state cf-state--loading cf-state--compact rl-wait" role="status" aria-live="polite"><span class="cf-spinner" aria-hidden="true"></span><p class="cf-state-title">Loading lockdown status</p></div>
+            <div id="rlActive" class="rl-group" hidden>
+                <div class="cf-row cf-row--stack">
+                    <div>
+                        <div class="rl-big" id="rlCountdown">...</div>
+                        <div class="rl-muted" id="rlActiveMeta"></div>
+                    </div>
+                    <div class="rl-stats" id="rlCounters"></div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="rlExtendBy">Extend the lockdown</label>
+                        <p class="cf-row-desc">Adds time to the current end.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <div class="cf-input-group">
+                            <select id="rlExtendBy" class="form-select" aria-label="Extend by">
+                                <option value="15m">+15 minutes</option>
+                                <option value="30m" selected>+30 minutes</option>
+                                <option value="1h">+1 hour</option>
+                                <option value="6h">+6 hours</option>
+                                <option value="1d">+1 day</option>
+                            </select>
+                            <button type="button" class="btn btn-secondary" id="rlExtendBtn"><span>Extend</span></button>
+                        </div>
+                    </div>
+                </div>
+                <div class="cf-rows-head" id="rl-latest-head">Latest joins</div>
+                <div id="rlActiveUsers" class="rl-list"></div>
+                <div class="cf-section-foot">
+                    <button type="button" class="btn btn-primary" id="rlStopBtn"><span>End lockdown now</span></button>
+                </div>
+            </div>
+            <div id="rlStart" class="rl-group" hidden>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="rlStartAction">Every new join is</label>
+                        <p class="cf-row-desc">Actions you or the bot lack the permission for are greyed out.</p>
+                    </div>
+                    <div class="cf-row-control"><select id="rlStartAction" class="form-select"></select></div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="rlStartDuration">Lockdown length</label>
+                        <p class="cf-row-desc">It ends by itself after this.</p>
+                    </div>
+                    <div class="cf-row-control">
+                        <select id="rlStartDuration" class="form-select">
+                            <option value="15m">15 minutes</option>
+                            <option value="30m">30 minutes</option>
+                            <option value="1h">1 hour</option>
+                            <option value="2h">2 hours</option>
+                            <option value="6h">6 hours</option>
+                            <option value="12h">12 hours</option>
+                            <option value="1d">1 day</option>
+                            <option value="3d">3 days</option>
+                            <option value="7d">7 days</option>
+                            <option value="custom">Custom...</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="cf-row cf-row--sub" id="rlStartCustomWrap" hidden>
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="rlStartCustom">Custom length</label>
+                        <p class="cf-row-desc">For example 45m, 1h30m or 2d.</p>
+                    </div>
+                    <div class="cf-row-control"><input id="rlStartCustom" class="form-control" placeholder="e.g. 45m, 1h30m, 2d"></div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="rlStartReason">Reason (optional)</label>
+                        <p class="cf-row-desc">Shown in the log and the summary.</p>
+                    </div>
+                    <div class="cf-row-control"><input id="rlStartReason" class="form-control" maxlength="200" placeholder="Shown in the log and the summary"></div>
+                </div>
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="rlStartInvites">Pause Discord invites for the lockdown</label>
+                        <p class="cf-row-desc">Nobody can join by invite until it ends.</p>
+                    </div>
+                    <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="rlStartInvites"></div>
+                </div>
+                <div class="cf-row cf-row--switch">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="rlStartChannels">Lock the channels picked below</label>
+                        <p class="cf-row-desc">Picked under Lockdown settings.</p>
+                    </div>
+                    <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="rlStartChannels"></div>
+                </div>
+                <div class="cf-row">
+                    <div class="cf-row-text">
+                        <label class="cf-row-label" for="rlStartConfirm">Type LOCKDOWN to confirm</label>
+                        <p class="cf-row-desc">The start button unlocks once it matches.</p>
+                    </div>
+                    <div class="cf-row-control"><input id="rlStartConfirm" class="form-control" placeholder="LOCKDOWN" autocomplete="off"></div>
+                </div>
+                <div class="cf-section-foot">
+                    <span class="cf-foot-note" id="rlStartWarn"></span>
+                    <button type="button" class="btn btn-danger" id="rlStartBtn" disabled><span>Start lockdown</span></button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="rl-auto-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="rl-auto-title">Lockdown auto-trigger</h2>
+                <p class="cf-section-desc">Starts a lockdown on its own when this many people join this fast. The burst that set it off is handled too.</p>
+            </div>
+            <div class="cf-section-actions"><span id="rlAutoBadge" class="cf-pill"></span></div>
+        </header>
+        <div class="cf-rows rl-panel">
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="rlAutoEnabled">Start a lockdown automatically</label>
+                    <p class="cf-row-desc">You are asked to confirm when you switch it on.</p>
+                </div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="rlAutoEnabled"></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="rlAutoJoins">Joins</label>
+                    <p class="cf-row-desc">From 3 to 100.</p>
+                </div>
+                <div class="cf-row-control"><div class="cf-input-unit"><input id="rlAutoJoins" type="number" class="form-control" min="3" max="100"><span class="cf-unit">joins</span></div></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="rlAutoWindow">Within (seconds)</label>
+                    <p class="cf-row-desc">From 5 to 300.</p>
+                </div>
+                <div class="cf-row-control"><div class="cf-input-unit"><input id="rlAutoWindow" type="number" class="form-control" min="5" max="300"><span class="cf-unit">seconds</span></div></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="rlAutoDuration">Lockdown (minutes)</label>
+                    <p class="cf-row-desc">How long an automatic lockdown lasts. From 1 to 1440.</p>
+                </div>
+                <div class="cf-row-control"><div class="cf-input-unit"><input id="rlAutoDuration" type="number" class="form-control" min="1" max="1440"><span class="cf-unit">minutes</span></div></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="rlAutoAction">Auto-trigger action</label>
+                    <p class="cf-row-desc">What happens to every join during it.</p>
+                </div>
+                <div class="cf-row-control"><select id="rlAutoAction" class="form-select"></select></div>
+            </div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="rlAutoInvites">Pause invites</label>
+                    <p class="cf-row-desc">Pause Discord invites while it runs.</p>
+                </div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="rlAutoInvites"></div>
+            </div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="rlAutoChannels">Lock picked channels</label>
+                    <p class="cf-row-desc">Lock the channels picked under Lockdown settings.</p>
+                </div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="rlAutoChannels"></div>
+            </div>
+            <div class="cf-section-foot">
+                <button type="button" class="btn btn-primary" id="rlAutoSave"><span>Save</span></button>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="rl-name-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="rl-name-title">Same-name join floods</h2>
+                <p class="cf-section-desc">Bot floods often join under one name ("crypto_drop", "crypto_drop_2"). Lookalike letters, separators and trailing numbers
+                    are ignored when names are compared; this many in the window and the whole group is acted on.</p>
+            </div>
+            <div class="cf-section-actions"><span id="rlNameBadge" class="cf-pill"></span></div>
+        </header>
+        <div class="cf-rows rl-panel">
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="rlNameEnabled">Act on same-name floods</label>
+                    <p class="cf-row-desc">You are asked to confirm when you switch it on.</p>
+                </div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="rlNameEnabled"></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="rlNameCount">Same-name joins</label>
+                    <p class="cf-row-desc">From 3 to 50.</p>
+                </div>
+                <div class="cf-row-control"><div class="cf-input-unit"><input id="rlNameCount" type="number" class="form-control" min="3" max="50"><span class="cf-unit">joins</span></div></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="rlNameWindow">Same-name window</label>
+                    <p class="cf-row-desc">From 30 to 600.</p>
+                </div>
+                <div class="cf-row-control"><div class="cf-input-unit"><input id="rlNameWindow" type="number" class="form-control" min="30" max="600"><span class="cf-unit">seconds</span></div></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="rlNameAction">Same-name action</label>
+                    <p class="cf-row-desc">Used on every member in the group.</p>
+                </div>
+                <div class="cf-row-control"><select id="rlNameAction" class="form-select"></select></div>
+            </div>
+            <div class="cf-section-foot">
+                <button type="button" class="btn btn-primary" id="rlNameSave"><span>Save</span></button>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="rl-incident-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="rl-incident-title">Discord invite and DM pause</h2>
+                <p class="cf-section-desc">Discord's own security actions, and the bot's only control for them (also <code>/lockdown dms</code> and <code>/lockdown invites</code>). Discord allows 24 hours at a time, so a switch that is on is renewed before it runs out.
+                    Switching one off lifts a running pause straight away, whoever set it, unless a running lockdown is holding invites.</p>
+            </div>
+        </header>
+        <div class="cf-rows rl-panel">
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="rlKeepDms">Keep DMs between members paused</label>
+                    <p class="cf-row-desc" id="rlDmsState"></p>
+                </div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="rlKeepDms"></div>
+            </div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="rlKeepInvites">Keep invites paused</label>
+                    <p class="cf-row-desc" id="rlInvitesState"></p>
+                </div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="rlKeepInvites"></div>
+            </div>
+            <div class="cf-section-foot">
+                <span id="rlIncidentMeta" class="cf-foot-note"></span>
+                <button type="button" class="btn btn-sm btn-secondary" id="rlIncidentSync"><span>Check with Discord now</span></button>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="rl-settings-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="rl-settings-title">Lockdown settings</h2>
+                <p class="cf-section-desc">Defaults for a lockdown started by hand, where alerts go, and the channels a lockdown locks.</p>
+            </div>
+        </header>
+        <div class="cf-rows rl-panel">
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="rlDefAction">Default action</label>
+                    <p class="cf-row-desc">Picked first when you start a lockdown.</p>
+                </div>
+                <div class="cf-row-control"><select id="rlDefAction" class="form-select"></select></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="rlDefDuration">Default length (minutes)</label>
+                    <p class="cf-row-desc">From 1 to 10080.</p>
+                </div>
+                <div class="cf-row-control"><div class="cf-input-unit"><input id="rlDefDuration" type="number" class="form-control" min="1" max="10080"><span class="cf-unit">minutes</span></div></div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="rlAlertChannel">Alerts and summaries go to</label>
+                    <p class="cf-row-desc">Lockdown alerts and the end-of-lockdown summary.</p>
+                </div>
+                <div class="cf-row-control"><select id="rlAlertChannel" class="form-select"></select></div>
+            </div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="rlDefDm">DM kicked joiners when they can come back</label>
+                    <p class="cf-row-desc">Sent when a joiner is kicked during a lockdown.</p>
+                </div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="rlDefDm"></div>
+            </div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="rlDefInvites">Pause invites by default</label>
+                    <p class="cf-row-desc">Pre-ticks the invite pause when you start a lockdown.</p>
+                </div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="rlDefInvites"></div>
+            </div>
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="rlDefChannels">Lock picked channels by default</label>
+                    <p class="cf-row-desc">Pre-ticks the channel lock when you start a lockdown.</p>
+                </div>
+                <div class="cf-row-control"><input type="checkbox" class="cf-switch" role="switch" id="rlDefChannels"></div>
+            </div>
+            <div class="cf-row cf-row--stack">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="rlChanFilter">Channels a lockdown locks</label>
+                    <p class="cf-row-desc">Send messages is turned off for @everyone, and put back exactly as it was when the lockdown ends.</p>
+                </div>
+                <div class="cf-search"><i class="fas fa-search" aria-hidden="true"></i><input type="search" id="rlChanFilter" class="form-control" placeholder="Filter channels" aria-label="Filter channels"></div>
+                <div id="rlChannels" class="cf-check-grid rl-chans"></div>
+            </div>
+            <div class="cf-section-foot">
+                <button type="button" class="btn btn-primary" id="rlDefSave"><span>Save</span></button>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="rl-history-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="rl-history-title">Lockdown history</h2>
+                <p class="cf-section-desc">Select a lockdown to see who tried to join during it.</p>
+            </div>
+        </header>
+        <div class="cf-rows rl-panel">
+            <div id="rlHistory"><%- include('../kit/_state', { kind: 'loading', title: 'Loading lockdown history', compact: true }) %></div>
+        </div>
+    </section>
+</div>
+</div>
+
+<style>
+  .rl-anchor { scroll-margin-top: calc(var(--cf-header-h, 56px) + 16px); margin: 0 0 var(--cf-8); }
+  :root[data-style="compact"] .rl-anchor { margin-bottom: var(--cf-6); }
+  #raidLockdownPanel .rl-muted { color: var(--cf-text-3); font-size: var(--cf-text-sm); line-height: 1.5; }
+  #raidLockdownPanel .cf-pill:empty { display: none; }
+  #raidLockdownPanel #rlStatusCard.alarm { border-color: var(--cf-danger); box-shadow: inset 3px 0 0 var(--cf-danger); }
+  #raidLockdownPanel #rlStatusCard > .rl-wait { display: none; }
+  #raidLockdownPanel #rlStatusCard:has(> #rlActive[hidden]):has(> #rlStart[hidden]) > .rl-wait { display: flex; }
+  #raidLockdownPanel .rl-group > * + * { border-top: 1px solid var(--cf-border); }
+  #raidLockdownPanel .rl-group > .cf-rows-head + * { border-top-color: transparent; }
+  #raidLockdownPanel .rl-group > :last-child { border-bottom-left-radius: var(--cf-radius-lg); border-bottom-right-radius: var(--cf-radius-lg); }
+  #raidLockdownPanel .rl-big { font-size: var(--cf-text-xl); font-weight: 600; color: var(--cf-danger); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
+  #raidLockdownPanel .rl-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 8rem), 1fr)); gap: var(--cf-2); }
+  #raidLockdownPanel .rl-stat { background: var(--cf-surface-2); border: 1px solid var(--cf-border); border-radius: var(--cf-radius); padding: var(--cf-2) var(--cf-3); min-width: 0; }
+  #raidLockdownPanel .rl-stat b { display: block; font-size: var(--cf-text-lg); font-weight: 600; color: var(--cf-text); font-variant-numeric: tabular-nums; }
+  #raidLockdownPanel .rl-stat span { font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+
+  /* Join lists (latest joins, history detail). */
+  #raidLockdownPanel .rl-list { display: block; max-height: 16rem; overflow-y: auto; font-size: var(--cf-text-sm); }
+  #raidLockdownPanel .rl-list:empty { display: none; }
+  #raidLockdownPanel .rl-list > .rl-muted { padding: var(--cf-3) var(--cf-5); }
+  #raidLockdownPanel .rl-item { display: flex; gap: var(--cf-3); justify-content: space-between; align-items: baseline; padding: var(--cf-2) var(--cf-5); min-width: 0; }
+  #raidLockdownPanel .rl-item > span:first-child { min-width: 0; overflow-wrap: anywhere; }
+  #raidLockdownPanel .rl-item > span:last-child { flex: none; font-size: var(--cf-text-xs); }
+  #raidLockdownPanel .rl-item + .rl-item { border-top: 1px solid var(--cf-border); }
+  #raidLockdownPanel .rl-item .rl-muted { font-size: var(--cf-text-xs); }
+  #raidLockdownPanel .rl-o-banned, #raidLockdownPanel .rl-o-kicked { color: var(--cf-danger); }
+  #raidLockdownPanel .rl-o-timed_out, #raidLockdownPanel .rl-o-quarantined, #raidLockdownPanel .rl-o-failed { color: var(--cf-warning); }
+  #raidLockdownPanel .rl-o-held, #raidLockdownPanel .rl-o-paused, #raidLockdownPanel .rl-o-logged { color: var(--cf-text-3); }
+
+  /* Channel picker. */
+  /* The channel picker scrolls inside a quiet box. */
+  #raidLockdownPanel .rl-chans { --cf-check-min: 12rem; gap: 2px var(--cf-4); max-height: 14rem; overflow-y: auto;
+      padding: var(--cf-2) var(--cf-3); border: 1px solid var(--cf-border); border-radius: var(--cf-radius); background: color-mix(in srgb, var(--cf-surface-2) 40%, var(--cf-surface)); }
+  #raidLockdownPanel .rl-chans:empty { display: none; }
+  #raidLockdownPanel .rl-chans > .cf-choice { align-items: center; padding: 4px 0; overflow-wrap: anywhere; }
+
+  /* History table the script draws. */
+  #raidLockdownPanel tr.rl-click { cursor: pointer; }
+  #raidLockdownPanel tr.rl-click:hover td { background: var(--cf-surface-2); }
+  #raidLockdownPanel tr.rl-detail > td { background: color-mix(in srgb, var(--cf-surface-2) 40%, var(--cf-surface)); }
+  #raidLockdownPanel tr.rl-detail .rl-item { padding-left: 0; padding-right: 0; }
+  @media (max-width: 640px) {
+    #raidLockdownPanel .rl-item, #raidLockdownPanel .rl-list > .rl-muted { padding-left: var(--cf-4); padding-right: var(--cf-4); }
+  }
+</style>
+
+<script>
+(function () {
+  const root = document.getElementById('raidLockdownPanel');
+  if (!root) return;
+  const guildId = root.dataset.guildId;
+  const api = (p) => `/api/guilds/${guildId}/raid-lockdown${p}`;
+  const $ = (id) => document.getElementById(id);
+  let state = null;
+  let poll = null;
+  let tick = null;
+
+  // DOM builder: every server value goes in through textContent / attributes, never markup.
+  function el(tag, attrs = {}, ...kids) {
+    const n = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (v == null || v === false) continue;
+      if (k === 'class') n.className = v;
+      else if (k === 'text') n.textContent = v;
+      else if (k.startsWith('on')) n.addEventListener(k.slice(2), v);
+      else n.setAttribute(k, v === true ? '' : v);
+    }
+    for (const kid of kids.flat()) if (kid != null) n.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
+    return n;
+  }
+  const when = (t) => (t ? new Date(t).toLocaleString() : '');
+  function fmt(ms) {
+    let s = Math.max(0, Math.round(ms / 1000)); const d = Math.floor(s / 86400); s -= d * 86400;
+    const h = Math.floor(s / 3600); s -= h * 3600; const m = Math.floor(s / 60); s -= m * 60;
+    return d ? `${d}d ${h}h ${m}m` : h ? `${h}h ${m}m ${s}s` : `${m}m ${s}s`;
+  }
+  const OUTCOME = { banned: 'banned', kicked: 'kicked', timed_out: 'timed out', quarantined: 'quarantined', logged: 'logged only', held: 'exempt', paused: 'paused (logged)', failed: 'could not act' };
+
+  async function req(url, options = {}) {
+    const res = await fetch(url, { credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, ...options });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.error || `Request failed (${res.status})`);
+    return body;
+  }
+  const showError = (m) => { const e = $('rlError'); e.hidden = !m; e.textContent = m || ''; if (m) e.scrollIntoView({ block: 'nearest' }); };
+  const notice = (m) => { const e = $('rlNotice'); e.hidden = !m; e.textContent = m || ''; };
+  async function act(fn, done) {
+    showError('');
+    try { await fn(); if (done) notice(done); await load(); } catch (err) { showError(err.message); }
+  }
+
+  function fillActions(select, value) {
+    select.replaceChildren(...state.actions.map(a => {
+      const allowed = state.actor.may[a.value];
+      const botOk = state.botPerms[a.value];
+      const extra = !allowed ? ' (you lack the permission)' : !botOk ? ' (the bot lacks the permission)'
+        : a.value === 'quarantine' && !state.quarantineReady ? ' (set up a quarantine role first)' : '';
+      return el('option', { value: a.value, disabled: !allowed, selected: a.value === value, text: a.label + extra });
+    }));
+  }
+
+  // ── status ─────────────────────────────────────────────────────────────
+  function renderStatus() {
+    const a = state.active;
+    $('rlStatusCard').classList.toggle('alarm', !!a);
+    const badge = $('rlBadge');
+    badge.className = 'cf-pill' + (a ? ' is-bad' : '');
+    badge.textContent = a ? `Lockdown #${a.id} on` : 'Off';
+    $('rlActive').hidden = !a;
+    $('rlStart').hidden = !!a;
+    clearInterval(tick); clearInterval(poll);
+    if (a) {
+      const end = new Date(a.endsAt).getTime();
+      const t = () => {
+        const left = end - Date.now();
+        $('rlCountdown').textContent = left > 0 ? `${fmt(left)} left` : 'Ending…';
+        if (left <= -5000) { clearInterval(tick); load(); }
+      };
+      t(); tick = setInterval(t, 1000);
+      $('rlActiveMeta').textContent = `${a.actionLabel} every join · started ${when(a.startedAt)} by `
+        + (a.trigger === 'auto' ? `the auto-trigger (${a.triggerDetail || 'join spike'})` : (a.startedBy?.name || a.startedBy?.id || 'someone'))
+        + ` · ends ${when(a.endsAt)}` + (a.invitesPaused ? ' · Discord invites paused' : '')
+        + (a.channelsLocked.length ? ` · ${a.channelsLocked.length} channel(s) locked` : '') + (a.reason ? ` · ${a.reason}` : '');
+      renderCounters(a);
+      poll = setInterval(refreshActive, 5000);
+      for (const id of ['rlStopBtn', 'rlExtendBtn', 'rlExtendBy']) $(id).disabled = !state.actor.canConfigure;
+    } else {
+      fillActions($('rlStartAction'), state.settings.lockdownAction);
+      const d = state.settings.lockdownDurationMinutes;
+      const preset = { 15: '15m', 30: '30m', 60: '1h', 120: '2h', 360: '6h', 720: '12h', 1440: '1d', 4320: '3d', 10080: '7d' }[d];
+      $('rlStartDuration').value = preset || 'custom';
+      $('rlStartCustomWrap').hidden = !!preset;
+      if (!preset) $('rlStartCustom').value = `${d}m`;
+      $('rlStartInvites').checked = state.settings.lockdownPauseInvites;
+      $('rlStartChannels').checked = state.settings.lockdownLockChannels;
+      const warn = [];
+      if (!state.incidents.botCanManage) warn.push('The bot lacks Manage Server, so it cannot pause Discord invites.');
+      if (!state.settings.lockdownChannelIds.length) warn.push('No channels are picked to lock (Lockdown settings below).');
+      $('rlStartWarn').textContent = warn.join(' ');
+      for (const id of ['rlStartAction', 'rlStartDuration', 'rlStartReason', 'rlStartConfirm', 'rlStartInvites', 'rlStartChannels']) $(id).disabled = !state.actor.canConfigure;
+      checkConfirm();
+    }
+  }
+  function renderCounters(a) {
+    const stat = (n, label) => el('div', { class: 'rl-stat' }, el('b', { text: String(n) }), el('span', { text: label }));
+    $('rlCounters').replaceChildren(stat(a.counts.blocked, 'joins blocked'), stat(a.counts.held, 'exempt / paused'),
+      stat(a.counts.failed, 'failed'), ...(a.counts.logged ? [stat(a.counts.logged, 'logged only')] : []));
+    const users = a.users.slice(-12).reverse();
+    $('rlActiveUsers').replaceChildren(...(users.length ? users.map(userRow) : [el('div', { class: 'rl-muted', text: 'Nobody has tried to join yet.' })]));
+  }
+  function userRow(u) {
+    return el('div', { class: 'rl-item' },
+      el('span', {}, u.username || u.id, ' ', el('span', { class: 'rl-muted', text: u.id })),
+      el('span', { class: `rl-o-${u.outcome}`, text: `${OUTCOME[u.outcome] || u.outcome}${u.at ? ` · ${new Date(u.at).toLocaleTimeString()}` : ''}` }));
+  }
+  async function refreshActive() {
+    try {
+      const { active } = await req(api('/active'));
+      if (!active || !state.active || active.id !== state.active.id) return load();
+      state.active = active;
+      renderCounters(active);
+    } catch { /* next tick */ }
+  }
+
+  function checkConfirm() {
+    $('rlStartBtn').disabled = !state.actor.canConfigure || $('rlStartConfirm').value.trim().toUpperCase() !== 'LOCKDOWN';
+  }
+  $('rlStartConfirm').addEventListener('input', checkConfirm);
+  $('rlStartDuration').addEventListener('change', () => { $('rlStartCustomWrap').hidden = $('rlStartDuration').value !== 'custom'; });
+  $('rlStartBtn').addEventListener('click', () => {
+    const pick = $('rlStartDuration').value;
+    const duration = pick === 'custom' ? $('rlStartCustom').value.trim() : pick;
+    act(() => req(api('/start'), { method: 'POST', body: JSON.stringify({
+      action: $('rlStartAction').value, duration, reason: $('rlStartReason').value.trim() || null,
+      pauseInvites: $('rlStartInvites').checked, lockChannels: $('rlStartChannels').checked, confirm: $('rlStartConfirm').value,
+    }) }).then(() => { $('rlStartConfirm').value = ''; $('rlStartReason').value = ''; }), 'Lockdown started.');
+  });
+  $('rlStopBtn').addEventListener('click', () => {
+    if (!confirm('End the lockdown now? New members will be able to join again, and invites it paused are resumed.')) return;
+    act(() => req(api('/stop'), { method: 'POST', body: '{}' }), 'Lockdown ended. The summary was posted to the log.');
+  });
+  $('rlExtendBtn').addEventListener('click', () => act(() => req(api('/extend'), { method: 'POST', body: JSON.stringify({ by: $('rlExtendBy').value }) }), 'Lockdown extended.'));
+
+  // ── settings ───────────────────────────────────────────────────────────
+  function renderSettings() {
+    const s = state.settings;
+    const can = state.actor.canConfigure;
+    const badge = (id, on, text) => { const b = $(id); b.className = 'cf-pill' + (on ? ' is-ok' : ''); b.textContent = text; };
+    badge('rlAutoBadge', s.autoEnabled, s.autoEnabled ? `On · ${s.autoJoins} in ${s.autoWindowSeconds}s` : 'Off');
+    badge('rlNameBadge', s.sameNameEnabled, s.sameNameEnabled ? `On · ${s.sameNameCount} in ${s.sameNameWindowSeconds}s` : 'Off');
+    $('rlAutoEnabled').checked = s.autoEnabled;
+    $('rlAutoJoins').value = s.autoJoins; $('rlAutoWindow').value = s.autoWindowSeconds; $('rlAutoDuration').value = s.autoDurationMinutes;
+    fillActions($('rlAutoAction'), s.autoAction);
+    $('rlAutoInvites').checked = s.autoPauseInvites; $('rlAutoChannels').checked = s.autoLockChannels;
+    $('rlNameEnabled').checked = s.sameNameEnabled;
+    $('rlNameCount').value = s.sameNameCount; $('rlNameWindow').value = s.sameNameWindowSeconds;
+    fillActions($('rlNameAction'), s.sameNameAction);
+    fillActions($('rlDefAction'), s.lockdownAction);
+    $('rlDefDuration').value = s.lockdownDurationMinutes;
+    $('rlDefDm').checked = s.lockdownDm; $('rlDefInvites').checked = s.lockdownPauseInvites; $('rlDefChannels').checked = s.lockdownLockChannels;
+    $('rlAlertChannel').replaceChildren(el('option', { value: '', text: 'Server log only' }),
+      ...state.channels.map(c => el('option', { value: c.id, selected: c.id === s.alertChannelId, 'data-kind': 'text', text: `#${c.name}` })));
+    renderChannels();
+    root.querySelectorAll('.rl-panel input, .rl-panel select, .rl-panel button').forEach(n => {
+      if (n.closest('#rlStatusCard') || n.id === 'rlChanFilter') return;
+      if (!can) n.disabled = true;
+    });
+  }
+  function renderChannels() {
+    const picked = new Set(state.settings.lockdownChannelIds);
+    const q = $('rlChanFilter').value.trim().toLowerCase();
+    const prev = new Set([...root.querySelectorAll('#rlChannels input:checked')].map(i => i.value));
+    const chosen = prev.size || root.dataset.chansTouched ? prev : picked;
+    $('rlChannels').replaceChildren(...state.channels.map(c => {
+      const row = el('label', { class: 'cf-choice' }, el('input', { type: 'checkbox', value: c.id, checked: chosen.has(c.id), onchange: () => { root.dataset.chansTouched = '1'; } }), `#${c.name}`);
+      if (q && !c.name.toLowerCase().includes(q)) row.hidden = true;
+      return row;
+    }));
+  }
+  $('rlChanFilter').addEventListener('input', () => {
+    const q = $('rlChanFilter').value.trim().toLowerCase();
+    root.querySelectorAll('#rlChannels label').forEach(l => { l.hidden = !!q && !l.textContent.toLowerCase().includes(q); });
+  });
+  const save = (body, done) => act(() => req(api('/settings'), { method: 'PUT', body: JSON.stringify(body) }), done);
+  $('rlAutoSave').addEventListener('click', () => {
+    const on = $('rlAutoEnabled').checked;
+    if (on && !state.settings.autoEnabled && !confirm(`Switch the auto-trigger on? When ${$('rlAutoJoins').value} people join within ${$('rlAutoWindow').value} seconds, every join for the next ${$('rlAutoDuration').value} minutes is handled with "${$('rlAutoAction').selectedOptions[0]?.textContent}".`)) return;
+    save({ autoEnabled: on, autoJoins: $('rlAutoJoins').value, autoWindowSeconds: $('rlAutoWindow').value, autoDurationMinutes: $('rlAutoDuration').value,
+      autoAction: $('rlAutoAction').value, autoPauseInvites: $('rlAutoInvites').checked, autoLockChannels: $('rlAutoChannels').checked }, 'Auto-trigger saved.');
+  });
+  $('rlNameSave').addEventListener('click', () => {
+    const on = $('rlNameEnabled').checked;
+    if (on && !state.settings.sameNameEnabled && !confirm(`Switch the same-name check on? ${$('rlNameCount').value} or more joins with the same name within ${$('rlNameWindow').value} seconds will all get "${$('rlNameAction').selectedOptions[0]?.textContent}".`)) return;
+    save({ sameNameEnabled: on, sameNameCount: $('rlNameCount').value, sameNameWindowSeconds: $('rlNameWindow').value, sameNameAction: $('rlNameAction').value }, 'Same-name check saved.');
+  });
+  $('rlDefSave').addEventListener('click', () => {
+    const ids = [...root.querySelectorAll('#rlChannels input:checked')].map(i => i.value);
+    save({ lockdownAction: $('rlDefAction').value, lockdownDurationMinutes: $('rlDefDuration').value, lockdownDm: $('rlDefDm').checked,
+      lockdownPauseInvites: $('rlDefInvites').checked, lockdownLockChannels: $('rlDefChannels').checked, lockdownChannelIds: ids,
+      alertChannelId: $('rlAlertChannel').value || null }, 'Lockdown settings saved.');
+    delete root.dataset.chansTouched;
+  });
+
+  // ── incident actions ───────────────────────────────────────────────────
+  function renderIncidents() {
+    const i = state.incidents;
+    const s = state.settings;
+    $('rlKeepDms').checked = s.keepDmsDisabled;
+    $('rlKeepInvites').checked = s.keepInvitesDisabled;
+    const line = (until, ours, label) => until
+      ? `${label} paused until ${when(until)}${ours ? ' (set by this bot)' : ' (set in Discord by hand, or by another bot)'}`
+      : `${label} allowed.`;
+    $('rlDmsState').textContent = line(i.dmsUntil, i.dmsOurs, 'DMs');
+    $('rlInvitesState').textContent = line(i.invitesUntil, i.invitesOurs, 'Invites');
+    const meta = [];
+    if (i.raidDetectedAt) meta.push(`Discord flagged a raid here at ${when(i.raidDetectedAt)}.`);
+    if (i.dmSpamDetectedAt) meta.push(`Discord flagged DM spam at ${when(i.dmSpamDetectedAt)}.`);
+    if (!i.botCanManage) meta.push('The bot needs the Manage Server permission for this.');
+    if (i.error) meta.push(`Last attempt failed: ${i.error}.`);
+    if (i.checkedAt) meta.push(`Last checked ${when(i.checkedAt)}.`);
+    $('rlIncidentMeta').textContent = meta.join(' ');
+    for (const id of ['rlKeepDms', 'rlKeepInvites', 'rlIncidentSync']) $(id).disabled = !state.actor.canConfigure;
+  }
+  function incidentSwitch(id, kind, text) {
+    $(id).addEventListener('change', () => {
+      const enabled = $(id).checked;
+      if (!confirm(enabled ? `${text} now? The bot keeps it on, renewing it every day, until you switch it off.` : `Switch this off? A running pause is lifted now${kind === 'invites' ? ', unless a lockdown is holding invites' : ''}.`)) {
+        $(id).checked = !enabled; return;
+      }
+      act(() => req(api('/incidents'), { method: 'POST', body: JSON.stringify({ kind, enabled }) }), enabled ? 'Applied.' : 'Switched off.');
+    });
+  }
+  incidentSwitch('rlKeepDms', 'dms', 'Disable DMs between members who are not friends');
+  incidentSwitch('rlKeepInvites', 'invites', 'Pause all invites to this server');
+  $('rlIncidentSync').addEventListener('click', () => act(() => req(api('/incidents/sync'), { method: 'POST', body: '{}' }), 'Checked with Discord.'));
+
+  // ── history ────────────────────────────────────────────────────────────
+  function renderHistory() {
+    const rows = state.history;
+    if (!rows.length) { $('rlHistory').replaceChildren(el('div', { class: 'cf-state cf-state--empty cf-state--compact' }, el('p', { class: 'cf-state-title', text: 'No lockdowns yet' }))); return; }
+    const tbody = el('tbody');
+    for (const h of rows) {
+      const lasted = h.endedAt ? fmt(new Date(h.endedAt) - new Date(h.startedAt)) : 'running';
+      const tr = el('tr', { class: 'rl-click', title: 'Show who tried to join' },
+        el('td', { 'data-label': 'Lockdown', text: `#${h.id}` }),
+        el('td', { 'data-label': 'Started', text: when(h.startedAt) }),
+        el('td', { 'data-label': 'Trigger', text: h.trigger === 'auto' ? `Auto${h.triggerDetail ? `: ${h.triggerDetail}` : ''}` : `By ${h.startedBy?.name || h.startedBy?.id || 'someone'}` }),
+        el('td', { 'data-label': 'Action', text: h.actionLabel }),
+        el('td', { 'data-label': 'Length', text: h.status === 'active' ? `running, ends ${when(h.endsAt)}` : `${lasted}${h.endReason === 'expired' ? '' : h.endedBy ? ` (ended by ${h.endedBy.name || h.endedBy.id})` : ''}` }),
+        el('td', { 'data-label': 'Joins', text: `${h.counts.blocked} blocked · ${h.counts.held} exempt · ${h.counts.failed} failed` }));
+      const detail = el('tr', { class: 'rl-detail', hidden: true }, el('td', { colspan: '6' },
+        h.reason ? el('div', { class: 'rl-muted', text: `Reason: ${h.reason}` }) : null,
+        el('div', { class: 'rl-list' }, ...(h.users.length ? h.users.map(userRow) : [el('div', { class: 'rl-muted', text: 'Nobody tried to join.' })]))));
+      tr.addEventListener('click', () => { detail.hidden = !detail.hidden; });
+      tbody.append(tr, detail);
+    }
+    $('rlHistory').replaceChildren(el('div', { class: 'cf-table-wrap' }, el('table', { class: 'cf-table cf-table--stack' },
+      el('thead', {}, el('tr', {}, ...['#', 'Started', 'Trigger', 'Action', 'Length', 'Joins'].map(t => el('th', { scope: 'col', text: t })))), tbody)));
+  }
+
+  async function load() {
+    try {
+      state = await req(api('/'));
+      if (!state.actor.canConfigure) notice('This section is view-only for you.');
+      renderStatus(); renderSettings(); renderIncidents(); renderHistory();
+    } catch (err) { showError(err.message); }
+  }
+  load();
+})();
+</script>

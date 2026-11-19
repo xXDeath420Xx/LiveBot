@@ -1,18 +1,18 @@
 import { SlashCommandBuilder, PermissionFlagsBits, MessageFlags } from 'discord.js';
-import { renderStep } from '../../core/setup-wizard.js';
+import { renderHome } from '../../core/setup-wizard.js';
 import logger from '../../utils/logger.js';
 
 export default {
   category: 'admin',
   data: new SlashCommandBuilder()
     .setName('setup')
-    .setDescription('Guided walkthrough to turn the bot\'s features on or off, one at a time')
+    .setDescription('Set up the bot for this server — presets, or feature by feature')
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .setDMPermission(false),
 
   async execute(interaction) {
     try {
-      const payload = await renderStep(interaction.guildId, 0);
+      const payload = await renderHome(interaction.guildId, interaction.guild.name);
       await interaction.reply({ ...payload, flags: MessageFlags.Ephemeral });
     } catch (err) {
       logger.error('[setup] start failed', { err: err.message });

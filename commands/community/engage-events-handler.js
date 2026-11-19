@@ -3,6 +3,7 @@ import pool from '../../utils/db.js';
 import { importTwitchSchedule } from '../../core/event-schedule-twitch.js';
 import { getEventScheduleManager } from '../../jobs/event-schedule-checker.js';
 import { DEFAULT_CATEGORIES } from '../../migrations/117_event_schedules.js';
+import { themeColor } from '../../core/guild-theme.js';
 
 const DOW_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
@@ -161,7 +162,7 @@ export async function handleList(interaction) {
     });
 
     const embed = new EmbedBuilder()
-        .setColor('#3498DB')
+        .setColor(themeColor(interaction.guildId, 'primary'))
         .setTitle('Your Scheduled Events')
         .setDescription(lines.join('\n').slice(0, 4000))
         .setFooter({ text: 'Remove with /engage events remove id:<id>' });

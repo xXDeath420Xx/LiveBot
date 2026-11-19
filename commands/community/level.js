@@ -8,7 +8,16 @@ import {
   ButtonStyle
 } from 'discord.js';
 import { generateRankCard } from '../../utils/rank-card-generator.js';
+import { effectiveRankCardSettings } from '../../core/rankcard-policy.js';
+import { accessibleAttachment, rankCardAltText } from '../../utils/accessible-attachment.js';
+import { displayNameFor } from '../../utils/display-name.js';
 import pool from '../../utils/db.js';
+import { themeColor } from '../../core/guild-theme.js';
+import { parseTimeToSeconds, formatDuration } from '../../utils/timeParser.js';
+import { logFeatureEvent, userLabel } from '../../core/feature-log.js';
+import { XP_COOLDOWN_MIN, XP_COOLDOWN_MAX } from '../../core/leveling-settings.js';
+
+const XP_EVENT_MAX_SECONDS = 30 * 24 * 60 * 60; // 30 days
 
 export default {
   data: new SlashCommandBuilder()
@@ -58,10 +67,10 @@ export default {
         .addIntegerOption(option =>
           option
             .setName('cooldown')
-            .setDescription('Cooldown in seconds between XP gains')
+            .setDescription(`Seconds between XP gains (${XP_COOLDOWN_MIN}-${XP_COOLDOWN_MAX})`)
             .setRequired(false)
-            .setMinValue(1)
-            .setMaxValue(300)
+            .setMinValue(XP_COOLDOWN_MIN)
+            .setMaxValue(XP_COOLDOWN_MAX)
         )
         .addChannelOption(option =>
           option
@@ -180,6 +189,47 @@ export default {
             .setName('list')
             .setDescription('List all role rewards')
         )
+    )
+    .addSubcommandGroup(group =>
+      group
+        .setName('xp-event')
+        .setDescription('Run double-XP style multiplier events (Admin)')
+        .addSubcommand(subcommand =>
+          subcommand
+            .setName('start')
+            .setDescription('Start an XP multiplier event now (Admin)')
+            .addNumberOption(option =>
+              option
+                .setName('multiplier')
+                .setDescription('XP multiplier, e.g. 2 for double XP')
+                .setRequired(true)
+                .setMinValue(1.1)
+                .setMaxValue(9.99)
+            )
+            .addStringOption(option =>
+              option
+                .setName('duration')
+                .setDescription('How long it runs, e.g. 2h, 1d, 1d 12h (max 30d)')
+                .setRequired(true)
+            )
+            .addStringOption(option =>
+              option
+                .setName('name')
+                .setDescription('Event name (defaults to "<multiplier>x XP")')
+                .setRequired(false)
+                .setMaxLength(100)
+            )
+        )
+        .addSubcommand(subcommand =>
+          subcommand
+            .setName('stop')
+            .setDescription('End the running XP event now (Admin)')
+        )
+        .addSubcommand(subcommand =>
+          subcommand
+            .setName('list')
+            .setDescription('Show the running and recent XP events (Admin)')
+        )
     ),
 
   async execute(interaction) {
@@ -199,6 +249,10 @@ export default {
       // Handle role-reward subcommand group
       if (subcommandGroup === 'role-reward') {
         return await this.handleRoleReward(interaction, levelingManager, subcommand);
+      }
+
+      if (subcommandGroup === 'xp-event') {
+        return await this.handleXPEvent(interaction, levelingManager, subcommand);
       }
 
       // Handle other subcommands
@@ -262,19 +316,29 @@ export default {
         'SELECT * FROM rank_card_settings WHERE guild_id = ? AND user_id = ?',
         [interaction.guild.id, user.id]
       );
-      const customization = customRows.length > 0 ? customRows[0] : null;
+      // Server rules from the Rank Cards page (customisation off, uploads off, default accent).
+      const customization = await effectiveRankCardSettings(interaction.guild.id, customRows.length > 0 ? customRows[0] : null);
 
       const rankCard = await generateRankCard(user, rankData, member, customization);
 
-      const attachment = new AttachmentBuilder(rankCard, { name: 'rank-card.png' });
+      const attachment = accessibleAttachment(rankCard, {
+        name: 'rank-card.png',
+        description: rankCardAltText({
+          username: displayNameFor(user, interaction.guild),
+          level: rankData.level,
+          xp: rankData.xp,
+          requiredXp: rankData.xpForNextLevel,
+          rank: rankData.rank,
+        }),
+      });
 
       await interaction.editReply({ files: [attachment] });
     } catch (error) {
       console.error('[Rank Card Error]', error);
       // Fallback to text-based rank display
       const embed = new EmbedBuilder()
-        .setColor('#5865F2')
-        .setTitle(`${user.username}'s Rank`)
+        .setColor(themeColor(interaction.guildId, 'primary'))
+        .setTitle(`${displayNameFor(user, interaction.guild)}'s Rank`)
         .setThumbnail(user.displayAvatarURL({ size: 256 }))
         .addFields(
           { name: 'Level', value: `${rankData.level}`, inline: true },
@@ -304,7 +368,7 @@ export default {
     }
 
     const embed = new EmbedBuilder()
-      .setColor('#FFD700')
+      .setColor(themeColor(interaction.guildId, 'warning'))
       .setTitle(`${interaction.guild.name} - XP Leaderboard`)
       .setDescription(`Showing page ${page} of ${leaderboard.totalPages}`)
       .setFooter({ text: `Total users: ${leaderboard.totalUsers}` });
@@ -319,7 +383,7 @@ export default {
 
       try {
         const user = await interaction.client.users.fetch(userData.user_id).catch(() => null);
-        const username = user ? user.username : `Unknown User (${userData.user_id})`;
+        const username = user ? displayNameFor(user, interaction.guild) : `Unknown User (${userData.user_id})`;
         const totalXP = levelingManager.getTotalXP(userData.level, userData.xp);
 
         description += `${medal} **${username}** - Level ${userData.level} (${totalXP} total XP)\n`;
@@ -367,7 +431,13 @@ export default {
           { name: 'XP per Message', value: `${config.xp_per_message}`, inline: true },
           { name: 'Cooldown', value: `${config.xp_cooldown_seconds}s`, inline: true },
           { name: 'Voice XP Enabled', value: config.voice_xp_enabled ? 'Yes' : 'No', inline: true },
-          { name: 'Level Up Channel', value: config.level_up_channel_id ? `<#${config.level_up_channel_id}>` : 'Current channel', inline: true },
+          {
+            name: 'Level Up Channel',
+            value: config.level_up_mode === 'dm' ? 'Sent by DM'
+              : config.level_up_mode === 'off' ? 'Not announced'
+              : config.level_up_channel_id ? `<#${config.level_up_channel_id}>` : 'Current channel',
+            inline: true
+          },
           { name: 'Weekend Multiplier', value: `${config.xp_multiplier_weekends}x`, inline: true },
           { name: 'Level Up Message', value: config.level_up_message, inline: false }
         )
@@ -388,7 +458,9 @@ export default {
       xp_per_voice_minute: currentConfig.xp_per_voice_minute,
       voice_xp_enabled: currentConfig.voice_xp_enabled,
       xp_multiplier_weekends: currentConfig.xp_multiplier_weekends,
-      xp_multiplier_events: currentConfig.xp_multiplier_events
+      xp_multiplier_events: currentConfig.xp_multiplier_events,
+      // Picking a channel here means "announce in it", so it ends DM/off announcements
+      level_up_mode: levelUpChannel ? 'channel' : undefined
     };
 
     const success = await levelingManager.updateConfig(interaction.guild.id, newConfig);
@@ -446,8 +518,13 @@ export default {
 
     if (result) {
       await interaction.editReply({
-        content: `Successfully set ${user.username}'s XP to ${amount} (Level ${result.level}, ${result.xp} XP).`
+        content: `Successfully set ${displayNameFor(user, interaction.guild)}'s XP to ${amount} (Level ${result.level}, ${result.xp} XP).`
       });
+      void levelingManager.syncMemberRewards(interaction.guild, user.id, result.level).catch(() => {});
+      void logFeatureEvent(() => (interaction.guild), 'xp.adjusted', () => ({
+        title: '🛠️ XP Adjusted',
+        fields: [['Member', userLabel(user)], ['Change', `Set to ${amount} XP`], ['Now', `Level ${result.level} · ${result.xp} XP`], ['Admin', userLabel(interaction.user)]],
+      }));
     } else {
       await interaction.editReply({
         content: 'Failed to set XP. Please try again later.'
@@ -468,13 +545,20 @@ export default {
 
     await interaction.deferReply({ ephemeral: true });
 
-    const oldLevel = await levelingManager.addXP(interaction.guild.id, user.id, amount);
+    // false: the xp.adjusted log below already shows the level change
+    const oldLevel = await levelingManager.addXP(interaction.guild.id, user.id, amount, false);
     const rankData = await levelingManager.getUserRank(interaction.guild.id, user.id);
 
     if (rankData) {
       await interaction.editReply({
-        content: `Successfully added ${amount} XP to ${user.username}. They are now Level ${rankData.level} with ${rankData.xp} XP.`
+        content: `Successfully added ${amount} XP to ${displayNameFor(user, interaction.guild)}. They are now Level ${rankData.level} with ${rankData.xp} XP.`
       });
+      void levelingManager.syncMemberRewards(interaction.guild, user.id, rankData.level).catch(() => {});
+      void logFeatureEvent(() => (interaction.guild), 'xp.adjusted', () => ({
+        title: '🛠️ XP Adjusted',
+        fields: [['Member', userLabel(user)], ['Change', `+${amount} XP`], ['Now', `Level ${rankData.level} · ${rankData.xp} XP`],
+          ['Level', rankData.level > oldLevel ? `${oldLevel} → ${rankData.level}` : null], ['Admin', userLabel(interaction.user)]],
+      }));
     } else {
       await interaction.editReply({
         content: 'Failed to add XP. Please try again later.'
@@ -499,8 +583,13 @@ export default {
 
     if (result) {
       await interaction.editReply({
-        content: `Successfully removed ${amount} XP from ${user.username}. They are now Level ${result.level} with ${result.xp} XP.`
+        content: `Successfully removed ${amount} XP from ${displayNameFor(user, interaction.guild)}. They are now Level ${result.level} with ${result.xp} XP.`
       });
+      void levelingManager.syncMemberRewards(interaction.guild, user.id, result.level).catch(() => {});
+      void logFeatureEvent(() => (interaction.guild), 'xp.adjusted', () => ({
+        title: '🛠️ XP Adjusted',
+        fields: [['Member', userLabel(user)], ['Change', `-${amount} XP`], ['Now', `Level ${result.level} · ${result.xp} XP`], ['Admin', userLabel(interaction.user)]],
+      }));
     } else {
       await interaction.editReply({
         content: 'Failed to remove XP or user not found.'
@@ -524,8 +613,12 @@ export default {
       const success = await levelingManager.resetUser(interaction.guild.id, user.id);
       if (success) {
         await interaction.editReply({
-          content: `Successfully reset ${user.username}'s level and XP.`
+          content: `Successfully reset ${displayNameFor(user, interaction.guild)}'s level and XP.`
         });
+        void logFeatureEvent(() => (interaction.guild), 'xp.reset', () => ({
+          title: '♻️ Levels Reset',
+          fields: [['Member', userLabel(user)], ['Admin', userLabel(interaction.user)]],
+        }));
       } else {
         await interaction.editReply({
           content: 'Failed to reset user levels.'
@@ -553,7 +646,7 @@ export default {
       }
 
       const embed = new EmbedBuilder()
-        .setColor('#5865F2')
+        .setColor(themeColor(interaction.guildId, 'primary'))
         .setTitle('Level Role Rewards')
         .setDescription('Users will receive these roles when reaching the specified levels:');
 
@@ -611,6 +704,99 @@ export default {
           content: 'Failed to remove role reward or no reward found for that level.'
         });
       }
+    }
+  },
+
+  async handleXPEvent(interaction, levelingManager, subcommand) {
+    if (!interaction.member.permissions.has(PermissionFlagsBits.ManageGuild)) {
+      return interaction.reply({
+        content: 'You need the **Manage Server** permission to use this command.',
+        ephemeral: true
+      });
+    }
+
+    const guildId = interaction.guild.id;
+
+    if (subcommand === 'start') {
+      const multiplier = Math.round(interaction.options.getNumber('multiplier') * 100) / 100;
+      const durationStr = interaction.options.getString('duration');
+      const durationSeconds = parseTimeToSeconds(durationStr);
+
+      if (!durationSeconds || durationSeconds < 60) {
+        return interaction.reply({
+          content: 'Invalid duration. Use formats like `30m`, `2h`, `1d` or `1d 12h` (at least 1 minute).',
+          ephemeral: true
+        });
+      }
+      if (durationSeconds > XP_EVENT_MAX_SECONDS) {
+        return interaction.reply({
+          content: 'XP events can run for at most 30 days.',
+          ephemeral: true
+        });
+      }
+
+      const name = (interaction.options.getString('name') || '').trim() || `${multiplier}x XP`;
+
+      await interaction.deferReply({ ephemeral: true });
+
+      const { event, conflict } = await levelingManager.startXPEvent(guildId, { name, multiplier, durationSeconds });
+
+      if (conflict) {
+        return interaction.editReply({
+          content: `**${conflict.event_name}** (${parseFloat(conflict.multiplier)}x) is already running until <t:${conflict.end_ts}:f>. Use \`/level xp-event stop\` first.`
+        });
+      }
+
+      const enabled = await levelingManager.isEnabledForGuild(guildId);
+
+      const embed = new EmbedBuilder()
+        .setColor(themeColor(interaction.guildId, 'success'))
+        .setTitle('XP Event Started')
+        .setDescription(`**${event.event_name}** is live — all message and voice XP is multiplied by **${parseFloat(event.multiplier)}x**.`)
+        .addFields(
+          { name: 'Duration', value: formatDuration(durationSeconds), inline: true },
+          { name: 'Ends', value: `<t:${event.end_ts}:f> (<t:${event.end_ts}:R>)`, inline: true }
+        );
+
+      if (!enabled) {
+        embed.addFields({ name: 'Note', value: 'The leveling system is currently **disabled** here, so nobody earns XP until it is enabled.' });
+      }
+
+      return interaction.editReply({ embeds: [embed] });
+    }
+
+    if (subcommand === 'stop') {
+      await interaction.deferReply({ ephemeral: true });
+      const stopped = await levelingManager.stopXPEvents(guildId);
+      return interaction.editReply({
+        content: stopped > 0 ? 'The XP event has been ended. XP is back to normal.' : 'There is no XP event running right now.'
+      });
+    }
+
+    if (subcommand === 'list') {
+      await interaction.deferReply({ ephemeral: true });
+      const events = await levelingManager.listXPEvents(guildId, 10);
+
+      if (events.length === 0) {
+        return interaction.editReply({
+          content: 'No XP events have been run in this server yet. Start one with `/level xp-event start`.'
+        });
+      }
+
+      const nowTs = Math.floor(Date.now() / 1000);
+      const lines = events.map(e => {
+        const status = Number(e.is_active) ? '**Active**'
+          : (Number(e.enabled) && e.start_ts > nowTs) ? 'Scheduled'
+          : 'Ended';
+        return `${status} — **${e.event_name}** (${parseFloat(e.multiplier)}x) · <t:${e.start_ts}:f> → <t:${e.end_ts}:f>`;
+      });
+
+      const embed = new EmbedBuilder()
+        .setColor(themeColor(interaction.guildId, 'primary'))
+        .setTitle('XP Events')
+        .setDescription(lines.join('\n'));
+
+      return interaction.editReply({ embeds: [embed] });
     }
   },
 

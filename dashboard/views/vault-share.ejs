@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="<%= locals.uiTheme || 'dark' %>" data-density="<%= locals.uiDensity || 'comfortable' %>" data-style="<%= locals.uiStyle || 'cards' %>">
+<head>
+    <script>/* Anti-flash: the saved theme (signed in) or the footer switch's choice (signed out) before first paint. */(function () { try { var d = document.documentElement, t = localStorage.getItem('ui-theme'); if (<%= locals.userPrefs ? 'true' : 'false' %>) localStorage.setItem('ui-theme', d.getAttribute('data-theme') || 'dark'); else if (t && /^[a-z]{3,12}$/.test(t)) d.setAttribute('data-theme', t); } catch (e) {} })();</script>
+    <script>(function(){var d=document.documentElement,m=window.matchMedia?matchMedia('(prefers-color-scheme: light)'):null;function a(){if(d.getAttribute('data-theme')==='auto'||d.getAttribute('data-theme-mode')==='auto'){d.setAttribute('data-theme-mode','auto');d.setAttribute('data-theme',m&&m.matches?'light':'dark');}}a();if(m&&m.addEventListener)m.addEventListener('change',a);})();</script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="darkreader-lock">
+    <meta name="csrf-token" content="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
+    <meta name="robots" content="noindex, nofollow, noarchive">
+    <meta name="referrer" content="no-referrer">
+    <title>Secure download · CertiFried</title>
+    <link rel="icon" type="image/png" href="/images/CertiFried.png">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="/css/themes.css">
+    <link rel="stylesheet" href="/css/cf-ui.css">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: var(--cf-bg); color: var(--cf-text); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 16px; }
+        .panel { width: 100%; max-width: 440px; background: var(--cf-surface); border: 1px solid var(--cf-border); border-radius: var(--cf-radius-lg); padding: 24px; text-align: center; }
+        .brand { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; margin-bottom: 20px; text-decoration: none; color: var(--cf-text); font-weight: 600; font-size: var(--cf-text-sm); }
+        .brand img { width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--cf-border-strong); }
+        .icon { width: 52px; height: 52px; margin: 0 auto 16px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.3rem; background: var(--cf-surface-2); border: 1px solid var(--cf-border); color: var(--cf-text-2); }
+        .icon.bad { color: var(--cf-danger); border-color: color-mix(in srgb, var(--cf-danger) 35%, transparent); background: color-mix(in srgb, var(--cf-danger) 10%, transparent); }
+        h1 { font-size: var(--cf-text-lg); font-weight: 600; margin-bottom: 4px; overflow-wrap: anywhere; }
+        .sub { color: var(--cf-text-3); font-size: var(--cf-text-sm); line-height: 1.5; }
+        .meta { margin: 20px 0; padding: 4px 12px; background: var(--cf-surface-2); border: 1px solid var(--cf-border); border-radius: var(--cf-radius); text-align: left; }
+        .meta-row { display: flex; justify-content: space-between; gap: 12px; font-size: var(--cf-text-sm); padding: 8px 0; }
+        .meta-row + .meta-row { border-top: 1px solid var(--cf-border); }
+        .meta-label { color: var(--cf-text-3); }
+        .meta-value { font-weight: 500; text-align: right; overflow-wrap: anywhere; }
+        .hash { font-family: var(--cf-mono); font-size: var(--cf-text-xs); color: var(--cf-text-2); }
+        .note { color: var(--cf-text-2); font-size: var(--cf-text-sm); padding: 8px 0; border-top: 1px solid var(--cf-border); overflow-wrap: anywhere; }
+        .btn-block { width: 100%; min-height: 44px; }
+        .input { width: 100%; margin-bottom: 12px; text-align: center; }
+        .error { color: var(--cf-danger); font-size: var(--cf-text-sm); margin-bottom: 12px; }
+        .foot { margin-top: 20px; font-size: var(--cf-text-xs); color: var(--cf-text-3); line-height: 1.5; }
+    </style>
+</head>
+<body>
+    <main class="panel">
+        <a href="/" class="brand">
+            <img src="/images/CertiFried.png" alt="">
+            <span>CertiFried</span>
+        </a>
+
+        <% if (state !== 'ok') { %>
+            <div class="icon bad" aria-hidden="true"><i class="fas fa-link-slash"></i></div>
+            <h1><%= state === 'expired' ? 'This link has expired' : state === 'exhausted' ? 'This link is used up' : 'Link not found' %></h1>
+            <p class="sub">
+                <% if (state === 'expired') { %>
+                    Share links are time-limited on purpose. Ask whoever sent it for a fresh one.
+                <% } else if (state === 'exhausted') { %>
+                    It had a download limit and that limit has been reached.
+                <% } else { %>
+                    It may have been revoked, or the file may have been deleted.
+                <% } %>
+            </p>
+        <% } else if (needsPassword) { %>
+            <div class="icon" aria-hidden="true"><i class="fas fa-lock"></i></div>
+            <h1>Password required</h1>
+            <p class="sub">This file is protected. Enter the password you were given.</p>
+            <form method="POST" action="<%= unlockUrl %>" style="margin-top:1.5rem;">
+                <input type="hidden" name="_csrf" value="<%= typeof csrfToken !== 'undefined' ? csrfToken : '' %>">
+                <% if (error) { %><div class="error" role="alert"><%= error %></div><% } %>
+                <input class="input form-control" type="password" name="password" placeholder="Password" aria-label="Password" autofocus required autocomplete="off">
+                <button class="btn btn-primary btn-lg btn-block" type="submit">Unlock</button>
+            </form>
+        <% } else { %>
+            <div class="icon" aria-hidden="true"><i class="fas fa-file-arrow-down"></i></div>
+            <h1><%= file.name %></h1>
+            <p class="sub"><%= file.sizeLabel %></p>
+
+            <div class="meta">
+                <div class="meta-row">
+                    <span class="meta-label">Link expires</span>
+                    <span class="meta-value"><time datetime="<%= new Date(file.expiresAt).toISOString() %>" data-local-time><%= new Date(file.expiresAt).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' }) %> UTC</time></span>
+                </div>
+                <% if (file.remaining !== null) { %>
+                <div class="meta-row">
+                    <span class="meta-label">Downloads left</span>
+                    <span class="meta-value"><%= file.remaining %></span>
+                </div>
+                <% } %>
+                <% if (file.sha256) { %>
+                <div class="meta-row">
+                    <span class="meta-label">SHA-256</span>
+                    <span class="meta-value hash"><%= file.sha256.slice(0, 32) %>...</span>
+                </div>
+                <% } %>
+                <% if (file.note) { %><div class="note"><%= file.note %></div><% } %>
+            </div>
+
+            <a class="btn btn-primary btn-lg btn-block" href="<%= downloadUrl %>" rel="noreferrer">
+                <i class="fas fa-download" aria-hidden="true"></i> Download
+            </a>
+        <% } %>
+
+        <p class="foot">
+            Shared privately through CertiFried.<br>
+            Don't forward this link: it works for anyone who has it.
+        </p>
+    </main>
+    <script>
+        // Expiry in the visitor's own time zone.
+        document.querySelectorAll('time[data-local-time]').forEach(function (t) {
+            var d = new Date(t.getAttribute('datetime'));
+            if (!isNaN(d)) t.textContent = d.toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' });
+        });
+    </script>
+</body>
+</html>

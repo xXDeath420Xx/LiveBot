@@ -184,6 +184,43 @@ export default class LastFMAPIService {
   }
 
   /**
+   * Tracks Last.fm listeners treat as similar to the given one (used by autoplay).
+   * @returns {Promise<Array<{title: string, artist: string}>>} best match first; [] on any failure
+   */
+  async getSimilarTracks(artist, track, limit = 25) {
+    if (!this.apiKey || !artist || !track) return [];
+    try {
+      const response = await axios.get(this.baseUrl, {
+        params: { method: 'track.getsimilar', artist, track, autocorrect: 1, limit, api_key: this.apiKey, format: 'json' },
+        timeout: this.timeout
+      });
+      return (response.data?.similartracks?.track || [])
+        .map(t => ({ title: t.name, artist: t.artist?.name }))
+        .filter(t => t.title && t.artist);
+    } catch (error) {
+      logger.warn('[Last.fm API] Error getting similar tracks', { error: error.message, artist, track });
+      return [];
+    }
+  }
+
+  /**
+   * Artists similar to the given one, best match first. [] on any failure.
+   */
+  async getSimilarArtists(artist, limit = 10) {
+    if (!this.apiKey || !artist) return [];
+    try {
+      const response = await axios.get(this.baseUrl, {
+        params: { method: 'artist.getsimilar', artist, autocorrect: 1, limit, api_key: this.apiKey, format: 'json' },
+        timeout: this.timeout
+      });
+      return (response.data?.similarartists?.artist || []).map(a => a.name).filter(Boolean);
+    } catch (error) {
+      logger.warn('[Last.fm API] Error getting similar artists', { error: error.message, artist });
+      return [];
+    }
+  }
+
+  /**
    * Compare music taste between two users
    * @param {string} user1 - First Last.fm username
    * @param {string} user2 - Second Last.fm username
@@ -195,20 +232,17 @@ export default class LastFMAPIService {
     }
 
     try {
-      const response = await axios.get(this.baseUrl, {
-        params: {
-          method: 'tasteometer.compare',
-          type1: 'user',
-          type2: 'user',
-          value1: user1,
-          value2: user2,
-          api_key: this.apiKey,
-          format: 'json'
-        },
-        timeout: this.timeout
-      });
+      // Last.fm retired tasteometer.compare ("Invalid Method"), so compute it from both
+      // users' all-time top 100 artists. Returns the old { result: { score, artists } } shape.
+      const [a, b] = await Promise.all([
+        this.getTopArtists(user1, 'overall', 100),
+        this.getTopArtists(user2, 'overall', 100)
+      ]);
+      const bNames = new Set(b.map(x => x.name.toLowerCase()));
+      const shared = a.filter(x => bNames.has(x.name.toLowerCase()));
+      const score = Math.min(1, shared.length / Math.max(1, Math.min(a.length, b.length)));
 
-      return response.data.comparison;
+      return { result: { score, artists: { artist: shared.map(x => ({ name: x.name })) } } };
     } catch (error) {
       logger.error('[Last.fm API] Error comparing users', {
         error: error.message,

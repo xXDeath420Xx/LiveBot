@@ -1,380 +1,35 @@
+<%#
+  Moderation: the mod log channel and mute role (POST update-moderation), messages to members, protected
+  roles and default lengths (PUT /api/guilds/:id/moderation/messages), recent infractions, the
+  automated ban log (core/ban-log.js, GET /api/guilds/:id/insight/ban-log, one-click Unban),
+  /ban requests (GET/PUT /api/guilds/:id/moderation/ban-requests, core/ban-requests.js; shown only where
+  /ban is available, `banAvailable`, core/guild-scoped-access.js) and
+  escalation rules (POST add-/remove-escalation-rule). Built on the settings-row kit
+  (dashboard/public/css/cf-settings.css, partials/kit/); field names and ids are the ones the
+  routes and the settings search (core/settings-index.js) already use.
+%>
+<%
+const modTone = { warn: 'is-warn', timeout: 'is-warn', mute: 'is-warn', kick: 'is-info', ban: 'is-bad' };
+const modType = (t) => { const s = String(t || ''); return s ? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase() : 'Unknown'; };
+// Pickers: text channels only for the log (voice channels are text-based in discord.js too), and role
+// colours for the chips. The mute role is one the bot gives, so roles above the bot are marked.
+const modTextChannels = (channels || []).filter(c => !(c && typeof c.isVoiceBased === 'function' && c.isVoiceBased()));
+const modBotTop = (guild && guild.members && guild.members.me && guild.members.me.roles && guild.members.me.roles.highest) ? guild.members.me.roles.highest.position : Infinity;
+const modRoleColor = (r) => (r && r.hexColor && r.hexColor !== '#000000') ? r.hexColor : '';
+%>
 <style>
-/* Compact Moderation Page Styles */
-.mod-section-card {
-    background: rgba(255, 255, 255, 0.03);
-    border: 1px solid rgba(167, 139, 250, 0.15);
-    border-radius: 12px;
-    overflow: hidden;
-    margin-bottom: 16px;
-}
-
-.mod-section-header {
-    background: rgba(167, 139, 250, 0.08);
-    padding: 14px 18px;
-    border-bottom: 1px solid rgba(167, 139, 250, 0.15);
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.mod-section-header i { font-size: 1rem; color: #a78bfa; }
-.mod-section-header.infractions i { color: #f87171; }
-.mod-section-header.escalation i { color: #fbbf24; }
-.mod-section-header h3 { font-size: 0.95rem; font-weight: 600; color: #ffffff; margin: 0; }
-.mod-section-header p { font-size: 0.75rem; color: rgba(255, 255, 255, 0.5); margin: 2px 0 0 0; }
-
-.mod-section-body { padding: 18px; }
-
-/* Form Styles */
-.mod-form-group { margin-bottom: 16px; }
-
-.mod-form-label {
-    display: block;
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: rgba(255, 255, 255, 0.9);
-    margin-bottom: 6px;
-}
-
-.mod-form-label i { color: #a78bfa; margin-right: 6px; }
-
-.mod-form-input,
-.mod-form-select {
-    width: 100%;
-    padding: 10px 14px;
-    background: rgba(0, 0, 0, 0.3);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 8px;
-    color: #ffffff;
-    font-size: 0.85rem;
-    transition: all 0.2s;
-}
-
-.mod-form-input:focus,
-.mod-form-select:focus {
-    outline: none;
-    border-color: rgba(167, 139, 250, 0.5);
-    box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.1);
-}
-
-.mod-form-select option { background: #1a1d21; color: #ffffff; }
-
-.mod-form-hint {
-    display: block;
-    margin-top: 4px;
-    font-size: 0.7rem;
-    color: rgba(255, 255, 255, 0.45);
-}
-
-.mod-form-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 14px;
-}
-
-/* Save Button */
-.mod-save-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 20px;
-    background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%);
-    border: none;
-    border-radius: 8px;
-    color: #ffffff;
-    font-size: 0.85rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.mod-save-btn:hover { box-shadow: 0 4px 16px rgba(124, 58, 237, 0.4); }
-
-/* Infractions Table */
-.mod-table-wrapper {
-    background: rgba(0, 0, 0, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: 10px;
-    overflow: hidden;
-}
-
-.mod-infractions-table {
-    width: 100%;
-    border-collapse: collapse;
-}
-
-.mod-infractions-table thead { background: rgba(0, 0, 0, 0.2); }
-
-.mod-infractions-table th {
-    padding: 10px 14px;
-    text-align: left;
-    font-size: 0.7rem;
-    font-weight: 600;
-    color: rgba(255, 255, 255, 0.5);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-
-.mod-infractions-table th:first-child {
-    border-radius: 12px 0 0 0;
-}
-
-.mod-infractions-table th:last-child {
-    border-radius: 0 12px 0 0;
-}
-
-.mod-infractions-table td {
-    padding: 16px 20px;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.mod-infractions-table tbody tr {
-    transition: all 0.2s ease;
-}
-
-.mod-infractions-table tbody tr:hover {
-    background: rgba(167, 139, 250, 0.05);
-}
-
-.mod-infractions-table tbody tr:last-child td {
-    border-bottom: none;
-}
-
-/* User Info */
-.mod-user-info {
-    font-weight: 600;
-    color: #ffffff;
-}
-
-.mod-moderator-info {
-    font-size: 0.85rem;
-    color: rgba(255, 255, 255, 0.6);
-}
-
-/* Type Badges */
-.mod-type-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 12px;
-    border-radius: 6px;
-    font-size: 0.75rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-}
-
-.mod-type-badge.warn {
-    background: rgba(251, 191, 36, 0.15);
-    border: 1px solid rgba(251, 191, 36, 0.3);
-    color: #fbbf24;
-}
-
-.mod-type-badge.timeout {
-    background: rgba(251, 146, 60, 0.15);
-    border: 1px solid rgba(251, 146, 60, 0.3);
-    color: #fb923c;
-}
-
-.mod-type-badge.kick {
-    background: rgba(167, 139, 250, 0.15);
-    border: 1px solid rgba(167, 139, 250, 0.3);
-    color: #a78bfa;
-}
-
-.mod-type-badge.ban {
-    background: rgba(239, 68, 68, 0.15);
-    border: 1px solid rgba(239, 68, 68, 0.3);
-    color: #ef4444;
-}
-
-/* Reason */
-.mod-reason {
-    max-width: 250px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    color: rgba(255, 255, 255, 0.7);
-    font-size: 0.9rem;
-}
-
-/* Date */
-.mod-date {
-    font-size: 0.8rem;
-    color: rgba(255, 255, 255, 0.5);
-}
-
-/* Add Rule Form */
-.mod-add-rule-form {
-    background: rgba(0, 0, 0, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 12px;
-    padding: 20px;
-    margin-bottom: 24px;
-}
-
-.mod-add-rule-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr 1fr auto;
-    gap: 16px;
-    align-items: end;
-}
-
-.mod-add-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 14px 24px;
-    background: linear-gradient(135deg, #7c3aed 0%, #a78bfa 100%);
-    border: none;
-    border-radius: 12px;
-    color: #ffffff;
-    font-size: 0.9rem;
-    font-weight: 700;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    white-space: nowrap;
-}
-
-.mod-add-btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 24px rgba(124, 58, 237, 0.4);
-}
-
-/* Escalation Rule Card */
-.mod-rule-card {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    background: rgba(0, 0, 0, 0.2);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 12px;
-    padding: 16px 20px;
-    margin-bottom: 12px;
-    transition: all 0.2s ease;
-}
-
-.mod-rule-card:hover {
-    background: rgba(0, 0, 0, 0.3);
-    border-color: rgba(167, 139, 250, 0.3);
-}
-
-.mod-rule-card:last-child {
-    margin-bottom: 0;
-}
-
-.mod-rule-text {
-    color: rgba(255, 255, 255, 0.8);
-    font-size: 0.95rem;
-}
-
-.mod-rule-highlight {
-    font-weight: 700;
-}
-
-.mod-rule-highlight.count {
-    color: #a78bfa;
-}
-
-.mod-rule-highlight.hours {
-    color: #60a5fa;
-}
-
-.mod-rule-highlight.action {
-    color: #f87171;
-    text-transform: uppercase;
-}
-
-/* Delete Button */
-.mod-delete-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 16px;
-    background: rgba(248, 113, 113, 0.1);
-    border: 1px solid rgba(248, 113, 113, 0.3);
-    border-radius: 10px;
-    color: #f87171;
-    font-size: 0.85rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.mod-delete-btn:hover {
-    background: rgba(248, 113, 113, 0.2);
-    border-color: rgba(248, 113, 113, 0.5);
-    transform: translateY(-2px);
-}
-
-/* Empty State */
-.mod-empty-state {
-    text-align: center;
-    padding: 48px 24px;
-    background: rgba(0, 0, 0, 0.2);
-    border: 2px dashed rgba(167, 139, 250, 0.2);
-    border-radius: 12px;
-}
-
-.mod-empty-icon {
-    font-size: 2.5rem;
-    color: rgba(167, 139, 250, 0.3);
-    margin-bottom: 16px;
-}
-
-.mod-empty-text {
-    color: rgba(255, 255, 255, 0.5);
-    font-size: 0.95rem;
-}
-
-@media (max-width: 992px) {
-    .mod-add-rule-grid {
-        grid-template-columns: 1fr 1fr;
+    .mod-user-info { font-weight: 500; color: var(--cf-text); min-width: 0; }
+    .mod-moderator-info { font-size: var(--cf-text-sm); color: var(--cf-text-2); }
+    .mod-reason { max-width: 22rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--cf-text-2); }
+    .mod-date { font-size: var(--cf-text-xs); color: var(--cf-text-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .mod-evidence { margin-top: 2px; font-size: var(--cf-text-xs); color: var(--cf-text-3); white-space: normal; }
+    .mod-unbanned { font-size: var(--cf-text-xs); color: var(--cf-success); white-space: nowrap; }
+    #banLogStatus { font-size: var(--cf-text-sm); color: var(--cf-text-3); }
+    #banLogFilter { width: auto; max-width: 15rem; }
+    @media (max-width: 640px) {
+        .mod-reason { max-width: none; white-space: normal; overflow-wrap: anywhere; }
+        #banLogFilter { max-width: none; flex: 1 1 100%; }
     }
-}
-
-@media (max-width: 768px) {
-    .mod-form-grid {
-        grid-template-columns: 1fr;
-    }
-
-    .mod-add-rule-grid {
-        grid-template-columns: 1fr;
-    }
-
-    .mod-add-btn {
-        width: 100%;
-        justify-content: center;
-    }
-
-    .mod-rule-card {
-        flex-direction: column;
-        gap: 12px;
-        align-items: flex-start;
-    }
-
-    /* Touch-friendly inputs */
-    .mod-form-select,
-    .mod-form-input,
-    .mod-save-btn,
-    .mod-add-btn,
-    .mod-delete-btn { min-height: 44px; }
-
-    .mod-delete-btn { width: 100%; justify-content: center; }
-
-    /* Infractions table mobile: hide moderator + date columns */
-    .mod-infractions-table .mobile-hide { display: none !important; }
-
-    .mod-infractions-table td { padding: 10px 12px; }
-
-    /* Reason column allow wrapping */
-    .mod-reason {
-        max-width: none;
-        white-space: normal;
-    }
-
-    .mod-infractions-table { font-size: 0.85rem; }
-}
 </style>
 
 <div class="page-section">
@@ -384,194 +39,655 @@
                 <i class="fas fa-shield-alt"></i>
                 <span>Moderation</span>
             </div>
-            <div class="page-section-subtitle">
-                Configure moderation tools, infractions, and escalation rules
-            </div>
+            <div class="page-section-subtitle">Settings every moderation command shares, and the record those commands leave.</div>
         </div>
     </div>
 
-    <!-- Configuration Section -->
-    <div class="mod-section-card">
-        <div class="mod-section-header">
-            <i class="fas fa-cog"></i>
+    <section class="cf-section" aria-labelledby="mod-config-title">
+        <header class="cf-section-head">
             <div>
-                <h3>Configuration</h3>
-                <p>Set up moderation logging and mute settings</p>
+                <h2 class="cf-section-title" id="mod-config-title">Log and mute role</h2>
+                <p class="cf-section-desc">Where moderation actions are recorded, and the role the bot uses when it mutes someone.</p>
             </div>
-        </div>
-        <div class="mod-section-body">
-            <form action="/manage/<%= guild.id %>/update-moderation" method="POST">
-                <div class="mod-form-grid">
-                    <div class="mod-form-group">
-                        <label class="mod-form-label">
-                            <i class="fas fa-hashtag"></i>Moderation Log Channel
-                        </label>
-                        <select class="mod-form-select" name="mod_log_channel_id">
-                            <option value="">Select a channel</option>
-                            <% channels.forEach(channel => { %>
-                                <option value="<%= channel.id %>" <%= settings && settings.mod_log_channel_id === channel.id ? 'selected' : '' %>>
-                                    #<%= channel.name %>
-                                </option>
-                            <% }) %>
-                        </select>
-                        <span class="mod-form-hint">Where moderation actions will be logged</span>
-                    </div>
-
-                    <div class="mod-form-group">
-                        <label class="mod-form-label">
-                            <i class="fas fa-volume-mute"></i>Mute Role
-                        </label>
-                        <select class="mod-form-select" name="muted_role_id">
-                            <option value="">Select a role</option>
-                            <% roles.forEach(role => { %>
-                                <option value="<%= role.id %>" <%= settings && settings.muted_role_id === role.id ? 'selected' : '' %>>
-                                    <%= role.name %>
-                                </option>
-                            <% }) %>
-                        </select>
-                        <span class="mod-form-hint">Role assigned to muted users</span>
-                    </div>
+        </header>
+        <form class="cf-rows" action="/manage/<%= guild.id %>/update-moderation" method="POST">
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="f-moderation-mod_log_channel_id">Moderation log channel</label>
+                    <p class="cf-row-desc" id="f-moderation-mod_log_channel_id-desc">Every warning, timeout, kick and ban is posted here.</p>
                 </div>
+                <div class="cf-row-control">
+                    <select id="f-moderation-mod_log_channel_id" class="form-select" name="mod_log_channel_id" aria-describedby="f-moderation-mod_log_channel_id-desc">
+                        <%- include('../kit/_options', { items: modTextChannels, selected: settings ? settings.mod_log_channel_id : null, prefix: '#', empty: 'No log channel' }) %>
+                    </select>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="f-moderation-muted_role_id">Mute role</label>
+                    <p class="cf-row-desc" id="f-moderation-muted_role_id-desc">Given to members when they are muted and taken away when the mute ends.</p>
+                </div>
+                <div class="cf-row-control">
+                    <select id="f-moderation-muted_role_id" class="form-select" name="muted_role_id" aria-describedby="f-moderation-muted_role_id-desc">
+                        <option value="">No mute role</option>
+                        <% (roles || []).forEach(r => { const sel = settings && String(settings.muted_role_id) === String(r.id); const above = typeof r.position === 'number' && r.position >= modBotTop; %><option value="<%= r.id %>" data-kind="role" data-color="<%= modRoleColor(r) %>"<%= sel ? ' selected' : '' %><%= above && !sel ? ' disabled' : '' %>><%= r.name %><%= above ? ' (above the bot)' : '' %></option>
+                        <% }) %>
+                    </select>
+                </div>
+            </div>
+            <div class="cf-section-foot">
+                <button type="submit" class="btn btn-primary">Save</button>
+            </div>
+        </form>
+    </section>
 
-                <button type="submit" class="mod-save-btn">
-                    <i class="fas fa-save"></i>
-                    Save Configuration
-                </button>
-            </form>
-        </div>
-    </div>
-
-    <!-- Recent Infractions Section -->
-    <div class="mod-section-card">
-        <div class="mod-section-header infractions">
-            <i class="fas fa-exclamation-triangle"></i>
+    <%# Messages to members, protected roles and default lengths (moderation_config, migration 420;
+        PUT /api/guilds/:id/moderation/messages). Used by every bot moderation command through
+        core/moderation-manager.js. %>
+    <%
+    const mdRow = settings || {};
+    const mdOnDefault = { warn: true, mute: true, unmute: true, kick: true, ban: true, unban: false };
+    const mdOn = (a) => (mdRow['dm_on_' + a] === undefined || mdRow['dm_on_' + a] === null) ? mdOnDefault[a] : !!Number(mdRow['dm_on_' + a]);
+    let mdTemplates = {};
+    try { const p = typeof mdRow.dm_templates === 'string' ? JSON.parse(mdRow.dm_templates) : (mdRow.dm_templates || {}); if (p && typeof p === 'object') mdTemplates = p; } catch (e) { mdTemplates = {}; }
+    let mdProtected = [];
+    try { const p = typeof mdRow.protected_role_ids === 'string' ? JSON.parse(mdRow.protected_role_ids) : (mdRow.protected_role_ids || []); if (Array.isArray(p)) mdProtected = p.map(String); } catch (e) { mdProtected = []; }
+    const mdActions = [
+        { key: 'warn', label: 'Warning', when: 'When a member is warned.', title: 'You have been warned in {server}' },
+        { key: 'mute', label: 'Timeout', when: 'When a member is muted (timed out).', title: 'You have been muted in {server}' },
+        { key: 'unmute', label: 'Timeout removed', when: 'When a timeout is lifted early.', title: 'You have been unmuted in {server}' },
+        { key: 'kick', label: 'Kick', when: 'Sent just before the kick.', title: 'You have been kicked from {server}' },
+        { key: 'ban', label: 'Ban', when: 'Sent just before the ban.', title: 'You have been banned from {server}' },
+        { key: 'unban', label: 'Unban', when: 'Often not delivered: after a ban the bot usually shares no server with them.', title: 'You have been unbanned from {server}' },
+    ];
+    %>
+    <style>
+        .mod-dm-text { min-height: 4.5rem; }
+        .mod-dm-vars { font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+        .mod-dm-vars code { font-size: var(--cf-text-xs); }
+        .mod-dm-preview { border: 1px solid var(--cf-border); border-radius: var(--cf-radius); background: var(--cf-surface-2); padding: var(--cf-3) var(--cf-4); font-size: var(--cf-text-sm); color: var(--cf-text); overflow-wrap: anywhere; line-height: 1.45; }
+        .mod-dm-preview-bar { display: flex; align-items: center; justify-content: space-between; gap: var(--cf-3); flex-wrap: wrap; margin-bottom: 6px; }
+        .mod-dm-preview-head { font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+        .mod-dm-author { display: flex; align-items: center; gap: 6px; margin-bottom: 4px; font-weight: 600; }
+        .mod-dm-avatar { flex: none; width: 20px; height: 20px; border-radius: 50%; background: var(--cf-border-strong); }
+        .mod-dm-app { padding: 0 4px; border-radius: 3px; font-size: 10px; font-weight: 600; line-height: 15px; color: var(--cf-on-accent, #fff); background: var(--cf-accent); }
+        .mod-dm-plain { white-space: pre-wrap; }
+        .mod-dm-embed { max-width: 520px; padding: var(--cf-3); border-left: 4px solid var(--cf-danger); border-radius: var(--cf-radius-sm); background: var(--cf-surface); }
+        .mod-dm-embed.is-warn { border-left-color: var(--cf-warning); }
+        .mod-dm-embed.is-ok { border-left-color: var(--cf-success); }
+        .mod-dm-preview-title { font-weight: 600; margin-bottom: 6px; }
+        .mod-dm-preview-field + .mod-dm-preview-field { margin-top: 6px; }
+        .mod-dm-field-name { font-size: var(--cf-text-xs); font-weight: 600; color: var(--cf-text); }
+        .mod-dm-field-value { color: var(--cf-text-2); white-space: pre-wrap; }
+        #modMsgStatus, #modSafetyStatus, #cfk-mod-test-status { font-size: var(--cf-text-sm); color: var(--cf-text-3); }
+    </style>
+    <section class="cf-section" id="modMessagesSection" aria-labelledby="mod-dm-title">
+        <header class="cf-section-head">
             <div>
-                <h3>Recent Infractions</h3>
-                <p>View recent moderation actions in your server</p>
+                <h2 class="cf-section-title" id="mod-dm-title">Messages to members</h2>
+                <p class="cf-section-desc">The direct message a member gets when a moderator uses a bot command on them. Leave a message empty to send the standard one.</p>
             </div>
-        </div>
-        <div class="mod-section-body">
-            <% if (infractions && infractions.length > 0) { %>
-                <div class="mod-table-wrapper">
-                    <table class="mod-infractions-table">
-                        <thead>
-                            <tr>
-                                <th>User</th>
-                                <th class="mobile-hide">Moderator</th>
-                                <th>Type</th>
-                                <th>Reason</th>
-                                <th class="mobile-hide">Date</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <% infractions.forEach(infraction => { %>
-                                <tr>
-                                    <td>
-                                        <div class="mod-user-info">
-                                            <%= infraction.user_tag || infraction.user_id %>
-                                        </div>
-                                    </td>
-                                    <td class="mobile-hide">
-                                        <div class="mod-moderator-info">
-                                            <%= infraction.moderator_tag || infraction.moderator_id %>
-                                        </div>
-                                    </td>
-                                    <td>
-                                        <span class="mod-type-badge <%= infraction.type %>">
-                                            <i class="fas fa-<%= infraction.type === 'warn' ? 'exclamation' : infraction.type === 'timeout' ? 'clock' : infraction.type === 'kick' ? 'boot' : 'gavel' %>"></i>
-                                            <%= infraction.type %>
-                                        </span>
-                                    </td>
-                                    <td>
-                                        <div class="mod-reason" title="<%= infraction.reason || 'No reason provided' %>">
-                                            <%= infraction.reason || 'No reason provided' %>
-                                        </div>
-                                    </td>
-                                    <td class="mobile-hide">
-                                        <div class="mod-date">
-                                            <%= new Date(infraction.created_at).toLocaleDateString() %>
-                                        </div>
-                                    </td>
-                                </tr>
-                            <% }) %>
-                        </tbody>
-                    </table>
+        </header>
+        <div class="cf-rows">
+            <% mdActions.forEach(a => { %>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="f-moderation-dm_on_<%= a.key %>">Message on <%= a.label.toLowerCase() %></label>
+                    <p class="cf-row-desc" id="f-moderation-dm_on_<%= a.key %>-desc"><%= a.when %></p>
                 </div>
-            <% } else { %>
-                <div class="mod-empty-state">
-                    <div class="mod-empty-icon">
-                        <i class="fas fa-check-circle"></i>
-                    </div>
-                    <div class="mod-empty-text">No recent infractions found</div>
+                <div class="cf-row-control">
+                    <input class="cf-switch" type="checkbox" role="switch" id="f-moderation-dm_on_<%= a.key %>" name="dm_on_<%= a.key %>" data-dm-on="<%= a.key %>" aria-describedby="f-moderation-dm_on_<%= a.key %>-desc" <%= mdOn(a.key) ? 'checked' : '' %>>
                 </div>
-            <% } %>
-        </div>
-    </div>
-
-    <!-- Escalation Rules Section -->
-    <div class="mod-section-card">
-        <div class="mod-section-header escalation">
-            <i class="fas fa-layer-group"></i>
-            <div>
-                <h3>Escalation Rules</h3>
-                <p>Automatically apply stricter punishments for repeat offenders</p>
             </div>
-        </div>
-        <div class="mod-section-body">
-            <!-- Add Rule Form -->
-            <form action="/manage/<%= guild.id %>/add-escalation-rule" method="POST" class="mod-add-rule-form">
-                <div class="mod-add-rule-grid">
-                    <div class="mod-form-group" style="margin-bottom: 0;">
-                        <label class="mod-form-label">Infraction Count</label>
-                        <input type="number" name="infraction_count" class="mod-form-input" required min="1" placeholder="3">
-                    </div>
-                    <div class="mod-form-group" style="margin-bottom: 0;">
-                        <label class="mod-form-label">Within Hours</label>
-                        <input type="number" name="time_period_hours" class="mod-form-input" required min="1" placeholder="24">
-                    </div>
-                    <div class="mod-form-group" style="margin-bottom: 0;">
-                        <label class="mod-form-label">Action</label>
-                        <select name="action" class="mod-form-select" required>
-                            <option value="timeout">Timeout</option>
-                            <option value="kick">Kick</option>
-                            <option value="ban">Ban</option>
-                        </select>
-                    </div>
-                    <div>
-                        <button type="submit" class="mod-add-btn">
-                            <i class="fas fa-plus"></i>
-                            Add Rule
-                        </button>
-                    </div>
-                </div>
-            </form>
-
-            <!-- Existing Rules -->
-            <% if (escalationRules && escalationRules.length > 0) { %>
-                <% escalationRules.forEach(rule => { %>
-                    <div class="mod-rule-card">
-                        <div class="mod-rule-text">
-                            After <span class="mod-rule-highlight count"><%= rule.infraction_count %></span> infractions
-                            within <span class="mod-rule-highlight hours"><%= rule.time_period_hours %></span> hours,
-                            apply <span class="mod-rule-highlight action"><%= rule.action %></span>
+            <div class="cf-row cf-row--sub cf-row--stack">
+                <label class="visually-hidden" for="f-moderation-dm_template_<%= a.key %>"><%= a.label %> message</label>
+                <textarea id="f-moderation-dm_template_<%= a.key %>" name="dm_template_<%= a.key %>" class="form-control mod-dm-text" rows="2" maxlength="1500" data-dm-template="<%= a.key %>" data-dm-title="<%= a.title %>" placeholder="Standard message: <%= a.title %>, with the reason"><%= typeof mdTemplates[a.key] === 'string' ? mdTemplates[a.key] : '' %></textarea>
+            </div>
+            <% }) %>
+            <div class="cf-row cf-row--stack">
+                <p class="mod-dm-vars" id="mod-dm-vars">You can use <code>{user}</code> <code>{server}</code> <code>{action}</code> <code>{reason}</code> <code>{duration}</code> <code>{moderator}</code> <code>{appeal_link}</code>. <code>{moderator}</code> says "a moderator" unless the switch below is on.</p>
+                <div>
+                    <div class="mod-dm-preview-bar">
+                        <div class="mod-dm-preview-head" id="mod-dm-preview-head">Preview</div>
+                        <div class="cf-inline">
+                            <span id="cfk-mod-test-status" role="status" aria-live="polite"></span>
+                            <button type="button" class="btn btn-sm btn-secondary" id="cfk-mod-test-send" title="Sends the message shown, as it is now, to you in a DM">Send me a test</button>
                         </div>
-                        <form action="/manage/<%= guild.id %>/remove-escalation-rule" method="POST" style="display: inline;">
-                            <input type="hidden" name="ruleId" value="<%= rule.id %>">
-                            <button type="submit" class="mod-delete-btn">
-                                <i class="fas fa-trash"></i>
-                                Remove
-                            </button>
-                        </form>
                     </div>
-                <% }) %>
-            <% } else { %>
-                <div class="mod-empty-state">
-                    <div class="mod-empty-icon">
-                        <i class="fas fa-layer-group"></i>
-                    </div>
-                    <div class="mod-empty-text">No escalation rules configured</div>
+                    <div class="mod-dm-preview" id="mod-dm-preview" aria-live="polite"></div>
                 </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="f-moderation-dm_show_moderator">Name the moderator</label>
+                    <p class="cf-row-desc" id="f-moderation-dm_show_moderator-desc">Off keeps moderators anonymous: the message says "a moderator".</p>
+                </div>
+                <div class="cf-row-control">
+                    <input class="cf-switch" type="checkbox" role="switch" id="f-moderation-dm_show_moderator" name="dm_show_moderator" aria-describedby="f-moderation-dm_show_moderator-desc" <%= Number(mdRow.dm_show_moderator || 0) ? 'checked' : '' %>>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="f-moderation-appeal_link">Appeal link</label>
+                    <p class="cf-row-desc" id="f-moderation-appeal_link-desc">Added to warning, timeout, kick and ban messages, and available as <code>{appeal_link}</code>.</p>
+                </div>
+                <div class="cf-row-control">
+                    <input id="f-moderation-appeal_link" type="url" class="form-control" name="appeal_link" maxlength="500" placeholder="https://" value="<%= mdRow.appeal_link || '' %>" aria-describedby="f-moderation-appeal_link-desc">
+                </div>
+            </div>
+            <div class="cf-section-foot">
+                <span id="modMsgStatus" class="cf-foot-note" role="status" aria-live="polite"></span>
+                <button type="button" class="btn btn-primary" data-mod-save>Save</button>
+            </div>
+        </div>
+    </section>
+
+    <section class="cf-section" id="modSafetySection" aria-labelledby="mod-safety-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="mod-safety-title">Protected roles and default lengths</h2>
+                <p class="cf-section-desc">Applies to the bot's moderation commands, including the buttons on filtered-word reports.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="f-moderation-protected_role_ids">Protected roles</label>
+                    <p class="cf-row-desc" id="f-moderation-protected_role_ids-desc">Members with any of these roles cannot be warned, muted, kicked or banned with bot commands.</p>
+                </div>
+                <div class="cf-row-control">
+                    <select id="f-moderation-protected_role_ids" class="form-select" name="protected_role_ids" multiple size="5" aria-describedby="f-moderation-protected_role_ids-desc">
+                        <% (roles || []).forEach(r => { %><option value="<%= r.id %>" data-kind="role" data-color="<%= modRoleColor(r) %>"<%= mdProtected.includes(String(r.id)) ? ' selected' : '' %>><%= r.name %></option>
+                        <% }) %>
+                    </select>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="f-moderation-default_mute_minutes">Default timeout length</label>
+                    <p class="cf-row-desc" id="f-moderation-default_mute_minutes-desc">Used when a mute is given no length. Empty means a length is required. At most 40320 minutes (28 days).</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-unit">
+                        <input id="f-moderation-default_mute_minutes" type="number" class="form-control" name="default_mute_minutes" min="1" max="40320" step="1" value="<%= mdRow.default_mute_minutes || '' %>" aria-describedby="f-moderation-default_mute_minutes-desc">
+                        <span class="cf-unit">minutes</span>
+                    </div>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="f-moderation-default_ban_minutes">Default ban length</label>
+                    <p class="cf-row-desc" id="f-moderation-default_ban_minutes-desc">Used when a ban is given no length; the member is unbanned when it runs out. Empty keeps bans permanent. A moderator can still type "permanent". At most 525600 minutes (365 days).</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-unit">
+                        <input id="f-moderation-default_ban_minutes" type="number" class="form-control" name="default_ban_minutes" min="1" max="525600" step="1" value="<%= mdRow.default_ban_minutes || '' %>" aria-describedby="f-moderation-default_ban_minutes-desc">
+                        <span class="cf-unit">minutes</span>
+                    </div>
+                </div>
+            </div>
+            <div class="cf-section-foot">
+                <span id="modSafetyStatus" class="cf-foot-note" role="status" aria-live="polite"></span>
+                <button type="button" class="btn btn-primary" data-mod-save>Save</button>
+            </div>
+        </div>
+    </section>
+    <script>
+    (function () {
+        const guildId = <%- JSON.stringify(String(guild.id)).replace(/</g, '\\u003c') %>;
+        const serverName = <%- JSON.stringify(String(guild.name || 'this server')).replace(/</g, '\\u003c') %>;
+        const myName = <%- JSON.stringify(String((locals.user && (locals.user.global_name || locals.user.username)) || 'YourName')).replace(/</g, '\\u003c') %>;
+        const url = '/api/guilds/' + guildId + '/moderation/messages';
+        const $ = (id) => document.getElementById(id);
+        const actions = ['warn', 'mute', 'unmute', 'kick', 'ban', 'unban'];
+        const past = { warn: 'warned', mute: 'muted', unmute: 'unmuted', kick: 'kicked', ban: 'banned', unban: 'unbanned' };
+        const sampleLength = { mute: '1 hour', ban: 'permanent' };
+        const botName = <%- JSON.stringify(String((guild && guild.client && guild.client.user && guild.client.user.username) || 'CertiFried')).replace(/</g, '\\u003c') %>;
+        const tone = { warn: 'is-warn', mute: 'is-warn', unmute: 'is-ok', kick: '', ban: '', unban: 'is-ok' };
+        const preview = $('mod-dm-preview');
+        const previewHead = $('mod-dm-preview-head');
+        let shown = 'ban';
+
+        function fill(text, vars) {
+            return String(text).replace(/\{(user|server|action|reason|duration|moderator|appeal_link)\}/gi, (_, k) => vars[k.toLowerCase()] ?? '');
+        }
+        function line(cls, text) { const d = document.createElement('div'); d.className = cls; d.textContent = text; return d; }
+        function field(name, value) {
+            const d = line('mod-dm-preview-field', '');
+            d.append(line('mod-dm-field-name', name), line('mod-dm-field-value', value));
+            return d;
+        }
+        function author() {
+            const a = line('mod-dm-author', '');
+            const av = document.createElement('span'); av.className = 'mod-dm-avatar'; av.setAttribute('aria-hidden', 'true');
+            const app = document.createElement('span'); app.className = 'mod-dm-app'; app.textContent = 'APP'; app.setAttribute('aria-hidden', 'true');
+            a.append(av, document.createTextNode(botName), app);
+            return a;
+        }
+        function render() {
+            const box = document.querySelector('[data-dm-template="' + shown + '"]');
+            const showMod = $('f-moderation-dm_show_moderator').checked;
+            const appeal = $('f-moderation-appeal_link').value.trim();
+            const vars = { user: 'pixelpal', server: serverName, action: past[shown], reason: 'Spamming in #general',
+                duration: sampleLength[shown] || '', moderator: showMod ? myName : 'a moderator', appeal_link: appeal };
+            const on = $('f-moderation-dm_on_' + shown).checked;
+            previewHead.textContent = 'Preview: ' + box.labels[0].textContent + (on ? '' : ' (switched off, not sent)');
+            const custom = box.value.trim();
+            if (custom) {
+                preview.replaceChildren(author(), line('mod-dm-plain', (fill(custom, vars).trim() || fill(box.dataset.dmTitle, vars)).slice(0, 2000)));
+                return;
+            }
+            const embed = line('mod-dm-embed' + (tone[shown] ? ' ' + tone[shown] : ''), '');
+            embed.append(line('mod-dm-preview-title', fill(box.dataset.dmTitle, vars)), field('Reason', vars.reason));
+            if (shown === 'mute') embed.append(field('Ends', 'in ' + vars.duration));
+            else if (vars.duration) embed.append(field('Duration', vars.duration));
+            if (showMod) embed.append(field('Moderator', myName));
+            if (appeal && ['warn', 'mute', 'kick', 'ban'].includes(shown)) embed.append(field('Appeal', appeal));
+            preview.replaceChildren(author(), embed);
+        }
+        actions.forEach(a => {
+            const box = document.querySelector('[data-dm-template="' + a + '"]');
+            const sw = $('f-moderation-dm_on_' + a);
+            const pick = () => { shown = a; render(); };
+            box.addEventListener('focus', pick);
+            box.addEventListener('input', pick);
+            sw.addEventListener('change', pick);
+        });
+        $('f-moderation-dm_show_moderator').addEventListener('change', render);
+        $('f-moderation-appeal_link').addEventListener('input', render);
+        render();
+
+        // Send me a test: the message being previewed, with its unsaved text, DMed to the admin.
+        $('cfk-mod-test-send').addEventListener('click', async () => {
+            const btn = $('cfk-mod-test-send');
+            const status = $('cfk-mod-test-status');
+            btn.disabled = true;
+            status.textContent = 'Sending...';
+            try {
+                const res = await fetch(url + '/test', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ action: shown, template: document.querySelector('[data-dm-template="' + shown + '"]').value,
+                        showModerator: $('f-moderation-dm_show_moderator').checked, appealLink: $('f-moderation-appeal_link').value.trim() }) });
+                const d = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(d.error || ('Request failed (' + res.status + ')'));
+                status.textContent = 'Sent. Check your DMs.';
+            } catch (e) {
+                status.textContent = e.message;
+            } finally {
+                setTimeout(() => { btn.disabled = false; }, 3000);
+            }
+        });
+
+        function collect() {
+            const dmOn = {}, templates = {};
+            actions.forEach(a => {
+                dmOn[a] = $('f-moderation-dm_on_' + a).checked;
+                templates[a] = document.querySelector('[data-dm-template="' + a + '"]').value;
+            });
+            return {
+                dmOn, templates,
+                showModerator: $('f-moderation-dm_show_moderator').checked,
+                appealLink: $('f-moderation-appeal_link').value.trim(),
+                protectedRoleIds: Array.from($('f-moderation-protected_role_ids').selectedOptions, o => o.value),
+                defaultMuteMinutes: $('f-moderation-default_mute_minutes').value.trim(),
+                defaultBanMinutes: $('f-moderation-default_ban_minutes').value.trim(),
+            };
+        }
+        function apply(d) {
+            actions.forEach(a => {
+                $('f-moderation-dm_on_' + a).checked = !!(d.dmOn && d.dmOn[a]);
+                document.querySelector('[data-dm-template="' + a + '"]').value = (d.templates && d.templates[a]) || '';
+            });
+            $('f-moderation-dm_show_moderator').checked = !!d.showModerator;
+            $('f-moderation-appeal_link').value = d.appealLink || '';
+            const keep = new Set(d.protectedRoleIds || []);
+            for (const o of $('f-moderation-protected_role_ids').options) o.selected = keep.has(o.value);
+            $('f-moderation-default_mute_minutes').value = d.defaultMuteMinutes || '';
+            $('f-moderation-default_ban_minutes').value = d.defaultBanMinutes || '';
+            render();
+        }
+        document.querySelectorAll('[data-mod-save]').forEach(btn => btn.addEventListener('click', async () => {
+            const status = btn.closest('.cf-section').querySelector('[role="status"]');
+            const buttons = document.querySelectorAll('[data-mod-save]');
+            buttons.forEach(b => { b.disabled = true; });
+            status.textContent = 'Saving...';
+            try {
+                const res = await fetch(url, { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(collect()) });
+                const d = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(d.error || ('Request failed (' + res.status + ')'));
+                apply(d);
+                status.textContent = 'Saved.';
+            } catch (e) {
+                status.textContent = e.message;
+            } finally {
+                buttons.forEach(b => { b.disabled = false; });
+            }
+        }));
+    })();
+    </script>
+
+    <%# /ban requests (ban_request_config; core/ban-requests.js, H-657). Loaded and saved by the script below.
+        /ban is per-server (guildScoped), so the section only shows where it is registered (H-712). %>
+    <% if (typeof banAvailable !== 'undefined' && banAvailable === false) { %>
+    <p class="cf-section-desc" id="cfk-mod-banreq-unavailable">Ban requests come with <code>/ban</code>, which is not available in this server. Moderators with Ban Members can still use <code>/admin mod ban</code>.</p>
+    <% } else { %>
+    <section class="cf-section" id="cfk-mod-banreq" aria-labelledby="mod-banreq-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="mod-banreq-title">Ban requests</h2>
+                <p class="cf-section-desc">How <code>/ban</code> works for moderators who cannot ban: it kicks the member and posts a request that an admin approves or declines. Members with Ban Members always ban outright; members with Kick Members can always file a request.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="cfk-mod-banreq-channel">Request channel</label>
+                    <p class="cf-row-desc" id="cfk-mod-banreq-channel-desc">Requests are posted here with Approve and Decline buttons, and the approver roles are pinged. Without one, requests only reach the server log.</p>
+                </div>
+                <div class="cf-row-control">
+                    <select id="cfk-mod-banreq-channel" class="form-select" aria-describedby="cfk-mod-banreq-channel-desc">
+                        <%- include('../kit/_options', { items: modTextChannels, selected: null, prefix: '#', empty: 'No request channel' }) %>
+                    </select>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="cfk-mod-banreq-approvers">Approver roles</label>
+                    <p class="cf-row-desc" id="cfk-mod-banreq-approvers-desc">Members with these roles ban outright with <code>/ban</code> and can approve or decline requests, even without Ban Members.</p>
+                </div>
+                <div class="cf-row-control">
+                    <select id="cfk-mod-banreq-approvers" class="form-select" multiple size="5" aria-describedby="cfk-mod-banreq-approvers-desc">
+                        <% (roles || []).forEach(r => { %><option value="<%= r.id %>" data-kind="role" data-color="<%= modRoleColor(r) %>"><%= r.name %></option>
+                        <% }) %>
+                    </select>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="cfk-mod-banreq-requesters">Requester roles</label>
+                    <p class="cf-row-desc" id="cfk-mod-banreq-requesters-desc">Members with these roles can use <code>/ban</code> to kick and ask for a ban, even without Kick Members. Discord shows <code>/ban</code> only to members with Kick Members unless you change it under Server Settings, Integrations.</p>
+                </div>
+                <div class="cf-row-control">
+                    <select id="cfk-mod-banreq-requesters" class="form-select" multiple size="5" aria-describedby="cfk-mod-banreq-requesters-desc">
+                        <% (roles || []).forEach(r => { %><option value="<%= r.id %>" data-kind="role" data-color="<%= modRoleColor(r) %>"><%= r.name %></option>
+                        <% }) %>
+                    </select>
+                </div>
+            </div>
+            <div class="cf-section-foot">
+                <span id="cfk-mod-banreq-status" class="cf-foot-note" role="status" aria-live="polite"></span>
+                <button type="button" class="btn btn-primary" id="cfk-mod-banreq-save">Save</button>
+            </div>
+        </div>
+    </section>
+    <script>
+    (function () {
+        const guildId = <%- JSON.stringify(String(guild.id)).replace(/</g, '\\u003c') %>;
+        const url = '/api/guilds/' + guildId + '/moderation/ban-requests';
+        const $ = (id) => document.getElementById(id);
+        const status = $('cfk-mod-banreq-status');
+        const save = $('cfk-mod-banreq-save');
+        const pick = (id, values) => { const want = new Set((values || []).map(String)); for (const o of $(id).options) o.selected = want.has(o.value); $(id).dispatchEvent(new Event('change', { bubbles: true })); };
+        function apply(d) {
+            $('cfk-mod-banreq-channel').value = d.channelId || '';
+            $('cfk-mod-banreq-channel').dispatchEvent(new Event('change', { bubbles: true }));
+            pick('cfk-mod-banreq-approvers', d.approverRoleIds);
+            pick('cfk-mod-banreq-requesters', d.requesterRoleIds);
+        }
+        async function load() {
+            try {
+                const res = await fetch(url, { credentials: 'same-origin' });
+                const d = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(d.error || ('Request failed (' + res.status + ')'));
+                apply(d);
+            } catch (e) {
+                status.textContent = 'Could not load: ' + e.message;
+            }
+        }
+        save.addEventListener('click', async () => {
+            save.disabled = true;
+            status.textContent = 'Saving...';
+            try {
+                const body = {
+                    channelId: $('cfk-mod-banreq-channel').value || null,
+                    approverRoleIds: Array.from($('cfk-mod-banreq-approvers').selectedOptions, o => o.value),
+                    requesterRoleIds: Array.from($('cfk-mod-banreq-requesters').selectedOptions, o => o.value),
+                };
+                const res = await fetch(url, { method: 'PUT', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+                const d = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(d.error || ('Request failed (' + res.status + ')'));
+                apply(d);
+                status.textContent = 'Saved.';
+            } catch (e) {
+                status.textContent = e.message;
+            } finally {
+                save.disabled = false;
+            }
+        });
+        load();
+    })();
+    </script>
+    <% } %>
+
+    <section class="cf-section" aria-labelledby="mod-infractions-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="mod-infractions-title">Recent infractions</h2>
+                <p class="cf-section-desc">The latest warnings, timeouts, kicks and bans, by moderators and by the bot.</p>
+            </div>
+            <% if (infractions && infractions.length) { %><div class="cf-section-actions"><span class="cf-pill"><%= infractions.length %> shown</span></div><% } %>
+        </header>
+        <div class="cf-rows">
+            <% if (infractions && infractions.length > 0) { %>
+            <div class="cf-table-wrap">
+                <table class="cf-table cf-table--stack">
+                    <thead>
+                        <tr><th scope="col">Member</th><th scope="col">Moderator</th><th scope="col">Action</th><th scope="col">Reason</th><th scope="col">Date</th></tr>
+                    </thead>
+                    <tbody>
+                        <% infractions.forEach(infraction => { const t = String(infraction.type || '').toLowerCase(); %>
+                        <tr>
+                            <td data-label="Member">
+                                <div class="mod-user-info">
+                                    <%- include('_user-cell', { cfUser: infraction.user || null, cfUserId: infraction.user_id, cfUserName: infraction.user_tag || null }) %>
+                                </div>
+                            </td>
+                            <td data-label="Moderator">
+                                <div class="mod-moderator-info">
+                                    <%- include('_user-cell', { cfUser: infraction.moderator || null, cfUserId: infraction.moderator_id, cfUserName: infraction.moderator_tag || null, cfUserSize: 'sm' }) %>
+                                </div>
+                            </td>
+                            <td data-label="Action"><span class="cf-pill <%= modTone[t] || '' %>"><%= modType(t) %></span></td>
+                            <td data-label="Reason"><div class="mod-reason" title="<%= infraction.reason || 'No reason given' %>"><%= infraction.reason || 'No reason given' %></div></td>
+                            <td data-label="Date"><span class="mod-date"><%= new Date(infraction.created_at).toLocaleDateString() %></span></td>
+                        </tr>
+                        <% }) %>
+                    </tbody>
+                </table>
+            </div>
+            <% } else { %>
+            <%- include('../kit/_state', { kind: 'empty', title: 'No recent infractions', text: 'Warnings, timeouts, kicks and bans will be listed here.', id: null, boxed: false, compact: false }) %>
             <% } %>
         </div>
-    </div>
+    </section>
+
+    <%# Automated ban log (core/ban-log.js): every ban the protections made, with evidence and one-click Unban. %>
+    <section class="cf-section" id="banLogSection" aria-labelledby="banLogSection-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="banLogSection-title">Automated ban log</h2>
+                <p class="cf-section-desc">Bans made by the bot's protections in the last 90 days: the spammer check, name and avatar filters, raid lockdown, message threats, the global ban list, the join gate and verification.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--stack">
+                <div class="cf-inline">
+                    <label class="visually-hidden" for="banLogFilter">Protection</label>
+                    <select id="banLogFilter" class="form-select form-select-sm">
+                        <option value="">Every protection</option>
+                    </select>
+                    <label class="cf-choice" for="banLogActive"><input type="checkbox" id="banLogActive" checked> <span>Still banned only</span></label>
+                    <button type="button" class="btn btn-sm btn-secondary" id="banLogRefresh">Refresh</button>
+                </div>
+                <div id="banLogStatus" role="status" aria-live="polite">Loading...</div>
+            </div>
+            <div class="cf-table-wrap">
+                <table class="cf-table cf-table--stack">
+                    <thead>
+                        <tr><th scope="col">Member</th><th scope="col">Protection</th><th scope="col">Reason and evidence</th><th scope="col">When</th><th scope="col"><span class="visually-hidden">Action</span></th></tr>
+                    </thead>
+                    <tbody id="banLogBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+    <script>
+    (function () {
+        const guildId = <%- JSON.stringify(String(guild.id)).replace(/</g, '\\u003c') %>;
+        const base = '/api/guilds/' + guildId + '/insight';
+        const el = (tag, props, ...kids) => {
+            const node = document.createElement(tag);
+            if (props) { const { style, label, ...rest } = props; Object.assign(node, rest); if (style) node.style.cssText = style; if (label) node.dataset.label = label; }
+            for (const k of kids) if (k != null) node.append(k);
+            return node;
+        };
+        const body = document.getElementById('banLogBody');
+        const status = document.getElementById('banLogStatus');
+        const filter = document.getElementById('banLogFilter');
+        const activeOnly = document.getElementById('banLogActive');
+        let rows = [];
+
+        function render() {
+            const shown = rows.filter(r => (!filter.value || r.protection === filter.value) && (!activeOnly.checked || !r.unbanned));
+            status.textContent = rows.length
+                ? shown.length + ' shown of ' + rows.length + ' automated bans (' + rows.filter(r => !r.unbanned).length + ' still banned).'
+                : 'No automated bans in the last 90 days.';
+            body.replaceChildren(...shown.map(r => {
+                const who = el('div', { className: 'mod-user-info' },
+                    window.CFUser ? CFUser.cell(r.user || { id: r.userId, username: r.username, avatar: r.avatar })
+                        : el('span', { textContent: r.username || r.userId }));
+                const prot = el('a', { href: '/manage/' + guildId + '?page=' + r.page, textContent: r.label, className: 'cf-pill is-bad' });
+                const ev = el('div', { className: 'mod-reason' }, el('div', { textContent: r.reason || 'No reason recorded' }));
+                if (r.evidence) {
+                    const line = el('div', { className: 'mod-evidence' });
+                    if (r.evidence.text) line.append(r.evidence.text + ' ');
+                    if (r.evidence.url) line.append(el('a', { href: r.evidence.url, target: '_blank', rel: 'noopener', textContent: 'Message' }), ' ');
+                    if (r.evidence.page) line.append(el('a', { href: '/manage/' + guildId + '?page=' + r.evidence.page, textContent: 'Details' }));
+                    ev.append(line);
+                }
+                const action = el('td', { className: 'cf-cell-end' });
+                if (r.unbanned) {
+                    action.append(el('span', { className: 'mod-unbanned', textContent: 'Unbanned ' + new Date(r.unbannedAt).toLocaleDateString() }));
+                } else {
+                    const btn = el('button', { type: 'button', className: 'btn btn-sm btn-secondary', textContent: 'Unban' });
+                    btn.addEventListener('click', async () => {
+                        if (!confirm('Unban ' + (window.CFUser && r.user ? CFUser.label(r.user) : (r.username || r.userId)) + '? They can rejoin straight away, and the rejoin limit counts from now.')) return;
+                        btn.disabled = true; btn.textContent = 'Unbanning...';
+                        try {
+                            const res = await fetch(base + '/ban-log/' + encodeURIComponent(r.userId) + '/unban', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' } });
+                            const out = await res.json().catch(() => ({}));
+                            if (!res.ok) throw new Error(out.error || ('Request failed (' + res.status + ')'));
+                            r.unbanned = true; r.unbannedAt = Date.now();
+                            render();
+                        } catch (e) {
+                            btn.disabled = false; btn.textContent = 'Unban';
+                            alert(e.message);
+                        }
+                    });
+                    action.append(btn);
+                }
+                return el('tr', {},
+                    el('td', { label: 'Member' }, who),
+                    el('td', { label: 'Protection' }, prot),
+                    el('td', { label: 'Reason' }, ev),
+                    el('td', { label: 'When' }, el('span', { className: 'mod-date', textContent: new Date(r.at).toLocaleString() })),
+                    action);
+            }));
+        }
+
+        async function load() {
+            status.textContent = 'Loading...';
+            try {
+                const res = await fetch(base + '/ban-log', { credentials: 'same-origin' });
+                const out = await res.json().catch(() => ({}));
+                if (!res.ok) throw new Error(out.error || ('Request failed (' + res.status + ')'));
+                rows = out.rows || [];
+                const kinds = [...new Map(rows.map(r => [r.protection, r.label])).entries()];
+                const keep = filter.value;
+                filter.replaceChildren(el('option', { value: '', textContent: 'Every protection' }),
+                    ...kinds.map(([k, label]) => el('option', { value: k, textContent: label })));
+                filter.value = kinds.some(([k]) => k === keep) ? keep : '';
+                render();
+            } catch (e) {
+                status.textContent = 'Could not load the ban log: ' + e.message;
+            }
+        }
+        filter.addEventListener('change', render);
+        activeOnly.addEventListener('change', render);
+        document.getElementById('banLogRefresh').addEventListener('click', load);
+        load();
+    })();
+    </script>
+
+    <section class="cf-section" aria-labelledby="mod-escalation-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="mod-escalation-title">Escalation rules</h2>
+                <p class="cf-section-desc">Stricter action, applied automatically, for members who keep breaking the rules. Warnings, timeouts, kicks and bans count, from moderators and from the automatic protections; actions taken by these rules and anything before a member's infractions were cleared do not. When several rules match, the one with the highest count acts.</p>
+            </div>
+            <div class="cf-section-actions"><span class="cf-pill<%= escalationRules && escalationRules.length ? ' is-ok' : '' %>"><%= (escalationRules && escalationRules.length) || 0 %> <%= escalationRules && escalationRules.length === 1 ? 'rule' : 'rules' %></span></div>
+        </header>
+        <div class="cf-rows">
+            <% if (escalationRules && escalationRules.length > 0) { %>
+            <div class="cf-list">
+                <% escalationRules.forEach(rule => { %>
+                <div class="cf-list-item">
+                    <div class="cf-list-main">
+                        After <span class="cf-em"><%= rule.infraction_count %></span> infractions within
+                        <span class="cf-em"><%= rule.time_period_hours %></span> hours:
+                        <span class="cf-pill <%= modTone[String(rule.action).toLowerCase()] || '' %>"><%= (rule.action === 'mute' || rule.action === 'timeout') ? 'Timeout' : modType(rule.action) %></span><% if ((rule.action === 'mute' || rule.action === 'timeout') && rule.action_duration_minutes) { %>
+                        for <span class="cf-em"><%= rule.action_duration_minutes %></span> minutes<% } %>
+                    </div>
+                    <form class="cf-list-actions" action="/manage/<%= guild.id %>/remove-escalation-rule" method="POST">
+                        <input type="hidden" name="ruleId" value="<%= rule.id %>">
+                        <button type="submit" class="btn btn-sm btn-danger">Remove</button>
+                    </form>
+                </div>
+                <% }) %>
+            </div>
+            <% } else { %>
+            <%- include('../kit/_state', { kind: 'empty', title: 'No escalation rules', text: 'Add one below, for example a timeout after three infractions in a day.', id: null, boxed: false, compact: false }) %>
+            <% } %>
+            <form action="/manage/<%= guild.id %>/add-escalation-rule" method="POST">
+                <div class="cf-rows-head" id="mod-add-rule-head">Add a rule</div>
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-fields">
+                        <div class="cf-field">
+                            <label for="f-moderation-infraction_count">Infractions</label>
+                            <input id="f-moderation-infraction_count" type="number" name="infraction_count" class="form-control" required min="1" max="100" placeholder="3">
+                        </div>
+                        <div class="cf-field">
+                            <label for="f-moderation-time_period_hours">Within (hours)</label>
+                            <input id="f-moderation-time_period_hours" type="number" name="time_period_hours" class="form-control" required min="1" max="17520" placeholder="24">
+                        </div>
+                        <div class="cf-field">
+                            <label for="f-moderation-action">Action</label>
+                            <select id="f-moderation-action" name="action" class="form-select" required>
+                                <option value="timeout">Timeout</option>
+                                <option value="kick">Kick</option>
+                                <option value="ban">Ban</option>
+                            </select>
+                        </div>
+                        <div class="cf-field">
+                            <label for="f-moderation-action_duration_minutes">Timeout length (minutes)</label>
+                            <input id="f-moderation-action_duration_minutes" type="number" name="action_duration_minutes" class="form-control" min="1" max="40320" value="60" placeholder="60">
+                        </div>
+                    </div>
+                </div>
+                <div class="cf-section-foot">
+                    <span class="cf-foot-note">Up to 100 infractions within up to 17520 hours (two years, as long as infractions are kept). The timeout length, at most 40320 minutes (28 days), is only used when the action is Timeout.</span>
+                    <button type="submit" class="btn btn-primary">Add rule</button>
+                </div>
+            </form>
+        </div>
+    </section>
 </div>

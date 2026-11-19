@@ -1,0 +1,458 @@
+<%#
+  Commission and sales filter: on/off (POST commission-filter/toggle), log channel and DM
+  (POST .../settings), the soft-sell tier (POST .../soft-sell), the review queue (POST .../review),
+  the removal log (POST .../undo), exemptions (POST .../unexempt) and the phrase list
+  (POST .../phrase). Built on the settings-row kit (dashboard/public/css/cf-settings.css).
+  Locals: guild, commissionConfig (row|null), commissionGroups (default PHRASE_GROUPS),
+          commissionGlobalStats ({enabledCount,totalRemoved}), commissionPending, commissionRemovals,
+          commissionExemptions, commissionSignals.
+%>
+<% const cfg = locals.commissionConfig || null;
+   const on = !!(cfg && cfg.enabled);
+   const removed = cfg ? (cfg.deleted_count || 0) : 0;
+   let customList = null;
+   try { const c = JSON.parse(cfg && cfg.phrases ? cfg.phrases : 'null'); if (Array.isArray(c) && c.length) customList = c; } catch (e) {}
+   const groups = customList
+     ? [{ title: 'Custom list for this server', desc: 'This server replaced the defaults with its own phrases.', phrases: customList }]
+     : (locals.commissionGroups || []);
+   const totalPhrases = groups.reduce((n, g) => n + g.phrases.length, 0);
+   const gstats = locals.commissionGlobalStats || { enabledCount: 0, totalRemoved: 0 };
+   const softOn = !!(cfg && cfg.soft_sell_enabled);
+   const delAt = cfg && cfg.soft_sell_delete_at ? cfg.soft_sell_delete_at : 6;
+   const sensitivity = delAt >= 7 ? 'cautious' : (delAt <= 5 ? 'strict' : 'balanced');
+   const removals = locals.commissionRemovals || [];
+   const pending = locals.commissionPending || [];
+   const exemptions = locals.commissionExemptions || [];
+   const signals = locals.commissionSignals || [];
+   const softRemoved = cfg ? (cfg.soft_sell_deleted_count || 0) : 0;
+   const textChannels = (locals.channels || []).filter(c => c.type === 0 || c.type === 5);
+   const chName = id => { const c = (locals.channels || []).find(x => String(x.id) === String(id)); return c ? c.name : id; };
+   const when = d => { try { return new Date(d).toISOString().slice(0, 16).replace('T', ' '); } catch (e) { return ''; } };
+   const trim = (s, n) => { const t = String(s || '').replace(/\s+/g, ' ').trim(); return t.length > n ? t.slice(0, n) + '…' : (t || '(no text)'); };
+   const dmOn = !cfg || !!cfg.dm_user;
+%>
+
+<style>
+  /* Commission filter: the quoted message in the review and removal lists, the cell headings of
+     the "what happens" list, and the count beside a phrase group's heading. Meta lines, chips and
+     the add-a-phrase group are the kit's. */
+  .cf-list-meta .cmf-time { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .cmf-quote { margin: var(--cf-2) 0; padding-left: var(--cf-3); border-left: 2px solid var(--cf-border-strong); font-size: var(--cf-text-sm); line-height: 1.5;
+    color: var(--cf-text-2); white-space: pre-wrap; overflow-wrap: anywhere; }
+  .cmf-item-main { flex: 1 1 auto; }
+  .cmf-item-main .cf-chips-row { margin-top: 2px; }
+  .cmf-restored { color: var(--cf-text-3); }
+  .cmf-title { display: block; font-weight: 600; color: var(--cf-text); }
+  .cmf-text { display: block; color: var(--cf-text-3); }
+  .cmf-chip-form { display: inline-flex; margin: 0; }
+  .cmf-group-desc { margin: 0 0 var(--cf-2); font-size: var(--cf-text-sm); color: var(--cf-text-3); }
+  .cmf-count { float: right; font-weight: 500; color: var(--cf-text-3); font-variant-numeric: tabular-nums; }
+  .cmf-note { margin: 0; font-size: var(--cf-text-sm); color: var(--cf-text-3); line-height: 1.55; max-width: 78ch; }
+  .cmf-note strong { color: var(--cf-text); font-variant-numeric: tabular-nums; }
+  .cmf-ex-value { font-family: var(--cf-mono); font-size: var(--cf-text-xs); color: var(--cf-text-2); overflow-wrap: anywhere; }
+  .cmf-rule code { font-family: var(--cf-mono); }
+  #commissionFilterPage .cf-notice { margin: 0 var(--cf-5) var(--cf-4); }
+</style>
+
+<div class="page-section" id="commissionFilterPage" data-guild-id="<%= guild.id %>">
+  <div class="page-section-header">
+    <div>
+      <div class="page-section-title"><i class="fas fa-broom"></i> <span>Commission and sales filter</span></div>
+      <div class="page-section-subtitle">Checks regular members only: admins and moderators always post freely.</div>
+    </div>
+  </div>
+
+  <dl class="cf-kpis" aria-label="Commission filter at a glance">
+    <div class="cf-kpi"><dt>Removed here</dt><dd class="cf-kpi-value"><%= removed.toLocaleString() %></dd></div>
+    <div class="cf-kpi"><dt>Phrases</dt><dd class="cf-kpi-value"><%= totalPhrases %></dd></div>
+    <div class="cf-kpi"><dt>Removed across all servers</dt><dd class="cf-kpi-value"><%= (gstats.totalRemoved||0).toLocaleString() %></dd></div>
+  </dl>
+
+  <section class="cf-section" aria-labelledby="cmf-settings-title">
+    <header class="cf-section-head">
+      <div>
+        <h2 class="cf-section-title" id="cmf-settings-title">Filter</h2>
+        <p class="cf-section-desc">Every message from a regular member is checked the moment it is sent.</p>
+      </div>
+    </header>
+    <div class="cf-rows">
+      <form method="POST" action="/manage/<%= guild.id %>/commission-filter/toggle" id="cfk-cmf-toggle-form">
+        <input type="hidden" name="enabled" id="cfk-cmf-toggle-value" value="<%= on ? '0' : '1' %>">
+        <div class="cf-row cf-row--switch">
+          <div class="cf-row-text">
+            <label class="cf-row-label" for="cfk-cmf-enabled" id="cmf-toggle-label">Commission filter</label>
+            <p class="cf-row-desc" id="cfk-cmf-enabled-desc">Remove matching messages from regular members.</p>
+          </div>
+          <div class="cf-row-control">
+            <input type="checkbox" class="cf-switch" role="switch" id="cfk-cmf-enabled" data-feature-switch aria-describedby="cfk-cmf-enabled-desc" <%= on ? 'checked' : '' %>>
+          </div>
+        </div>
+      </form>
+      <form method="POST" action="/manage/<%= guild.id %>/commission-filter/settings">
+        <div class="cf-row">
+          <div class="cf-row-text">
+            <label class="cf-row-label" for="f-commission-filter-log_channel_id">Log channel</label>
+            <p class="cf-row-desc" id="f-commission-filter-log_channel_id-desc">Optional. Each removal is posted here with the full message.</p>
+          </div>
+          <div class="cf-row-control">
+            <select id="f-commission-filter-log_channel_id" name="log_channel_id" class="form-select" aria-describedby="f-commission-filter-log_channel_id-desc">
+              <option value="">No log channel</option>
+              <% (locals.channels || []).filter(c => c.type === 0 || c.type === 5).forEach(c => { %>
+                <option value="<%= c.id %>" <%= (cfg && cfg.log_channel_id === c.id) ? 'selected' : '' %>>#<%= c.name %></option>
+              <% }) %>
+            </select>
+          </div>
+        </div>
+        <div class="cf-row cf-row--switch">
+          <div class="cf-row-text">
+            <span class="cf-row-label" id="cmf-dm-label">DM the poster</span>
+            <p class="cf-row-desc" id="cmf-dm-desc">Tells them why the message was removed and to contact a moderator if it was a mistake.</p>
+          </div>
+          <div class="cf-row-control">
+            <input type="checkbox" class="cf-switch" role="switch" name="dm_user" aria-labelledby="cmf-dm-label" aria-describedby="cmf-dm-desc" <%= dmOn ? 'checked' : '' %>>
+          </div>
+        </div>
+        <div class="cf-section-foot">
+          <button class="btn btn-primary" type="submit">Save</button>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <section class="cf-section" aria-labelledby="cmf-flow-title">
+    <header class="cf-section-head">
+      <div>
+        <h2 class="cf-section-title" id="cmf-flow-title">When a match is posted</h2>
+        <p class="cf-section-desc">Administrators, members with Moderate Members or Manage Server, and the owner are never checked.</p>
+      </div>
+    </header>
+    <div class="cf-rows">
+      <div class="cf-list">
+        <div class="cf-list-item">
+          <div class="cf-list-main"><span class="cmf-title">Removed</span><span class="cmf-text">Deleted before spam detection or anyone else sees it.</span></div>
+          <div class="cf-list-actions"><span class="cf-pill <%= on ? 'is-ok' : '' %>"><%= on ? 'On' : 'Off' %></span></div>
+        </div>
+        <div class="cf-list-item">
+          <div class="cf-list-main"><span class="cmf-title">Poster notified</span><span class="cmf-text">Sent the reason by DM and told to contact a moderator if it was a mistake.</span></div>
+          <div class="cf-list-actions"><span class="cf-pill <%= dmOn ? 'is-ok' : '' %>"><%= dmOn ? 'On' : 'Off' %></span></div>
+        </div>
+        <div class="cf-list-item">
+          <div class="cf-list-main"><span class="cmf-title">Logged</span><span class="cmf-text"><%= (cfg && cfg.log_channel_id) ? 'Recorded in #' + chName(cfg.log_channel_id) + '.' : 'Set a log channel above to record removals in Discord.' %></span></div>
+          <div class="cf-list-actions"><span class="cf-pill <%= (cfg && cfg.log_channel_id) ? 'is-ok' : 'is-warn' %>"><%= (cfg && cfg.log_channel_id) ? 'On' : 'No channel' %></span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="cf-section" aria-labelledby="cmf-soft-title">
+    <header class="cf-section-head">
+      <div>
+        <h2 class="cf-section-title" id="cmf-soft-title">Soft-sell detection</h2>
+        <p class="cf-section-desc">Catches adverts that never ask for anything, such as "just finished this logo for a client, thoughts?".
+          It scores each message and only acts when several separate signals agree.</p>
+      </div>
+      <div class="cf-section-actions"><span class="cf-pill<%= softOn ? ' is-ok' : '' %>"><%= softOn ? 'On' : 'Off' %></span></div>
+    </header>
+
+    <% if (!(cfg && (cfg.log_channel_id || cfg.review_channel_id))) { %>
+    <div class="cf-notice is-warn" role="status">
+      <i class="fas fa-triangle-exclamation" aria-hidden="true"></i>
+      <div class="cf-notice-body"><strong>No log or review channel.</strong> Removals are still listed below and can be undone, but borderline
+        posts have nowhere to go for a decision. Set a log channel under Filter above.</div>
+    </div>
+    <% } %>
+
+    <form class="cf-rows" method="POST" action="/manage/<%= guild.id %>/commission-filter/soft-sell">
+      <div class="cf-row cf-row--switch">
+        <div class="cf-row-text">
+          <span class="cf-row-label" id="cmf-soft-label">Soft-sell detection</span>
+          <p class="cf-row-desc" id="cmf-soft-desc">Removed by this tier so far: <%= softRemoved.toLocaleString() %>.</p>
+        </div>
+        <div class="cf-row-control">
+          <input type="checkbox" class="cf-switch" role="switch" name="soft_sell_enabled" aria-labelledby="cmf-soft-label" aria-describedby="cmf-soft-desc" <%= softOn ? 'checked' : '' %>>
+        </div>
+      </div>
+      <div class="cf-row">
+        <div class="cf-row-text">
+          <label class="cf-row-label" for="f-cf-sensitivity">Sensitivity</label>
+          <p class="cf-row-desc" id="f-cf-sensitivity-desc">How much evidence it needs before it acts.</p>
+        </div>
+        <div class="cf-row-control">
+          <select id="f-cf-sensitivity" name="sensitivity" class="form-select" aria-describedby="f-cf-sensitivity-desc">
+            <option value="cautious" <%= sensitivity === 'cautious' ? 'selected' : '' %>>Cautious: only very obvious ads</option>
+            <option value="balanced" <%= sensitivity === 'balanced' ? 'selected' : '' %>>Balanced (recommended)</option>
+            <option value="strict"   <%= sensitivity === 'strict'   ? 'selected' : '' %>>Strict: acts on thinner evidence</option>
+          </select>
+        </div>
+      </div>
+      <div class="cf-row">
+        <div class="cf-row-text">
+          <label class="cf-row-label" for="f-cf-review">Review channel</label>
+          <p class="cf-row-desc" id="f-cf-review-desc">Borderline posts are sent here for a moderator to decide.</p>
+        </div>
+        <div class="cf-row-control">
+          <select id="f-cf-review" name="review_channel_id" class="form-select" aria-describedby="f-cf-review-desc">
+            <option value="">Use the log channel</option>
+            <% textChannels.forEach(c => { %>
+              <option value="<%= c.id %>" <%= (cfg && cfg.review_channel_id === c.id) ? 'selected' : '' %>>#<%= c.name %></option>
+            <% }) %>
+          </select>
+        </div>
+      </div>
+      <div class="cf-row cf-row--stack">
+        <div class="cf-row-text">
+          <span class="cf-row-label">Signals and their weights</span>
+          <p class="cf-row-desc">
+            Deletes at a score of <%= delAt %> and sends to review at <%= cfg && cfg.soft_sell_review_at ? cfg.soft_sell_review_at : 4 %>.
+            At least two different signals are always required, so a lone price or a passing mention of freelance work
+            can never trigger it on its own.
+          </p>
+        </div>
+        <div class="cf-chips-row">
+          <% signals.forEach(s => { %><span class="cf-token">+<%= s.weight %> <%= s.label %></span><% }) %>
+          <span class="cf-token">+1 several different products named</span>
+        </div>
+      </div>
+      <div class="cf-section-foot">
+        <button class="btn btn-primary" type="submit">Save</button>
+      </div>
+    </form>
+  </section>
+
+  <% if (pending.length) { %>
+  <section class="cf-section" aria-labelledby="cmf-pending-title">
+    <header class="cf-section-head">
+      <div>
+        <h2 class="cf-section-title" id="cmf-pending-title">Waiting for a decision</h2>
+        <p class="cf-section-desc">Suspicious, but not sure enough to remove on its own. These messages are still up.</p>
+      </div>
+      <div class="cf-section-actions"><span class="cf-pill is-warn"><%= pending.length %> waiting</span></div>
+    </header>
+    <div class="cf-rows">
+      <div class="cf-list">
+        <% pending.forEach(p => { %>
+        <div class="cf-list-item">
+          <div class="cf-list-main cmf-item-main">
+            <div class="cf-list-meta">
+              <span class="cf-pill is-warn"><%= p.score != null ? 'Score ' + p.score : 'Suspicious' %></span>
+              <%- include('_user-cell', { cfUser: null, cfUserId: p.user_id, cfUserName: null, cfUserSize: 'sm' }) %>
+              <% if (p.channel_id) { %><span>in #<%= chName(p.channel_id) %></span><% } %>
+              <span class="cmf-time"><%= when(p.created_at) %> UTC</span>
+            </div>
+            <p class="cmf-quote"><%= trim(p.content, 400) %></p>
+            <% const ps = (p.signals || '').split(',').filter(Boolean); if (ps.length) { %>
+            <div class="cf-chips-row"><% ps.forEach(s => { %><span class="cf-token"><%= s %></span><% }) %></div>
+            <% } %>
+          </div>
+          <div class="cf-list-actions">
+            <form method="POST" action="/manage/<%= guild.id %>/commission-filter/review" onsubmit="return confirm('Delete this message from Discord? This cannot be undone.');">
+              <input type="hidden" name="decision_id" value="<%= p.id %>">
+              <input type="hidden" name="decision" value="confirm">
+              <button class="btn btn-sm btn-danger" type="submit">Delete it</button>
+            </form>
+            <form method="POST" action="/manage/<%= guild.id %>/commission-filter/review">
+              <input type="hidden" name="decision_id" value="<%= p.id %>">
+              <input type="hidden" name="decision" value="allow">
+              <button class="btn btn-sm btn-secondary" type="submit">Allow it</button>
+            </form>
+          </div>
+        </div>
+        <% }) %>
+      </div>
+    </div>
+  </section>
+  <% } %>
+
+  <section class="cf-section" aria-labelledby="cmf-removals-title">
+    <header class="cf-section-head">
+      <div>
+        <h2 class="cf-section-title" id="cmf-removals-title">Removal log</h2>
+        <p class="cf-section-desc">Restore it puts the message back and exempts that exact post. Stop matching this switches off whatever caught it, for the whole server.</p>
+      </div>
+      <div class="cf-section-actions"><span class="cf-pill"><%= removals.length %> shown</span></div>
+    </header>
+    <div class="cf-rows">
+      <% if (removals.length > 15) { %>
+      <div class="cf-row cf-row--stack">
+        <div class="cf-search">
+          <i class="fas fa-magnifying-glass" aria-hidden="true"></i>
+          <label class="visually-hidden" for="cfk-cmf-removal-search">Search removals</label>
+          <input type="search" id="cfk-cmf-removal-search" class="form-control" placeholder="Search message text, channel or trigger" autocomplete="off" aria-controls="cfk-cmf-removal-list">
+        </div>
+      </div>
+      <% } %>
+      <% if (!removals.length) { %>
+        <%- include('../kit/_state', { kind: 'empty', title: 'Nothing removed yet', text: 'Messages the filter removes will be listed here.', id: null, boxed: false, compact: false }) %>
+      <% } else { %>
+      <div class="cf-list" id="cfk-cmf-removal-list">
+        <% removals.forEach(r => { const restored = r.verdict === 'false_positive'; %>
+        <div class="cf-list-item">
+          <div class="cf-list-main cmf-item-main<%= restored ? ' cmf-restored' : '' %>">
+            <div class="cf-list-meta">
+              <span class="cf-pill <%= r.via === 'soft-sell' ? 'is-warn' : '' %>">#<%= r.id %> · <%= r.via %></span>
+              <%- include('_user-cell', { cfUser: null, cfUserId: r.user_id, cfUserName: null, cfUserSize: 'sm' }) %>
+              <% if (r.channel_id) { %><span>in #<%= chName(r.channel_id) %></span><% } %>
+              <span class="cmf-time"><%= when(r.created_at) %> UTC</span>
+              <% if (restored) { %><span class="cf-pill is-ok">Restored</span><% } %>
+            </div>
+            <p class="cmf-quote"><%= trim(r.content, 400) %></p>
+            <div class="cf-chips-row">
+              <% if (r.via === 'soft-sell') { %>
+                <span class="cf-token">score <%= r.score %></span>
+                <% (r.signals || '').split(',').filter(Boolean).forEach(s => { %><span class="cf-token"><%= s %></span><% }) %>
+              <% } else { %>
+                <span class="cf-token">matched <%= r.matched %></span>
+              <% } %>
+            </div>
+          </div>
+          <% if (!restored) { %>
+          <div class="cf-list-actions">
+            <form method="POST" action="/manage/<%= guild.id %>/commission-filter/undo">
+              <input type="hidden" name="removal_id" value="<%= r.id %>">
+              <input type="hidden" name="mode" value="restore">
+              <button class="btn btn-sm btn-secondary" type="submit">Restore it</button>
+            </form>
+            <form method="POST" action="/manage/<%= guild.id %>/commission-filter/undo">
+              <input type="hidden" name="removal_id" value="<%= r.id %>">
+              <input type="hidden" name="mode" value="trigger">
+              <button class="btn btn-sm btn-secondary" type="submit">Stop matching this</button>
+            </form>
+          </div>
+          <% } %>
+        </div>
+        <% }) %>
+      </div>
+      <% } %>
+    </div>
+  </section>
+
+  <section class="cf-section" aria-labelledby="cmf-exempt-title">
+    <header class="cf-section-head">
+      <div>
+        <h2 class="cf-section-title" id="cmf-exempt-title">Exemptions</h2>
+        <p class="cf-section-desc">What moderators have told the filter to leave alone. Removing one lets it be caught again.</p>
+      </div>
+      <div class="cf-section-actions"><span class="cf-pill"><%= exemptions.length %></span></div>
+    </header>
+    <div class="cf-rows">
+      <% if (!exemptions.length) { %>
+        <%- include('../kit/_state', { kind: 'empty', title: 'Nothing exempted yet', text: 'Use Restore it on a removal above to add one.', id: null, boxed: false, compact: false }) %>
+      <% } else { %>
+      <div class="cf-list">
+        <% exemptions.forEach(x => {
+             const label = x.kind === 'content' ? 'This exact message' : (x.kind === 'trigger' ? 'This trigger' : 'This member'); %>
+        <div class="cf-list-item">
+          <div class="cf-list-main">
+            <span class="cmf-title"><%= label %></span>
+            <span class="cmf-ex-value"><%= x.value %></span>
+            <div class="cf-list-meta"><span class="cmf-time"><%= when(x.created_at) %> UTC</span><% if (x.note) { %><span><%= x.note %></span><% } %></div>
+          </div>
+          <form class="cf-list-actions" method="POST" action="/manage/<%= guild.id %>/commission-filter/unexempt">
+            <input type="hidden" name="exemption_id" value="<%= x.id %>">
+            <button class="btn btn-sm btn-secondary" type="submit">Remove</button>
+          </form>
+        </div>
+        <% }) %>
+      </div>
+      <% } %>
+    </div>
+  </section>
+
+  <section class="cf-section" aria-labelledby="cmf-phrases-title">
+    <header class="cf-section-head">
+      <div>
+        <h2 class="cf-section-title" id="cmf-phrases-title">Filtered phrases</h2>
+        <p class="cf-section-desc">A message is removed if it contains any of these. Matching ignores case, punctuation, emoji and leetspeak.</p>
+      </div>
+      <div class="cf-section-actions"><span class="cf-pill"><%= totalPhrases %> phrases</span></div>
+    </header>
+    <div class="cf-rows">
+      <% if (totalPhrases > 15) { %>
+      <div class="cf-row cf-row--stack">
+        <div class="cf-search">
+          <i class="fas fa-magnifying-glass" aria-hidden="true"></i>
+          <label class="visually-hidden" for="cfk-cmf-phrase-search">Search phrases</label>
+          <input type="search" id="cfk-cmf-phrase-search" class="form-control" placeholder="Search phrases" autocomplete="off">
+        </div>
+      </div>
+      <% } %>
+      <% groups.forEach(g => { %>
+      <div class="cf-rows-head"><%= g.title %><span class="cmf-count"><%= g.phrases.length %></span></div>
+      <div class="cf-row cf-row--stack">
+        <div>
+          <% if (g.desc) { %><p class="cmf-group-desc"><%= g.desc %></p><% } %>
+          <div class="cf-chips">
+            <% g.phrases.forEach(ph => { %>
+              <span class="cf-chip"><code><%= ph %></code><% if (customList) { %><form class="cmf-chip-form" method="POST" action="/manage/<%= guild.id %>/commission-filter/phrase"><input type="hidden" name="action" value="remove"><input type="hidden" name="phrase" value="<%= ph %>"><button class="cf-chip-remove" type="submit" title="Remove" aria-label="Remove <%= ph %>"><i class="fas fa-xmark" aria-hidden="true"></i></button></form><% } %></span>
+            <% }) %>
+          </div>
+        </div>
+      </div>
+      <% }) %>
+      <form method="POST" action="/manage/<%= guild.id %>/commission-filter/phrase">
+        <div class="cf-rows-head" id="cmf-add-head">Add a phrase</div>
+        <div class="cf-row cf-row--stack">
+          <input type="hidden" name="action" value="add">
+          <div class="cf-input-group">
+            <input type="text" name="phrase" class="form-control" placeholder="For example: dm to commission" aria-label="Phrase to add" required>
+            <button class="btn btn-primary" type="submit">Add phrase</button>
+          </div>
+          <% if (!customList) { %><p class="cmf-note">Adding a phrase starts a custom list for this server (the defaults plus your addition), which you can then trim.</p><% } %>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <section class="cf-section" aria-labelledby="cmf-how-title">
+    <header class="cf-section-head">
+      <div>
+        <h2 class="cf-section-title" id="cmf-how-title">How matching works</h2>
+        <p class="cf-section-desc">The same reference is in Discord with <code>/moderation commission-filter help</code>.</p>
+      </div>
+    </header>
+    <div class="cf-rows cmf-rule">
+      <div class="cf-row cf-row--stack">
+        <div class="cf-row-text"><span class="cf-row-label">Ignores case</span><p class="cf-row-desc"><code>Commissions OPEN</code> matches <code>commissions open</code>.</p></div>
+      </div>
+      <div class="cf-row cf-row--stack">
+        <div class="cf-row-text"><span class="cf-row-label">Ignores punctuation</span><p class="cf-row-desc">Emoji, symbols and extra spaces are stripped, so <code>**comms open**</code> still matches.</p></div>
+      </div>
+      <div class="cf-row cf-row--stack">
+        <div class="cf-row-text"><span class="cf-row-label">Undoes leetspeak</span><p class="cf-row-desc"><code>0→o 1→i 3→e @→a $→s</code>, so <code>c0mmissions 0pen</code> is caught.</p></div>
+      </div>
+      <div class="cf-row cf-row--stack">
+        <div class="cf-row-text"><span class="cf-row-label">Matches anywhere</span><p class="cf-row-desc">A phrase anywhere in the message triggers removal.</p></div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+(function () {
+  const page = document.getElementById('commissionFilterPage');
+  if (!page) return;
+  // The master switch sits in the page header (data-feature-switch); a change posts the toggle form.
+  const sw = document.getElementById('cfk-cmf-enabled');
+  const form = document.getElementById('cfk-cmf-toggle-form');
+  if (sw && form) sw.addEventListener('change', () => {
+    document.getElementById('cfk-cmf-toggle-value').value = sw.checked ? '1' : '0';
+    sw.disabled = true;
+    form.submit();
+  });
+  document.querySelectorAll('#commissionFilterPage input[type="search"][aria-controls]').forEach(input => {
+    const list = document.getElementById(input.getAttribute('aria-controls'));
+    if (!list) return;
+    input.addEventListener('input', () => {
+      const q = input.value.trim().toLowerCase();
+      for (const n of list.children) n.hidden = !!q && !n.textContent.toLowerCase().includes(q);
+    });
+  });
+  const ps = document.getElementById('cfk-cmf-phrase-search');
+  if (ps) ps.addEventListener('input', () => {
+    const q = ps.value.trim().toLowerCase();
+    page.querySelectorAll('section[aria-labelledby="cmf-phrases-title"] .cf-chips > .cf-chip').forEach(chip => {
+      chip.hidden = !!q && !chip.textContent.toLowerCase().includes(q);
+    });
+  });
+})();
+</script>

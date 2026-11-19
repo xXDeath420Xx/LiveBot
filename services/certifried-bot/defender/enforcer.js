@@ -18,6 +18,16 @@
 const BAN_SCOPE = 'moderation:ban';
 const MANAGE_SCOPE = 'moderation:chat_message:manage';
 
+// True when `domain` is one of `allowed` or a subdomain of one.
+export function isAllowedDomain(domain, allowed) {
+    if (!domain || !Array.isArray(allowed) || !allowed.length) return false;
+    const d = String(domain).toLowerCase().replace(/\.+$/, '');
+    return allowed.some(a => {
+        const s = String(a || '').toLowerCase().trim().replace(/^\*\./, '').replace(/\.+$/, '');
+        return !!s && (d === s || d.endsWith('.' + s));
+    });
+}
+
 export function createEnforcer(deps) {
     async function check(event) {
         const { platform, userId, username, isMod, isBroadcaster } = event;
@@ -73,6 +83,8 @@ export function createEnforcer(deps) {
         const reason = `phishing:${domain}`;
 
         const settings = deps.getSettings ? await deps.getSettings(channelId) : {};
+        // The channel's own allowed domains (dashboard "Allowed domains"): never a scam link here.
+        if (isAllowedDomain(domain, settings.safeDomains)) return { acted: false };
         const threshold = Number.isInteger(settings.phishingThreshold) ? settings.phishingThreshold : 2;
         const count = deps.recordOffense ? await deps.recordOffense(event.platform, userId, username, domain) : 1;
         const repeat = count >= threshold;

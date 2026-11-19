@@ -2,6 +2,8 @@ import { EmbedBuilder, ChannelType } from 'discord.js';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import { volumePercent } from '../../core/vc-sound-manager.js';
+import { themeColor } from '../../core/guild-theme.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -26,7 +28,7 @@ export async function handleEnable(interaction) {
     const embed = new EmbedBuilder()
         .setTitle('VC Sound Drops Enabled')
         .setDescription(`Sound drops are now **enabled** in **${mode}** mode.`)
-        .setColor(0x00ff00)
+        .setColor(themeColor(interaction.guildId, 'success'))
         .addFields(
             { name: 'Mode', value: mode, inline: true },
             { name: 'Next Steps', value: mode === 'scheduled'
@@ -47,7 +49,7 @@ export async function handleDisable(interaction) {
     return interaction.reply({
         embeds: [new EmbedBuilder()
             .setTitle('VC Sound Drops Disabled')
-            .setColor(0xff0000)
+            .setColor(themeColor(interaction.guildId, 'danger'))
             .setTimestamp()
         ]
     });
@@ -77,7 +79,7 @@ export async function handleStatus(interaction) {
         .addFields(
             { name: 'Status', value: config.enabled ? 'Enabled' : 'Disabled', inline: true },
             { name: 'Mode', value: config.mode || 'random', inline: true },
-            { name: 'Volume', value: `${Math.round((config.volume || 0.5) * 100)}%`, inline: true },
+            { name: 'Volume', value: `${volumePercent(config.volume)}%`, inline: true },
             { name: 'Random Interval', value: `${config.min_interval_minutes}-${config.max_interval_minutes} min`, inline: true },
             { name: 'Min Users', value: `${config.min_users_in_vc || 1}`, inline: true },
             { name: 'Leave After', value: `${config.leave_after_seconds || 5}s`, inline: true },
@@ -155,7 +157,8 @@ export async function handleVolume(interaction) {
     if (!mgr) return;
 
     const level = interaction.options.getInteger('level');
-    await mgr.updateConfig(interaction.guild.id, { volume: level / 100 });
+    // A percentage, as the VC sound drops page saves it (core/vc-sound-manager.js volumePercent).
+    await mgr.updateConfig(interaction.guild.id, { volume: level });
 
     return interaction.reply({
         embeds: [new EmbedBuilder()
@@ -233,7 +236,7 @@ export async function handleUnblacklist(interaction) {
         embeds: [new EmbedBuilder()
             .setTitle('Channel Unblacklisted')
             .setDescription(`${channel} is now eligible for sound drops again.`)
-            .setColor(0x00ff00)
+            .setColor(themeColor(interaction.guildId, 'success'))
             .setTimestamp()
         ]
     });
@@ -282,7 +285,7 @@ export async function handleAddsound(interaction) {
                 { name: 'File', value: attachment.name, inline: true },
                 { name: 'Size', value: `${(attachment.size / 1024).toFixed(1)} KB`, inline: true }
             )
-            .setColor(0x00ff00)
+            .setColor(themeColor(interaction.guildId, 'success'))
             .setTimestamp()
         ]
     });
@@ -310,7 +313,7 @@ export async function handleRemovesound(interaction) {
         embeds: [new EmbedBuilder()
             .setTitle('Sound Removed')
             .setDescription(`Sound **${name}** has been removed.`)
-            .setColor(0xff0000)
+            .setColor(themeColor(interaction.guildId, 'danger'))
             .setTimestamp()
         ]
     });
@@ -402,7 +405,7 @@ export async function handleTest(interaction) {
             embeds: [new EmbedBuilder()
                 .setTitle('Test Sound Drop')
                 .setDescription(`Playing **${sound.name}** in ${voiceChannel}`)
-                .setColor(0x00ff00)
+                .setColor(themeColor(interaction.guildId, 'success'))
                 .setTimestamp()
             ]
         });

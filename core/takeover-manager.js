@@ -22,173 +22,35 @@ import logger from '../utils/logger.js';
 import ReactionRoleManager from './reaction-role-manager.js';
 import { loadDecisions, summarizeDecisions } from './takeover-decisions.js';
 import { QUESTIONS } from './takeover-questions.js';
+import { themeColor } from './guild-theme.js';
+import { foldConfusables } from '../utils/text-fold.js';
+import {
+  KNOWN_BOTS, FEATURES, WEBHOOK_ONLY, BOT_CATALOG,
+  resolveBotMeta, featuresOf, nameKey,
+} from './takeover-bots.js';
+import { resolveOwner } from './takeover-owner.js';
+import { asList } from './takeover-classifier.js';
 
 /** X-Audit-Log-Reason must be ASCII — anything above 0x7E is rejected outright. */
 const ascii = (s) => String(s).replace(/[^\x20-\x7E]/g, '').slice(0, 400);
 
-/**
- * What each incumbent bot does, and whether we can take it over.
- * `probe` decides whether the feature is actually in use in this guild.
+/*
+ * Who the incumbents are lives in core/takeover-bots.js — a catalog keyed by id AND by name, so a
+ * bot posting through a webhook, or one whose id we never wrote down, still resolves. Re-exported
+ * here because the API, the retirement engine and /takeover all read these from this module.
  */
-/**
- * `coverage` is the honest verdict, and it is three-valued on purpose:
- *   'full'    — we reproduce what it does here. Retire it.
- *   'partial' — we reproduce the core of it but not all of it. `why` says exactly what is missing.
- *   'none'    — genuinely nothing to replace. KEEP it; this is not a failure, it is a decision.
- * Anything without `coverage` defaults to 'full' when a feature is set. Never label a bot we do
- * replace as unreplaceable — that was the old bug, and it made a nearly-complete takeover read as
- * a wall of red.
- */
-export const KNOWN_BOTS = Object.freeze({
-  // Replaceable — we have the feature.
-  '510016054391734273': { name: 'counting', feature: 'counting', coverage: 'full' },
-  '696797815782768650': { name: 'Counting Bot', feature: 'counting', coverage: 'full' },
-  '282286160494067712': { name: 'Pingcord', feature: 'streams', coverage: 'full' },
-  '155149108183695360': { name: 'Dyno', feature: 'logging', coverage: 'full' },
-  '235148962103951360': { name: 'Carl-bot', feature: 'reaction_roles', coverage: 'full' },
-  '471091072546766849': { name: 'Friend Time', feature: 'timezone', coverage: 'full' },
-  '966695034340663367': { name: 'Cat Bot', feature: 'catbot', coverage: 'full' },
-  '972637072991068220': { name: 'Grow a Tree', feature: 'growtree', coverage: 'full' },
-  '408785106942164992': { name: 'OwO', feature: 'owo', coverage: 'full' },
-  '1071983600729346208': { name: 'CannaFriend', feature: 'cannabis', coverage: 'full' },
-  '696870234262339614': { name: 'Sx Bot', feature: 'emoji', coverage: 'full' },
-  '83010416610906112': { name: 'Nightbot', feature: 'custom_commands', coverage: 'full' },
-  '1437489496680828968': { name: 'Throne Integration', feature: 'throne', coverage: 'full' },
-  '672822334641537041': { name: 'FreeStuff', feature: 'free_games', coverage: 'full' },
-  '656621136808902656': { name: 'Birthday Bot', feature: 'birthday', coverage: 'full' },
-  '356268235697553409': { name: '.fmbot', feature: 'lastfm', coverage: 'full' },
-  '684773505157431347': { name: 'FlaviBot', feature: 'moderation', coverage: 'full' },
-  '836232765942923305': { name: 'Ko-fi Bot', feature: 'kofi', coverage: 'full' },
-
-  // Partial — we have the system, but not every part of what this bot gives you.
-  // Blerp posts nothing (it plays clips into VOICE), so a message scan never sees it. Our
-  // /soundboard does the Discord half — upload clips, button panel, play into VC. What it does
-  // NOT give you is Blerp's hosted clip library or its Twitch integration.
-  '964278831085125722': {
-    name: 'Blerp', feature: 'soundboard', coverage: 'partial',
-    why: '/soundboard plays clips into voice from a button panel — but you upload the clips. ' +
-      "Blerp's hosted library and Twitch integration do not come across.",
-  },
-
-  // Keep — genuinely no equivalent. Not a gap in us; just not a thing we do.
-  '490707751832649738': { name: 'TacoShack', feature: null, coverage: 'none', why: 'idle taco game — no equivalent' },
-  '302050872383242240': { name: 'DISBOARD', feature: null, coverage: 'none', why: 'server-listing bump service — nothing to replace' },
-  '351227880153546754': { name: 'BetterTTV', feature: null, coverage: 'none', why: 'Twitch emote service, not a Discord feature' },
-});
+export {
+  KNOWN_BOTS, BOT_CATALOG, FEATURES, WEBHOOK_ONLY,
+  resolveBotMeta, presentBotNames, needsEvidence, featuresOf,
+} from './takeover-bots.js';
 
 /**
- * Streamers the incumbent announced that we do not. Read out of Pingcord's own posts: it pings
- * @everyone for Karabi420 in #kabs-live★, and she was never in our `subscriptions` — retiring
- * Pingcord without this would silently stop the server's most important announcement.
+ * Streamers recovered by hand from one server's incumbent posts. Per-guild data: it is referenced
+ * only from that guild's profile below, never used unconditionally.
  */
 export const PINGCORD_STREAMERS = Object.freeze([
   { platform: 'twitch', username: 'karabi420', channelId: '814371170341617664', pingRoleId: 'everyone' },
 ]);
-
-/**
- * Bots that post only through webhooks have no guild member to detect. TANGIA is one: it
- * pipes Twitch TTS into a channel and owns no bot user.
- */
-export const WEBHOOK_ONLY = Object.freeze({
-  TANGIA: 'Twitch-side TTS overlay, not a Discord feature',
-});
-
-/** Our own bots. They appear in a scan like anything else, but are never retirement targets. */
-const OURS = new Set(['certifriedutility', 'kabbot']);
-
-/** Discord's own personas. Not bots — nothing to attribute, nothing to remove. */
-const SYSTEM_PERSONAS = new Set(['communityupdates', 'automod', 'serverboost', 'discord']);
-
-const nameKey = (s) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
-
-/**
- * The set of bots actually still in the guild, by normalised name. Built from the scan rows so a
- * webhook can be tied back to whether its owning bot is still here.
- *
- * Records BOTH the scanned name and the name we know it by — they differ ("Throne Integration Bot"
- * in the guild vs "Throne Integration" in KNOWN_BOTS), and a plain equality check silently treated
- * a present, replaceable bot as absent and stopped gating it.
- */
-export function presentBotNames(scanBots) {
-  const set = new Set();
-  for (const b of scanBots ?? []) {
-    if (b.kind !== 'bot' || !(b.present === 1 || b.present === true)) continue;
-    set.add(nameKey(b.name));
-    const meta = resolveBotMeta(b.bot_id, b.name);
-    if (meta?.name) set.add(nameKey(meta.name));
-  }
-  return set;
-}
-
-/**
- * Does this speaker's message shapes have to be explained before anything can happen?
- *
- * Only a bot we are actually going to REMOVE gates on evidence. Three things are therefore NOT
- * gated, and demanding checkboxes for them was pure noise that made a finished takeover look
- * unfinished:
- *   • a bot we keep (TacoShack, TANGIA — 770 TTS shapes we will never retire)
- *   • one of ours, or a Discord system persona
- *   • a bot that has ALREADY LEFT — you cannot retire what is not there (Dyno)
- *
- * A webhook is judged by its owning bot: FreeStuff posts through a webhook, so that evidence still
- * counts while FreeStuff is in the guild. Dyno's webhook does not, because Dyno is gone.
- */
-export function needsEvidence(meta, presentNames = null) {
-  if (!meta) return true; // unrecognised — a human genuinely must look
-  if (meta.coverage !== 'full' && meta.coverage !== 'partial') return false;
-  if (!presentNames) return true; // caller has no presence info — stay strict
-  return presentNames.has(nameKey(meta.name));
-}
-
-/**
- * Resolve a scanned speaker to what we know about it.
- *
- * The analyzer keys a webhook persona as `wh:<name>`, not as a snowflake — so a straight
- * `KNOWN_BOTS[botId]` lookup misses every webhook. That mattered: Dyno posted 252 of its message
- * shapes through its webhook, FreeStuff posts through one too, and all of them sat permanently
- * "unrecognised", blocking retirement on evidence we had already explained for the same bot's
- * member account. Fall back to a name match for those.
- *
- * @param {string} botId    snowflake, or `wh:<name>` for a webhook persona
- * @param {string} [name]   display name, used for the webhook fallback
- * @param {string} [selfId] the id of the bot doing the takeover — never a retirement target
- */
-export function resolveBotMeta(botId, name, selfId = null) {
-  if (selfId && botId === selfId) {
-    return { name: name ?? 'this bot', feature: null, coverage: 'self', why: 'this is the bot doing the takeover' };
-  }
-  const direct = KNOWN_BOTS[botId];
-  if (direct) return direct;
-
-  const key = (s) => String(s ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
-  const nk = key(name);
-
-  // Ours (the main bot, which may have left the guild) — never a retirement target.
-  if (OURS.has(nk)) {
-    return { name: name, feature: null, coverage: 'self', why: 'one of our own bots' };
-  }
-  // Discord's own system personas. Not bots, not removable, nothing to replace.
-  if (SYSTEM_PERSONAS.has(nk)) {
-    return { name: name, feature: null, coverage: 'system', why: "Discord's own system messages — not a bot" };
-  }
-
-  // Webhook persona → match by name, both against the known bots and the webhook-only list.
-  const raw = String(botId ?? '').startsWith('wh:') ? String(botId).slice(3) : (name ?? '');
-  const needle = raw.toLowerCase().replace(/[^a-z0-9]/g, '');
-  if (!needle) return null;
-
-  for (const [whName, why] of Object.entries(WEBHOOK_ONLY)) {
-    if (whName.toLowerCase().replace(/[^a-z0-9]/g, '') === needle) {
-      return { name: whName, feature: null, coverage: 'none', why };
-    }
-  }
-  for (const meta of Object.values(KNOWN_BOTS)) {
-    const known = meta.name.toLowerCase().replace(/[^a-z0-9]/g, '');
-    // `wh:Dyno™ #dyno-updates` → starts with `dyno`. Prefix match, not equality.
-    if (needle === known || needle.startsWith(known)) return meta;
-  }
-  return null;
-}
 
 /**
  * Exact reply parity, recovered from message history. Discord exposes no API for another bot's
@@ -303,22 +165,22 @@ const GUILD_PROFILES = Object.freeze({
     freeGamesChannel: '1466968286158651609',         // #discounted-free-games (where FreeStuff posted)
     freeGamesRole: '1466949549955219701',            // the Free Games ping role
 
-    // Panels she asked us NOT to put up.
+    // Panels the owner asked us NOT to put up.
     //
-    // She approved the role clean-up with: "everything but colours!". That is prose, and prose is
-    // not something the code should be interpreting at runtime — so the reading is made HERE, once,
-    // by a human, with her words next to it, and reviewed like any other per-guild fact.
+    // The role clean-up was approved with: "everything but colours!". That is prose, and prose is not
+    // something the code should be interpreting at runtime — so the reading is made HERE, once, by a
+    // human, with the owner's words next to it, and reviewed like any other per-guild fact.
     //
-    // Not posting is the reversible direction: her seven existing colour roles stay exactly as they
-    // are today (pickerless, which is how she has always had them), and no abandoned duplicates get
-    // renamed into new colours. If she meant something else, a panel we did not post costs one
-    // click to add, whereas fifteen roles renamed and a panel members have already used costs an
-    // afternoon to unpick.
+    // Not posting is the reversible direction: the seven existing colour roles stay exactly as they
+    // are today (pickerless, which is how this server has always had them), and no abandoned
+    // duplicates get renamed into new colours. If something else was meant, a panel we did not post
+    // costs one click to add, whereas fifteen roles renamed and a panel members have already used
+    // costs an afternoon to unpick.
     skipPanels: ['Pick a name colour'],
 
-    // The seven spare roles, in her words: "Fortnite, Streamer, Minecraft, Party Games, Among Us,
-    // 18-20, 21+". Parsed from her answer at runtime (see decisions.spareRoleNames) — this is only
-    // the note that the count matches the seven the clean-up frees up.
+    // The seven spare roles, in the owner's own words: "Fortnite, Streamer, Minecraft, Party Games,
+    // Among Us, 18-20, 21+". Parsed from that answer at runtime (see decisions.spareRoleNames) — this
+    // is only the note that the count matches the seven the clean-up frees up.
   },
 });
 
@@ -330,9 +192,10 @@ const GUILD_PROFILES = Object.freeze({
  * panels should say.
  */
 export async function profileFor(guildId) {
-  // Tier 1: hand-verified, in code. Kabster's panels carry all 60 emoji-to-role mappings, which a
-  // machine cannot recover — Carl-bot keeps that mapping in its own database and never puts it in
-  // the message. A hand-verified profile therefore always beats a derived one.
+  // Tier 1: hand-verified, in code. A hand-written profile carries things a machine cannot recover —
+  // a reaction-role bot keeps its emoji-to-role mapping in its own database and never puts it in the
+  // message, so all sixty of those pairings can only come from a human reading the live panel. A
+  // hand-verified profile therefore always beats a derived one.
   const p = GUILD_PROFILES[guildId];
   if (p) {
     const TABLES = {
@@ -340,10 +203,13 @@ export async function profileFor(guildId) {
     };
     // A panel the owner declined is filtered out HERE, at the single point every caller reads its
     // panels from — plan(), postPanels() and the emoji step all go through this. Filtering in each of
-    // them instead would work right up until somebody adds a fourth caller and posts the panel she
-    // said no to.
+    // them instead would work right up until somebody adds a fourth caller and posts the panel the
+    // owner said no to.
     const skip = new Set(p.skipPanels ?? []);
-    const panels = (TABLES[p.panels] ?? []).filter(pan => !skip.has(pan.name));
+    const panels = (TABLES[p.panels] ?? [])
+      .filter(pan => !skip.has(pan.name))
+      // A hand-written table names one channel for the lot; a panel may still override it.
+      .map(pan => ({ ...pan, channelId: pan.channelId ?? p.selfAssignChannel ?? null }));
 
     return {
       source: 'hand-verified',
@@ -378,12 +244,25 @@ export async function profileFor(guildId) {
     nightbotCommands: d.customCommands?.value ?? [],
     nightbotAutoresponses: [],
     platformEmoji: d.platformEmoji?.value ?? [],
-    // A button whose role we could not resolve is a button that does NOTHING. Dropping it is the
-    // only safe answer: posting it would hand members a panel with dead options and no way to tell.
+    // A button whose role we could not resolve is a button that does NOTHING when clicked. Dropping
+    // it is the only safe answer: posting it hands members a panel with dead options and no way to
+    // tell which. `emoji ?? ''` because a label-only button is legitimate, and a null here would be
+    // read downstream as "an emoji we failed to resolve".
     panels: (d.panels?.value ?? []).map(pan => ({
       name: pan.name,
       mode: pan.mode ?? 'multiple',
-      roles: pan.options.filter(o => o.roleId).map(o => [o.emoji, o.roleId, o.label]),
+      // WHERE this panel lives. Derivation has always recorded it per panel and this mapping dropped
+      // it, so every panel was reposted into one "self-assign channel" — putting a server's streamer
+      // panel into its rules channel, and leaving the real one standing in the channel it came from.
+      // The analysis was right; throwing it away here is what made it look like a guess.
+      channelId: pan.channelId ?? null,
+      // Carried so the rebuilt panel says what the original said. See derivePanels.
+      description: pan.description ?? null,
+      fields: pan.fields ?? [],
+      color: pan.color ?? null,
+      roles: pan.options
+        .filter(o => o.roleId)
+        .map(o => [o.emoji ?? '', o.roleId, o.label]),
     })).filter(pan => pan.roles.length),
     // Derivation does not recover these yet — a guild reaching takeover through a derived profile keeps
     // Throne and free-games as manual steps until they are hand-verified.
@@ -479,7 +358,7 @@ const STEPS = {
     label: 'Platform emoji',
     describe: s => `Re-upload ${s.missing.length} emoji (${s.missing.join(', ')}) into this server — ` +
       'the platform role panel cannot use them while they live on Carl-bot\'s emoji server',
-    needs: ['ManageGuildExpressions'],
+    needs: ['CreateGuildExpressions'],
   },
   streams: { label: 'Stream announcements', describe: s => `Subscribe **${s.username}** (${s.platform}) → #${s.channelName}` },
   logging: { label: 'Server logging', describe: s => `Log events to #${s.channelName}` },
@@ -519,23 +398,72 @@ export async function readCountingState(channel, scan = 200) {
   return null;
 }
 
-/** Which of the known bots are actually present right now. */
+/**
+ * Every bot actually in this guild right now — recognised or not.
+ *
+ * This used to walk the catalog and ask "is bot #X here?", which meant the audit could only ever
+ * see bots somebody had already typed an id for. Anything else was invisible: not "unrecognised",
+ * INVISIBLE, absent from readiness, absent from the hierarchy check, absent from the parity gaps.
+ * A server could be full of bots and the page would report a clean sweep.
+ *
+ * So it now works the other way round: enumerate the guild's bot members and resolve each one.
+ * A bot we do not recognise comes back with `known: false` and no feature, which the audit reports
+ * honestly instead of silently dropping.
+ *
+ * The member list is fetched once and cached by discord.js; if the fetch is refused (a very large
+ * guild without the members intent), we fall back to the old id sweep so the plan still works.
+ */
 export async function detectBots(guild) {
-  const present = [];
-  for (const [id, meta] of Object.entries(KNOWN_BOTS)) {
-    const member = await guild.members.fetch(id).catch(() => null);
-    if (member) present.push({ id, ...meta, tag: member.user.tag });
+  const seen = new Map();
+  const add = (member) => {
+    if (!member?.user?.bot) return;
+    if (member.id === guild.client?.user?.id) return;      // never audit ourselves
+    const meta = resolveBotMeta(member.id, member.user.username, guild.client?.user?.id);
+    seen.set(member.id, {
+      id: member.id,
+      name: meta?.name ?? member.user.username,
+      scannedName: member.user.username,
+      tag: member.user.tag,
+      feature: meta?.feature ?? null,
+      features: featuresOf(meta),
+      coverage: meta ? (meta.coverage ?? (meta.feature ? 'full' : 'none')) : null,
+      why: meta?.why ?? null,
+      known: !!meta,
+      topRolePosition: member.roles?.highest?.position ?? 0,
+      topRoleName: member.roles?.highest?.name ?? null,
+    });
+  };
+
+  // Use the cache when it is already complete. A full member fetch on a large guild is a real cost,
+  // and plan() calls this on every preview — but a PARTIAL cache is worse than useless here, because
+  // a bot missing from it reads as "not in this server" and quietly drops out of the audit.
+  const cached = guild.members.cache;
+  const complete = guild.memberCount != null && cached.size >= guild.memberCount;
+
+  const fetched = complete ? cached : await guild.members.fetch().catch(() => null);
+  if (fetched) {
+    for (const m of fetched.values()) add(m);
+  } else {
+    // No member list. Fall back to asking about the ids we do know — worse, but never nothing.
+    for (const id of Object.keys(KNOWN_BOTS)) {
+      const member = guild.members.cache.get(id) ?? await guild.members.fetch(id).catch(() => null);
+      add(member);
+    }
   }
-  return present;
+
+  // Our own custom bots serve this guild and are not takeover targets. resolveBotMeta already
+  // flags them by name; drop them here so no caller has to remember to.
+  return [...seen.values()].filter(b => b.coverage !== 'self');
 }
 
 /**
  * Channel names are routinely written in styled Unicode — `#𝗰𝗼𝘂𝗻𝘁𝗶𝗻𝗴` is
  * MATHEMATICAL SANS-SERIF BOLD, and `/count/i` does not match a single character of it.
- * NFKC folds those back to ASCII (`𝗰𝗼𝘂𝗻𝘁𝗶𝗻𝗴` → `counting`, `𝟰𝟮𝟬` → `420`).
+ * The shared folder (utils/text-fold.js) does NFKC (`𝗰𝗼𝘂𝗻𝘁𝗶𝗻𝗴` → `counting`, `𝟰𝟮𝟬` → `420`)
+ * plus small capitals, lookalike letters and decoration NFKC leaves alone.
  */
 export function normalizeName(name) {
-  return String(name || '').normalize('NFKC').toLowerCase();
+  return foldConfusables(name);
 }
 
 const nameMatches = (channel, re) => re.test(normalizeName(channel.name));
@@ -557,18 +485,18 @@ function missingPerms(channel, guild, names) {
  * STRICTLY below its own; Administrator does not bypass it. So we compare our bot's top role against
  * each target bot's top role and report exactly which are removable today.
  */
-export async function readiness(guild) {
+export async function readiness(guild, ctx = {}) {
   const me = guild.members.me ?? await guild.members.fetchMe().catch(() => null);
   const myTop = me?.roles?.highest?.position ?? 0;
 
-  const bots = await detectBots(guild);
-  const hierarchy = { botPosition: myTop, removable: [], blocked: [] };
+  const bots = ctx.bots ?? await detectBots(guild);
+  const hierarchy = { botPosition: myTop, botRole: me?.roles?.highest?.name ?? null, removable: [], blocked: [] };
   for (const b of bots) {
-    const member = await guild.members.fetch(b.id).catch(() => null);
-    if (!member) continue;
-    const top = member.roles.highest.position;
-    const entry = { name: b.name, id: b.id, position: top, topRole: member.roles.highest.name };
-    (myTop > top ? hierarchy.removable : hierarchy.blocked).push(entry);
+    // A bot with nothing to replace is not a removal candidate, so its role position is not a
+    // blocker — listing it as one turned "we keep DISBOARD" into a red line on the audit.
+    if (!b.features.length && b.coverage !== 'partial' && b.known) continue;
+    const entry = { name: b.name, id: b.id, position: b.topRolePosition, topRole: b.topRoleName ?? '@everyone' };
+    (myTop > b.topRolePosition ? hierarchy.removable : hierarchy.blocked).push(entry);
   }
 
   // Server security posture. These are the settings a takeover should not silently inherit as-is.
@@ -582,9 +510,10 @@ export async function readiness(guild) {
   };
   if (guild.mfaLevel !== 1) security.warnings.push('2FA is NOT required for moderation actions — any compromised mod account can ban/kick.');
   if ((guild.verificationLevel ?? 0) < 2) security.warnings.push(`Verification is ${security.verification} — a raid can post immediately. Medium+ gates new/unverified accounts.`);
+  if ((guild.explicitContentFilter ?? 0) === 0) security.warnings.push('The explicit-media filter is off for everyone — Discord will not scan attachments at all.');
 
-  // Role hygiene: same-named duplicates (Carl-bot rebuilds leave stacks of pronoun/region roles) and
-  // empty non-managed roles. Cheap — reads the role cache only, no member sweep.
+  // Role hygiene: same-named duplicates (a rebuilt reaction-role setup leaves stacks of pronoun and
+  // region roles) and empty non-managed roles. Cheap — reads the role cache only, no member sweep.
   const byName = new Map();
   for (const r of guild.roles.cache.values()) {
     if (r.managed || r.id === guild.id) continue;
@@ -600,15 +529,403 @@ export async function readiness(guild) {
     hierarchy,
     security,
     roleHygiene: { duplicates, emptyRoles: empty, placeholderRoles: placeholders },
-    parityGaps: [], // OwO guild boss is now built (migration 154); nothing outstanding.
-    notes: [
-      'The analyzer was blind to Components V2 messages until 2026-07-12 — FreeStuff (95 posts) and ' +
-      "OwO's guild boss were invisible. Re-scan to see them; FreeStuff parity (free_games) still holds.",
-    ],
+    parityGaps: parityGaps(bots),
+    notes: await auditNotes(guild, bots, ctx),
   };
 }
 
+/**
+ * What this takeover will NOT carry across, derived from the bots actually in this server.
+ *
+ * This was a hardcoded empty array with a comment about one server's OwO guild boss, which meant
+ * every server on earth was told it had no parity gaps. A gap is not a static fact about our
+ * feature set — it is a fact about which bots THIS server hired, so it is computed from them.
+ */
+export function parityGaps(bots) {
+  const gaps = [];
+  for (const b of bots) {
+    if (b.coverage === 'partial' && b.why) {
+      gaps.push({ feature: b.name, detail: b.why, severity: 'partial' });
+    } else if (!b.known) {
+      gaps.push({
+        feature: b.name,
+        detail: 'we do not recognise this bot, so we cannot say what it does or whether we replace it. '
+          + 'Open it below, read its message shapes, and decide before retiring anything.',
+        severity: 'unknown',
+      });
+    }
+  }
+  return gaps;
+}
+
+/**
+ * The narrative half of the audit: what is true about THIS server right now, in sentences.
+ *
+ * Every line is derived. The previous version was a single hardcoded paragraph about a scanner bug
+ * fixed in July and one server's FreeStuff posts — it was shown to every server, was false on all
+ * but one of them, and never changed no matter what the scan found.
+ */
+async function auditNotes(guild, bots, ctx = {}) {
+  const notes = [];
+  const scan = ctx.scan ?? null;
+
+  if (!scan) {
+    notes.push('No scan on record. Everything below is read from the live server only — run the scan '
+      + 'so the audit can also see what the old bots have been posting.');
+  } else {
+    const when = scan.finished_at ?? scan.started_at;
+    const ageDays = when ? Math.floor((Date.now() - new Date(when).getTime()) / 86_400_000) : null;
+    const depth = { deep: 'full history', standard: 'the last 90 days', quick: '1k messages per channel' }[scan.depth] ?? scan.depth;
+    notes.push(`Scanned ${depth}: ${Number(scan.messages_scanned ?? 0).toLocaleString()} messages across `
+      + `${scan.channels_done}/${scan.channels_total} channels`
+      + (ageDays === null ? '.' : ageDays === 0 ? ', today.' : `, ${ageDays} day(s) ago.`));
+    if (scan.status !== 'complete') {
+      notes.push(`That scan is "${scan.status}", not complete — anything it never reached is missing from `
+        + 'this audit. Resume it before trusting the bot list.');
+    }
+    if (ageDays !== null && ageDays > 30) {
+      notes.push(`The scan is over a month old. Bots come and go; re-run it before retiring anything.`);
+    }
+  }
+
+  if (ctx.unreadableChannels?.length) {
+    notes.push(`${ctx.unreadableChannels.length} channel(s) could not be read — `
+      + ctx.unreadableChannels.map(c => `#${c.name}`).join(', ')
+      + '. A bot that only ever posted there is invisible to this audit.');
+  }
+
+  const unknown = bots.filter(b => !b.known);
+  if (unknown.length) {
+    notes.push(`${unknown.length} bot(s) here are not in our catalog — ${unknown.map(b => b.name).join(', ')}. `
+      + 'They are never retired automatically; work out what they do first.');
+  }
+
+  const gone = (ctx.scanBots ?? []).filter(b => b.kind === 'bot' && !(b.present === 1 || b.present === true));
+  if (gone.length) {
+    notes.push(`${gone.length} bot(s) posted here in the past but have already left `
+      + `(${gone.slice(0, 5).map(b => b.name).join(', ')}${gone.length > 5 ? ', …' : ''}). `
+      + 'Nothing to retire — their old messages are just history.');
+  }
+
+  if (typeof ctx.unattributed === 'number' && ctx.unattributed > 0) {
+    notes.push(`${ctx.unattributed} message shape(s) are still unexplained. Retirement is gated on `
+      + 'them: every distinct thing a bot posts has to be accounted for before it can be removed.');
+  }
+
+  // What each bot was actually caught doing, in the order of how much it did it. This is the line
+  // that answers "what am I even replacing?" without opening anything.
+  const did = [];
+  for (const b of bots) {
+    const fams = (ctx.behaviours?.get(nameKey(b.name)) ?? []).filter(f => f.kind === 'feature');
+    if (!fams.length) continue;
+    did.push(`${b.name} — ${fams.slice(0, 4).map(f => `${f.says.toLowerCase()} (${f.occurrences})`).join(', ')}`
+      + (fams.length > 4 ? `, +${fams.length - 4} more` : ''));
+  }
+  if (did.length) {
+    notes.push(`Read out of the scan, this is what they actually did here: ${did.join('; ')}.`);
+  }
+
+  // Only count jobs the bot was SEEN doing. Warning that Dyno does seven things is noise when this
+  // server only ever used three of them; warning about the three is the thing that matters.
+  const multi = bots
+    .map(b => ({ b, used: b.features.filter(f => ctx.observed?.get(nameKey(b.name))?.has(f)) }))
+    .filter(x => x.used.length > 1);
+  if (multi.length) {
+    notes.push('Some of these are doing several jobs at once here — '
+      + multi.map(({ b, used }) => `${b.name} (${used.map(f => FEATURES[f]?.label ?? f).join(', ')})`).join('; ')
+      + '. Removing one takes ALL of them out at the same moment, so every one needs its replacement '
+      + 'standing before it goes.');
+  }
+
+  return notes;
+}
+
 // ── Planning ─────────────────────────────────────────────────────────────────
+
+/**
+ * One entry per command name, first writer wins.
+ *
+ * Two sources can find the same command — the classifier reading the scan's trigger/reply pairs, and
+ * the profile derivation walking the raw history — and re-creating one twice is at best noise and at
+ * worst two rows fighting over the same trigger.
+ */
+function dedupeCommands(list) {
+  const out = new Map();
+  for (const c of list) {
+    if (!c?.name) continue;
+    const key = String(c.name).toLowerCase();
+    if (!out.has(key)) out.set(key, c);
+  }
+  return [...out.values()];
+}
+
+/**
+ * Which of OUR log events each observed behaviour corresponds to.
+ *
+ * Keyed by the classifier's behaviour name, and the values are the event types `core/log-manager.js`
+ * actually passes to `sendLogEmbed` — checked against that file, not invented. An event name that
+ * does not exist there is a row in `log_event_config` that nothing will ever read.
+ */
+const LOG_EVENTS = Object.freeze({
+  'Voice join/leave logs': ['voiceUpdate', 'voiceSelfMute', 'voiceServerMute', 'voiceServerDeaf',
+    'voiceStream', 'voiceVideo', 'voiceChannelEffect'],
+  'Message delete/edit logs': ['messageDelete', 'messageUpdate'],
+  'Join/leave logs': ['memberJoin', 'memberLeave'],
+  'Role change logs': ['memberUpdate'],
+  'Role & server change logs': ['roleCreate', 'roleDelete', 'roleUpdate', 'guildUpdate'],
+  'Member update logs': ['memberUpdate', 'memberTimeout'],
+  'Channel logs': ['channelCreate', 'channelDelete', 'channelUpdate', 'channelPinsUpdate',
+    'threadCreate', 'threadDelete', 'threadUpdate'],
+  'Moderation actions': ['ban', 'unban', 'memberKick', 'memberTimeout', 'automod'],
+  'Moderation case logs': ['ban', 'unban', 'memberKick', 'memberTimeout'],
+  'Warnings': ['automod'],
+  'Automod actions': ['automod'],
+});
+
+/**
+ * What a log channel's NAME says it is for.
+ *
+ * A tiebreaker for thin evidence, nothing more. A server with #log-channels, #log-voice and
+ * #log-messages has told us where each kind belongs; if the incumbent only ever posted ONE channel
+ * event, and that one happened to land in #log-mod, following the evidence alone routes every future
+ * channel event to the wrong place forever on a sample of one. Names are a convention rather than a
+ * contract, so this only ever overrides evidence too weak to trust.
+ */
+const LOG_CHANNEL_HINTS = Object.freeze({
+  'Channel logs': /channel|thread/i,
+  'Message delete/edit logs': /message|msg|delete|edit/i,
+  'Voice join/leave logs': /voice|vc\b/i,
+  'Join/leave logs': /join|leave|member|welcome-?log/i,
+  'Role change logs': /role/i,
+  'Role & server change logs': /role|server|guild/i,
+  'Member update logs': /member|nick|profile/i,
+  'Moderation actions': /\bmod|infract|punish|ban|mute/i,
+  'Moderation case logs': /\bmod|case|infract/i,
+});
+
+/** Below this, one stray post should not decide where a whole category of logs lives. */
+const WEAK_EVIDENCE = 2;
+
+/**
+ * Reproduce the incumbent's log routing, channel for channel.
+ *
+ * Servers really do split logging: voice in one channel, roles in another, deletions in a third.
+ * That is a deliberate arrangement somebody built, and "we have logging too, go and configure it"
+ * throws it away and calls the result a takeover. The scan knows which behaviour was posted where,
+ * so the routing can simply be read back out.
+ *
+ * Each behaviour votes for the channel it was actually seen in, weighted by how many posts landed
+ * there. Where two behaviours map to the same event and disagree (a nickname change is a
+ * `memberUpdate`, and so is a role grant), the busier channel wins — that is the one the server is
+ * really using for it.
+ *
+ * @returns {{events: Array<{event,channelId,channelName,posts,from}>, defaultChannelId: string|null}}
+ */
+export function deriveLogRouting(families, guild) {
+  const votes = new Map();   // event -> Map(channelId -> posts)
+  const source = new Map();  // event -> the behaviour that put it there
+  const totals = new Map();  // channelId -> posts, for choosing the fallback channel
+
+  for (const fam of families ?? []) {
+    if (fam.kind !== 'feature') continue;
+    if (fam.feature !== 'logging' && fam.feature !== 'moderation') continue;
+    const events = LOG_EVENTS[fam.says];
+    if (!events?.length) continue;
+
+    for (const { id, count } of fam.channels ?? []) {
+      if (!guild.channels.cache.get(id)?.isTextBased?.()) continue;  // deleted, or not postable
+      totals.set(id, (totals.get(id) ?? 0) + count);
+      for (const ev of events) {
+        const per = votes.get(ev) ?? new Map();
+        per.set(id, (per.get(id) ?? 0) + count);
+        votes.set(ev, per);
+        const best = [...per.entries()].sort((a, b) => b[1] - a[1])[0];
+        if (best[0] === id) source.set(ev, fam.says);
+      }
+    }
+  }
+
+  const events = [];
+  for (const [ev, per] of votes) {
+    let [channelId, posts] = [...per.entries()].sort((a, b) => b[1] - a[1])[0];
+    const from = source.get(ev) ?? null;
+    let why = 'where the old bot posted it';
+
+    // Thin evidence: let the server's own channel names break the tie.
+    const hint = LOG_CHANNEL_HINTS[from];
+    if (hint && posts <= WEAK_EVIDENCE) {
+      const named = [...guild.channels.cache.values()]
+        .filter(c => c.isTextBased?.() && /log/i.test(c.name) && hint.test(c.name));
+      if (named.length === 1 && named[0].id !== channelId) {
+        channelId = named[0].id;
+        why = `only ${posts} example(s) to go on, and this server has a channel named for it`;
+        posts = 0;
+      }
+    }
+
+    events.push({
+      event: ev,
+      channelId,
+      channelName: guild.channels.cache.get(channelId)?.name ?? channelId,
+      posts,
+      from,
+      why,
+    });
+  }
+  events.sort((a, b) => b.posts - a.posts);
+
+  // The catch-all, for anything not routed above.
+  //
+  // NOT the busiest channel. The busiest is whichever category the server logs most — here that was
+  // role changes — so every unrouted event landed in #log-roles, and members watched slash-command
+  // usage pile up in the middle of their role audit. Prefer a channel that reads as a general log,
+  // and fall back to the busiest only when there is no such thing.
+  const general = [...guild.channels.cache.values()].find(c =>
+    c.isTextBased?.() && /^(logs?|server-?logs?|bot-?logs?|audit)$/i.test(String(c.name).replace(/[^a-z0-9-]/gi, '')));
+  const modLog = [...guild.channels.cache.values()].find(c =>
+    c.isTextBased?.() && /log/i.test(c.name) && /\bmod/i.test(c.name));
+  const defaultChannelId = general?.id
+    ?? modLog?.id
+    ?? [...totals.entries()].sort((a, b) => b[1] - a[1])[0]?.[0]
+    ?? null;
+
+  return { events, defaultChannelId };
+}
+
+/**
+ * Which feature each step key belongs to.
+ *
+ * This exists so the catalog sweep at the end of `plan()` can tell what the bespoke steps above
+ * already claimed. Keeping it as a lookup rather than a field on each step means a profile-gated
+ * step that was NOT pushed (no recovered profile, so no `streams` step) correctly leaves its
+ * feature unclaimed — and the sweep offers the manual path instead of the server being told
+ * nothing at all about its stream announcements.
+ */
+const STEP_FEATURE = Object.freeze({
+  counting: 'counting', counting_disable: 'counting',
+  logging: 'logging', timezone: 'timezone', catbot: 'catbot', growtree: 'growtree', owo: 'owo',
+  birthday: 'birthday', kofi: 'kofi', emoji_ready: 'emoji', cannabis_ready: 'cannabis',
+  protection: 'moderation', free_games: 'free_games', throne: 'throne', streams: 'streams',
+  nightbot_commands: 'custom_commands', nightbot_autoresponses: 'custom_commands',
+  custom_commands: 'custom_commands',
+  carlbot_panels: 'reaction_roles', platform_emoji: 'reaction_roles',
+});
+
+/**
+ * Everything the audit knows about this server that is NOT readable from the live guild.
+ *
+ * The plan can inspect roles, channels and members itself. What it cannot see on its own is the
+ * scan: how much history was read and when, which channels were refused, which bots have posted
+ * here and since left, and how much of what they posted is still unexplained. That is the
+ * difference between a list of config rows and an audit.
+ *
+ * Loaded here rather than demanded from the caller, so /takeover in Discord and the dashboard page
+ * produce the SAME audit. A caller that already has this data passes it in and nothing is re-read;
+ * a caller that does not gets it anyway instead of silently getting a worse answer.
+ */
+export async function scanContext(guild) {
+  const { getLatestScan, getBots, scannableChannels } = await import('./guild-analyzer.js');
+  const { summariseBot, asList } = await import('./takeover-classifier.js');
+
+  const scan = await getLatestScan(guild.id).catch(() => null);
+  const scanBots = scan ? await getBots(scan.id).catch(() => []) : [];
+  const unreadableChannels = scannableChannels(guild)?.skipped ?? [];
+
+  let unattributed = 0;
+  const observed = new Map();         // bot name -> Set of features it was actually SEEN doing here
+  const behaviours = new Map();       // bot name -> the families, for anything that wants to name them
+  const recoveredCommands = new Map(); // bot name -> command/reply pairs caught on camera
+
+  if (scan) {
+    const [[row]] = await pool.execute(
+      'SELECT COUNT(*) AS n FROM guild_scan_templates WHERE scan_id = ? AND attributed = 0', [scan.id])
+      .catch(() => [[{ n: 0 }]]);
+    unattributed = Number(row?.n ?? 0);
+
+    // Read what each bot actually POSTED, and work out which of its jobs it was really doing here.
+    //
+    // This is the difference between a catalog and an audit. The catalog says Dyno can run seven
+    // things; the scan says which seven-sevenths of that this particular server ever used. Planning
+    // from the catalog alone produced steps for a starboard nobody has, next to steps for the
+    // logging they rely on every day, at exactly the same weight.
+    const [rows] = await pool.execute(
+      `SELECT id, bot_id, sample, occurrences, attributed, triggers, channels
+         FROM guild_scan_templates WHERE scan_id = ?`,
+      [scan.id]).catch(() => [[]]);
+
+    // Channel IDS are what the scan stores; channel NAMES are what the classifier can reason about
+    // ("#server-logs" says something, "1466968286158651609" says nothing). Resolved once here.
+    const named = rows.map(r => ({
+      ...r,
+      channelNames: asList(r.channels)
+        .map(id => guild.channels.cache.get(id)?.name)
+        .filter(Boolean),
+    }));
+
+    const byBot = new Map();
+    for (const r of named) (byBot.get(r.bot_id) ?? byBot.set(r.bot_id, []).get(r.bot_id)).push(r);
+
+    // Keyed by the bot's RESOLVED NAME, not its scan row id, so a webhook persona's output counts
+    // as its owning bot's work. This is not a tidy-up: Dyno posts 247 of its 258 log shapes through
+    // `wh:Dyno`, and FreeStuff posts through a webhook exclusively. Keying by row id credited all of
+    // that to a persona nobody plans against, so the bot itself looked like it had never logged
+    // anything here — and the logging step would have been dropped as an unused feature.
+    for (const b of scanBots) {
+      const meta = resolveBotMeta(b.bot_id, b.name);
+      const key = nameKey(meta?.name ?? b.name);
+      const summary = summariseBot(byBot.get(b.bot_id) ?? [], featuresOf(meta));
+
+      // Merge, because two rows (the member and its webhook) land on the same key.
+      const merged = behaviours.get(key) ?? new Map();
+      for (const f of summary.families) {
+        const prev = merged.get(f.key);
+        if (!prev) { merged.set(f.key, { ...f }); continue; }
+        prev.shapes += f.shapes;
+        prev.occurrences += f.occurrences;
+        prev.attributed += f.attributed;
+        prev.templateIds = prev.templateIds.concat(f.templateIds);
+        if (prev.examples.length < 3) prev.examples = prev.examples.concat(f.examples).slice(0, 3);
+      }
+      behaviours.set(key, merged);
+
+      const seen = observed.get(key) ?? new Set();
+      for (const f of summary.families) if (f.kind === 'feature') seen.add(f.feature);
+      observed.set(key, seen);
+
+      if (summary.customCommands.length) {
+        recoveredCommands.set(key, (recoveredCommands.get(key) ?? []).concat(summary.customCommands));
+      }
+    }
+
+    // Collapse the merge maps back to sorted lists, which is what every reader expects.
+    for (const [key, m] of behaviours) {
+      behaviours.set(key, [...m.values()].sort((a, b) => b.occurrences - a.occurrences));
+    }
+  }
+
+  return { scan, scanBots, unreadableChannels, unattributed, observed, behaviours, recoveredCommands };
+}
+
+/**
+ * The channels a given bot actually posted in, by name, from the scan rows.
+ *
+ * Evidence, not inference: the scan records the channel ids a speaker was seen in, and this only
+ * turns them into names. A channel that has since been deleted is dropped rather than shown as a
+ * raw id, because an id in a sentence is noise to everyone reading it.
+ */
+function evidenceChannels(guild, scanBots, bot, limit = 3) {
+  const row = (scanBots ?? []).find(b => b.bot_id === bot.id
+    || nameKey(b.name) === nameKey(bot.name)
+    || nameKey(b.name) === nameKey(bot.scannedName));
+  if (!row) return [];
+  // `guild_scan_bots.channels` is a plain array of ids, unlike a TEMPLATE's `channels`, which is a
+  // {channelId: postCount} object. asList() reads either, so a future change to one shape cannot
+  // silently break the other — which is exactly how this broke the last time.
+  return asList(row.channels)
+    .map(id => guild.channels.cache.get(id)?.name)
+    .filter(Boolean)
+    .slice(0, limit);
+}
 
 /**
  * Inspect the guild and produce the list of steps a takeover would perform.
@@ -620,8 +937,40 @@ export async function plan(guild, opts = {}) {
   const steps = [];
   const push = (key, data) => steps.push({ key, ...data });
 
-  const bots = await detectBots(guild);
-  const byFeature = new Map(bots.filter(b => b.feature).map(b => [b.feature, b]));
+  const bots = opts.bots ?? await detectBots(guild);
+
+  // The scan half of the audit. Loaded unless the caller already has it.
+  const ctx = opts.scan !== undefined ? opts : { ...opts, ...await scanContext(guild).catch(() => ({})) };
+
+  // Index by EVERY feature a bot covers, not just its first one. The big all-rounders do six jobs
+  // each; indexing only the primary meant a server running Dyno for logging AND welcome AND
+  // starboard was planned as if it only had logging, and the other five silently died with it.
+  //
+  // When two bots both cover a feature, the plan has to name ONE as the incumbent, and which one it
+  // picks is not cosmetic — it is the name a human reads next to "replaces". So it is decided by
+  // evidence rather than by array order:
+  //   1. the bot the feature is PRIMARY for — a dedicated stream bot beats an all-rounder that
+  //      happens to have a feed module;
+  //   2. then whichever actually posted more in this server. A module nobody switched on should not
+  //      out-rank the bot doing the job every day.
+  const volume = new Map((ctx.scanBots ?? []).map(r => [r.bot_id, Number(r.messages) || 0]));
+  // Keyed by name so a bot's webhook output counts as its own. See scanContext().
+  const didHere = (b, f) => !!ctx.observed?.get(nameKey(b.name))?.has(f);
+
+  const byFeature = new Map();
+  for (const f of new Set(bots.flatMap(b => b.features))) {
+    const ranked = bots
+      .filter(b => b.features.includes(f))
+      .sort((a, b) =>
+        // Seen doing it here beats capable of it — the scan outranks the catalog every time.
+        (didHere(b, f) - didHere(a, f))
+        || (b.feature === f) - (a.feature === f)
+        || (volume.get(b.id) ?? 0) - (volume.get(a.id) ?? 0));
+    byFeature.set(f, ranked[0]);
+  }
+
+  // Who we are doing this for. Never referred to by a pronoun we were never told.
+  const owner = await resolveOwner(guild);
 
   // Recovered, guild-specific data. Null for any server we have not studied — every step below that
   // depends on it is skipped entirely rather than offered with another guild's ids in it.
@@ -633,7 +982,17 @@ export async function plan(guild, opts = {}) {
   // ── Counting ──
   const countingChannel = opts.countingChannel
     ?? guild.channels.cache.find(c => c.isTextBased?.() && nameMatches(c, /count/) && !nameMatches(c, /log/));
-  if (countingChannel) {
+
+  // A channel called #counting is not, on its own, a counting game to take over. Offer this only
+  // where something is actually running one: an incumbent counting bot, or a row of our own already
+  // pointing at it. Otherwise a server with a dormant #counting channel got a permanent red
+  // "blocked" row for a feature nobody here has ever used.
+  const [countingRows] = await pool.execute(
+    'SELECT channel_id FROM counting_channels WHERE guild_id = ? AND is_active = TRUE', [guildId]);
+  const countsHere = byFeature.has('counting')
+    || countingRows.some(r => r.channel_id === countingChannel?.id);
+
+  if (countingChannel && countsHere) {
     const [[row]] = await pool.execute(
       'SELECT * FROM counting_channels WHERE guild_id = ? AND channel_id = ?', [guildId, countingChannel.id]);
     const live = await readCountingState(countingChannel);
@@ -647,27 +1006,28 @@ export async function plan(guild, opts = {}) {
       lastUserId: null, // never lock anyone out of the next number
       // "Infinite attempts": the channel is a pure ladder of numbers. ANY message that is not
       // the exact next number is deleted, no matter who posts it, and the count NEVER resets.
-      //   • allow_same_user MUST be 1 — otherwise the correct next number gets deleted purely
-      //     because the same person posted the previous one, which contradicts the rule.
+      // The no-two-in-a-row rule is universal to the counting game, not configurable here.
       //   • delete_chatter removes non-numeric talk.
       //   • milestones would post a non-number into a numbers-only channel.
       failMode: opts.failMode ?? 'delete',
-      allowSameUser: Number(opts.allowSameUser ?? 1),
       reactOnValid: Number(opts.reactOnValid ?? 1),
       announceMilestones: Number(opts.announceMilestones ?? 0),
       deleteChatter: Number(opts.deleteChatter ?? 1),
       done: !!(row?.is_active && Number(row.current_count) === (live?.lastNumber ?? -1)),
-      blocked: !live ? 'could not read the current number from recent history'
-        : miss.length ? `missing ${miss.join(', ')}` : null,
+      // Missing permissions is a real blocker. An unreadable number is not — it usually means the
+      // channel is empty or nobody has counted recently, and the answer is to say where to start.
+      blocked: miss.length ? `missing ${miss.join(', ')}` : null,
+      needsInput: !miss.length && !live
+        ? `we could not read a current number out of #${countingChannel.name} — nobody has posted one `
+          + 'recently. Tell us what to start from, or run /arcade counting to set it yourself.'
+        : null,
       replaces: byFeature.get('counting')?.name ?? null,
       note: live ? `read ${live.lastNumber} from the channel (sampled ${live.sampled} messages)` : null,
     });
   }
 
   // ── Stale counting rows on channels that are not the counting channel ──
-  const [staleRows] = await pool.execute(
-    'SELECT channel_id FROM counting_channels WHERE guild_id = ? AND is_active = TRUE', [guildId]);
-  for (const r of staleRows) {
+  for (const r of countingRows) {
     if (countingChannel && r.channel_id === countingChannel.id) continue;
     const ch = guild.channels.cache.get(r.channel_id);
     push('counting_disable', {
@@ -683,13 +1043,42 @@ export async function plan(guild, opts = {}) {
   // ── Logging ──
   const [[logRow]] = await pool.execute('SELECT log_channel_id FROM logging_config WHERE guild_id = ?', [guildId]);
   if (byFeature.has('logging')) {
+    const incumbent = byFeature.get('logging');
+
+    // Read the incumbent's own routing back out of the scan. A server that splits its logs across
+    // several channels built that on purpose, and telling it to go and set logging up again is not a
+    // takeover — it is a shrug with a command name attached.
+    const fams = ctx.behaviours?.get(nameKey(incumbent.name)) ?? [];
+    const routing = deriveLogRouting(fams, guild);
+
+    const [existing] = await pool.execute(
+      'SELECT event_type, log_channel_id FROM log_event_config WHERE guild_id = ?', [guildId]);
+    const have = new Map(existing.map(r => [r.event_type, r.log_channel_id]));
+    const matched = routing.events.filter(e => have.get(e.event) === e.channelId).length;
+
+    const channels = [...new Set(routing.events.map(e => e.channelName))];
+
     push('logging', {
       label: STEPS.logging.label,
-      channelId: logRow?.log_channel_id ?? null,
-      channelName: guild.channels.cache.get(logRow?.log_channel_id)?.name ?? '—',
-      done: !!logRow?.log_channel_id,
-      blocked: logRow?.log_channel_id ? null : 'no log channel configured — run /systems logging first',
-      replaces: byFeature.get('logging').name,
+      channelId: routing.defaultChannelId ?? logRow?.log_channel_id ?? null,
+      channelName: guild.channels.cache.get(routing.defaultChannelId ?? logRow?.log_channel_id)?.name ?? '—',
+      routing: routing.events,
+      done: routing.events.length > 0
+        ? matched === routing.events.length && !!logRow?.log_channel_id
+        : !!logRow?.log_channel_id,
+      // NOT blocked. "You have not configured the thing this step configures" is the step's whole
+      // job, not an obstacle to it — and reporting it in red made a working takeover read as broken.
+      needsInput: routing.events.length || logRow?.log_channel_id ? null
+        : `we could not work out where ${incumbent.name} was logging — either it posts nowhere we can `
+          + 'read, or the scan predates per-channel evidence. Re-scan, or run /systems logging to pick '
+          + 'a channel yourself.',
+      note: routing.events.length
+        ? `${incumbent.name} splits its logs across ${channels.length} channel(s) — `
+          + routing.events.slice(0, 6).map(e => `${e.event} → #${e.channelName}`).join(', ')
+          + (routing.events.length > 6 ? `, +${routing.events.length - 6} more` : '')
+          + '. We reproduce that routing exactly rather than dumping everything into one channel.'
+        : null,
+      replaces: incumbent.name,
     });
   }
 
@@ -727,8 +1116,8 @@ export async function plan(guild, opts = {}) {
     // state. That turns "start again from a 3ft sapling" from the only option into a CHOICE.
     const old = await readIncumbentTree(guild);
 
-    // Which of the two defensible answers she picked. Until she answers, we must not pick for her —
-    // but once she HAS, continuing to ask is not caution, it is not listening.
+    // Which of the two defensible answers the owner picked. Until they answer, we must not pick for
+    // them — but once they HAVE, continuing to ask is not caution, it is not listening.
     const treeChoice = decisions.value('tree');
 
     push('growtree', {
@@ -745,14 +1134,14 @@ export async function plan(guild, opts = {}) {
       // the whole takeover, and it POSTS to the guild — so it is deliberate, like the panels: its own
       // button, its own confirmation, never swept up by "apply all".
       deliberate: tree || treeChoice !== 'fresh' ? null
-        : 'she chose to start fresh, with a forest fire to explain it — use the "Forest fire" action. '
-          + 'It burns the old tree, tells the story, and plants the sapling in one go. '
+        : `${owner.name} chose to start fresh, with a forest fire to explain it — use the "Forest fire" `
+          + 'action. It burns the old tree, tells the story, and plants the sapling in one go. '
           + 'Levels, XP, coins and sticker books all survive it.',
       noop: tree || old || treeChoice ? null : 'no setup needed — the first /tree plants the tree',
       note: [
         old && `read live from #${old.channelName}: "${old.name}", ${old.size}ft, last watered by <@${old.lastWateredBy}>`,
-        treeChoice === 'carry' && old && `she chose to carry it over — /tree setup ${old.size}`,
-        treeChoice === 'fresh' && 'she chose a fresh start',
+        treeChoice === 'carry' && old && `${owner.name} chose to carry it over — /tree setup ${old.size}`,
+        treeChoice === 'fresh' && `${owner.name} chose a fresh start`,
       ].filter(Boolean).join(' · ') || null,
       replaces: byFeature.get('growtree').name,
     });
@@ -766,9 +1155,13 @@ export async function plan(guild, opts = {}) {
       // Not blocked — everything works. It is SEQUENCED: enabling ours while the real OwO is still
       // in the guild would make both bots answer `owoh`. Flip it on the moment OwO is removed.
       sequenced: owo?.enabled ? null : 'enable the moment the real OwO bot is removed (both would double-reply otherwise)',
-      note: 'parity: hunt/gems/lootboxes/crates/battle/pets built; guild boss now built too (see readiness). ' +
-        'karabi progress FULLY recovered from #owo-game: level 29, 30,491 XP, team @26, and 1,671,101 cowoncy '
-        + '(read from OwO\'s own `owo balance` reply — nothing is left unrecoverable). New players start at 15,000.',
+      // Progress does NOT come across on its own: OwO keeps every balance in its own database. What
+      // makes it recoverable at all is that OwO *prints* it — an `owo balance` reply sitting in the
+      // history is the only export that exists, so the scan is where a member's numbers come from.
+      note: 'parity: hunt, gems, lootboxes, crates, battle, pets and the guild boss are all built. '
+        + 'Balances and levels are not transferred automatically — anything OwO posted in this server '
+        + '(an `owo balance` or `owo profile` reply) can be read back out of the scan and seeded by hand. '
+        + 'Anyone without one starts fresh.',
       replaces: byFeature.get('owo').name,
     });
   }
@@ -855,13 +1248,14 @@ export async function plan(guild, opts = {}) {
   // ── Moderation / protection (FlaviBot) ──
   if (byFeature.has('moderation')) {
     const [[an]] = await pool.execute('SELECT enabled FROM anti_nuke_config WHERE guild_id = ?', [guildId]);
-    const [[ar]] = await pool.execute('SELECT is_enabled FROM anti_raid_config WHERE guild_id = ?', [guildId]);
+    // Raid protection is the raid system's own config (detection or the auto-lockdown trigger).
+    const raid = await (await import('./raid-lockdown.js')).raidProtectionState(guildId);
     const [[ph]] = await pool.execute('SELECT enabled FROM phishing_config WHERE guild_id = ?', [guildId]);
-    const on = !!an?.enabled && !!ar?.is_enabled && !!ph?.enabled;
+    const on = !!an?.enabled && raid.on && !!ph?.enabled;
     push('protection', {
       label: 'Protection suite',
       done: on,
-      note: `anti-nuke ${an?.enabled ? 'on' : 'off'}, anti-raid ${ar?.is_enabled ? 'on' : 'off'}, ` +
+      note: `anti-nuke ${an?.enabled ? 'on' : 'off'}, anti-raid ${raid.on ? 'on' : 'off'}, ` +
         `phishing ${ph?.enabled ? 'on' : 'off'} — enabling switches on the ones the owner asked for`,
       replaces: byFeature.get('moderation').name,
     });
@@ -944,6 +1338,7 @@ export async function plan(guild, opts = {}) {
 
   // ── Carl-bot: rebuild the self-assign panels as our own ──
   if (byFeature.has('reaction_roles') && profile?.panels.length) {
+    const incumbentPanelBot = byFeature.get('reaction_roles').name;
     const channel = guild.channels.cache.get(profile.selfAssignChannel);
     const [[panels]] = await pool.execute(
       "SELECT COUNT(*) AS n FROM reaction_role_panels WHERE guild_id = ? AND message_id <> 'PENDING'", [guildId]);
@@ -953,7 +1348,9 @@ export async function plan(guild, opts = {}) {
 
     // Every `:name:` in a panel must exist in THIS guild before the panel can be posted.
     const missingEmoji = profile.panels.flatMap(p => p.roles)
-      .filter(([emoji]) => resolveEmoji(guild, emoji) === null)
+      // A button with NO emoji is perfectly valid — modern panels are often label-only — so an
+      // absent emoji is not a missing one. Only a `:name:` we cannot resolve in this guild counts.
+      .filter(([emoji]) => emoji && resolveEmoji(guild, emoji) === null)
       .map(([emoji, , label]) => `${emoji.replaceAll(':', '')} (${label})`);
 
     const needUpload = profile.platformEmoji.filter(e => !guild.emojis.cache.some(g => g.name === e.name));
@@ -980,8 +1377,8 @@ export async function plan(guild, opts = {}) {
     // offer. A button carries a role ID, so it would still "work" before the rename — it would just
     // hand out a role called "Ask" to someone who clicked "Cyan". That is worse than not working.
     const notYetRenamed = profile.panels.flatMap(p => p.roles)
-      .filter(([, id, label]) => guild.roles.cache.get(id) && guild.roles.cache.get(id).name !== label)
-      .map(([, , label]) => label);
+      .map(([, id, label]) => ({ label, actual: guild.roles.cache.get(id)?.name }))
+      .filter(r => r.actual && r.actual !== r.label);
 
     const panelBlocker = !channel ? 'self-assign channel not found'
       : missingRoles.length ? `these roles no longer exist: ${missingRoles.join(', ')}`
@@ -999,11 +1396,12 @@ export async function plan(guild, opts = {}) {
       done: Number(panels.n) >= profile.panels.length,
       blocked: panelBlocker,
       sequenced: panelBlocker || !notYetRenamed.length ? null
-        : `run the role clean-up first (scripts/kabster-role-plan.mjs --apply) — ${notYetRenamed.length} role(s) ` +
-          `still carry their old duplicate name, so a member clicking "${notYetRenamed[0]}" would be given the wrong-named role`,
+        : `rename the reclaimed roles first — ${notYetRenamed.length} role(s) still carry their old ` +
+          `name, so a member clicking "${notYetRenamed[0].label}" would be handed the role currently ` +
+          `called "${notYetRenamed[0].actual}"`,
       deliberate: panelBlocker || notYetRenamed.length ? null
         : `ready — posts ${profile.panels.length} button panels` +
-          (oldPanels.length ? `, then removes Carl-bot's ${oldPanels.length} old reaction panel(s) once ours are up` : '') +
+          (oldPanels.length ? `, then removes ${incumbentPanelBot}'s ${oldPanels.length} old reaction panel(s) once ours are up` : '') +
           '. Use the "Post panels" action; it is the only step that writes to the guild.',
       // A panel we are NOT posting has to be as visible as the ones we are. A silent omission looks
       // exactly like a bug, and six months from now nobody remembers it was asked for.
@@ -1014,7 +1412,8 @@ export async function plan(guild, opts = {}) {
           : '')
         + (oldPanels.length
           ? ` — REMOVES (archived first): ${oldPanels.map(m => m.embeds[0]?.title ?? m.id).join(', ')}. `
-            + 'Carl-bot panels keep showing their reactions after it leaves, so members would click a dead panel.'
+            + 'A reaction panel keeps showing its reactions after the bot that made it leaves, so members '
+            + 'would carry on clicking a dead panel and silently get nothing.'
           : ''),
       replaces: byFeature.get('reaction_roles').name,
     });
@@ -1026,44 +1425,176 @@ export async function plan(guild, opts = {}) {
     ...Object.entries(WEBHOOK_ONLY).map(([name, why]) => ({ id: null, name, feature: null, why })),
   ];
 
-  // ── Manual carry-over: Nightbot replies, reaction-role panels ──
+  // ── Custom chat replies ─────────────────────────────────────────────────────
+  //
+  // The only system in a takeover with NO readable source of truth. Discord exposes no API for
+  // another bot's command list, so the sole evidence that a custom command exists is a moment where
+  // somebody typed it and the bot answered, in a channel we can read. That makes the scan the only
+  // copy — and makes it worth saying plainly whether the scan found any, rather than telling every
+  // server to go and re-create commands it may not have.
   const [[cc]] = await pool.execute('SELECT COUNT(*) AS n FROM custom_commands WHERE guild_id = ?', [guildId]);
-  if (byFeature.has('custom_commands') && !Number(cc.n)) {
-    push('custom_commands', {
-      label: 'Other custom chat replies',
+  if (byFeature.has('custom_commands')) {
+    const incumbent = byFeature.get('custom_commands');
+
+    // Everything we caught on camera, from every bot that answers commands here.
+    const caught = [...(ctx.recoveredCommands?.values() ?? [])].flat();
+    const derived = profile?.nightbotCommands ?? [];
+    const known = dedupeCommands([
+      ...caught.map(c => ({ name: c.name, prefix: c.prefix ?? '!', response: c.response })),
+      ...derived,
+    ]);
+
+    // A deep scan that read the entire history and never saw a single prefixed command answered is
+    // real evidence, not merely an absence. Say so — the alternative is a permanent "needs your
+    // input" row on a server that has no custom commands to carry across.
+    const readEverything = ctx.scan?.depth === 'deep' && ctx.scan?.status === 'complete';
+
+    if (known.length) {
+      push('custom_commands', {
+        label: 'Custom chat replies',
+        done: Number(cc.n) >= known.length,
+        commands: known,
+        note: `recovered from this server's own history: ${known.map(c => `${c.prefix ?? '!'}${c.name}`).join(', ')}. `
+          + 'These are the ones we caught being used — a command nobody ran in the history we read '
+          + "cannot be recovered by anyone, because a bot's command list is private to it.",
+        replaces: incumbent.name,
+      });
+    } else if (readEverything) {
+      // `done`, not `no-op`. The retirement gate requires this step to be done before the bot can go,
+      // and "there is nothing to reproduce" IS parity achieved — leaving it un-done would block the
+      // removal of a bot forever on the grounds that it has no custom commands.
+      push('custom_commands', {
+        label: 'Custom chat replies',
+        done: true,
+        note: `nothing to carry across — we read this server's full history and never saw anyone use `
+          + `a ${incumbent.name} command. If it has commands nobody has used in the readable history, `
+          + `run them once before retiring ${incumbent.name} and re-scan; that is the only way to `
+          + 'capture them.',
+        replaces: incumbent.name,
+      });
+    } else if (!Number(cc.n)) {
+      push('custom_commands', {
+        label: 'Custom chat replies',
+        done: false,
+        needsInput: `we have not read enough history to say whether ${incumbent.name} answers any custom `
+          + 'commands here. Run the full-history scan, or list them yourself in the Command Center — '
+          + "a bot's command list is not readable from Discord.",
+        replaces: incumbent.name,
+      });
+    }
+  }
+
+  // ── Everything else the incumbents actually do ─────────────────────────────
+  //
+  // Every step above is bespoke: it knows the shape of one feature and reads that feature's own
+  // config table. That was the whole plan, and it meant a server whose bots do things we happen not
+  // to have written a bespoke step for got a plan with one line in it — and the audit read as
+  // "there is almost nothing to take over here", which was never true. It was just blind.
+  //
+  // So the catalog is walked to the end. Anything an incumbent covers that no step above claimed
+  // gets an honest line: what the bot does, what we offer instead, and whether that is a click, a
+  // command someone has to run, or something already true.
+  const HANDLED = new Set(steps.map(x => STEP_FEATURE[x.key]).filter(Boolean));
+
+  // Jobs an incumbent is capable of but was never SEEN doing here. Reported once, at the end, rather
+  // than as a step each: absence of evidence is not proof — a starboard nobody ever triggered posts
+  // nothing — but it is not worth putting eight "set this up" rows in front of somebody for features
+  // their server has never had.
+  const unusedByBot = new Map();
+
+  for (const [feature, bot] of byFeature) {
+    if (HANDLED.has(feature)) continue;
+    const spec = FEATURES[feature];
+    if (!spec) continue;
+
+    // Only when there IS a scan to have seen it in. With no scan we know nothing, and offering
+    // everything is the honest response to knowing nothing.
+    if (ctx.scan && ctx.observed?.size && !didHere(bot, feature)) {
+      (unusedByBot.get(bot.name) ?? unusedByBot.set(bot.name, []).get(bot.name)).push(spec.label);
+      continue;
+    }
+
+    // Where this bot actually posted, from the scan. Naming the channel turns "set up welcome
+    // messages" into "the old bot welcomed people in #general" — which is the part nobody can
+    // reconstruct from memory six months later.
+    const where = evidenceChannels(guild, ctx.scanBots, bot);
+    const seen = where.length ? ` The old bot posted in ${where.map(c => `#${c}`).join(', ')}.` : '';
+
+    if (spec.kind === 'standing') {
+      push(`have_${feature}`, {
+        label: spec.label,
+        done: true,
+        note: `${spec.replacement} replaces ${bot.name} — a standing command, already deployed, `
+          + `nothing to configure.${seen}`,
+        replaces: bot.name,
+      });
+      continue;
+    }
+
+    if (feature === 'leveling') {
+      const [[lv]] = await pool.execute('SELECT enabled FROM level_config WHERE guild_id = ?', [guildId]);
+      const [[ranked]] = await pool.execute('SELECT COUNT(*) AS n FROM user_levels WHERE guild_id = ?', [guildId]);
+      push('leveling', {
+        label: spec.label,
+        done: !!lv?.enabled,
+        note: `${spec.replacement} replaces ${bot.name}. ${Number(ranked.n).toLocaleString()} member(s) `
+          + 'already have XP on our side. Level ROLES have to be re-created with /level rewards — and '
+          + `whatever XP totals ${bot.name} holds stay with it, because no bot exports another's leaderboard.${seen}`,
+        replaces: bot.name,
+      });
+      continue;
+    }
+
+    // 'config' features with no bespoke step, and everything 'manual'. Both come down to the same
+    // honest answer: we have it, and a human picks the channel/role, because guessing that wrong is
+    // a message posted in the wrong place in somebody's live server.
+    push(`setup_${feature}`, {
+      label: spec.label,
       done: false,
-      // The two Nightbot commands WE saw in history are handled by nightbot_commands above. This
-      // catch-all is only for any others: Discord exposes no API for a foreign bot's command list,
-      // so anything it never posted on-camera can only be re-created by hand.
-      needsInput: "any Nightbot commands beyond !pp/!karabi aren't API-readable — re-create them in the Command Center",
-      replaces: byFeature.get('custom_commands').name,
+      needsInput: `run ${spec.replacement} and point it at the channel/role you want — we do not pick `
+        + `that for you.${seen}`,
+      note: `replaces ${bot.name}${bot.coverage === 'partial' && bot.why ? ` — ${bot.why}` : ''}`,
+      replaces: bot.name,
+    });
+  }
+
+  if (unusedByBot.size) {
+    push('unused_features', {
+      label: 'Things the old bots can do but never did here',
+      done: false,
+      noop: 'nothing to carry across — no step needed',
+      note: [...unusedByBot].map(([name, labels]) => `${name}: ${labels.join(', ')}`).join(' · ')
+        + '. Read out of the scan: none of these ever posted anything in this server. If one of them '
+        + 'is switched on but simply never fired, say so and we will set it up.',
     });
   }
 
   // ── What the owner actually said ──
   //
-  // Applied LAST, over the top of everything the scan worked out for itself, because her answer wins.
-  // A step she declined is not "ready and we chose not to" — it is decided, and it must carry that
-  // decision into apply() so that nobody can run it by clicking "apply all" and never reading her
-  // page. Her note rides along on the step it concerns, so the operator cannot act on a step without
-  // seeing what she wrote next to it.
+  // Applied LAST, over the top of everything the scan worked out for itself, because the owner's
+  // answer wins. A step they declined is not "ready and we chose not to" — it is decided, and it must
+  // carry that decision into apply() so nobody can run it by clicking "apply all" without ever
+  // reading their page. Their note rides along on the step it concerns, so the operator cannot act on
+  // a step without seeing what they wrote next to it.
   for (const s of steps) {
     const dec = decisions.forStep(s.key);
     if (dec.note) s.ownerNote = dec.note;
     if (dec.declined) {
-      const q = QUESTIONS.find(x => x.key === dec.key);
+      // Look up the option label in THIS guild's generated set (STEP_DECISION keys are preserved),
+      // falling back to the static template.
+      const q = (decisions.questionSet ?? QUESTIONS).find(x => x.key === dec.key);
       const opt = q?.options?.find(o => o.v === dec.value);
-      s.declined = `the owner asked us not to — she answered "${opt?.label ?? dec.value}"`;
+      s.declined = `${owner.name} asked us not to — the answer was "${opt?.label ?? dec.value}"`;
     }
   }
 
-  // Ko-fi's only real blocker was a token nobody but her could fetch. If she has pasted one, the
-  // step stops asking for it.
+  // Ko-fi's only real blocker is a token nobody but the owner can fetch. Once one has been pasted in,
+  // the step stops asking for it.
   const kofiStep = steps.find(s => s.key === 'kofi');
   if (kofiStep && decisions.kofiToken && !kofiStep.done) {
     kofiStep.needsInput = null;
     kofiStep.tokenSupplied = true;
-    kofiStep.note = 'the owner has supplied her Ko-fi webhook token — /kofi setup can run now';
+    kofiStep.note = `${owner.name} has supplied the Ko-fi webhook token — /kofi setup can run now`;
   } else if (kofiStep && decisions.kofiTokenMalformed) {
     kofiStep.blocked = `the Ko-fi answer is not a token: "${decisions.kofiTokenMalformed}" — a Ko-fi `
       + 'verification token is a UUID (Ko-fi → Settings → API)';
@@ -1085,11 +1616,12 @@ export async function plan(guild, opts = {}) {
     // part of a bulk config apply. `declined` never reaches here: statusOf() ranks it above `ready`.
     actionable: steps.filter(s => s.status === 'ready'),
     summary: summarize(steps),
-    // Her answers, at the TOP of the plan rather than buried in a table somewhere else. A plan you
-    // can work through without ever encountering what the owner asked for is a plan that will get
-    // something she said no to.
+    // The owner's answers, at the TOP of the plan rather than buried in a table somewhere else. A plan
+    // you can work through without ever encountering what the owner asked for is a plan that will
+    // eventually do something they said no to.
     decisions: summarizeDecisions(decisions),
-    readiness: await readiness(guild).catch(err => {
+    owner,
+    readiness: await readiness(guild, { ...ctx, bots }).catch(err => {
       logger.warn(`[Takeover] readiness failed: ${err.message}`);
       return null;
     }),
@@ -1144,11 +1676,11 @@ export async function apply(guild, planned, only) {
   const wanted = new Set(only ?? planned.actionable.map(s => s.key));
   const results = [];
 
-  // Re-read her answers HERE rather than trusting the ones baked into `planned`. Same reasoning as
-  // the profile guard below: `planned` arrives from the caller and could be stale — made before she
-  // answered, or hand-built — and "the owner said no" is not a thing we are willing to lose to a
-  // stale object. She can also change her mind between planning and applying, and the later answer
-  // is the real one.
+  // Re-read the answers HERE rather than trusting the ones baked into `planned`. Same reasoning as
+  // the profile guard below: `planned` arrives from the caller and could be stale — made before the
+  // owner answered, or hand-built — and "the owner said no" is not a thing we are willing to lose to
+  // a stale object. People also change their mind between planning and applying, and the later
+  // answer is the real one.
   const decisions = await loadDecisions(guild.id);
 
   for (const step of planned.steps) {
@@ -1195,6 +1727,7 @@ export async function apply(guild, planned, only) {
 // worse than an honest "you still need to do X".
 const ENABLE_AFTER_REMOVAL = Object.freeze({
   counting: ['counting'],
+  logging: ['logging'],
   streams: ['streams'],
   timezone: ['timezone'],
   catbot: ['catbot'],
@@ -1206,6 +1739,7 @@ const ENABLE_AFTER_REMOVAL = Object.freeze({
   moderation: ['protection'],
   free_games: ['free_games'],
   throne: ['throne'],
+  leveling: ['leveling'],
 });
 
 /**
@@ -1235,9 +1769,9 @@ export function selectRemovals(present, { ours, exclude = new Set(), decisions }
  * The owner asked to say "go" once instead of clicking five things, so this chains every phase in the
  * one order that is actually safe: stand our replacements up, then remove each incumbent and enable
  * its replacement the instant it is gone — never both running at once, which is what would double a
- * reply or a go-live ping. Pingcord is removed last, because its @everyone announcement is the
- * loudest thing to break and its replacement (the Karabi420 subscription) is the one we most want to
- * see live first.
+ * reply or a go-live ping. The stream bot is removed last, because its @everyone announcement is the
+ * loudest thing in the server to break and its replacement — the live subscription — is the one we
+ * most want to see working before anything else goes.
  *
  * dryRun is the default and it is load-bearing: it produces the exact ordered list of what WOULD
  * happen, touching nothing, so the list can be read back before anything irreversible runs. Nothing
@@ -1293,12 +1827,18 @@ export async function executeAll(guild, { scanId, userId, overrideSoak = false, 
       },
     };
     if (bot.feature === 'growtree') return {
-      label: 'plant Kababi @193ft',
+      label: 'carry the tree over',
       run: async () => {
+        // Read the incumbent's LIVE tree rather than planting one server's tree into another. The
+        // name and height were hardcoded here — a specific tree, at a specific height, watered by a
+        // specific person — so every guild with Grow a Tree got a stranger's tree planted in it.
+        const old = await readIncumbentTree(guild).catch(() => null);
+        if (!old) return ['no readable tree to carry over — the first /tree plants a sapling'];
         const { plantTree } = await import('./growtree/manager.js');
-        const p = await plantTree(guild.id, guild.ownerId, 'Kababi', undefined, { height: 193, lastWateredBy: '756325866660691998' });
+        const p = await plantTree(guild.id, guild.ownerId, old.name, undefined,
+          { height: old.size, lastWateredBy: old.lastWateredBy });
         if (!(p.ok || p.reason === 'exists')) throw new Error(`tree plant failed: ${p.reason}`);
-        return ['planted Kababi @193ft'];
+        return [`planted ${old.name} @${old.size}ft`];
       },
     };
     if (bot.feature === 'kofi') return {
@@ -1307,7 +1847,7 @@ export async function executeAll(guild, { scanId, userId, overrideSoak = false, 
         if (!decisions.kofiToken) return ['Ko-fi token missing — setup skipped'];
         const { setup } = await import('./kofi-manager.js');
         await setup(guild.id, { verificationToken: decisions.kofiToken });
-        return ['Ko-fi connected (map tiers with /kofi tier)'];
+        return ['Ko-fi connected (map tiers with /creator kofi tier)'];
       },
     };
     return { label: '', run: async () => [] };
@@ -1315,7 +1855,7 @@ export async function executeAll(guild, { scanId, userId, overrideSoak = false, 
 
   // Removal that is NOT a gated retire: a bot the owner explicitly chose to drop that has nothing to
   // replace and no data to lose (DISBOARD's listing). Blerp is deliberately NOT here — it must be
-  // removed by hand AFTER she saves her clips, because a kick destroys the only copy she can reach.
+  // removed by hand AFTER the clips are saved, because a kick destroys the only copy anyone can reach.
   const directRemove = async (botId, why) => {
     const member = await guild.members.fetch(botId).catch(() => null);
     if (!member) return 'already gone';
@@ -1348,10 +1888,16 @@ export async function executeAll(guild, { scanId, userId, overrideSoak = false, 
     const verifiable = isAutoVerifiable(bot.feature);
     const spec = enableSpec(bot);
 
-    // Gates our OWN enable step is about to satisfy, so a red reading here is not a real blocker:
-    // parity (the config we are about to write) and, for Carl-bot only, data (the panels we are about
-    // to rebuild). Every other gate — evidence, hierarchy, permission, present — is a genuine stop.
-    const softGate = (id) => id === 'parity' || (bot.feature === 'reaction_roles' && id === 'data');
+    // Gates our OWN enable step is about to satisfy, so a red reading here is not a real blocker.
+    //
+    // `parity` is soft ONLY when our enable will actually satisfy it. If the bot does something we
+    // cannot machine-check — a welcome message, an auto-role — running the enable changes nothing
+    // about that gate, and calling it soft made the dry run promise a removal that `retire()` then
+    // refused. The run enabled the replacement, the removal was declined, and the only trace was a
+    // string in the results nobody reads. A dry run that lies is worse than no dry run.
+    const softParity = (g) => !/cannot be checked automatically/.test(g.detail ?? '');
+    const softGate = (g) => (g.id === 'parity' && softParity(g))
+      || (bot.feature === 'reaction_roles' && g.id === 'data');
 
     // Read-only prediction for the dry run. It calls evaluate() — which touches nothing — so the dry
     // run tells the TRUTH about what will happen, instead of optimistically listing removals that then
@@ -1361,7 +1907,7 @@ export async function executeAll(guild, { scanId, userId, overrideSoak = false, 
       if (isDisboard) return { ok: true, why: 'you asked to drop the listing — direct removal (nothing to replace)' };
       if (!verifiable) return { ok: false, why: `no automated parity check for "${bot.feature}" — remove on the dashboard after a look` };
       const pre = await evaluate(guild, bot.id, scanId, { overrideSoak });
-      const blockers = pre.gates.filter(g => g.pass !== true && !softGate(g.id));
+      const blockers = pre.gates.filter(g => g.pass !== true && !softGate(g));
       if (blockers.length) return { ok: false, why: blockers.map(g => `${g.label}: ${g.detail}`).join('; ') };
       return { ok: true, why: `${spec.label}, then remove${overrideSoak ? ' (soak waived)' : ''}` };
     };
@@ -1377,7 +1923,7 @@ export async function executeAll(guild, { scanId, userId, overrideSoak = false, 
         // (evidence, hierarchy, data) is red, skip WITHOUT enabling — otherwise we would leave a
         // replacement running next to a bot we could not remove, doubling its output.
         const pre = await evaluate(guild, bot.id, scanId, { overrideSoak });
-        const blockers = pre.gates.filter(g => g.pass !== true && !softGate(g.id));
+        const blockers = pre.gates.filter(g => g.pass !== true && !softGate(g));
         if (blockers.length) return `SKIPPED (nothing enabled) — ${blockers.map(g => `${g.label}: ${g.detail}`).join('; ')}`;
 
         let done = [];
@@ -1387,7 +1933,8 @@ export async function executeAll(guild, { scanId, userId, overrideSoak = false, 
         if (!res.ok) return `enabled ${done.join(', ') || '—'}; removal SKIPPED — ${res.error}`;
 
         if (bot.feature === 'growtree' && decisions.value('tree') === 'fresh') {
-          try { await postForestFire(guild, null, { name: 'Kababi' }); done.push('forest fire'); }
+          const old = await readIncumbentTree(guild).catch(() => null);
+          try { await postForestFire(guild, null, { name: old?.name ?? 'the old tree' }); done.push('forest fire'); }
           catch (err) { done.push(`forest fire FAILED: ${err.message}`); }
         }
         return `removed via ${res.method}${res.verdict?.soakWaived ? ', soak waived' : ''}${done.length ? ` → ${done.join(', ')}` : ''}`;
@@ -1456,26 +2003,58 @@ async function runStep(guild, step) {
       await pool.execute(
         `INSERT INTO counting_channels
            (guild_id, channel_id, current_count, highest_count, last_user_id, reset_count, is_active,
-            fail_mode, allow_same_user, react_on_valid, announce_milestones, delete_chatter)
-         VALUES (?, ?, ?, ?, NULL, 0, TRUE, ?, ?, ?, ?, ?)
+            fail_mode, react_on_valid, announce_milestones, delete_chatter)
+         VALUES (?, ?, ?, ?, NULL, 0, TRUE, ?, ?, ?, ?)
          ON DUPLICATE KEY UPDATE
            current_count = VALUES(current_count),
            highest_count = GREATEST(highest_count, VALUES(highest_count)),
            last_user_id = NULL,
            is_active = TRUE,
            fail_mode = VALUES(fail_mode),
-           allow_same_user = VALUES(allow_same_user),
            react_on_valid = VALUES(react_on_valid),
            announce_milestones = VALUES(announce_milestones),
            delete_chatter = VALUES(delete_chatter)`,
         [g, step.channelId, seed, seed, step.failMode,
-          step.allowSameUser, step.reactOnValid, step.announceMilestones, step.deleteChatter]);
+          step.reactOnValid, step.announceMilestones, step.deleteChatter]);
       return;
     }
     case 'counting_disable':
       await pool.execute(
         'UPDATE counting_channels SET is_active = FALSE WHERE guild_id = ? AND channel_id = ?', [g, step.channelId]);
       return;
+
+    case 'logging': {
+      // Two tables, and both are required. `logging_config` is the master switch and the catch-all
+      // channel; `log_event_config` is the per-event override the log manager consults first. Writing
+      // only one of them fails silently — the logs simply do not appear, with nothing in any log to
+      // say why. See feedback_three_log_destination_stores.
+      if (!step.channelId && !step.routing?.length) throw new Error('no log channel to configure');
+
+      // Log exactly what the incumbent logged, and nothing else.
+      //
+      // `enabled_events` is checked before any per-event routing, and NULL means "everything".
+      // Leaving it null turned a faithful six-channel takeover into a firehose: events the old bot
+      // never posted — slash-command usage, reaction adds — started appearing in whichever channel
+      // was the catch-all. Reproducing a setup means reproducing what it did NOT do, too.
+      const enabledEvents = [...new Set((step.routing ?? []).map(r => r.event))];
+
+      await pool.execute(
+        `INSERT INTO logging_config (guild_id, log_channel_id, enabled, enabled_events) VALUES (?, ?, 1, ?)
+         ON DUPLICATE KEY UPDATE log_channel_id = VALUES(log_channel_id), enabled = 1,
+                                 enabled_events = VALUES(enabled_events)`,
+        [g, step.channelId ?? null, enabledEvents.length ? JSON.stringify(enabledEvents) : null]);
+
+      // Re-point each event at the channel the incumbent used for it. Idempotent per (guild, event).
+      for (const r of step.routing ?? []) {
+        if (!guild.channels.cache.get(r.channelId)?.isTextBased?.()) continue;
+        await pool.execute(
+          `INSERT INTO log_event_config (guild_id, event_type, enabled, log_channel_id)
+           VALUES (?, ?, 1, ?)
+           ON DUPLICATE KEY UPDATE enabled = 1, log_channel_id = VALUES(log_channel_id)`,
+          [g, r.event, r.channelId]);
+      }
+      return;
+    }
 
     case 'timezone':
       await pool.execute(
@@ -1551,6 +2130,19 @@ async function runStep(guild, step) {
       return;
     }
 
+    case 'custom_commands':
+      // Recreate exactly what we caught the old bot answering. The response is stored verbatim —
+      // this is the only copy in existence, and "improving" somebody's command while migrating it
+      // is how a server ends up with replies nobody wrote.
+      for (const c of step.commands ?? []) {
+        await pool.execute(
+          `INSERT INTO custom_commands (guild_id, command_name, response, action_type)
+           VALUES (?, ?, ?, 'reply')
+           ON DUPLICATE KEY UPDATE response = VALUES(response)`,
+          [g, c.name, c.response]);
+      }
+      return;
+
     case 'nightbot_commands':
       for (const c of profile.nightbotCommands) {
         await pool.execute(
@@ -1582,6 +2174,14 @@ async function runStep(guild, step) {
       }
       return;
 
+    case 'leveling':
+      // Switch on XP tracking. Deliberately nothing else: level ROLES are a per-server design
+      // decision (which role at which level) and inventing them would hand out roles nobody chose.
+      await pool.execute(
+        `INSERT INTO level_config (guild_id, enabled) VALUES (?, 1)
+         ON DUPLICATE KEY UPDATE enabled = 1`, [g]);
+      return;
+
     case 'emoji_ready':
     case 'cannabis_ready':
       // Nothing to configure — these are standing commands (/emoji, and the seven cannabis aliases).
@@ -1593,9 +2193,7 @@ async function runStep(guild, step) {
       await pool.execute(
         `INSERT INTO anti_nuke_config (guild_id, enabled) VALUES (?, 1)
          ON DUPLICATE KEY UPDATE enabled = 1`, [g]);
-      await pool.execute(
-        `INSERT INTO anti_raid_config (guild_id, is_enabled) VALUES (?, 1)
-         ON DUPLICATE KEY UPDATE is_enabled = 1`, [g]);
+      await (await import('./raid-lockdown.js')).enableRaidDetection(g);
       await pool.execute(
         `INSERT INTO phishing_config (guild_id, enabled) VALUES (?, 1)
          ON DUPLICATE KEY UPDATE enabled = 1`, [g]);
@@ -1609,9 +2207,9 @@ async function runStep(guild, step) {
       await pool.execute(
         `INSERT INTO free_games_subscriptions
            (guild_id, discord_channel_id, mention_role_id, notify_free, notify_weekend, notify_prime,
-            filter_steam, filter_epic, filter_gog, filter_humble, filter_origin, filter_ubisoft,
+            filter_steam, filter_epic, filter_gog, filter_origin, filter_ubisoft,
             filter_itch, filter_prime, is_enabled)
-         VALUES (?, ?, ?, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1)
+         VALUES (?, ?, ?, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1)
          ON DUPLICATE KEY UPDATE mention_role_id = VALUES(mention_role_id), is_enabled = 1`,
         [g, profile.freeGamesChannel, profile.freeGamesRole ?? null]);
       return;
@@ -1628,6 +2226,9 @@ async function runStep(guild, step) {
     }
 
     default:
+      // `have_<feature>` steps are standing commands: they are reported so the parity gate has
+      // something to verify, and they are already `done`, so apply() never reaches here for one.
+      if (step.key.startsWith('have_')) return;
       throw new Error(`step "${step.key}" has no apply action`);
   }
 }
@@ -1654,13 +2255,36 @@ export async function postPanels(guild) {
   if (!profile?.panels.length) {
     throw new Error('we have no recovered role panels for this server — scan it and add a profile first');
   }
-  // Pull the emoji cache fresh first. The platform panel references custom emoji we may have uploaded
-  // moments earlier in the same run, and a REST upload does not populate this process's cache until a
-  // gateway event lands — a lag that once threw "emoji not in this server" on panel 3 and stopped the
-  // whole panel post at two.
-  await guild.emojis.fetch().catch(() => {});
-  const channel = guild.channels.cache.get(profile.selfAssignChannel);
-  if (!channel) throw new Error('self-assign channel not found');
+  // Resolve custom emoji against a FRESHLY-FETCHED collection, never the process cache. The platform
+  // panel references custom emoji we may have uploaded moments earlier in the same run, and a REST
+  // upload does not populate this process's cache until a gateway event lands. Relying on the cache —
+  // and swallowing a failed fetch with `.catch(() => {})` — is exactly what once made resolveEmoji
+  // return null on panel 3 and abort the whole post at two, live, on the real guild. Fetching into a
+  // local map and reading from THAT removes the dependency on cache freshness entirely.
+  let emojiByName = null;
+  try {
+    const fetched = await guild.emojis.fetch();
+    emojiByName = new Map(fetched.map(e => [e.name, e]));
+  } catch {
+    emojiByName = new Map(guild.emojis.cache.map(e => [e.name, e]));  // last resort — better than nothing
+  }
+  // Resolve a spec to a button-ready emoji, or '' if a custom emoji genuinely can't be found. Empty
+  // means "post the button without an icon" — a labelled button still works; a missing panel does not.
+  const resolveOrDrop = (spec) => {
+    const m = /^:(\w+):$/.exec(spec);
+    if (!m) return spec;                       // plain unicode, always fine
+    const e = emojiByName.get(m[1]);
+    return e ? `<${e.animated ? 'a' : ''}:${e.name}:${e.id}>` : '';
+  };
+
+  // Each panel goes back to the channel it was found in. `selfAssignChannel` is only the fallback
+  // for a panel we have no channel for — it is a summary of where MOST panels live, which is the
+  // wrong answer for any server that separates its rules gate from its role picker.
+  const channelFor = (pan) => guild.channels.cache.get(pan.channelId ?? profile.selfAssignChannel);
+  const missing = profile.panels.filter(pan => !channelFor(pan)?.isTextBased?.());
+  if (missing.length === profile.panels.length) {
+    throw new Error('none of the channels these panels came from still exist');
+  }
 
   const [existing] = await pool.execute(
     "SELECT panel_name FROM reaction_role_panels WHERE guild_id = ? AND message_id <> 'PENDING'",
@@ -1668,41 +2292,79 @@ export async function postPanels(guild) {
   const already = new Set(existing.map(r => r.panel_name));
 
   const results = [];
+  // Titles we can safely retire an original for: one we posted just now, OR one already up from a
+  // prior run. Never delete an original whose replacement failed this run.
+  const replaced = new Set(already);
+  const posted = new Map();   // panel name -> the channel we actually posted it into
+  const manager = new ReactionRoleManager(guild.client);
+
   for (const panel of profile.panels) {
     if (already.has(panel.name)) { results.push({ panel: panel.name, outcome: 'already-done' }); continue; }
 
-    const roles = [];
-    for (const [emojiSpec, roleId, label] of panel.roles) {
-      const role = guild.roles.cache.get(roleId);
-      if (!role) throw new Error(`${panel.name}: role ${label} (${roleId}) no longer exists`);
+    // One panel's failure must never abort the batch. Post what we can; report what we can't. The old
+    // Carl panels are only removed for the ones that actually went up (see `replaced`).
+    try {
+      const roles = [];
+      const dropped = [];
+      for (const [emojiSpec, roleId, label] of panel.roles) {
+        const role = guild.roles.cache.get(roleId);
+        if (!role) throw new Error(`role ${label} (${roleId}) no longer exists`);
+        const emoji = resolveOrDrop(emojiSpec);
+        if (emoji === '' && emojiSpec !== '') dropped.push(emojiSpec);
+        roles.push({ roleId, label, name: role.name, emoji, style: 'secondary' });
+      }
 
-      const emoji = resolveEmoji(guild, emojiSpec);
-      if (emoji === null) throw new Error(`${panel.name}: emoji ${emojiSpec} is not in this server — run the platform_emoji step first`);
+      const target = channelFor(panel);
+      if (!target?.isTextBased?.()) {
+        throw new Error(`the channel this panel came from (${panel.channelId ?? 'unknown'}) no longer exists`);
+      }
 
-      roles.push({ roleId, label, name: role.name, emoji, style: 'secondary' });
-    }
+      const mode = panel.mode ?? 'multiple';
 
-    // Built against the client that actually holds this guild — with custom bots there is no one
-    // global client, and the manager resolves the guild from its own cache.
-    const manager = new ReactionRoleManager(guild.client);
-    const mode = panel.mode ?? 'multiple';
-    const made = await manager.createReactionPanel(
-      guild.id, channel.id, panel.name, mode, 'button', roles,
-      { title: panel.name, description: mode === 'unique'
+      // The original's own words first. The how-to-use line is appended, not substituted — losing a
+      // server's rules to a template is the single most destructive thing this tool has ever done.
+      const howTo = mode === 'unique'
         ? 'Pick one. Picking another swaps it; click the one you have to remove it.'
-        : 'Pick as many as you like. Click again to remove.' });
+        : 'Pick as many as you like. Click again to remove.';
+      const body = panel.description
+        ? `${panel.description}\n\n*${howTo}*`
+        : howTo;
 
-    if (!made) throw new Error(`${panel.name}: panel creation failed`);
-    results.push({ panel: panel.name, outcome: 'posted', messageId: made.messageId });
+      const made = await manager.createReactionPanel(
+        guild.id, target.id, panel.name, mode, 'button', roles,
+        {
+          title: panel.name,
+          description: body.slice(0, 4000),
+          ...(panel.fields?.length ? { fields: panel.fields.slice(0, 25) } : {}),
+          ...(panel.color ? { color: panel.color } : {}),
+        });
+
+      if (!made) throw new Error('panel creation failed');
+      replaced.add(panel.name);
+      posted.set(panel.name, target);
+      results.push({ panel: panel.name, outcome: 'posted', channel: target.name, messageId: made.messageId,
+        ...(dropped.length ? { note: `emoji not found, posted plain: ${dropped.join(', ')}` } : {}) });
+    } catch (e) {
+      results.push({ panel: panel.name, outcome: `failed: ${e.message}` });
+    }
   }
 
-  // Only now that every replacement is up do the originals come down. If any panel above threw, we
-  // have already returned and the old ones are still there — never a channel with neither.
-  for (const old of await findOldPanels(channel, profile.panels)) {
-    await archiveMessage(guild.id, old);
-    await old.delete(ascii('Takeover: replaced by our own self-assign panel'))
-      .then(() => results.push({ panel: old.embeds[0]?.title ?? old.id, outcome: 'old-panel-removed', messageId: old.id }))
-      .catch(e => results.push({ panel: old.id, outcome: `old-panel-delete-failed: ${e.message}` }));
+  // Only pull an original down once its replacement is actually up — never leave a channel with
+  // neither. A panel that failed above keeps its original in place.
+  //
+  // Swept PER CHANNEL, because the originals are wherever they were: sweeping one channel left every
+  // panel in every other channel standing, which is why a server ended up with our new panels in one
+  // place and the old ones still live in another.
+  for (const [name, target] of posted) {
+    for (const old of await findOldPanels(target, profile.panels).catch(() => [])) {
+      const title = (old.embeds[0]?.title ?? '').trim().toLowerCase();
+      if (title !== name.trim().toLowerCase()) continue;
+      await archiveMessage(guild.id, old);
+      await old.delete(ascii('Takeover: replaced by our own self-assign panel'))
+        .then(() => results.push({ panel: old.embeds[0]?.title ?? old.id, outcome: 'old-panel-removed',
+          channel: target.name, messageId: old.id }))
+        .catch(e => results.push({ panel: old.id, outcome: `old-panel-delete-failed: ${e.message}` }));
+    }
   }
   return results;
 }
@@ -1733,9 +2395,10 @@ async function findOldPanels(channel, panels) {
 /**
  * Post the "Link your Twitch" button.
  *
- * Linking the BROADCASTER's Twitch tells us who her VIPs and moderators are. It does not tell us
- * which Discord account belongs to each of them — only they can say that. Without this, she would
- * connect her account, watch nothing happen, and reasonably conclude the whole thing was broken.
+ * Linking the BROADCASTER's Twitch tells us who their VIPs and moderators are. It does not tell us
+ * which Discord account belongs to each of them — only they can say that. Without this, the owner
+ * would connect their account, watch nothing happen, and reasonably conclude the whole thing was
+ * broken.
  *
  * The member flow at /link/twitch already exists and works (623 links across 65 guilds). What was
  * missing was any way to REACH it: nothing in Discord has ever pointed at that page.
@@ -1784,12 +2447,12 @@ export async function postTwitchLinkPanel(guild, channelId) {
 /**
  * The Fire. A ONE-OFF, not a command.
  *
- * Kabster is giving up a 193ft tree to start again on ours. "The old bot left and your tree is gone"
- * is a shrug — a thing that happened TO the server, with nobody to blame and nothing to say about it.
- * A tree that *died*, on the other hand, is an event. The sapling that follows it means something,
- * and the 193ft is not deleted, it is mourned.
+ * A server giving up a fully-grown tree to start again on ours deserves better than silence. "The old
+ * bot left and your tree is gone" is a shrug — a thing that happened TO the server, with nobody to
+ * blame and nothing to say about it. A tree that *died*, on the other hand, is an event. The sapling
+ * that follows it means something, and the height it reached is not deleted, it is mourned.
  *
- * Deliberately NOT a `/tree burn` subcommand. A server does not need a permanent, discoverable button
+ * Deliberately NOT a `/arcade tree burn` subcommand. A server does not need a permanent, discoverable button
  * that destroys its own tree — that is a footgun sitting in the command list forever, for one night's
  * use. It lives here, with the other takeover actions that write to a guild: asked for by name, run
  * once, gone.
@@ -1812,13 +2475,13 @@ export async function postForestFire(guild, channelId, { name = null } = {}) {
   if (miss.length) throw new Error(`missing ${miss.join(', ')} in #${channel.name}`);
 
   const res = await burnDown(guild.id, { name, plantedBy: guild.ownerId });
-  if (!res.ok) throw new Error('there is no tree here to burn — plant ours first with /tree plant');
+  if (!res.ok) throw new Error('there is no tree here to burn — plant ours first with /arcade tree plant');
 
   const { name: lost, height } = res.lost;
 
   await channel.send({
     embeds: [new EmbedBuilder()
-      .setColor(0xC0392B)
+      .setColor(themeColor(guild?.id, 'danger'))
       .setTitle('🔥 The Fire')
       .setDescription(
         'It started somewhere past the treeline, and by the time anyone smelled the smoke it had '
@@ -1834,9 +2497,9 @@ export async function postForestFire(guild, channelId, { name = null } = {}) {
       .setTitle('🌱 …and then, a green shoot')
       .setDescription(
         'Something came up through the ash. Three feet of it, if you are generous.\n\n'
-        + `**${res.tree.name}** starts again from nothing — but you do not. Your **level**, your **XP**, `
-        + 'your **sticker book** and your **coins** all came through the fire. They were never the '
-        + "tree's. They were yours.\n\n"
+        + `**${res.tree.name}** starts again from nothing — and so does everyone. This is a brand-new tree `
+        + 'on a brand-new system. From here on, every time you water it you earn **XP**, climb **levels**, '
+        + 'fill a **sticker book** and bank **coins** — and those are yours to keep, fire or no fire.\n\n'
         + 'Water it. 💧')],
   });
 

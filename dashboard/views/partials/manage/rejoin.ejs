@@ -1,0 +1,334 @@
+<%#
+  Rejoin limit: the rule (POST security/rejoin), a member lookup (GET ?page=rejoin&user=, reset via
+  POST rejoin/reset), repeat joiners, what the rule has done and the past-joins backfill
+  (POST rejoin/sync-history). Built on the settings-row kit (dashboard/public/css/cf-settings.css).
+%>
+<%
+  const rj = (typeof rejoin !== 'undefined' && rejoin) ? rejoin : {};
+  const cfg = rj.config || {};
+  const on = !!cfg.rejoin_limit_enabled;
+  const max = cfg.rejoin_max_joins == null ? 3 : cfg.rejoin_max_joins;
+  const days = cfg.rejoin_window_days == null ? 0 : cfg.rejoin_window_days;
+  const action = ['ban', 'kick', 'apply', 'none'].includes(cfg.rejoin_action) ? cfg.rejoin_action : 'ban';
+  const ACTION_TEXT = { ban: 'Ban', kick: 'Kick every time', apply: 'Remove with an application', none: 'Log only' };
+  const SOURCE_TEXT = { live: 'Recorded at the time', system_message: "Discord's join message", audit_log: 'Bot log', invite_log: 'Invite log' };
+  const EVENT_TEXT = { rejoin_banned: 'Banned', rejoin_kicked: 'Kicked', rejoin_apply: 'Removed, may apply', rejoin_observed: 'Would have acted (log only)' };
+  const EVENT_TONE = { rejoin_banned: 'is-bad', rejoin_kicked: 'is-warn', rejoin_apply: 'is-info', rejoin_observed: '' };
+  const totals = rj.totals || { joins: 0, members: 0 };
+  const repeaters = rj.repeaters || [];
+  // At the limit counts too: their next join is the one acted on.
+  const nextActed = repeaters.filter(r => r.counted >= max).length;
+  const lookup = rj.lookup;
+  const iso = (d) => d ? new Date(d).toISOString() : '';
+  const utc = (d) => d ? new Date(d).toISOString().replace('T', ' ').slice(0, 16) + ' UTC' : '—';
+  const scope = days > 0 ? `in the last ${days} days` : 'ever';
+%>
+<style>
+    .rj-facts .cf-kpi-sub { margin: 2px 0 0; font-size: var(--cf-text-xs); font-weight: 400; color: var(--cf-text-3); line-height: 1.4; }
+    .rj-kpi-on { color: var(--cf-success); }
+    .rj-kpi-off { color: var(--cf-text-3); }
+    .rj-time, .rj-date { font-variant-numeric: tabular-nums; white-space: nowrap; }
+    .rj-who { display: flex; align-items: center; gap: var(--cf-3); min-width: 0; }
+    .rj-who img { width: 44px; height: 44px; border-radius: 50%; flex: none; }
+    .rj-who-text { flex: 1 1 auto; min-width: 0; }
+    .rj-who-name { font-size: var(--cf-text-md); font-weight: 600; color: var(--cf-text); overflow-wrap: anywhere; }
+    .rj-who-id { font-size: var(--cf-text-xs); color: var(--cf-text-3); font-family: var(--cf-mono); overflow-wrap: anywhere; }
+    .rj-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr)); gap: var(--cf-3) var(--cf-5); margin: 0; }
+    .rj-facts dt { margin: 0 0 2px; font-size: var(--cf-text-xs); font-weight: 500; color: var(--cf-text-3); }
+    .rj-facts dd { margin: 0; font-size: var(--cf-text-lg); font-weight: 600; color: var(--cf-text); font-variant-numeric: tabular-nums; }
+    .rj-history { margin: 0; font-size: var(--cf-text-sm); color: var(--cf-text-2); line-height: 1.5; }
+    .rj-text { margin: 0; font-size: var(--cf-text-sm); color: var(--cf-text-2); line-height: 1.6; max-width: 78ch; }
+    .rj-lookup { max-width: 40rem; }
+    .rj-num { text-align: right; font-variant-numeric: tabular-nums; }
+    .rj-detail { color: var(--cf-text-3); font-size: var(--cf-text-xs); }
+    @media (max-width: 640px) {
+        .rj-num { text-align: left; }
+    }
+</style>
+
+<div class="page-section rj-page">
+    <div class="page-section-header">
+        <div>
+            <div class="page-section-title">
+                <i class="fas fa-repeat"></i>
+                <span>Rejoin limit</span>
+            </div>
+            <div class="page-section-subtitle">How many joins a member gets, what happens after, and every member's join history.</div>
+        </div>
+    </div>
+
+    <% if (rj.notice === 'reset') { %>
+    <div class="cf-notice is-ok" role="status">Their rejoin count now starts from zero. Their history is kept below.</div>
+    <% } else if (rj.notice === 'counting' || rj.backfilling) { %>
+    <div class="cf-notice is-info" role="status"><i class="fas fa-spinner fa-spin" aria-hidden="true"></i> Counting past joins from Discord's join messages and the bot's logs. This usually takes under a minute; refresh to see the result.</div>
+    <% } %>
+
+    <dl class="cf-kpis" aria-label="Rejoin limit at a glance">
+        <div class="cf-kpi">
+            <dt>Rule</dt>
+            <dd class="cf-kpi-value <%= on ? 'rj-kpi-on' : 'rj-kpi-off' %>"><%= on ? 'On' : 'Off' %></dd>
+            <dd class="cf-kpi-sub"><%= on ? `${ACTION_TEXT[action]} after ${max} join${max === 1 ? '' : 's'} ${scope}` : 'Nobody is removed' %></dd>
+        </div>
+        <div class="cf-kpi">
+            <dt>Joins on record</dt>
+            <dd class="cf-kpi-value"><%= totals.joins.toLocaleString() %></dd>
+            <dd class="cf-kpi-sub"><%= totals.members.toLocaleString() %> members<% if (totals.firstJoin) { %>, since <time class="rj-date" datetime="<%= iso(totals.firstJoin) %>"><%= utc(totals.firstJoin).slice(0, 10) %></time><% } %></dd>
+        </div>
+        <div class="cf-kpi">
+            <dt>Joined more than once</dt>
+            <dd class="cf-kpi-value"><%= (rj.repeaterCount || 0).toLocaleString() %></dd>
+            <dd class="cf-kpi-sub">members</dd>
+        </div>
+        <div class="cf-kpi">
+            <dt>Next join acted on</dt>
+            <dd class="cf-kpi-value"><%= nextActed %></dd>
+            <dd class="cf-kpi-sub"><%= on ? 'members at or over the limit' : 'at or over the limit, once the rule is on' %></dd>
+        </div>
+    </dl>
+
+    <section class="cf-section" aria-labelledby="rj-settings-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="rj-settings-title">Rule</h2>
+                <p class="cf-section-desc">How many joins a member gets, how far back they are counted, and what happens on the join after that.</p>
+            </div>
+        </header>
+        <form class="cf-rows" action="/manage/<%= guild.id %>/security/rejoin" method="POST">
+            <div class="cf-row cf-row--switch">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="rejoinEnabled">Rejoin limit</label>
+                    <p class="cf-row-desc" id="rejoinEnabled-desc">Members are told why by DM before anything happens to them.</p>
+                </div>
+                <div class="cf-row-control">
+                    <input class="cf-switch" type="checkbox" role="switch" id="rejoinEnabled" name="rejoinEnabled" data-feature-switch aria-describedby="rejoinEnabled-desc" <%= on ? 'checked' : '' %>>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="rejoinMaxJoins">Joins allowed</label>
+                    <p class="cf-row-desc" id="rejoinMaxJoins-desc">The join after this many is acted on.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-unit">
+                        <input class="form-control" type="number" id="rejoinMaxJoins" name="rejoinMaxJoins" min="1" max="100" value="<%= max %>" aria-describedby="rejoinMaxJoins-desc">
+                        <span class="cf-unit">joins</span>
+                    </div>
+                </div>
+            </div>
+            <div class="cf-row">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="rejoinWindowDays">Count joins from the last</label>
+                    <p class="cf-row-desc" id="rejoinWindowDays-desc">Set 0 to count every join ever.</p>
+                </div>
+                <div class="cf-row-control">
+                    <div class="cf-input-unit">
+                        <input class="form-control" type="number" id="rejoinWindowDays" name="rejoinWindowDays" min="0" max="3650" value="<%= days %>" aria-describedby="rejoinWindowDays-desc">
+                        <span class="cf-unit">days</span>
+                    </div>
+                </div>
+            </div>
+            <div class="cf-row cf-row--stack">
+                <div class="cf-row-text">
+                    <label class="cf-row-label" for="rejoinAction">What to do</label>
+                    <p class="cf-row-desc" id="rejoinAction-desc">On the join after the limit. Applications appear in the channel set on the <a href="/manage/<%= guild.id %>?page=security">Security</a> page.</p>
+                </div>
+                <div class="cf-opts" role="radiogroup" aria-label="What to do" aria-describedby="rejoinAction-desc">
+                    <label class="cf-opt"><input type="radio" id="rejoinAction" name="rejoinAction" value="ban"<%= action === 'ban' ? ' checked' : '' %>><span class="cf-opt-body"><span class="cf-opt-title">Ban</span><span class="cf-opt-desc">They cannot come back.</span></span></label>
+                    <label class="cf-opt"><input type="radio" name="rejoinAction" value="kick"<%= action === 'kick' ? ' checked' : '' %>><span class="cf-opt-body"><span class="cf-opt-title">Kick</span><span class="cf-opt-desc">Removed again every time they join.</span></span></label>
+                    <label class="cf-opt"><input type="radio" name="rejoinAction" value="apply"<%= action === 'apply' ? ' checked' : '' %>><span class="cf-opt-body"><span class="cf-opt-title">Remove with an application</span><span class="cf-opt-desc">Removed; they can send an application to come back.</span></span></label>
+                    <label class="cf-opt"><input type="radio" name="rejoinAction" value="none"<%= action === 'none' ? ' checked' : '' %>><span class="cf-opt-body"><span class="cf-opt-title">Log only</span><span class="cf-opt-desc">Nothing happens to them; use it to try the limit out.</span></span></label>
+                </div>
+            </div>
+            <div class="cf-section-foot">
+                <button type="submit" class="btn btn-primary">Save</button>
+            </div>
+        </form>
+    </section>
+
+    <section class="cf-section" aria-labelledby="rj-lookup-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="rj-lookup-title">Look up a member</h2>
+                <p class="cf-section-desc">Every join on record for one member, and how close they are to the limit. User IDs work for people who have left.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <form class="cf-row cf-row--stack" method="GET" action="/manage/<%= guild.id %>">
+                <div class="cf-input-group rj-lookup">
+                    <input type="hidden" name="page" value="rejoin">
+                    <input class="form-control" type="text" aria-label="User ID or username" name="user" placeholder="User ID, or username of someone in the server" value="<%= lookup ? lookup.query : '' %>" required>
+                    <button type="submit" class="btn btn-secondary">Show history</button>
+                </div>
+            </form>
+
+            <% if (lookup && lookup.notFound) { %>
+            <div class="cf-state cf-state--empty" role="status">
+                <p class="cf-state-title">Nobody called <%= lookup.query %> is in the server right now</p>
+                <p class="cf-state-text">Paste their user ID instead: it works for people who have left too.</p>
+            </div>
+            <% } else if (lookup) { %>
+            <div class="cf-row cf-row--switch">
+                <div class="rj-who">
+                    <% if (lookup.avatar) { %><img src="<%= lookup.avatar %>" alt=""><% } %>
+                    <div class="rj-who-text">
+                        <div class="rj-who-name"><%= lookup.name || 'Unknown user' %></div>
+                        <div class="rj-who-id"><% if (lookup.username) { %>@<%= lookup.username %> · <% } %><%= lookup.userId %></div>
+                    </div>
+                </div>
+                <div class="cf-row-control">
+                    <span class="cf-pill <%= lookup.inServer ? 'is-ok' : '' %>"><%= lookup.inServer ? 'In the server' : 'Not in the server' %></span>
+                </div>
+            </div>
+            <div class="cf-row cf-row--stack">
+                <dl class="rj-facts">
+                    <div><dt>Joins on record</dt><dd><%= lookup.total %></dd></div>
+                    <div><dt>Counted toward the limit</dt><dd><%= lookup.counted %></dd>
+                        <dd class="cf-kpi-sub"><% if (lookup.since) { %>since <time class="rj-date" datetime="<%= iso(lookup.since) %>"><%= utc(lookup.since).slice(0, 10) %></time><% } else { %>all of them<% } %></dd></div>
+                    <div><dt>Limit</dt><dd><%= lookup.max %></dd><dd class="cf-kpi-sub"><%= on ? ACTION_TEXT[action] : 'rule is off' %></dd></div>
+                    <div><dt>Next join</dt>
+                        <dd><span class="cf-pill <%= (lookup.counted >= lookup.max) ? 'is-bad' : 'is-ok' %>"><%= (lookup.counted >= lookup.max) ? (on ? ACTION_TEXT[action] : 'Over the limit') : 'Allowed' %></span></dd>
+                        <dd class="cf-kpi-sub"><%= Math.max(0, lookup.max - lookup.counted) %> more join<%= (lookup.max - lookup.counted) === 1 ? '' : 's' %> allowed</dd></div>
+                </dl>
+            </div>
+
+            <% if (lookup.reset || lookup.approvedAt) { %>
+            <div class="cf-row cf-row--stack">
+                <p class="rj-history">
+                    <% if (lookup.reset) { %>Count reset <time class="rj-time" datetime="<%= iso(lookup.reset.reset_at) %>"><%= utc(lookup.reset.reset_at) %></time> <%= lookup.reset.reason === 'unban' ? '(they were unbanned)' : '(by staff)' %>.<% } %>
+                    <% if (lookup.approvedAt) { %> Application approved <time class="rj-time" datetime="<%= iso(lookup.approvedAt) %>"><%= utc(lookup.approvedAt) %></time>.<% } %>
+                </p>
+            </div>
+            <% } %>
+
+            <% if (lookup.total) { %>
+            <div class="cf-table-wrap">
+                <table class="cf-table cf-table--stack">
+                    <thead><tr><th scope="col">Join</th><th scope="col">Joined</th><th scope="col">Source</th></tr></thead>
+                    <tbody>
+                        <% lookup.joins.forEach((j, i) => { %>
+                        <tr>
+                            <td data-label="Join" class="cf-em"><%= lookup.total - i %></td>
+                            <td data-label="Joined"><time class="rj-time" datetime="<%= iso(j.joined_at) %>"><%= utc(j.joined_at) %></time></td>
+                            <td data-label="Source" class="cf-cell-muted"><%= SOURCE_TEXT[j.source] || j.source %></td>
+                        </tr>
+                        <% }) %>
+                    </tbody>
+                </table>
+            </div>
+            <% } else { %>
+            <%- include('../kit/_state', { kind: 'empty', title: 'No joins on record', text: 'This user has no joins on record in this server.', id: null, boxed: false, compact: true }) %>
+            <% } %>
+
+            <form action="/manage/<%= guild.id %>/rejoin/reset" method="POST" data-no-ajax="1" onsubmit="return confirm('Start this member\'s rejoin count from zero? Their history is kept.');">
+                <input type="hidden" name="userId" value="<%= lookup.userId %>">
+                <div class="cf-section-foot">
+                    <span class="cf-foot-note">Unbanning them or approving their application does this automatically.</span>
+                    <button type="submit" class="btn btn-secondary">Reset their count</button>
+                </div>
+            </form>
+            <% } %>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="rj-repeaters-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="rj-repeaters-title">Members who have joined more than once</h2>
+                <p class="cf-section-desc">Highest join counts first. Counted joins are the ones inside the window that the limit looks at.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <% if (repeaters.length) { %>
+            <div class="cf-table-wrap">
+                <table class="cf-table cf-table--stack">
+                    <thead><tr><th scope="col">Member</th><th scope="col" class="rj-num">Joins</th><th scope="col" class="rj-num">Counted</th><th scope="col">Last joined</th><th scope="col">Status</th><th scope="col"><span class="visually-hidden">History</span></th></tr></thead>
+                    <tbody>
+                        <% repeaters.forEach(r => { %>
+                        <tr>
+                            <td data-label="Member">
+                                <% if (r.name) { %><%- include('_user-cell', { cfUser: { id: r.userId, username: r.name, displayName: r.name, avatar: r.avatar || null } }) %><% } else { %><%- include('_user-cell', { cfUser: null, cfUserId: r.userId, cfUserName: null }) %><% } %>
+                            </td>
+                            <td data-label="Joins" class="rj-num"><%= r.total %></td>
+                            <td data-label="Counted" class="rj-num"><%= r.counted %><% if (r.resetAt) { %> <span class="rj-detail">(reset)</span><% } %></td>
+                            <td data-label="Last joined"><time class="rj-time" datetime="<%= iso(r.lastJoin) %>"><%= utc(r.lastJoin) %></time></td>
+                            <td data-label="Status"><% if (r.over) { %><span class="cf-pill is-bad">Over the limit</span><% } else if (r.counted === max) { %><span class="cf-pill is-warn">At the limit</span><% } else { %><span class="cf-pill">OK</span><% } %></td>
+                            <td class="cf-cell-end"><a class="btn btn-sm btn-secondary" href="/manage/<%= guild.id %>?page=rejoin&user=<%= r.userId %>">History</a></td>
+                        </tr>
+                        <% }) %>
+                    </tbody>
+                </table>
+            </div>
+            <% if ((rj.repeaterCount || 0) > repeaters.length) { %><div class="cf-section-foot"><span class="cf-foot-note">Showing the <%= repeaters.length %> highest counts of <%= rj.repeaterCount %>.</span></div><% } %>
+            <% } else { %>
+            <%- include('../kit/_state', { kind: 'empty', title: 'Nobody has joined more than once', text: cfg.rejoin_backfilled_at ? 'Members who leave and come back will be listed here.' : 'Nobody has rejoined since the bot started keeping this history.', id: null, boxed: false, compact: false }) %>
+            <% } %>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="rj-actions-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="rj-actions-title">What the rule has done</h2>
+                <p class="cf-section-desc">Each time the rule acted on a join, and whether the member got the DM explaining why.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <% if ((rj.actions || []).length) { %>
+            <div class="cf-table-wrap">
+                <table class="cf-table cf-table--stack">
+                    <thead><tr><th scope="col">When</th><th scope="col">Member</th><th scope="col">Action</th><th scope="col">Told by DM</th><th scope="col"><span class="visually-hidden">History</span></th></tr></thead>
+                    <tbody>
+                        <% rj.actions.forEach(a => { %>
+                        <tr>
+                            <td data-label="When"><time class="rj-time" datetime="<%= iso(a.created_at) %>"><%= utc(a.created_at) %></time></td>
+                            <td data-label="Member"><%- include('_user-cell', { cfUser: null, cfUserId: a.user_id, cfUserName: a.name || null, cfUserSize: 'sm' }) %></td>
+                            <td data-label="Action"><span class="cf-pill <%= EVENT_TONE[a.action] || '' %>"><%= EVENT_TEXT[a.action] || a.action %></span><% if (a.detail) { %> <span class="rj-detail">(<%= a.detail %>)</span><% } %></td>
+                            <td data-label="Told by DM"><%= a.action === 'rejoin_observed' ? '—' : (a.dm_delivered ? 'Yes' : 'No, DMs closed') %></td>
+                            <td class="cf-cell-end"><a class="btn btn-sm btn-secondary" href="/manage/<%= guild.id %>?page=rejoin&user=<%= a.user_id %>">History</a></td>
+                        </tr>
+                        <% }) %>
+                    </tbody>
+                </table>
+            </div>
+            <% } else { %>
+            <%- include('../kit/_state', { kind: 'empty', title: 'Nothing yet', text: 'Joins the rule acts on will be listed here.', id: null, boxed: false, compact: false }) %>
+            <% } %>
+        </div>
+    </section>
+
+    <section class="cf-section" aria-labelledby="rj-past-title">
+        <header class="cf-section-head">
+            <div>
+                <h2 class="cf-section-title" id="rj-past-title">Past joins</h2>
+                <p class="cf-section-desc">Joins from before the bot kept this history.</p>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="cf-row cf-row--stack">
+                <p class="rj-text">
+                    These are counted from Discord's own "joined the server" messages in your system channel, plus the bot's logs.
+                    This happens automatically the first time the rule is switched on.
+                    <% if (cfg.rejoin_backfilled_at) { %>Last counted <time class="rj-time" datetime="<%= iso(cfg.rejoin_backfilled_at) %>"><%= utc(cfg.rejoin_backfilled_at) %></time>.<% } else { %>Not counted yet.<% } %>
+                    Join messages that were deleted, or posted while they were switched off, cannot be recovered.
+                </p>
+            </div>
+            <form action="/manage/<%= guild.id %>/rejoin/sync-history" method="POST" data-no-ajax="1">
+                <div class="cf-section-foot">
+                    <button type="submit" class="btn btn-secondary" <%= rj.backfilling ? 'disabled' : '' %>><%= cfg.rejoin_backfilled_at ? 'Count past joins again' : 'Count past joins now' %></button>
+                </div>
+            </form>
+        </div>
+    </section>
+</div>
+
+<script>
+// Show times in the viewer's own timezone; the server renders UTC as the fallback.
+document.querySelectorAll('time.rj-time, time.rj-date').forEach(function (el) {
+    var d = new Date(el.getAttribute('datetime'));
+    if (isNaN(d)) return;
+    el.title = el.textContent;
+    el.textContent = el.classList.contains('rj-date')
+        ? d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+        : d.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+});
+</script>

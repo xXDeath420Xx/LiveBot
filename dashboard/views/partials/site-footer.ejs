@@ -1,0 +1,111 @@
+<%#
+  The site footer for every standalone page. Pairs with partials/site-head.ejs and
+  partials/site-header.ejs; styles in /css/cf-site.css (.cfs-footer). No locals needed.
+  It does not close <body>: pages add their own scripts and closing tags after it.
+%>
+<%
+  const _cid = (locals.clientId && /^\d{15,22}$/.test(String(locals.clientId))) ? String(locals.clientId) : (((locals.discoveryUrl || '').match(/(\d{15,22})$/) || [])[1] || null);
+  const _invite = _cid ? 'https://discord.com/oauth2/authorize?client_id=' + _cid + '&permissions=1643797540086&scope=bot+applications.commands' : '/invite';
+%>
+<footer class="cfs-footer">
+    <div class="cfs-footer-inner">
+        <div class="cfs-footer-grid">
+            <div class="cfs-footer-brand">
+                <a class="cfs-brand" href="/"><img src="/images/CertiFried.png" alt="" width="28" height="28"><span>CertiFried</span></a>
+                <p>A Discord bot for moderation, protection, stream alerts, levels, music and games, and a shared ban list for Kick. Free for every server.</p>
+            </div>
+            <div>
+                <h2>Bot</h2>
+                <ul>
+                    <li><a href="<%= _invite %>">Add to Discord</a></li>
+                    <li><a href="/dashboard">Dashboard</a></li>
+                    <li><a href="/commands">Commands</a></li>
+                    <li><a href="/docs">Documentation</a></li>
+                    <li><a href="/studio">CertiFried Studio</a></li>
+                    <li><a href="/compare">Compare bots</a></li>
+                    <li><a href="/changelog">Changelog</a></li>
+                </ul>
+            </div>
+            <div>
+                <h2>Play and create</h2>
+                <ul>
+                    <li><a href="/greenhouse">Greenhouse Tycoon</a></li>
+                    <li><a href="/docs/rpg">D&amp;D guide</a></li>
+                    <li><a href="/cah">Cards Against Humanity</a></li>
+                    <li><a href="/cards">Group greeting cards</a></li>
+                    <li><a href="/stream-team">Stream team</a></li>
+                    <li><a href="/sprites">Fortnite sprites</a></li>
+                    <li><a href="/kick">Kick defender</a></li>
+                </ul>
+            </div>
+            <div>
+                <h2>Help and safety</h2>
+                <ul>
+                    <li><a href="/discord" rel="noopener">Support server</a></li>
+                    <li><a href="mailto:support@certifriedmultitool.com">Email support</a></li>
+                    <li><a href="/status">Status</a></li>
+                    <li><a href="/report">Report a user</a></li>
+                    <li><a href="/appeal">Appeal a ban</a></li>
+                    <li><a href="/scams">Scam link lookup</a></li>
+                </ul>
+            </div>
+            <div>
+                <h2>About</h2>
+                <ul>
+                    <li><a href="/donate">Donate</a></li>
+                    <li><a href="/legal">Legal and data</a></li>
+                    <li><a href="/terms">Terms of Service</a></li>
+                    <li><a href="/privacy">Privacy Policy</a></li>
+                    <li><a href="/eula">EULA</a></li>
+                    <li><a href="https://github.com/xXDeath420Xx/LiveBot" rel="noopener">Source code (AGPL)</a></li>
+                </ul>
+            </div>
+        </div>
+        <div class="cfs-footer-bottom">
+            <span>&copy; <%= new Date().getFullYear() %> CertiFried MultiTool</span>
+            <span>Every feature is free. Donations are voluntary. <a href="https://github.com/xXDeath420Xx/LiveBot" rel="noopener">Source code</a> under the <a href="https://github.com/xXDeath420Xx/LiveBot/blob/dev/LICENSE" rel="noopener">AGPL-3.0-or-later</a>.</span>
+            <% if (locals.userPrefs) { %>
+            <a class="cfs-theme-link" href="/settings">Theme and appearance settings</a>
+            <% } else { %>
+            <label class="cfs-theme"><span>Theme</span>
+                <select id="cfsTheme">
+                    <option value="dark">Dark</option>
+                    <option value="light">Light</option>
+                    <option value="sand">Sand</option>
+                    <option value="auto">Auto (follow system)</option>
+                </select>
+            </label>
+            <script>
+            // Signed-out visitors: the theme is kept in this browser (localStorage 'ui-theme') and put on
+            // <html> before first paint by the head script (partials/site-head.ejs). Dark is the default.
+            // Signed-in users choose on the Settings page, which saves it to their account.
+            (function () {
+                var s = document.getElementById('cfsTheme'), d = document.documentElement;
+                if (!s) return;
+                var known = { dark: 1, light: 1, sand: 1, auto: 1 };
+                var cur = d.getAttribute('data-theme-mode') === 'auto' ? 'auto' : (d.getAttribute('data-theme') || 'dark');
+                if (!known[cur]) {
+                    var o = document.createElement('option');
+                    o.value = cur; o.textContent = cur.charAt(0).toUpperCase() + cur.slice(1);
+                    s.appendChild(o);
+                }
+                s.value = cur;
+                s.addEventListener('change', function () {
+                    var v = s.value;
+                    try { localStorage.setItem('ui-theme', v); } catch (e) { /* storage off: this page only */ }
+                    // The same choice as a cookie, for the one page the server themes without a template (/greenhouse).
+                    document.cookie = 'ui-theme=' + v + '; path=/; max-age=31536000; SameSite=Lax' + (location.protocol === 'https:' ? '; Secure' : '');
+                    if (v === 'auto') {
+                        d.setAttribute('data-theme-mode', 'auto');
+                        d.setAttribute('data-theme', window.matchMedia && matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+                    } else {
+                        d.removeAttribute('data-theme-mode');
+                        d.setAttribute('data-theme', v);
+                    }
+                });
+            })();
+            </script>
+            <% } %>
+        </div>
+    </div>
+</footer>

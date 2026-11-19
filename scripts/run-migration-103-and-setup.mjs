@@ -13,17 +13,15 @@
 // the new voiceStateUpdate guard logic.
 
 import pool from '../utils/db.js';
-import encryption from '../utils/encryption.js';
+import { resolveBotForGuild } from '../utils/bot-resolver.js';
 import { up as migrate103 } from '../migrations/103_voice_channel_guards.js';
 
 // --- Constants ----------------------------------------------------------
 const KITSUNE_GUILD   = '1469931133981687873';
-const KITSUNE_BOT     = '1498486251576229958';
 const KITSUNE_CHANNEL = '1502435691412459540';
 const ALLOWED_USER    = '533297810309906444';
 
 const TWAT_GUILD   = '1099732505243959407';
-const TWAT_BOT     = '1496352090950467595';
 const TWAT_SIGNUP  = '1496351044567961620';
 const TWAT_OUTPUT  = '1496351043372716053';
 const TWAT_MSG     = '1496387932561473586';
@@ -36,11 +34,12 @@ const SPEAK        = 1n << 21n;
 const SEND_MESSAGES = 2048n;
 
 // --- Bot tokens ---------------------------------------------------------
-const [rows] = await pool.execute(
-  'SELECT bot_id, bot_token FROM custom_bots WHERE bot_id IN (?, ?)',
-  [KITSUNE_BOT, TWAT_BOT]
-);
-const tokens = Object.fromEntries(rows.map(r => [r.bot_id, encryption.decrypt(JSON.parse(r.bot_token))]));
+// The acting bots come from guild_bot_mapping — never pinned here.
+const kitsuneBot = await resolveBotForGuild(KITSUNE_GUILD, { db: pool });
+const twatBot    = await resolveBotForGuild(TWAT_GUILD, { db: pool });
+const KITSUNE_BOT = kitsuneBot.botId;
+const TWAT_BOT    = twatBot.botId;
+const tokens = { [KITSUNE_BOT]: kitsuneBot.token, [TWAT_BOT]: twatBot.token };
 
 async function api(botId, method, path, body) {
   const r = await fetch(`https://discord.com/api/v10${path}`, {

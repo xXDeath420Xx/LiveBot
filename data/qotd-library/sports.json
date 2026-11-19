@@ -1,0 +1,135 @@
+{
+  "theme": "sports",
+  "label": "Sport & Competition",
+  "questions": [
+    {
+      "slug": "sport-team-loyalty",
+      "text": "Which team do you support, and how did that allegiance get decided for you?"
+    },
+    {
+      "slug": "sport-played-longest",
+      "text": "What sport or physical activity have you stuck with the longest?"
+    },
+    {
+      "slug": "sport-quit-why",
+      "text": "What did you play seriously and then stop? Do you miss it?"
+    },
+    {
+      "slug": "sport-best-moment-watched",
+      "text": "What's the greatest sporting moment you've watched live, on TV or in person?"
+    },
+    {
+      "slug": "sport-worst-teammate",
+      "text": "What's the worst teammate behaviour you've experienced in any sport?"
+    },
+    {
+      "slug": "sport-competitive-about",
+      "text": "What are you unreasonably competitive about that isn't a sport?"
+    },
+    {
+      "slug": "sport-fitness-honest",
+      "text": "How's your fitness routine going, honestly? No judgement here."
+    },
+    {
+      "slug": "sport-injury-badge",
+      "text": "What injury do you have a story and a scar for?"
+    },
+    {
+      "slug": "sport-would-try",
+      "text": "What sport would you try if there was no chance of embarrassing yourself?"
+    },
+    {
+      "slug": "sport-obscure-favourite",
+      "text": "What's the most obscure sport you'd happily watch a whole match of?"
+    },
+    {
+      "slug": "sport-motivation",
+      "text": "What actually gets you to move — a goal, a person, a playlist, or spite?"
+    },
+    {
+      "slug": "sport-childhood-team",
+      "text": "Were you on a team as a kid? Were you any good?"
+    },
+    {
+      "slug": "sport-watch-vs-play",
+      "text": "Do you enjoy watching or doing more? Has that flipped as you've got older?"
+    },
+    {
+      "slug": "sport-athlete-admire",
+      "text": "Which athlete do you admire for something other than their results?"
+    },
+    {
+      "slug": "sport-rule-change",
+      "text": "What rule would you change in a sport you follow, and what would it fix?"
+    },
+    {
+      "slug": "sport-underdog",
+      "text": "What's the best underdog story you've followed?"
+    },
+    {
+      "slug": "sport-personal-best",
+      "text": "What's a personal best you're proud of, at any level?"
+    },
+    {
+      "slug": "sport-hate-exercise",
+      "text": "What form of exercise do you absolutely refuse to do?"
+    },
+    {
+      "slug": "sport-gym-culture",
+      "text": "What's the most annoying thing people do at a gym, pitch, or pool?"
+    },
+    {
+      "slug": "sport-outdoor-activity",
+      "text": "What outdoor activity would you like to be good at?"
+    },
+    {
+      "slug": "sport-event-attend",
+      "text": "What sporting event would you fly across the world to attend?"
+    },
+    {
+      "slug": "sport-esports-real",
+      "text": "Are esports real sports? Give an actual argument, either way."
+    },
+    {
+      "slug": "sport-coach-memorable",
+      "text": "What did a coach say to you that you still repeat to yourself?"
+    },
+    {
+      "slug": "sport-rivalry",
+      "text": "What's your most intense personal rivalry, in anything at all?"
+    },
+    {
+      "slug": "sport-lost-badly",
+      "text": "What's the worst you've ever lost at something, and how did you take it?"
+    },
+    {
+      "slug": "sport-won-something",
+      "text": "What have you actually won? Trophy, medal, pub quiz, doesn't matter."
+    },
+    {
+      "slug": "sport-team-vs-solo",
+      "text": "Team sports or solo sports — which suits your temperament and why?"
+    },
+    {
+      "slug": "sport-watching-ritual",
+      "text": "Do you have a match-day ritual, superstition, or seat you must sit in?"
+    },
+    {
+      "slug": "sport-fitness-goal",
+      "text": "What physical thing would you like to be able to do a year from now?"
+    },
+    {
+      "slug": "sport-first-live-game",
+      "text": "What was the first live match or event you attended, and who took you?",
+      "group": "first-live-event"
+    },
+    {
+      "slug": "sport-hometown-team",
+      "text": "Does your area have a team, club, or event that defines it?"
+    },
+    {
+      "slug": "sport-would-coach",
+      "text": "What could you coach someone in, and what would your first lesson be?"
+    }
+  ]
+}

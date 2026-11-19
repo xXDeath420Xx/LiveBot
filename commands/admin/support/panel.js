@@ -1,6 +1,7 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import pool from '../../../utils/db.js';
 import logger from '../../../utils/logger.js';
+import { themeColor } from '../../../core/guild-theme.js';
 
 /**
  * List all ticket panels
@@ -17,7 +18,7 @@ async function handleList(interaction) {
 
     if (panels.length === 0) {
         const embed = new EmbedBuilder()
-            .setColor('#5865F2')
+            .setColor(themeColor(interaction.guildId, 'primary'))
             .setTitle('Ticket Panels')
             .setDescription('No ticket panels configured yet.\n\nUse `/support panel create` to create your first panel!')
             .setTimestamp();
@@ -27,7 +28,7 @@ async function handleList(interaction) {
     }
 
     const embed = new EmbedBuilder()
-        .setColor('#5865F2')
+        .setColor(themeColor(interaction.guildId, 'primary'))
         .setTitle('Ticket Panels')
         .setDescription(`You have ${panels.length} ticket panel(s) configured:`)
         .setTimestamp();
@@ -59,7 +60,7 @@ async function handleList(interaction) {
  */
 async function handleCreate(interaction) {
     const embed = new EmbedBuilder()
-        .setColor('#5865F2')
+        .setColor(themeColor(interaction.guildId, 'primary'))
         .setTitle('Create Ticket Panel')
         .setDescription('Creating a ticket panel requires multiple configuration steps.\n\n**For the best experience, use the web dashboard:**\nhttps://certifriedmultitool.com/manage/' + interaction.guild.id + '?page=tickets\n\nAlternatively, click the button below to create a basic panel via Discord.')
         .setTimestamp();
@@ -97,7 +98,7 @@ async function handleEdit(interaction) {
     const panel = panels[0];
 
     const embed = new EmbedBuilder()
-        .setColor('#5865F2')
+        .setColor(themeColor(interaction.guildId, 'primary'))
         .setTitle(`Edit Panel: ${panel.panel_name}`)
         .setDescription('For detailed editing with all customization options, please use the web dashboard:\n\nhttps://certifriedmultitool.com/manage/' + interaction.guild.id + '?page=tickets\n\n**Current Configuration:**')
         .addFields(

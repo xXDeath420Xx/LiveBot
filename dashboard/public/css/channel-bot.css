@@ -1,0 +1,26 @@
+/* Channel bot commands (views/partials/channel-bot/commands-body.ejs), on the Kick Defender pages and the stream bot's
+   Twitch commands page. The kit (cf-ui.css, cf-settings.css) carries the look; these are the few pieces it lacks.
+   Moved here from the Kick frame's inline style (views/kick/_head.ejs) so both frames share one copy. */
+.muted { color: var(--cf-text-3); font-size: var(--cf-text-sm); }
+.pill { --cf-tone: var(--cf-text-2); display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 8px; border-radius: 999px;
+  font-size: var(--cf-text-xs); font-weight: 500; line-height: 1; white-space: nowrap; vertical-align: middle;
+  color: var(--cf-tone); background: color-mix(in srgb, var(--cf-tone) 13%, transparent); border: 1px solid color-mix(in srgb, var(--cf-tone) 28%, transparent); }
+.pill.ok { --cf-tone: var(--cf-success); }
+.pill.warn { --cf-tone: var(--cf-warning); }
+.pill.bad { --cf-tone: var(--cf-danger); }
+.pill.off { --cf-tone: var(--cf-text-3); }
+:root:is([data-theme="light"], [data-theme="sand"]) .pill { color: color-mix(in srgb, var(--cf-tone) 76%, var(--cf-text)); }
+.kick-status { min-height: 1.2em; font-size: var(--cf-text-sm); color: var(--cf-text-3); }
+.kick-status.is-ok { color: var(--cf-success); }
+.kick-status.is-bad { color: var(--cf-danger); }
+.kick-search { width: 100%; max-width: 18rem; }
+.kick-cmd-more > summary { padding: 0 var(--cf-5) var(--cf-3); cursor: pointer; font-size: var(--cf-text-sm); color: var(--cf-text-3); width: fit-content; }
+.kick-cmd-more > summary:hover { color: var(--cf-text); }
+.kick-cmd-more[open] > summary { padding-bottom: 0; }
+.cmd > .cf-row--switch { padding-bottom: var(--cf-2); }
+.kick-cmd-more > .cf-list { border-top: 1px solid var(--cf-border); }
+.cf-rows .cf-list-actions .cf-switch { align-self: center; }
+code { overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  .kick-search { max-width: none; }
+}

@@ -7,7 +7,6 @@ import logger from '../../utils/logger.js';
 import welcomeRouter from './features/welcome.js';
 import levelingRouter from './features/leveling.js';
 import economyRouter from './features/economy.js';
-import automodRouter from './features/automod.js';
 import loggingRouter from './features/logging.js';
 import ticketsRouter from './features/tickets.js';
 import streamingRouter from './features/streaming.js';
@@ -19,6 +18,7 @@ import selfPromoRouter from './features/self-promo.js';
 import communitySupportRouter from './features/community-support.js';
 import streamEndedRouter from './features/stream-ended.js';
 import autoTrackRouter from './features/auto-track.js';
+import liveRoutingRouter from './features/live-routing.js';
 import globalBanRouter from './features/global-ban.js';
 
 const router = express.Router();
@@ -27,7 +27,6 @@ const router = express.Router();
 router.use('/', welcomeRouter);
 router.use('/', levelingRouter);
 router.use('/', economyRouter);
-router.use('/', automodRouter);
 router.use('/', loggingRouter);
 router.use('/', ticketsRouter);
 router.use('/', streamingRouter);
@@ -39,6 +38,7 @@ router.use('/', selfPromoRouter);
 router.use('/', communitySupportRouter);
 router.use('/', streamEndedRouter);
 router.use('/', autoTrackRouter);
+router.use('/', liveRoutingRouter);
 router.use('/', globalBanRouter);
 
 // Get guild configuration

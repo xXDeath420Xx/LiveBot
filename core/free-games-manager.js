@@ -36,9 +36,27 @@ function dedupeGames(games) {
 /**
  * Manages free games discovery, storage, and notifications
  */
+/**
+ * The single in-flight notification pass for this process, shared by every manager instance —
+ * the default bot's and each custom bot's — because they all notify from the same subscription
+ * table and the same ledger.
+ */
+let inFlight = null;
+
 export default class FreeGamesManager {
   constructor(client) {
     this.client = client;
+    // FOUR FIRST-PARTY STORES, DELIBERATELY.
+    //
+    // A GamerPower aggregator used to sit here covering Ubisoft, EA/Origin, itch.io, Humble,
+    // Battle.net, consoles and mobile. It was removed on purpose: its links are
+    // `gamerpower.com/open/...` redirects into third-party giveaway sites that ask members to
+    // register an account or download an archive to claim a key. Handing a server's members that
+    // is not something this bot should do, whatever the offer is worth. Every store here claims
+    // in the storefront the member already trusts.
+    //
+    // Do not re-add an aggregator without solving that: the objection is the destination, not the
+    // scraping.
     this.scrapers = {
       epic: new EpicGamesScraper(),
       steam: new SteamScraper(),
@@ -100,12 +118,22 @@ export default class FreeGamesManager {
       }
 
       if (deduped.length > 0) {
+        // A scraper that has never run has no backlog boundary: every offer it can currently
+        // see looks new, so its first cycle would dump its whole catalogue into every
+        // subscribed channel at once. Record them as known and announce nothing; the next
+        // cycle posts only what appeared since.
+        const prime = !(await this.hasRunBefore(platform));
+        if (prime) {
+          logger.info(`[FreeGamesManager] ${platform} has never run — priming with ` +
+            `${deduped.length} current offer(s) instead of announcing them`);
+        }
+
         // Process games in parallel batches of 5 to avoid overwhelming the database
         const batchSize = 5;
         for (let i = 0; i < deduped.length; i += batchSize) {
           const batch = deduped.slice(i, i + batchSize);
           const announcements = await Promise.all(
-            batch.map(game => this.processGame(game).catch(() => null))
+            batch.map(game => this.processGame(game, prime).catch(() => null))
           );
 
           for (const announcement of announcements) {
@@ -117,6 +145,10 @@ export default class FreeGamesManager {
 
         // Update scraper cache
         await this.updateScraperCache(platform, deduped, null);
+      } else {
+        // Record the run even on an empty result, so an initially-quiet source is not
+        // treated as brand new (and re-primed) on its next cycle.
+        await this.updateScraperCache(platform, [], null);
       }
     }
 
@@ -145,10 +177,18 @@ export default class FreeGamesManager {
       const games = await scraper.getCachedOrFetch();
 
       if (games && games.length > 0) {
+        // Same first-run rule as checkForNewGames — a source's opening catalogue is a backlog,
+        // not news. Either entry point can be the one that runs a scraper first.
+        const prime = !(await this.hasRunBefore(platformName));
+        if (prime) {
+          logger.info(`[FreeGamesManager] ${platformName} has never run — priming with ` +
+            `${games.length} current offer(s) instead of announcing them`);
+        }
+
         // Process games sequentially to avoid DB contention
         for (const game of games) {
           try {
-            const announcement = await this.processGame(game);
+            const announcement = await this.processGame(game, prime);
             if (announcement) {
               newAnnouncements.push(announcement);
             }
@@ -161,6 +201,8 @@ export default class FreeGamesManager {
 
         // Update scraper cache in DB
         await this.updateScraperCache(platformName, games, null);
+      } else {
+        await this.updateScraperCache(platformName, [], null);
       }
 
       logger.info(`[FreeGamesManager] ${platformName}: Found ${games?.length || 0} games, ${newAnnouncements.length} new`);
@@ -180,7 +222,7 @@ export default class FreeGamesManager {
    * @param {Object} gameData - Normalized game object
    * @returns {Promise<Object|null>} Announcement object if created, null otherwise
    */
-  async processGame(gameData) {
+  async processGame(gameData, prime = false) {
     try {
       // Check if product already exists
       const [existingProducts] = await pool.execute(
@@ -198,6 +240,10 @@ export default class FreeGamesManager {
       } else {
         // Insert new product
         productId = await this.insertProduct(gameData);
+
+        // On a priming run the product is recorded but deliberately not announced — see
+        // checkForNewGames. Returning null keeps it out of the notification batch.
+        if (prime) return null;
 
         // Create announcement for new game
         const announcement = await this.createAnnouncement(productId, gameData);
@@ -301,8 +347,14 @@ export default class FreeGamesManager {
    * @returns {Promise<Object>} Announcement object
    */
   async createAnnouncement(productId, gameData) {
-    // Determine channel type
-    const channel = gameData.is_free_to_keep ? 'free' : 'weekend';
+    // Determine channel type.
+    // `notify_dlc` and `notify_loot` existed as subscription columns but nothing ever routed to
+    // them, so a server that unticked DLC still got DLC. Kind decides first, then keep-vs-timed.
+    const channel =
+      gameData.kind === 'dlc' ? 'dlc'
+      : (gameData.kind === 'loot' || gameData.kind === 'beta') ? 'loot'
+      : gameData.is_free_to_keep ? 'free'
+      : 'weekend';
 
     // Create announcement
     const [result] = await pool.execute(
@@ -342,6 +394,27 @@ export default class FreeGamesManager {
    * @param {Array|null} data - Data fetched (or null if error)
    * @param {string|null} error - Error message if failed
    */
+  /**
+   * Has this scraper completed a cycle before?
+   *
+   * The cache row is written at the end of every successful cycle, so its absence is the one
+   * durable signal that a source is brand new — distinct from "returned nothing this time".
+   */
+  async hasRunBefore(platform) {
+    try {
+      const [rows] = await pool.execute(
+        'SELECT 1 FROM free_games_scraper_cache WHERE platform = ? LIMIT 1',
+        [platform]
+      );
+      return rows.length > 0;
+    } catch (err) {
+      // If we cannot tell, assume it has run: priming again would suppress real announcements,
+      // whereas not priming at worst repeats a burst that already happened.
+      logger.warn(`[FreeGamesManager] Could not check first-run state for ${platform}: ${err.message}`);
+      return true;
+    }
+  }
+
   async updateScraperCache(platform, data, error) {
     try {
       await pool.execute(
@@ -411,21 +484,43 @@ export default class FreeGamesManager {
    * Send notifications for unnotified announcements
    */
   async sendNotifications() {
-    logger.info('[FreeGamesManager] Checking for announcements to notify');
-
-    const announcements = await this.getUnnotifiedAnnouncements();
-
-    if (announcements.length === 0) {
-      logger.debug('[FreeGamesManager] No unnotified announcements');
-      return;
+    // Only ever ONE pass at a time, across every manager instance in this process.
+    //
+    // Two callers race on startup: the scheduler's 30-second "initial check" and the notify cron on
+    // the next quarter-hour. Both walk the same subscription list, and the old guard was a SELECT
+    // ("has this been delivered?") followed much later by an INSERT — so a second pass that started
+    // while the first was still working read "not delivered" for every subscription it had not yet
+    // reached, and posted the whole announcement a second time. The ledger's UNIQUE key then quietly
+    // collapsed the two rows into one, which is why the database looked perfectly clean while
+    // fifteen servers had the game posted twice, one second apart.
+    if (inFlight) {
+      logger.info('[FreeGamesManager] A notification pass is already running — not starting a second');
+      return inFlight;
     }
 
-    logger.info(`[FreeGamesManager] Processing ${announcements.length} announcement(s)`);
+    inFlight = (async () => {
+      logger.info('[FreeGamesManager] Checking for announcements to notify');
 
-    for (const announcement of announcements) {
-      await this.notifyAnnouncement(announcement);
-      // Add delay between notifications
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      const announcements = await this.getUnnotifiedAnnouncements();
+
+      if (announcements.length === 0) {
+        logger.debug('[FreeGamesManager] No unnotified announcements');
+        return;
+      }
+
+      logger.info(`[FreeGamesManager] Processing ${announcements.length} announcement(s)`);
+
+      for (const announcement of announcements) {
+        await this.notifyAnnouncement(announcement);
+        // Add delay between notifications
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    })();
+
+    try {
+      return await inFlight;
+    } finally {
+      inFlight = null;
     }
   }
 
@@ -473,11 +568,14 @@ export default class FreeGamesManager {
       let skipCount = 0;
 
       for (const sub of subscriptions) {
-        // THE duplicate guard. `free_games_notifications` has always been written but never read,
-        // so a retry re-sent to every subscription — including the ones that had already received
-        // the message. That happens whenever a send half-fails (the post lands, then the ledger
-        // INSERT throws), which reports failure for a message the guild can already see.
-        if (await this.alreadyDelivered(sub.id, announcement.id)) { skipCount++; continue; }
+        // THE duplicate guard, and it has to be a CLAIM rather than a question.
+        //
+        // Asking "has this been delivered?" and posting afterwards leaves a window between the two
+        // in which a concurrent pass asks the same question and gets the same answer. Inserting the
+        // ledger row FIRST closes it: the row's UNIQUE key means exactly one caller can ever create
+        // it, and whoever loses simply skips. If the send then fails the claim is released below,
+        // so a real failure still retries.
+        if (!await this.claimDelivery(sub.id, announcement.id)) { skipCount++; continue; }
 
         // The guild may already have been told about this game by the bot we are replacing. Their
         // members do not care which bot posted it — to them it is simply the same game, twice.
@@ -492,6 +590,9 @@ export default class FreeGamesManager {
         if (success) {
           successCount++;
         } else {
+          // Nothing was posted, so give the claim back — otherwise the retry this failure is meant
+          // to trigger would find the slot taken and skip the guild forever.
+          await this.releaseDelivery(sub.id, announcement.id);
           failCount++;
         }
       }
@@ -517,6 +618,33 @@ export default class FreeGamesManager {
         stack: error.stack
       });
     }
+  }
+
+  /**
+   * Take the delivery slot for (subscription, announcement). True only for the caller that got it.
+   *
+   * The UNIQUE key on the pair is what makes this atomic — a plain INSERT either creates the row or
+   * raises ER_DUP_ENTRY, with no window in between. Deliberately NOT `INSERT IGNORE` or an upsert:
+   * this codebase has already been bitten by MariaDB's affectedRows being untrustworthy on those,
+   * and a wrong answer here means either a double post or a guild silently skipped.
+   */
+  async claimDelivery(subscriptionId, announcementId) {
+    try {
+      await pool.execute(
+        'INSERT INTO free_games_notifications (subscription_id, announcement_id) VALUES (?, ?)',
+        [subscriptionId, announcementId]);
+      return true;
+    } catch (err) {
+      if (err.code === 'ER_DUP_ENTRY') return false;
+      throw err;
+    }
+  }
+
+  /** Hand the slot back after a send that posted nothing, so the retry can have it. */
+  async releaseDelivery(subscriptionId, announcementId) {
+    await pool.execute(
+      'DELETE FROM free_games_notifications WHERE subscription_id = ? AND announcement_id = ?',
+      [subscriptionId, announcementId]).catch(() => {});
   }
 
   /** Has this exact subscription already been sent this exact announcement? */
@@ -577,21 +705,54 @@ export default class FreeGamesManager {
    * @returns {Promise<Array>}
    */
   async getMatchingSubscriptions(announcement, product) {
-    // Build filter query
-    const channelFilter = `notify_${announcement.channel} = 1`;
-    const storeFilter = `filter_${product.store} = 1`;
+    // These become column names, so they must be whitelisted rather than interpolated raw — an
+    // unrecognised store interpolated blind is a SQL error that kills the whole notification run.
+    //
+    // The list is the four stores this bot scrapes, plus 'other' as the fallback the code below
+    // coerces anything unrecognised to. Historic rows from the retired GamerPower aggregator
+    // carried stores that are no longer in it; they were deleted by migration 219, and any that
+    // somehow survive land on 'other' rather than throwing.
+    const KNOWN_CHANNELS = new Set(['free', 'weekend', 'dlc', 'prime', 'gamepass']);
+    // There is no Humble store here on purpose (register H-308): only the GamerPower aggregator ever
+    // reported Humble giveaways, and it was removed for the reason above, so the Humble filter was
+    // taken off every surface rather than kept as a switch that cannot change a notification.
+    const KNOWN_STORES = new Set(['steam', 'epic', 'gog', 'prime', 'other']);
+
+    const channel = KNOWN_CHANNELS.has(announcement.channel) ? announcement.channel : 'free';
+    const store = KNOWN_STORES.has(product.store) ? product.store : 'other';
 
     const [subscriptions] = await pool.execute(
       `SELECT * FROM free_games_subscriptions
-      WHERE is_enabled = 1 AND ${channelFilter} AND ${storeFilter}`
+        WHERE is_enabled = 1 AND notify_${channel} = 1 AND filter_${store} = 1`
     );
 
-    // Additional platform filtering
+    // Platform filtering is an INTERSECTION, not a veto.
+    //
+    // The old rule was "if the game runs on Windows and you did not tick Windows, skip it",
+    // which drops a Windows+Linux game for a Linux-only subscriber even though they can play
+    // it. Since platform_windows defaults to true on nearly every product, unticking Windows
+    // silenced a subscription almost entirely. The right question is whether the game runs on
+    // at least one platform the subscriber asked for.
+    // Console and mobile flags only ever came from the retired aggregator; the four storefront
+    // scrapers set Windows/Mac/Linux and nothing else. The columns stay in the schema (harmless,
+    // and historic rows still carry them) but they are no longer offered as filters anywhere.
+    const PLATFORMS = [
+      ['platform_windows', 'filter_windows'],
+      ['platform_mac', 'filter_mac'],
+      ['platform_linux', 'filter_linux'],
+      ['platform_xbox', 'filter_xbox'],
+      ['platform_playstation', 'filter_playstation'],
+      ['platform_switch', 'filter_switch'],
+      ['platform_android', 'filter_android'],
+      ['platform_ios', 'filter_ios'],
+      ['platform_vr', 'filter_vr'],
+    ];
+
     return subscriptions.filter(sub => {
-      if (product.platform_windows && !sub.filter_windows) return false;
-      if (product.platform_mac && !sub.filter_mac) return false;
-      if (product.platform_linux && !sub.filter_linux) return false;
-      return true;
+      const productPlatforms = PLATFORMS.filter(([p]) => product[p]);
+      // A product with no platform data at all tells us nothing — deliver rather than suppress.
+      if (!productPlatforms.length) return true;
+      return productPlatforms.some(([, f]) => sub[f] === undefined || sub[f]);
     });
   }
 

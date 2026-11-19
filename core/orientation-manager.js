@@ -1,30 +1,35 @@
 import { EmbedBuilder, ChannelType, PermissionsBitField } from 'discord.js';
 import pool from '../utils/db.js';
 import logger from '../utils/logger.js';
+import { themeColor } from './guild-theme.js';
 
 /**
  * Feature detection definitions.
  * Each entry maps a feature name to a query that checks if it's enabled for a guild.
  * The query should return at least one row if the feature is active.
+ *
+ * `hint` says how to set it up: `slash` is a real slash command path (picked from the / menu), `page` a dashboard
+ * page (its title in core/manage-nav.js) where there is no setup command. tests/orientation-commands.test.js checks
+ * that every command the guide names exists, as slash or as text, in the form it is named (H-717).
  */
-const FEATURE_CHECKS = [
+export const FEATURE_CHECKS = [
     {
         name: 'Ticketing System',
         emoji: '\uD83C\uDFAB',
         query: 'SELECT panel_id FROM ticket_panels WHERE guild_id = ? LIMIT 1',
-        hint: '/admin tickets'
+        hint: { slash: '/support ticket setup' }
     },
     {
         name: 'Leveling & Rank Cards',
         emoji: '\uD83D\uDCC8',
         query: 'SELECT guild_id FROM level_config WHERE guild_id = ? LIMIT 1',
-        hint: '/admin leveling'
+        hint: { slash: '/level setup' }
     },
     {
         name: 'Reaction Roles',
         emoji: '\uD83C\uDFAD',
         query: 'SELECT id FROM reaction_role_panels WHERE guild_id = ? LIMIT 1',
-        hint: '/reactionroles'
+        hint: { slash: '/manage roles create-panel' }
     },
     {
         name: 'Stream Announcements',
@@ -37,105 +42,139 @@ const FEATURE_CHECKS = [
             SELECT guild_id FROM guild_streamer_auto_track WHERE guild_id = ? AND enabled = 1
         ) t LIMIT 1`,
         params: 3,
-        hint: '/subscribe'
+        hint: { slash: '/socials streamer add' }
     },
     {
         name: 'Self-Promo Tracking',
         emoji: '\uD83D\uDCE3',
         query: 'SELECT guild_id FROM self_promo_config WHERE guild_id = ? AND enabled = 1 LIMIT 1',
-        hint: '/admin selfpromo'
+        hint: { slash: '/systems selfpromo setup' }
     },
     {
         name: 'Community Support',
         emoji: '\uD83E\uDD1D',
         query: 'SELECT guild_id FROM community_support_config WHERE guild_id = ? AND enabled = 1 LIMIT 1',
-        hint: 'Setup script'
+        hint: { slash: '/systems community setup' }
     },
     {
         name: 'Logging / Audit Trail',
         emoji: '\uD83D\uDCDD',
         query: 'SELECT guild_id FROM logging_config WHERE guild_id = ? AND enabled = 1 LIMIT 1',
-        hint: '/admin logging'
+        hint: { slash: '/manage logs-setup apply' }
     },
     {
         name: 'Moderation Tools',
         emoji: '\uD83D\uDEE1\uFE0F',
         query: 'SELECT guild_id FROM moderation_config WHERE guild_id = ? LIMIT 1',
-        hint: '/admin moderation'
+        hint: { page: 'Moderation' }
     },
     {
         name: 'Phishing Protection',
         emoji: '\uD83D\uDEA8',
         query: 'SELECT guild_id FROM phishing_config WHERE guild_id = ? AND enabled = 1 LIMIT 1',
-        hint: '/admin phishing'
+        hint: { page: 'Phishing links' }
     },
     {
         name: 'Global Ban Network',
         emoji: '\uD83C\uDF10',
         query: 'SELECT guild_id FROM global_ban_config WHERE guild_id = ? AND enabled = 1 LIMIT 1',
-        hint: '/globalban'
+        hint: { slash: '/protection globalban enable' }
     },
     {
         name: 'Anti-Nuke Protection',
         emoji: '\u2622\uFE0F',
         query: 'SELECT guild_id FROM anti_nuke_config WHERE guild_id = ? LIMIT 1',
-        hint: '/admin antinuke'
+        hint: { slash: '/protection antinuke enable' }
     },
     {
         name: 'Economy System',
         emoji: '\uD83D\uDCB0',
         query: 'SELECT guild_id FROM economy_config WHERE guild_id = ? AND enabled = 1 LIMIT 1',
-        hint: '/admin economy'
+        hint: { page: 'Economy' }
     },
     {
         name: 'Starboard',
         emoji: '\u2B50',
         query: 'SELECT guild_id FROM starboard_config WHERE guild_id = ? LIMIT 1',
-        hint: '/admin starboard'
+        hint: { slash: '/community starboard setup' }
     },
     {
         name: 'Birthday Celebrations',
         emoji: '\uD83C\uDF82',
         query: 'SELECT guild_id FROM birthday_config WHERE guild_id = ? AND enabled = 1 LIMIT 1',
-        hint: '/admin birthday'
+        hint: { slash: '/engage birthday setup' }
     },
     {
         name: 'Suggestions',
         emoji: '\uD83D\uDCA1',
         query: 'SELECT guild_id FROM suggestion_config WHERE guild_id = ? LIMIT 1',
-        hint: '/admin suggestions'
+        hint: { slash: '/engage suggest setup' }
     },
     {
         name: 'Music Playback',
         emoji: '\uD83C\uDFB5',
         query: 'SELECT guild_id FROM music_config WHERE guild_id = ? LIMIT 1',
-        hint: '/play'
+        hint: { slash: '/music play' }
     },
     {
         name: 'VC Sound Drops',
         emoji: '\uD83D\uDD0A',
         query: 'SELECT guild_id FROM vc_sound_config WHERE guild_id = ? AND enabled = 1 LIMIT 1',
-        hint: '/admin vcsounds'
+        hint: { slash: '/admin vcsounds enable' }
     },
     {
         name: 'Auto Publisher',
         emoji: '\uD83D\uDCE4',
         query: 'SELECT guild_id FROM auto_publisher_config WHERE guild_id = ? AND is_enabled = 1 LIMIT 1',
-        hint: '/alerts autopublish'
+        hint: { slash: '/alerts autopublish enable' }
     },
     {
         name: 'Welcome & Goodbye',
         emoji: '\uD83D\uDC4B',
         query: 'SELECT guild_id FROM welcome_settings WHERE guild_id = ? LIMIT 1',
-        hint: '/admin welcome'
+        hint: { slash: '/manage welcome set-welcome' }
     },
     {
         name: 'Confessions',
         emoji: '\uD83E\uDD2B',
         query: 'SELECT guild_id FROM confession_config WHERE guild_id = ? LIMIT 1',
-        hint: '/admin confessions'
+        hint: { page: 'Confessions' }
     }
 ];
+
+/**
+ * The "Always Available" lines. `slash`: picked from the / menu. `typed`: text commands (not registered with
+ * Discord since the slash/text split, docs/command-split-2026-11-18.md), typed as a message that starts with /.
+ */
+export const ALWAYS_AVAILABLE = [
+    { emoji: '🎲', title: 'Fun & Games', text: 'jokes, 8ball, memes, Cards Against Humanity and word games', typed: ['/8ball', '/meme', '/cah', '/wordgame'] },
+    { emoji: '⚔️', title: 'D&D RPG', text: '5e characters, dice, combat, spells, dungeons, party and PvP', typed: ['/rpg'] },
+    { emoji: '💰', title: 'Economy & Arcade', text: 'currency, shop, pets, gambling and arcade games', typed: ['/economy', '/arcade'] },
+    { emoji: '🎵', title: 'Music & Voice', text: 'a full music player with an AI DJ, and tools for your own voice channel', slash: ['/music'], typed: ['/voice'] },
+    { emoji: '🔧', title: 'Utility', text: 'translate, QR codes, unit and currency converters, colours, AFK and more', typed: ['/tools'] },
+    { emoji: '📅', title: 'Info & Schedules', text: 'server and member info, and event schedules', typed: ['/server info', '/user profile info'], slash: ['/schedule'] },
+];
+
+const codeList = (list) => {
+    const items = list.map(c => `\`${c}\``);
+    return items.length > 1 ? `${items.slice(0, -1).join(', ')} or ${items[items.length - 1]}` : items[0];
+};
+
+/** One "Available to Set Up" line: the setup command, or the dashboard page when there is no command. */
+export function hintText(hint) {
+    if (hint?.slash) return `\`${hint.slash}\``;
+    if (hint?.page) return `dashboard, ${hint.page} page`;
+    return 'dashboard';
+}
+
+/** One "Always Available" line, saying which commands are picked from the / menu and which are typed. */
+export function alwaysAvailableLine(item) {
+    const parts = [];
+    if (item.slash?.length) parts.push(`pick ${codeList(item.slash)} from the / menu`);
+    if (item.typed?.length) parts.push(`type ${codeList(item.typed)} as a message`);
+    const how = parts.join('; ');
+    return `${item.emoji} **${item.title}**: ${item.text}. ${how.charAt(0).toUpperCase()}${how.slice(1)}.`;
+}
 
 /**
  * Detect which features are enabled for a guild
@@ -175,17 +214,17 @@ function capValue(s) {
     return s.slice(0, cut > 0 ? cut : 1000) + '\n… use `/help` for the rest';
 }
 
-export async function buildOrientationEmbed(client, guildId) {
+export async function buildOrientationEmbed(client, guildId, { detect = detectFeatures } = {}) {
     const guild = client.guilds.cache.get(guildId);
     const botName = client.user.displayName || client.user.username;
-    const { enabled, available } = await detectFeatures(guildId);
+    const { enabled, available } = await detect(guildId);
 
     const embed = new EmbedBuilder()
         .setAuthor({
             name: `${botName} — Server Guide`,
             iconURL: client.user.displayAvatarURL()
         })
-        .setColor(0x5865F2)
+        .setColor(themeColor(guildId, 'primary'))
         .setThumbnail(guild?.iconURL({ size: 128 }) || null)
         .setDescription(
             `Hey${guild ? ` **${guild.name}**` : ''}! Here's what I'm set up to do in this server.\n` +
@@ -206,7 +245,7 @@ export async function buildOrientationEmbed(client, guildId) {
 
     // Available but not configured
     if (available.length > 0) {
-        const lines = available.map(f => `${f.emoji} ${f.name} — \`${f.hint}\``);
+        const lines = available.map(f => `${f.emoji} ${f.name}: ${hintText(f.hint)}`);
         embed.addFields({
             name: '\u2699\uFE0F Available to Set Up',
             value: capValue(lines.join('\n')),
@@ -217,14 +256,7 @@ export async function buildOrientationEmbed(client, guildId) {
     // Always-available features
     embed.addFields({
         name: '\uD83C\uDF1F Always Available',
-        value: [
-            '🎲 **Fun & Games** — trivia, 8ball, memes, hangman, Cards Against Humanity (`/cah`), word games (`/wordgame`)',
-            '⚔️ **D&D RPG** — full 5e characters, dice, combat, spells, dungeons, party & PvP (`/rpg`)',
-            '💰 **Economy & Arcade** — currency, shop, pets, gambling, counting & more (`/economy`, `/arcade`)',
-            '🎵 **Music & Voice** — full player + AI DJ, VC sound drops (`/music`, `/voice`)',
-            '🔧 **Utility** — reminders, polls, giveaways, tags, notes, weather, translate, QR & more (`/tools`)',
-            '📅 **Info & Schedules** — server/user/avatar/role info + timed announcements (`/info`, `/schedule`)'
-        ].join('\n'),
+        value: capValue(ALWAYS_AVAILABLE.map(alwaysAvailableLine).join('\n')),
         inline: false
     });
 
@@ -255,13 +287,17 @@ export async function buildOrientationEmbed(client, guildId) {
  * Post or update the orientation message in a channel.
  * Upserts the orientation_config record.
  */
-export async function postOrientationMessage(client, guildId, channelId) {
+export async function postOrientationMessage(client, guildId, channelId, { fresh = false } = {}) {
     const embed = await buildOrientationEmbed(client, guildId);
     const guild = client.guilds.cache.get(guildId);
     if (!guild) return null;
 
-    const channel = guild.channels.cache.get(channelId);
-    if (!channel) return null;
+    // Cache misses are normal for channels nobody has spoken in since the last
+    // restart. Falling straight to null here reported "failed to post" for a
+    // channel that was perfectly fine.
+    const channel = guild.channels.cache.get(channelId)
+        || await guild.channels.fetch(channelId).catch(() => null);
+    if (!channel || !channel.isTextBased?.()) return null;
 
     // Check for existing message
     const [existing] = await pool.execute(
@@ -269,26 +305,43 @@ export async function postOrientationMessage(client, guildId, channelId) {
         [guildId]
     );
 
-    // Try to edit existing message first
-    if (existing.length > 0 && existing[0].message_id) {
-        try {
-            const oldChannel = guild.channels.cache.get(existing[0].channel_id);
+    const oldChannelId = existing[0]?.channel_id;
+    const oldMessageId = existing[0]?.message_id;
+
+    if (oldMessageId) {
+        const oldChannel = oldChannelId === channelId
+            ? channel
+            : (guild.channels.cache.get(oldChannelId) || await guild.channels.fetch(oldChannelId).catch(() => null));
+
+        // A different target channel is an explicit "put it HERE". Editing the
+        // old copy in its old channel and then recording the new channel id was
+        // the worst of both: the message never moved, and the config lied about
+        // where it lived.
+        const moving = oldChannelId !== channelId;
+
+        if (fresh || moving) {
+            // The old copy has to go — otherwise the guild ends up with two
+            // orientation embeds.
             if (oldChannel) {
-                const oldMsg = await oldChannel.messages.fetch(existing[0].message_id);
-                if (oldMsg) {
-                    await oldMsg.edit({ embeds: [embed] });
-                    // Update channel if it changed
-                    if (existing[0].channel_id !== channelId) {
-                        await pool.execute(
-                            'UPDATE orientation_config SET channel_id = ? WHERE guild_id = ?',
-                            [channelId, guildId]
-                        );
-                    }
-                    return oldMsg;
-                }
+                await oldChannel.messages.delete(oldMessageId).catch(() => {
+                    // Already gone, or we lost access. Either way, post the new one.
+                });
             }
-        } catch {
-            // Message was deleted or channel inaccessible — send a new one
+        } else {
+            // Editing in place is the right default: it keeps the message at
+            // its pinned/linked position and avoids spamming the channel every
+            // time a feature is toggled.
+            try {
+                if (oldChannel) {
+                    const oldMsg = await oldChannel.messages.fetch(oldMessageId);
+                    if (oldMsg) {
+                        await oldMsg.edit({ embeds: [embed] });
+                        return { message: oldMsg, action: 'edited' };
+                    }
+                }
+            } catch {
+                // Message was deleted or channel inaccessible — send a new one
+            }
         }
     }
 
@@ -303,7 +356,42 @@ export async function postOrientationMessage(client, guildId, channelId) {
             message_id = VALUES(message_id)
     `, [guildId, channelId, msg.id]);
 
-    return msg;
+    return { message: msg, action: 'posted' };
+}
+
+/**
+ * The dashboard's Orientation page saved a different guide channel (orientation_config.channel_id is
+ * already written by then). Deletes the guide from where it was and posts it in the new channel, or
+ * removes the config when the channel was cleared. Without this the row named the new channel while
+ * the message stayed in the old one, so /systems orientation update could no longer find it.
+ * @returns {Promise<{ action: 'posted'|'failed'|'removed'|'unavailable', channelId?: string }>}
+ */
+export async function moveOrientationMessage(client, guildId, { fromChannelId = null, messageId = null, toChannelId = null } = {},
+    { db = pool, post = postOrientationMessage } = {}) {
+    const guild = client?.guilds?.cache?.get(guildId);
+    if (!guild) return { action: 'unavailable' };
+    if (fromChannelId && messageId) {
+        const old = guild.channels.cache.get(fromChannelId) || await guild.channels.fetch(fromChannelId).catch(() => null);
+        if (old?.messages) await old.messages.delete(messageId).catch(() => {});
+    }
+    if (!toChannelId) {
+        await db.execute('DELETE FROM orientation_config WHERE guild_id = ?', [guildId]);
+        return { action: 'removed' };
+    }
+    await db.execute('UPDATE orientation_config SET message_id = NULL WHERE guild_id = ?', [guildId]);
+    const result = await post(client, guildId, toChannelId).catch(() => null);
+    return { action: result ? 'posted' : 'failed', channelId: toChannelId };
+}
+
+/** The save message for moveOrientationMessage's result. */
+export function describeOrientationMove(result) {
+    switch (result?.action) {
+        case 'posted': return ' The guide was posted in the new channel.';
+        case 'failed': return ' The guide could not be posted there. Check that the bot can see and send messages in that channel, then save again.';
+        case 'removed': return ' The guide message was removed.';
+        case 'unavailable': return ' The bot is not available right now, so the guide was not moved. Use /systems orientation post to post it.';
+        default: return '';
+    }
 }
 
 /**

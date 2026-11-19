@@ -1,0 +1,22 @@
+<%# Stream bot tabs. Locals: active ('overview'|'events'|'automations'|'runs'|'connections'|'devices'|'sounds'|'overlays'). %>
+<%
+  const _sbAct = typeof active !== 'undefined' ? active : '';
+  const _sbTabs = [
+      ['overview', '/stream/bot', 'Overview'],
+      ['events', '/stream/bot/events', 'Events'],
+      ['automations', '/stream/bot/automations', 'Automations'],
+      ['commands', '/stream/bot/commands', 'Commands'],
+      ['timers', '/stream/bot/timers', 'Timers'],
+      ['runs', '/stream/bot/runs', 'Run history'],
+      ['connections', '/stream/bot/connections', 'Connections'],
+      ['devices', '/stream/bot/devices', 'Devices'],
+      ['sounds', '/stream/bot/sounds', 'Sounds'],
+      ['overlays', '/stream/bot/overlays', 'Overlays'],
+      ['music', '/stream/bot/music', 'Music'],
+      ['import', '/stream/bot/import', 'Import'],
+  ];
+%>
+<nav class="sb-tabs" aria-label="Stream bot">
+    <% _sbTabs.forEach(([k, href, label]) => { %><a href="<%= href %>"<% if (k === _sbAct) { %> aria-current="page"<% } %>><%= label %></a><% }) %>
+    <a class="sb-tabs-end" href="/stream">Multicast</a>
+</nav>

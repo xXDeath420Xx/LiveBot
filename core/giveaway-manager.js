@@ -1,6 +1,9 @@
 import pool from '../utils/db.js';
 import logger from '../utils/logger.js';
+import { displayNameFor } from '../utils/display-name.js';
 import { EmbedBuilder } from 'discord.js';
+import { themeColor } from './guild-theme.js';
+import { logFeatureEvent, userLabel } from './feature-log.js';
 
 class GiveawayManager {
   constructor(client) {
@@ -33,7 +36,10 @@ class GiveawayManager {
     }
   }
 
-  async endGiveaway(giveaway, isReroll) {
+  /**
+   * @param {Object|null} [actor=null] who ended/rerolled it (User/GuildMember/id) — null = the scheduler ('Automatic')
+   */
+  async endGiveaway(giveaway, isReroll, actor = null) {
     const guildId = giveaway.guild_id;
 
     try {
@@ -66,6 +72,12 @@ class GiveawayManager {
         logger.info(`[GiveawayManager] Giveaway ${giveaway.id} ended with no reactions.`, {
           guildId
         });
+        void logFeatureEvent(() => (guild), 'giveaway.noEntries', () => ({
+          title: '🎉 Giveaway Ended (No Entries)',
+          fields: [['Prize', giveaway.prize], ['Channel', `<#${channel.id}>`], [isReroll ? 'Rerolled By' : 'Ended By', userLabel(actor)]],
+          url: message.url,
+          avoidChannelIds: [channel.id],
+        }));
         return;
       }
 
@@ -78,6 +90,12 @@ class GiveawayManager {
         logger.info(`[GiveawayManager] Giveaway ${giveaway.id} ended with no valid entries.`, {
           guildId
         });
+        void logFeatureEvent(() => (guild), 'giveaway.noEntries', () => ({
+          title: '🎉 Giveaway Ended (No Entries)',
+          fields: [['Prize', giveaway.prize], ['Channel', `<#${channel.id}>`], [isReroll ? 'Rerolled By' : 'Ended By', userLabel(actor)]],
+          url: message.url,
+          avoidChannelIds: [channel.id],
+        }));
         return;
       }
 
@@ -112,6 +130,16 @@ class GiveawayManager {
         guildId
       });
 
+      void logFeatureEvent(() => (guild), () => (isReroll ? 'giveaway.rerolled' : 'giveaway.ended'), () => ({
+        title: isReroll ? '🔄 Giveaway Rerolled' : '🏆 Giveaway Ended',
+        fields: [
+          ['Prize', giveaway.prize], [winnersArray.length === 1 ? 'Winner' : 'Winners', winnerMentions],
+          ['Entries', entrants.size], ['Channel', `<#${channel.id}>`], [isReroll ? 'Rerolled By' : 'Ended By', userLabel(actor)],
+        ],
+        url: message.url,
+        avoidChannelIds: [channel.id],
+      }));
+
     } catch (error) {
       logger.error(`[GiveawayManager] Error ending giveaway ${giveaway.id}.`, {
         guildId,
@@ -120,7 +148,11 @@ class GiveawayManager {
     }
   }
 
-  async createGiveaway(guildId, channelId, hostId, prize, winnerCount, duration) {
+  /**
+   * options.description: optional details shown in a "Details" field above "Ends" (up to 1000
+   * characters; the field stays on the post when the giveaway ends).
+   */
+  async createGiveaway(guildId, channelId, hostId, prize, winnerCount, duration, options = {}) {
     try {
       const guild = this.client.guilds.cache.get(guildId);
       if (!guild) throw new Error('Guild not found');
@@ -132,12 +164,14 @@ class GiveawayManager {
       const host = await guild.members.fetch(hostId);
 
       const embed = new EmbedBuilder()
-        .setColor('#5865F2')
+        .setColor(themeColor(guildId, 'primary'))
         .setTitle('🎉 GIVEAWAY 🎉')
         .setDescription(`Prize: **${prize}**\nWinners: **${winnerCount}**\nReact with 🎉 to enter!`)
         .addFields({ name: 'Ends', value: `<t:${Math.floor(endsAt.getTime() / 1000)}:R>` })
-        .setFooter({ text: `Hosted by ${host.user.username}`, iconURL: host.user.displayAvatarURL() })
+        .setFooter({ text: `Hosted by ${displayNameFor(host)}`, iconURL: host.user.displayAvatarURL() })
         .setTimestamp();
+      const details = typeof options?.description === 'string' ? options.description.trim().slice(0, 1000) : '';
+      if (details) embed.spliceFields(0, 0, { name: 'Details', value: details });
 
       const message = await channel.send({ embeds: [embed] });
       await message.react('🎉');
@@ -151,6 +185,16 @@ class GiveawayManager {
         guildId,
         giveawayId: result.insertId
       });
+
+      void logFeatureEvent(() => (guild), 'giveaway.started', () => ({
+        title: '🎉 Giveaway Started',
+        fields: [
+          ['Prize', prize], ['Winners', winnerCount], ['Host', userLabel(host)],
+          ['Channel', `<#${channel.id}>`], ['Ends', `<t:${Math.floor(endsAt.getTime() / 1000)}:R>`],
+        ],
+        url: message.url,
+        avoidChannelIds: [channel.id],
+      }));
 
       return { giveawayId: result.insertId, messageId: message.id };
     } catch (error) {
@@ -185,7 +229,10 @@ class GiveawayManager {
     }
   }
 
-  async cancelGiveaway(giveawayId) {
+  /**
+   * @param {Object|null} [actor=null] who cancelled it (User/GuildMember/id); null = 'Automatic'
+   */
+  async cancelGiveaway(giveawayId, actor = null) {
     try {
       const [[giveaway]] = await pool.execute(
         'SELECT * FROM giveaways WHERE id = ? AND is_active = 1',
@@ -203,7 +250,7 @@ class GiveawayManager {
           const message = await channel.messages.fetch(giveaway.message_id).catch(() => null);
           if (message) {
             const cancelledEmbed = EmbedBuilder.from(message.embeds[0])
-              .setColor('#E74C3C')
+              .setColor(themeColor(message.guild?.id, 'danger'))
               .setDescription(`**Giveaway Cancelled**\nThis giveaway has been cancelled by a moderator.`);
             await message.edit({ embeds: [cancelledEmbed], components: [] });
           }
@@ -211,6 +258,12 @@ class GiveawayManager {
       }
 
       logger.info(`[GiveawayManager] Cancelled giveaway ${giveawayId}`);
+      void logFeatureEvent(() => (guild), 'giveaway.cancelled', () => ({
+        title: '🚫 Giveaway Cancelled',
+        fields: [['Prize', giveaway.prize], ['Channel', `<#${giveaway.channel_id}>`], ['Cancelled By', userLabel(actor)]],
+        url: `https://discord.com/channels/${giveaway.guild_id}/${giveaway.channel_id}/${giveaway.message_id}`,
+        avoidChannelIds: [giveaway.channel_id],
+      }));
       return true;
     } catch (error) {
       logger.error(`[GiveawayManager] Failed to cancel giveaway: ${error.message}`);

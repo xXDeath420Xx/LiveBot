@@ -1,8 +1,9 @@
-import { AttachmentBuilder } from 'discord.js';
+import {  } from 'discord.js';
 import pool from '../utils/db.js';
 import logger from '../utils/logger.js';
 import { weekStartFor, materializeWeek, groupByCategory, scheduleHash, formatTimeLabel } from './event-schedule-helpers.js';
-import renderEventSchedule from '../utils/event-schedule-renderer.js';
+import renderEventSchedule, { describeEventSchedule } from '../utils/event-schedule-renderer.js';
+import { accessibleAttachment } from '../utils/accessible-attachment.js';
 
 const COOLDOWN_MS = 10 * 60 * 1000; // mirror the twitch manager's 10-min settle window
 
@@ -78,7 +79,13 @@ class EventScheduleManager {
     const buffer = model ? await renderEventSchedule(model) : null;
     const content = config.custom_message || (userId ? `<@${userId}>'s event schedule` : null);
     const payload = buffer
-      ? { content: content || undefined, files: [new AttachmentBuilder(buffer, { name: 'schedule.png' })] }
+      ? {
+          content: content || undefined,
+          files: [accessibleAttachment(buffer, {
+            name: 'schedule.png',
+            description: describeEventSchedule(model),
+          })],
+        }
       : { content: content || 'No upcoming events.' };
 
     try {

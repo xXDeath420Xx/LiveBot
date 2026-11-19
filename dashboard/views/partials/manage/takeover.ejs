@@ -1,235 +1,371 @@
-<%# Analyze & Take Over. API-driven; needs `guild` in locals. %>
+<%#
+  Analyze and take over: scan the server, account for every bot, recover this server's profile,
+  read the owner's questionnaire, apply feature parity and finally retire the replaced bots.
+  API-driven (/api/guilds/:id/takeover/...); needs `guild` in locals. Built on the settings-row kit
+  (cf-settings.css): each phase is a kit section with one panel, and the script fills the panels
+  with hairline-split rows. Every id, data-* hook and request is unchanged.
+%>
+<style>
+  #takeoverPage .to-stepno { margin: 0 0 2px; font-size: var(--cf-text-xs); font-weight: 600; color: var(--cf-text-3); font-variant-numeric: tabular-nums; }
+  #takeoverPage .cf-section-actions select { width: auto; max-width: 12rem; margin: 0; }
+  #takeoverPage .to-muted { color: var(--cf-text-3); font-size: var(--cf-text-sm); }
+  #takeoverPage .to-mt { margin-top: var(--cf-2); }
+  #takeoverPage .to-bad { color: var(--cf-danger); }
+  #takeoverPage .to-pad { padding: var(--cf-4) var(--cf-5); }
+  #takeoverPage .to-pad > .to-bar { margin-top: var(--cf-3); }
+  #takeoverPage .to-pad > #toUnreadable:not(:empty) { margin-top: var(--cf-2); }
+  #takeoverPage .to-pad .cf-state { padding: 0; }
+  #takeoverPage .cf-state--compact { flex-wrap: wrap; }
+  #takeoverPage .cf-state--compact .cf-state-title { white-space: nowrap; }
+  #takeoverPage .to-bar { height: 6px; border-radius: 999px; background: var(--cf-surface-3); overflow: hidden; }
+  #takeoverPage .to-bar-fill { width: 0; height: 100%; background: var(--cf-accent); border-radius: inherit; transition: width .4s ease; }
+  #takeoverPage code { overflow-wrap: anywhere; }
+
+  /* A panel the script fills: its children are rows split by hairlines; bare text gets row padding. */
+  #takeoverPage .to-list { display: block; min-width: 0; font-size: var(--cf-text-sm); color: var(--cf-text-2); }
+  #takeoverPage .to-list:not(:has(> *)) { padding: var(--cf-4) var(--cf-5); }
+  #takeoverPage .to-list > * { padding: var(--cf-3) var(--cf-5); min-width: 0; }
+  #takeoverPage .to-list > * + * { border-top: 1px solid var(--cf-border); }
+  #takeoverPage .to-list > .cf-state { padding: var(--cf-4) var(--cf-5); }
+  #takeoverPage .to-list strong, #takeoverPage .to-list b { color: var(--cf-text); font-weight: 600; }
+
+  /* Status tags, summary chips and feature chips are kit chips (.cf-chip); only their spacing is the page's. */
+  #takeoverPage .to-tag-block { margin-top: 4px; }
+  #takeoverPage .to-sum .cf-chips, #takeoverPage .to-dec-box .cf-chips { margin-top: var(--cf-2); }
+
+  /* Bots (phase 2): a row that expands into its evidence. */
+  #takeoverPage .to-list > .to-bot { padding: 0; }
+  #takeoverPage .to-bot-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--cf-4); padding: var(--cf-3) var(--cf-5); cursor: pointer; }
+  #takeoverPage .to-bot-head:hover { background: color-mix(in srgb, var(--cf-surface-2) 50%, transparent); }
+  #takeoverPage .to-bot-head > div { min-width: 0; }
+  #takeoverPage .to-chev { flex: none; color: var(--cf-text-3); transition: transform .15s ease; padding-top: 3px; }
+  #takeoverPage .to-bot.open > .to-bot-head .to-chev, #takeoverPage .to-fam.open > .to-fam-head .to-chev { transform: rotate(180deg); }
+  #takeoverPage .to-bot-body { display: none; border-top: 1px solid var(--cf-border); padding: var(--cf-4) var(--cf-5); background: color-mix(in srgb, var(--cf-surface-2) 45%, var(--cf-surface)); }
+  #takeoverPage .to-bot.open .to-bot-body { display: block; }
+  #takeoverPage .to-actions { display: flex; gap: var(--cf-2); align-items: center; flex-wrap: wrap; margin-bottom: var(--cf-3); }
+  #takeoverPage .to-h { margin: var(--cf-4) 0 var(--cf-2); font-size: var(--cf-text-sm); font-weight: 600; color: var(--cf-text); }
+
+  /* Behaviour families inside a bot. */
+  #takeoverPage .to-fam { border: 1px solid var(--cf-border); border-radius: var(--cf-radius); background: var(--cf-surface); margin-bottom: var(--cf-2); }
+  #takeoverPage .to-fam.done { box-shadow: inset 3px 0 0 var(--cf-success); }
+  #takeoverPage .to-fam.to-fam--keep { box-shadow: inset 3px 0 0 var(--cf-warning); }
+  #takeoverPage .to-fam-head { display: flex; gap: var(--cf-3); align-items: flex-start; padding: var(--cf-3) var(--cf-4); cursor: pointer; }
+  #takeoverPage .to-fam--keep .to-fam-head { cursor: default; }
+  #takeoverPage .to-fam-main { flex: 1; min-width: 0; font-size: var(--cf-text-sm); color: var(--cf-text-2); }
+  #takeoverPage .to-fam-tick { display: flex; align-items: center; padding-top: 2px; margin: 0; }
+  #takeoverPage .to-fam-tick input { width: 16px; height: 16px; accent-color: var(--cf-accent); }
+  #takeoverPage .to-fam-body { display: none; border-top: 1px solid var(--cf-border); padding: var(--cf-3) var(--cf-4); }
+  #takeoverPage .to-fam.open .to-fam-body { display: block; }
+  #takeoverPage .to-fam-ex { margin-bottom: 4px; font-size: var(--cf-text-xs); color: var(--cf-text-3); overflow-wrap: anywhere; }
+  #takeoverPage .to-fam-ex code, #takeoverPage .to-fam-cmd code, #takeoverPage .to-tpl code { font-family: var(--cf-mono); color: var(--cf-text-2); }
+  #takeoverPage .to-fam-cmd { font-size: var(--cf-text-xs); color: var(--cf-text-3); margin-top: 2px; }
+  #takeoverPage .to-trig { color: var(--cf-text-3); font-size: var(--cf-text-xs); }
+  #takeoverPage .to-gate { display: flex; gap: var(--cf-3); align-items: flex-start; font-size: var(--cf-text-sm); padding: 4px 0; }
+  #takeoverPage .to-gate > .cf-chip { flex: none; min-width: 3.75rem; justify-content: center; }
+
+  /* Removal and live-run confirmation rows. */
+  #takeoverPage .to-retire { margin-top: var(--cf-3); padding-top: var(--cf-3); border-top: 1px solid var(--cf-border); display: flex; gap: var(--cf-2); flex-wrap: wrap; align-items: center; }
+  #takeoverPage .to-retire .form-control { width: auto; flex: 0 1 16rem; min-width: 0; margin: 0; }
+  #takeoverPage .to-retire .to-input-sm { flex-basis: 11rem; }
+  /* When the soak is the only thing left, the waiver row is visibly a deliberate, out-of-the-ordinary act. */
+  #takeoverPage .to-retire-waive { background: color-mix(in srgb, var(--cf-warning) 8%, transparent); box-shadow: inset 3px 0 0 var(--cf-warning); }
+  #takeoverPage .to-bot-body .to-retire-waive { padding: var(--cf-3); border-radius: var(--cf-radius); border-top: 0; }
+  #takeoverPage .cf-rows > .to-retire { margin: 0; padding: var(--cf-3) var(--cf-5); }
+  #takeoverPage .to-waive { display: inline-flex; align-items: center; gap: var(--cf-2); font-size: var(--cf-text-sm); color: var(--cf-text); }
+  #takeoverPage .to-waive input[type="checkbox"] { width: 16px; height: 16px; flex: none; accent-color: var(--cf-warning); }
+  #takeoverPage #toSoakWrap { box-sizing: border-box; width: 100%; padding: var(--cf-3) var(--cf-5); line-height: 1.45; background: color-mix(in srgb, var(--cf-warning) 8%, transparent); }
+
+  /* Questionnaire and profile rows: an inset edge carries the state. */
+  #takeoverPage .to-qsum { color: var(--cf-text-2); }
+  #takeoverPage .to-list > .to-qsec, #takeoverPage .to-sub {
+    font-size: var(--cf-text-xs); font-weight: 600; color: var(--cf-text-2); letter-spacing: 0.01em;
+  }
+  #takeoverPage .to-list > .to-qsec { padding-top: var(--cf-2); padding-bottom: var(--cf-2); background: color-mix(in srgb, var(--cf-surface-2) 55%, var(--cf-surface)); }
+  #takeoverPage .to-q { box-shadow: inset 3px 0 0 var(--cf-border-strong); }
+  #takeoverPage .to-q.yes { box-shadow: inset 3px 0 0 var(--cf-success); }
+  #takeoverPage .to-q.no { color: var(--cf-text-3); }
+  /* "Tell me more" is the only pick that is a job for us; it must not read as a soft maybe. */
+  #takeoverPage .to-q.ask, #takeoverPage .to-q.warn { box-shadow: inset 3px 0 0 var(--cf-warning); }
+  #takeoverPage .to-qq { font-weight: 500; color: var(--cf-text); display: flex; flex-wrap: wrap; align-items: center; gap: var(--cf-2); }
+  #takeoverPage .to-qa { margin-top: 2px; color: var(--cf-text-2); overflow-wrap: anywhere; }
+  #takeoverPage .to-qa.waiting { color: var(--cf-text-3); font-style: italic; }
+  #takeoverPage .to-qnote, #takeoverPage .to-ownernote {
+    margin: var(--cf-2) 0 0; padding: 4px var(--cf-3); border-left: 2px solid var(--cf-accent);
+    background: var(--cf-surface-2); border-radius: 0 var(--cf-radius-sm) var(--cf-radius-sm) 0;
+    font-size: var(--cf-text-sm); color: var(--cf-text-2);
+  }
+  #takeoverPage .to-qnote { white-space: pre-wrap; }
+  #takeoverPage .to-ownernote { font-style: italic; }
+  #takeoverPage .to-qwhen { font-size: var(--cf-text-xs); color: var(--cf-text-3); margin-top: 4px; }
+  #takeoverPage .to-code {
+    display: inline-block; max-width: 100%; padding: 4px 8px; font-family: var(--cf-mono); font-size: var(--cf-text-xs);
+    background: var(--cf-surface-2); border: 1px solid var(--cf-border); border-radius: var(--cf-radius-sm); color: var(--cf-text); overflow-wrap: anywhere;
+  }
+  #takeoverPage .to-copy { margin-left: var(--cf-2); }
+  #takeoverPage .to-ok-text { color: var(--cf-success); }
+  #takeoverPage .to-warn-text { color: var(--cf-warning); }
+
+  /* Role panels in the profile. */
+  #takeoverPage .to-panel { border-left: 2px solid var(--cf-border-strong); margin: var(--cf-2) 0; padding: 2px 0 2px var(--cf-3); }
+  #takeoverPage .to-panel-h { font-weight: 500; font-size: var(--cf-text-sm); color: var(--cf-text); margin-bottom: 4px; display: flex; gap: var(--cf-2); align-items: baseline; flex-wrap: wrap; }
+  #takeoverPage .to-opt { display: flex; gap: var(--cf-2); align-items: baseline; flex-wrap: wrap; padding: 3px 0; font-size: var(--cf-text-sm); border-top: 1px solid var(--cf-border); }
+  #takeoverPage .to-opt-e { min-width: 2.2rem; }
+  #takeoverPage .to-opt-r { min-width: 9rem; color: var(--cf-text); }
+  #takeoverPage .to-opt-why { flex-basis: 100%; font-size: var(--cf-text-xs); color: var(--cf-text-3); padding-left: 2.7rem; }
+
+  /* Plan (phase 5): headline, readiness audit, the owner's decisions and the steps. */
+  #takeoverPage .to-sum { color: var(--cf-text-2); background: color-mix(in srgb, var(--cf-surface-2) 45%, var(--cf-surface)); }
+  #takeoverPage .to-sum .good, #takeoverPage .to-ready .good, #takeoverPage .to-dec-box .good { color: var(--cf-success); }
+  #takeoverPage .to-sum .bad, #takeoverPage .to-ready .bad { color: var(--cf-danger); }
+  #takeoverPage .to-ready .warn, #takeoverPage .to-dec-box .warn, #takeoverPage .to-gap-unknown { color: var(--cf-warning); }
+  #takeoverPage .to-step { display: flex; gap: var(--cf-3); align-items: flex-start; font-size: var(--cf-text-sm); color: var(--cf-text-2); }
+  #takeoverPage .to-step > input { flex: none; width: 16px; height: 16px; margin-top: 2px; accent-color: var(--cf-accent); }
+  #takeoverPage .to-step > div { min-width: 0; }
+  #takeoverPage .to-step.to-st-blocked { box-shadow: inset 3px 0 0 var(--cf-danger); }
+  #takeoverPage .to-step.to-st-ready { box-shadow: inset 3px 0 0 var(--cf-info); }
+  /* Declined: visibly stood down, not broken. It is not a failure; it is an answer. */
+  #takeoverPage .to-step.to-st-declined { opacity: .72; }
+  #takeoverPage .cf-rows > #toReadiness, #takeoverPage .cf-rows > #toDecisions { padding: 0; }
+  #takeoverPage .to-ready-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); overflow: hidden; }
+  #takeoverPage .to-ready { padding: var(--cf-4) var(--cf-5); min-width: 0; font-size: var(--cf-text-sm); color: var(--cf-text-2); box-shadow: -1px 0 0 var(--cf-border), 0 -1px 0 var(--cf-border); }
+  #takeoverPage .to-ready h5, #takeoverPage .to-notes h5 { margin: 0 0 var(--cf-2); font-size: var(--cf-text-xs); font-weight: 600; color: var(--cf-text-3); }
+  #takeoverPage .to-ready .big { font-size: var(--cf-text-lg); font-weight: 600; color: var(--cf-text); font-variant-numeric: tabular-nums; }
+  #takeoverPage .to-ready strong { color: var(--cf-text); font-weight: 600; }
+  #takeoverPage .to-ready ul, #takeoverPage .to-notes ul { margin: var(--cf-2) 0 0; padding-left: 1.1rem; font-size: var(--cf-text-sm); color: var(--cf-text-2); }
+  #takeoverPage .to-ready li, #takeoverPage .to-notes li { margin-bottom: 4px; }
+  #takeoverPage .to-notes { padding: var(--cf-4) var(--cf-5); border-top: 1px solid var(--cf-border); box-shadow: inset 3px 0 0 var(--cf-accent); }
+  #takeoverPage .to-notes h5 { margin-bottom: 0; }
+  #takeoverPage .to-dec-box { padding: var(--cf-4) var(--cf-5); font-size: var(--cf-text-sm); color: var(--cf-text-2); }
+  #takeoverPage .to-dec-box > .to-h { margin-top: 0; }
+  #takeoverPage .to-sub { margin: var(--cf-4) 0 var(--cf-2); }
+  #takeoverPage .to-dec-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); gap: var(--cf-2); margin: var(--cf-3) 0; }
+  #takeoverPage .to-dec { border: 1px solid var(--cf-border); border-radius: var(--cf-radius); padding: var(--cf-2) var(--cf-3); min-width: 0; }
+  #takeoverPage .to-dec-q { font-size: var(--cf-text-xs); color: var(--cf-text-3); }
+  #takeoverPage .to-dec-a { font-weight: 500; color: var(--cf-text); margin-top: 2px; }
+  #takeoverPage .to-dec-n { margin-top: 4px; font-size: var(--cf-text-sm); color: var(--cf-text-2); font-style: italic; }
+  #takeoverPage .to-foot-note { margin: 0; font-size: var(--cf-text-xs); color: var(--cf-text-3); line-height: 1.5; }
+  #takeoverPage .to-foot-note strong { color: var(--cf-text-2); }
+
+  /* Server owner, beside the page title. */
+  #takeoverPage .to-owner { display: flex; align-items: center; gap: var(--cf-2); font-size: var(--cf-text-sm); color: var(--cf-text-2); }
+  #takeoverPage .to-owner img { width: 26px; height: 26px; border-radius: 50%; }
+  #takeoverPage .to-owner b { color: var(--cf-text); font-weight: 600; }
+
+  #takeoverPage #toExecConfirm { width: auto; flex: 0 1 18rem; min-width: 0; margin: 0; }
+
+  @media (max-width: 640px) {
+    #takeoverPage .to-pad, #takeoverPage .to-list > *, #takeoverPage .to-bot-head, #takeoverPage .to-bot-body,
+    #takeoverPage .to-ready, #takeoverPage .to-notes, #takeoverPage .to-dec-box, #takeoverPage .cf-rows > .to-retire,
+    #takeoverPage #toSoakWrap { padding-left: var(--cf-4); padding-right: var(--cf-4); }
+    #takeoverPage .to-list > .to-bot { padding: 0; }
+    #takeoverPage .to-list:not(:has(> *)) { padding: var(--cf-4); }
+    #takeoverPage .cf-section-actions { width: 100%; }
+    #takeoverPage .cf-section-actions > .btn, #takeoverPage .cf-section-actions > select { flex: 1 1 auto; max-width: none; }
+    #takeoverPage .to-retire .form-control, #takeoverPage #toExecConfirm { flex: 1 1 100%; min-height: 44px; }
+    #takeoverPage .to-retire .btn { flex: 1 1 auto; justify-content: center; }
+    #takeoverPage .to-opt-why { padding-left: 0; }
+    #takeoverPage .to-copy { margin: var(--cf-2) 0 0; }
+  }
+</style>
+
 <div class="page-section" id="takeoverPage" data-guild-id="<%= guild.id %>" data-guild-name="<%= guild.name %>">
     <div class="page-section-header">
         <div>
             <div class="page-section-title">
-                <i class="fas fa-crosshairs"></i>
-                <span>Analyze &amp; Take Over</span>
+                <i class="fas fa-crosshairs" aria-hidden="true"></i>
+                <span>Analyze and take over</span>
             </div>
-            <div class="page-section-subtitle">
-                Read every channel, work out what each bot does, replace what we can, and retire
-                the old bot only once nothing it does is left unexplained.
-            </div>
+            <div class="page-section-subtitle">No bot is removed while anything it does is still unexplained.</div>
         </div>
+        <div class="to-owner" id="toOwner" hidden></div>
     </div>
 
-    <div id="toError" class="alert alert-danger" hidden></div>
+    <div id="toError" class="cf-notice is-bad" role="alert" hidden></div>
 
     <!-- Phase 1: scan -->
-    <div class="to-card">
-        <div class="to-head">
+    <section class="cf-section" aria-labelledby="to-scan-title">
+        <header class="cf-section-head">
             <div>
-                <h3 class="to-h">1 · Scan the server</h3>
-                <p class="form-help">
-                    Reads every channel back to its first message. Nothing is posted, edited or
-                    deleted. Safe to run on a live server, and safe to interrupt — it resumes.
-                </p>
+                <p class="to-stepno">Step 1</p>
+                <h2 class="cf-section-title" id="to-scan-title">Scan the server</h2>
+                <p class="cf-section-desc">Reads every channel back to its first message. Nothing is posted, edited or deleted. Safe to run on a live server, and safe to interrupt: it resumes.</p>
             </div>
-            <div class="to-actions">
-                <select id="toDepth" class="form-control" style="max-width:11rem">
+            <div class="cf-section-actions">
+                <select id="toDepth" class="form-select" aria-label="Scan depth">
                     <option value="deep">Full history</option>
                     <option value="standard">Last 90 days</option>
                     <option value="quick">Quick (1k / channel)</option>
                 </select>
-                <button class="btn btn-primary" id="toScan">Start scan</button>
-                <button class="btn btn-secondary" id="toCancel" hidden>Cancel</button>
-                <button class="btn btn-secondary" id="toResume" hidden>Resume</button>
+                <button type="button" class="btn btn-primary" id="toScan">Start scan</button>
+                <button type="button" class="btn btn-secondary" id="toCancel" hidden>Cancel</button>
+                <button type="button" class="btn btn-secondary" id="toResume" hidden>Resume</button>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div class="to-pad">
+                <div id="toScanState" class="to-muted" role="status" aria-live="polite">
+                    <%- include('../kit/_state', { kind: 'loading', title: 'Loading scan status', compact: true }) %>
+                </div>
+                <div class="to-bar" id="toBarWrap" hidden><div class="to-bar-fill" id="toBar"></div></div>
+                <div id="toUnreadable"></div>
             </div>
         </div>
-
-        <div id="toScanState" class="to-muted">Loading…</div>
-        <div class="to-bar" id="toBarWrap" hidden><div class="to-bar-fill" id="toBar" style="width:0%"></div></div>
-        <div id="toUnreadable"></div>
-    </div>
+    </section>
 
     <!-- Phase 2: bots -->
-    <div class="to-card">
-        <div class="to-head">
+    <section class="cf-section" aria-labelledby="to-bots-title">
+        <header class="cf-section-head">
             <div>
-                <h3 class="to-h">2 · What we found</h3>
-                <p class="form-help">
-                    Every bot and webhook persona that has ever posted. Expand one to see the distinct
-                    message shapes it shows — each must be accounted for before it can be removed.
-                </p>
+                <p class="to-stepno">Step 2</p>
+                <h2 class="cf-section-title" id="to-bots-title">What we found</h2>
+                <p class="cf-section-desc">Every bot and webhook persona that has ever posted. Expand one to see the distinct message shapes it shows; each must be accounted for before it can be removed.</p>
             </div>
-            <div class="to-actions">
-                <button class="btn btn-secondary" id="toAttrAll">Auto-attribute everything we recognise</button>
+            <div class="cf-section-actions">
+                <button type="button" class="btn btn-secondary" id="toAttrAll">Read every bot's messages and classify them</button>
             </div>
+        </header>
+        <div class="cf-rows">
+            <div id="toAttrAllResult" class="to-pad to-muted" role="status" hidden></div>
+            <div id="toBots" class="to-list">Run a scan to see results.</div>
         </div>
-        <div id="toAttrAllResult" class="to-muted" hidden></div>
-        <div id="toBots" class="to-list">Run a scan to see results.</div>
-    </div>
+    </section>
 
     <!-- The recovered profile. Sits between the scan and the plan because the plan is BUILT from it:
          without a profile, the guild-specific steps are not offered at all. -->
-    <div class="to-card">
-        <div class="to-head">
+    <section class="cf-section" aria-labelledby="to-profile-title">
+        <header class="cf-section-head">
             <div>
-                <h3 class="to-h">3 · This server's profile</h3>
-                <p class="form-help">
-                    The things we can only learn by reading this server's own history — which streamer
-                    the old bot announces, where its role panels live, what <code>!commands</code>
-                    people type. Reading is safe: it posts nothing and changes nothing.
-                </p>
+                <p class="to-stepno">Step 3</p>
+                <h2 class="cf-section-title" id="to-profile-title">This server's profile</h2>
+                <p class="cf-section-desc">What can only be learned from this server's own history: which streamer the old bot announces, where its role panels live, what <code>!commands</code> people type. Reading posts nothing and changes nothing.</p>
             </div>
-            <div class="to-actions">
-                <button class="btn btn-secondary" id="toDerive">Read the history</button>
-                <button class="btn btn-primary" id="toApprove" hidden>Approve</button>
+            <div class="cf-section-actions">
+                <button type="button" class="btn btn-secondary" id="toDerive">Read the history</button>
+                <button type="button" class="btn btn-primary" id="toApprove" hidden>Approve</button>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div id="toProfile" class="to-list to-muted">
+                <%- include('../kit/_state', { kind: 'loading', title: 'Loading the profile', compact: true }) %>
             </div>
         </div>
-        <div id="toProfile" class="to-list to-muted">Loading…</div>
-    </div>
+    </section>
 
-    <!-- What the owner actually wants. Sits BEFORE the parity phase on purpose: her answers should
+    <!-- What the owner actually wants. Sits BEFORE the parity phase on purpose: their answers should
          shape what you apply, not be discovered after you have applied it. -->
-    <div class="to-card">
-        <div class="to-head">
+    <section class="cf-section" aria-labelledby="to-q-title">
+        <header class="cf-section-head">
             <div>
-                <h3 class="to-h">4 · What the server owner wants</h3>
-                <p class="form-help">
-                    Her own answers, from the questionnaire she filled in. She has no dashboard
-                    account — the link below is the only way she reaches it, so treat it like a key.
-                </p>
+                <p class="to-stepno">Step 4</p>
+                <h2 class="cf-section-title" id="to-q-title">What the server owner wants</h2>
+                <p class="cf-section-desc" id="toQHelp">Their own answers, in their own words. A server owner usually has no dashboard account, so the link below is the only way they reach the questions. Treat it like a key.</p>
             </div>
-            <div class="to-actions">
-                <button class="btn btn-secondary" id="toQLink">Get her link</button>
-                <button class="btn btn-secondary" id="toQRevoke" hidden>Revoke link</button>
+            <div class="cf-section-actions">
+                <button type="button" class="btn btn-secondary" id="toQLink">Get the link</button>
+                <button type="button" class="btn btn-secondary" id="toQRevoke" hidden>Revoke link</button>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div id="toQUrl" class="to-pad to-muted" hidden></div>
+            <div id="toQ" class="to-list to-muted">
+                <%- include('../kit/_state', { kind: 'loading', title: 'Loading the answers', compact: true }) %>
             </div>
         </div>
-        <div id="toQUrl" class="to-muted" hidden></div>
-        <div id="toQ" class="to-list to-muted">Loading…</div>
-    </div>
+    </section>
 
     <!-- Phase 4: parity -->
-    <div class="to-card">
-        <div class="to-head">
+    <section class="cf-section" aria-labelledby="to-plan-title">
+        <header class="cf-section-head">
             <div>
-                <h3 class="to-h">5 · Apply feature parity</h3>
-                <p class="form-help">
-                    Writes configuration only. It carries live values across — a counting channel
-                    resumes at the exact number the old bot left off on.
-                </p>
+                <p class="to-stepno">Step 5</p>
+                <h2 class="cf-section-title" id="to-plan-title">Apply feature parity</h2>
+                <p class="cf-section-desc">Writes configuration only, carrying live values across: a counting channel resumes at the exact number the old bot left off on.</p>
             </div>
-            <div class="to-actions">
-                <button class="btn btn-secondary" id="toPlan">Preview plan</button>
-                <button class="btn btn-primary" id="toApply" disabled>Apply selected</button>
+            <div class="cf-section-actions">
+                <button type="button" class="btn btn-secondary" id="toPlan">Preview plan</button>
+                <button type="button" class="btn btn-primary" id="toApply" disabled>Apply selected</button>
+            </div>
+        </header>
+        <p class="cf-status-line" id="toApplyStatus" role="status"></p>
+        <div class="cf-rows">
+            <!-- What the owner asked for. ABOVE the steps on purpose: a plan you can work through without
+                 ever meeting their answers is a plan that will eventually do something they said no to. -->
+            <div id="toDecisions" hidden></div>
+
+            <!-- Readiness: the full picture around the steps. Populated by Preview plan. -->
+            <div id="toReadiness" hidden>
+                <div class="to-ready-grid">
+                    <div class="to-ready" id="toReadyHierarchy"></div>
+                    <div class="to-ready" id="toReadySecurity"></div>
+                    <div class="to-ready" id="toReadyHygiene"></div>
+                    <div class="to-ready" id="toReadyGaps"></div>
+                </div>
+                <!-- The narrative half of the audit. Every line is derived from this server's own scan;
+                     there is nothing here that is true of every server. -->
+                <div class="to-notes" id="toReadyNotes" hidden></div>
+            </div>
+
+            <div id="toSteps" class="to-list to-muted">Preview a plan to see the steps.</div>
+            <div class="cf-section-foot">
+                <p class="to-foot-note"><strong>Apply writes configuration only.</strong> It never posts, edits or deletes a message, and it never removes a bot. Those are step 6, so that nothing irreversible can ride along with a config sweep.</p>
             </div>
         </div>
+    </section>
 
-        <!-- What the owner asked for. ABOVE the steps on purpose: a plan you can work through without
-             ever meeting her answers is a plan that will eventually do something she said no to. -->
-        <div id="toDecisions" hidden></div>
-
-        <!-- Readiness: the full picture around the steps. Populated by Preview plan. -->
-        <div id="toReadiness" hidden>
-            <div class="to-ready-grid">
-                <div class="to-ready" id="toReadyHierarchy"></div>
-                <div class="to-ready" id="toReadySecurity"></div>
-                <div class="to-ready" id="toReadyHygiene"></div>
-                <div class="to-ready" id="toReadyGaps"></div>
+    <!-- What the owner ASKED FOR, as opposed to what we are replacing. Its own section, because these
+         are additions to the server rather than a like-for-like takeover. -->
+    <section class="cf-section" aria-labelledby="to-cat-title">
+        <header class="cf-section-head">
+            <div>
+                <p class="to-stepno">Step 5b</p>
+                <h2 class="cf-section-title" id="to-cat-title">What the owner asked for</h2>
+                <p class="cf-section-desc">The features ticked on the questionnaire. Some are a config row; some need a channel or a role that does not exist yet, and we say exactly what we made; some need a decision only they can make.</p>
+            </div>
+            <div class="cf-section-actions">
+                <button type="button" class="btn btn-primary" id="toCatApply">Set these up</button>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div id="toCat" class="to-list to-muted">
+                <%- include('../kit/_state', { kind: 'loading', title: 'Loading what they asked for', compact: true }) %>
             </div>
         </div>
+    </section>
 
-        <div id="toSteps" class="to-list to-muted">Preview a plan to see the steps.</div>
-    </div>
+    <!-- Phase 5: the part that actually changes the server. Deliberately separate, deliberately last,
+         and deliberately not reachable from "Apply selected". -->
+    <section class="cf-section cf-section--danger" aria-labelledby="to-exec-title">
+        <header class="cf-section-head">
+            <div>
+                <p class="to-stepno">Step 6</p>
+                <h2 class="cf-section-title" id="to-exec-title">Take over</h2>
+                <p class="cf-section-desc">Post our own role panels, take the old ones down, and remove each bot we have replaced. Every removal re-checks its gates at the moment it runs; nothing here trusts the plan you previewed a minute ago.</p>
+            </div>
+            <div class="cf-section-actions">
+                <button type="button" class="btn btn-secondary" id="toPanels">Post the role panels</button>
+                <button type="button" class="btn btn-secondary" id="toDry">Preview the full takeover</button>
+            </div>
+        </header>
+        <div class="cf-rows">
+            <div id="toExecOut" class="to-list to-muted">Run the preview first. It calls the same checks the live run does, so what it lists is what will actually happen.</div>
+
+            <!-- The soak is the gate that stops almost every first run, and it is the one gate that is
+                 about TIME rather than about correctness, so it is the one worth being able to waive
+                 from here. Everything else (evidence, parity, hierarchy, data) has to be earned. -->
+            <label class="to-waive" id="toSoakWrap" hidden>
+                <input type="checkbox" id="toSoak">
+                Skip the 24-hour soak: remove each bot as soon as its replacement is configured, without waiting to see it work live first
+            </label>
+
+            <div class="to-retire to-retire-waive" id="toExecGo" hidden>
+                <span class="to-waive">Ready to run for real?</span>
+                <input type="text" class="form-control" placeholder="Type: <%= guild.name %>" id="toExecConfirm" aria-label="Type the server name to confirm" autocomplete="off">
+                <button type="button" class="btn btn-danger" id="toExecRun">Run the takeover</button>
+                <span class="to-muted" id="toExecStatus" role="status"></span>
+            </div>
+        </div>
+    </section>
 </div>
-
-<style>
-  #takeoverPage .to-card { background:#1e2028; border:1px solid #2c2f3a; border-radius:10px; padding:1.1rem 1.25rem; margin-bottom:1rem; }
-  #takeoverPage .to-h { margin:0 0 .35rem; font-size:1rem; font-weight:600; }
-  #takeoverPage .to-head { display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; flex-wrap:wrap; }
-  #takeoverPage .to-actions { display:flex; gap:.5rem; align-items:center; flex-wrap:wrap; }
-  #takeoverPage .to-muted { color:#8b8f9e; font-size:.88rem; }
-  #takeoverPage .to-bar { height:8px; border-radius:999px; background:#2c2f3a; margin-top:.75rem; overflow:hidden; }
-  #takeoverPage .to-bar-fill { height:100%; background:linear-gradient(90deg,#5865F2,#57F287); transition:width .4s ease; }
-  #takeoverPage .to-list { margin-top:.9rem; display:grid; gap:.5rem; }
-  #takeoverPage .to-bot { border:1px solid #2c2f3a; border-radius:8px; background:#14161c; }
-  #takeoverPage .to-bot-head { display:flex; align-items:center; justify-content:space-between; gap:1rem; padding:.7rem .9rem; cursor:pointer; }
-  #takeoverPage .to-bot-body { border-top:1px solid #2c2f3a; padding:.8rem .9rem; display:none; }
-  #takeoverPage .to-bot.open .to-bot-body { display:block; }
-  /* Her questionnaire. An unanswered question must read as loudly as an answered one — the gaps
-     are the whole point of looking at this page. */
-  #takeoverPage .to-qsum { font-size:.86rem; color:#b8bdc9; margin-bottom:.9rem; }
-  #takeoverPage .to-qsec { font-size:.7rem; letter-spacing:.09em; text-transform:uppercase;
-    color:#7a8291; margin:1.1rem 0 .5rem; padding-bottom:.3rem; border-bottom:1px solid #2c2f3a; }
-  #takeoverPage .to-q { padding:.6rem .8rem; margin-bottom:.4rem; border-radius:7px;
-    background:#191b22; border-left:3px solid #3a3f4d; }
-  #takeoverPage .to-q.yes { border-left-color:#57F287; }
-  #takeoverPage .to-q.no  { border-left-color:#3a3f4d; opacity:.72; }
-  /* "Tell me more" is the only pick that is a job for US — it must not read as a soft maybe. */
-  #takeoverPage .to-q.ask { border-left-color:#FEE75C; }
-  #takeoverPage .to-qq { font-weight:600; font-size:.92rem; }
-  #takeoverPage .to-qa { font-size:.9rem; color:#dfe3ea; margin-top:.15rem; }
-  #takeoverPage .to-qa.waiting { color:#7a8291; font-style:italic; }
-  #takeoverPage .to-qnote { margin:.45rem 0 0; padding:.4rem .7rem; border-left:2px solid #5865F2;
-    background:#16181e; border-radius:0 5px 5px 0; font-size:.89rem; color:#c9cfda;
-    white-space:pre-wrap; }
-  #takeoverPage .to-qwhen { font-size:.72rem; color:#6b7280; margin-top:.3rem; }
-  #takeoverPage .to-code { font-family:ui-monospace,Menlo,Consolas,monospace; font-size:.8rem;
-    background:#16181e; border:1px solid #2c2f3a; border-radius:5px; padding:.35rem .55rem;
-    word-break:break-all; display:inline-block; max-width:100%; }
-  #takeoverPage .to-copy { margin-left:.5rem; padding:.25rem .7rem; font-size:.78rem; }
-
-  #takeoverPage .to-tag { font-size:.72rem; padding:.15rem .45rem; border-radius:999px; border:1px solid #2c2f3a; }
-  #takeoverPage .to-tag.ok { color:#57F287; border-color:#2f6f4a; }
-  #takeoverPage .to-tag.no { color:#ED4245; border-color:#6f2f2f; }
-  #takeoverPage .to-tag.warn { color:#c9a227; border-color:#6f5f2f; }
-  #takeoverPage .to-tpl { display:flex; align-items:flex-start; justify-content:space-between; gap:.8rem;
-    padding:.45rem .6rem; border:1px solid #23262f; border-radius:6px; margin-bottom:.35rem; font-size:.84rem; }
-  #takeoverPage .to-tpl code { color:#c9d1d9; word-break:break-word; }
-  #takeoverPage .to-trig { color:#8b8f9e; font-size:.78rem; }
-  #takeoverPage .to-gate { display:flex; gap:.55rem; align-items:flex-start; font-size:.86rem; padding:.2rem 0; }
-  #takeoverPage .to-step { display:flex; gap:.6rem; align-items:flex-start; padding:.55rem .7rem;
-    border:1px solid #2c2f3a; border-radius:8px; background:#14161c; font-size:.88rem; }
-  #takeoverPage .to-retire { margin-top:.8rem; padding-top:.8rem; border-top:1px solid #2c2f3a; display:flex; gap:.5rem; flex-wrap:wrap; align-items:center; }
-  /* When soak is the only thing left, the waiver row is visibly a deliberate, out-of-the-ordinary act. */
-  #takeoverPage .to-retire-waive { border-top-color:#5c5230; background:linear-gradient(0deg,#211d10,transparent); border-radius:0 0 8px 8px; }
-  #takeoverPage .to-waive { display:inline-flex; align-items:center; gap:.35rem; font-size:.84rem; color:#e0cf8b; }
-  #takeoverPage .to-ready-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(15rem,1fr)); gap:.7rem; margin:.9rem 0 1.1rem; }
-  #takeoverPage .to-ready { border:1px solid #2c2f3a; border-radius:8px; background:#14161c; padding:.75rem .9rem; }
-  #takeoverPage .to-ready h5 { margin:0 0 .5rem; font-size:.82rem; text-transform:uppercase; letter-spacing:.03em; color:#8b8f9e; }
-  #takeoverPage .to-ready .big { font-size:1.05rem; font-weight:600; }
-  #takeoverPage .to-ready .good { color:#57F287; }
-  #takeoverPage .to-ready .bad { color:#ED4245; }
-  #takeoverPage .to-ready .warn { color:#c9a227; }
-  #takeoverPage .to-ready ul { margin:.4rem 0 0; padding-left:1.05rem; font-size:.82rem; color:#c9d1d9; }
-  #takeoverPage .to-ready li { margin-bottom:.2rem; }
-  #takeoverPage .to-tag.rdy { color:#5865F2; border-color:#3a3f7a; }
-  #takeoverPage .to-tag.seq { color:#8b93a7; border-color:#3a3f4a; }
-  #takeoverPage .to-sum { padding:.8rem .9rem; border:1px solid #2c2f3a; border-radius:8px; background:#14161c; margin-bottom:.7rem; font-size:.9rem; }
-  #takeoverPage .to-sum .good { color:#57F287; }
-  #takeoverPage .to-sum .bad { color:#ED4245; }
-  #takeoverPage .to-sum-chips { display:flex; flex-wrap:wrap; gap:.4rem; margin-top:.55rem; }
-  #takeoverPage .to-sum-chip { font-size:.74rem; padding:.2rem .5rem; border-radius:999px; border:1px solid #2c2f3a; color:#c9d1d9; }
-  #takeoverPage .to-sum-chip.ok { color:#57F287; border-color:#2f6f4a; }
-  #takeoverPage .to-sum-chip.rdy { color:#8f9bff; border-color:#3a3f7a; }
-  #takeoverPage .to-sum-chip.seq { color:#a9b1c2; border-color:#3a3f4a; }
-  #takeoverPage .to-sum-chip.warn { color:#c9a227; border-color:#6f5f2f; }
-  #takeoverPage .to-sum-chip.no { color:#ED4245; border-color:#6f2f2f; }
-  #takeoverPage .to-step.to-st-blocked { border-color:#6f2f2f; }
-  #takeoverPage .to-step.to-st-ready { border-color:#3a3f7a; }
-  /* Declined: visibly stood down, not broken. It is not a failure — it is an answer. */
-  #takeoverPage .to-step.to-st-declined { border-color:#3a3d47; opacity:.72; }
-  #takeoverPage .to-tag.off { background:#3a3d47; color:#c9d1d9; }
-
-  /* Her own words, wherever they appear. Quoted, warm, and never confusable with our prose. */
-  #takeoverPage .to-ownernote { margin-top:.35rem; padding:.35rem .6rem; border-left:2px solid #5865F2;
-    background:#1a1c24; border-radius:0 6px 6px 0; font-size:.86rem; color:#dcdfe4; font-style:italic; }
-
-  #takeoverPage .to-sub { margin:.9rem 0 .45rem; font-size:.82rem; text-transform:uppercase;
-    letter-spacing:.03em; color:#8b8f9e; font-weight:600; }
-  #takeoverPage .to-dec-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(16rem,1fr));
-    gap:.6rem; margin:.8rem 0; }
-  #takeoverPage .to-dec { border:1px solid #2c2f3a; border-radius:8px; background:#14161c; padding:.6rem .75rem; }
-  #takeoverPage .to-dec-q { font-size:.78rem; color:#8b8f9e; }
-  #takeoverPage .to-dec-a { font-weight:600; color:#e6e9ef; margin-top:.15rem; }
-  #takeoverPage .to-dec-n { margin-top:.3rem; font-size:.83rem; color:#c9d1d9; font-style:italic; }
-  #takeoverPage .to-feats { display:flex; flex-wrap:wrap; gap:.35rem; }
-  #takeoverPage .to-feat { font-size:.8rem; padding:.2rem .55rem; border-radius:999px; border:1px solid #2c2f3a; }
-  #takeoverPage .to-feat.yes { background:#16301f; border-color:#2c5c3c; color:#8be0a4; }
-  #takeoverPage .to-feat.no  { background:#241a1a; border-color:#5c3030; color:#e0a0a0; }
-  #takeoverPage .to-feat.ask { background:#2a2618; border-color:#5c5230; color:#e0cf8b; }
-</style>
 
 <script>
 (function () {
@@ -239,10 +375,31 @@
   const guildName = root.dataset.guildName;
   const api = (p) => `/api/guilds/${guildId}/takeover${p}`;
   const $ = (id) => document.getElementById(id);
+  // Page tone names (ok / no / warn / ask / rdy / seq / off) as kit chip tones.
+  const chipTone = (c) => ({ ok: 'is-ok', yes: 'is-ok', no: 'is-bad', warn: 'is-warn', ask: 'is-warn', rdy: 'is-info' })[c] || '';
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
 
   let poll = null;
   let state = null;
+
+  /**
+   * Who this server belongs to.
+   *
+   * Everything on this page that used to say "she" now says this, or "they". Discord does not tell
+   * us anybody's pronouns and a name does not either, so the page uses the owner's name where it
+   * can and the neutral form where it cannot. Getting that wrong about a real person, in their own
+   * server, is not a cosmetic bug.
+   */
+  const owner = () => state?.owner?.name || 'the server owner';
+  const ownerPossessive = () => state?.owner?.possessive || "the server owner's";
+
+  function renderOwner(o) {
+    const el = $('toOwner');
+    if (!o?.known) { el.hidden = true; return; }
+    el.hidden = false;
+    el.innerHTML = `${o.avatar ? `<img src="${esc(o.avatar)}" alt="">` : ''}
+      <span>Server owner: <b>${esc(o.name)}</b></span>`;
+  }
 
   async function req(url, options) {
     const res = await fetch(url, { credentials:'same-origin', headers:{ 'Content-Type':'application/json' }, ...options });
@@ -264,10 +421,10 @@
     $('toScanState').innerHTML =
       `<strong>${esc(s.status)}</strong> · ${s.channels_done}/${s.channels_total} channels · ` +
       `${Number(s.messages_scanned).toLocaleString()} messages indexed` +
-      (s.error ? ` · <span style="color:#ED4245">${esc(s.error)}</span>` : '');
+      (s.error ? ` · <span class="to-bad">${esc(s.error)}</span>` : '');
 
     $('toUnreadable').innerHTML = d.unreadableChannels?.length
-      ? `<div class="to-muted" style="margin-top:.6rem">⚠ ${d.unreadableChannels.length} channel(s) excluded — we cannot read their history:
+      ? `<div class="to-muted"><span class="cf-chip is-warn">Excluded</span> ${d.unreadableChannels.length} channel(s) we cannot read the history of:
            ${d.unreadableChannels.map(c => '#' + esc(c.name)).join(', ')}</div>`
       : '';
   }
@@ -275,14 +432,18 @@
   // A bot we deliberately keep is NOT a failure — it must not read like one. Only an
   // unrecognised bot (one we have never classified) deserves a warning colour.
   function botTag(b) {
-    if (b.coverage === 'self') return '<span class="to-tag ok">this is our bot</span>';
-    if (b.coverage === 'system') return '<span class="to-tag seq">Discord system — not a bot</span>';
-    if (b.retired) return '<span class="to-tag ok">retired</span>';
-    if (!b.known) return '<span class="to-tag warn">unrecognised — needs a look</span>';
-    if (b.coverage === 'none') return '<span class="to-tag seq">keep — no equivalent</span>';
-    if (b.coverage === 'partial') return `<span class="to-tag warn">partial: ${esc(b.feature)}</span>`;
+    if (b.coverage === 'self') return '<span class="cf-chip is-ok">this is our bot</span>';
+    if (b.coverage === 'system') return '<span class="cf-chip">Discord system — not a bot</span>';
+    if (b.retired) return '<span class="cf-chip is-ok">retired</span>';
+    if (!b.known) return '<span class="cf-chip is-warn">unrecognised — needs a look</span>';
+    if (b.coverage === 'none') return '<span class="cf-chip">keep — no equivalent</span>';
+
+    // Name every job, not just the first. "partial: logging" on a bot that also runs the welcome
+    // message, the autorole and the starboard is not a description, it is a trap.
+    const jobs = (b.features || []).map(f => f.label || f).join(', ') || b.feature || '—';
+    if (b.coverage === 'partial') return `<span class="cf-chip is-warn">partial: ${esc(jobs)}</span>`;
     const via = b.kind === 'webhook' ? ' (webhook)' : !b.present ? ' (already gone)' : '';
-    return `<span class="to-tag ok">we replace this — ${esc(b.feature)}${via}</span>`;
+    return `<span class="cf-chip is-ok">we replace this — ${esc(jobs)}${via}</span>`;
   }
 
   function renderBots(d) {
@@ -295,14 +456,21 @@
           <div>
             <strong>${esc(b.name)}</strong> ${botTag(b)}
             <div class="to-muted">${Number(b.messages).toLocaleString()} messages in ${b.channels.length} channel(s)</div>
+            ${b.did?.length
+              ? `<div class="to-muted">Did here: ${b.did.map(d => `${esc(d.says.toLowerCase())} <b>×${d.occurrences}</b>`).join(', ')}</div>`
+              : ''}
             ${b.why ? `<div class="to-muted">${esc(b.why)}</div>` : ''}
-            ${b.holdsData ? `<div class="to-tag warn" style="display:inline-block;margin-top:.3rem">holds ${esc(b.holdsData.what)}</div>` : ''}
+            ${b.holdsData ? `<div><span class="cf-chip is-warn to-tag-block">holds ${esc(b.holdsData.what)}</span></div>` : ''}
           </div>
-          <span class="to-muted">▾</span>
+          <i class="fas fa-chevron-down to-chev" aria-hidden="true"></i>
         </div>
         <div class="to-bot-body" data-body="${esc(b.bot_id)}"></div>
       </div>`).join('');
   }
+
+  // The last-loaded evidence per bot. A family tick needs the template ids it stands for, and
+  // re-fetching them on every click would make ticking a 174-shape family feel broken.
+  const evidence = new Map();
 
   async function openBot(botId) {
     const body = root.querySelector(`[data-body="${botId}"]`);
@@ -314,43 +482,127 @@
       bot.kind === 'bot' && bot.present ? req(api(`/bots/${botId}/gates`)).catch(e => ({ error: e.message })) : null,
     ]);
 
-    const templates = tpl.templates.map(t => `
-      <div class="to-tpl">
-        <div>
-          <code>${esc(t.sample || '(empty)')}</code>
-          <div class="to-trig">×${t.occurrences}${t.triggers.length ? ' · triggered by ' + t.triggers.map(esc).join(', ') : ''}</div>
-        </div>
-        <label class="to-trig" style="white-space:nowrap">
-          <input type="checkbox" data-attr="${t.id}" ${t.attributed ? 'checked' : ''}>
-          covered${t.attributed_to ? ` (${esc(t.attributed_to)})` : ''}
-        </label>
-      </div>`).join('') || '<div class="to-muted">No message shapes recorded.</div>';
+    evidence.set(botId, tpl);
+    const templates = renderCustomCommands(tpl) + renderFamilies(botId, tpl);
 
     const gateHtml = !gates ? '' : gates.error
       ? `<div class="to-muted">${esc(gates.error)}</div>`
-      : `<h4 class="to-h" style="margin-top:1rem">Removal gates</h4>` +
+      : `<h4 class="to-h">Removal gates</h4>` +
         gates.gates.map(g => `
           <div class="to-gate">
-            <span>${g.pass === true ? '✅' : g.pass === null ? '⏳' : '⛔'}</span>
+            ${g.pass === true ? '<span class="cf-chip is-ok">Pass</span>' : g.pass === null ? '<span class="cf-chip">Pending</span>' : '<span class="cf-chip is-bad">Fail</span>'}
             <span><strong>${esc(g.label)}</strong>${g.detail ? `<br><span class="to-muted">${esc(g.detail)}</span>` : ''}</span>
           </div>`).join('') +
         retireBox(gates, bot);
 
     body.innerHTML = `
-      <div class="to-actions" style="margin-bottom:.6rem">
-        <button class="btn btn-sm btn-secondary" data-auto="${botId}">Auto-attribute what we recognise</button>
-        <span class="to-muted">${tpl.templates.filter(t => !t.attributed).length} unexplained</span>
+      <div class="to-actions">
+        <button type="button" class="btn btn-sm btn-secondary" data-auto="${botId}">Read its messages and classify them</button>
+        <span class="to-muted">${tpl.templates.filter(t => !t.attributed).length} of ${tpl.templates.length} shapes unexplained</span>
       </div>
       ${templates}
       ${gateHtml}`;
   }
 
+  /**
+   * What this bot DID, grouped by behaviour.
+   *
+   * The old view listed every distinct message shape — which for a stream bot meant 179 rows that
+   * said the same thing about a different game, each with its own checkbox. Nobody reads 179 rows;
+   * they hit whatever bulk control is nearest and stop looking, which is the opposite of evidence.
+   * One row per behaviour, with the count, what we offer instead, and the shapes folded underneath
+   * for anyone who wants to check the reading.
+   */
+  const CONF_TAG = { certain: ['ok','certain'], likely: ['warn','likely'], unsure: ['no','not recognised'] };
+
+  /**
+   * Custom commands recovered from the history.
+   *
+   * Given its own block, above everything else, because it is the only thing in a takeover that is
+   * genuinely unrecoverable: no API anywhere will tell you another bot's command list, so a command
+   * nobody happened to run in the readable history is gone the moment that bot leaves. If we caught
+   * any, this is the only copy that exists and it needs to be in front of a person.
+   */
+  function renderCustomCommands(tpl) {
+    const cmds = tpl.customCommands || [];
+    if (!cmds.length) return '';
+    return `
+      <div class="to-fam to-fam--keep">
+        <div class="to-fam-head">
+          <div class="to-fam-main">
+            <strong>Custom commands recovered from the history</strong>
+            <span class="cf-chip is-warn">the only copy</span>
+            <div class="to-muted">Caught being used in a channel we can read. A bot's command list is
+              private to it, so any command nobody has run is unrecoverable once it leaves.</div>
+            ${cmds.map(c => `
+              <div class="to-fam-ex to-mt">
+                <code>${esc(c.trigger)}</code> → <code>${esc(c.response.slice(0, 160))}</code>
+                <span class="to-trig">×${c.occurrences}</span>
+              </div>`).join('')}
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function renderFamilies(botId, tpl) {
+    const fams = tpl.families || [];
+    if (!fams.length) return '<div class="to-muted">No message shapes recorded.</div>';
+
+    return fams.map((f, i) => {
+      const [cls, conf] = CONF_TAG[f.confidence] ?? ['warn', f.confidence];
+      const done = f.attributed >= f.shapes;
+
+      // What this behaviour means for the takeover, in one line. Three genuinely different answers:
+      // we replace it, it is not a feature at all, or a person has to look.
+      const verdict = f.kind === 'feature'
+        ? `<span class="cf-chip is-ok">we replace this — <code>${esc(f.replacement || '')}</code></span>`
+        : f.kind === 'non-feature'
+          ? `<span class="cf-chip">not a feature</span>`
+          : `<span class="cf-chip is-warn">needs a human</span>`;
+
+      const shapes = f.examples.map(x => `<div class="to-fam-ex"><code>${esc(x)}</code></div>`).join('')
+        + (f.shapes > f.examples.length
+          ? `<div class="to-trig">…and ${f.shapes - f.examples.length} more shape(s) that say the same thing</div>`
+          : '');
+
+      // The command that produced it, where we caught one. This is the strongest evidence we hold
+      // and the reason some of these could be classified at all — worth showing, not burying.
+      const cmds = f.commands?.length
+        ? `<div class="to-fam-cmd">produced by ${f.commands.slice(0, 6).map(c => `<code>${esc(c)}</code>`).join(' ')}</div>`
+        : '';
+
+      return `
+        <div class="to-fam ${done ? 'done' : ''}">
+          <div class="to-fam-head" data-fam="${i}">
+            <label class="to-fam-tick" onclick="event.stopPropagation()">
+              <input type="checkbox" data-famtick="${esc(botId)}" data-famidx="${i}" ${done ? 'checked' : ''}>
+            </label>
+            <div class="to-fam-main">
+              <strong>${esc(f.says)}</strong> ${verdict}
+              <span class="cf-chip ${chipTone(cls)}">${esc(conf)}</span>
+              <div class="to-muted">${f.occurrences.toLocaleString()} post(s) across ${f.shapes} distinct shape(s)</div>
+              ${cmds}
+              ${f.detail ? `<div class="to-muted">${esc(f.detail)}</div>` : ''}
+            </div>
+            <i class="fas fa-chevron-down to-chev" aria-hidden="true"></i>
+          </div>
+          <div class="to-fam-body">${shapes}</div>
+        </div>`;
+    }).join('');
+  }
+
   function retireBox(gates, bot) {
-    if (!state.isOwner) return '<div class="to-muted" style="margin-top:.6rem">Only the server owner can remove a bot.</div>';
+    if (!state.isOwner) return '<div class="to-muted to-mt">Only the server owner can remove a bot.</div>';
     if (bot.retired) return '';
 
     const ack = bot.holdsData && !gates.gates.find(g => g.id === 'data')?.pass
-      ? `<button class="btn btn-sm btn-secondary" data-ack="${bot.bot_id}">I exported ${esc(bot.holdsData.what)}</button>` : '';
+      ? `<button type="button" class="btn btn-sm btn-secondary" data-ack="${bot.bot_id}">I exported ${esc(bot.holdsData.what)}</button>` : '';
+
+    // The parts no machine can verify. Its own button, with the features named, so nobody confirms
+    // a thing they have not read.
+    const parity = gates.gates.find(g => g.id === 'parity');
+    const handSet = parity && parity.pass !== true && /cannot be checked automatically/.test(parity.detail || '')
+      ? `<button type="button" class="btn btn-sm btn-secondary" data-parityack="${bot.bot_id}">I set these up myself</button>` : '';
 
     // Is the 24h soak the ONLY thing standing in the way? Every other gate — the ones that prove we
     // actually replaced the bot — must be green. If so, the owner may waive the wait (but never the
@@ -361,16 +613,17 @@
 
     const waiver = soakOnly ? `
       <label class="to-waive"><input type="checkbox" data-waive="${bot.bot_id}"> Skip the 24h soak</label>
-      <input type="text" class="form-control" style="max-width:11rem" placeholder="Type: SKIP SOAK" data-waiveack="${bot.bot_id}">` : '';
+      <input type="text" class="form-control to-input-sm" placeholder="Type: SKIP SOAK" aria-label="Type SKIP SOAK to confirm" autocomplete="off" data-waiveack="${bot.bot_id}">` : '';
 
     const canClick = gates.ready || soakOnly;
     const label = gates.ready ? 'Remove this bot' : soakOnly ? 'Remove (soak waived)' : 'Blocked';
 
     return `<div class="to-retire ${soakOnly ? 'to-retire-waive' : ''}">
       ${ack}
+      ${handSet}
       ${waiver}
-      <input type="text" class="form-control" style="max-width:16rem" placeholder="Type: ${esc(guildName)}" data-confirm="${bot.bot_id}">
-      <button class="btn btn-sm btn-danger" data-retire="${bot.bot_id}" ${canClick ? '' : 'disabled'}>${label}</button>
+      <input type="text" class="form-control" placeholder="Type: ${esc(guildName)}" aria-label="Type the server name to confirm" autocomplete="off" data-confirm="${bot.bot_id}">
+      <button type="button" class="btn btn-sm btn-danger" data-retire="${bot.bot_id}" ${canClick ? '' : 'disabled'}>${label}</button>
       <span class="to-muted" data-rstatus="${bot.bot_id}"></span>
     </div>`;
   }
@@ -387,15 +640,15 @@
       (blocked.length
         ? `<div class="big bad">${blocked.length} blocked</div>
            <ul>${blocked.map(b => `<li>${esc(b.name)} — tops out at <strong>${esc(b.topRole)}</strong> (${b.position}), our bot is ${h.botPosition}</li>`).join('')}</ul>
-           <div class="to-muted" style="margin-top:.4rem">Raise our bot's role above theirs, or nothing can be retired.</div>`
-        : `<div class="big good">✅ all ${h.removable?.length ?? 0} removable</div>
-           <div class="to-muted" style="margin-top:.35rem">Our role (${h.botPosition}) is above every target bot's highest role.</div>`);
+           <div class="to-muted to-mt">Raise our bot's role above theirs, or nothing can be retired.</div>`
+        : `<div class="big good">All ${h.removable?.length ?? 0} removable</div>
+           <div class="to-muted to-mt">Our role (${h.botPosition}) is above every target bot's highest role.</div>`);
 
     const s = r.security || { warnings: [] };
     $('toReadySecurity').innerHTML =
       `<h5>Server security</h5>
        <div>Verification: <strong class="${(s.warnings||[]).some(w=>/Verification/.test(w))?'warn':''}">${esc(s.verification)}</strong></div>
-       <div>2FA for mod: <strong class="${s.twoFactorForMod?'good':'warn'}">${s.twoFactorForMod?'required':'OFF'}</strong></div>
+       <div>2FA for mod: <strong class="${s.twoFactorForMod?'good':'warn'}">${s.twoFactorForMod?'required':'off'}</strong></div>
        <div>Explicit filter: <strong>${esc(s.explicitContentFilter)}</strong></div>` +
       ((s.warnings||[]).length ? `<ul>${s.warnings.map(w=>`<li class="warn">${esc(w)}</li>`).join('')}</ul>` : '');
 
@@ -405,15 +658,36 @@
        <div>Empty roles: <strong>${g.emptyRoles}</strong></div>
        <div>Unnamed "new role": <strong>${g.placeholderRoles}</strong></div>` +
       ((g.duplicates||[]).length
-        ? `<div style="margin-top:.35rem">Duplicate-named roles (Carl-bot leftovers):</div>
+        ? `<div class="to-mt">Duplicate-named roles (usually left behind by a rebuilt role panel):</div>
            <ul>${g.duplicates.map(d=>`<li>${esc(d.name)} ×${d.count}</li>`).join('')}</ul>`
-        : `<div class="to-muted" style="margin-top:.35rem">No duplicate-named roles.</div>`);
+        : `<div class="to-muted to-mt">No duplicate-named roles.</div>`);
 
+    // Parity gaps are now DERIVED from the bots actually in this server, so this panel is either a
+    // real list of things that will not come across or an honest "nothing outstanding". It is never
+    // a hardcoded paragraph about somebody else's server, which is what it used to be.
     const gaps = r.parityGaps || [];
+    const unknown = gaps.filter(x => x.severity === 'unknown');
+    const partial = gaps.filter(x => x.severity !== 'unknown');
     $('toReadyGaps').innerHTML =
-      `<h5>Parity gaps &amp; notes</h5>` +
-      (gaps.length ? `<ul>${gaps.map(x=>`<li><strong class="warn">${esc(x.feature)}</strong> — ${esc(x.detail)}</li>`).join('')}</ul>` : '') +
-      ((r.notes||[]).length ? `<ul>${r.notes.map(n=>`<li class="to-muted">${esc(n)}</li>`).join('')}</ul>` : '');
+      `<h5>What will not come across</h5>` +
+      (gaps.length
+        ? `<div class="big ${unknown.length ? 'warn' : ''}">${gaps.length} to read</div>
+           <ul>
+             ${partial.map(x=>`<li><strong class="warn">${esc(x.feature)}</strong> — ${esc(x.detail)}</li>`).join('')}
+             ${unknown.map(x=>`<li><strong class="to-gap-unknown">${esc(x.feature)}</strong> — ${esc(x.detail)}</li>`).join('')}
+           </ul>`
+        : `<div class="big good">Nothing outstanding</div>
+           <div class="to-muted to-mt">Every bot here is either fully replaced or
+           deliberately kept.</div>`);
+
+    // The narrative. Each line is a fact about this scan, this server, right now.
+    const notes = r.notes || [];
+    const notesBox = $('toReadyNotes');
+    notesBox.hidden = !notes.length;
+    if (notes.length) {
+      notesBox.innerHTML = `<h5>What this audit is based on</h5>
+        <ul>${notes.map(n=>`<li>${esc(n)}</li>`).join('')}</ul>`;
+    }
   }
 
   // One badge class + wording per honest status. Only 'blocked' is a problem; the rest are fine.
@@ -424,11 +698,11 @@
     deliberate:    { cls:'seq',  text:'deliberate action' },
     'needs-input': { cls:'warn', text:'needs your input' },
     'no-op':       { cls:'ok',   text:'no setup needed' },
-    declined:      { cls:'off',  text:'she said no' },
+    declined:      { cls:'off',  text:'the owner said no' },
     blocked:       { cls:'no',   text:'blocked' },
   };
   // The reason line comes from whichever intent field is set — not always `blocked`. `declined` goes
-  // first: once she has said no, why we COULD have done it is not the interesting part.
+  // first: once the owner has said no, why we COULD have done it is not the interesting part.
   const stepReason = (s) => s.declined || s.blocked || s.sequenced || s.deliberate || s.needsInput || s.noop || null;
 
   function renderHeadline(p) {
@@ -436,13 +710,14 @@
     const order = ['done','ready','deliberate','sequenced','needs-input','no-op','declined','blocked'];
     const chips = order.filter(k => c[k]).map(k => {
       const m = STATUS_META[k];
-      return `<span class="to-sum-chip ${m.cls}">${c[k]} ${esc(m.text)}</span>`;
+      const text = k === 'declined' ? `${owner()} said no` : m.text;
+      return `<span class="cf-chip ${chipTone(m.cls)}">${c[k]} ${esc(text)}</span>`;
     }).join('');
     const blocked = c.blocked || 0;
     const lead = blocked
       ? `<strong class="bad">${blocked} real blocker${blocked>1?'s':''}</strong> — everything else is done, ready, or working as intended.`
       : `<strong class="good">No blockers.</strong> Everything is done, one click away, or intentionally hand-driven.`;
-    return `<div class="to-sum">${lead}<div class="to-sum-chips">${chips}</div></div>`;
+    return `<div class="to-sum">${lead}<div class="cf-chips to-sum-chips">${chips}</div></div>`;
   }
 
   /**
@@ -450,7 +725,7 @@
    *
    * Rendered above the steps, and the "does not want" list is given equal weight to the "wants" —
    * a takeover goes wrong by switching on something nobody asked for far more often than by
-   * forgetting something they did.
+   * forgetting something they did. The owner is named, never pronouned.
    */
   function renderDecisions(d) {
     const box = $('toDecisions');
@@ -471,29 +746,29 @@
         ${x.note ? `<div class="to-dec-n">“${esc(x.note)}”</div>` : ''}
       </div>`).join('');
 
-    const chips = (list, cls) => list.map(c => `<span class="to-feat ${cls}">${esc(c.name)}</span>`).join('');
+    const chips = (list, cls) => list.map(c => `<span class="cf-chip ${chipTone(cls)}">${esc(c.name)}</span>`).join('');
 
     box.innerHTML = `
-      <div class="to-card">
-        <h4 class="to-h">What she asked for</h4>
+      <div class="to-dec-box">
+        <h4 class="to-h">What ${esc(owner())} asked for</h4>
         <div class="to-muted">${head}</div>
         <div class="to-dec-grid">${rows}</div>
 
         ${d.spareRoleNames?.length ? `
-          <h5 class="to-sub">The spare roles, in her words</h5>
-          <div class="to-feats">${d.spareRoleNames.map(n => `<span class="to-feat yes">${esc(n)}</span>`).join('')}</div>` : ''}
+          <h5 class="to-sub">The spare roles, in ${esc(ownerPossessive())} own words</h5>
+          <div class="cf-chips to-feats">${d.spareRoleNames.map(n => `<span class="cf-chip is-ok">${esc(n)}</span>`).join('')}</div>` : ''}
 
         <h5 class="to-sub">Wants switched on <span class="to-muted">(${d.wanted.length})</span></h5>
-        <div class="to-feats">${chips(d.wanted, 'yes') || '<span class="to-muted">—</span>'}</div>
+        <div class="cf-chips to-feats">${chips(d.wanted, 'yes') || '<span class="to-muted">—</span>'}</div>
 
         <h5 class="to-sub">Does <em>not</em> want <span class="to-muted">(${d.unwanted.length})</span></h5>
-        <div class="to-feats">${chips(d.unwanted, 'no') || '<span class="to-muted">—</span>'}</div>
+        <div class="cf-chips to-feats">${chips(d.unwanted, 'no') || '<span class="to-muted">—</span>'}</div>
         <div class="to-muted">Leave these alone. Switching one on because it seemed like a nice idea is the
-          exact thing she was asked in order to prevent.</div>
+          exact thing ${esc(owner())} was asked in order to prevent.</div>
 
         ${d.needsExplaining?.length ? `
-          <h5 class="to-sub">She wants these explained <span class="to-muted">(${d.needsExplaining.length})</span></h5>
-          <div class="to-feats">${chips(d.needsExplaining, 'ask')}</div>
+          <h5 class="to-sub">Wants these explained <span class="to-muted">(${d.needsExplaining.length})</span></h5>
+          <div class="cf-chips to-feats">${chips(d.needsExplaining, 'ask')}</div>
           <div class="to-muted">These are questions back to us, not answers. Answer them before assuming either way.</div>` : ''}
       </div>`;
   }
@@ -508,15 +783,15 @@
       const reason = stepReason(s);
       const applyable = st === 'ready';
       return `
-      <div class="to-step to-st-${st}">
+      <div class="to-step to-st-${esc(st)}">
         <input type="checkbox" data-step="${esc(s.key)}" ${applyable ? 'checked' : 'disabled'}>
         <div>
           <strong>${esc(s.label)}</strong>
-          <span class="to-tag ${m.cls}">${esc(m.text)}</span>
+          <span class="cf-chip ${chipTone(m.cls)}">${esc(st === 'declined' ? `${owner()} said no` : m.text)}</span>
           ${s.replaces ? `<span class="to-muted"> — replaces ${esc(s.replaces)}</span>` : ''}
           ${s.note ? `<div class="to-muted">${esc(s.note)}</div>` : ''}
           ${reason ? `<div class="to-muted">${esc(reason)}</div>` : ''}
-          ${s.ownerNote ? `<div class="to-ownernote">“${esc(s.ownerNote)}” <span class="to-muted">— the owner</span></div>` : ''}
+          ${s.ownerNote ? `<div class="to-ownernote">“${esc(s.ownerNote)}” <span class="to-muted">— ${esc(owner())}</span></div>` : ''}
         </div>
       </div>`;
     }).join('') || '<div class="to-muted">Nothing to do.</div>');
@@ -524,16 +799,16 @@
   }
 
   /**
-   * Her answers. An unanswered question is shown as loudly as an answered one — the gaps are the
-   * point. A note with no chosen option is still a real answer (on the free-text questions it is the
-   * ONLY possible answer), so it must never render as "not answered".
+   * The owner's answers. An unanswered question is shown as loudly as an answered one — the gaps are
+   * the point. A note with no chosen option is still a real answer (on the free-text questions it is
+   * the ONLY possible answer), so it must never render as "not answered".
    */
   function renderQuestionnaire(d) {
     const url = $('toQUrl');
     if (d.url) {
       url.hidden = false;
       url.innerHTML = `<code class="to-code">${esc(d.url)}</code>
-        <button class="btn btn-secondary to-copy" data-copy="${esc(d.url)}">Copy</button>`;
+        <button type="button" class="btn btn-sm btn-secondary to-copy" data-copy="${esc(d.url)}">Copy</button>`;
       $('toQLink').hidden = true;
       $('toQRevoke').hidden = false;
     } else {
@@ -542,9 +817,17 @@
       $('toQRevoke').hidden = true;
     }
 
+    // Questions are generated from this server's own scan. No scan yet → nothing to ask about.
+    if (d.scanned === false) {
+      $('toQ').innerHTML = `<div class="to-q no"><div class="to-qa waiting">This server hasn’t been scanned yet — `
+        + `run the full scan above and the questions will be built from what it finds.</div></div>`;
+      $('toQ').classList.remove('to-muted');
+      return;
+    }
+
     const total = d.questions.length;
     let html = `<div class="to-qsum">${d.answered} of ${total} answered${
-      d.answered === 0 ? ' — she has not opened it yet, or has not started' : ''}</div>`;
+      d.answered === 0 ? ` — ${esc(owner())} has not opened it yet, or has not started` : ''}</div>`;
 
     let section = null;
     for (const q of d.questions) {
@@ -558,7 +841,7 @@
       html += `<div class="to-q ${answered ? 'yes' : 'no'}">`;
       html += `<div class="to-qq">${esc(q.q)}</div>`;
       if (!answered) {
-        html += `<div class="to-qa waiting">waiting on her</div>`;
+        html += `<div class="to-qa waiting">waiting on ${esc(owner())}</div>`;
       } else {
         if (chosen) html += `<div class="to-qa">${esc(chosen.label)}${chosen.detail ? ` <span class="to-muted">— ${esc(chosen.detail)}</span>` : ''}</div>`;
         else if (a.value) html += `<div class="to-qa">${esc(a.value)}</div>`;
@@ -568,11 +851,11 @@
       html += '</div>';
     }
 
-    // The feature menu. Only what she actually touched is shown — 44 untouched rows would bury the
-    // handful she picked, and "she didn't pick it" is not information worth 44 lines.
+    // The feature menu. Only what the owner actually touched is shown — 44 untouched rows would bury
+    // the handful they picked, and "not picked" is not information worth 44 lines.
     const cat = d.catalogue || [];
     const picked = cat.filter(c => d.answers[c.key]?.value);
-    html += `<div class="to-qsec">Features she picked${picked.length ? '' : ' — none yet'}</div>`;
+    html += `<div class="to-qsec">Features picked${picked.length ? '' : ' — none yet'}</div>`;
 
     if (picked.length) {
       const want    = picked.filter(c => d.answers[c.key].value === 'yes');
@@ -589,7 +872,7 @@
       html += list(want,    'yes',  'Wants these');
       html += list(nope,    'no',   'Does not want these');
     } else {
-      html += `<div class="to-q no"><div class="to-qa waiting">she has not been through the menu</div></div>`;
+      html += `<div class="to-q no"><div class="to-qa waiting">${esc(owner())} has not been through the menu</div></div>`;
     }
 
     $('toQ').innerHTML = html;
@@ -609,9 +892,45 @@
    *
    * The review list goes FIRST and stays loud. Derivation is genuinely good at some of this (a
    * Twitch handle in an announcement is not an inference) and genuinely bad at other parts (which
-   * role a panel's 🧡 button grants is nowhere in the message). Rendering both at the same visual
+   * role a panel's emoji button grants is nowhere in the message). Rendering both at the same visual
    * weight would invite someone to approve a guess by reflex.
    */
+  /**
+   * The panels, option by option, with the reason each role was chosen.
+   *
+   * This is the one place in the takeover where being wrong is worse than being unsure. An option
+   * with no role is a button that does nothing when a member clicks it; an option with the WRONG
+   * role hands them something they did not ask for and looks like it worked. So every option shows
+   * which rung of evidence it came from, in its own words, and the weak ones are visually loud.
+   */
+  const RUNG = {
+    certain: ['ok',   'from a role id'],
+    likely:  ['warn', 'inferred'],
+    guess:   ['no',   'GUESS — read this'],
+    unknown: ['no',   'no role — will be dropped'],
+  };
+
+  function renderPanels(list) {
+    if (!list?.length) return '—';
+    return list.map(pan => {
+      const opts = (pan.options || []).map(o => {
+        const [cls, label] = RUNG[o.roleConfidence] ?? ['warn', o.roleConfidence];
+        return `<div class="to-opt">
+          <span class="to-opt-e">${esc(o.emoji || o.label || '?')}</span>
+          <span class="to-opt-r">${o.roleId ? esc(o.label ?? o.roleId) : '<i>nothing</i>'}</span>
+          <span class="cf-chip ${chipTone(cls)}">${esc(label)}</span>
+          ${o.evidence ? `<div class="to-opt-why">${esc(o.evidence)}</div>` : ''}
+        </div>`;
+      }).join('');
+      return `<div class="to-panel">
+        <div class="to-panel-h">${esc(pan.name)}
+          <span class="to-muted">${pan.kind === 'buttons' ? 'button panel' : 'reaction panel'} ·
+          ${pan.options.length} option(s)</span></div>
+        ${opts}
+      </div>`;
+    }).join('');
+  }
+
   function renderProfile(d) {
     const p = d.profile;
     const btnDerive = $('toDerive');
@@ -641,8 +960,8 @@
     btnDerive.textContent = 'Read it again';
 
     let html = `<div class="to-qsum">${approved
-      ? '<b style="color:#57F287">Approved</b> — the plan can use this.'
-      : '<b style="color:#FEE75C">Proposed.</b> Nothing will be written from this until you approve it.'}
+      ? '<span class="cf-chip is-ok">Approved</span> The plan can use this.'
+      : '<span class="cf-chip is-warn">Proposed</span> Nothing will be written from this until you approve it.'}
       Read ${p.stats?.messagesRead ?? '?'} messages across ${p.stats?.channelsRead ?? '?'} channels.</div>`;
 
     // Review list first. These are the fields that will be wrong.
@@ -651,26 +970,26 @@
       for (const r of d.review) {
         const [cls, label] = CONF[r.confidence] ?? ['warn', r.confidence];
         html += `<div class="to-q ${cls}">
-          <div class="to-qq">${esc(r.key)} <span class="to-tag ${cls === 'ask' ? 'warn' : 'seq'}">${esc(label)}</span></div>
+          <div class="to-qq">${esc(r.key)} <span class="cf-chip ${chipTone(cls === 'ask' ? 'warn' : 'seq')}">${esc(label)}</span></div>
           <div class="to-qa">${esc(r.evidence)}</div></div>`;
       }
     }
 
     html += `<div class="to-qsec">What it found</div>`;
     const rows = [
-      ['Streamer',        p.streamers,        v => v.length ? v.map(s => `${s.platform}/${s.username}${s.pingRoleId === 'everyone' ? ' (@everyone)' : ''}`).join(', ') : '—'],
-      ['Role panels',     p.panels,           v => v.length ? v.map(x => `${x.name} (${x.options.length})`).join(' · ') : '—'],
-      ['Panel channel',   p.selfAssignChannel,v => v ? `<code class="to-code">${v}</code>` : '—'],
-      ['Custom commands', p.customCommands,   v => v.length ? v.map(c => c.prefix + c.name).join(', ') : '—'],
-      ['Birthday role',   p.birthdayRole,     v => v ? `<code class="to-code">${v}</code>` : '—'],
-      ['Emoji to upload', p.platformEmoji,    v => v.length ? v.map(e => e.name).join(', ') : 'none needed'],
+      ['Streamer',        p.streamers,        v => v.length ? v.map(s => esc(`${s.platform}/${s.username}${s.pingRoleId === 'everyone' ? ' (@everyone)' : ''}`)).join(', ') : '—'],
+      ['Role panels',     p.panels,           renderPanels],
+      ['Panel channel',   p.selfAssignChannel,v => v ? `<code class="to-code">${esc(v)}</code>` : '—'],
+      ['Custom commands', p.customCommands,   v => v.length ? v.map(c => esc(c.prefix + c.name)).join(', ') : '—'],
+      ['Birthday role',   p.birthdayRole,     v => v ? `<code class="to-code">${esc(v)}</code>` : '—'],
+      ['Emoji to upload', p.platformEmoji,    v => v.length ? v.map(e => esc(e.name)).join(', ') : 'none needed'],
       ['Spare roles',     p.roleHygiene,      v => `${v.duplicates.length} empty duplicate(s), ${v.empty.length} other empty`],
     ];
     for (const [label, f, fmt] of rows) {
       if (!f) continue;
       const [cls, conf] = CONF[f.confidence] ?? ['warn', f.confidence];
       html += `<div class="to-q ${cls === 'ok' ? 'yes' : cls}">
-        <div class="to-qq">${esc(label)} <span class="to-tag ${cls === 'ok' ? 'ok' : 'warn'}">${esc(conf)}</span></div>
+        <div class="to-qq">${esc(label)} <span class="cf-chip ${chipTone(cls === 'ok' ? 'ok' : 'warn')}">${esc(conf)}</span></div>
         <div class="to-qa">${fmt(f.value)}</div>
         <div class="to-qwhen">${esc(f.evidence ?? '')}</div></div>`;
     }
@@ -701,6 +1020,7 @@
     try {
       showError('');
       state = await req(api('/'));
+      renderOwner(state.owner);
       renderScan(state);
       renderBots(state);
 
@@ -708,14 +1028,25 @@
         $('toProfile').textContent = 'Could not load the profile.';
       });
 
-      // Independent of the scan — her answers exist whether or not anyone has scanned anything.
+      req(api('/catalogue')).then(d => renderCatalogue(d.items)).catch(() => {
+        $('toCat').textContent = 'Could not load what they asked for.';
+      });
+
+      // Independent of the scan — the answers exist whether or not anyone has scanned anything.
       req(api('/questionnaire')).then(renderQuestionnaire).catch(() => {
-        $('toQ').textContent = 'Could not load her answers.';
+        $('toQ').textContent = 'Could not load the answers.';
       });
 
       if (state.scanning && !poll) poll = setInterval(load, 3000);
       if (!state.scanning && poll) { clearInterval(poll); poll = null; }
-    } catch (err) { showError(err.message); }
+    } catch (err) {
+      showError(err.message);
+      // First load failed: the panels still show their loading rows, so say they could not load.
+      root.querySelectorAll('.cf-state--loading').forEach((el) => {
+        el.outerHTML = '<div class="cf-state cf-state--error cf-state--compact"><p class="cf-state-title">Could not load</p>'
+          + '<p class="cf-state-text">Reload the page to try again.</p></div>';
+      });
+    }
   }
 
   $('toQLink').addEventListener('click', async () => {
@@ -727,7 +1058,7 @@
   });
 
   $('toQRevoke').addEventListener('click', async () => {
-    if (!confirm('Revoke her link? The page stops working for her immediately. Her answers are kept.')) return;
+    if (!confirm(`Revoke this link? The page stops working for ${owner()} immediately. The answers are kept.`)) return;
     try {
       await req(api('/questionnaire/revoke'), { method: 'POST' });
       renderQuestionnaire(await req(api('/questionnaire')));
@@ -760,19 +1091,19 @@
 
   $('toAttrAll').addEventListener('click', async () => {
     const btn = $('toAttrAll');
-    btn.disabled = true; btn.textContent = 'Attributing…';
+    btn.disabled = true; btn.textContent = 'Reading their messages…';
     try {
       const r = await req(api('/auto-attribute-all'), { method: 'POST' });
       const el = $('toAttrAllResult');
       el.hidden = false;
       el.innerHTML = r.remaining
-        ? `Attributed <strong>${r.matched}</strong> message shape(s). <strong>${r.remaining}</strong> still need a human — ` +
-          r.results.map(x => `${esc(x.name)} (${x.remaining})`).join(', ') +
-          `. Open those bots and tick the ones we cover.`
-        : `Attributed <strong>${r.matched}</strong> message shape(s). <strong>Nothing left unexplained.</strong>`;
+        ? `Classified <strong>${r.matched}</strong> message shape(s). <strong>${r.remaining}</strong> could not be `
+          + `read confidently — ` + r.results.map(x => `${esc(x.name)} (${x.remaining})`).join(', ')
+          + `. Open those bots: each is grouped by what it does, so it is a handful of decisions, not a list.`
+        : `Classified <strong>${r.matched}</strong> message shape(s). <strong>Nothing left unexplained.</strong>`;
       await load();
     } catch (err) { showError(err.message); }
-    finally { btn.disabled = false; btn.textContent = 'Auto-attribute everything we recognise'; }
+    finally { btn.disabled = false; btn.textContent = "Read every bot's messages and classify them"; }
   });
 
   $('toApply').addEventListener('click', async () => {
@@ -782,7 +1113,9 @@
       const r = await req(api('/apply'), { method:'POST', body: JSON.stringify({ only }) });
       const applied = r.results.filter(x => x.outcome === 'applied').length;
       showError('');
-      alert(`Applied ${applied} step(s).`);
+      const applyStatus = $('toApplyStatus');
+      applyStatus.textContent = `Applied ${applied} ${applied === 1 ? 'step' : 'steps'}.`;
+      applyStatus.className = 'cf-status-line is-ok';
       renderSteps(await req(api('/plan')));
     } catch (err) { showError(err.message); }
   });
@@ -795,6 +1128,10 @@
       if (card.classList.contains('open')) await openBot(toggle.dataset.toggle).catch(err => showError(err.message));
       return;
     }
+
+    // Expand a behaviour to read the actual messages behind it.
+    const fam = e.target.closest('[data-fam]');
+    if (fam) { fam.closest('.to-fam').classList.toggle('open'); return; }
 
     const auto = e.target.closest('[data-auto]');
     if (auto) {
@@ -810,6 +1147,20 @@
       if (!confirm('Confirm the data has been exported? This cannot be undone once the bot is removed.')) return;
       try { await req(api(`/bots/${ack.dataset.ack}/extraction-ack`), { method:'POST' }); await openBot(ack.dataset.ack); }
       catch (err) { showError(err.message); }
+      return;
+    }
+
+    const pack = e.target.closest('[data-parityack]');
+    if (pack) {
+      const botId = pack.dataset.parityack;
+      const detail = root.querySelector(`[data-body="${botId}"]`)?.textContent ?? '';
+      const named = (detail.match(/"([a-z_]+)"/g) || []).map(x => x.replace(/"/g, ''));
+      if (!confirm('Confirm you have set these up yourself?\n\n' + (named.join(', ') || 'the unverifiable features')
+        + '\n\nThis is recorded against you, and it lets the removal proceed.')) return;
+      try {
+        await req(api(`/bots/${botId}/parity-ack`), { method: 'POST', body: JSON.stringify({ features: named }) });
+        await openBot(botId);
+      } catch (err) { showError(err.message); }
       return;
     }
 
@@ -838,11 +1189,32 @@
         const r = await req(api(`/bots/${botId}/retire`), { method:'POST', body: JSON.stringify(body) });
         status.textContent = `Removed via ${r.method}${r.verdict?.soakWaived ? ' (soak waived)' : ''}.`;
         await load();
-      } catch (err) { status.textContent = err.message; status.style.color = '#ED4245'; rm.disabled = false; }
+      } catch (err) { status.textContent = err.message; status.classList.add('to-bad'); rm.disabled = false; }
     }
   });
 
   root.addEventListener('change', async (e) => {
+    // A whole behaviour at once — one decision, however many shapes it covers.
+    const tick = e.target.closest('[data-famtick]');
+    if (tick) {
+      const botId = tick.dataset.famtick;
+      const f = evidence.get(botId)?.families?.[Number(tick.dataset.famidx)];
+      if (!f) return;
+      try {
+        await req(api(`/bots/${botId}/attribute-family`), {
+          method: 'POST',
+          body: JSON.stringify({
+            templateIds: f.templateIds,
+            attributed: tick.checked,
+            feature: f.kind === 'feature' ? f.feature : `n/a:${f.feature ?? 'unknown'}`,
+          }),
+        });
+        tick.closest('.to-fam').classList.toggle('done', tick.checked);
+        await load();
+      } catch (err) { showError(err.message); tick.checked = !tick.checked; }
+      return;
+    }
+
     const box = e.target.closest('[data-attr]');
     if (!box) return;
     try {
@@ -850,6 +1222,154 @@
         method:'POST', body: JSON.stringify({ attributed: box.checked, feature: 'manual' }),
       });
     } catch (err) { showError(err.message); box.checked = !box.checked; }
+  });
+
+  /**
+   * Step 6 — the actions that actually change the server.
+   *
+   * Kept away from "Apply selected" on purpose. Apply writes config rows and can be re-run all day;
+   * these post messages, take other bots' panels down, and remove bots. The dry run is not a
+   * courtesy — it calls the same gate evaluation the live run does, so a removal it says will be
+   * skipped WILL be skipped.
+   */
+  function renderExec(r) {
+    const el = $('toExecOut');
+    const order = r.order || [];
+
+    const rows = order.map(a => {
+      // Dry run reports `willRun`; a live run reports what happened. Both land in `outcome`.
+      const ok = a.willRun ?? !/^(SKIPPED|MANUAL|LEFT IN PLACE|WILL SKIP|RUN ERROR|PREDICT ERROR)/.test(a.outcome || '');
+      return `<div class="to-step to-st-${ok ? 'ready' : 'blocked'}">
+        <div>
+          <strong>${esc(a.label)}</strong>
+          <span class="cf-chip ${chipTone(ok ? 'ok' : 'no')}">${esc(a.phase || '')}</span>
+          ${a.outcome ? `<div class="to-muted">${esc(a.outcome)}</div>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+
+    const extra = [
+      (r.kept || []).length
+        ? `<div class="to-muted"><strong>Kept:</strong> ${r.kept.map(k =>
+            esc(typeof k === 'string' ? k : `${k.name}${k.why ? ` — ${k.why}` : ''}`)).join(' · ')}</div>`
+        : '',
+      (r.followUps || []).length
+        ? `<div class="to-muted"><strong>Still for you:</strong> ${r.followUps.map(f =>
+            esc(typeof f === 'string' ? f : f.label ?? JSON.stringify(f))).join(' · ')}</div>`
+        : '',
+    ].join('');
+
+    el.classList.remove('to-muted');
+    el.innerHTML = (r.dryRun
+      ? `<div class="to-sum"><strong>Nothing has been changed.</strong> ${r.willRunCount} of
+           ${order.length} action(s) would run, checked against the live gates.</div>`
+      : `<div class="to-sum"><strong class="good">Takeover run — ${r.willRunCount} action(s) completed.</strong>
+           Anything marked SKIPPED was refused by a gate and left exactly as it was.</div>`)
+      + (rows || '<div class="to-muted">Nothing to do — every bot we replace is already gone.</div>')
+      + extra;
+
+    // Only offer the live run once a dry run has actually been read.
+    $('toExecGo').hidden = !r.dryRun || !order.length;
+
+    // Offer the waiver only when the soak is genuinely what is holding things up. Showing it when
+    // the blockers are real ones would invite ticking it and expecting a different answer.
+    const soakBound = order.some(a => !a.willRun && /soak|running for 24h/i.test(a.outcome || ''));
+    $('toSoakWrap').hidden = !(r.dryRun && soakBound);
+  }
+
+  $('toPanels').addEventListener('click', async () => {
+    const b = $('toPanels');
+    if (!confirm('Post our role panels into this server, and take the old bot\'s panels down once ours are up?\n\n'
+      + 'The old panels are archived before they are removed.')) return;
+    b.disabled = true; b.textContent = 'Posting…';
+    try {
+      const r = await req(api('/panels'), { method: 'POST' });
+      const posted = (r.results || []).filter(x => x.outcome === 'posted').length;
+      $('toExecOut').classList.remove('to-muted');
+      $('toExecOut').innerHTML = `<div class="to-sum"><strong class="good">Posted ${posted} panel(s).</strong>
+        ${(r.results || []).map(x => `${esc(x.panel)}: ${esc(x.outcome)}`).join(' · ')}</div>`;
+      await load();
+    } catch (err) { showError(err.message); }
+    finally { b.disabled = false; b.textContent = 'Post the role panels'; }
+  });
+
+  $('toDry').addEventListener('click', async () => {
+    const b = $('toDry');
+    b.disabled = true; b.textContent = 'Checking every gate…';
+    try {
+      renderExec(await req(api('/execute'), {
+        method: 'POST',
+        body: JSON.stringify({ dryRun: true, overrideSoak: $('toSoak').checked }),
+      }));
+    }
+    catch (err) { showError(err.message); }
+    finally { b.disabled = false; b.textContent = 'Preview the full takeover'; }
+  });
+
+  const CAT_KIND = {
+    config:        ['ok',   'one click'],
+    creates:       ['warn', 'creates a channel or role'],
+    standing:      ['seq',  'already available'],
+    'needs-input': ['no',   'needs a decision from you'],
+  };
+
+  function renderCatalogue(items) {
+    const el = $('toCat');
+    if (!items.length) {
+      el.textContent = 'Nothing ticked on the questionnaire yet.';
+      return;
+    }
+    el.classList.remove('to-muted');
+    el.innerHTML = items.map(i => {
+      const [cls, label] = CAT_KIND[i.kind] ?? ['warn', i.kind];
+      return `<div class="to-step to-st-${i.done ? 'ready' : i.kind === 'needs-input' ? 'blocked' : 'ready'}">
+        <div>
+          <strong>${esc(i.label)}</strong>
+          <span class="cf-chip ${chipTone(i.done ? 'ok' : cls)}">${esc(i.done ? 'already on' : label)}</span>
+          ${i.note ? `<div class="to-muted">${esc(i.note)}</div>` : ''}
+          ${i.outcome ? `<div class="to-muted">${esc(i.outcome)}${i.detail ? ` — ${esc(i.detail)}` : ''}</div>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+  }
+
+  $('toCatApply').addEventListener('click', async () => {
+    const b = $('toCatApply');
+    if (!confirm('Set up everything the owner asked for?\n\nSome of these create a channel, a category '
+      + 'or a role. Nothing already present is duplicated, and you will be told exactly what was made.')) return;
+    b.disabled = true; b.textContent = 'Setting up…';
+    try {
+      const r = await req(api('/catalogue/apply'), { method: 'POST', body: JSON.stringify({}) });
+      renderCatalogue(r.results);
+    } catch (err) { showError(err.message); }
+    finally { b.disabled = false; b.textContent = 'Set these up'; }
+  });
+
+  $('toSoak').addEventListener('change', () => $('toDry').click());
+
+  $('toExecRun').addEventListener('click', async () => {
+    const confirmEl = $('toExecConfirm');
+    const waiving = $('toSoak').checked;
+    if (!confirm(`Run the takeover for real?\n\nReplacements are switched on and the bots they replace are `
+      + `removed. A removed bot takes its stored data with it.`
+      + (waiving ? '\n\nYou are ALSO skipping the 24-hour soak, so nothing will have been proven working '
+        + 'live before its incumbent is removed.' : ''))) return;
+    const b = $('toExecRun');
+    b.disabled = true; $('toExecStatus').textContent = 'Running…';
+    try {
+      const r = await req(api('/execute'), {
+        method: 'POST',
+        body: JSON.stringify({
+          dryRun: false,
+          confirm: confirmEl.value,
+          overrideSoak: $('toSoak').checked,
+        }),
+      });
+      renderExec(r);
+      $('toExecStatus').textContent = '';
+      await load();
+    } catch (err) { $('toExecStatus').textContent = err.message; $('toExecStatus').classList.add('to-bad'); }
+    finally { b.disabled = false; }
   });
 
   window.addEventListener('beforeunload', () => poll && clearInterval(poll));

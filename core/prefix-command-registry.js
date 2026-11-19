@@ -223,7 +223,9 @@ register('mute', {
     category: 'moderation',
     args: [
         { name: 'user', type: 'user', required: true },
-        { name: 'duration', type: 'string', required: true },
+        // Optional: without a length the server's default timeout length applies (Moderation page); the
+        // handler then reads a first word that is not a length as part of the reason.
+        { name: 'duration', type: 'string', required: false },
         { name: 'reason', type: 'string', required: false, rest: true }
     ],
     handler: { file: '../commands/admin/admin-mod-handler.js', method: 'handleMute' },

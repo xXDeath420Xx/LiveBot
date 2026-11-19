@@ -11,11 +11,11 @@
         box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.05);
     }
     .opc-recipient { margin-bottom: 32px; }
-    .opc-recipient-avatar { width: 80px; height: 80px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.2); margin: 0 auto 12px; display: block; object-fit: cover; }
-    .opc-recipient-name { font-size: 14px; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 2px; }
+    .opc-recipient-avatar { /* theme: fixed (card art: on the card, whose colour the creator picks) */ width: 80px; height: 80px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.2); margin: 0 auto 12px; display: block; object-fit: cover; }
+    .opc-recipient-name { /* theme: fixed (card art: on the card, whose colour the creator picks) */ font-size: 14px; color: rgba(255,255,255,0.5); text-transform: uppercase; letter-spacing: 2px; }
     .opc-title { font-size: <%= card.title_font_size || 28 %>px; font-weight: 700; color: <%= card.title_font_color || '#ffffff' %>; margin-bottom: 8px; <% if (card.title_font) { %>font-family: '<%= card.title_font %>', sans-serif;<% } %> }
     .opc-subtitle { font-size: 14px; color: <%= card.subtitle_font_color || 'rgba(255,255,255,0.4)' %>; margin-bottom: 32px; <% if (card.subtitle_font) { %>font-family: '<%= card.subtitle_font %>', sans-serif;<% } %> }
-    .opc-divider { width: 60px; height: 2px; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent); margin: 0 auto 32px; }
+    .opc-divider { /* theme: fixed (card art: on the card, whose colour the creator picks) */ width: 60px; height: 2px; background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent); margin: 0 auto 32px; }
     .opc-message {
         font-size: <%= (sig && sig.font_size) || 18 %>px;
         line-height: 1.8; color: <%= (sig && sig.font_color) || 'rgba(255,255,255,0.9)' %>;
@@ -24,11 +24,11 @@
     }
     .opc-gif { max-width: 100%; border-radius: 16px; margin-bottom: 24px; }
     .opc-audio { width: 100%; margin-bottom: 24px; height: 36px; opacity: 0.8; }
-    .opc-signer { display: flex; align-items: center; gap: 10px; justify-content: center; margin-top: 32px; padding-top: 24px; border-top: 1px solid rgba(255,255,255,0.08); }
+    .opc-signer { /* theme: fixed (card art: on the card, whose colour the creator picks) */ display: flex; align-items: center; gap: 10px; justify-content: center; margin-top: 32px; padding-top: 24px; border-top: 1px solid rgba(255,255,255,0.08); }
     .opc-signer-avatar { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; }
-    .opc-signer-name { font-size: 14px; font-weight: 600; color: rgba(255,255,255,0.7); }
-    .opc-signer-date { font-size: 11px; color: rgba(255,255,255,0.3); }
-    .opc-empty { color: rgba(255,255,255,0.4); font-size: 16px; padding: 40px; }
+    .opc-signer-name { /* theme: fixed (card art: on the card, whose colour the creator picks) */ font-size: 14px; font-weight: 600; color: rgba(255,255,255,0.7); }
+    .opc-signer-date { /* theme: fixed (card art: on the card, whose colour the creator picks) */ font-size: 11px; color: rgba(255,255,255,0.3); }
+    .opc-empty { /* theme: fixed (card art: on the card, whose colour the creator picks) */ color: rgba(255,255,255,0.4); font-size: 16px; padding: 40px; }
     .opc-actions { display: flex; justify-content: center; gap: 10px; margin-top: 20px; }
     .opc-actions .btn { font-size: 0.75rem; padding: 6px 14px; border-radius: 8px; }
     @media (max-width: 500px) { .opc-card { padding: 32px 24px; } .opc-message { font-size: 16px; } }
@@ -63,7 +63,14 @@
             <!-- The single message -->
             <div class="opc-message"><%= sig.message %></div>
 
-            <% if (sig.gif_url) { %>
+            <% if (sig.video && sig.video.embedUrl) { %>
+                <div class="sig-video" data-embed="<%= sig.video.embedUrl %>" onclick="playVideo(this)" title="Play video">
+                    <% if (sig.video.thumbnailUrl || sig.gif_url) { %>
+                    <img src="<%= sig.video.thumbnailUrl || sig.gif_url %>" alt="" loading="lazy">
+                    <% } %>
+                    <span class="sig-video-play"><i class="fas fa-play"></i></span>
+                </div>
+            <% } else if (sig.gif_url) { %>
                 <img src="<%= sig.gif_url %>" class="opc-gif" alt="" loading="lazy">
             <% } %>
 

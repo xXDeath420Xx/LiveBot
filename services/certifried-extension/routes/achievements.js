@@ -185,7 +185,7 @@ router.post('/claim', async (req, res) => {
             [req.player.id]
         );
 
-        logger.info('[Achievements] Claimed', {
+        logger.debug('[Achievements] Claimed', {
             playerId: req.player.id,
             achievementId,
             achievementName: playerAchievement.name,
@@ -276,7 +276,7 @@ export async function checkAchievements(playerId) {
                     description: achievement.description
                 });
 
-                logger.info('[Achievements] Unlocked', {
+                logger.debug('[Achievements] Unlocked', {
                     playerId,
                     achievementId: achievement.id,
                     achievementName: achievement.name

@@ -105,7 +105,7 @@ class ConfigCache {
   invalidateGuild(guildId) {
     let count = 0;
     for (const key of this.cache.keys()) {
-      if (key.endsWith(`:${guildId}`)) {
+      if (key.endsWith(`:${guildId}`) || key.includes(`:${guildId}:`)) {
         this.cache.delete(key);
         count++;
       }

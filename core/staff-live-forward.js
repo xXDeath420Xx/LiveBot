@@ -18,10 +18,10 @@ import logger from '../utils/logger.js';
 
 // Broad stream-link detector — includes Rumble VIDEO links (rumble.com/v…),
 // which the channel-only stream-url-parser deliberately doesn't match.
-const STREAM_LINK = /https?:\/\/(?:www\.)?(twitch\.tv|kick\.com|youtube\.com|youtu\.be|rumble\.com|tiktok\.com|trovo\.live|facebook\.com|fb\.gg)\/\S+/i;
+const STREAM_LINK = /https?:\/\/(?:www\.)?(twitch\.tv|kick\.com|youtube\.com|youtu\.be|rumble\.com|tiktok\.com|facebook\.com|fb\.gg)\/\S+/i;
 const PLATFORM_LABEL = [
   [/twitch\.tv/i, 'Twitch'], [/kick\.com/i, 'Kick'], [/youtu\.?be/i, 'YouTube'],
-  [/rumble\.com/i, 'Rumble'], [/tiktok\.com/i, 'TikTok'], [/trovo\.live/i, 'Trovo'], [/facebook\.com|fb\.gg/i, 'Facebook'],
+  [/rumble\.com/i, 'Rumble'], [/tiktok\.com/i, 'TikTok'], [/facebook\.com|fb\.gg/i, 'Facebook'],
 ];
 
 const CACHE = new Map(); // guildId -> { enabled, watch:Set, roles:[...], ts }

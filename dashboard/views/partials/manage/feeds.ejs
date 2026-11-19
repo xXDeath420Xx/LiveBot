@@ -1,461 +1,605 @@
+<%#
+  Content feeds: new posts from subreddits, YouTube channels, Twitter / X accounts and Bluesky
+  accounts, posted to a Discord channel. One add form and one list per source (POST
+  add-*-feed / remove-*-feed). Built on the settings-row kit (cf-settings.css); field names and
+  ids are unchanged.
+%>
 <%
 const rFeeds = redditFeeds || [];
 const yFeeds = youtubeFeeds || [];
 const tFeeds = twitterFeeds || [];
 const bFeeds = (typeof blueskyFeeds !== 'undefined') ? blueskyFeeds : [];
-const fFeeds = (typeof facebookFeeds !== 'undefined') ? facebookFeeds : [];
-const totalFeeds = rFeeds.length + yFeeds.length + tFeeds.length + bFeeds.length + fFeeds.length;
+const sFeeds = (typeof rssFeeds !== 'undefined' && Array.isArray(rssFeeds)) ? rssFeeds : [];
+const totalFeeds = rFeeds.length + yFeeds.length + tFeeds.length + bFeeds.length + sFeeds.length;
+const feedChannel = (id) => { const c = channels.find(ch => ch.id === id); return c ? '#' + c.name : 'Deleted channel'; };
+// Each feed's message, ping and filters are edited in the panel under its row (partials/manage/feeds-edit.ejs).
+const fdRoles = (typeof roles !== 'undefined' && Array.isArray(roles)) ? roles : [];
+const fdOn = (v, dflt) => (v === undefined || v === null) ? dflt : Number(v) !== 0;
+const fdRoleName = (id) => {
+    if (id === 'everyone') return '@everyone';
+    const r = fdRoles.find(x => String(x.id) === String(id));
+    return r ? '@' + r.name : 'a deleted role';
+};
+/** One line saying what is set on a feed beyond the defaults. */
+const fdSummary = (kind, f) => {
+    const parts = [];
+    if (f.ping_role_id) parts.push('Pings ' + fdRoleName(f.ping_role_id));
+    if (f.custom_message) parts.push('Custom message');
+    if (kind === 'reddit' || kind === 'rss') {
+        if (f.title_include || f.title_exclude) parts.push('Title filter');
+        if (f.flair_filter) parts.push('Flairs: ' + f.flair_filter);
+    } else if (kind === 'youtube') {
+        const on = [['Videos', f.include_videos], ['Shorts', f.include_shorts], ['Live', f.include_live]].filter(x => fdOn(x[1], true)).map(x => x[0]);
+        if (on.length < 3) parts.push(on.length ? on.join(' and ') + ' only' : 'Posts nothing');
+    } else if (kind === 'twitter') {
+        if (!fdOn(f.filter_replies, true)) parts.push('Includes replies');
+        if (!fdOn(f.filter_retweets, true)) parts.push('Includes reposts');
+        if (fdOn(f.filter_media_only, false)) parts.push('Media only');
+    } else if (kind === 'bluesky') {
+        if (!fdOn(f.filter_replies, true)) parts.push('Includes replies');
+        if (!fdOn(f.filter_reposts, true)) parts.push('Includes reposts');
+    }
+    return parts.join(', ') || 'Default';
+};
 %>
+<style>
+    .fd-source { font-weight: 500; color: var(--cf-text); overflow-wrap: anywhere; }
+    .fd-options { font-size: var(--cf-text-sm); color: var(--cf-text-2); overflow-wrap: anywhere; }
+    .fd-actions { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: var(--cf-2); }
+    .fd-actions form { margin: 0; }
+    .cf-rows table.cf-table tr.fd-edit-row[hidden] { display: none !important; }
+    .fd-edit { display: grid; gap: var(--cf-3); padding: var(--cf-2) 0; text-align: left; }
+    .fd-ctl { display: flex; flex-direction: column; gap: 6px; margin: 0; font-size: var(--cf-text-sm); font-weight: 500; color: var(--cf-text); }
+    .fd-ctl > :is(select, input, textarea) { width: 100%; margin: 0; font-weight: 400; }
+    .fd-group { margin: 0; padding: 0; border: 0; min-width: 0; }
+    .fd-group > legend { float: none; width: auto; margin: 0 0 var(--cf-2); padding: 0; font-size: var(--cf-text-sm); font-weight: 500; color: var(--cf-text); }
+    .fd-edit-foot { display: flex; flex-wrap: wrap; align-items: center; gap: var(--cf-2); }
+    .fd-url { display: block; font-size: var(--cf-text-xs); color: var(--cf-text-3); overflow-wrap: anywhere; }
+    .fd-url.is-bad { color: var(--cf-danger); }
+    .fd-rss-add .cf-section-foot [data-fd-add-status] { margin-right: auto; }
+    .fd-ico { width: 1.15em; text-align: center; margin-right: 4px; color: var(--cf-text-2); }
+    .fd-preview { display: grid; gap: 6px; }
+    .fd-preview-label { font-size: var(--cf-text-sm); font-weight: 500; color: var(--cf-text); }
+</style>
 
-<div class="page-section">
+<div class="page-section" data-fd-api="/api/guilds/<%= guild.id %>/feeds">
     <div class="page-section-header">
         <div>
             <div class="page-section-title">
                 <i class="fas fa-rss"></i>
-                <span>Content Feeds</span>
+                <span>Content feeds</span>
             </div>
-            <div class="page-section-subtitle">
-                Automatically post content from Reddit, YouTube, and Twitter
-            </div>
+            <div class="page-section-subtitle">Edit a feed to change its message, ping and filters.</div>
         </div>
     </div>
 
-    <!-- Stats Overview -->
-    <div class="grid grid-cols-4" style="margin-bottom: var(--spacing-6);">
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Total Feeds</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: var(--color-text-primary);"><%= totalFeeds %></div>
-        </div>
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Reddit</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: #FF4500;"><%= rFeeds.length %></div>
-        </div>
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">YouTube</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: #FF0000;"><%= yFeeds.length %></div>
-        </div>
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Twitter</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: #1DA1F2;"><%= tFeeds.length %></div>
-        </div>
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Bluesky</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: #0085FF;"><%= bFeeds.length %></div>
-        </div>
-        <div style="background: var(--color-dark-600); padding: var(--spacing-4); border-radius: var(--radius-md); border: 1px solid var(--color-dark-400);">
-            <div style="font-size: var(--font-size-xs); color: var(--color-text-muted); margin-bottom: var(--spacing-1);">Facebook</div>
-            <div style="font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); color: #1877F2;"><%= fFeeds.length %></div>
-        </div>
-    </div>
+    <dl class="cf-kpis" aria-label="Feeds at a glance">
+        <div class="cf-kpi"><dt>All feeds</dt><dd class="cf-kpi-value"><%= totalFeeds %></dd></div>
+        <div class="cf-kpi"><dt>Reddit</dt><dd class="cf-kpi-value"><%= rFeeds.length %></dd></div>
+        <div class="cf-kpi"><dt>YouTube</dt><dd class="cf-kpi-value"><%= yFeeds.length %></dd></div>
+        <div class="cf-kpi"><dt>Twitter / X</dt><dd class="cf-kpi-value"><%= tFeeds.length %></dd></div>
+        <div class="cf-kpi"><dt>Bluesky</dt><dd class="cf-kpi-value"><%= bFeeds.length %></dd></div>
+        <div class="cf-kpi"><dt>RSS</dt><dd class="cf-kpi-value"><%= sFeeds.length %></dd></div>
+    </dl>
 
-<!-- Reddit Feeds -->
-<div style="background: var(--color-dark-600); padding: var(--spacing-6); border-radius: var(--radius-lg); border: 1px solid var(--color-dark-400); margin-bottom: var(--spacing-6);">
-    <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin: 0 0 var(--spacing-2) 0;">
-        <i class="fab fa-reddit" style="color: #FF4500;"></i>
-        Reddit Feeds
-    </h3>
-    <p style="color: var(--color-text-secondary); margin-bottom: var(--spacing-5);">
-        Automatically post new content from subreddits to your channels
-    </p>
-    <form action="/manage/<%= guild.id %>/add-reddit-feed" method="POST" style="margin-bottom: var(--spacing-5);">
-        <div class="grid grid-cols-3" style="gap: var(--spacing-3); align-items: end;">
+    <section class="cf-section" aria-labelledby="fd-reddit-title">
+        <header class="cf-section-head">
             <div>
-                <label class="form-label">Subreddit Name</label>
-                <input type="text" name="subreddit" class="form-control" required placeholder="buildapcsales">
-                <div class="form-help">Without r/ prefix</div>
+                <h2 class="cf-section-title" id="fd-reddit-title"><i class="fab fa-reddit-alien fd-ico" aria-hidden="true"></i>Reddit <span class="cf-tab-count"><%= rFeeds.length %></span></h2>
+                <p class="cf-section-desc"><% if (!(process.env.REDDIT_CLIENT_ID && process.env.REDDIT_CLIENT_SECRET)) { %>Paused: Reddit no longer lets bots read subreddits.<% } else { %>New posts from a subreddit.<% } %></p>
             </div>
-            <div>
-                <label class="form-label">Post to Channel</label>
-                <select name="channel_id" class="form-select" required>
-                    <option value="">Select channel</option>
-                    <% channels.forEach(channel => { %>
-                        <option value="<%= channel.id %>">#<%= channel.name %></option>
-                    <% }); %>
-                </select>
-            </div>
-            <div>
-                <button type="submit" class="btn btn-primary" style="width: 100%;">
-                    <i class="fas fa-plus"></i>
-                    <span>Add Reddit Feed</span>
-                </button>
-            </div>
-        </div>
-    </form>
-
-    <% if (rFeeds.length > 0) { %>
-        <div class="table-container">
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th>Subreddit</th>
-                        <th>Channel</th>
-                        <th class="text-end">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <% rFeeds.forEach(feed => { %>
+        </header>
+        <div class="cf-rows">
+            <% if (rFeeds.length > 0) { %>
+            <div class="cf-table-wrap">
+                <table class="cf-table cf-table--stack">
+                    <thead>
+                        <tr><th scope="col">Subreddit</th><th scope="col">Channel</th><th scope="col">Options</th><th scope="col"><span class="visually-hidden">Edit or remove</span></th></tr>
+                    </thead>
+                    <tbody>
+                        <% rFeeds.forEach(feed => { %>
                         <tr>
-                            <td>
-                                <div style="display: flex; align-items: center; gap: var(--spacing-2);">
-                                    <i class="fab fa-reddit" style="color: #FF4500;"></i>
-                                    <span style="font-weight: var(--font-weight-medium);">r/<%= feed.subreddit %></span>
+                            <td data-label="Subreddit"><span class="fd-source">r/<%= feed.subreddit %></span></td>
+                            <td data-label="Channel"><%= feedChannel(feed.channel_id) %></td>
+                            <td data-label="Options"><span class="fd-options"><%= fdSummary('reddit', feed) %></span></td>
+                            <td class="cf-cell-end">
+                                <div class="fd-actions">
+                                    <button type="button" class="btn btn-sm btn-secondary" data-fd-act="edit" data-feed-kind="reddit" data-feed-id="<%= feed.id %>" aria-expanded="false">Edit</button>
+                                    <form action="/manage/<%= guild.id %>/remove-reddit-feed" method="POST">
+                                        <input type="hidden" name="feedId" value="<%= feed.id %>">
+                                        <button type="submit" class="btn btn-sm btn-danger">Remove</button>
+                                    </form>
                                 </div>
                             </td>
-                            <td>
-                                <span style="color: var(--color-text-secondary);">#<%= channels.find(c => c.id === feed.channel_id)?.name || 'Unknown' %></span>
-                            </td>
-                            <td class="text-end">
-                                <form action="/manage/<%= guild.id %>/remove-reddit-feed" method="POST" style="display: inline;">
-                                    <input type="hidden" name="feedId" value="<%= feed.id %>">
-                                    <button type="submit" class="btn btn-sm btn-danger">
-                                        <i class="fas fa-trash"></i>
-                                        <span>Remove</span>
-                                    </button>
-                                </form>
-                            </td>
                         </tr>
-                    <% }); %>
-                </tbody>
-            </table>
+                        <tr class="fd-edit-row" hidden data-feed-kind="reddit" data-feed-id="<%= feed.id %>">
+                            <td colspan="4"><%- include('feeds-edit', { kind: 'reddit', feed, channels, roles: fdRoles }) %></td>
+                        </tr>
+                        <% }); %>
+                    </tbody>
+                </table>
+            </div>
+            <% } else { %>
+            <%- include('../kit/_state', { kind: 'empty', title: 'No Reddit feeds yet', text: null, id: null, boxed: false, compact: true }) %>
+            <% } %>
+            <% if (!(process.env.REDDIT_CLIENT_ID && process.env.REDDIT_CLIENT_SECRET)) { %>
+            <div class="cf-state" role="note"><p class="cf-state-text"><strong>Reddit feeds are paused.</strong> Reddit no longer lets bots read subreddits: since November 2025 its API needs approval Reddit is not granting to new apps, and it blocks requests from bot servers. Existing settings are kept and start working again if Reddit access is ever restored.</p></div>
+            <% } else { %>
+            <form action="/manage/<%= guild.id %>/add-reddit-feed" method="POST">
+                <div class="cf-rows-head" id="fd-reddit-add-head">Add a subreddit</div>
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-fields">
+                        <div class="cf-field">
+                            <label for="f-feeds-subreddit">Subreddit</label>
+                            <input id="f-feeds-subreddit" type="text" name="subreddit" class="form-control" required placeholder="buildapcsales">
+                            <span class="cf-field-hint">Without the r/ in front.</span>
+                        </div>
+                        <div class="cf-field">
+                            <label for="f-feeds-channel_id">Post to</label>
+                            <select id="f-feeds-channel_id" name="channel_id" class="form-select" required>
+                                <%- include('../kit/_options', { items: channels, selected: null, prefix: '#', empty: 'Choose a channel' }) %>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="cf-section-foot">
+                    <button type="submit" class="btn btn-primary">Add feed</button>
+                </div>
+            </form>
+            <% } %>
         </div>
-    <% } else { %>
-        <div style="text-align: center; padding: var(--spacing-6); background: var(--color-dark-700); border-radius: var(--radius-md); border: 1px dashed var(--color-dark-400);">
-            <div style="color: var(--color-text-muted); margin-bottom: var(--spacing-2);">
-                <i class="fab fa-reddit" style="font-size: var(--font-size-2xl);"></i>
-            </div>
-            <div style="color: var(--color-text-secondary);">No Reddit feeds configured</div>
-        </div>
-    <% } %>
-</div>
+    </section>
 
-<!-- YouTube Feeds -->
-<div style="background: var(--color-dark-600); padding: var(--spacing-6); border-radius: var(--radius-lg); border: 1px solid var(--color-dark-400); margin-bottom: var(--spacing-6);">
-    <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin: 0 0 var(--spacing-2) 0;">
-        <i class="fab fa-youtube" style="color: #FF0000;"></i>
-        YouTube Feeds
-    </h3>
-    <p style="color: var(--color-text-secondary); margin-bottom: var(--spacing-5);">
-        Get notified when YouTube channels upload new videos
-    </p>
-
-    <form action="/manage/<%= guild.id %>/add-youtube-feed" method="POST" style="margin-bottom: var(--spacing-5);">
-        <div class="grid grid-cols-3" style="gap: var(--spacing-3); align-items: end;">
+    <section class="cf-section" aria-labelledby="fd-youtube-title">
+        <header class="cf-section-head">
             <div>
-                <label class="form-label">YouTube Channel</label>
-                <input type="text" name="youtube_channel_id" class="form-control" required placeholder="https://youtube.com/@handle, @handle, or UC… ID">
-                <div class="form-help">Paste the channel URL or <strong>@handle</strong> — we'll look up the ID for you. A raw <code>UC…</code> ID works too.</div>
+                <h2 class="cf-section-title" id="fd-youtube-title"><i class="fab fa-youtube fd-ico" aria-hidden="true"></i>YouTube <span class="cf-tab-count"><%= yFeeds.length %></span></h2>
+                <p class="cf-section-desc">New uploads from a YouTube channel.</p>
             </div>
-            <div>
-                <label class="form-label">Post to Channel</label>
-                <select name="discord_channel_id" class="form-select" required>
-                    <option value="">Select channel</option>
-                    <% channels.forEach(channel => { %>
-                        <option value="<%= channel.id %>">#<%= channel.name %></option>
-                    <% }); %>
-                </select>
-            </div>
-            <div>
-                <button type="submit" class="btn btn-primary" style="width: 100%;">
-                    <i class="fas fa-plus"></i>
-                    <span>Add YouTube Feed</span>
-                </button>
-            </div>
-        </div>
-    </form>
-
-    <% if (yFeeds.length > 0) { %>
-        <div class="table-container">
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th>YouTube Channel</th>
-                        <th>Discord Channel</th>
-                        <th class="text-end">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <% yFeeds.forEach(feed => { %>
+        </header>
+        <div class="cf-rows">
+            <% if (yFeeds.length > 0) { %>
+            <div class="cf-table-wrap">
+                <table class="cf-table cf-table--stack">
+                    <thead>
+                        <tr><th scope="col">YouTube channel</th><th scope="col">Channel</th><th scope="col">Options</th><th scope="col"><span class="visually-hidden">Edit or remove</span></th></tr>
+                    </thead>
+                    <tbody>
+                        <% yFeeds.forEach(feed => { %>
                         <tr>
-                            <td>
-                                <div style="display: flex; align-items: center; gap: var(--spacing-2);">
-                                    <i class="fab fa-youtube" style="color: #FF0000;"></i>
-                                    <code style="font-size: var(--font-size-xs); background: var(--color-dark-700); padding: var(--spacing-1) var(--spacing-2); border-radius: var(--radius-sm);">
-                                        <%= feed.youtube_channel_id %>
-                                    </code>
+                            <td data-label="YouTube channel"><span class="fd-source"><% if (feed.channel_name) { %><%= feed.channel_name %> <% } %><code><%= feed.youtube_channel_id %></code></span></td>
+                            <td data-label="Channel"><%= feedChannel(feed.discord_channel_id) %></td>
+                            <td data-label="Options"><span class="fd-options"><%= fdSummary('youtube', feed) %></span></td>
+                            <td class="cf-cell-end">
+                                <div class="fd-actions">
+                                    <button type="button" class="btn btn-sm btn-secondary" data-fd-act="edit" data-feed-kind="youtube" data-feed-id="<%= feed.id %>" aria-expanded="false">Edit</button>
+                                    <form action="/manage/<%= guild.id %>/remove-youtube-feed" method="POST">
+                                        <input type="hidden" name="feedId" value="<%= feed.id %>">
+                                        <button type="submit" class="btn btn-sm btn-danger">Remove</button>
+                                    </form>
                                 </div>
                             </td>
-                            <td>
-                                <span style="color: var(--color-text-secondary);">#<%= channels.find(c => c.id === feed.discord_channel_id)?.name || 'Unknown' %></span>
-                            </td>
-                            <td class="text-end">
-                                <form action="/manage/<%= guild.id %>/remove-youtube-feed" method="POST" style="display: inline;">
-                                    <input type="hidden" name="feedId" value="<%= feed.id %>">
-                                    <button type="submit" class="btn btn-sm btn-danger">
-                                        <i class="fas fa-trash"></i>
-                                        <span>Remove</span>
-                                    </button>
-                                </form>
-                            </td>
                         </tr>
-                    <% }); %>
-                </tbody>
-            </table>
+                        <tr class="fd-edit-row" hidden data-feed-kind="youtube" data-feed-id="<%= feed.id %>">
+                            <td colspan="4"><%- include('feeds-edit', { kind: 'youtube', feed, channels, roles: fdRoles }) %></td>
+                        </tr>
+                        <% }); %>
+                    </tbody>
+                </table>
+            </div>
+            <% } else { %>
+            <%- include('../kit/_state', { kind: 'empty', title: 'No YouTube feeds yet', text: null, id: null, boxed: false, compact: true }) %>
+            <% } %>
+            <form action="/manage/<%= guild.id %>/add-youtube-feed" method="POST">
+                <div class="cf-rows-head" id="fd-youtube-add-head">Add a YouTube channel</div>
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-fields">
+                        <div class="cf-field">
+                            <label for="f-feeds-youtube_channel_id">YouTube channel</label>
+                            <input id="f-feeds-youtube_channel_id" type="text" name="youtube_channel_id" class="form-control" required placeholder="https://youtube.com/@handle">
+                            <span class="cf-field-hint">The channel URL or @handle; the ID is looked up for you. A UC... channel ID works too.</span>
+                        </div>
+                        <div class="cf-field">
+                            <label for="f-feeds-discord_channel_id">Post to</label>
+                            <select id="f-feeds-discord_channel_id" name="discord_channel_id" class="form-select" required>
+                                <%- include('../kit/_options', { items: channels, selected: null, prefix: '#', empty: 'Choose a channel' }) %>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="cf-section-foot">
+                    <button type="submit" class="btn btn-primary">Add feed</button>
+                </div>
+            </form>
         </div>
-    <% } else { %>
-        <div style="text-align: center; padding: var(--spacing-6); background: var(--color-dark-700); border-radius: var(--radius-md); border: 1px dashed var(--color-dark-400);">
-            <div style="color: var(--color-text-muted); margin-bottom: var(--spacing-2);">
-                <i class="fab fa-youtube" style="font-size: var(--font-size-2xl);"></i>
-            </div>
-            <div style="color: var(--color-text-secondary);">No YouTube feeds configured</div>
-        </div>
-    <% } %>
-</div>
+    </section>
 
-<!-- Twitter Feeds -->
-<div style="background: var(--color-dark-600); padding: var(--spacing-6); border-radius: var(--radius-lg); border: 1px solid var(--color-dark-400);">
-    <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin: 0 0 var(--spacing-2) 0;">
-        <i class="fab fa-twitter" style="color: #1DA1F2;"></i>
-        Twitter/X Feeds
-    </h3>
-    <p style="color: var(--color-text-secondary); margin-bottom: var(--spacing-5);">
-        Automatically post new tweets from Twitter/X accounts
-    </p>
-
-    <form action="/manage/<%= guild.id %>/add-twitter-feed" method="POST" style="margin-bottom: var(--spacing-5);">
-        <div class="grid grid-cols-3" style="gap: var(--spacing-3); align-items: end;">
+    <section class="cf-section" aria-labelledby="fd-twitter-title">
+        <header class="cf-section-head">
             <div>
-                <label class="form-label">Twitter Username</label>
-                <input type="text" name="twitter_username" class="form-control" required placeholder="elonmusk">
-                <div class="form-help">Without @ symbol</div>
+                <h2 class="cf-section-title" id="fd-twitter-title"><i class="fab fa-x-twitter fd-ico" aria-hidden="true"></i>Twitter / X <span class="cf-tab-count"><%= tFeeds.length %></span></h2>
+                <p class="cf-section-desc">New posts from a Twitter / X account.</p>
             </div>
-            <div>
-                <label class="form-label">Post to Channel</label>
-                <select name="channel_id" class="form-select" required>
-                    <option value="">Select channel</option>
-                    <% channels.forEach(channel => { %>
-                        <option value="<%= channel.id %>">#<%= channel.name %></option>
-                    <% }); %>
-                </select>
-            </div>
-            <div>
-                <button type="submit" class="btn btn-primary" style="width: 100%;">
-                    <i class="fas fa-plus"></i>
-                    <span>Add Twitter Feed</span>
-                </button>
-            </div>
-        </div>
-    </form>
-
-    <% if (tFeeds.length > 0) { %>
-        <div class="table-container">
-            <table class="data-table">
-                <thead>
-                    <tr>
-                        <th>Twitter Account</th>
-                        <th>Channel</th>
-                        <th class="text-end">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <% tFeeds.forEach(feed => { %>
+        </header>
+        <div class="cf-rows">
+            <% if (tFeeds.length > 0) { %>
+            <div class="cf-table-wrap">
+                <table class="cf-table cf-table--stack">
+                    <thead>
+                        <tr><th scope="col">Account</th><th scope="col">Channel</th><th scope="col">Options</th><th scope="col"><span class="visually-hidden">Edit or remove</span></th></tr>
+                    </thead>
+                    <tbody>
+                        <% tFeeds.forEach(feed => { %>
                         <tr>
-                            <td>
-                                <div style="display: flex; align-items: center; gap: var(--spacing-2);">
-                                    <i class="fab fa-twitter" style="color: #1DA1F2;"></i>
-                                    <span style="font-weight: var(--font-weight-medium);">@<%= feed.twitter_username %></span>
+                            <td data-label="Account"><span class="fd-source">@<%= feed.twitter_username %></span></td>
+                            <td data-label="Channel"><%= feedChannel(feed.channel_id) %></td>
+                            <td data-label="Options"><span class="fd-options"><%= fdSummary('twitter', feed) %></span></td>
+                            <td class="cf-cell-end">
+                                <div class="fd-actions">
+                                    <button type="button" class="btn btn-sm btn-secondary" data-fd-act="edit" data-feed-kind="twitter" data-feed-id="<%= feed.id %>" aria-expanded="false">Edit</button>
+                                    <form action="/manage/<%= guild.id %>/remove-twitter-feed" method="POST">
+                                        <input type="hidden" name="feedId" value="<%= feed.id %>">
+                                        <button type="submit" class="btn btn-sm btn-danger">Remove</button>
+                                    </form>
                                 </div>
                             </td>
-                            <td>
-                                <span style="color: var(--color-text-secondary);">#<%= channels.find(c => c.id === feed.channel_id)?.name || 'Unknown' %></span>
-                            </td>
-                            <td class="text-end">
-                                <form action="/manage/<%= guild.id %>/remove-twitter-feed" method="POST" style="display: inline;">
-                                    <input type="hidden" name="feedId" value="<%= feed.id %>">
-                                    <button type="submit" class="btn btn-sm btn-danger">
-                                        <i class="fas fa-trash"></i>
-                                        <span>Remove</span>
-                                    </button>
-                                </form>
-                            </td>
                         </tr>
-                    <% }); %>
-                </tbody>
-            </table>
-        </div>
-    <% } else { %>
-        <div style="text-align: center; padding: var(--spacing-6); background: var(--color-dark-700); border-radius: var(--radius-md); border: 1px dashed var(--color-dark-400);">
-            <div style="color: var(--color-text-muted); margin-bottom: var(--spacing-2);">
-                <i class="fab fa-twitter" style="font-size: var(--font-size-2xl);"></i>
+                        <tr class="fd-edit-row" hidden data-feed-kind="twitter" data-feed-id="<%= feed.id %>">
+                            <td colspan="4"><%- include('feeds-edit', { kind: 'twitter', feed, channels, roles: fdRoles }) %></td>
+                        </tr>
+                        <% }); %>
+                    </tbody>
+                </table>
             </div>
-            <div style="color: var(--color-text-secondary);">No Twitter feeds configured</div>
+            <% } else { %>
+            <%- include('../kit/_state', { kind: 'empty', title: 'No Twitter / X feeds yet', text: null, id: null, boxed: false, compact: true }) %>
+            <% } %>
+            <form action="/manage/<%= guild.id %>/add-twitter-feed" method="POST">
+                <div class="cf-rows-head" id="fd-twitter-add-head">Add an account</div>
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-fields">
+                        <div class="cf-field">
+                            <label for="f-feeds-twitter_username">Username</label>
+                            <input id="f-feeds-twitter_username" type="text" name="twitter_username" class="form-control" required placeholder="username">
+                            <span class="cf-field-hint">Without the @ in front.</span>
+                        </div>
+                        <div class="cf-field">
+                            <label for="f-feeds-channel_id-2">Post to</label>
+                            <select id="f-feeds-channel_id-2" name="channel_id" class="form-select" required>
+                                <%- include('../kit/_options', { items: channels, selected: null, prefix: '#', empty: 'Choose a channel' }) %>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="cf-section-foot">
+                    <button type="submit" class="btn btn-primary">Add feed</button>
+                </div>
+            </form>
         </div>
-    <% } %>
-</div>
+    </section>
 
-<!-- Bluesky Feeds -->
-<div style="background: var(--color-dark-600); padding: var(--spacing-6); border-radius: var(--radius-lg); border: 1px solid var(--color-dark-400); margin-bottom: var(--spacing-6);">
-    <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin: 0 0 var(--spacing-2) 0;">
-        <span style="color: #0085FF;">🦋</span> Bluesky Feeds
-    </h3>
-    <p style="color: var(--color-text-secondary); margin-bottom: var(--spacing-5);">
-        Automatically post new posts from Bluesky accounts
-    </p>
-    <form action="/manage/<%= guild.id %>/add-bluesky-feed" method="POST" style="margin-bottom: var(--spacing-5);">
-        <div class="grid grid-cols-3" style="gap: var(--spacing-3); align-items: end;">
+    <section class="cf-section" aria-labelledby="fd-bluesky-title">
+        <header class="cf-section-head">
             <div>
-                <label class="form-label">Bluesky Handle</label>
-                <input type="text" name="bluesky_handle" class="form-control" required placeholder="user.bsky.social">
-                <div class="form-help">Full handle (e.g. <code>jay.bsky.social</code>)</div>
+                <h2 class="cf-section-title" id="fd-bluesky-title"><i class="fas fa-cloud fd-ico" aria-hidden="true"></i>Bluesky <span class="cf-tab-count"><%= bFeeds.length %></span></h2>
+                <p class="cf-section-desc">New posts from a Bluesky account.</p>
             </div>
-            <div>
-                <label class="form-label">Post to Channel</label>
-                <select name="channel_id" class="form-select" required>
-                    <option value="">Select channel</option>
-                    <% channels.forEach(channel => { %>
-                        <option value="<%= channel.id %>">#<%= channel.name %></option>
-                    <% }); %>
-                </select>
-            </div>
-            <div>
-                <button type="submit" class="btn btn-primary" style="width: 100%;">
-                    <i class="fas fa-plus"></i><span>Add Bluesky Feed</span>
-                </button>
-            </div>
-        </div>
-    </form>
-    <% if (bFeeds.length > 0) { %>
-        <div class="table-container">
-            <table class="data-table">
-                <thead><tr><th>Bluesky Handle</th><th>Channel</th><th class="text-end">Actions</th></tr></thead>
-                <tbody>
-                    <% bFeeds.forEach(feed => { %>
+        </header>
+        <div class="cf-rows">
+            <% if (bFeeds.length > 0) { %>
+            <div class="cf-table-wrap">
+                <table class="cf-table cf-table--stack">
+                    <thead>
+                        <tr><th scope="col">Handle</th><th scope="col">Channel</th><th scope="col">Options</th><th scope="col"><span class="visually-hidden">Edit or remove</span></th></tr>
+                    </thead>
+                    <tbody>
+                        <% bFeeds.forEach(feed => { %>
                         <tr>
-                            <td><span style="color: #0085FF; font-weight: var(--font-weight-medium);">@<%= feed.bluesky_handle %></span></td>
-                            <td><span style="color: var(--color-text-secondary);">#<%= channels.find(c => c.id === feed.channel_id)?.name || 'Unknown' %></span></td>
-                            <td class="text-end">
-                                <form action="/manage/<%= guild.id %>/remove-bluesky-feed" method="POST" style="display: inline;">
-                                    <input type="hidden" name="feedId" value="<%= feed.id %>">
-                                    <button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-trash"></i><span>Remove</span></button>
-                                </form>
+                            <td data-label="Handle"><span class="fd-source">@<%= feed.bluesky_handle %></span></td>
+                            <td data-label="Channel"><%= feedChannel(feed.channel_id) %></td>
+                            <td data-label="Options"><span class="fd-options"><%= fdSummary('bluesky', feed) %></span></td>
+                            <td class="cf-cell-end">
+                                <div class="fd-actions">
+                                    <button type="button" class="btn btn-sm btn-secondary" data-fd-act="edit" data-feed-kind="bluesky" data-feed-id="<%= feed.id %>" aria-expanded="false">Edit</button>
+                                    <form action="/manage/<%= guild.id %>/remove-bluesky-feed" method="POST">
+                                        <input type="hidden" name="feedId" value="<%= feed.id %>">
+                                        <button type="submit" class="btn btn-sm btn-danger">Remove</button>
+                                    </form>
+                                </div>
                             </td>
                         </tr>
-                    <% }); %>
-                </tbody>
-            </table>
+                        <tr class="fd-edit-row" hidden data-feed-kind="bluesky" data-feed-id="<%= feed.id %>">
+                            <td colspan="4"><%- include('feeds-edit', { kind: 'bluesky', feed, channels, roles: fdRoles }) %></td>
+                        </tr>
+                        <% }); %>
+                    </tbody>
+                </table>
+            </div>
+            <% } else { %>
+            <%- include('../kit/_state', { kind: 'empty', title: 'No Bluesky feeds yet', text: null, id: null, boxed: false, compact: true }) %>
+            <% } %>
+            <form action="/manage/<%= guild.id %>/add-bluesky-feed" method="POST">
+                <div class="cf-rows-head" id="fd-bluesky-add-head">Add an account</div>
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-fields">
+                        <div class="cf-field">
+                            <label for="f-feeds-bluesky_handle">Handle</label>
+                            <input id="f-feeds-bluesky_handle" type="text" name="bluesky_handle" class="form-control" required placeholder="user.bsky.social">
+                            <span class="cf-field-hint">The full handle, such as <code>name.bsky.social</code>.</span>
+                        </div>
+                        <div class="cf-field">
+                            <label for="f-feeds-channel_id-3">Post to</label>
+                            <select id="f-feeds-channel_id-3" name="channel_id" class="form-select" required>
+                                <%- include('../kit/_options', { items: channels, selected: null, prefix: '#', empty: 'Choose a channel' }) %>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="cf-section-foot">
+                    <button type="submit" class="btn btn-primary">Add feed</button>
+                </div>
+            </form>
         </div>
-    <% } else { %>
-        <div style="text-align: center; padding: var(--spacing-6); background: var(--color-dark-700); border-radius: var(--radius-md); border: 1px dashed var(--color-dark-400);">
-            <div style="color: var(--color-text-muted); margin-bottom: var(--spacing-2); font-size: var(--font-size-2xl);">🦋</div>
-            <div style="color: var(--color-text-secondary);">No Bluesky feeds configured</div>
-        </div>
-    <% } %>
-</div>
+    </section>
 
-<!-- Facebook Feeds -->
-<div style="background: var(--color-dark-600); padding: var(--spacing-6); border-radius: var(--radius-lg); border: 1px solid var(--color-dark-400);">
-    <h3 style="font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); color: var(--color-text-primary); margin: 0 0 var(--spacing-2) 0;">
-        <i class="fab fa-facebook" style="color: #1877F2;"></i> Facebook Page Feeds
-    </h3>
-    <p style="color: var(--color-text-secondary); margin-bottom: var(--spacing-5);">
-        Automatically post new Facebook Page posts (uses Meta Graph API — connected page only)
-    </p>
-    <form action="/manage/<%= guild.id %>/add-facebook-feed" method="POST" style="margin-bottom: var(--spacing-5);">
-        <div class="grid grid-cols-3" style="gap: var(--spacing-3); align-items: end;">
+    <section class="cf-section" aria-labelledby="fd-rss-title">
+        <header class="cf-section-head">
             <div>
-                <label class="form-label">Facebook Page ID</label>
-                <input type="text" name="facebook_page_id" class="form-control" required placeholder="1009504068903484">
-                <div class="form-help">Numeric page ID (found in Meta Business Suite)</div>
+                <h2 class="cf-section-title" id="fd-rss-title"><i class="fas fa-rss fd-ico" aria-hidden="true"></i>RSS and podcasts <span class="cf-tab-count"><%= sFeeds.length %></span></h2>
+                <p class="cf-section-desc">New items from any RSS or Atom feed, such as a blog, a news site or a podcast. Checked every 15 minutes.</p>
             </div>
-            <div>
-                <label class="form-label">Post to Channel</label>
-                <select name="channel_id" class="form-select" required>
-                    <option value="">Select channel</option>
-                    <% channels.forEach(channel => { %>
-                        <option value="<%= channel.id %>">#<%= channel.name %></option>
-                    <% }); %>
-                </select>
-            </div>
-            <div>
-                <button type="submit" class="btn btn-primary" style="width: 100%;">
-                    <i class="fas fa-plus"></i><span>Add Facebook Feed</span>
-                </button>
-            </div>
-        </div>
-    </form>
-    <% if (fFeeds.length > 0) { %>
-        <div class="table-container">
-            <table class="data-table">
-                <thead><tr><th>Facebook Page</th><th>Channel</th><th class="text-end">Actions</th></tr></thead>
-                <tbody>
-                    <% fFeeds.forEach(feed => { %>
+        </header>
+        <div class="cf-rows">
+            <% if (sFeeds.length > 0) { %>
+            <div class="cf-table-wrap">
+                <table class="cf-table cf-table--stack">
+                    <thead>
+                        <tr><th scope="col">Feed</th><th scope="col">Channel</th><th scope="col">Options</th><th scope="col"><span class="visually-hidden">Edit or remove</span></th></tr>
+                    </thead>
+                    <tbody>
+                        <% sFeeds.forEach(feed => { %>
                         <tr>
-                            <td><code style="background: var(--color-dark-700); padding: var(--spacing-1) var(--spacing-2); border-radius: var(--radius-sm);"><%= feed.page_name || feed.facebook_page_id %></code></td>
-                            <td><span style="color: var(--color-text-secondary);">#<%= channels.find(c => c.id === feed.channel_id)?.name || 'Unknown' %></span></td>
-                            <td class="text-end">
-                                <form action="/manage/<%= guild.id %>/remove-facebook-feed" method="POST" style="display: inline;">
-                                    <input type="hidden" name="feedId" value="<%= feed.id %>">
-                                    <button type="submit" class="btn btn-sm btn-danger"><i class="fas fa-trash"></i><span>Remove</span></button>
-                                </form>
+                            <td data-label="Feed">
+                                <span class="fd-source"><%= feed.feed_title || feed.feed_url %></span>
+                                <% if (feed.feed_title) { %><span class="fd-url"><%= feed.feed_url %></span><% } %>
+                                <% if (feed.suspended_until && new Date(feed.suspended_until) > new Date()) { %><span class="fd-url is-bad">Paused after repeated errors: <%= feed.last_error || 'no answer' %></span><% } %>
+                            </td>
+                            <td data-label="Channel"><%= feedChannel(feed.channel_id) %></td>
+                            <td data-label="Options"><span class="fd-options"><%= fdSummary('rss', feed) %></span></td>
+                            <td class="cf-cell-end">
+                                <div class="fd-actions">
+                                    <button type="button" class="btn btn-sm btn-secondary" data-fd-act="edit" data-feed-kind="rss" data-feed-id="<%= feed.id %>" aria-expanded="false">Edit</button>
+                                    <button type="button" class="btn btn-sm btn-danger" data-fd-act="remove" data-feed-kind="rss" data-feed-id="<%= feed.id %>">Remove</button>
+                                </div>
                             </td>
                         </tr>
-                    <% }); %>
-                </tbody>
-            </table>
+                        <tr class="fd-edit-row" hidden data-feed-kind="rss" data-feed-id="<%= feed.id %>">
+                            <td colspan="4"><%- include('feeds-edit', { kind: 'rss', feed, channels, roles: fdRoles }) %></td>
+                        </tr>
+                        <% }); %>
+                    </tbody>
+                </table>
+            </div>
+            <% } else { %>
+            <%- include('../kit/_state', { kind: 'empty', title: 'No RSS feeds yet', text: null, id: null, boxed: false, compact: true }) %>
+            <% } %>
+            <div class="fd-rss-add">
+                <div class="cf-rows-head" id="fd-rss-add-head">Add a feed</div>
+                <div class="cf-row cf-row--stack">
+                    <div class="cf-fields">
+                        <div class="cf-field">
+                            <label class="fd-ctl"><span>Feed address</span>
+                                <input type="url" class="form-control" maxlength="1000" data-rss-add="feed_url" placeholder="https://example.com/feed.xml">
+                            </label>
+                            <span class="cf-field-hint">The RSS or Atom link of a blog, news site or podcast. Items already in the feed are not posted. Up to 10 per server.</span>
+                        </div>
+                        <div class="cf-field">
+                            <label class="fd-ctl"><span>Post to</span>
+                                <select class="form-select" data-rss-add="channel_id">
+                                    <%- include('../kit/_options', { items: channels, selected: null, prefix: '#', empty: 'Choose a channel' }) %>
+                                </select>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+                <div class="cf-section-foot">
+                    <span class="cf-status-line" role="status" aria-live="polite" data-fd-add-status></span>
+                    <button type="button" class="btn btn-primary" data-fd-act="add-rss">Add feed</button>
+                </div>
+            </div>
         </div>
-    <% } else { %>
-        <div style="text-align: center; padding: var(--spacing-6); background: var(--color-dark-700); border-radius: var(--radius-md); border: 1px dashed var(--color-dark-400);">
-            <div style="color: var(--color-text-muted); margin-bottom: var(--spacing-2);"><i class="fab fa-facebook" style="font-size: var(--font-size-2xl);"></i></div>
-            <div style="color: var(--color-text-secondary);">No Facebook feeds configured</div>
-        </div>
-    <% } %>
-</div>
+    </section>
 </div>
 
-<style>
-.table-container {
-    overflow-x: auto;
-    border: 1px solid var(--color-dark-400);
-    border-radius: var(--radius-lg);
-}
+<script src="/js/cf-msgpreview.js" defer></script>
+<script>
+(function () {
+    // Edit panels under each feed row: open/close, and save with PATCH <data-fd-api>/:kind/:id
+    // (dashboard/routes/api/features/feeds.js).
+    var page = document.querySelector('[data-fd-api]');
+    if (!page) return;
+    var apiBase = page.getAttribute('data-fd-api');
 
-.data-table {
-    width: 100%;
-    border-collapse: collapse;
-}
+    async function send(method, url, body) {
+        var res = await fetch(url, {
+            method: method,
+            headers: body ? { 'Content-Type': 'application/json' } : {},
+            body: body ? JSON.stringify(body) : undefined
+        });
+        var data = await res.json().catch(function () { return {}; });
+        if (!res.ok || !data.success) throw new Error(data.error || ('Request failed (' + res.status + ')'));
+        return data;
+    }
 
-.data-table thead {
-    background: var(--color-dark-700);
-    border-bottom: 2px solid var(--color-dark-400);
-}
+    function panelFor(kind, id) {
+        return page.querySelector('tr.fd-edit-row[data-feed-kind="' + kind + '"][data-feed-id="' + id + '"]');
+    }
+    function setStatus(row, text, cls) {
+        var el = row.querySelector('[data-fd-status]');
+        if (!el) return;
+        el.textContent = text;
+        el.className = 'cf-status-line' + (cls ? ' ' + cls : '');
+    }
 
-.data-table th {
-    padding: var(--spacing-4);
-    text-align: left;
-    font-size: var(--font-size-sm);
-    font-weight: var(--font-weight-semibold);
-    color: var(--color-text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
+    // ---- Live preview in each edit panel ------------------------------------------------------
+    // Drawn the way the posters build their messages (core/reddit-feed.js, youtube-feed.js,
+    // twitter-feed.js, bluesky-feed.js, rss-feed.js and buildFeedContent in core/feed-message.js),
+    // with sample post values.
+    var FD_CTX = <%- JSON.stringify({
+        channels: (channels || []).map(c => ({ id: String(c.id), name: c.name })),
+        roles: fdRoles.map(r => ({ id: String(r.id), name: r.name, color: r.hexColor || null })),
+    }).replace(/</g, '\\u003c') %>;
+    var FD_BOT = <%- JSON.stringify({ name: (guild.members && guild.members.me && guild.members.me.displayName) || 'CertiFried', avatar: (guild.members && guild.members.me && guild.members.me.displayAvatarURL ? guild.members.me.displayAvatarURL({ size: 64 }) : null) }).replace(/</g, '\\u003c') %>;
 
-.data-table td {
-    padding: var(--spacing-4);
-    border-bottom: 1px solid var(--color-dark-400);
-}
+    function fdTemplate(tpl, vars) {
+        var lower = {};
+        Object.keys(vars).forEach(function (k) { lower[k.toLowerCase()] = vars[k]; });
+        return String(tpl).replace(/\{([a-z_]+)\}/gi, function (whole, key) {
+            var v = lower[key.toLowerCase()];
+            return v == null ? whole : String(v);
+        });
+    }
+    function fdPing(id) {
+        if (!id) return null;
+        return id === 'everyone' ? '@everyone' : '<@&' + id + '>';
+    }
+    function fdContent(tpl, vars, pingId) {
+        var body = tpl && tpl.trim() ? fdTemplate(tpl.trim(), vars) : '';
+        var mention = fdPing(pingId);
+        var content = mention ? (body ? mention + ' ' + body : mention) : body;
+        return content.length > 2000 ? content.slice(0, 1999) + '…' : content;
+    }
+    function fdMessage(kind, source, panel) {
+        var val = function (k) { var el = panel.querySelector('[data-f="' + k + '"]'); return el ? el.value : ''; };
+        var on = function (k) { var el = panel.querySelector('[data-f="' + k + '"]'); return !!(el && el.checked); };
+        var tpl = val('custom_message');
+        var ping = val('ping_role_id');
+        if (kind === 'reddit') {
+            return {
+                content: fdContent(tpl, { subreddit: source, title: 'An example post title', author: 'u/example_user', flair: 'Discussion', url: 'https://www.reddit.com/' + source }, ping),
+                embeds: [{ color: '#FF4500', author: { name: 'New post in ' + source }, title: 'An example post title', url: 'https://www.reddit.com',
+                    description: 'The first lines of the post text appear here.', fields: [{ name: 'Author', value: 'u/example_user', inline: true }], timestamp: true }],
+            };
+        }
+        if (kind === 'youtube') {
+            var type = on('include_videos') || !on('include_shorts') ? 'video' : 'Short';
+            var mention = fdPing(ping);
+            var content = tpl.trim()
+                ? fdContent(tpl, { channel: source, title: 'An example video title', type: type, url: 'https://youtu.be/example' }, ping)
+                : (mention ? mention + ' a new ' + type + ' from **' + source + '** is out!' : 'A new ' + type + ' from **' + source + '** is out!');
+            return {
+                content: content,
+                embeds: [{ color: '#ED4245', author: { name: source + ' just uploaded a new ' + type + '!' }, title: 'An example video title', url: 'https://youtu.be/example',
+                    description: 'The start of the video description.', image: { placeholder: 'Video thumbnail' }, timestamp: true }],
+            };
+        }
+        if (kind === 'twitter') {
+            var url = 'https://x.com/' + source + '/status/1';
+            return {
+                content: fdContent(tpl, { username: source, name: source, url: url }, ping),
+                embeds: [{ color: '#1DA1F2', author: { name: source + ' (@' + source + ')' }, description: 'The text of the post appears here.',
+                    image: on('include_images') ? { placeholder: 'First image, when the post has one' } : null, timestamp: true }],
+                buttons: [{ label: 'View on X' }],
+            };
+        }
+        if (kind === 'bluesky') {
+            return {
+                content: fdContent(tpl, { handle: source, name: source, url: 'https://bsky.app/profile/' + source }, ping),
+                embeds: [{ color: '#0085FF', author: { name: source + ' (@' + source + ')' }, description: 'The text of the post appears here.', footer: { text: 'Bluesky' }, timestamp: true }],
+            };
+        }
+        return {
+            content: fdContent(tpl, { feed: source, title: 'An example item title', url: 'https://example.com/post', author: 'Author name' }, ping),
+            embeds: [{ color: '#5865F2', author: { name: source }, title: 'An example item title', url: 'https://example.com/post',
+                description: 'The summary of the item appears here.', footer: { text: 'Author name · RSS' }, timestamp: true }],
+        };
+    }
+    function fdPreview(panel) {
+        var target = panel.querySelector('[data-fd-preview]');
+        if (!target || !window.CFMsgPreview) return;
+        var edit = panel.querySelector('.fd-edit');
+        var msg = fdMessage(panel.getAttribute('data-feed-kind'), edit ? edit.getAttribute('data-fd-source') : '', panel);
+        msg.username = FD_BOT.name;
+        msg.avatarUrl = FD_BOT.avatar;
+        CFMsgPreview.render(target, msg, FD_CTX);
+    }
+    page.addEventListener('input', function (e) { var p = e.target.closest('tr.fd-edit-row'); if (p) fdPreview(p); });
+    page.addEventListener('change', function (e) { var p = e.target.closest('tr.fd-edit-row'); if (p) fdPreview(p); });
 
-.data-table tbody tr {
-    transition: background var(--transition-base);
-}
-
-.data-table tbody tr:hover {
-    background: var(--color-dark-700);
-}
-
-.data-table tbody tr:last-child td {
-    border-bottom: none;
-}
-
-.text-end {
-    text-align: right;
-}
-</style>
+    page.addEventListener('click', async function (e) {
+        var btn = e.target.closest('button[data-fd-act]');
+        if (!btn || !page.contains(btn)) return;
+        var act = btn.getAttribute('data-fd-act');
+        if (act === 'add-rss') {
+            var box = btn.closest('.fd-rss-add');
+            var status = box.querySelector('[data-fd-add-status]');
+            var addBody = {};
+            box.querySelectorAll('[data-rss-add]').forEach(function (el) { addBody[el.getAttribute('data-rss-add')] = el.value.trim(); });
+            if (!addBody.feed_url) { status.textContent = 'Enter the feed address.'; status.className = 'cf-status-line is-bad'; return; }
+            if (!addBody.channel_id) { status.textContent = 'Choose a channel to post in.'; status.className = 'cf-status-line is-bad'; return; }
+            btn.disabled = true;
+            status.textContent = 'Checking the feed';
+            status.className = 'cf-status-line is-busy';
+            try {
+                var added = await send('POST', apiBase + '/rss', addBody);
+                status.textContent = 'Added ' + (added.feed_title || 'the feed') + '. New items will be posted from now on.';
+                status.className = 'cf-status-line is-ok';
+                setTimeout(function () { window.location.reload(); }, 1200);
+            } catch (err) {
+                status.textContent = err.message;
+                status.className = 'cf-status-line is-bad';
+                btn.disabled = false;
+            }
+            return;
+        }
+        if (act === 'remove') {
+            if (!confirm('Remove this feed? It stops posting right away.')) return;
+            btn.disabled = true;
+            try {
+                await send('DELETE', apiBase + '/' + encodeURIComponent(btn.getAttribute('data-feed-kind')) + '/' + encodeURIComponent(btn.getAttribute('data-feed-id')));
+                window.location.reload();
+            } catch (err) {
+                btn.disabled = false;
+                alert(err.message);
+            }
+            return;
+        }
+        if (act === 'edit') {
+            var row = panelFor(btn.getAttribute('data-feed-kind'), btn.getAttribute('data-feed-id'));
+            if (!row) return;
+            row.hidden = !row.hidden;
+            btn.setAttribute('aria-expanded', row.hidden ? 'false' : 'true');
+            if (!row.hidden) { fdPreview(row); var first = row.querySelector('[data-f]'); if (first) first.focus(); }
+            return;
+        }
+        var panel = btn.closest('tr.fd-edit-row');
+        if (!panel) return;
+        var kind = panel.getAttribute('data-feed-kind');
+        var id = panel.getAttribute('data-feed-id');
+        if (act === 'cancel') {
+            panel.hidden = true;
+            var opener = page.querySelector('button[data-fd-act="edit"][data-feed-kind="' + kind + '"][data-feed-id="' + id + '"]');
+            if (opener) { opener.setAttribute('aria-expanded', 'false'); opener.focus(); }
+            return;
+        }
+        if (act !== 'save') return;
+        var body = {};
+        panel.querySelectorAll('[data-f]').forEach(function (el) {
+            var key = el.getAttribute('data-f');
+            if (el.type === 'checkbox') body[key] = el.checked;
+            else if (key === 'channel_id' && !el.value) return; // a deleted channel: leave it until one is chosen
+            else body[key] = el.value;
+        });
+        btn.disabled = true;
+        setStatus(panel, 'Saving', 'is-busy');
+        try {
+            await send('PATCH', apiBase + '/' + encodeURIComponent(kind) + '/' + encodeURIComponent(id), body);
+            setStatus(panel, 'Saved', 'is-ok');
+            setTimeout(function () { window.location.reload(); }, 700);
+        } catch (err) {
+            setStatus(panel, err.message, 'is-bad');
+            btn.disabled = false;
+        }
+    });
+})();
+</script>
